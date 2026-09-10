@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -18,14 +19,19 @@ namespace Flit.Admin.Tests.Security;
 
 /// <summary>
 /// HU #10616 — enriquecer el JWT (empresa/NIT/tipo de entidad) y corregir <c>/me</c> para que
-/// exponga TODOS los roles activos y la unión completa de permisos. Cubre los 5 AC contra una
+/// exponga los roles activos y la unión completa de sus permisos. Cubre los 5 AC contra una
 /// BD real (WebApplicationFactory + FlitDbContext real, mismo patrón que
-/// <see cref="MultiRoleUserAssignmentEndpointsTests"/>), ejerciendo el flujo HTTP real de
+/// <see cref="UserRoleAssignmentEndpointsTests"/>), ejerciendo el flujo HTTP real de
 /// <c>POST /api/v1/auth/login</c> + <c>GET /api/v1/auth/me</c> de punta a punta.
 /// </summary>
 public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
     private const string Password = "DemoPass1!";
+
+    // NIT único por ejecución: identity.tenants tiene índice único parcial sobre tax_id y la base
+    // de pruebas es compartida. El valor se afirma contra estos mismos campos, no contra literales.
+    private static readonly string CompanyNit = TestNit.Unique();
+    private static readonly string TransitOfficeNit = TestNit.Unique();
 
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
@@ -44,7 +50,6 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
     private Guid _otRoleId;
     private Guid _noNitRoleId;
     private Guid _multiRoleAId;
-    private Guid _multiRoleBId;
 
     public AuthLoginAndMeEndpointsTests(WebApplicationFactory<Program> factory)
     {
@@ -63,13 +68,13 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
 
         var jwt = new JsonWebTokenHandler().ReadJsonWebToken(accessToken);
         jwt.GetClaim("company_name").Value.Should().Be("Acme Renting HU10616");
-        jwt.GetClaim("company_nit").Value.Should().Be("900111222-3");
+        jwt.GetClaim("company_nit").Value.Should().Be(CompanyNit);
         jwt.GetClaim("entity_type").Value.Should().Be("COMPANY");
 
         var me = await GetMeAsync(accessToken);
         me.Should().NotBeNull();
         me!.CompanyName.Should().Be("Acme Renting HU10616");
-        me.CompanyNit.Should().Be("900111222-3");
+        me.CompanyNit.Should().Be(CompanyNit);
         me.EntityType.Should().Be("COMPANY");
         me.Roles.Should().ContainSingle(r => r.RoleId == _companyRoleId);
     }
@@ -83,22 +88,23 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
         var jwt = new JsonWebTokenHandler().ReadJsonWebToken(accessToken);
         jwt.GetClaim("entity_type").Value.Should().Be("TRANSIT_OFFICE");
         jwt.GetClaim("company_name").Value.Should().Be("Organismo de Tránsito HU10616");
-        jwt.GetClaim("company_nit").Value.Should().Be("800999888-1");
+        jwt.GetClaim("company_nit").Value.Should().Be(TransitOfficeNit);
 
         var me = await GetMeAsync(accessToken);
         me!.EntityType.Should().Be("TRANSIT_OFFICE");
-        me.CompanyNit.Should().Be("800999888-1");
+        me.CompanyNit.Should().Be(TransitOfficeNit);
     }
 
-    // AC3 — /me devuelve TODOS los roles activos (no solo el primero).
+    // AC3 — /me devuelve los roles ACTIVOS del usuario. Con el rol único es exactamente uno; la
+    // forma de lista se conserva en el contrato (antes la HU #10506 permitía varios).
     [Fact]
-    public async Task Login_MultiRoleUser_MeExposesAllActiveRoles()
+    public async Task Login_MeExposesTheActiveRole()
     {
         var accessToken = await LoginAsync($"multi-{_multiRoleUserId:N}@flit.local");
 
         var me = await GetMeAsync(accessToken);
-        me!.Roles.Should().HaveCount(2);
-        me.Roles.Select(r => r.RoleId).Should().BeEquivalentTo([_multiRoleAId, _multiRoleBId]);
+        me!.Roles.Should().HaveCount(1);
+        me.Roles.Select(r => r.RoleId).Should().BeEquivalentTo([_multiRoleAId]);
     }
 
     // AC4 — tenant sin NIT registrado: el login se completa sin error y company_nit va vacío.
@@ -172,7 +178,7 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
             Id = _companyTenantId,
             Code = $"CO-HU10616-{Guid.NewGuid():N}"[..20],
             LegalName = "Acme Renting HU10616",
-            TaxId = "900111222-3",
+            TaxId = CompanyNit,
             TenantType = "RENTING",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -183,7 +189,7 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
             Id = _otTenantId,
             Code = $"OT-HU10616-{Guid.NewGuid():N}"[..20],
             LegalName = "Organismo de Tránsito HU10616",
-            TaxId = "800999888-1",
+            TaxId = TransitOfficeNit,
             TenantType = "RENTING",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -305,24 +311,13 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
         };
-        var multiRoleB = new Role
-        {
-            Id = Guid.NewGuid(),
-            Code = $"Hu10616MultiB-{Guid.NewGuid():N}"[..40],
-            Name = "HU10616 Multi Role B",
-            TargetEntityType = "COMPANY",
-            IsSystem = false,
-            IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-        };
-        db.Roles.AddRange(companyRole, otRole, noNitRole, multiRoleA, multiRoleB);
+        db.Roles.AddRange(companyRole, otRole, noNitRole, multiRoleA);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         _companyRoleId = companyRole.Id;
         _otRoleId = otRole.Id;
         _noNitRoleId = noNitRole.Id;
         _multiRoleAId = multiRoleA.Id;
-        _multiRoleBId = multiRoleB.Id;
 
         db.UserRoleAssignments.AddRange(
             new UserRoleAssignment
@@ -360,15 +355,6 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
                 RoleId = multiRoleA.Id,
                 AssignedAt = DateTimeOffset.UtcNow,
                 CreatedAt = DateTimeOffset.UtcNow,
-            },
-            new UserRoleAssignment
-            {
-                Id = Guid.NewGuid(),
-                TenantId = _companyTenantId,
-                UserId = _multiRoleUserId,
-                RoleId = multiRoleB.Id,
-                AssignedAt = DateTimeOffset.UtcNow,
-                CreatedAt = DateTimeOffset.UtcNow,
             });
 
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -381,34 +367,67 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
     {
         using var db = CreateDbContext();
 
-        db.UserRoleAssignments.RemoveRange(db.UserRoleAssignments.Where(a =>
-            a.TenantId == _companyTenantId || a.TenantId == _otTenantId || a.TenantId == _noNitTenantId));
-        db.TransitOfficeProfiles.RemoveRange(db.TransitOfficeProfiles.Where(p => p.TenantId == _otTenantId));
-        db.UserCredentials.RemoveRange(db.UserCredentials.Where(c =>
-            c.UserId == _companyUserId || c.UserId == _otUserId || c.UserId == _noNitUserId || c.UserId == _multiRoleUserId));
-        db.SaveChanges();
+        TryDelete(() => db.UserRoleAssignments
+            .Where(a => a.TenantId == _companyTenantId || a.TenantId == _otTenantId || a.TenantId == _noNitTenantId)
+            .ExecuteDelete());
+        TryDelete(() => db.TransitOfficeProfiles.Where(p => p.TenantId == _otTenantId).ExecuteDelete());
+        TryDelete(() => db.UserCredentials
+            .Where(c => c.UserId == _companyUserId || c.UserId == _otUserId
+                        || c.UserId == _noNitUserId || c.UserId == _multiRoleUserId)
+            .ExecuteDelete());
 
-        // El login audita cada intento con changed_by = usuario (HU #10678); esas filas
-        // deben eliminarse antes que los usuarios o el FK tenant_config_audit_logs_changed_by_fkey
-        // bloquea el borrado.
-        db.TenantConfigAuditLogs.RemoveRange(db.TenantConfigAuditLogs.Where(l =>
-            (l.ChangedBy == _companyUserId || l.ChangedBy == _otUserId
-                || l.ChangedBy == _noNitUserId || l.ChangedBy == _multiRoleUserId)
-            || (l.TargetEntityId == _companyUserId || l.TargetEntityId == _otUserId
-                || l.TargetEntityId == _noNitUserId || l.TargetEntityId == _multiRoleUserId)));
-        db.SaveChanges();
+        // El login audita cada intento con changed_by = usuario (HU #10678); esas filas deben
+        // eliminarse antes que los usuarios o el FK tenant_config_audit_logs_changed_by_fkey
+        // bloquea el borrado. Va en la MISMA etapa que el borrado del usuario: la traza se
+        // escribe en su propio scope, así que una fila puede confirmarse entre ambos DELETE.
+        TryDelete(() =>
+        {
+            db.TenantConfigAuditLogs
+                .Where(l => l.ChangedBy == _companyUserId || l.ChangedBy == _otUserId
+                            || l.ChangedBy == _noNitUserId || l.ChangedBy == _multiRoleUserId
+                            || l.TargetEntityId == _companyUserId || l.TargetEntityId == _otUserId
+                            || l.TargetEntityId == _noNitUserId || l.TargetEntityId == _multiRoleUserId)
+                .ExecuteDelete();
+            db.Users
+                .Where(u => u.Id == _companyUserId || u.Id == _otUserId
+                            || u.Id == _noNitUserId || u.Id == _multiRoleUserId)
+                .ExecuteDelete();
+        });
 
-        db.Users.RemoveRange(db.Users.Where(u =>
-            u.Id == _companyUserId || u.Id == _otUserId || u.Id == _noNitUserId || u.Id == _multiRoleUserId));
-        db.Roles.RemoveRange(db.Roles.Where(r =>
-            r.Id == _companyRoleId || r.Id == _otRoleId || r.Id == _noNitRoleId
-            || r.Id == _multiRoleAId || r.Id == _multiRoleBId));
-        db.SaveChanges();
+        TryDelete(() => db.Roles
+            .Where(r => r.Id == _companyRoleId || r.Id == _otRoleId
+                        || r.Id == _noNitRoleId || r.Id == _multiRoleAId)
+            .ExecuteDelete());
 
-        db.Tenants.RemoveRange(db.Tenants.Where(t =>
-            t.Id == _companyTenantId || t.Id == _otTenantId || t.Id == _noNitTenantId));
-        db.TransitOffices.RemoveRange(db.TransitOffices.Where(o => o.Id == _transitOfficeId));
-        db.SaveChanges();
+        TryDelete(() => db.Tenants
+            .Where(t => t.Id == _companyTenantId || t.Id == _otTenantId || t.Id == _noNitTenantId)
+            .ExecuteDelete());
+        TryDelete(() => db.TransitOffices.Where(o => o.Id == _transitOfficeId).ExecuteDelete());
+    }
+
+    /// <summary>
+    /// Etapa de limpieza aislada: la BD de desarrollo es COMPARTIDA, así que el fallo de una
+    /// etapa no debe impedir las siguientes ni hacer fallar el test (esto es housekeeping, el
+    /// test ya pasó). Se reintenta una vez por si una escritura concurrente vuelve a bloquear.
+    /// </summary>
+    private static void TryDelete(Action stage)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                stage();
+                return;
+            }
+            catch (DbUpdateException)
+            {
+                // Reintento.
+            }
+            catch (DbException)
+            {
+                // ExecuteDelete no envuelve el error del proveedor (p. ej. violación de FK).
+            }
+        }
     }
 
     private sealed record LoginResponseDto(string AccessToken, int ExpiresInSeconds, string TokenType);

@@ -14,6 +14,8 @@ internal sealed class TransitOfficeConfiguration : IEntityTypeConfiguration<Tran
         builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
         builder.Property(x => x.DepartmentCode).HasColumnName("department_code").HasMaxLength(2).IsRequired();
         builder.Property(x => x.CityCode).HasColumnName("city_code").HasMaxLength(5).IsRequired();
+        builder.Property(x => x.CityName).HasColumnName("city_name").HasMaxLength(100);
+        builder.Property(x => x.DepartmentName).HasColumnName("department_name").HasMaxLength(100);
         builder.Property(x => x.IsActive).HasColumnName("is_active").IsRequired();
 
         // Quipux (HU #10710). Nullable a propósito: se carga a mano y "no lo sé" debe distinguirse

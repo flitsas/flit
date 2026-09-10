@@ -10,4 +10,5 @@ public sealed record TransitOfficeEntry(
     string Code,
     string Name,
     string DepartmentCode,
-    string CityCode);
+    string CityCode,
+    string? CityName = null);

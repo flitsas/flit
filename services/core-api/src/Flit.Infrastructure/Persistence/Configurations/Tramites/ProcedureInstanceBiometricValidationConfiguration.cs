@@ -34,6 +34,8 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.Score).HasColumnName("score");
         builder.Property(x => x.Detail).HasColumnName("detail").HasColumnType("jsonb");
         builder.Property(x => x.FacePhotoPath).HasColumnName("face_photo_path").HasMaxLength(1000);
+        builder.Property(x => x.SignatureImagePath).HasColumnName("signature_image_path").HasMaxLength(1000);
+        builder.Property(x => x.SignatureImageSha256).HasColumnName("signature_image_sha256").HasMaxLength(64);
         builder.Property(x => x.IdFrontPhotoPath).HasColumnName("id_front_photo_path").HasMaxLength(1000);
         builder.Property(x => x.IdBackPhotoPath).HasColumnName("id_back_photo_path").HasMaxLength(1000);
         builder.Property(x => x.ValidatedAt).HasColumnName("validated_at");

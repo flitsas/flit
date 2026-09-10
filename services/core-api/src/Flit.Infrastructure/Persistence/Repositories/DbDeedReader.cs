@@ -98,6 +98,40 @@ internal sealed class DbDeedReader : IDeedReader
             },
             cancellationToken);
 
+    public Task<DeedItem?> FindActiveByCompanyAsync(
+        Guid tenantId,
+        Guid representedCompanyId,
+        CancellationToken cancellationToken = default) =>
+        TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
+                var deedId = await (
+                        from dc in _context.CompanyDeedCompanies.AsNoTracking()
+                        join d in _context.CompanyDeeds.AsNoTracking() on dc.DeedId equals d.Id
+                        where dc.RepresentedCompanyId == representedCompanyId
+                            && d.TenantId == tenantId
+                            && d.IsActive
+                        orderby (d.UpdatedAt ?? d.CreatedAt) descending, d.Id descending
+                        select d.Id)
+                    .FirstOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (deedId == Guid.Empty)
+                {
+                    return null;
+                }
+
+                var row = await _context.CompanyDeeds
+                    .AsNoTracking()
+                    .FirstAsync(d => d.Id == deedId, cancellationToken)
+                    .ConfigureAwait(false);
+                var items = await ProjectAsync([row], cancellationToken).ConfigureAwait(false);
+                return items.Count == 0 ? null : items[0];
+            },
+            cancellationToken);
+
     private async Task<IReadOnlyList<DeedItem>> ProjectAsync(
         List<CompanyDeedEntity> rows,
         CancellationToken cancellationToken)

@@ -379,37 +379,24 @@ public sealed class VerifikResultMapperTests
         return VerifikResultMapper.MapVehicle(response!);
     }
 
-    [Theory]
-    [InlineData("noCertificado")]
-    [InlineData("numeroCertificado")]
-    [InlineData("nroCertificado")]
-    public void Rtm_NumeroDeCertificado_SeResuelvePorCualquieraDeLosNombresCandidatos(string nombre)
-    {
-        // No hay muestra real que documente cómo se llama este campo: las respuestas capturadas traen
-        // la lista de RTM vacía. En vez de fijar un nombre inventado, se aceptan los candidatos.
-        var result = MapearRtm($$"""{ "vigente": "SI", "{{nombre}}": "CDA-99887" }""");
-
-        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_numero" && f.ValueText == "CDA-99887");
-    }
-
     [Fact]
-    public void Rtm_FechasDeVigenciaYExpedicion_SeResuelvenDeLosCamposNoModelados()
+    public void Rtm_NumeroYFechasDeLaRevision_YaNoSeAdivinanPorNombresCandidatos()
     {
+        // HU #11303 — se retiró la resolución por nombres candidatos que introdujo la HU #11135. No es
+        // una decisión de estilo: la medición en base de datos mostró CERO filas de rtm_numero y
+        // rtm_expedicion en todo el ambiente, así que la lista nunca acertó un nombre. Lo único que
+        // producía era cobertura aparente sobre un hueco real, que es el mecanismo que originó el
+        // Feature #11301. La evidencia de qué manda el proveedor vive ahora en el payload crudo.
         var result = MapearRtm("""
-            { "vigente": "SI", "cdaExpide": "CDA NORTE", "fechaVigencia": "01/02/2026", "fechaExpedicion": "31/01/2026" }
+            { "vigente": "SI", "cdaExpide": "CDA NORTE", "noCertificado": "CDA-99887", "fechaExpedicion": "31/01/2026" }
             """);
 
-        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_vigencia" && f.ValueText == "01/02/2026");
-        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_expedicion" && f.ValueText == "31/01/2026");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "rtm_numero");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "rtm_expedicion");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "rtm_vigencia");
+
+        // Lo que el modelo SÍ declara se sigue leyendo igual.
         result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_entidad" && f.ValueText == "CDA NORTE");
-    }
-
-    [Fact]
-    public void Rtm_NumeroComoNumeroJson_TambienSeLee()
-    {
-        var result = MapearRtm("""{ "vigente": "SI", "noCertificado": 99887 }""");
-
-        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_numero" && f.ValueText == "99887");
     }
 
     [Fact]
@@ -436,5 +423,23 @@ public sealed class VerifikResultMapperTests
         var response = JsonSerializer.Deserialize<VerifikVehicleResponse>(json, WebJsonOptions);
 
         response!.Data!.TecnoMecanica![0].CamposNoModelados.Should().ContainKey("campoNuevoDelProveedor");
+    }
+
+    [Fact]
+    public void HydratedFields_DatosTecnicos_HidratanEjesDimensionesYLlantas()
+    {
+        var json = """
+            {"data":{"informacionGeneral":{"noPlaca":"S07249","noVin":"9F9CHJ3UMEP185065","claseVehiculo":"SEMIREMOLQUE","estadoDelVehiculo":"ACTIVO"},
+             "datosTecnicos":{"alto":"2000","ancho":"2980","largo":"15500","noEjes":"3","noLlantas":"12","rodaje":"ORUGAS"}}}
+            """;
+        var response = JsonSerializer.Deserialize<VerifikVehicleResponse>(json, WebJsonOptions)!;
+        var result = VerifikResultMapper.MapVehicle(response);
+
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_axles" && f.ValueText == "3");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_height" && f.ValueText == "2000");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_width" && f.ValueText == "2980");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_length" && f.ValueText == "15500");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_tires" && f.ValueText == "12");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_traction" && f.ValueText == "ORUGAS");
     }
 }

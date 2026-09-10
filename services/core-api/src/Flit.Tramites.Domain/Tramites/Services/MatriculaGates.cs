@@ -31,12 +31,18 @@ public static class MatriculaGates
                 // avanza con un dato vital sin verificar; hay que reejecutar la consulta.
                 if (ctx.Preflight?.ProviderError == true)
                     return GateResult.Block("preflight_provider_error", "No fue posible verificar la información del vehículo en el RUNT. Vuelve a ejecutar la consulta antes de continuar");
+                // Bloqueo DURO: el RUNT respondió y el vehículo NO existe. Sin vehículo no hay trámite,
+                // así que no se subsana con "aceptar riesgo" ni forzando; hay que corregir el VIN.
+                if (ctx.Preflight?.VehiculoNoEncontrado == true)
+                    return GateResult.Block("vehiculo_no_encontrado", "El vehículo no se encontró en el RUNT. Verifica el VIN antes de continuar");
                 return GateResult.Allowed;
 
             case 2:
                 // HU #10935 — Paso 2 = Comprador (antes iba en el paso 3): parte + RUNT consultado.
-                if (!ParteCompleta(ctx.Comprador))
-                    return GateResult.Block("comprador_incompleto", "Completa nombre, documento y email del comprador");
+                // HU #11593 — exige los seis datos de contacto (nombre, documento, email, ciudad,
+                // dirección, teléfono); el mensaje enumera los campos faltantes reales.
+                if (!ParteCompletaRule.EstaCompleta(ctx.Comprador))
+                    return GateResult.Block("comprador_incompleto", ParteCompletaRule.MensajeFaltantes("comprador", ctx.Comprador));
                 if (!RuntConsultado(ctx.RuntComprador, ctx.Comprador?.Documento))
                     return GateResult.Block("runt_comprador", "Consulta RUNT del comprador antes de continuar");
                 return GateResult.Allowed;
@@ -47,6 +53,9 @@ public static class MatriculaGates
                 // información es vital y NO se puede continuar ni "aceptando el riesgo" ni forzando.
                 if (ctx.Preflight?.ProviderError == true)
                     return GateResult.Block("preflight_provider_error", "No fue posible verificar la información en el RUNT. Vuelve a ejecutar la consulta antes de continuar");
+                // Mismo bloqueo DURO del paso 1: sin vehículo verificado no se avanza a documentos.
+                if (ctx.Preflight?.VehiculoNoEncontrado == true)
+                    return GateResult.Block("vehiculo_no_encontrado", "El vehículo no se encontró en el RUNT. Verifica el VIN antes de continuar");
                 if (!forzar && !ctx.RiesgoPreflightAceptado && ctx.Preflight?.Overall == "red")
                     return GateResult.Block("preflight_red", "Hay bloqueos críticos en los documentos. Subsana antes de continuar");
                 if (!ctx.DocumentosObligatoriosCompletos)
@@ -90,12 +99,6 @@ public static class MatriculaGates
             return false;
         return paso < MaxPasoAlcanzable(ctx);
     }
-
-    private static bool ParteCompleta(ParteDatos? parte) =>
-        parte is not null &&
-        !string.IsNullOrWhiteSpace(parte.Nombre) &&
-        !string.IsNullOrWhiteSpace(parte.Documento) &&
-        TramiteDocumento.EmailValido(parte.Email);
 
     private static bool RuntConsultado(RuntSnapshot? runt, string? documentoParte)
     {

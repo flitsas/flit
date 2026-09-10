@@ -1,8 +1,19 @@
 // Lógica pura del gate de acceso a /admin/* y /empresa/* (HU #10194, AC6; HU #10218 OT admin).
 // Extraída del middleware para poder probarla sin el runtime de Next.js.
-import { decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin } from "./jwt";
+import {
+  canAccessRuntConfirmation,
+  canManageBanners,
+  canReadGeneracionDocumental,
+  decodeJwtPayload,
+  isAdminCompany,
+  isOtAdmin,
+  isSuperAdmin,
+} from "./jwt";
 
 export const FORBIDDEN_PATH = "/403";
+
+/** Raíz de Administración → Plataforma → Confirmación RUNT (Feature #12276). */
+export const RUNT_CONFIRMATION_BASE_PATH = "/admin/plataforma/confirmacion-runt";
 
 export type UserRole = "superadmin" | "admincompany" | "ot_admin" | "user";
 
@@ -20,6 +31,11 @@ export interface AdminAccessDecision {
  * - Sin token, token malformado o token expirado → no renderizar, redirigir a /403.
  * - SuperAdmin → permitido en todo /admin/*.
  * - ot_admin → permitido solo en /admin/transit-offices/* (HU #10218).
+ * - AdminCompany → permitido en /admin/companies/* (HU #11228; la página redirige a su tenant).
+ * - Cualquier rol con `generacion-documental.read` → permitido en /admin/generacion-documental/* (Feature #12201).
+ * - Cualquier rol con `runt_confirmation.settings.manage` o `runt_confirmation.history.read` →
+ *   permitido en /admin/plataforma/confirmacion-runt/* (Feature #12276).
+ * - Cualquier rol con `banners.manage` → permitido en /admin/banners/* (Feature #12236, HU #12241).
  * - Otros roles → redirigir a /403.
  */
 export function evaluateAdminAccess(
@@ -40,6 +56,44 @@ export function evaluateAdminAccess(
     pathname?.startsWith("/admin/transit-offices") &&
     payload &&
     isOtAdmin(payload)
+  ) {
+    return { allowed: true };
+  }
+
+  if (
+    pathname?.startsWith("/admin/companies") &&
+    payload &&
+    isAdminCompany(payload)
+  ) {
+    return { allowed: true };
+  }
+
+  // Generación documental (Feature #12201): el módulo NO es exclusivo de SuperAdmin. El
+  // acceso se gobierna por el permiso `generacion-documental.read` del JWT, no por rol —
+  // si se dejara solo el gate SuperAdmin de arriba, un AdminCompany con el módulo
+  // habilitado sería redirigido a /403 antes de renderizar nada.
+  if (
+    pathname?.startsWith("/admin/generacion-documental") &&
+    canReadGeneracionDocumental(payload)
+  ) {
+    return { allowed: true };
+  }
+
+  // Confirmación RUNT (Feature #12276): único submódulo de Plataforma que NO es exclusivo de
+  // SuperAdmin. Se abre con cualquiera de sus dos permisos; qué pestaña ve cada uno lo decide la
+  // propia página. El resto de /admin/plataforma/* sigue siendo SuperAdmin.
+  if (
+    pathname?.startsWith(RUNT_CONFIRMATION_BASE_PATH) &&
+    canAccessRuntConfirmation(payload)
+  ) {
+    return { allowed: true };
+  }
+
+  // Banners promocionales (Feature #12236, HU #12241): tampoco es exclusivo de SuperAdmin —
+  // se gobierna por el permiso `banners.manage` del JWT, mismo patrón que generación documental.
+  if (
+    pathname?.startsWith("/admin/banners") &&
+    canManageBanners(payload)
   ) {
     return { allowed: true };
   }

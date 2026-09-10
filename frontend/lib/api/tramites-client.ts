@@ -1,3 +1,4 @@
+import type { QueryField } from '@/lib/api/queries';
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
 import type {
   AceptarConsentimientoResult,
@@ -9,6 +10,7 @@ import type {
   BiometricParte,
   BiometricValidation,
   BiometricValidationsResponse,
+  FirmaBaulActorCoberturaDto,
   ChecklistView,
   CommercialData,
   SuggestedCommercialValue,
@@ -19,6 +21,7 @@ import type {
   CreateFromConsultaResult,
   CreateInstanceRequest,
   PreflightPreviewResult,
+  BatchOcrResult,
   DocumentOcrResult,
   PersistOcrFieldsResult,
   EditarPrevalidacionRequest,
@@ -38,9 +41,17 @@ import type {
   PrendaData,
   PrendaInput,
   InstanceSummary,
+  InstanceEstadoCountsResponse,
   InstancesResponse,
+  ListInstancesParams,
+  FirmaPosteriorEstado,
+  MandateSignerSelection,
   TransitOfficeOption,
   TransitOfficesResponse,
+  VehicleServiceTypeOption,
+  VehicleServiceTypesResponse,
+  RuesPreviewInput,
+  RuesPreviewResult,
   IniciarBiometriaInput,
   IniciarBiometriaResult,
   InvitarParticipanteInput,
@@ -58,6 +69,7 @@ import type {
   ProcedureInstanceDetail,
   ReconcileIdentityResult,
   ProcedureInstanceSummary,
+  CompletePlateFlowResult,
   RuntPersonLookupInput,
   RuntPersonLookupResult,
   ValidateSoatResult,
@@ -70,11 +82,16 @@ import type {
   SimularFirmaResult,
   SolicitarFirmaInput,
   StatusHistoryPage,
+  NotificationDispatchesResponse,
   TenantBiometricValidationsResponse,
   TenantBiometricValidationFilters,
+  TenantBiometricPersonsResponse,
+  TenantBiometricPersonFilters,
+  PersonBiometricValidationsResponse,
   StuckIdentityValidationsResponse,
   WizardModalidad,
   WizardState,
+  DocumentoInformativoPreviewItem,
 } from './types/procedure-runtime';
 
 /**
@@ -123,6 +140,7 @@ function mapPreflight(dto: PreflightSnapshotDto): PreflightSnapshot {
 import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
+import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
 
 export { DEV_TENANT_ID, DEV_USER_ID };
 
@@ -241,6 +259,33 @@ export class TramitesApiError extends Error {
 }
 
 /**
+ * Duck-typing — 409 informativo de precedencia de envío de identidad (HU #11264/#11267).
+ * El cuerpo trae `motivo` (IdentitySendConflictDto), no un ProblemDetails clásico.
+ */
+export function getIdentitySendConflict(err: unknown): {
+  motivo: string;
+  status: string | null;
+  validatedAt: string | null;
+  validUntil: string | null;
+  validationId: string | null;
+  origen: string | null;
+} | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 409 || !problem || typeof problem !== 'object') return null;
+  const p = problem as Record<string, unknown>;
+  if (typeof p.motivo !== 'string' || !p.motivo) return null;
+  return {
+    motivo: p.motivo,
+    status: typeof p.status === 'string' ? p.status : null,
+    validatedAt: typeof p.validatedAt === 'string' ? p.validatedAt : null,
+    validUntil: typeof p.validUntil === 'string' ? p.validUntil : null,
+    validationId: typeof p.validationId === 'string' ? p.validationId : null,
+    origen: typeof p.origen === 'string' ? p.origen : null,
+  };
+}
+
+/**
  * AC1 (HU #10882) — detecta el bloqueo de duplicidad de trámite en curso (409
  * `DUPLICATE_ACTIVE_PROCEDURE`, HU #10876) que puede devolver el preflight de consulta de
  * vehículo y extrae el id del trámite existente para ofrecer "Retomar" (AC2). Devuelve `null`
@@ -290,7 +335,55 @@ export function getVehicleStateBlock(err: unknown): VehicleStateBlockInfo | null
   return { vehicleStatus, procedureType: typeof procedureType === 'string' ? procedureType : '' };
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * HU #11199 (AC3) / HU #11200 (AC2/AC3) — detecta el bloqueo del organismo de tránsito (422
+ * `TRANSIT_OFFICE_NOT_AVAILABLE`): el organismo no está activo en FLIT o no está habilitado para la
+ * compañía gestora. En matrícula inicial es la secretaría que el gestor eligió; en traspaso es el
+ * organismo donde el RUNT dice que está matriculado el vehículo. Como en ambos casos lo que el gestor
+ * debe hacer es lo mismo (pedirle al administrador que lo active y lo habilite), no se distingue el
+ * motivo: la señal es booleana a propósito.
+ *
+ * Duck-typing sobre `{ status, problem }`, mismo patrón que `getVehicleStateBlock`.
+ */
+/**
+ * Detecta el bloqueo DURO «el vehículo no tiene carrocería que cambiar» (422
+ * `VEHICLE_BODY_TYPE_MISSING`) que devuelven la consulta previa del paso 1 y el preflight al crear
+ * el trámite. Booleano a propósito: solo aplica a un tipo de trámite (el cambio de carrocería) y lo
+ * que el gestor debe hacer es siempre lo mismo —escoger otro tipo—, así que no hay variantes de
+ * mensaje que distinguir como sí las tiene {@link getVehicleStateBlock}.
+ *
+ * Duck-typing sobre `{ status, problem }`, mismo patrón que {@link isTransitOfficeUnavailable}.
+ */
+export function isVehicleBodyTypeMissing(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return false;
+  return (problem as { title?: unknown }).title === 'VEHICLE_BODY_TYPE_MISSING';
+}
+
+export function isTransitOfficeUnavailable(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return false;
+  return (problem as { title?: unknown }).title === 'TRANSIT_OFFICE_NOT_AVAILABLE';
+}
+
+/**
+ * Consulta RUES sin trámite (paso 1, empresa vinculadora del tipo de servicio PÚBLICO) — distingue el
+ * fallo transitorio del proveedor (503, NO es culpa del operador: se ofrece reintentar) del caso
+ * "el proveedor respondió y el NIT no existe" (200 con `found:false`, que no lanza excepción).
+ *
+ * Duck-typing sobre `{ status }`, mismo patrón que `isTransitOfficeUnavailable`.
+ */
+export function isRuesPreviewUnavailable(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status } = err as { status?: unknown };
+  return status === 503;
+}
+
+// Exportado para que otros clientes del mismo dominio (p. ej. lib/api/ui-preferences.ts)
+// reutilicen el mismo manejo de errores/JSON en vez de reimplementarlo.
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(apiUrl(path), {
     ...init,
@@ -346,7 +439,10 @@ function jwtTenantId(): string | undefined {
  * Para un company-user el backend igual lo sobrescribe desde el token (defensa); enviarlo solo
  * mantiene la llamada coherente. NO es el header X-Flit-SuperAdmin de parametrización.
  */
-function tenantHeader(tenantId?: string): HeadersInit {
+// Exportado por el mismo motivo que `request`: es el único lugar que resuelve Bearer +
+// X-Tenant-Id (explícito → tenant activo → JWT), y otros clientes (ui-preferences.ts) lo
+// necesitan tal cual, sin duplicar la resolución de tenant.
+export function tenantHeader(tenantId?: string): HeadersInit {
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -366,6 +462,113 @@ async function sha256Hex(file: File): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+
+/**
+ * Una página del listado de trámites, con el `total` del universo filtrado.
+ *
+ * Los defaults de los campos async (HU #10350 / #11056) se aplican AQUÍ y no en cada llamador: un
+ * backend que todavía no exponga una columna deja la tabla funcionando en vez de romper el render.
+ */
+/** Cuerpo y cabeceras del camino POST. El tenant sigue viajando por cabecera, no por el cuerpo. */
+function searchPayload(params: ListInstancesParams) {
+  const headers: Record<string, string> = {};
+  if (params.filterTenantId) headers['X-Tenant-Id'] = params.filterTenantId;
+  const { filterTenantId: _tenant, ...body } = params;
+  return { headers, body };
+}
+
+/**
+ * Una página del listado con `total`, por POST y con condiciones.
+ *
+ * Comparte con {@link listInstancesPage} la normalización de los campos async: se aplica en
+ * {@link normalizeInstances} para que las dos rutas no puedan divergir en qué defaults ponen.
+ */
+async function searchInstances(
+  params: ListInstancesParams,
+): Promise<{ items: InstanceSummary[]; total: number }> {
+  const { headers, body } = searchPayload(params);
+  const res = await request<InstancesResponse>('/api/v1/tramites/instances/search', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  const items = normalizeInstances(res?.items);
+  return { items, total: res?.total ?? items.length };
+}
+
+/**
+ * HU #12194 — historial operativo de una placa.
+ *
+ * <p>Endpoint propio y no `listInstances({ placa })` porque el alcance NO es el mismo: el historial
+ * lo resuelve el servidor por rol (SuperAdmin ve la placa en todas las compañías; el resto solo en
+ * la suya) y fija el orden cronológico descendente. El cliente no manda `sortBy` ni tenant: si los
+ * mandara, estaría reproduciendo una decisión que ya es del servidor y podría divergir de ella.</p>
+ *
+ * <p>Una placa sin trámites responde `200` con lista vacía, nunca `404`: el vacío es un resultado,
+ * no un error, y quien llama debe pintarlo como estado vacío.</p>
+ */
+async function listPlateHistory(params: {
+  placa: string;
+  skip?: number;
+  take?: number;
+}): Promise<{ items: InstanceSummary[]; total: number }> {
+  const qs = new URLSearchParams();
+  // La normalización canónica la hace el servidor (Trim + upper); aquí solo se evita mandar
+  // espacios de sobra que ensucian la URL.
+  qs.set('placa', params.placa.trim());
+  if (params.skip !== undefined) qs.set('skip', String(params.skip));
+  if (params.take !== undefined) qs.set('take', String(params.take));
+
+  const res = await request<InstancesResponse>(
+    `/api/v1/tramites/instances/plate-history?${qs.toString()}`,
+  );
+  const items = normalizeInstances(res?.items);
+  return { items, total: res?.total ?? items.length };
+}
+
+async function listInstancesPage(
+  params: ListInstancesParams,
+): Promise<{ items: InstanceSummary[]; total: number }> {
+  const headers: Record<string, string> = {};
+  if (params.filterTenantId) headers['X-Tenant-Id'] = params.filterTenantId;
+
+  const { filterTenantId: _tenant, ...query } = params;
+  const qs = buildListInstancesSearchParams(query).toString();
+  const path = qs ? `/api/v1/tramites/instances?${qs}` : '/api/v1/tramites/instances';
+
+  const res = await request<InstancesResponse>(path, { headers });
+
+  const items = normalizeInstances(res?.items);
+
+  // Sin `total` (ruta histórica, sin paginación) el respaldo es el tamaño de la página: nunca
+  // promete filas que no existen, que es el error que sí se notaría al exportar.
+  return { items, total: res?.total ?? items.length };
+}
+
+/**
+ * Defaults seguros de los campos async (HU #10350 / #11056): un backend que aún no exponga una
+ * columna deja la tabla funcionando en vez de romper el render.
+ */
+function normalizeInstances(items: InstanceSummary[] | undefined): InstanceSummary[] {
+  return (items ?? []).map((item) => ({
+    ...item,
+    draftFinalizedAt: item.draftFinalizedAt ?? null,
+    identityValidationStatus: item.identityValidationStatus ?? null,
+    signaturePending: item.signaturePending ?? false,
+    canSubmit: item.canSubmit ?? false,
+    prioritario: item.prioritario ?? false,
+    // HU #11056 — mismo criterio: un backend que aún no exponga estas columnas deja la tabla
+    // funcionando. `fuente` cae a 'dashboard' (el origen por defecto), y los estados de "Firmado" a
+    // null = "no aplica", que es la lectura conservadora: no inventa un estado que no se conoce.
+    updatedAt: item.updatedAt ?? null,
+    gestorNombre: item.gestorNombre ?? null,
+    fuente: item.fuente ?? 'dashboard',
+    firmaVendedorEstado: item.firmaVendedorEstado ?? null,
+    firmaCompradorEstado: item.firmaCompradorEstado ?? null,
+    consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
+  }));
 }
 
 export const tramitesClient = {
@@ -389,37 +592,119 @@ export const tramitesClient = {
     }),
 
   // Slice M6 — listado de instancias para la tabla "Trámites en curso".
-  // GET devuelve { items }; se desempaqueta al arreglo para el consumidor.
+  // GET devuelve { items, total? }; se desempaqueta al arreglo para el consumidor.
   // #1 — El tenant lo deriva el backend del JWT: company-user ve solo su compañía. El SuperAdmin
   // ve TODO; solo se manda X-Tenant-Id si elige una compañía (filterTenantId).
+  // Acepta string legacy (= filterTenantId) o un objeto con filtros/orden server-side.
   listInstances: async (
-    filterTenantId?: string,
+    filterTenantIdOrParams?: string | ListInstancesParams,
   ): Promise<InstanceSummary[]> => {
+    const params: ListInstancesParams =
+      typeof filterTenantIdOrParams === 'string'
+        ? { filterTenantId: filterTenantIdOrParams }
+        : (filterTenantIdOrParams ?? {});
+    return (await listInstancesPage(params)).items;
+  },
+
+  /**
+   * HU #12104 — el MISMO listado pero conservando el `total`, que es cuántos trámites cumplen los
+   * filtros en el universo entero y no cuántos vinieron en esta página.
+   *
+   * <p>Existe porque `listInstances` desempaqueta al arreglo y ese número se perdía. Quien exporta
+   * necesita saber cuándo parar de pedir páginas: sin el total tendría que seguir pidiendo hasta
+   * recibir una vacía, que es una petición de más en cada exportación y no distingue «ya no hay»
+   * de «esta página falló».</p>
+   *
+   * <p>Ojo con el contrato del endpoint: el `total` SOLO viaja por el camino filtrado/ordenado, y
+   * ese camino se activa con cualquier parámetro —incluidos `skip`/`take`—. Un recorrido que no
+   * mande paginación cae en la ruta histórica (top-N sin filtros) y se queda sin total; por eso el
+   * respaldo es el tamaño de la página, que al menos nunca promete filas que no existen.</p>
+   */
+  listInstancesPage: (params: ListInstancesParams = {}) => listInstancesPage(params),
+
+  /**
+   * HU #12194 — historial de trámites de una placa, paginado y con el `total` del universo.
+   *
+   * <p>El alcance por compañía y el orden (createdAt desc) los decide el servidor según el rol de
+   * quien consulta; por eso la firma solo admite placa y paginación.</p>
+   */
+  listPlateHistory: (params: { placa: string; skip?: number; take?: number }) =>
+    listPlateHistory(params),
+
+  /**
+   * HU #12106 — el listado por POST, que es el ÚNICO camino que admite condiciones.
+   *
+   * <p>Lo usan la tabla y el recorrido del export, así que un filtro nuevo llega a los dos a la vez.
+   * Es POST y no un GET con más parámetros porque placa, VIN y radicado aceptan pegar una lista
+   * completa desde Excel, y unos cientos de valores no caben en una query string.</p>
+   */
+  searchInstances: (params: ListInstancesParams = {}) => searchInstances(params),
+
+  /**
+   * HU #12106 — por qué se puede filtrar el listado. La barra se pinta a partir de esta respuesta,
+   * así que un campo nuevo aparece en pantalla sin desplegar frontend.
+   */
+  listFilterFields: async (filterTenantId?: string): Promise<QueryField[]> => {
     const headers: Record<string, string> = {};
     if (filterTenantId) headers['X-Tenant-Id'] = filterTenantId;
-    const res = await request<InstancesResponse>(
-      '/api/v1/tramites/instances',
-      { headers },
-    );
-    // Normaliza los campos async de HU #10350 con defaults seguros: un backend que aún no los
-    // exponga (transición) deja la tabla funcionando (chips/estado base) sin romper el render.
-    return (res?.items ?? []).map((item) => ({
-      ...item,
-      draftFinalizedAt: item.draftFinalizedAt ?? null,
-      identityValidationStatus: item.identityValidationStatus ?? null,
-      signaturePending: item.signaturePending ?? false,
-      canSubmit: item.canSubmit ?? false,
-      prioritario: item.prioritario ?? false,
-      // HU #11056 — mismo criterio: un backend que aún no exponga estas columnas deja la tabla
-      // funcionando. `fuente` cae a 'dashboard' (el origen por defecto), y los estados de "Firmado" a
-      // null = "no aplica", que es la lectura conservadora: no inventa un estado que no se conoce.
-      updatedAt: item.updatedAt ?? null,
-      gestorNombre: item.gestorNombre ?? null,
-      fuente: item.fuente ?? 'dashboard',
-      firmaVendedorEstado: item.firmaVendedorEstado ?? null,
-      firmaCompradorEstado: item.firmaCompradorEstado ?? null,
-      consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
-    }));
+    return (await request<QueryField[]>('/api/v1/tramites/instances/fields', { headers })) ?? [];
+  },
+
+  /** Conteo por estado bajo las mismas condiciones. `estado` se ignora en el servidor. */
+  searchEstadoCounts: async (params: ListInstancesParams = {}): Promise<Record<string, number>> => {
+    const { headers, body } = searchPayload(params);
+    try {
+      return (
+        (await request<Record<string, number>>('/api/v1/tramites/instances/estado-counts', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        })) ?? {}
+      );
+    } catch {
+      // Igual que su gemelo GET: unas tarjetas en blanco son mejor que una pantalla de error. La
+      // tabla es lo que el gestor necesita.
+      return {};
+    }
+  },
+
+  /**
+   * Conteo por estado para la tira de KPIs del listado, sobre el UNIVERSO que matchea los filtros
+   * —no sobre la página que trae `listInstances`—.
+   *
+   * `estado` se ignora aunque venga en `params`: las tarjetas dicen cuántos hay de CADA estado bajo
+   * el resto de criterios, así que acotarlas al estado ya seleccionado dejaría las otras seis en
+   * cero. Se descarta aquí y no en cada llamador para que no se pueda olvidar en uno.
+   *
+   * Si el backend todavía no expone la ruta, devuelve un objeto vacío en vez de propagar: la tabla
+   * es lo que el gestor necesita, y unas tarjetas en blanco son mejor que una pantalla de error.
+   */
+  listInstanceEstadoCounts: async (
+    params: ListInstancesParams = {},
+  ): Promise<Record<string, number>> => {
+    const headers: Record<string, string> = {};
+    if (params.filterTenantId) headers['X-Tenant-Id'] = params.filterTenantId;
+
+    const {
+      filterTenantId: _tenant,
+      estado: _estado,
+      sortBy: _sortBy,
+      sortDir: _sortDir,
+      skip: _skip,
+      take: _take,
+      ...query
+    } = params;
+    const qs = buildListInstancesSearchParams(query).toString();
+    const path = qs
+      ? `/api/v1/tramites/instances/estado-counts?${qs}`
+      : '/api/v1/tramites/instances/estado-counts';
+
+    try {
+      const res = await request<InstanceEstadoCountsResponse>(path, { headers });
+      return res?.counts ?? {};
+    } catch {
+      return {};
+    }
   },
 
   // HU #10536 — marca/desmarca el trámite como prioritario (el OT lo revisa con primacía).
@@ -479,6 +764,80 @@ export const tramitesClient = {
     );
     return res?.items ?? [];
   },
+
+  // Captura del TIPO DE SERVICIO en el paso 1 (solo matrícula inicial, sección 18 del FUR). Catálogo
+  // cerrado (6 valores) y sin tenant-scoping: el backend lo devuelve activos + ordenados por
+  // sort_order (orden normativo del FUR); se ordena de nuevo aquí como defensa adicional.
+  listVehicleServiceTypes: async (): Promise<VehicleServiceTypeOption[]> => {
+    const res = await request<VehicleServiceTypesResponse>('/api/v1/tramites/vehicle-service-types');
+    return (res?.items ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+  },
+
+  /** Catálogo RUNT de colores (BD). Búsqueda server-side; no descarga el catálogo completo. */
+  searchVehicleColors: async (
+    search?: string,
+    limit = 50,
+    signal?: AbortSignal,
+  ): Promise<{ id: string; code: string; name: string }[]> => {
+    const params = new URLSearchParams();
+    if (search?.trim()) params.set('search', search.trim());
+    params.set('limit', String(limit));
+    const qs = params.toString();
+    const res = await request<{ items: { id: string; code: string; name: string }[] }>(
+      `/api/v1/tramites/vehicle-colors${qs ? `?${qs}` : ''}`,
+      { signal },
+    );
+    return res?.items ?? [];
+  },
+
+  /** Catálogo RUNT de carrocerías (BD). Con clase: solo esa clase; sin clase: respaldo. */
+  searchVehicleBodyworks: async (
+    vehicleClass?: string,
+    search?: string,
+    limit = 200,
+    signal?: AbortSignal,
+  ): Promise<{ id: string; code: string; name: string; classVehicle: string | null }[]> => {
+    const params = new URLSearchParams();
+    if (vehicleClass?.trim()) params.set('vehicleClass', vehicleClass.trim());
+    if (search?.trim()) params.set('search', search.trim());
+    params.set('limit', String(limit));
+    const qs = params.toString();
+    const res = await request<{
+      items: { id: string; code: string; name: string; classVehicle: string | null }[];
+    }>(`/api/v1/tramites/vehicle-bodyworks${qs ? `?${qs}` : ''}`, { signal });
+    return res?.items ?? [];
+  },
+
+  // HU #11203 — mandatarios que pueden firmar el mandato de este trámite (los habilitados para su
+  // organismo en la compañía), con la vigencia de su identidad y cuál está elegido.
+  listMandateSigners: (id: string, tenantId?: string) =>
+    request<MandateSignerSelection>(`/api/v1/tramites/instances/${id}/mandate-signers`, {
+      headers: tenantHeader(tenantId),
+    }),
+
+  // HU #11203 — fija quién firma. 409 fuera de borrador; 422 si no está habilitado para el organismo.
+  setMandateSigner: (id: string, mandateSignerId: string, tenantId?: string) =>
+    request<void>(`/api/v1/tramites/instances/${id}/mandate-signer`, {
+      method: 'PUT',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({ mandateSignerId }),
+    }),
+
+  // HU #11197 — ¿se ofrece la firma a posteriori para esta parte y ya está marcada? En persona natural
+  // responde `aplica:false` en vez de un error: para el gestor la opción sencillamente no existe.
+  getFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
+    request<FirmaPosteriorEstado>(
+      `/api/v1/tramites/instances/${id}/deferred-signature?parte=${encodeURIComponent(parte)}`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  // HU #11196 — marca el trámite para firmarse cuando el representante valide su identidad. Idempotente.
+  marcarFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
+    request<FirmaPosteriorEstado>(`/api/v1/tramites/instances/${id}/deferred-signature`, {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({ parte }),
+    }),
 
   getInstance: (id: string, tenantId?: string) =>
     request<ProcedureInstanceDetail>(`/api/v1/tramites/instances/${id}`, {
@@ -568,7 +927,8 @@ export const tramitesClient = {
     ),
 
   // Autopopulado JURÍDICO del actor desde RUES por NIT (bifurcación del "Consultar RUNT" para
-  // persona jurídica). Siempre 200 ante petición válida; `found=false` => fallback manual.
+  // persona jurídica). 200 con found=false => NIT inexistente (ingreso manual). 503 => proveedor
+  // caído o token inválido (no se confunde con "no encontrado").
   ruesPersonLookup: (
     instanceId: string,
     input: RuesPersonLookupInput,
@@ -582,6 +942,17 @@ export const tramitesClient = {
         body: JSON.stringify(input),
       },
     ),
+
+  // Consulta RUES SIN trámite (paso 1, empresa vinculadora cuando el tipo de servicio es PÚBLICO):
+  // sin instanceId, porque en creación diferida (CF-02) el trámite todavía no existe. `found:false`
+  // (200) = el proveedor respondió y el NIT no existe; un 503 (proveedor caído) llega como excepción
+  // y se distingue con `isRuesPreviewUnavailable`.
+  ruesPreview: (input: RuesPreviewInput, tenantId?: string) =>
+    request<RuesPreviewResult>('/api/v1/tramites/rues-preview', {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify(input),
+    }),
 
   // HU #10956 (revierte parcialmente HU #10885/#10878, AC2/AC3/AC4/AC5) — precarga SOLO datos de
   // CONTACTO (ciudad/correo/dirección/teléfono) de una persona ya conocida en el tenant, tras
@@ -661,12 +1032,19 @@ export const tramitesClient = {
     );
     return {
       overall: result.overall,
+      // El mapeo enumera campo por campo, así que todo lo que el servidor añada al check se pierde
+      // aquí en silencio si no se agrega también. Le pasó a `datos` —el respaldo del proveedor:
+      // vencimiento del SOAT, póliza, aseguradora, CDA—: el backend lo mandaba y el panel no lo veía
+      // nunca, porque este `map` lo dejaba fuera. `details` llevaba el mismo tiempo perdido, y con él
+      // el listado de comparendos bajo la advertencia de multas.
       checks: result.checks.map((c) => ({
         key: c.key,
         label: c.label,
         status: c.status,
         source: c.source,
         message: c.message ?? '',
+        details: c.details ?? null,
+        datos: c.datos ?? null,
       })),
       createdAt: new Date().toISOString(),
       fromCache: result.fromCache ?? false,
@@ -682,13 +1060,18 @@ export const tramitesClient = {
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
 
-  /** Gestor en Asignado: checks opcionales + avanza a Terminado. */
+  /**
+   * Gestor en Asignado: checks opcionales + avanza a Terminado.
+   *
+   * El trámite puede avanzar CON salvedades (p. ej. la compañía permite continuar sin SOAT vigente):
+   * en ese caso llega `warningMessage` y la UI debe mostrarlo aunque la operación haya salido bien.
+   */
   completePlateFlow: (
     instanceId: string,
     body: { soatPagado?: boolean; impuestoDepartamentalPagado?: boolean } = {},
     tenantId?: string,
   ) =>
-    request<ProcedureInstanceSummary>(
+    request<CompletePlateFlowResult>(
       `/api/v1/tramites/instances/${instanceId}/plate-flow/complete`,
       {
         method: 'POST',
@@ -718,6 +1101,20 @@ export const tramitesClient = {
     return res?.attachments ?? [];
   },
 
+  // HU #12034 — qué tipos de documento tienen OCR, según el backend. Es la fuente de verdad: sustituye
+  // a la lista por modalidad que el frontend mantenía a mano y que podía contradecir a la BD en silencio.
+  // Estático y sin inquilino, así que no manda X-Tenant-Id. Lanza si la respuesta no es OK; quien llama
+  // decide qué hacer con el fallo (y en el hook la decisión es fallar ABIERTO: intentar el análisis).
+  listOcrTipos: async (): Promise<readonly string[]> => {
+    const res = await fetch(apiUrl('/api/v1/tramites/ocr/tipos'), { method: 'GET' });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    const json = JSON.parse(await res.text()) as { tipos?: readonly string[] };
+    return json.tipos ?? [];
+  },
+
   // OCR semántico de un documento ANTES de subirlo al expediente. Multipart POST a través del API
   // (a diferencia de uploadAttachment, que sube el binario directo a S3). Devuelve el JSON extraído y,
   // en PDFs multi-documento, el recorte en base64. Lanza si la respuesta no es OK (proveedor caído/
@@ -739,6 +1136,31 @@ export const tramitesClient = {
       throw new Error(problemMessage(res, body));
     }
     return JSON.parse(await res.text()) as DocumentOcrResult;
+  },
+
+  // Cargue masivo: manda uno o varios archivos (o un .zip, que expande el backend) y devuelve las tres
+  // listas de la pantalla de revisión. No sube nada: las piezas confirmadas las sube después el hook
+  // por el flujo presign→S3→register de siempre. Lanza sólo si falla el lote entero (sin tipos, sin
+  // archivos, topes excedidos); los fallos de un archivo suelto vienen dentro, en `errores`.
+  analyzeBatch: async (
+    tipos: readonly string[],
+    files: readonly File[],
+    tenantId?: string,
+  ): Promise<BatchOcrResult> => {
+    const form = new FormData();
+    form.append('tipos', tipos.join(','));
+    for (const file of files) form.append('files', file, file.name);
+
+    const res = await fetch(apiUrl('/api/v1/tramites/ocr/lote'), {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    return JSON.parse(await res.text()) as BatchOcrResult;
   },
 
   /**
@@ -932,10 +1354,15 @@ export const tramitesClient = {
       body: JSON.stringify({
         tenantId: tenantId ?? jwtTenantId() ?? DEV_TENANT_ID,
         modalidad: input.modalidad,
+        procedureTypeCode: input.procedureTypeCode ?? null,
         vin: input.vin ?? null,
         plate: input.plate ?? null,
         ownerDocumentType: input.ownerDocumentType ?? null,
         ownerDocumentNumber: input.ownerDocumentNumber ?? null,
+        // `||`, no `??`: mientras no se elige, el organismo viaja como cadena vacía (se elige DESPUÉS
+        // de consultar). El backend lo lee como `Guid?` y un `""` lo rechaza el binder con un 400 sin
+        // cuerpo, antes de que el handler pueda explicar nada. Sin elegir es null, no "".
+        transitOfficeId: input.transitOfficeId || null,
       }),
     });
     return {
@@ -955,7 +1382,20 @@ export const tramitesClient = {
   // consultado: es el único punto del flujo que da de alta el registro. `previewToken` evita repetir
   // la consulta al proveedor externo; si expiró, el backend consulta de nuevo (no falla).
   createInstanceFromConsulta: async (
-    input: ConsultaVehiculoInput & { previewToken?: string | null },
+    input: ConsultaVehiculoInput & {
+      /**
+       * ADR-0050 — `code` del tipo elegido en el catálogo. Manda sobre `modalidad`, que queda como
+       * familia para el bloqueo por compañía. Sin él no hay forma de crear un trámite de OTROS: por
+       * modalidad todos caían en matrícula inicial.
+       */
+      procedureTypeCode?: string | null;
+      previewToken?: string | null;
+      /** Tipo de servicio elegido en el paso 1 (solo matrícula inicial, sección 18 del FUR). */
+      tipoServicioCode?: string | null;
+      /** NIT/razón social de la empresa vinculadora, solo cuando `tipoServicioCode` es PUBLICO. */
+      empresaVinculadoraNit?: string | null;
+      empresaVinculadoraRazonSocial?: string | null;
+    },
     tenantId?: string,
   ): Promise<CreateFromConsultaResult> => {
     const payload = decodeJwtPayload(getToken());
@@ -969,12 +1409,20 @@ export const tramitesClient = {
         tenantId: tenantId ?? payload?.tenant_id ?? DEV_TENANT_ID,
         createdByUserId: payload?.sub ?? DEV_USER_ID,
         modalidad: input.modalidad,
+        procedureTypeCode: input.procedureTypeCode ?? null,
         vin: input.vin ?? null,
         plate: input.plate ?? null,
         ownerDocumentType: input.ownerDocumentType ?? null,
         ownerDocumentNumber: input.ownerDocumentNumber ?? null,
         previewToken: input.previewToken ?? null,
-        transitOfficeId: null,
+        // HU #11199 — la secretaría elegida en el paso 1 viaja a la creación: es lo que la vuelve
+        // permanente y lo que hace que el paso del FUR ya no tenga que preguntarla.
+        transitOfficeId: input.transitOfficeId ?? null,
+        // Tipo de servicio (paso 1, matrícula inicial): igual patrón que transitOfficeId — se elige
+        // antes de que el trámite exista y viaja explícito a la creación.
+        tipoServicioCode: input.tipoServicioCode ?? null,
+        empresaVinculadoraNit: input.empresaVinculadoraNit ?? null,
+        empresaVinculadoraRazonSocial: input.empresaVinculadoraRazonSocial ?? null,
       }),
     });
     return {
@@ -985,10 +1433,27 @@ export const tramitesClient = {
 
   // CF-02 (HU #10883, AC3) — esqueleto de pasos para pintar el wizard en el paso 1 mientras el
   // trámite aún no existe. Mismos pasos/etiquetas que el wizard real, con el resto bloqueado.
-  getWizardPreview: (modalidad: WizardModalidad) =>
+  getWizardPreview: (procedureTypeCode: string) =>
     request<WizardState>(
-      `/api/v1/tramites/wizard-preview?modalidad=${encodeURIComponent(modalidad)}`,
+      `/api/v1/tramites/wizard-preview?procedureTypeCode=${encodeURIComponent(procedureTypeCode)}`,
     ),
+
+  /** Guía informativa de documentos (paso 1, sin instancia). */
+  /**
+   * ADR-0050 — el checklist informativo se pide por `code` del tipo. Antes se pedía por modalidad,
+   * así que cualquier trámite de la familia OTROS recibía los documentos de un traspaso.
+   */
+  fetchDocumentRequirementsPreview: async (
+    procedureTypeCode: string,
+    transitOfficeId?: string,
+  ): Promise<DocumentoInformativoPreviewItem[]> => {
+    const qs = new URLSearchParams({ procedureTypeCode });
+    if (transitOfficeId) qs.set('transitOfficeId', transitOfficeId);
+    const res = await request<{ items?: DocumentoInformativoPreviewItem[] }>(
+      `/api/v1/tramites/document-requirements/preview?${qs.toString()}`,
+    );
+    return res?.items ?? [];
+  },
 
   // HU #10879/#10883 — autosave del avance del wizard: persiste la `key` del paso donde quedó el
   // operador para retomar ahí al reabrir el borrador (AC2). PATCH /instances/{id}/current-step; el
@@ -1073,13 +1538,18 @@ export const tramitesClient = {
       { headers: tenantHeader(tenantId) },
     ),
 
-  // ── Prenda / gravamen (IT-3, Feature #10585) — GET/PUT /prenda ───
+  // ── Prenda / gravamen (IT-3, Feature #10585; captura dual ADR-0055/HU #12129) ───
+  // GET devuelve un ARRAY de 0-2 decisiones vigentes (una por familia constitución/levantamiento) —
+  // cambio de contrato de lectura cerrado en HU-FE-1 (#12130), ver `PrendaData` en procedure-runtime.
   getPrenda: (instanceId: string, tenantId?: string) =>
-    request<PrendaData | null>(
+    request<PrendaData[]>(
       `/api/v1/tramites/instances/${instanceId}/prenda`,
       { headers: tenantHeader(tenantId) },
     ),
 
+  // PUT NO cambió de forma: sigue recibiendo UNA decisión por request. El patrón para declarar la
+  // acción complementaria (ADR-0055) es llamar este mismo PUT dos veces, una por acción — el
+  // backend re-scopea el versionado por familia automáticamente.
   putPrenda: (instanceId: string, data: PrendaInput, tenantId?: string) =>
     request<PrendaData>(
       `/api/v1/tramites/instances/${instanceId}/prenda`,
@@ -1110,9 +1580,12 @@ export const tramitesClient = {
   // POST simular la validación biométrica de una parte (mock de esta iteración:
   // la biométrica real es una iteración futura). Devuelve la validación aprobada
   // (estado 'aprobado', score 95). Mismo DTO que listBiometric.
+  // ADR-0053 (Múltiple Propietario) — `documento` es opcional/aditivo: identifica a CUÁL de los
+  // 1..4 actores del rol se refiere la simulación (el backend ya lo resuelve así, ver
+  // SimularBiometriaRequest). Sin él (o con 1 solo actor en el rol), se comporta igual que siempre.
   simulateBiometric: (
     instanceId: string,
-    input: { parte: BiometricParte },
+    input: { parte: BiometricParte; documento?: string },
     tenantId?: string,
   ) =>
     request<BiometricValidation>(
@@ -1160,7 +1633,12 @@ export const tramitesClient = {
   listBiometricExpediente: async (
     instanceId: string,
     tenantId?: string,
-  ): Promise<{ validations: BiometricValidation[]; firmaBaulPartes: string[] }> => {
+  ): Promise<{
+    validations: BiometricValidation[];
+    firmaBaulPartes: string[];
+    /** ADR-0053 (Múltiple Propietario) — cobertura del baúl por actor (documento del RL + ordinal). */
+    firmaBaulActores: FirmaBaulActorCoberturaDto[];
+  }> => {
     const res = await request<BiometricValidationsResponse>(
       `/api/v1/tramites/instances/${instanceId}/biometric`,
       { headers: tenantHeader(tenantId) },
@@ -1168,6 +1646,7 @@ export const tramitesClient = {
     return {
       validations: res?.validations ?? [],
       firmaBaulPartes: res?.firmaBaulPartes ?? [],
+      firmaBaulActores: res?.firmaBaulActores ?? [],
     };
   },
 
@@ -1222,6 +1701,78 @@ export const tramitesClient = {
         page: 1,
         pageSize: 20,
         total: 0,
+      }
+    );
+  },
+
+  // HU #11270/#11271 — vista agrupada por persona (ADR-0040). Endpoint propio; no altera el listado plano.
+  listTenantBiometricPersons: async (
+    filters: TenantBiometricPersonFilters = {},
+    tenantId?: string,
+  ): Promise<TenantBiometricPersonsResponse> => {
+    const params = new URLSearchParams();
+    const add = (key: string, value: string | number | undefined) => {
+      if (value === undefined) return;
+      const s = typeof value === 'number' ? String(value) : value.trim();
+      if (s !== '') params.set(key, s);
+    };
+    add('name', filters.name);
+    add('documentType', filters.documentType);
+    add('documentNumber', filters.documentNumber);
+    add('status', filters.status);
+    add('createdFrom', filters.createdFrom);
+    add('createdTo', filters.createdTo);
+    add('vigenciaEstado', filters.vigenciaEstado);
+    add('expiraDesde', filters.expiraDesde);
+    add('expiraHasta', filters.expiraHasta);
+    add('venceEnDias', filters.venceEnDias);
+    add('page', filters.page);
+    add('pageSize', filters.pageSize);
+    if (filters.standalone !== undefined) {
+      params.set('standalone', String(filters.standalone));
+    }
+    const query = params.toString();
+    const res = await request<TenantBiometricPersonsResponse>(
+      `/api/v1/tramites/biometric-validations/by-person${query ? `?${query}` : ''}`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return (
+      res ?? {
+        persons: [],
+        stats: { total: 0, aprobadas: 0, enProceso: 0, rechazadas: 0, expiradas: 0 },
+        page: 1,
+        pageSize: 20,
+        total: 0,
+      }
+    );
+  },
+
+  // HU #11272/#11273 — historial multi-validación de una persona (tope 50).
+  listPersonBiometricValidations: async (
+    documentType: string,
+    documentNumber: string,
+    opts: { page?: number; pageSize?: number } = {},
+    tenantId?: string,
+  ): Promise<PersonBiometricValidationsResponse> => {
+    const params = new URLSearchParams();
+    params.set('documentType', documentType);
+    params.set('documentNumber', documentNumber);
+    if (opts.page != null) params.set('page', String(opts.page));
+    if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize));
+    const res = await request<PersonBiometricValidationsResponse>(
+      `/api/v1/tramites/biometric-validations/by-person/detail?${params.toString()}`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return (
+      res ?? {
+        documentType,
+        documentNumber,
+        name: null,
+        validations: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        allTerminal: true,
       }
     );
   },
@@ -1581,6 +2132,13 @@ export const tramitesClient = {
       { headers: tenantHeader(tenantId) },
     ),
 
+  /** HU #11470 — despachos de correo al cambio de estado (correo enmascarado). */
+  getNotificationDispatches: (instanceId: string, tenantId?: string) =>
+    request<NotificationDispatchesResponse>(
+      `/api/v1/tramites/instances/${instanceId}/notification-dispatches`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
   // ── N 03 — transición de estado de negocio ──────────────────────
   // POST /instances/{id}/transition. Errores: ProblemDetails con title = CÓDIGO
   // (transicion_no_permitida, estado_final, identidad_no_aprobada, documentos_incompletos,
@@ -1636,7 +2194,145 @@ export const tramitesClient = {
       `/api/v1/tramites/instances/${instanceId}/cancelar-subsanacion`,
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
+
+  // ── Admin · Trámites · Gestión avanzada (Feature #12155, HU #12163) ──────────────────
+  // Los 6 endpoints administrativos de HU #12158-#12162, todos gateados por permiso en el
+  // BACKEND (SuperAdmin bypassa). El frontend no repite esa validación aquí: solo condiciona la
+  // VISIBILIDAD del ítem de menú con el claim `permissions` del JWT (ver
+  // lib/tramites/admin-tramite-permissions.ts + hooks/usePermissions) — si una llamada se cuela sin
+  // el slug, el backend sigue respondiendo 403.
+
+  /** HU #12158 — descarta el consolidado vigente (aunque lo haya cargado un admin) y lo regenera. */
+  adminLimpiarConsolidado: (instanceId: string, tenantId?: string) =>
+    request<ProcedureAttachment>(
+      `/api/v1/admin/tramites/${instanceId}/consolidado/limpiar`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  /**
+   * HU #12158 — registra un PDF externo como el consolidado del trámite (Source="user"). Multipart
+   * (campo `file`): NO usa `request()` (fija Content-Type: application/json) — mismo patrón que
+   * `analyzeDocument`/`analyzeBatch` de este archivo.
+   */
+  adminCargarConsolidado: async (
+    instanceId: string,
+    file: File,
+    tenantId?: string,
+  ): Promise<ProcedureAttachment> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(
+      apiUrl(`/api/v1/admin/tramites/${instanceId}/consolidado/cargar`),
+      { method: 'POST', headers: tenantHeader(tenantId), body: form },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
+    }
+    return (await res.json()) as ProcedureAttachment;
+  },
+
+  /** HU #12159 — cambia `status` sin restricciones de flujo (rechaza 422 si origen/destino es 'aprobado'). */
+  adminCambiarEstado: (
+    instanceId: string,
+    toStatus: string,
+    reason: string | null,
+    tenantId?: string,
+  ) =>
+    request<AdminCambiarEstadoResult>(
+      `/api/v1/admin/tramites/${instanceId}/estado`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ toStatus, reason }),
+      },
+    ),
+
+  /** HU #12160 — anula el trámite desde cualquier estado (rechaza 422 si es 'aprobado' o 'revocado'). */
+  adminAnular: (instanceId: string, reason: string | null, tenantId?: string) =>
+    request<AdminAnularResult>(
+      `/api/v1/admin/tramites/${instanceId}/anular`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ reason }),
+      },
+    ),
+
+  /** HU #12161 — reenvía la validación de identidad (biométrica) fuera del gate del wizard. */
+  adminReenviarValidacionIdentidad: (
+    instanceId: string,
+    validationId: string,
+    email: string | null,
+    tenantId?: string,
+  ) =>
+    request<AdminReenviarValidacionResult>(
+      `/api/v1/admin/tramites/${instanceId}/validaciones-identidad/${validationId}/reenviar`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ email }),
+      },
+    ),
+
+  /** HU #12162 — reasigna `AssignedToUserId` a otro gestor DISPONIBLE del mismo tenant. */
+  adminReasignarGestor: (instanceId: string, newAssignedToUserId: string, tenantId?: string) =>
+    request<AdminReasignarGestorResult>(
+      `/api/v1/admin/tramites/${instanceId}/reasignar-gestor`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ newAssignedToUserId }),
+      },
+    ),
+
+  /** HU #12162 (AC-selector) — gestores DISPONIBLES del tenant para el selector de reasignación. */
+  adminListGestoresDisponibles: (tenantId?: string) =>
+    request<GestorOption[]>(
+      '/api/v1/admin/tramites/gestores-disponibles',
+      { headers: tenantHeader(tenantId) },
+    ),
 };
+
+/** HU #12159 — resultado del cambio de estado administrativo (espejo de `AdminCambiarEstadoResult`). */
+export interface AdminCambiarEstadoResult {
+  id: string;
+  previousStatus: string;
+  newStatus: string;
+  changedAt: string;
+}
+
+/** HU #12160 — resultado de la anulación administrativa (mismo shape que el cambio de estado). */
+export interface AdminAnularResult {
+  id: string;
+  previousStatus: string;
+  newStatus: string;
+  changedAt: string;
+}
+
+/** HU #12161 — resultado del reenvío administrativo de validación de identidad. */
+export interface AdminReenviarValidacionResult {
+  validation: BiometricValidation;
+  captureUrl: string;
+  emailActualizado: boolean;
+  /** `true` = 202 Accepted (falla transitoria del proveedor; el worker reintenta). */
+  queued: boolean;
+}
+
+/** HU #12162 — resultado de la reasignación administrativa de gestor. */
+export interface AdminReasignarGestorResult {
+  id: string;
+  previousAssignedToUserId: string | null;
+  newAssignedToUserId: string;
+  changedAt: string;
+}
+
+/** HU #12162 (AC-selector) — candidato del selector de reasignación (espejo de `GestorOption`). */
+export interface GestorOption {
+  id: string;
+  displayName: string;
+  email: string;
+}
 
 /** N 03 — copy UX por código de error del endpoint de transición (title del ProblemDetails). */
 const TRANSITION_ERROR_COPY: Record<string, string> = {

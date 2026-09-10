@@ -77,10 +77,8 @@ public sealed class ConsumptionHandlerTests
     }
 
     [Fact]
-    public async Task ActiveDeeds_ReturnsAllVigentesForSameCompany_DoesNotCollapse()
+    public async Task ActiveDeeds_SameCompany_KeepsMostRecentOnly()
     {
-        // Feature #10929: dos escrituras VIGENTES de la MISMA compañía → el paso 1 debe ver AMBAS,
-        // ya no se colapsa a una sola fila por NIT.
         await using var ctx = NewContext();
         var deedRepo = new DeedRepository(ctx);
         var companyRepo = new LegalRepresentativeRepository(ctx);
@@ -90,7 +88,7 @@ public sealed class ConsumptionHandlerTests
 
         var nearest = new DateOnly(2026, 9, 30);
         var farthest = new DateOnly(2027, 3, 31);
-        var idCorta = await deedRepo.CreateAsync(new SaveDeedData(
+        await deedRepo.CreateAsync(new SaveDeedData(
             Tenant, null, "Corta", "path-1", "sha-1", new DateOnly(2026, 1, 1), nearest, [companyId], null), Ct);
         var idLarga = await deedRepo.CreateAsync(new SaveDeedData(
             Tenant, null, "Larga", "path-2", "sha-2", new DateOnly(2026, 1, 1), farthest, [companyId], null), Ct);
@@ -100,15 +98,65 @@ public sealed class ConsumptionHandlerTests
 
         var result = await handler.HandleAsync(new ListActiveDeedsForTenantQuery { TenantId = Tenant }, Ct);
 
-        // Ambas escrituras del mismo NIT, ordenadas por vigencia más próxima primero.
-        result.Should().HaveCount(2);
-        result.Should().OnlyContain(d => d.Nit == Nit);
-        result[0].VigenciaHasta.Should().Be(nearest);
-        result[0].Id.Should().Be(idCorta);
-        result[0].Description.Should().Be("Corta");
-        result[1].VigenciaHasta.Should().Be(farthest);
-        result[1].Id.Should().Be(idLarga);
-        result[1].Description.Should().Be("Larga");
+        result.Should().ContainSingle();
+        result[0].Id.Should().Be(idLarga);
+        result[0].Description.Should().Be("Larga");
+    }
+
+    [Fact]
+    public async Task ActiveDeeds_ProjectsRepresentative_WhenDeedHasRepresentativeId()
+    {
+        await using var ctx = NewContext();
+        var deedRepo = new DeedRepository(ctx);
+        var companyRepo = new LegalRepresentativeRepository(ctx);
+
+        var companyId = await companyRepo.UpsertRepresentedCompanyAsync(
+            new UpsertRepresentedCompanyData(Tenant, Nit, "ACME S.A.S.", null, null, null, null, null), Ct);
+        var repId = await companyRepo.SaveAsync(new SaveLegalRepresentativeData(
+            Tenant, null, companyId, "CC", "1038409485", "Pérez", "Gómez", "Juan",
+            null, null, null, null, null, null, [], null), Ct);
+
+        var hasta = new DateOnly(2026, 12, 31);
+        await deedRepo.CreateAsync(new SaveDeedData(
+            Tenant, null, "Con RL", "path-rl", "sha-rl",
+            new DateOnly(2026, 1, 1), hasta, [companyId], null, RepresentativeId: repId), Ct);
+
+        var handler = new ListActiveDeedsForTenantHandler(
+            new DbDeedReader(ctx), new DbLegalRepresentativeReader(ctx), Clock);
+
+        var result = await handler.HandleAsync(new ListActiveDeedsForTenantQuery { TenantId = Tenant }, Ct);
+
+        result.Should().ContainSingle();
+        result[0].RepresentativeId.Should().Be(repId);
+        result[0].RepresentativeName.Should().Be("Juan Pérez Gómez");
+        result[0].RepresentativeDocumentType.Should().Be("CC");
+        result[0].RepresentativeDocumentNumber.Should().Be("1038409485");
+    }
+
+    [Fact]
+    public async Task ActiveDeeds_RepresentativeNull_WhenLegacyDeedWithoutRepresentative()
+    {
+        await using var ctx = NewContext();
+        var deedRepo = new DeedRepository(ctx);
+        var companyRepo = new LegalRepresentativeRepository(ctx);
+
+        var companyId = await companyRepo.UpsertRepresentedCompanyAsync(
+            new UpsertRepresentedCompanyData(Tenant, Nit, "ACME S.A.S.", null, null, null, null, null), Ct);
+
+        await deedRepo.CreateAsync(new SaveDeedData(
+            Tenant, null, "Legada", "path-leg", "sha-leg",
+            new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), [companyId], null), Ct);
+
+        var handler = new ListActiveDeedsForTenantHandler(
+            new DbDeedReader(ctx), new DbLegalRepresentativeReader(ctx), Clock);
+
+        var result = await handler.HandleAsync(new ListActiveDeedsForTenantQuery { TenantId = Tenant }, Ct);
+
+        result.Should().ContainSingle();
+        result[0].RepresentativeId.Should().BeNull();
+        result[0].RepresentativeName.Should().BeNull();
+        result[0].RepresentativeDocumentType.Should().BeNull();
+        result[0].RepresentativeDocumentNumber.Should().BeNull();
     }
 
     [Fact]

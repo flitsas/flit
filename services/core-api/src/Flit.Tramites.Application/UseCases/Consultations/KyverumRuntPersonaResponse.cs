@@ -18,6 +18,13 @@ public sealed class KyverumRuntPersonaResponse
     [JsonPropertyName("message")]
     public string? Message { get; set; }
 
+    /// <summary>
+    /// Bloque de identidad resuelta contra la Registraduría. Fuente PREFERENTE del nombre: es el
+    /// único que llega siempre sin enmascarar (ver <see cref="KyverumRuntPersona.Nombres"/>).
+    /// </summary>
+    [JsonPropertyName("identidad")]
+    public KyverumRuntIdentidad? Identidad { get; set; }
+
     [JsonPropertyName("persona")]
     public KyverumRuntPersona? Persona { get; set; }
 
@@ -28,13 +35,56 @@ public sealed class KyverumRuntPersonaResponse
     public KyverumRuntMultas? Multas { get; set; }
 }
 
+/// <summary>
+/// Identidad resuelta (bloque <c>identidad</c>). Trae el nombre real desglosado; es lo que el
+/// mapper prefiere sobre cualquier otro campo.
+/// </summary>
+public sealed class KyverumRuntIdentidad
+{
+    [JsonPropertyName("primerNombre")]
+    public string? PrimerNombre { get; set; }
+
+    [JsonPropertyName("segundoNombre")]
+    public string? SegundoNombre { get; set; }
+
+    [JsonPropertyName("primerApellido")]
+    public string? PrimerApellido { get; set; }
+
+    [JsonPropertyName("segundoApellido")]
+    public string? SegundoApellido { get; set; }
+
+    [JsonPropertyName("nombreCompleto")]
+    public string? NombreCompleto { get; set; }
+}
+
 public sealed class KyverumRuntPersona
 {
+    /// <summary>
+    /// ENMASCARADO por el RUNT desde su actualización de 2026 ("S****L"). NO usarlo para hidratar
+    /// nada: existe solo para no perder el campo del contrato. El nombre real está en el bloque
+    /// <c>identidad</c> o en los campos desglosados de abajo.
+    /// </summary>
     [JsonPropertyName("nombres")]
     public string? Nombres { get; set; }
 
+    /// <summary>ENMASCARADO — ver <see cref="Nombres"/>.</summary>
     [JsonPropertyName("apellidos")]
     public string? Apellidos { get; set; }
+
+    [JsonPropertyName("primerNombre")]
+    public string? PrimerNombre { get; set; }
+
+    [JsonPropertyName("segundoNombre")]
+    public string? SegundoNombre { get; set; }
+
+    [JsonPropertyName("primerApellido")]
+    public string? PrimerApellido { get; set; }
+
+    [JsonPropertyName("segundoApellido")]
+    public string? SegundoApellido { get; set; }
+
+    [JsonPropertyName("nombreCompleto")]
+    public string? NombreCompleto { get; set; }
 
     [JsonPropertyName("tipoDocumento")]
     public string? TipoDocumento { get; set; }

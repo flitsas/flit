@@ -4,6 +4,7 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Infrastructure.OtRules;
 
@@ -47,7 +48,7 @@ internal sealed class PlatePreassignPolicy : IPlatePreassignPolicy
             var modalidad = await _context.ProcedureInstances
                 .AsNoTracking()
                 .Where(p => p.Id == instanceId && p.TenantId == tenantId)
-                .Select(p => new { p.ModalidadEntrada })
+                .Select(p => new { Family = p.ProcedureType != null ? p.ProcedureType.Family : "" })
                 .FirstOrDefaultAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -72,7 +73,7 @@ internal sealed class PlatePreassignPolicy : IPlatePreassignPolicy
             var plateField = fields.FirstOrDefault(f => f.FieldKey == PlateFieldKey);
             return (
                 Found: true,
-                Modalidad: modalidad.ModalidadEntrada,
+                Modalidad: modalidad.Family,
                 Office: fields.FirstOrDefault(f => f.FieldKey == OfficeFieldKey)?.ValueText,
                 Plate: plateField?.ValueText,
                 PlateSource: plateField?.Source);
@@ -89,7 +90,7 @@ internal sealed class PlatePreassignPolicy : IPlatePreassignPolicy
         }
 
         if (snapshot.Modalidad is null
-            || TramiteModalidadEntradaCodes.FromCode(snapshot.Modalidad) != TramiteModalidadEntrada.MatriculaInicial)
+            || ProcedureFamilyCodes.FromCodeOrLegacyModalidad(snapshot.Modalidad) != ProcedureFamily.Matriculas)
         {
             return PlateRouteResult.NotMatricula;
         }

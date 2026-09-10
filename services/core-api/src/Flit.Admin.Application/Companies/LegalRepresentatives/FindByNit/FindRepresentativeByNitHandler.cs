@@ -64,18 +64,15 @@ public sealed class FindRepresentativeByNitHandler
             return null;
         }
 
-        // Datos completos de la compañía (email/dirección/…); el read model del representante solo
-        // denormaliza NIT + razón social.
-        var company = await _representativeReader
-            .FindRepresentedCompanyByNitAsync(query.TenantId, nit, cancellationToken)
-            .ConfigureAwait(false);
-
         var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
         var now = new DateTimeOffset(today.ToDateTime(TimeOnly.MinValue), ColombiaUtcOffset);
 
         var options = new List<RepresentativeOptionDto>(representatives.Count);
         foreach (var representative in representatives)
         {
+            var ownCompany = representative.Companies.FirstOrDefault(c =>
+                string.Equals(c.Nit, nit, StringComparison.Ordinal));
+
             var firmaVigente = await ResolveFirmaVigenteAsync(query.TenantId, representative, today, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -93,17 +90,24 @@ public sealed class FindRepresentativeByNitHandler
                 representative.Email,
                 representative.Phone,
                 firmaVigente,
-                IdentidadVigente: identidadRef is not null));
+                IdentidadVigente: identidadRef is not null,
+                RazonSocial: ownCompany?.Name,
+                CompanyEmail: ownCompany?.Email,
+                CompanyAddress: ownCompany?.Address,
+                CompanyCity: ownCompany?.City,
+                CompanyPhone: ownCompany?.Phone));
         }
 
         var primary = representatives[0];
+        var primaryCompany = primary.Companies.FirstOrDefault(c =>
+            string.Equals(c.Nit, nit, StringComparison.Ordinal));
         var companyDto = new RepresentativeCompanyDto(
-            company?.DocumentNumber ?? primary.CompanyDocumentNumber,
-            company?.Name ?? primary.CompanyName,
-            company?.Email,
-            company?.Address,
-            company?.City,
-            company?.Phone);
+            primaryCompany?.Nit ?? primary.CompanyDocumentNumber,
+            primaryCompany?.Name ?? primary.CompanyName,
+            primaryCompany?.Email,
+            primaryCompany?.Address,
+            primaryCompany?.City,
+            primaryCompany?.Phone);
 
         var contactDto = new RepresentativeContactDto(
             primary.DocumentType,

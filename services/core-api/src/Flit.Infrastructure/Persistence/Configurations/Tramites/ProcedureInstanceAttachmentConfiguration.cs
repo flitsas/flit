@@ -22,10 +22,16 @@ internal sealed class ProcedureInstanceAttachmentConfiguration : IEntityTypeConf
         builder.Property(x => x.Sha256).HasColumnName("sha256").HasMaxLength(64).IsRequired();
         builder.Property(x => x.StoragePath).HasColumnName("storage_path").HasMaxLength(1000).IsRequired();
         builder.Property(x => x.Source).HasColumnName("source").HasMaxLength(20).IsRequired().HasDefaultValue("user");
+        // Procedencia Kyverum vs manual (impronta): no reutiliza Source (DT-4).
+        builder.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(40);
         builder.Property(x => x.UploadedAt).HasColumnName("uploaded_at").IsRequired();
         builder.Property(x => x.UploadedBy).HasColumnName("uploaded_by");
         // HU #10936 — escritura utilizada (admin.company_deeds.id) para las escrituras de sistema.
         builder.Property(x => x.SourceDeedId).HasColumnName("source_deed_id");
+        // HU #11313/#11316 — versión de documento personalizado utilizada (espejo de SourceDeedId).
+        builder.Property(x => x.SourcePersonalizedDocumentId).HasColumnName("source_personalized_document_id");
+        // HU #12166 (Feature #12156) — FUR/certificados marcados como históricos al revocar (OT).
+        builder.Property(x => x.IsHistorico).HasColumnName("is_historico").IsRequired().HasDefaultValue(false);
 
         builder.HasIndex(x => new { x.TenantId, x.ProcedureInstanceId })
             .HasDatabaseName("ix_procedure_instance_attachments_tenant_id_instance");

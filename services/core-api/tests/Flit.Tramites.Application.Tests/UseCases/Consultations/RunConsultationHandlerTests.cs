@@ -44,6 +44,7 @@ public sealed class RunConsultationHandlerTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status = TramiteEstado.Borrador) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

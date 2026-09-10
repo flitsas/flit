@@ -74,24 +74,14 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                 continue; // un solo documento por tipo (rol)
             }
 
-            var company = await _representativeReader
-                .FindRepresentedCompanyByNitAsync(tenantId, actor.DocumentNumber.Trim(), ct)
-                .ConfigureAwait(false);
-            if (company is null)
-            {
-                continue;
-            }
-
-            // Feature #10929 — la escritura es DEL representante seleccionado. Se resuelve su id por el
-            // documento del sujeto de identidad (el RL embebido en el actor jurídico) y se filtran las
-            // escrituras de la compañía a las que ÉL asoció (RepresentativeId). Si no se resuelve el
-            // representante (sin documento del RL o no está en el directorio), se mantiene el
-            // comportamiento por compañía (compat), incluidas las escrituras legadas sin representante.
             var subject = IdentitySubjectResolver.For(actor);
             Guid? representativeId = null;
-            if (!string.IsNullOrWhiteSpace(subject.TipoDocumento)
-                && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+            if (subject.EsRepresentanteLegal)
             {
+                // Solo buscamos en el directorio cuando el sujeto es de verdad un representante
+                // legal capturado con documento; en cualquier otro caso (PJ sin RL en metadata,
+                // persona natural) el sujeto es un fallback al propio actor y no tiene sentido
+                // buscar un representante por ese documento.
                 var representative = await _representativeReader
                     .FindActiveByDocumentAsync(
                         tenantId, subject.TipoDocumento!.Trim(), subject.NumeroDocumento!.Trim(), ct)
@@ -99,14 +89,43 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                 representativeId = representative?.Id;
             }
 
-            // HU #10936 — entre las escrituras vigentes (de la compañía y, si se resolvió, del
-            // representante) se elige la MÁS PRÓXIMA A VENCER (menor VigenciaHasta); ThenBy(Id) desempata
-            // de forma estable. Antes ganaba la de mayor vigencia; ahora prima la que primero deja de servir.
+            RepresentedCompanyItem? company;
+            if (representativeId is Guid rid)
+            {
+                company = await _representativeReader
+                    .FindActiveCompanyForRepresentativeAsync(tenantId, rid, actor.DocumentNumber.Trim(), ct)
+                    .ConfigureAwait(false);
+            }
+            else if (subject.EsRepresentanteLegal)
+            {
+                // El gestor capturó un representante legal con documento pero ese documento no figura
+                // en el directorio como representante activo de la compañía. Caer al NIT aquí
+                // adjuntaría la escritura de OTRO representante que sí está registrado —esa escritura
+                // lo autoriza a él, no al RL recién capturado—, y el consolidado terminaría con dos
+                // escrituras: la de sistema y la que el gestor sube a mano (EscrituraRepresentanteUpload).
+                // Sin representante resuelto y con RL capturado, no existe escritura de sistema que
+                // le corresponda: se omite.
+                continue;
+            }
+            else
+            {
+                // Sin RL capturado (persona jurídica sin datos de RL en metadata, o persona cuyo
+                // tipo no está definido): se cae al NIT para mantener el comportamiento previo
+                // durante la apertura del trámite.
+                company = await _representativeReader
+                    .FindRepresentedCompanyByNitAsync(tenantId, actor.DocumentNumber.Trim(), ct)
+                    .ConfigureAwait(false);
+            }
+            if (company is null || !company.IsActive)
+            {
+                continue;
+            }
+
             var deed = deeds
                 .Where(d => d.RepresentedCompanyIds.Contains(company.Id)
                     && (representativeId is null || d.RepresentativeId == representativeId))
-                .OrderBy(d => d.VigenciaHasta)
-                .ThenBy(d => d.Id)
+                .OrderByDescending(d => d.UpdatedAt ?? d.CreatedAt)
+                .ThenByDescending(d => d.Id)
                 .FirstOrDefault();
             if (deed is null)
             {

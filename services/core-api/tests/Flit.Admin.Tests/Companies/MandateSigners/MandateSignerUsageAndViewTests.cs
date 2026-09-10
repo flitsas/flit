@@ -1,5 +1,7 @@
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
+using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -59,13 +61,14 @@ public sealed class MandateSignerUsageAndViewTests
     public async Task ListOtCompanies_ADR0036_Multiplicity_ReturnsAllSignersPerCompany_WithoutThrowing()
     {
         await using var ctx = Scenario.NewSeededContext();
-        var (create, companies) = Handlers(ctx);
+        var (_, companies) = Handlers(ctx);
 
-        // Dos mandatarios distintos, ambos asignados a la MISMA compañía (multiplicidad ADR-0036).
-        await create.HandleAsync(Scenario.NewCreate("Samuel Cárdenas", "111", [Scenario.CompanyA]), Scenario.Ct);
-        await create.HandleAsync(Scenario.NewCreate("Laura Ríos", "222", [Scenario.CompanyA]), Scenario.Ct);
+        // El alta ya no permite dos activos en la misma llave cliente×OT. La vista igual agrupa
+        // (datos históricos o InMemory sin el índice único parcial): no debe reventar.
+        SeedActiveAssignment(ctx, "Samuel Cárdenas", "111", Scenario.CompanyA);
+        SeedActiveAssignment(ctx, "Laura Ríos", "222", Scenario.CompanyA);
+        await ctx.SaveChangesAsync(Scenario.Ct);
 
-        // Antes: ToDictionary por CompanyTenantId lanzaba ArgumentException (clave duplicada). Ahora agrupa.
         var view = await companies.HandleAsync(
             new ListOtCompaniesQuery { TransitOfficeId = Scenario.Office }, Scenario.Ct);
 
@@ -92,8 +95,46 @@ public sealed class MandateSignerUsageAndViewTests
         view.Single(c => c.CompanyTenantId == Scenario.CompanyA).AssignedSigners.Should().NotBeEmpty();
     }
 
+    private static void SeedActiveAssignment(
+        FlitDbContext ctx,
+        string fullName,
+        string documentNumber,
+        Guid companyTenantId)
+    {
+        var id = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        ctx.MandateSigners.Add(new MandateSigner
+        {
+            Id = id,
+            TransitOfficeId = Scenario.Office,
+            FullName = fullName,
+            DocumentNumber = documentNumber,
+            IntegrityHash = Convert.ToHexString(id.ToByteArray()).ToLowerInvariant(),
+            RegisteredAt = now,
+            CreatedAt = now,
+            IsActive = true,
+        });
+        ctx.MandateSignerTransitOffices.Add(new MandateSignerTransitOffice
+        {
+            Id = Guid.NewGuid(),
+            MandateSignerId = id,
+            TransitOfficeId = Scenario.Office,
+            IsActive = true,
+            CreatedAt = now,
+        });
+        ctx.MandateSignerCompanies.Add(new MandateSignerCompany
+        {
+            Id = Guid.NewGuid(),
+            MandateSignerId = id,
+            TransitOfficeId = Scenario.Office,
+            CompanyTenantId = companyTenantId,
+            IsActive = true,
+            CreatedAt = now,
+        });
+    }
+
     private static (CreateMandateSignerHandler Create, ListOtCompaniesHandler Companies) Handlers(
-        Flit.Infrastructure.Persistence.FlitDbContext ctx)
+        FlitDbContext ctx)
     {
         var reader = new DbMandateSignerReader(ctx);
         return (

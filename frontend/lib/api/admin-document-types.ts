@@ -37,6 +37,11 @@ export function deactivateDocumentType(id: string): Promise<void> {
   return apiFetch<void>(`${base}/${id}`, { method: "DELETE" });
 }
 
+/** DELETE /{id}/permanent — baja física del tipo y de sus asociaciones de matriz. */
+export function purgeDocumentType(id: string): Promise<void> {
+  return apiFetch<void>(`${base}/${id}/permanent`, { method: "DELETE" });
+}
+
 /** POST /{id}/reactivate — reactivación (contraparte del soft-delete). Idempotente. */
 export function reactivateDocumentType(id: string): Promise<void> {
   return apiFetch<void>(`${base}/${id}/reactivate`, { method: "POST" });

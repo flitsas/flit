@@ -23,6 +23,22 @@ public sealed class ResolvedDocumentMatrixItem
     public short OrdenResuelto { get; init; }
 
     /// <summary>
+    /// Buzón dummy (CFD-06) — <c>is_dummy</c>. Se muestra en el checklist pero NUNCA bloquea el
+    /// avance del paso, aunque sea obligatorio. Sin este dato el gate de documentos trataría un
+    /// buzón informativo como requisito bloqueante.
+    /// </summary>
+    public bool EsDummy { get; init; }
+
+    /// <summary>Catálogo: el sistema lo genera o apalanca; no se pide carga al gestor.</summary>
+    public bool EsGeneradoSistema { get; init; }
+
+    /// <summary>
+    /// Instrucción de cargue del catálogo (HU #12065) — <c>document_types.upload_instructions</c>:
+    /// qué debe subir el gestor en esta casilla. <c>null</c> ⇒ el tipo no tiene texto configurado.
+    /// </summary>
+    public string? InstruccionCargue { get; init; }
+
+    /// <summary>
     /// Nivel que determinó el orden: <see cref="DocumentOrderScope.Cliente"/>,
     /// <see cref="DocumentOrderScope.Ot"/> o <see cref="DocumentOrderScope.Default"/>.
     /// </summary>

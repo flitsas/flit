@@ -97,8 +97,8 @@ describe("OtUsersSection — botón Editar (#10622)", () => {
       expect(updateOtUser).toHaveBeenCalledWith(
         "u-1",
         {
+          // El correo es la credencial de acceso: se muestra en solo lectura y no viaja en el PATCH.
           displayName: "Laura García Ruiz",
-          email: "laura@transito.gov.co",
           rowVersion: 7,
         },
         { transitOfficeId: "ot-1" },

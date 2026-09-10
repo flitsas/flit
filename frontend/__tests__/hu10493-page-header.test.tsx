@@ -42,16 +42,23 @@ describe("HU #10493 — AC2: la acción primaria se renderiza FUERA de la caja d
 describe("HU #10493 — AC1/unificación: módulos migrados al encabezado unificado", () => {
   const usuarios = read("components/atom/modules/Usuarios.tsx");
   const rbac = read("components/atom/modules/RbacAdmin.tsx");
+  const usersTable = read("components/atom/modules/users/UsersTable.tsx");
 
   it("Usuarios usa `action=` para el botón primario (fuera de la caja), no `right=`", () => {
     expect(usuarios).toMatch(/action=\{\s*\n?\s*tab === "usuarios"/);
     expect(usuarios).not.toMatch(/right=\{\s*\n?\s*tab === "usuarios"/);
   });
 
-  it("Usuarios movió la búsqueda a la fila de tabs (sin fila de búsqueda separada max-w-md)", () => {
-    // La búsqueda vive ahora dentro del contenedor de tabs (border-b) con ml-auto.
-    expect(usuarios).toMatch(/ml-auto[^"]*rounded-xl border bg-white/);
+  it("Usuarios no tiene una fila de búsqueda separada (max-w-md) por encima de la tabla", () => {
+    // La intención original de la HU sigue vigente: nada de una banda de búsqueda propia
+    // ocupando el ancho por encima del listado. Lo que cambió con la unificación de tablas
+    // (context/usuarios-contex.md) es DÓNDE vive: la búsqueda ya no está suelta en la fila de
+    // tabs, sino junto a los filtros de perfil/rol/estado dentro de UsersTable, que es la
+    // misma barra que usan la ficha de compañía y el hub OT.
     expect(usuarios).not.toMatch(/p-2\.5 rounded-xl border bg-white dark:bg-\[#0B0F14\] max-w-md/);
+    expect(usuarios).not.toMatch(/placeholder="Buscar/);
+    expect(usersTable).toMatch(/ml-auto|flex-1[\s\S]*?rounded-xl border bg-white/);
+    expect(usersTable).toMatch(/aria-label="Buscar usuarios"/);
   });
 
   it("RBAC usa el componente ModuleTitle unificado con `action` (antes era un h1 plano)", () => {

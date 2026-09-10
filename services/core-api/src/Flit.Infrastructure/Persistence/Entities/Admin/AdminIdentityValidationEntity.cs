@@ -48,6 +48,15 @@ public sealed class AdminIdentityValidationEntity
 
     public DateTimeOffset? ValidUntil { get; set; }
 
+    /// <summary>Intentos fallidos ya contados (HU #11504). Ver <c>AdminIdentityValidation.Attempts</c>.</summary>
+    public int Attempts { get; set; }
+
+    /// <summary>Tope de intentos antes de terminalizar en <c>rechazado</c> (HU #11504).</summary>
+    public int MaxAttempts { get; set; }
+
+    /// <summary>Clave del último intento ya contado (dedup). Ver <c>AdminIdentityValidation.LastAttemptAt</c>.</summary>
+    public string? LastAttemptAt { get; set; }
+
     public long RowVersion { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

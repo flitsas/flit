@@ -9,6 +9,7 @@ import type {
   ConsultationRestrictionKind,
   OtBlockingPolicy,
   OtConsultationRestriction,
+  OtPrendaDocumentPolicy,
   TransitOffice,
 } from "@/lib/api/types";
 import { ApiValidationError, BLOCKING_CRITERION_DEFAULTS } from "@/lib/api/types";
@@ -51,6 +52,8 @@ export interface OTConfigModalProps {
   policies: OtBlockingPolicy[];
   /** Filas dispersas de restricción ya cargadas por el panel (de todos los OT); se filtran por `office.id`. */
   restrictions: OtConsultationRestriction[];
+  /** OTs donde el check de prenda opcional está activo (tabla dispersa). */
+  prendaOptionalPolicies: OtPrendaDocumentPolicy[];
   /** Persiste el estado deseado del bloqueo (PUT idempotente). */
   onToggleBlocking: (transitOfficeId: string, criterion: BlockingCriterion, blocks: boolean) => Promise<void>;
   /** Persiste el estado deseado de la restricción (PUT idempotente). */
@@ -59,6 +62,8 @@ export interface OTConfigModalProps {
     kind: ConsultationRestrictionKind,
     enabled: boolean,
   ) => Promise<void>;
+  /** Persiste opt-out de prenda (true = opcional / check ON). */
+  onTogglePrendaOptional: (transitOfficeId: string, documentOptional: boolean) => Promise<void>;
   onClose: () => void;
   /** Notificación opcional de error de persistencia (toast). */
   onError?: (message: string) => void;
@@ -68,8 +73,10 @@ export function OTConfigModal({
   office,
   policies,
   restrictions,
+  prendaOptionalPolicies,
   onToggleBlocking,
   onToggleRestriction,
+  onTogglePrendaOptional,
   onClose,
   onError,
 }: OTConfigModalProps) {
@@ -92,6 +99,11 @@ export function OTConfigModal({
   const [restrictionPending, setRestrictionPending] = useState<Set<ConsultationRestrictionKind>>(
     () => new Set(),
   );
+
+  const [prendaOptional, setPrendaOptional] = useState(
+    () => prendaOptionalPolicies.some((p) => p.transitOfficeId === office.id && p.documentOptional),
+  );
+  const [prendaPending, setPrendaPending] = useState(false);
 
   const handleBlockingToggle = async (criterion: BlockingCriterion, label: string, next: boolean) => {
     const previous = blockingState.get(criterion) ?? BLOCKING_CRITERION_DEFAULTS[criterion];
@@ -145,12 +157,30 @@ export function OTConfigModal({
     }
   };
 
+  const handlePrendaOptionalToggle = async (next: boolean) => {
+    const previous = prendaOptional;
+    setPrendaOptional(next);
+    setPrendaPending(true);
+    try {
+      await onTogglePrendaOptional(office.id, next);
+    } catch (err) {
+      setPrendaOptional(previous);
+      const serverMessage = err instanceof ApiValidationError ? err.errors[0]?.message : undefined;
+      onError?.(
+        serverMessage ??
+          `No se pudo ${next ? "hacer opcional" : "volver a exigir"} el documento de prenda en ${office.name}.`,
+      );
+    } finally {
+      setPrendaPending(false);
+    }
+  };
+
   return (
     <Modal
       open
       onClose={onClose}
       title={`Configurar — ${office.name}`}
-      description="Define, para este organismo, qué bloquea el trámite en el preflight y qué se consulta."
+      description="Define, para este organismo, bloqueos del preflight, consultas y obligatoriedad de prenda."
       icon={Settings2}
       size="lg"
     >
@@ -209,6 +239,27 @@ export function OTConfigModal({
                 onChange={(checked) => void handleRestrictionToggle(kind, label, checked)}
               />
             ))}
+          </div>
+        </section>
+
+        <hr className="border-t" />
+
+        <section aria-labelledby="ot-config-prenda-heading">
+          <h3 id="ot-config-prenda-heading" className="mb-1 text-xs font-semibold">
+            Documento de prenda
+          </h3>
+          <p className="mb-2 text-[11px] opacity-60">
+            Por defecto el documento de inscripción/registro de prenda es <strong>obligatorio</strong>.
+            Activa el check para que deje de serlo (opcional) en esta compañía y organismo.
+          </p>
+          <div data-testid={`ot-prenda-optional-${office.id}`}>
+            <ToggleSwitch
+              id={`prenda-optional-${office.id}`}
+              label="Prenda opcional (no exigir documento)"
+              checked={prendaOptional}
+              disabled={prendaPending}
+              onChange={(checked) => void handlePrendaOptionalToggle(checked)}
+            />
           </div>
         </section>
       </div>

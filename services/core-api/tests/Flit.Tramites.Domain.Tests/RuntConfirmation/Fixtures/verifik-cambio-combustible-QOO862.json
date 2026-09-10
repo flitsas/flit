@@ -1,0 +1,153 @@
+{
+  "data": {
+    "datosTecnicos": {
+      "alto": null,
+      "ancho": null,
+      "capacidadCarga": "608 Kgs",
+      "largo": null,
+      "noEjes": "2",
+      "noLlantas": null,
+      "pasajerosSentados": "2",
+      "pasajerosTotal": null,
+      "peso": null,
+      "pesoBrutoVehicular": "1900 Kgs",
+      "rodaje": null
+    },
+    "documentNumber": "890903938",
+    "documentType": "NIT",
+    "garantiasFavorDe": [],
+    "garantiasMobiliarias": [],
+    "informacionBlindaje": {
+      "autorizacion": null,
+      "blindado": null,
+      "fechaBlindaje": null,
+      "fechaDesblindaje": null,
+      "fechaExpedicionCertificado": null,
+      "fechaExpedicionCertificadoFormatoWS": null,
+      "idDocumentoCertificadoBlindaje": null,
+      "nivelBlindaje": null,
+      "nivelBlindajeNumero": null,
+      "numeroResolucion": null,
+      "tipoBlindajeNombre": null
+    },
+    "informacionGeneral": {
+      "capacidadCarga": "608",
+      "cilindraje": "1598",
+      "claseVehiculo": "CAMIONETA",
+      "clasificacion": "AUTOMOVIL",
+      "color": "AMARILLO",
+      "diasMatriculado": "166",
+      "esRegrabadoChasis": "NO",
+      "esRegrabadoMotor": "NO",
+      "esRegrabadoSerie": "NO",
+      "esRegrabadoVin": "NO",
+      "estadoDelVehiculo": "ACTIVO",
+      "fechaExpedLTImportacion": null,
+      "fechaMatricula": "28/03/2026",
+      "fechaVenciLTImportacion": null,
+      "idTipoServicio": "2",
+      "linea": "KANGOO",
+      "marca": "RENAULT",
+      "modelo": "2027",
+      "mostrarSolicitudes": "SI",
+      "noChasis": "8A18SRDD4VL528706",
+      "noEjes": "2",
+      "noIdentificacion": null,
+      "noLicenciaTransito": "10039202257",
+      "noMotor": "H4MJ759Q389860",
+      "noPlaca": "QOO862",
+      "noSerie": null,
+      "noVin": "8A18SRDD4VL528706",
+      "nombrePais": null,
+      "organismoTransito": "STRIA TTOyTTE MCPAL FUNZA",
+      "pasajerosSentados": "2",
+      "pasajerosTotal": null,
+      "pesoBruto": "1900",
+      "prendas": "NO",
+      "puertas": "5",
+      "repotenciado": "NO",
+      "seguridadEstado": "NO",
+      "subpartida": null,
+      "tarjetaServicio": "NO",
+      "tieneGravamenes": "NO",
+      "tieneLTImportacion": false,
+      "tipoCarroceria": "PANEL",
+      "tipoCombustible": "GAS GASOL",
+      "tipoMaquinaria": null,
+      "tipoServicio": "Público",
+      "validacionDIAN": "No Exitoso",
+      "vehiculoEnsenanza": "NO",
+      "verValidaDIAN": false
+    },
+    "limitacionPropiedad": [],
+    "normalizacionSaneamiento": [
+      {
+        "deficienciaMatriculaInicial": "NO",
+        "descargaCertificado": null,
+        "fecha": null,
+        "numeroActoAdministrativo": null,
+        "solicitudNormalizacion": null,
+        "vehiculoNormalizado": "NO DISPONIBLE"
+      }
+    ],
+    "plate": "QOO862",
+    "polizasResponsabilidadCivil": [],
+    "soat": [
+      {
+        "entidadExpideSoat": "AXA COLPATRIA SEGUROS SA",
+        "estado": "VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "fechaExpediSoat": "27/03/2026",
+        "fechaExpedicion": "27/03/2026",
+        "fechaVencimiento": "27/03/2027",
+        "fechaVigencia": "28/03/2026",
+        "noPoliza": "3540859400",
+        "nombrePais": null,
+        "origen": "NACIONAL",
+        "placa": null,
+        "tipoTarifa": "222"
+      }
+    ],
+    "solicitudes": [
+      {
+        "entidad": "STRIA TTOyTTE MCPAL FUNZA",
+        "estado": "AUTORIZADA",
+        "fechaSolicitud": "16/06/2026",
+        "noSolicitud": "296090366",
+        "tramitesRealizados": "TRÁMITE CAMBIO COLOR, TRÁMITE TRANSFORMACIÓN, "
+      },
+      {
+        "entidad": "STRIA TTOyTTE MCPAL FUNZA",
+        "estado": "AUTORIZADA",
+        "fechaSolicitud": "26/03/2026",
+        "noSolicitud": "290679071",
+        "tramitesRealizados": "TRÁMITE MATRÍCULA INICIAL, "
+      },
+      {
+        "entidad": "STRIA TTOyTTE MCPAL FUNZA",
+        "estado": "APROBADA",
+        "fechaSolicitud": "26/03/2026",
+        "noSolicitud": "290613267",
+        "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, "
+      }
+    ],
+    "tarjetaOperacion": {
+      "empresaAfiliadora": null,
+      "estado": null,
+      "fechaExpedicion": null,
+      "fechaFin": null,
+      "fechaInicio": null,
+      "modalidadTransporte": null,
+      "nroTarjetaOperacion": null,
+      "radioAccion": null,
+      "servicio": null
+    },
+    "tecnoMecanica": [],
+    "vin": "8A18SRDD4VL528706"
+  },
+  "signature": {
+    "dateTime": "September 10, 2026 1:44 PM",
+    "message": "Certified by Verifik.co"
+  },
+  "id": "V4Q0O"
+}

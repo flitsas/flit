@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
@@ -7,21 +7,43 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
+  searchInstances: vi.fn(),
+  searchEstadoCounts: vi.fn(),
+  listFilterFields: vi.fn(),
+  // La tira de KPIs pide sus conteos al backend (no se derivan del array del listado).
+  listInstanceEstadoCounts: vi.fn().mockResolvedValue({}),
   setPriority: vi.fn(),
   // HU #11054 / #11055 — documentos y consolidado desde el listado.
   getAttachments: vi.fn(),
   fetchAttachmentPreviewUrl: vi.fn(),
   downloadAttachment: vi.fn(),
+  // Frente C, etapa 1 — modal de detalle de un trámite ya radicado.
+  getInstance: vi.fn(),
+  // HU #12185 — el panel del trámite pide el historial paginado (que sí trae usuario y compañía),
+  // no el `statusHistory` del detalle, que no trae ninguno de los dos.
+  getStatusHistory: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 }),
+  listBiometricExpediente: vi.fn(),
   // ICT (PR #204) — pausa individual y masiva + cierre del subflujo de placa.
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
   completePlateFlow: vi.fn(),
+  // La tabla consulta la config del tenant al montar (bloqueo de creación por familia y
+  // "solo vehículos propios"); sin este mock el efecto revienta y tumba todo el archivo.
+  getConsultationConfig: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: mocks,
   DEV_TENANT_ID: 'tenant-dev',
   DEV_USER_ID: 'user-dev',
+}));
+
+// Preferencias de columnas: sin mock, el put fallaba y el selector revertía la selección.
+vi.mock('@/lib/api/ui-preferences', () => ({
+  uiPreferencesClient: {
+    get: vi.fn().mockResolvedValue({ scope: 'tramites.columns', value: {} }),
+    put: vi.fn().mockResolvedValue({ scope: 'tramites.columns', value: { visible: [] } }),
+  },
 }));
 
 // La tabla usa useRouter para abrir cada fila; en jsdom no hay router montado.
@@ -31,15 +53,32 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { TramitesTable } from '@/components/operacion/TramitesTable';
+// HU #12163 — el menú de acciones avanzadas del admin usa `useToast` (feedback de las 5 acciones
+// nuevas): la tabla ahora necesita `<ToastProvider>` en el árbol, igual que en producción
+// (`app/page.tsx` y `app/tramites/layout.tsx` ya envuelven la pantalla con él).
+import { ToastProvider } from '@/components/admin/Toast';
 
 /** Genera n instancias draft con placa única (P0001, P0002, …). */
+/**
+ * Enciende desde el selector columnas que NO vienen en el default de la pantalla (Firmas, Gestor,
+ * Fuente y los desgloses). Cierra el panel al terminar para que sus etiquetas no interfieran con
+ * las búsquedas por texto del propio test.
+ */
+async function activarColumnas(...labels: string[]): Promise<void> {
+  await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
+  for (const label of labels) {
+    await userEvent.click(screen.getByRole('checkbox', { name: new RegExp(`^${label}$`, 'i') }));
+  }
+  await userEvent.keyboard('{Escape}');
+}
+
 function makeInstances(n: number): InstanceSummary[] {
   return Array.from({ length: n }, (_, i) => {
     const num = String(i + 1).padStart(4, '0');
     return {
       id: `inst-${num}`,
       referenceNumber: `TR-${num}`,
-      modalidad: 'traspaso',
+      modalidad: 'TRASPASO',
       estado: 'borrador',
       placa: `P${num}`,
       vin: `VIN-${num}`,
@@ -88,22 +127,95 @@ async function abrirAcciones(referenceNumber = 'TR-0001') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // El tamaño de página se recuerda en `sessionStorage` (HU #12188) y este no se limpia solo entre
+  // casos: sin esto, el que elige 25 filas se lo dejaría puesto a todos los que vienen después.
+  sessionStorage.clear();
+  // HU #12107 — la tabla pasó al camino POST (`searchInstances`), que es el único que lleva
+  // condiciones. Se cablea sobre `listInstances` para que los casos que ya sembraban filas por ahí
+  // sigan valiendo sin tocarlos: lo que cambió es el transporte, no lo que devuelve el servidor.
+  //
+  // HU #12188 — y desde que la tabla pagina contra el servidor, este puente tiene que COMPORTARSE
+  // como uno: aplicar la búsqueda y el marcado prioritario, recortar por `skip`/`take` y devolver
+  // el total del universo, no el de la página. Un doble que devolviera siempre todo dejaría pasar
+  // en verde justo lo que esta HU corrige — una tabla que pagina sobre lo que ya tenía en memoria.
+  mocks.searchInstances.mockImplementation(async (params?: unknown) => {
+    const todos: InstanceSummary[] = (await mocks.listInstances(params)) ?? [];
+    const p = (params ?? {}) as {
+      busqueda?: string;
+      prioritario?: boolean;
+      skip?: number;
+      take?: number;
+    };
+
+    let universo = todos;
+
+    const texto = p.busqueda?.trim().toLowerCase();
+    if (texto) {
+      universo = universo.filter((i) => {
+        // El radicado casa EXACTO, igual que en el servidor: con un consecutivo numérico corto,
+        // la subcadena convierte cualquier búsqueda en medio listado.
+        if (i.referenceNumber?.toLowerCase() === texto) return true;
+        return [
+          i.placa,
+          i.vin,
+          i.compradorNombre,
+          i.vendedorNombre,
+          i.compradorDocumento,
+          i.vendedorDocumento,
+          i.organismoTransito,
+          i.companiaNombre,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(texto);
+      });
+    }
+
+    if (p.prioritario) universo = universo.filter((i) => i.prioritario);
+
+    const skip = p.skip ?? 0;
+    const take = p.take ?? universo.length;
+    return { items: universo.slice(skip, skip + take), total: universo.length };
+  });
+  mocks.searchEstadoCounts.mockImplementation((params?: unknown) =>
+    mocks.listInstanceEstadoCounts(params),
+  );
+  mocks.listFilterFields.mockResolvedValue([]);
+  // clearAllMocks borra la implementación: sin re-armarla el efecto de config recibe undefined
+  // y encadena .then sobre él. Por defecto, ninguna familia bloqueada.
+  mocks.getConsultationConfig.mockResolvedValue({
+    vehiclePlate: 'kyverum_runt',
+    onlyOwnVehicles: false,
+    blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
+  });
 });
 
+/**
+ * HU #12188 — la paginación consulta al SERVIDOR: `page`/`pageSize` viajan como `skip`/`take` y el
+ * total lo cuenta el servidor. El doble de `searchInstances` (arriba) se comporta como tal, así que
+ * estos casos ejercitan el contrato de verdad y no un recorte en memoria.
+ *
+ * El resumen dice el RANGO —«Mostrando 11–20 de 23»— y no «10 de 23»: con paginación de servidor lo
+ * segundo no distingue la página 2 de la primera.
+ */
 describe('TramitesTable — paginación', () => {
-  it('no muestra controles de paginación cuando todo cabe en una página', async () => {
+  it('no muestra botones de página cuando todo cabe en una página, pero sí el conteo', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(10));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
-    expect(
-      screen.queryByRole('navigation', { name: 'Paginación de trámites' }),
-    ).not.toBeInTheDocument();
+    const nav = screen.getByRole('navigation', { name: 'Paginación de trámites' });
+    // La píldora de conteo suelta desapareció: la cuenta ahora vive SOLO aquí, incluso con una
+    // única página.
+    expect(within(nav).getByText('Mostrando 1–10 de 10')).toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: 'Página anterior' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: 'Página 1' })).not.toBeInTheDocument();
   });
 
   it('pagina a 10 filas por página y navega entre páginas', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(23));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     // Página 1: P0001..P0010 visibles, P0011 no.
     await screen.findByText('P0001');
@@ -111,35 +223,44 @@ describe('TramitesTable — paginación', () => {
     expect(screen.queryByText('P0011')).not.toBeInTheDocument();
 
     const nav = screen.getByRole('navigation', { name: 'Paginación de trámites' });
-    expect(within(nav).getByText('1 / 3')).toBeInTheDocument();
-    expect(within(nav).getByText('1–10 de 23')).toBeInTheDocument();
+    // Paginación numerada del diseño: la página activa se marca con aria-current="page".
+    expect(within(nav).getByRole('button', { name: 'Página 1', current: 'page' })).toBeInTheDocument();
+    expect(within(nav).getByText('Mostrando 1–10 de 23')).toBeInTheDocument();
     // En la primera página "Anterior" está deshabilitado.
     expect(within(nav).getByRole('button', { name: 'Página anterior' })).toBeDisabled();
 
-    // Avanzar a página 2.
+    // Avanzar a página 2. Ahora es una consulta nueva, no un `slice`: hay que esperar la respuesta.
     await userEvent.click(
       within(nav).getByRole('button', { name: 'Página siguiente' }),
     );
+    expect(await screen.findByText('P0011')).toBeInTheDocument();
     expect(screen.queryByText('P0010')).not.toBeInTheDocument();
-    expect(screen.getByText('P0011')).toBeInTheDocument();
     expect(screen.getByText('P0020')).toBeInTheDocument();
+    // Y la página se pidió al servidor con su tramo, que es lo que esta HU corrige: antes se
+    // pedían 200 filas una vez y las páginas siguientes no existían.
+    expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+      expect.objectContaining({ skip: 10, take: 10 }),
+    );
 
     // Avanzar a página 3 (última, parcial: 3 filas) → "Siguiente" deshabilitado.
     await userEvent.click(
-      within(nav).getByRole('button', { name: 'Página siguiente' }),
+      screen.getByRole('button', { name: 'Página siguiente' }),
     );
-    expect(screen.getByText('P0021')).toBeInTheDocument();
+    expect(await screen.findByText('P0021')).toBeInTheDocument();
     expect(screen.getByText('P0023')).toBeInTheDocument();
-    expect(within(nav).getByText('3 / 3')).toBeInTheDocument();
-    expect(within(nav).getByText('21–23 de 23')).toBeInTheDocument();
+    // Se vuelve a consultar el `nav`: cada página es un render nuevo, y el nodo capturado antes
+    // puede haber quedado desprendido del documento.
+    const navFinal = screen.getByRole('navigation', { name: 'Paginación de trámites' });
+    expect(within(navFinal).getByRole('button', { name: 'Página 3', current: 'page' })).toBeInTheDocument();
+    expect(within(navFinal).getByText('Mostrando 21–23 de 23')).toBeInTheDocument();
     expect(
-      within(nav).getByRole('button', { name: 'Página siguiente' }),
+      within(navFinal).getByRole('button', { name: 'Página siguiente' }),
     ).toBeDisabled();
   });
 
   it('vuelve a la primera página al aplicar un filtro de búsqueda', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(23));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const nav = await screen.findByRole('navigation', {
       name: 'Paginación de trámites',
@@ -147,18 +268,115 @@ describe('TramitesTable — paginación', () => {
     await userEvent.click(
       within(nav).getByRole('button', { name: 'Página siguiente' }),
     );
-    expect(within(nav).getByText('2 / 3')).toBeInTheDocument();
+    expect(await screen.findByText('P0011')).toBeInTheDocument();
+    // Se vuelve a consultar el `nav`: cada página es un render nuevo.
+    expect(
+      screen.getByRole('button', { name: 'Página 2', current: 'page' }),
+    ).toBeInTheDocument();
 
-    // Buscar "Comprador" matchea las 23 (siguen 3 páginas) pero resetea a la 1.
-    // La búsqueda está oculta tras el botón "Buscar" (paridad con el diseño).
-    await userEvent.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
+    // Buscar "Comprador" casa las 23 (siguen 3 páginas) pero vuelve a la 1: con otro conjunto de
+    // resultados, «la página 2» ya no describe el mismo tramo.
     await userEvent.type(
       screen.getByRole('searchbox', { name: 'Buscar trámites' }),
       'Comprador',
     );
-    expect(within(nav).getByText('1 / 3')).toBeInTheDocument();
-    expect(screen.getByText('P0001')).toBeInTheDocument();
+    expect(await screen.findByText('P0001')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Página 1', current: 'page' }),
+    ).toBeInTheDocument();
     expect(screen.queryByText('P0011')).not.toBeInTheDocument();
+  });
+
+  it('la búsqueda se resuelve en el SERVIDOR, no sobre las filas cargadas', async () => {
+    // Es el defecto que motiva la HU: con la búsqueda en el cliente, un trámite que existe pero
+    // quedó fuera de la página respondía «sin resultados» — una respuesta falsa, no una limitación.
+    mocks.listInstances.mockResolvedValue(makeInstances(23));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+
+    // P0023 está en la tercera página: en el navegador no se ha cargado nunca.
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Buscar trámites' }), 'P0023');
+
+    expect(await screen.findByText('P0023')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ busqueda: 'P0023' }),
+      ),
+    );
+  });
+
+  it('el tamaño de página se elige, vuelve a la primera y se recuerda en la sesión', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(23));
+    const { unmount } = render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+
+    await userEvent.selectOptions(screen.getByLabelText('Filas por página'), '25');
+
+    expect(await screen.findByText('P0023')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ skip: 0, take: 25 }),
+      ),
+    );
+
+    // Se recuerda «durante la sesión»: al volver a la pantalla sigue en 25.
+    unmount();
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    expect(await screen.findByLabelText('Filas por página')).toHaveValue('25');
+  });
+});
+
+describe('TramitesTable — filtro por estado en el slider KPI', () => {
+  // El estado dejó de filtrarse en cliente: la tarjeta manda `estado` al backend. Lo que se
+  // comprueba aquí es esa llamada, no que el array se recorte en memoria — el listado trae como
+  // mucho una página, así que recortarla contestaba "los entregados que cupieron", no "los
+  // entregados". Y el conteo de la tarjeta viene del backend por la misma razón.
+  it('al clic en una tarjeta pide ese estado al backend y no expone el filtro en Filtros', async () => {
+    const [a, b] = makeInstances(2);
+    const borrador = { ...a, estado: 'borrador', placa: 'AAA111' };
+    const entregado = { ...b, estado: 'entregado', placa: 'BBB222' };
+    // El mock hace de servidor: devuelve según el `estado` pedido.
+    mocks.listInstances.mockImplementation(async (params?: { estado?: string }) =>
+      params?.estado === 'entregado' ? [entregado] : [borrador, entregado],
+    );
+    mocks.listInstanceEstadoCounts.mockResolvedValue({ borrador: 1, entregado: 1 });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('AAA111');
+    expect(screen.getByText('BBB222')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Entregado: 1 trámite' }));
+    await waitFor(() =>
+      expect(mocks.listInstances).toHaveBeenCalledWith(
+        expect.objectContaining({ estado: 'entregado' }),
+      ),
+    );
+    expect(await screen.findByText('BBB222')).toBeInTheDocument();
+    expect(screen.queryByText('AAA111')).not.toBeInTheDocument();
+
+    // Segundo clic en la misma tarjeta: quita el filtro y la petición vuelve a ir sin `estado`.
+    await userEvent.click(screen.getByRole('button', { name: 'Entregado: 1 trámite' }));
+    expect(await screen.findByText('AAA111')).toBeInTheDocument();
+    expect(screen.getByText('BBB222')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^Filtros/ }));
+    expect(screen.queryByText('Filtrar por estado')).not.toBeInTheDocument();
+  });
+
+  // La tira habla del UNIVERSO, la tabla de una página: por eso los conteos no se derivan de las
+  // filas traídas. Si se derivaran, un tenant que no cupiera en la ventana vería "1 borrador"
+  // teniendo cientos.
+  it('los conteos de la tira los sirve el backend, no se cuentan las filas de la página', async () => {
+    const [a] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([{ ...a, estado: 'borrador', placa: 'AAA111' }]);
+    mocks.listInstanceEstadoCounts.mockResolvedValue({ borrador: 340, entregado: 12 });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('AAA111');
+    expect(
+      await screen.findByRole('button', { name: 'Borrador: 340 trámites' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Entregado: 12 trámites' })).toBeInTheDocument();
   });
 });
 
@@ -176,9 +394,9 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
         identityValidationStatus: 'en_proceso',
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    const row = (await screen.findByText('PEND01')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('PEND01')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Pendiente validación')).toBeInTheDocument();
     // Accesible: el chip expone su estado por aria-label.
     expect(within(row).getByLabelText('Estado: Pendiente validación')).toBeInTheDocument();
@@ -200,9 +418,9 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
         signaturePending: true,
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    const row = (await screen.findByText('FIRM01')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('FIRM01')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Pendiente firma')).toBeInTheDocument();
   });
 
@@ -219,9 +437,9 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
         canSubmit: true,
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    const row = (await screen.findByText('RDY001')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('RDY001')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Listo para radicar')).toBeInTheDocument();
     // La acción vive dentro del menú de la fila desde HU #11037.
     await abrirAcciones();
@@ -237,19 +455,19 @@ describe('TramitesTable — organismo de tránsito', () => {
       { ...base, id: 'a', placa: 'BOG001', organismoTransito: 'Secretaría de Movilidad Bogotá' },
       { ...base, id: 'b', placa: 'CAL001', organismoTransito: 'Cali — STTMP' },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('BOG001');
     expect(screen.getByText('Secretaría de Movilidad Bogotá')).toBeInTheDocument();
     expect(screen.getByText('Cali — STTMP')).toBeInTheDocument();
 
-    // El buscador también filtra por organismo.
-    await userEvent.click(screen.getByRole('button', { name: /Buscar por placa o VIN/i }));
+    // El buscador también filtra por organismo (siempre visible en la tarjeta de filtros). Desde la
+    // HU #12188 la búsqueda va al servidor tras un respiro, así que hay que esperar la respuesta.
     await userEvent.type(
       screen.getByRole('searchbox', { name: 'Buscar trámites' }),
       'Cali',
     );
-    expect(screen.queryByText('BOG001')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('BOG001')).not.toBeInTheDocument());
     expect(screen.getByText('CAL001')).toBeInTheDocument();
   });
 });
@@ -263,7 +481,7 @@ describe('TramitesTable — HU #10536 prioridad', () => {
       { ...base, id: 'p1', placa: 'PRI001', prioritario: false },
     ]);
     mocks.setPriority.mockResolvedValue({ id: 'p1', prioritario: true });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const star = await screen.findByRole('button', {
       name: /Marcar como prioritario el trámite/,
@@ -279,17 +497,71 @@ describe('TramitesTable — HU #10536 prioridad', () => {
     ).toBeInTheDocument();
   });
 
+  it('al marcar prioritario la fila sube a la primera posición sin recargar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'x1', referenceNumber: 'TR-X1', placa: 'AAA111', prioritario: false },
+      { ...base, id: 'x2', referenceNumber: 'TR-X2', placa: 'BBB222', prioritario: false },
+    ]);
+    mocks.setPriority.mockResolvedValue({ id: 'x2', prioritario: true });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('AAA111');
+    const filas = () =>
+      within(screen.getByRole('table', { name: 'Trámites en curso' }))
+        .getAllByRole('row')
+        .slice(1);
+    expect(filas()[0].textContent).toContain('AAA111');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Marcar como prioritario el trámite TR-X2' }),
+    );
+
+    // Sin refetch ni recarga: el listado se reordena con el MISMO criterio del backend
+    // (prioritarios primero), así que la fila marcada pasa a encabezar la tabla.
+    expect(mocks.listInstances).toHaveBeenCalledTimes(1);
+    expect(filas()[0].textContent).toContain('BBB222');
+    expect(filas()[1].textContent).toContain('AAA111');
+  });
+
+  it('al marcar prioritario la fila sube a la primera posición sin recargar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'x1', referenceNumber: 'TR-X1', placa: 'AAA111', prioritario: false },
+      { ...base, id: 'x2', referenceNumber: 'TR-X2', placa: 'BBB222', prioritario: false },
+    ]);
+    mocks.setPriority.mockResolvedValue({ id: 'x2', prioritario: true });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('AAA111');
+    const filas = () =>
+      within(screen.getByRole('table', { name: 'Trámites en curso' }))
+        .getAllByRole('row')
+        .slice(1);
+    expect(filas()[0].textContent).toContain('AAA111');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Marcar como prioritario el trámite TR-X2' }),
+    );
+
+    // Sin refetch ni recarga: el listado se reordena con el MISMO criterio del backend
+    // (prioritarios primero), así que la fila marcada pasa a encabezar la tabla.
+    expect(mocks.listInstances).toHaveBeenCalledTimes(1);
+    expect(filas()[0].textContent).toContain('BBB222');
+    expect(filas()[1].textContent).toContain('AAA111');
+  });
+
   it('el filtro "Prioritarios" muestra solo los trámites prioritarios', async () => {
     mocks.listInstances.mockResolvedValue([
       { ...base, id: 'a', placa: 'PRIO01', prioritario: true },
       { ...base, id: 'b', placa: 'NORM01', prioritario: false },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('PRIO01');
     expect(screen.getByText('NORM01')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Prioritarios' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Mostrar solo trámites prioritarios' }),
+    );
 
     expect(screen.getByText('PRIO01')).toBeInTheDocument();
     expect(screen.queryByText('NORM01')).not.toBeInTheDocument();
@@ -305,7 +577,7 @@ function superAdminToken(): string {
 
 function instance(over: Partial<InstanceSummary>): InstanceSummary {
   return {
-    id: 'i', referenceNumber: 'TR', modalidad: 'traspaso', estado: 'borrador',
+    id: 'i', referenceNumber: 'TR', modalidad: 'TRASPASO', estado: 'borrador',
     placa: 'P', vin: 'V', vehiculoMarca: 'M', vehiculoLinea: 'L',
     compradorNombre: 'C', compradorDocumento: '1', organismoTransito: null,
     pasoActual: 1, totalPasos: 6, createdAt: '2026-06-18T00:00:00Z',
@@ -332,9 +604,9 @@ describe('TramitesTable — subsanación / motivo de rechazo', () => {
         ultimoRechazoMotivo: null,
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    const row = (await screen.findByText('SUB001')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('SUB001')).closest('tr') as HTMLElement;
     expect(within(row).queryByText('En subsanación')).not.toBeInTheDocument();
     expect(within(row).queryByText('Subsanado ×2')).not.toBeInTheDocument();
 
@@ -362,7 +634,7 @@ describe('TramitesTable — subsanación / motivo de rechazo', () => {
         ultimoRechazoMotivo: 'Falta certificado de tradición',
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('REJ001');
     expect(screen.queryByText('Falta certificado de tradición')).not.toBeInTheDocument();
@@ -393,20 +665,42 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
   // columna "Gestor" (empresa + persona que radica), que es la misma información con más contexto y
   // para todos los perfiles. El filtro por compañía del SuperAdmin sigue intacto.
   it('muestra la compañía en Gestor, conserva el filtro y abre con el tenant de la fila (?t=)', async () => {
+    // El catálogo se pide al montar, así que se fija ANTES del render.
+    mocks.listFilterFields.mockResolvedValue([
+      {
+        id: 'compania', label: 'Compañía', kind: 'opcion', group: 'Alcance',
+        operators: ['es_alguno', 'no_es_ninguno'],
+        options: [{ value: 'ten-a', label: 'Empresa A' }],
+        hint: null, admiteLista: true,
+      },
+    ]);
     mocks.listInstances.mockResolvedValue([
       instance({ id: 'a', placa: 'AAA111', tenantId: 'ten-a', companiaNombre: 'Empresa A' }),
       instance({ id: 'b', placa: 'BBB222', tenantId: 'ten-b', companiaNombre: 'Empresa B' }),
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('AAA111');
-    expect(within(screen.getByRole('row')).getByText('Gestor')).toBeInTheDocument();
-    expect(within(screen.getByRole('row')).queryByText('Compañía')).not.toBeInTheDocument();
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
-    expect(within(rows).getByText('Empresa A')).toBeInTheDocument();
-    // Filtro Compañía presente (select con label) con la opción de la empresa.
-    expect(screen.getByLabelText('Compañía')).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Empresa A' })).toBeInTheDocument();
+    // Gestor está fuera del default de la pantalla: el gestor la enciende desde "Columnas".
+    await activarColumnas('Gestor');
+    // `getByRole('row')` ya no es único: la cabecera y cada fila de datos son `<tr>` (role="row"
+    // implícito), así que se acota a la cabecera con `getAllByRole('row')[0]`.
+    const table = screen.getByRole('table', { name: 'Trámites en curso' });
+    const header = within(table).getAllByRole('row')[0];
+    expect(within(header).getByText('Gestor')).toBeInTheDocument();
+    expect(within(header).queryByText('Compañía')).not.toBeInTheDocument();
+    expect(within(table).getByText('Empresa A')).toBeInTheDocument();
+    // El filtro por compañía ya no es un desplegable propio del panel: es un campo más del
+    // catálogo que sirve el servidor, en el grupo «Alcance», igual que en Consultas. El de antes
+    // solo conocía las compañías de la PÁGINA cargada y filtraba sobre ella, así que escondía
+    // filas en vez de acotar el listado — y el total seguía contando las escondidas.
+    await userEvent.click(screen.getByRole('button', { name: /^Filtros/ }));
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId('tramites-campos')).getByRole('button', { name: 'Compañía' }),
+      ).toBeInTheDocument(),
+    );
+    await userEvent.keyboard('{Escape}');
 
     // Abrir una fila navega con ?t=<tenant de la fila>.
     await userEvent.click(screen.getByText('AAA111'));
@@ -418,12 +712,13 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
 describe('TramitesTable — actores del traspaso (HU #11020)', () => {
   it('muestra las columnas de vendedor y comprador con sus valores', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
-    // HU #11057 renombró la cabecera a "Propietario / vendedor" (rótulo del negocio).
-    expect(screen.getByText('Propietario / vendedor')).toBeInTheDocument();
-    expect(screen.getByText('Comprador')).toBeInTheDocument();
+    // La cabecera dice "Vendedor" a secas: la celda solo pinta `vendedorNombre`. El filtro
+    // específico conserva su propio rótulo, así que basta con que el texto exista ≥1 vez.
+    expect(screen.getAllByText('Vendedor').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Comprador').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Vendedor 0001')).toBeInTheDocument();
     expect(screen.getByText('Comprador 0001')).toBeInTheDocument();
   });
@@ -431,9 +726,9 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
   it('en matrícula inicial (sin vendedor) la celda queda vacía sin romper la fila', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
-      { ...item, modalidad: 'matricula_inicial', vendedorNombre: null, vendedorDocumento: null },
+      { ...item, modalidad: 'MATRICULAS', vendedorNombre: null, vendedorDocumento: null },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     expect(screen.getByText('Comprador 0001')).toBeInTheDocument();
@@ -441,37 +736,79 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
   });
 });
 
-// HU #11057 — columnas acordadas con el negocio.
+// HU #11057 — columnas del listado; el default es compacto (el resto se activa con "Columnas").
 describe('TramitesTable — columnas del listado (HU #11057)', () => {
-  it('muestra las columnas acordadas con el negocio', async () => {
+  it('muestra por defecto las columnas esenciales (sin scroll de catálogo completo)', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
-    const header = screen.getByRole('row');
+    // `getByRole('row')` ya no es único (cabecera + una fila por `<tr>`): se acota a la cabecera.
+    const header = within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole(
+      'row',
+    )[0];
     for (const col of [
       'Radicado',
-      'VIN',
-      'Placa',
-      'Trámite / Modalidad',
-      'Propietario / vendedor',
+      'Vehículo',
+      'Vendedor',
       'Comprador',
-      'Fecha de creación',
-      'Fecha de actualización',
+      'Trámite / Estado',
       'Secretaría',
-      'Gestor',
-      'Fuente',
       'Acciones',
     ]) {
       expect(within(header).getByText(col)).toBeInTheDocument();
     }
-    // Dos columnas "Firmado" (vendedor y comprador), distinguidas por su sufijo accesible.
-    expect(within(header).getAllByText(/^Firmado/)).toHaveLength(2);
-    expect(within(header).getByText('(vendedor)')).toBeInTheDocument();
-    expect(within(header).getByText('(comprador)')).toBeInTheDocument();
+    // Placa, VIN y marca/modelo van juntos en la columna "Vehículo": no hay columnas propias.
+    expect(within(header).queryByText('VIN')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Placa')).not.toBeInTheDocument();
+    // Columnas cuyo dato viaja apilado en una celda compuesta: fuera de la cabecera por defecto,
+    // disponibles en el selector para moverlo a su propia columna.
+    expect(within(header).queryByText('Paso')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Estado')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Fecha de creación')).not.toBeInTheDocument();
+    // La acreditación de cada parte va dentro de su columna de actor: no hay columna "Firmas".
+    expect(within(header).queryByText('Firmas')).not.toBeInTheDocument();
+    // Fuera del default por decisión de producto: el gestor las enciende desde "Columnas".
+    expect(within(header).queryByText('Gestor')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Fuente')).not.toBeInTheDocument();
   });
 
-  it('proyecta gestor, fuente y fecha de actualización de la fila', async () => {
+  it('permite activar columnas opcionales desde el selector', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    // Preferencias: sin backend en test, setVisible actualiza estado local.
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+
+    await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Estado$/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Paso$/i }));
+
+    const header = within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole(
+      'row',
+    )[0];
+    expect(within(header).getByText('Estado')).toBeInTheDocument();
+    expect(within(header).getByText('Paso')).toBeInTheDocument();
+  });
+
+  it('al activar una columna compuesta, el dato se MUEVE a su columna en vez de duplicarse', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, vehiculoMarca: 'RENAULT', vehiculoLinea: 'STEPWAY' },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+
+    const rows = () => screen.getByRole('table', { name: 'Trámites en curso' });
+    // Por defecto la marca va apilada dentro de "Vehículo", bajo la placa: aparece UNA vez.
+    expect(within(rows()).getAllByText('RENAULT STEPWAY')).toHaveLength(1);
+
+    await activarColumnas('Marca / modelo');
+
+    // Con la columna de desglose activa sigue apareciendo UNA sola vez, ya en su propia celda.
+    expect(within(rows()).getAllByText('RENAULT STEPWAY')).toHaveLength(1);
+  });
+
+  it('proyecta gestor, fuente y fecha de actualización cuando el usuario las activa', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       {
@@ -484,47 +821,131 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
         updatedAt: '2026-07-20T15:00:00Z',
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
+    // Ninguna de las tres viene en el default: Gestor y Fuente están fuera por decisión de
+    // producto, y la fecha de actualización viaja apilada dentro del radicado.
+    await activarColumnas('Gestor', 'Fuente', 'Fecha de actualización');
+
+    const rows = screen.getByRole('table', { name: 'Trámites en curso' });
     expect(within(rows).getByText('Empresa Gestora SAS')).toBeInTheDocument();
     expect(within(rows).getByText('Ana Gestora')).toBeInTheDocument();
     expect(within(rows).getByText('Integración')).toBeInTheDocument();
     expect(within(rows).getByText('2026/07/20')).toBeInTheDocument();
   });
 
-  it('muestra el estado de acreditación de cada parte por separado', async () => {
-    const [item] = makeInstances(1);
-    mocks.listInstances.mockResolvedValue([
-      { ...item, firmaVendedorEstado: 'firmado', firmaCompradorEstado: 'rechazado' },
-    ]);
-    render(<TramitesTable />);
-
-    await screen.findByText('P0001');
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
-    expect(within(rows).getByText('Firmado')).toBeInTheDocument();
-    expect(within(rows).getByText('Rechazado')).toBeInTheDocument();
-  });
-
-  it('en matrícula inicial la columna del vendedor se presenta como no aplicable', async () => {
+  // La acreditación de cada parte vive DENTRO de la celda de esa parte: quién firmó lo dice la
+  // columna en la que está, no un rótulo repetido dentro de la celda.
+  it('en traspaso cada actor muestra su propia acreditación en su columna', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       {
         ...item,
-        modalidad: 'matricula_inicial',
+        modalidad: 'TRASPASO',
+        firmaVendedorEstado: 'firmado',
+        firmaCompradorEstado: 'rechazado',
+      },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    // Sin encender nada: las dos columnas de actor vienen en el default y cada una trae su firma.
+    const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
+    const fila = within(tabla).getAllByRole('row')[1];
+    expect(within(fila).getByText('Firmado')).toBeInTheDocument();
+    expect(within(fila).getByText('Rechazado')).toBeInTheDocument();
+    // Y cada una está en la celda de SU parte: la acción de trazabilidad lo nombra.
+    expect(
+      within(fila).getByRole('button', { name: 'Ver tracking de identidad de Vendedor' }),
+    ).toBeInTheDocument();
+    expect(
+      within(fila).getByRole('button', { name: 'Ver tracking de identidad de Comprador' }),
+    ).toBeInTheDocument();
+    // Una sola vez por parte: el valor no se repite en otra columna.
+    expect(within(fila).getAllByText('Firmado')).toHaveLength(1);
+  });
+
+  // La columna del vendedor se ata a la pestaña, no a la preferencia: en matrícula inicial no
+  // existe vendedor, pero en "Todos" la lista mezcla ambas modalidades y el dato sí aplica.
+  it('la columna Vendedor sigue a la pestaña sin alterar la preferencia guardada', async () => {
+    // Una instancia de cada modalidad: si no, al cambiar de pestaña el listado queda vacío y no
+    // hay cabecera que comprobar (el caso se estaría midiendo contra el estado "Sin resultados").
+    const [uno, dos] = makeInstances(2);
+    mocks.listInstances.mockResolvedValue([
+      { ...uno, modalidad: 'MATRICULAS' },
+      { ...dos, modalidad: 'TRASPASO' },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+
+    const header = () =>
+      within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole('row')[0];
+    // Pestaña "Todos": presente.
+    expect(within(header()).getByText('Vendedor')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Matrículas' }));
+    expect(within(header()).queryByText('Vendedor')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Traspaso' }));
+    expect(within(header()).getByText('Vendedor')).toBeInTheDocument();
+
+    // Y al volver a "Todos" reaparece: nunca se tocó la preferencia, solo se derivó la vista.
+    await userEvent.click(screen.getByRole('tab', { name: 'Todos' }));
+    expect(within(header()).getByText('Vendedor')).toBeInTheDocument();
+  });
+
+  it('en matrícula inicial solo aparece la línea del comprador (no hay vendedor)', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...item,
+        modalidad: 'MATRICULAS',
         vendedorNombre: null,
         firmaVendedorEstado: null,
         firmaCompradorEstado: null,
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
-    // Sin chip de acreditación: el vendedor no existe y el comprador viene sin estado.
-    expect(within(rows).queryByText('Pendiente')).toBeNull();
-    expect(within(rows).getAllByTitle(/No aplica: este trámite no tiene/)).toHaveLength(2);
+    const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
+    const fila = within(tabla).getAllByRole('row')[1];
+    // El vendedor NO EXISTE en matrícula inicial: su celda no ofrece acreditación (un "Sin
+    // registrar" ahí se leería como una firma pendiente que nadie va a dar).
+    expect(
+      within(fila).queryByRole('button', { name: 'Ver tracking de identidad de Vendedor' }),
+    ).toBeNull();
+    // El comprador sí existe: sin acreditación registrada se dice, no se deja un guion mudo.
+    expect(within(fila).getByText('Sin registrar')).toBeInTheDocument();
+    expect(
+      within(fila).getByRole('button', { name: 'Ver tracking de identidad de Comprador' }),
+    ).toBeInTheDocument();
+  });
+
+  it('un actor todavía sin capturar no muestra acreditación (ni "Sin registrar")', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...item,
+        modalidad: 'TRASPASO',
+        vendedorNombre: null,
+        compradorNombre: null,
+        firmaVendedorEstado: null,
+        firmaCompradorEstado: null,
+      },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
+    const fila = within(tabla).getAllByRole('row')[1];
+    // Borrador sin actores capturados: las dos celdas muestran el guion y nada más. "Sin
+    // registrar" bajo un guion se leería como una firma pendiente de alguien que no existe aún.
+    expect(within(fila).queryByText('Sin registrar')).toBeNull();
+    expect(
+      within(fila).queryAllByRole('button', { name: /Ver tracking de identidad/ }),
+    ).toHaveLength(0);
   });
 });
 
@@ -544,7 +965,7 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
         uploadedAt: '2026-07-01T00:00:00Z',
       },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await abrirAcciones();
@@ -560,7 +981,7 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
   it('informa cuando el trámite no tiene documentos', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     mocks.getAttachments.mockResolvedValue([]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await abrirAcciones();
@@ -573,7 +994,7 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
 
   it('sin consolidado generado la fila NO ofrece la acción', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await abrirAcciones();
@@ -591,7 +1012,7 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
       url: 'https://s3.local/consolidado.pdf',
       expiresAt: '2026-07-29T00:10:00Z',
     });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await abrirAcciones();
@@ -609,13 +1030,317 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
   });
 });
 
+// Frente C, etapa 1 — armazón del modal de detalle (Tramites.tsx:222 de la propuesta): borrador
+// sigue navegando al asistente; radicado (estado ≠ 'borrador') abre el modal de detalle, sin
+// navegar. Cubre el cableado (fila / botón del radicado / acción "Ver") y el contenido del modal
+// (trazabilidad + archivos finales) con los 4 estados de carga.
+describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radicado', () => {
+  const [base] = makeInstances(1);
+
+  it('un trámite radicado abre el modal de detalle al hacer clic en la fila, sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-1', referenceNumber: 'TR-RAD1', placa: 'RAD001', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-1', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByText('RAD001'));
+
+    expect(await screen.findByRole('dialog', { name: /Detalle de traspaso/ })).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  // La secuencia de pasos y sus nombres los fija la norma FLIT (prototype_rules, «Reglas de
+  // wizards y trámites»): trámite general con CINCO pasos y matrícula inicial con CUATRO, porque
+  // no tiene datos comerciales. «Prohibido reordenar o renombrar pasos sin HU que lo respalde»,
+  // así que esto se blinda en un test en vez de confiarlo a la revisión.
+  it('los pasos del detalle son los de la norma: cinco en traspaso, cuatro en matrícula inicial', async () => {
+    mocks.getInstance.mockResolvedValue({ id: 'rad-p', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-p', referenceNumber: 'TR-P', placa: 'PASO01', estado: 'entregado' },
+    ]);
+    const { unmount } = render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await userEvent.click(await screen.findByText('PASO01'));
+    // Se comparan los NOMBRES ACCESIBLES: llevan el ordinal, el rótulo y el estado del paso, que
+    // es justo el contrato que hay que blindar. El número visible lo pinta el círculo del stepper,
+    // no el rótulo. Un trámite «entregado» tiene la captura cumplida y el expediente pendiente.
+    const tabsTraspaso = within(
+      await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
+    ).getAllByRole('tab');
+    expect(tabsTraspaso.map((t) => t.getAttribute('aria-label'))).toEqual([
+      'Paso 1: Trámite y vehículo — completado',
+      'Paso 2: Actores y validación — completado',
+      'Paso 3: Documentos — completado',
+      'Paso 4: Datos comerciales — completado',
+      'Paso 5: FUR y expediente — pendiente',
+    ]);
+    unmount();
+
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'rad-m',
+        referenceNumber: 'MI-P',
+        placa: 'PASO02',
+        estado: 'entregado',
+        modalidad: 'MATRICULAS',
+      },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await userEvent.click(await screen.findByText('PASO02'));
+    const tabsMatricula = within(
+      await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
+    ).getAllByRole('tab');
+    expect(tabsMatricula.map((t) => t.getAttribute('aria-label'))).toEqual([
+      'Paso 1: Consulta VIN y placa — completado',
+      'Paso 2: Comprador y rep. legal — completado',
+      'Paso 3: Documentos — completado',
+      'Paso 4: FUR y expediente — pendiente',
+    ]);
+  });
+
+  it('el botón del radicado de un trámite radicado abre el modal sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-2', referenceNumber: 'TR-RAD2', placa: 'RAD002', estado: 'aprobado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-2', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite TR-RAD2' }));
+
+    expect(await screen.findByRole('dialog', { name: /Detalle de traspaso/ })).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('la acción "Ver" del menú de un trámite radicado abre el modal sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-3', referenceNumber: 'TR-RAD3', placa: 'RAD003', estado: 'preparado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-3', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('RAD003');
+    await abrirAcciones('TR-RAD3');
+    await userEvent.click(screen.getByRole('menuitem', { name: /^Ver$/ }));
+
+    expect(await screen.findByRole('dialog', { name: /Detalle de traspaso/ })).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('un trámite en borrador sigue navegando al asistente en vez de abrir el modal', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'brw-1', referenceNumber: 'TR-BRW1', placa: 'BRW001', estado: 'borrador' },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByText('BRW001'));
+
+    expect(routerPush).toHaveBeenCalledWith('/tramites/brw-1');
+    expect(screen.queryByRole('dialog', { name: /Detalle de/ })).toBeNull();
+    expect(mocks.getInstance).not.toHaveBeenCalled();
+  });
+
+  it('la trazabilidad pinta los hitos del statusHistory devuelto por getInstance', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-4', referenceNumber: 'TR-RAD4', placa: 'RAD004', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({
+      id: 'rad-4',
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
+        { fromStatus: 'borrador', toStatus: 'preparado', changedAt: '2026-07-02T09:00:00Z', reason: null },
+      ],
+    });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByText('RAD004'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(within(dialog).getByText('Borrador')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Preparado desde Borrador/)).toBeInTheDocument();
+  });
+
+  it('el badge de Estado abre el panel del trámite sin abrir el detalle ni navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-tl', referenceNumber: 'TR-TL', placa: 'RADTL1', estado: 'entregado' },
+    ]);
+    // HU #12185 — el panel lee el historial PAGINADO, no el `statusHistory` del detalle: ese no
+    // trae quién movió cada estado ni desde qué compañía, que es la mitad de lo que se viene a ver.
+    mocks.getStatusHistory.mockResolvedValue({
+      items: [
+        {
+          id: 'h2',
+          fromStatus: 'borrador',
+          toStatus: 'entregado',
+          changedAt: '2026-07-03T09:00:00Z',
+          changedByUserId: 'u1',
+          changedByName: 'Laura Restrepo',
+          changedByCompania: 'Renting Colombia S.A.S',
+          reason: null,
+        },
+        {
+          id: 'h1',
+          fromStatus: null,
+          toStatus: 'borrador',
+          changedAt: '2026-07-01T09:00:00Z',
+          changedByUserId: null,
+          changedByName: null,
+          changedByCompania: null,
+          reason: null,
+        },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 50,
+    });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Ver trazabilidad del trámite TR-TL/i }),
+    );
+
+    expect(await screen.findByRole('dialog', { name: /Trámite TR-TL/i })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Detalle de traspaso/ })).toBeNull();
+    expect(routerPush).not.toHaveBeenCalled();
+    // La ficha identifica el trámite; el historial dice por dónde va y quién lo movió.
+    expect(await screen.findByRole('region', { name: 'Resumen del trámite' })).toBeInTheDocument();
+    expect(await screen.findByText(/Entregado desde Borrador/)).toBeInTheDocument();
+    expect(screen.getByText('Renting Colombia S.A.S · Laura Restrepo')).toBeInTheDocument();
+  });
+
+  it('la línea Firmas abre el modal de tracking de identidad de esa parte sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'rad-id',
+        referenceNumber: 'TR-ID',
+        placa: 'RADID1',
+        estado: 'entregado',
+        firmaCompradorEstado: 'firmado',
+      },
+    ]);
+    mocks.listBiometricExpediente.mockResolvedValue({
+      validations: [],
+      firmaBaulPartes: ['comprador'],
+    });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('RADID1');
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Ver tracking de identidad de Comprador/i }),
+    );
+
+    expect(
+      await screen.findByRole('dialog', { name: /Validación de identidad · Comprador/i }),
+    ).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('los archivos finales del sistema muestran su SHA-256 completo (y excluyen los de otro origen)', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-5', referenceNumber: 'TR-RAD5', placa: 'RAD005', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-5', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([
+      {
+        id: 'att-sys',
+        tipo: 'fur',
+        filename: 'fur-generado.pdf',
+        mimetype: 'application/pdf',
+        sizeBytes: 2048,
+        sha256: 'a91f2c7d4e88b013aabbccddeeff00112233445566778899aabbccddeeff00',
+        source: 'system',
+        uploadedAt: '2026-07-05T00:00:00Z',
+      },
+      {
+        id: 'att-user',
+        tipo: 'cedula',
+        filename: 'cedula.pdf',
+        mimetype: 'application/pdf',
+        sizeBytes: 1024,
+        sha256: 'zzzz',
+        source: 'user',
+        uploadedAt: '2026-07-04T00:00:00Z',
+      },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByText('RAD005'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(await within(dialog).findByText('fur-generado.pdf')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        /SHA-256 · a91f2c7d4e88b013aabbccddeeff00112233445566778899aabbccddeeff00/,
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText('cedula.pdf')).toBeNull();
+    expect(
+      within(dialog).getByRole('button', { name: 'Descargar fur-generado.pdf' }),
+    ).toBeInTheDocument();
+  });
+
+  it('estado de carga: muestra el skeleton de trazabilidad mientras getInstance está pendiente', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-6', referenceNumber: 'TR-RAD6', placa: 'RAD006', estado: 'entregado' },
+    ]);
+    let resolveGetInstance: (value: unknown) => void = () => {};
+    mocks.getInstance.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGetInstance = resolve;
+      }),
+    );
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByText('RAD006'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(within(dialog).getByRole('status', { name: 'Cargando trazabilidad' })).toBeInTheDocument();
+
+    resolveGetInstance({ id: 'rad-6', statusHistory: [] });
+    await vi.waitFor(() => {
+      expect(within(dialog).queryByRole('status', { name: 'Cargando trazabilidad' })).toBeNull();
+    });
+  });
+
+  it('estado de error: muestra el mensaje con botón Reintentar y vuelve a llamar a getInstance', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-7', referenceNumber: 'TR-RAD7', placa: 'RAD007', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockRejectedValueOnce(new Error('Fallo de red'));
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByText('RAD007'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(await within(dialog).findByText('Fallo de red')).toBeInTheDocument();
+
+    mocks.getInstance.mockResolvedValueOnce({ id: 'rad-7', statusHistory: [] });
+    // El panel de trazabilidad tiene tres bloques que fallan por separado (cronología, archivos e
+    // identidad), así que el reintento se pide por su nombre accesible concreto y no por el
+    // genérico «Reintentar», que ahora sería ambiguo.
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Reintentar la trazabilidad' }),
+    );
+
+    await vi.waitFor(() => {
+      expect(within(dialog).queryByText('Fallo de red')).toBeNull();
+    });
+    expect(mocks.getInstance).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_paused)', () => {
   it('muestra el badge "Pausado" con la observación en el label cuando isPaused', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       { ...item, isPaused: true, pausedObservation: 'En espera de liquidación' },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     const badge = screen.getByLabelText('Trámite pausado: En espera de liquidación');
@@ -625,7 +1350,7 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
 
   it('no muestra el badge "Pausado" cuando el trámite no está pausado (default)', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1)); // isPaused undefined ⇒ sin badge
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     expect(screen.queryByText('Pausado')).toBeNull();
@@ -637,7 +1362,7 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
       { ...item, id: 'ict1', referenceNumber: 'TR-ICT', placa: 'ICT001', origin: 'ict', estado: 'borrador', isPaused: false },
     ]);
     mocks.pauseInstance.mockResolvedValue({ id: 'ict1', isPaused: true, pausedObservation: null });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-ICT' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Pausar' }));
@@ -651,7 +1376,7 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
   it('un trámite de plataforma (sin origin ict) no ofrece "Pausar" en el menú ni checkbox de selección', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([{ ...item, referenceNumber: 'TR-PLT', placa: 'PLT001', estado: 'borrador' }]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('PLT001');
     expect(screen.queryByRole('checkbox')).toBeNull();
@@ -664,7 +1389,7 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     mocks.listInstances.mockResolvedValue([
       { ...item, id: 'pz', referenceNumber: 'TR-PZ', placa: 'PZ0001', origin: 'ict', estado: 'borrador', isPaused: true },
     ]);
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-PZ' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Continuar' }));
@@ -686,6 +1411,69 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
   });
 });
 
+// El trámite puede avanzar a Terminado CON salvedades (compañía que permite continuar sin SOAT
+// vigente). Enviarlo al OT en silencio en ese caso es el bug que esta suite cubre.
+describe('TramitesTable — advertencias al procesar (SOAT no vigente)', () => {
+  const procesable = () => {
+    const [item] = makeInstances(1);
+    return { ...item, id: 'proc1', referenceNumber: 'TR-PROC', placa: 'PRC001', estado: 'entregado', plateFlowStatus: 'asignado' } satisfies InstanceSummary;
+  };
+
+  it('cuando hay alerta de procesar, el menú destaca la opción Procesar', async () => {
+    mocks.listInstances.mockResolvedValue([procesable()]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /Acciones del trámite TR-PROC.*Pendiente por procesar/,
+      }),
+    );
+    const procesar = await screen.findByRole('menuitem', { name: 'Procesar' });
+    expect(procesar).toHaveClass('bg-amber-50');
+  });
+
+  async function procesar() {
+    mocks.listInstances.mockResolvedValue([procesable()]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    // Con la fila pendiente por procesar, ActionsMenu añade el hint al nombre accesible.
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Acciones del trámite TR-PROC/ }),
+    );
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Procesar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Marcar como Terminado' }));
+  }
+
+  it('muestra la advertencia del backend y deja el modal abierto', async () => {
+    mocks.completePlateFlow.mockResolvedValue({
+      instance: null,
+      warningCode: 'soat_no_vigente_advertencia',
+      warningMessage: 'El trámite se envió al OT SIN SOAT vigente: el RUNT no lo reporta vigente.',
+    });
+
+    await procesar();
+
+    const dialog = screen.getByRole('dialog', { name: 'Procesar trámite' });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/SIN SOAT vigente/);
+    // La operación fue exitosa: ya no se puede reintentar, solo cerrar.
+    expect(within(dialog).queryByRole('button', { name: 'Marcar como Terminado' })).toBeNull();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Entendido' }));
+    expect(screen.queryByRole('dialog', { name: 'Procesar trámite' })).toBeNull();
+  });
+
+  it('sin advertencia cierra el modal directamente', async () => {
+    mocks.completePlateFlow.mockResolvedValue({
+      instance: null,
+      warningCode: null,
+      warningMessage: null,
+    });
+
+    await procesar();
+
+    expect(screen.queryByRole('dialog', { name: 'Procesar trámite' })).toBeNull();
+  });
+});
+
 describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
   it('selecciona varios borradores ICT y los pausa en lote', async () => {
     const [b] = makeInstances(1);
@@ -694,7 +1482,7 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
       { ...b, id: 'm2', placa: 'MAS002', origin: 'ict', estado: 'borrador' },
     ]);
     mocks.pauseInstancesMassive.mockResolvedValue({ total: 2, processed: 2, detail: [] });
-    render(<TramitesTable />);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('MAS001');
     const checks = screen.getAllByRole('checkbox');
@@ -706,5 +1494,456 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
     expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['m1', 'm2'], true, null, undefined);
+  });
+});
+
+describe('TramitesTable — filtros y ordenamiento server-side', () => {
+  // HU #12107 — los filtros del listado usan la gramática de Consultas: dentro del popover
+  // "Filtros" vive `QueryFilterBar` (campo → operador → valores → chip). El rótulo del disparador
+  // cambia a "Filtros (n)" con condiciones aplicadas, así que se abre por regex.
+  async function abrirPopoverFiltro() {
+    if (screen.queryByRole('dialog', { name: 'Filtros del listado' })) return;
+    await userEvent.click(screen.getByRole('button', { name: /^Filtros/ }));
+  }
+  async function abrirPopoverPeriodo() {
+    if (screen.queryByRole('dialog', { name: 'Elegir periodo' })) return;
+    // Rótulo "Periodo" en reposo ("Sin periodo"); una vez elegido un periodo, el botón muestra su
+    // nombre (p. ej. "Mes actual"). En estos tests siempre se abre en reposo, antes de elegir.
+    await userEvent.click(screen.getByRole('button', { name: 'Periodo' }));
+  }
+  /**
+   * Arma una condición con la gramática: elige campo, operador y valores, y la aplica. Deja el
+   * popover "Filtros" abierto para poder encadenar varias.
+   */
+  async function agregarCondicion(
+    fieldId: string,
+    label: string,
+    operador: string,
+    valores: string,
+  ) {
+    await abrirPopoverFiltro();
+    await userEvent.click(
+      within(screen.getByTestId('tramites-campos')).getByRole('button', { name: label }),
+    );
+    await userEvent.selectOptions(screen.getByLabelText('Operador'), operador);
+    const caja = screen.queryByTestId(`tramites-valores-${fieldId}`);
+    if (caja) await userEvent.type(caja, valores);
+    await userEvent.click(screen.getByTestId(`tramites-aplicar-${fieldId}`));
+  }
+
+  /** Catálogo mínimo con la forma que sirve el backend (HU #12106). */
+  const CATALOGO = [
+    {
+      id: 'placa', label: 'Placa', kind: 'texto', group: 'Vehículo',
+      operators: ['es_alguno', 'contiene', 'esta_vacio', 'no_esta_vacio'],
+      options: [], hint: null, admiteLista: true,
+    },
+    {
+      id: 'comprador', label: 'Comprador', kind: 'texto', group: 'Personas',
+      operators: ['es_alguno', 'contiene', 'esta_vacio', 'no_esta_vacio'],
+      options: [], hint: null, admiteLista: true,
+    },
+  ];
+
+  it('aplica condiciones y un rango de creación al listado, y las muestra como chips', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    mocks.listFilterFields.mockResolvedValue(CATALOGO);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+
+    // La condición se arma eligiendo campo, operador y valores — no hay un input fijo por campo.
+    await agregarCondicion('placa', 'Placa', 'contiene', 'ABC');
+    await agregarCondicion('comprador', 'Comprador', 'es_alguno', 'García');
+
+    // Rango propio sobre "Fecha de creación": vive en el popover "Periodo", un disparador distinto.
+    // Abrirlo cierra "Filtros" (clic fuera), pero el borrador sigue vivo — todo el estado vive en
+    // TramitesTable, no en el popover.
+    await abrirPopoverPeriodo();
+    await userEvent.selectOptions(screen.getByLabelText('Periodo'), 'Rango propio');
+    await userEvent.type(screen.getByLabelText('Fecha inicial del rango propio'), '2026-01-01');
+    await userEvent.type(screen.getByLabelText('Fecha final del rango propio'), '2026-01-31');
+
+    await abrirPopoverFiltro();
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+
+    await vi.waitFor(() => {
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          condiciones: [
+            { fieldId: 'placa', operator: 'contiene', values: ['ABC'] },
+            { fieldId: 'comprador', operator: 'es_alguno', values: ['García'] },
+          ],
+          createdFrom: '2026-01-01',
+          createdTo: '2026-01-31',
+          take: 10,
+          skip: 0,
+        }),
+      );
+    });
+
+    // Y lo aplicado se lee como chips, con la etiqueta del catálogo y no con el id del campo.
+    expect(await screen.findByText(/Placa contiene ABC/)).toBeInTheDocument();
+  });
+
+  it('aplica un rango de fechas propio sobre la última actualización', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+
+    await abrirPopoverPeriodo();
+    await userEvent.selectOptions(screen.getByLabelText('Rango sobre'), 'Última actualización');
+    await userEvent.selectOptions(screen.getByLabelText('Periodo'), 'Rango propio');
+    await userEvent.type(screen.getByLabelText('Fecha inicial del rango propio'), '2026-02-01');
+    await userEvent.type(screen.getByLabelText('Fecha final del rango propio'), '2026-02-28');
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          updatedFrom: '2026-02-01',
+          updatedTo: '2026-02-28',
+        }),
+      );
+    });
+  });
+
+  it('empieza sin condiciones y "Empezar de cero" las retira todas', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    mocks.listFilterFields.mockResolvedValue(CATALOGO);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+
+    await abrirPopoverFiltro();
+    // En reposo no hay ninguna condición y no hay nada que limpiar.
+    expect(screen.queryByTestId('tramites-chip-placa')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Empezar de cero' })).toBeDisabled();
+
+    await agregarCondicion('placa', 'Placa', 'es_alguno', 'XYZ999');
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+
+    await vi.waitFor(() => {
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          condiciones: [{ fieldId: 'placa', operator: 'es_alguno', values: ['XYZ999'] }],
+        }),
+      );
+    });
+
+    // "Aplicar" cerró el popover: se reabre (ahora con rótulo "Filtros (1)") para llegar a
+    // "Empezar de cero".
+    await abrirPopoverFiltro();
+    await userEvent.click(screen.getByRole('button', { name: 'Empezar de cero' }));
+    await vi.waitFor(() => {
+      // Sin condiciones el cuerpo solo lleva la paginación: nada que filtrar. Desde la HU #12188
+      // `take` es el TAMAÑO DE PÁGINA elegido, no la ventana fija de 200 que había antes.
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith({ take: 10, skip: 0 });
+    });
+  });
+
+  it('ordena por placa y por VIN desde la cabecera de Vehículo (HU #12108)', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+
+    // "Vehículo" apila placa y VIN: la cabecera abre un menú en vez de alternar a ciegas.
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Vehículo$/ }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: /Ordenar por, en Vehículo/ })).getByRole(
+        'menuitemradio',
+        { name: /Placa.*A-Z/ },
+      ),
+    );
+
+    await vi.waitFor(() => {
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'placa', sortDir: 'asc', take: 10 }),
+      );
+    });
+
+    // El mismo menú permite ordenar por el VIN, que antes exigía encender su columna de desglose.
+    await userEvent.click(
+      screen.getByRole('button', { name: /Ordenar Vehículo\. Ahora: Placa ascendente/ }),
+    );
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: /Ordenar por, en Vehículo/ })).getByRole(
+        'menuitemradio',
+        { name: /VIN.*Z-A/ },
+      ),
+    );
+
+    await vi.waitFor(() => {
+      expect(mocks.searchInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'vin', sortDir: 'desc' }),
+      );
+    });
+  });
+
+  it('ordena por comprador y fecha de creación desde cabeceras visibles', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+
+    // Toda cabecera ordenable abre el mismo menú, tenga uno o varios datos dentro.
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Comprador$/ }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: /Ordenar por, en Comprador/ })).getByRole(
+        'menuitemradio',
+        { name: 'Comprador: A-Z' },
+      ),
+    );
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'comprador', sortDir: 'asc' }),
+      );
+    });
+
+    // La fecha de creación va apilada bajo el radicado en el default: para ordenar por ella hay
+    // que sacarla a su propia columna, que es donde vive la cabecera ordenable.
+    await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Fecha de creación$/i }));
+
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Fecha de creación$/ }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: /Ordenar por, en Fecha de creación/ })).getByRole(
+        'menuitemradio',
+        { name: 'Fecha de creación: Más antigua' },
+      ),
+    );
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'createdAt', sortDir: 'asc' }),
+      );
+    });
+  });
+});
+
+/**
+ * ADR-0050 — la fila dice QUÉ trámite es.
+ *
+ * La familia identifica bien una matrícula o un traspaso, pero «Otros» agrupa quince tipos: tres
+ * filas seguidas decían «Otros» y no había forma de distinguir un blindaje de un levantamiento de
+ * prenda sin abrirlas.
+ */
+describe('TramitesTable — rótulo del trámite', () => {
+  function conTipo(
+    modalidad: InstanceSummary['modalidad'],
+    tipoNombre: string | null,
+  ): InstanceSummary[] {
+    const [base] = makeInstances(1);
+    return [{ ...base, modalidad, tipoNombre }];
+  }
+
+  it('en OTROS muestra el nombre del tipo, no la familia', async () => {
+    mocks.listInstances.mockResolvedValue(conTipo('OTROS', 'Levantamiento de prenda'));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    expect(await screen.findByText('Levantamiento de prenda')).toBeInTheDocument();
+    expect(screen.queryByText('Otros')).not.toBeInTheDocument();
+  });
+
+  it('sin nombre de tipo cae a la familia y nunca deja la celda vacía', async () => {
+    // Expediente servido por un backend anterior al campo.
+    mocks.listInstances.mockResolvedValue(conTipo('OTROS', null));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    expect(await screen.findByText('Otros')).toBeInTheDocument();
+  });
+
+  /**
+   * HU #12181 — REVIERTE a propósito el guardián anterior, que fijaba que matrícula y traspaso
+   * conservaran el rótulo de FAMILIA.
+   *
+   * Aquella decisión venía de ADR-0050, donde el problema visible era «Otros». Pero la familia
+   * tampoco identifica en las otras dos: «Matrícula Leasing» y «Matrícula Inicial» se leían las
+   * dos «Matrícula», y en un `TRASPASO_UNILATERAL` el comprador ni siquiera comparece. Son
+   * trámites distintos y el gestor los reconoce por su nombre.
+   */
+  it('matrícula y traspaso también nombran su tipo, no la familia', async () => {
+    mocks.listInstances.mockResolvedValue(conTipo('MATRICULAS', 'Matrícula Leasing'));
+    const { unmount } = render(<ToastProvider><TramitesTable /></ToastProvider>);
+    expect(await screen.findByText('Matrícula Leasing')).toBeInTheDocument();
+    unmount();
+
+    mocks.listInstances.mockResolvedValue(conTipo('TRASPASO', 'Traspaso Unilateral'));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    expect(await screen.findByText('Traspaso Unilateral')).toBeInTheDocument();
+  });
+
+  it('sin nombre de tipo, matrícula y traspaso siguen cayendo a la familia', async () => {
+    mocks.listInstances.mockResolvedValue(conTipo('TRASPASO', null));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    expect(await screen.findByText('Traspaso')).toBeInTheDocument();
+  });
+});
+
+/**
+ * ADR-0050 — el rótulo del paso sale del recorrido del TIPO, no de una lista por familia.
+ * La lista de OTROS estaba vacía, así que esas filas mostraban «—» pasara lo que pasara.
+ */
+describe('TramitesTable — paso en curso', () => {
+  function conPaso(
+    modalidad: InstanceSummary['modalidad'],
+    pasoNombre: string | null,
+    pasoActual = 2,
+  ): InstanceSummary[] {
+    const [base] = makeInstances(1);
+    return [{ ...base, modalidad, pasoNombre, pasoActual, totalPasos: 5 }];
+  }
+
+  it('muestra el nombre del paso que manda el servidor', async () => {
+    mocks.listInstances.mockResolvedValue(conPaso('OTROS', 'Decisión de prenda'));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    // Acotado al bloque del progreso: hay otros «—» en la fila (vehículo, organismo).
+    const progreso = await screen.findByText('2/5');
+    expect(progreso.parentElement).toHaveTextContent('Decisión de prenda');
+  });
+
+  it('sin nombre del servidor cae al respaldo por familia', async () => {
+    // Expediente de un backend anterior al campo: matrícula sí tiene lista de respaldo.
+    mocks.listInstances.mockResolvedValue(conPaso('MATRICULAS', null, 1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    const progreso = await screen.findByText('1/5');
+    expect(progreso.parentElement).toHaveTextContent('Consulta VIN');
+  });
+
+  it('sin nombre y sin respaldo no rompe: muestra un guion', async () => {
+    mocks.listInstances.mockResolvedValue(conPaso('OTROS', null));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    const progreso = screen.getByText('2/5');
+    expect(progreso.parentElement?.textContent).toContain('—');
+  });
+});
+
+/**
+ * Enrutamiento de la fila. El detalle de un radicado es de SOLO LECTURA, así que un trámite en
+ * subsanación no puede acabar ahí: ni "Re-radicar" ni "Cancelar la subsanación" existen fuera del
+ * asistente, y mandarlo al modal dejaba al gestor sin salida de lo que él mismo activó.
+ */
+describe('TramitesTable — abrir un trámite en subsanación', () => {
+  const rechazado = (subsanacionActiva: boolean): InstanceSummary => ({
+    ...makeInstances(1)[0],
+    estado: 'rechazado',
+    subsanacionActiva,
+    ultimoRechazoMotivo: 'Corrige el documento del comprador.',
+  });
+
+  it('con la subsanación activa abre el asistente de pasos, no el detalle', async () => {
+    mocks.listInstances.mockResolvedValue([rechazado(true)]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir trámite TR-0001' }));
+
+    expect(routerPush).toHaveBeenCalledWith('/tramites/inst-0001');
+    expect(screen.queryByRole('dialog', { name: /Detalle de traspaso/ })).not.toBeInTheDocument();
+  });
+
+  it('rechazado SIN subsanación activa sigue abriendo el detalle (ahí se activa)', async () => {
+    mocks.listInstances.mockResolvedValue([rechazado(false)]);
+    mocks.getInstance.mockResolvedValue({ statusHistory: [], fieldValues: [], actors: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+    mocks.listBiometricExpediente.mockResolvedValue({ validations: [], firmaBaulPartes: [] });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir trámite TR-0001' }));
+
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('la acción de la fila se llama "Continuar" en subsanación, no "Ver"', async () => {
+    mocks.listInstances.mockResolvedValue([rechazado(true)]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    await abrirAcciones();
+    expect(screen.getByRole('menuitem', { name: /Continuar/ })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /^Ver$/ })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * HU #12183 — la columna de marcas: prenda y transformación.
+ *
+ * Son DOS y solo dos —el borrador del requerimiento pedía «un ícono por tipo de trámite», que
+ * serían quince y ninguno diría nada que la columna «Trámite» no diga ya con palabras—, son
+ * informativas (no filtran, no ordenan, no responden al clic) y el color no puede ser lo único que
+ * las distinga: cada una lleva su rótulo accesible.
+ */
+describe('TramitesTable — marcas de prenda y transformación', () => {
+  function conMarcas(tienePrenda: boolean, tieneTransformacion: boolean): InstanceSummary[] {
+    const [base] = makeInstances(1);
+    return [{ ...base, tienePrenda, tieneTransformacion }];
+  }
+
+  it('pinta el ícono de prenda con su rótulo accesible', async () => {
+    mocks.listInstances.mockResolvedValue(conMarcas(true, false));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    const icono = await screen.findByAltText('Con prenda');
+    expect(icono).toHaveAttribute('src', '/assets/marcas/prenda.svg');
+    expect(screen.queryByAltText('Con transformación')).not.toBeInTheDocument();
+  });
+
+  it('pinta el ícono de transformación con su rótulo accesible', async () => {
+    mocks.listInstances.mockResolvedValue(conMarcas(false, true));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    const icono = await screen.findByAltText('Con transformación');
+    expect(icono).toHaveAttribute('src', '/assets/marcas/transformacion.svg');
+    expect(screen.queryByAltText('Con prenda')).not.toBeInTheDocument();
+  });
+
+  it('un trámite con las dos muestra los dos íconos, no uno', async () => {
+    mocks.listInstances.mockResolvedValue(conMarcas(true, true));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    expect(await screen.findByAltText('Con prenda')).toBeInTheDocument();
+    expect(screen.getByAltText('Con transformación')).toBeInTheDocument();
+  });
+
+  it('sin marcas pinta un guion, no una celda vacía', async () => {
+    // Una celda vacía se lee como un dato que falta —o como una fila que no cargó— y no como
+    // «este trámite no tiene ninguna de las dos».
+    mocks.listInstances.mockResolvedValue(conMarcas(false, false));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    expect(screen.queryByAltText('Con prenda')).not.toBeInTheDocument();
+    expect(screen.queryByAltText('Con transformación')).not.toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('un expediente servido sin las marcas no rompe la fila', async () => {
+    // Backend anterior al campo: `tienePrenda`/`tieneTransformacion` llegan indefinidos.
+    const [base] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([base]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    expect(screen.queryByAltText('Con prenda')).not.toBeInTheDocument();
+  });
+
+  it('los íconos son informativos: no son botones ni enlaces', async () => {
+    mocks.listInstances.mockResolvedValue(conMarcas(true, true));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    const prenda = await screen.findByAltText('Con prenda');
+    expect(prenda.closest('button')).toBeNull();
+    expect(prenda.closest('a')).toBeNull();
+  });
+
+  it('la cabecera de Marcas no ofrece ordenar', async () => {
+    mocks.listInstances.mockResolvedValue(conMarcas(true, false));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByAltText('Con prenda');
+    const cabecera = screen.getByRole('columnheader', { name: /Marcas/i });
+    expect(within(cabecera).queryByRole('button')).toBeNull();
   });
 });

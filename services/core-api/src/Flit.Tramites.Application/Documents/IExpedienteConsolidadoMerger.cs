@@ -1,7 +1,20 @@
 namespace Flit.Tramites.Application.Documents;
 
+/// <summary>
+/// Perfil de estampado del pie de página (ADR-0049): controla el margen inferior del sello del
+/// nombre del documento porque esa geometría es propiedad del <b>tipo de documento</b>, no del tema
+/// global. <see cref="Default"/> es el margen histórico (mandato, solicitud, compraventa,
+/// certificados); <see cref="Formulario"/> es el margen reducido para las páginas del FUR (hoja 1 y
+/// hoja 2, en los tres formatos), que traen contenido oficial más cerca del borde inferior.
+/// </summary>
+public enum StampProfile
+{
+    Default,
+    Formulario,
+}
+
 /// <summary>Una parte del expediente: su PDF y el nombre a mostrar en el pie (HU #10858).</summary>
-public sealed record MergePart(byte[] Pdf, string? DocumentName = null);
+public sealed record MergePart(byte[] Pdf, string? DocumentName = null, StampProfile Profile = StampProfile.Default);
 
 /// <summary>
 /// Datos de la portada del expediente (HU #10857). La capa Application los arma desde la instancia;

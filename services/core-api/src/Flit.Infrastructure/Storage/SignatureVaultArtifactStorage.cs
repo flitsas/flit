@@ -45,4 +45,16 @@ internal sealed class SignatureVaultArtifactStorage : ISignatureVaultArtifactSto
 
         return new StoredSignatureArtifact(stored.StoragePath, stored.Sha256);
     }
+
+    public Task<Stream?> OpenReadAsync(
+        string storagePath,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(storagePath))
+        {
+            return Task.FromResult<Stream?>(null);
+        }
+
+        return _storage.OpenReadAsync(storagePath.Trim(), cancellationToken);
+    }
 }

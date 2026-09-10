@@ -67,4 +67,15 @@ public sealed class DocumentRequirementGateTests
 
         blockers.Should().ContainSingle().Which.Should().Be("DOCUMENT_CEDULA_REQUIRED");
     }
+
+    [Fact]
+    public void MissingRequired_SystemGenerated_DoesNotBlock_AunqueSeaObligatorio()
+    {
+        var reqs = new[]
+        {
+            new DocumentRequirementItem("soat", IsRequired: true, IsDummy: false, IsSystemGenerated: true),
+        };
+
+        DocumentRequirementGate.MissingRequired(reqs, Nothing).Should().BeEmpty();
+    }
 }

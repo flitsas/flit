@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { fetchOtRequirements, updateOtRequirements } from "@/lib/api/admin-ot";
+import { ApiError } from "@/lib/api/types";
 import type { OtRequirements } from "@/lib/api/types-ot";
 
 interface RequirementsSectionProps {
@@ -47,6 +48,23 @@ function ToggleRow({ id, label, description, checked, disabled, onChange }: Togg
       </button>
     </div>
   );
+}
+
+/**
+ * Motivo del fallo al guardar, en el idioma del operador. `ApiError.message` ya viene con el
+ * texto que manda el backend; el 404 se reescribe porque su mensaje ("No existe un tenant OT
+ * vinculado a ese transitOfficeId") describe el dato, no la acción que hay que tomar.
+ */
+function saveErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 404) {
+      return "Este organismo aún no está activado como OT, así que no tiene requisitos que configurar. Actívalo desde el listado de organismos.";
+    }
+    if (err.message && err.message !== "SESSION_EXPIRED") {
+      return err.message;
+    }
+  }
+  return "No se pudieron guardar los requisitos.";
 }
 
 /** Pantalla de requisitos configurables del OT (HU #10547): RNMC, ruta de placa e identidad. */
@@ -97,8 +115,12 @@ export function RequirementsSection({ transitOfficeId }: RequirementsSectionProp
       );
       setRequirements(saved);
       show("Requisitos del OT actualizados.", "success");
-    } catch {
-      show("No se pudieron guardar los requisitos.", "error");
+    } catch (err) {
+      // El backend resuelve el OT dueño del organismo y responde con el motivo cuando no puede
+      // (404: el organismo no está activado como OT; 400: falta el organismo en el scope). Antes
+      // todo caía en el mismo genérico y el operador no sabía si era un fallo suyo, del organismo
+      // o de la red — justo en la pantalla donde un guardado a ciegas configuraba el OT equivocado.
+      show(saveErrorMessage(err), "error");
     } finally {
       setSaving(false);
     }

@@ -24,13 +24,26 @@ public sealed class UserManagementRepository(FlitDbContext db) : IUserManagement
             .Select(u => new { u.Id, u.HomeTenantId, u.Email, u.DisplayName, u.DeletedAt, u.RowVersion })
             .FirstOrDefaultAsync(ct);
 
-        // Mismo criterio que UserRoleAssignmentRepository.UserBelongsToTenantAsync: el tenant del
-        // usuario es su HomeTenantId. Sin él no hay tenant sobre el que aplicar la acción.
-        if (user is null || user.HomeTenantId is null)
+        if (user is null)
+            return null;
+
+        // Tenant EFECTIVO: home_tenant_id es opcional en BD y hay usuarios legítimos sin él (los
+        // del seeder de desarrollo, entre otros). Para esos, el tenant lo dan sus asignaciones de
+        // rol activas — mismo criterio que ya usa AuthUserRepository al emitir el JWT. Antes se
+        // miraba solo HomeTenantId y editarlos devolvía 404 "El usuario no existe".
+        var tenantId = user.HomeTenantId ?? await db.UserRoleAssignments
+            .AsNoTracking()
+            .Where(a => a.UserId == userId && a.DeletedAt == null)
+            .OrderBy(a => a.AssignedAt)
+            .Select(a => (Guid?)a.TenantId)
+            .FirstOrDefaultAsync(ct);
+
+        // Sin tenant no hay alcance sobre el que aplicar la acción administrativa.
+        if (tenantId is null)
             return null;
 
         return new UserManagementTarget(
-            user.Id, user.HomeTenantId.Value, user.Email, user.DisplayName, user.DeletedAt, user.RowVersion);
+            user.Id, tenantId.Value, user.Email, user.DisplayName, user.DeletedAt, user.RowVersion);
     }
 
     public async Task<ExistingUserByEmail?> FindByEmailIncludingDeletedAsync(string email, CancellationToken ct)

@@ -32,6 +32,45 @@ public sealed class VerifikVehicleData
     // para no romper la deserialización (array-vs-objeto era la causa de la JsonException).
     [JsonPropertyName("garantiasMobiliarias")]
     public List<object>? GarantiasMobiliarias { get; set; }
+
+    /// <summary>
+    /// Historial de solicitudes del vehículo (Feature #12276): mismas claves en español que Kyverum,
+    /// pero <c>fechaSolicitud</c> viene como <c>dd/MM/yyyy</c> sin hora. Lo lee el motor de
+    /// Confirmación RUNT desde el crudo; se declara para que el DTO no oculte que existe.
+    /// </summary>
+    [JsonPropertyName("solicitudes")]
+    public List<VerifikSolicitud>? Solicitudes { get; set; }
+
+    /// <summary>
+    /// Bloque técnico del RUNT. En remolques/semirremolques ejes, dimensiones y llantas llegan aquí
+    /// y no en <see cref="InformacionGeneral"/> — si no se modela, System.Text.Json los descarta.
+    /// </summary>
+    [JsonPropertyName("datosTecnicos")]
+    public VerifikDatosTecnicos? DatosTecnicos { get; set; }
+}
+
+public sealed class VerifikDatosTecnicos
+{
+    [JsonPropertyName("alto")]
+    public string? Alto { get; set; }
+
+    [JsonPropertyName("ancho")]
+    public string? Ancho { get; set; }
+
+    [JsonPropertyName("largo")]
+    public string? Largo { get; set; }
+
+    [JsonPropertyName("noEjes")]
+    public string? NoEjes { get; set; }
+
+    [JsonPropertyName("noLlantas")]
+    public string? NoLlantas { get; set; }
+
+    [JsonPropertyName("pesoBrutoVehicular")]
+    public string? PesoBrutoVehicular { get; set; }
+
+    [JsonPropertyName("rodaje")]
+    public string? Rodaje { get; set; }
 }
 
 public sealed class VerifikInformacionGeneral
@@ -148,10 +187,13 @@ public sealed class VerifikSoat
 /// que originó este Feature: quedarían en null y el hueco volvería a esconderse tras un modelo que
 /// aparenta cubrirlo.</para>
 ///
-/// <para>En vez de adivinar, se conserva <b>todo</b> lo que mande el proveedor en
-/// <see cref="CamposNoModelados"/> y se resuelven esos tres valores probando los nombres candidatos
-/// documentados en <c>VerifikResultMapper</c>. Si el proveedor usa cualquiera de ellos, el dato entra
-/// hoy; si usa otro, queda capturado y visible en vez de perdido, y el OCR del PDF sigue de respaldo.</para>
+/// <para><b>HU #11303 (Feature #11301) — se retiró la resolución por nombres candidatos.</b> La
+/// medición en base de datos mostró CERO filas de <c>rtm_numero</c> y <c>rtm_expedicion</c> en todo
+/// el ambiente: la lista de candidatos nunca acertó un nombre. Lo único que producía era cobertura
+/// aparente sobre un hueco real. <see cref="CamposNoModelados"/> se conserva porque sigue evitando
+/// que lo no declarado se descarte en silencio, pero ya no alimenta ninguna celda del certificado:
+/// esa evidencia vive ahora en el payload crudo persistido, que permite ver qué manda el proveedor
+/// sin una sonda manual y corregir el modelo sin volver a pagar la consulta.</para>
 /// </summary>
 public sealed class VerifikTecnomecanica
 {
@@ -170,4 +212,24 @@ public sealed class VerifikTecnomecanica
     /// <summary>Todo lo que el proveedor envía y el modelo no declara. Sin esto se descartaba en silencio.</summary>
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? CamposNoModelados { get; set; }
+}
+
+/// <summary>Una solicitud del historial del RUNT vía Verifik (v2, claves en español).</summary>
+public sealed class VerifikSolicitud
+{
+    [JsonPropertyName("noSolicitud")]
+    public string? NoSolicitud { get; set; }
+
+    /// <summary><c>dd/MM/yyyy</c>, solo día.</summary>
+    [JsonPropertyName("fechaSolicitud")]
+    public string? FechaSolicitud { get; set; }
+
+    [JsonPropertyName("estado")]
+    public string? Estado { get; set; }
+
+    [JsonPropertyName("tramitesRealizados")]
+    public string? TramitesRealizados { get; set; }
+
+    [JsonPropertyName("entidad")]
+    public string? Entidad { get; set; }
 }

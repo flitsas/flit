@@ -23,4 +23,13 @@ public interface ISignatureVaultArtifactStorage
         Guid tenantId,
         byte[] artifact,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lee los bytes del PNG custodiado. <c>null</c> si el path no existe o está vacío.
+    /// Para previsualización admin; no sustituye el estampado en el PDF del trámite.
+    /// </summary>
+    Task<Stream?> OpenReadAsync(
+        string storagePath,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<Stream?>(null);
 }

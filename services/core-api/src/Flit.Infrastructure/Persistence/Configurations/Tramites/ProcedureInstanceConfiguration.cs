@@ -1,6 +1,7 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Infrastructure.Persistence.Schemas;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Flit.Infrastructure.Persistence.Configurations.Tramites;
@@ -23,17 +24,35 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
-        builder.Property(x => x.ReferenceNumber).HasMaxLength(30).IsRequired();
+        // HU #12151 — el radicado es un consecutivo GLOBAL que asigna Postgres
+        // (tramites.procedure_instance_reference_seq, ver DDL 103). Tres piezas, y las tres hacen falta:
+        //
+        //  · HasDefaultValueSql   → declara de dónde sale el valor.
+        //  · ValueGeneratedOnAdd  → hace que EF lo LEA de vuelta tras el INSERT (RETURNING).
+        //  · BeforeSaveBehavior=Ignore → hace que EF NUNCA mande la columna en el INSERT.
+        //
+        // El tercero es el que no es opcional y el que no se ve venir: `CreateProcedureInstanceCommand`
+        // construye la entidad con `ReferenceNumber = string.Empty`, y una cadena vacía NO es ausencia
+        // de valor para Postgres. Sin `Ignore`, EF enviaría '' , el DEFAULT no se dispararía, y el
+        // segundo trámite reventaría contra el índice único (además de violar el CHECK numérico).
+        // Verificado contra una copia de la base de dev antes de escribir esto.
+        builder.Property(x => x.ReferenceNumber)
+            .HasMaxLength(30)
+            .IsRequired()
+            .HasDefaultValueSql("nextval('tramites.procedure_instance_reference_seq')::text")
+            .ValueGeneratedOnAdd()
+            .Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
         // N 03 (ADR-0022): estados de negocio en español (TramiteEstado); default = borrador.
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("borrador");
 
         // Rework trámites (Slice 1)
-        builder.Property(x => x.ModalidadEntrada)
-            .HasColumnName("modalidad_entrada")
-            .HasMaxLength(20).IsRequired().HasDefaultValue("matricula_inicial");
-        builder.Property(x => x.TipologiaCodigo)
-            .HasColumnName("tipologia_codigo")
-            .HasMaxLength(40);
+        // ADR-0050 — clasificación derivada del tipo: se calcula desde la navegación
+        // ProcedureType, no son columnas.
+        builder.Ignore(x => x.Family);
+        builder.Ignore(x => x.TypeCode);
+        builder.Ignore(x => x.TypeName);
+        builder.Ignore(x => x.FamilyCode);
+
         builder.Property(x => x.ChecklistEstado)
             .HasColumnName("checklist_estado")
             .HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");
@@ -75,6 +94,12 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .IsRequired()
             .HasDefaultValue(0);
 
+        // Baseline del diff de re-radicación. Antes viajaba en el metadata de una fila
+        // rechazado→rechazado del historial, que el timeline pintaba como un rechazo repetido.
+        builder.Property(x => x.SubsanacionBaseline)
+            .HasColumnName("subsanacion_baseline")
+            .HasColumnType("jsonb");
+
         // Feature #10701 — vigencia del consolidado maestro. Columna agregada por migración SQL
         // cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea para el modelo EF. La baja
         // a false cualquier transición de estado o el adjuntar la LT; la sube a true la generación.
@@ -99,6 +124,30 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("plate_flow_status")
             .HasMaxLength(20);
 
+        // HU #12165 (Feature #12156) — ventana de 1 hora de corrección de placa por el OT (HU
+        // #12167). Columnas agregadas por migración SQL cruda (la tabla está ExcludeFromMigrations);
+        // aquí solo se mapean para el modelo EF.
+        builder.Property(x => x.PlateAssignedAt)
+            .HasColumnName("plate_assigned_at");
+
+        builder.Property(x => x.PlateUpdatedAt)
+            .HasColumnName("plate_updated_at");
+
+        // Feature #12276 — marca «Confirmado en RUNT» (HU #12312). Columnas agregadas por migración SQL
+        // cruda (107-F12276-confirmacion-runt.sql; la tabla está ExcludeFromMigrations); aquí solo se
+        // mapean. Es una marca ortogonal al status: la corrida de confirmación nunca lo toca.
+        builder.Property(x => x.RuntConfirmedAt)
+            .HasColumnName("runt_confirmed_at");
+
+        builder.Property(x => x.RuntAttempts)
+            .HasColumnName("runt_attempts")
+            .IsRequired()
+            .HasDefaultValue(0);
+
+        builder.Property(x => x.RuntFlag)
+            .HasColumnName("runt_flag")
+            .HasMaxLength(20);
+
         // Migración V1→V2 — marca de trámite histórico importado (foto de solo lectura). Columna
         // agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea
         // para el modelo EF. Default false = trámite nativo de V2.
@@ -118,9 +167,11 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasDatabaseName("ix_procedure_instances_mandate_signer_id")
             .HasFilter("mandate_signer_id IS NOT NULL");
 
-        builder.HasIndex(x => new { x.TenantId, x.ReferenceNumber })
+        // HU #12151 — sin tenant_id en la llave. Esa era justo la causa de que dos compañías
+        // pudieran compartir radicado (137 filas de dev lo hacían).
+        builder.HasIndex(x => x.ReferenceNumber)
             .IsUnique()
-            .HasDatabaseName("uq_procedure_instances_tenant_reference");
+            .HasDatabaseName("uq_procedure_instances_reference");
 
         // ICT — origen/referencia externa para materialización idempotente. Columnas agregadas por
         // migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapean para el modelo
@@ -150,6 +201,42 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
 
         builder.HasIndex(x => new { x.TenantId, x.Status, x.CreatedAt })
             .HasDatabaseName("ix_procedure_instances_tenant_id_status_created_at");
+
+        // Migración TramitesCamposBusqueda — vin/plate/vendedor_nombre/comprador_nombre denormalizados
+        // por trigger (ver Ddl/47-tramites-campos-busqueda.sql) para filtrar/ordenar el listado en SQL.
+        // Columnas agregadas por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se
+        // mapean para el modelo EF. Solo lectura de facto: nada en el aplicativo debería escribirlas
+        // directamente (la fuente de verdad sigue siendo FieldValues/Actors).
+        builder.Property(x => x.Vin).HasColumnName("vin").HasMaxLength(20);
+        builder.Property(x => x.Plate).HasColumnName("plate").HasMaxLength(20);
+        builder.Property(x => x.VendedorNombre).HasColumnName("vendedor_nombre").HasMaxLength(200);
+        builder.Property(x => x.CompradorNombre).HasColumnName("comprador_nombre").HasMaxLength(200);
+
+        builder.HasIndex(x => new { x.TenantId, x.Vin })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_vin");
+        builder.HasIndex(x => new { x.TenantId, x.Plate })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_plate");
+        builder.HasIndex(x => new { x.TenantId, x.CompradorNombre })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_comprador_nombre");
+        builder.HasIndex(x => new { x.TenantId, x.VendedorNombre })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_vendedor_nombre");
+        builder.HasIndex(x => new { x.TenantId, x.CreatedAt })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_created_at");
+        builder.HasIndex(x => new { x.TenantId, x.UpdatedAt })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_updated_at");
+        builder.HasIndex(x => new { x.TenantId, x.CreatedByUserId })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_created_by_user_id");
+
+        // HU #12162 — gestor asignado (reasignable por admin), distinto de CreatedByUserId (quién
+        // radicó). Columna agregada por migración SQL cruda (la tabla está ExcludeFromMigrations);
+        // aquí solo se mapea para el modelo EF. La FK a identity.users (ON DELETE SET NULL) y el
+        // índice parcial se declaran en el DDL, no en EF (tabla excluida de migraciones).
+        builder.Property(x => x.AssignedToUserId)
+            .HasColumnName("assigned_to_user_id");
+
+        builder.HasIndex(x => new { x.TenantId, x.AssignedToUserId })
+            .HasDatabaseName("ix_procedure_instances_tenant_id_assigned_to_user_id")
+            .HasFilter("assigned_to_user_id IS NOT NULL");
 
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();

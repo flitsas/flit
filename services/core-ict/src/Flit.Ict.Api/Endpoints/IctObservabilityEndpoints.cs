@@ -18,6 +18,7 @@ public static class IctObservabilityEndpoints
             IIntegrationLogQuery query,
             string? logType,
             Guid? correlationId,
+            string? search,
             DateTime? from,
             DateTime? to,
             int? page,
@@ -33,7 +34,7 @@ public static class IctObservabilityEndpoints
             // Superadmin ve todos los tenants; el resto, solo el suyo.
             var tenantScope = access.IsSuperAdmin ? null : access.TenantId;
             var result = await query.QueryAsync(
-                new LogQueryFilter(tenantScope, logType, correlationId, from, to, page ?? 1, pageSize ?? 50),
+                new LogQueryFilter(tenantScope, logType, correlationId, from, to, page ?? 1, pageSize ?? 50, search),
                 ct);
             return Results.Ok(result);
         });

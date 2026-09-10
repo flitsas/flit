@@ -15,9 +15,11 @@ internal sealed class ReportScheduleConfiguration : IEntityTypeConfiguration<Rep
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
-        builder.Property(x => x.TenantId).IsRequired();
+        builder.Property(x => x.TenantId);
         builder.Property(x => x.Name).HasMaxLength(120).IsRequired();
         builder.Property(x => x.ReportType).HasMaxLength(20).IsRequired();
+        builder.Property(x => x.SavedQueryId);
+        builder.Property(x => x.SavedQueryScope).HasMaxLength(10);
         builder.Property(x => x.Frequency).HasMaxLength(10).IsRequired();
         builder.Property(x => x.DayOfWeek);
         builder.Property(x => x.DayOfMonth);

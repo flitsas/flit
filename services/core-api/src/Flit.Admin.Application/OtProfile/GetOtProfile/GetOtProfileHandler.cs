@@ -5,7 +5,7 @@ namespace Flit.Admin.Application.OtProfile.GetOtProfile;
 
 /// <summary>
 /// Obtiene el perfil OT del tenant autenticado (HU #10215 AC1).
-/// Si no existe fila, crea el perfil por defecto (dashboard, read-only false).
+/// Solo LEE: si no existe fila devuelve un perfil por defecto sin persistirlo.
 /// </summary>
 public sealed class GetOtProfileHandler
 {
@@ -36,24 +36,31 @@ public sealed class GetOtProfileHandler
             return OtProfileMapper.ToResponse(byOffice ?? DefaultProfileFor(officeId));
         }
 
-        // ot_admin (o bootstrap): perfil del tenant autenticado; se crea por defecto si no existe.
+        // ot_admin: perfil del tenant autenticado.
         var profile = await _profileRepository
             .GetByTenantAsync(query.TenantId, cancellationToken)
             .ConfigureAwait(false);
 
-        profile ??= await _profileRepository.SaveAsync(
-            query.TenantId,
-            OtOperationModes.Dashboard,
-            quipuxReadOnly: false,
-            changedBy: null,
-            transitOfficeId: null,
-            cancellationToken).ConfigureAwait(false);
+        // Un GET NO debe mutar. Hasta aquí, cuando el tenant no tenía perfil se le CREABA uno
+        // (changedBy: null, y la oficina adivinada por el repositorio: primer grant o centinela).
+        // Bastaba con que alguien abriera el hub del OT para que su tenant quedara convertido en
+        // organismo de tránsito, sin decisión ni autor. Así fue como el tenant del SuperAdmin
+        // («Empresa Demo FLIT») acabó siendo el OT de Barranquilla, lo que además lo excluye de
+        // Consultas (SuperAdminTenantScope descarta a los tenants con perfil OT).
+        //
+        // El alta legítima de un OT ocurre en TransitOfficeTenantWriteRepository (consola de
+        // activación, con autor) y en los seeds de dev; este bootstrap implícito era redundante.
+        // Sin fila se devuelve un perfil por defecto SIN persistir, igual que la rama de SuperAdmin.
+        if (profile is null)
+        {
+            return OtProfileMapper.ToResponse(DefaultProfileFor(Guid.Empty));
+        }
 
         return OtProfileMapper.ToResponse(profile);
     }
 
     /// <summary>Perfil por defecto (no persistido) para una oficina que aún no tiene fila.</summary>
-    private static DomainOtProfile DefaultProfileFor(Guid transitOfficeId) => new()
+    internal static DomainOtProfile DefaultProfileFor(Guid transitOfficeId) => new()
     {
         Id = Guid.Empty,
         TenantId = Guid.Empty,
@@ -63,3 +70,4 @@ public sealed class GetOtProfileHandler
         FeatureFlags = [],
     };
 }
+

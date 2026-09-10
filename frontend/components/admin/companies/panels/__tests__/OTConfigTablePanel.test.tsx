@@ -55,6 +55,29 @@ const offices: TransitOffice[] = [
   { id: "o2", code: "05001", name: "Medellín — Secretaría de Movilidad", departmentCode: "05", cityCode: "05001" },
 ];
 
+/** Estado operativo "dado de alta y activo", que es lo que el panel lista. */
+function activo(id: string, code: string, name: string): TransitOfficeOperationalStatus {
+  return {
+    id,
+    code,
+    name,
+    departmentCode: "11",
+    hasTenant: true,
+    tenantId: `tenant-${id}`,
+    estadoActivo: true,
+    operationMode: null,
+    divipoCode: null,
+    quipuxRegistration: false,
+    quipuxTransfer: false,
+    quipuxOther: false,
+  };
+}
+
+const AMBOS_ACTIVOS: TransitOfficeOperationalStatus[] = [
+  activo("o1", "11001", "Secretaría de Movilidad Bogotá"),
+  activo("o2", "05001", "Medellín — Secretaría de Movilidad"),
+];
+
 /** Arranca el panel con catálogo completo y los datos dados; el resto en blanco. */
 function arrange(opts: {
   grantedIds?: string[];
@@ -64,7 +87,7 @@ function arrange(opts: {
 }) {
   vi.mocked(fetchTransitOffices).mockResolvedValue(offices);
   vi.mocked(fetchTransitGrants).mockResolvedValue({ transitOfficeIds: opts.grantedIds ?? [] });
-  vi.mocked(fetchTransitOfficesOperationalStatus).mockResolvedValue(opts.operational ?? []);
+  vi.mocked(fetchTransitOfficesOperationalStatus).mockResolvedValue(opts.operational ?? AMBOS_ACTIVOS);
   vi.mocked(fetchOtBlockingPolicies).mockResolvedValue(opts.policies ?? []);
   vi.mocked(fetchOtConsultationRestrictions).mockResolvedValue(opts.restrictions ?? []);
 }
@@ -124,36 +147,56 @@ describe("OTConfigTablePanel (HU #10194 — tabla consolidada de OT)", () => {
     await waitFor(() => expect(addTransitGrant).toHaveBeenCalledWith(TENANT, "o2"));
   });
 
-  it("(c) un OT sin alta/inactivo en FLIT no se puede habilitar: switch deshabilitado + badge", async () => {
+  // El listado solo ofrece los OT dados de alta y activos: uno sin alta ya no aparece, en vez de
+  // aparecer con el switch deshabilitado alargando la lista con opciones inservibles.
+  it("(c) un OT sin alta en FLIT no se lista", async () => {
     arrange({
       grantedIds: [],
-      operational: [
-        {
-          id: "o2",
-          code: "05001",
-          name: "Medellín",
-          departmentCode: "05",
-          hasTenant: false,
-          tenantId: null,
-          estadoActivo: null,
-          operationMode: null,
-          divipoCode: null,
-          quipuxRegistration: false,
-          quipuxTransfer: false,
-          quipuxOther: false,
-        },
-      ],
+      operational: [activo("o1", "11001", "Secretaría de Movilidad Bogotá")],
     });
     render(<OTConfigTablePanel tenantId={TENANT} />);
 
     await screen.findByText("Secretaría de Movilidad Bogotá");
+    expect(screen.queryByText(/Medellín/)).not.toBeInTheDocument();
+  });
 
-    const medellinSwitch = screen.getByRole("switch", { name: /habilitar medellín/i });
-    expect(medellinSwitch).toBeDisabled();
-    expect(screen.getByText(/Sin alta en FLIT/i)).toBeInTheDocument();
+  // Excepción deliberada: si se ocultara un OT ya habilitado que dejó de estar activo, su grant
+  // quedaría vigente sin forma de revocarlo desde la consola.
+  it("(c bis) un OT habilitado que dejó de estar activo sigue visible para poder revocarlo", async () => {
+    arrange({
+      grantedIds: ["o2"],
+      operational: [activo("o1", "11001", "Secretaría de Movilidad Bogotá")],
+    });
+    render(<OTConfigTablePanel tenantId={TENANT} />);
 
-    const bogotaSwitch = screen.getByRole("switch", { name: /habilitar secretaría de movilidad bogotá/i });
-    expect(bogotaSwitch).not.toBeDisabled();
+    await screen.findByText("Secretaría de Movilidad Bogotá");
+    expect(screen.getByText(/Medellín/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: /deshabilitar medellín/i }),
+    ).toBeChecked();
+  });
+
+  it("(c ter) el listado pagina y no vuelca todo el catálogo de una vez", async () => {
+    const muchos = Array.from({ length: 14 }, (_, i) => ({
+      id: `x${i}`,
+      code: `9${String(i).padStart(4, "0")}`,
+      name: `Organismo ${i}`,
+      departmentCode: "11",
+      cityCode: "11001",
+    }));
+    vi.mocked(fetchTransitOffices).mockResolvedValue(muchos);
+    vi.mocked(fetchTransitGrants).mockResolvedValue({ transitOfficeIds: [] });
+    vi.mocked(fetchTransitOfficesOperationalStatus).mockResolvedValue(
+      muchos.map((o) => activo(o.id, o.code, o.name)),
+    );
+    vi.mocked(fetchOtBlockingPolicies).mockResolvedValue([]);
+    vi.mocked(fetchOtConsultationRestrictions).mockResolvedValue([]);
+    render(<OTConfigTablePanel tenantId={TENANT} />);
+
+    await screen.findByText("Organismo 0");
+    // 14 activos con páginas de 10: la primera página corta en el noveno.
+    expect(screen.getByText("Organismo 9")).toBeInTheDocument();
+    expect(screen.queryByText("Organismo 10")).not.toBeInTheDocument();
   });
 
   it("(d) el menú «⋯ Acciones» → «Configurar» abre el modal unificado con ambas secciones y togglea un criterio de cada una", async () => {

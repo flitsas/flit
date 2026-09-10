@@ -35,6 +35,11 @@ internal sealed class TenantConsultationOverrideProvider(ITenantSettingsReposito
             chains,
             settings.RuntFailoverTimeoutMs,
             settings.OnlyOwnVehicles,
-            FinesSourceCodes.Normalize(settings.FinesQuerySource));
+            FinesSourceCodes.Normalize(settings.FinesQuerySource),
+            settings.OnlyOwnVehiclesMatriculas,
+            settings.OnlyOwnVehiclesOtros,
+            BlockProcedureFamilyMatriculas: settings.IsProcedureFamilyBlocked("MATRICULAS"),
+            BlockProcedureFamilyTraspaso: settings.IsProcedureFamilyBlocked("TRASPASO"),
+            BlockProcedureFamilyOtros: settings.IsProcedureFamilyBlocked("OTROS"));
     }
 }

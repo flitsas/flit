@@ -1,5 +1,6 @@
 using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Domain.Auth;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Modules.Security.Application.Auth.ForgotPassword;
 
@@ -8,15 +9,19 @@ namespace Flit.Modules.Security.Application.Auth.ForgotPassword;
 /// activo, genera un token de un solo uso, lo persiste (solo el hash) y envía el enlace
 /// por correo. En cualquier otro caso no hace nada: el endpoint responde 202 genérico
 /// para no filtrar la existencia del email (anti-enumeración).
+/// HU #11358 AC3 — un fallo del transporte de correo (resultado tipado, no excepción) NO
+/// interrumpe el flujo: el token ya quedó persistido y el endpoint sigue respondiendo el mismo
+/// 202 genérico sin importar si el correo salió o no (mismo comportamiento anti-enumeración).
 /// </summary>
-public sealed class ForgotPasswordHandler(
+public sealed partial class ForgotPasswordHandler(
     IUserAccountRepository userAccountRepository,
     IPasswordResetTokenRepository tokenRepository,
     ISecureTokenGenerator tokenGenerator,
     IEmailSender emailSender,
     PasswordRecoveryOptions options,
     IAdminAuditWriter auditWriter,
-    IAuditContextAccessor auditContext)
+    IAuditContextAccessor auditContext,
+    ILogger<ForgotPasswordHandler> logger)
 {
     private const string Purpose = "password_reset";
 
@@ -36,14 +41,16 @@ public sealed class ForgotPasswordHandler(
 
         await tokenRepository.CreateAsync(user.UserId, token.TokenHash, Purpose, expiresAt, cancellationToken);
 
-        var link = BuildResetLink(options.ResetUrlBase, token.RawToken);
+        var link = ForgotPasswordEmailTemplate.BuildResetLink(options.ResetUrlBase, token.RawToken);
+        var composed = ForgotPasswordEmailTemplate.Compose(user.DisplayName, link, options.TokenLifetimeMinutes);
+        // HU #11363 AC1 — id estable del catálogo (NotificationTemplateCatalog.TemplateIds.ForgotPassword
+        // en Flit.Infrastructure); literal a mano porque este proyecto no depende de Infrastructure.
         var message = new EmailMessage(
-            user.Email,
-            user.DisplayName,
-            "Recuperación de contraseña — FLIT",
-            BuildHtmlBody(user.DisplayName, link, options.TokenLifetimeMinutes));
+            user.TenantId, "security.forgot-password", user.Email, user.DisplayName, composed.Subject, composed.HtmlBody);
 
-        await emailSender.SendAsync(message, cancellationToken);
+        var sendResult = await emailSender.SendAsync(message, cancellationToken);
+        if (!sendResult.Success)
+            LogEmailFailed(logger, user.UserId, sendResult.Outcome);
 
         // HU #10678 — sin PII/token en el rastro: solo desenlace + actor/afectado (el mismo usuario).
         await auditWriter.WriteAsync(
@@ -63,23 +70,7 @@ public sealed class ForgotPasswordHandler(
             cancellationToken).ConfigureAwait(false);
     }
 
-    private static string BuildResetLink(string resetUrlBase, string rawToken)
-    {
-        var separator = resetUrlBase.Contains('?', StringComparison.Ordinal) ? '&' : '?';
-        return $"{resetUrlBase}{separator}token={Uri.EscapeDataString(rawToken)}";
-    }
-
-    private static string BuildHtmlBody(string displayName, string link, int lifetimeMinutes)
-    {
-        var greetingName = string.IsNullOrWhiteSpace(displayName) ? "usuario" : displayName;
-        return $"""
-            <p>Hola {System.Net.WebUtility.HtmlEncode(greetingName)},</p>
-            <p>Recibimos una solicitud para restablecer tu contraseña en FLIT.
-            Haz clic en el siguiente enlace para crear una nueva contraseña:</p>
-            <p><a href="{link}">Restablecer mi contraseña</a></p>
-            <p>El enlace caduca en {lifetimeMinutes} minutos. Si no solicitaste este cambio,
-            puedes ignorar este mensaje; tu contraseña seguirá siendo la misma.</p>
-            <p>— Equipo FLIT</p>
-            """;
-    }
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No fue posible enviar el correo de recuperación de contraseña para el usuario {UserId}. Cause: {Outcome}.")]
+    private static partial void LogEmailFailed(ILogger logger, Guid userId, EmailSendOutcome outcome);
 }

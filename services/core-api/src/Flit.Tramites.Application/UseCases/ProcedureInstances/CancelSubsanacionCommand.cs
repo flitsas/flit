@@ -1,4 +1,3 @@
-using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 
@@ -29,23 +28,15 @@ public sealed class CancelSubsanacionHandler(IProcedureInstanceRepository repo)
 
         var now = DateTimeOffset.UtcNow;
         instance.SubsanacionActiva = false;
+        // El baseline solo tiene sentido con la ventana abierta; al cerrarla se suelta para que una
+        // subsanación posterior no compare contra un snapshot viejo.
+        instance.SubsanacionBaseline = null;
         instance.UpdatedAt = now;
         instance.UpdatedBy = changedBy;
 
-        var history = new ProcedureInstanceStatusHistory
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            ProcedureInstanceId = instance.Id,
-            FromStatus = TramiteEstado.Rechazado,
-            ToStatus = TramiteEstado.Rechazado,
-            ChangedAt = now,
-            ChangedBy = changedBy,
-            Reason = "Subsanación cancelada por el operador",
-            Metadata = "{}",
-        };
-        instance.StatusHistory.Add(history);
-        repo.Add(history);
+        // Cerrar la ventana tampoco es una transición: no se escribe historial. Antes se insertaba
+        // una fila rechazado → rechazado que el timeline mostraba como un rechazo repetido. El quién
+        // y el cuándo quedan en updated_by / updated_at y en el log de auditoría de la tabla.
 
         var committed = await repo.SaveChangesWithConcurrencyGuardAsync(ct).ConfigureAwait(false);
         if (!committed)

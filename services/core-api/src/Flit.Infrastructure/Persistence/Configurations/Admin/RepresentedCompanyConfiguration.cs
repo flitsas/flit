@@ -34,12 +34,20 @@ internal sealed class RepresentedCompanyConfiguration : IEntityTypeConfiguration
         builder.Property(x => x.Address).HasMaxLength(300);
         builder.Property(x => x.City).HasMaxLength(120);
         builder.Property(x => x.Phone).HasMaxLength(40);
+        builder.Property(x => x.RepresentativeId).IsRequired(false);
+        builder.Property(x => x.IsActive).HasDefaultValue(true).IsRequired();
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
 
-        // Dimensión única por (tenant, NIT): base del upsert por NIT.
+        builder.HasIndex(x => new { x.TenantId, x.RepresentativeId, x.DocumentNumber })
+            .IsUnique()
+            .HasFilter("is_active AND representative_id IS NOT NULL")
+            .HasDatabaseName("uq_represented_companies_owner_nit");
         builder.HasIndex(x => new { x.TenantId, x.DocumentNumber })
             .IsUnique()
-            .HasDatabaseName("uq_represented_companies_tenant_document");
+            .HasFilter("is_active AND representative_id IS NULL")
+            .HasDatabaseName("uq_represented_companies_orphan_nit");
+        builder.HasIndex(x => x.RepresentativeId)
+            .HasDatabaseName("ix_represented_companies_representative_id");
     }
 }

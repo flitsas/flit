@@ -11,12 +11,22 @@ export interface DocumentType {
   codigo: string;
   nombre: string;
   descripcion?: string | null;
+  /**
+   * Instrucción de cargue (HU #12065): el texto que el GESTOR lee en la tarjeta del paso
+   * Requisitos. Distinto de `descripcion`, que es la nota interna del administrador.
+   */
+  instruccionCargue?: string | null;
   estado: DocumentTypeEstado;
   fechaCreacion: string;
   /** RF08 — formatos MIME permitidos por tipo. Vacío/ausente ⇒ formatos globales por defecto. */
   mimeTypesAllowed?: string[];
   /** RF09 — tamaño máximo por tipo en bytes. 0/ausente ⇒ tamaño global por defecto. */
   maxSizeBytes?: number;
+  /**
+   * True = autogenerado (consolidado / sistema). No se pide ni se exige en Requisitos.
+   * False u omitido = cargue del gestor.
+   */
+  esAutogenerado?: boolean;
 }
 
 export interface DocumentTypePagedResult {
@@ -30,26 +40,36 @@ export interface DocumentTypeListParams {
   page?: number;
   pageSize?: number;
   includeInactive?: boolean;
+  q?: string;
+  origen?: "cargue" | "autogenerado" | "";
+  estado?: "activo" | "inactivo" | "";
 }
 
-/** Payload del POST /api/v1/admin/document-types (alta de catálogo). */
+/** Payload del POST /api/v1/admin/document-types (alta de catálogo). El código lo genera el API. */
 export interface CreateDocumentTypeRequest {
-  codigo: string;
+  codigo?: string;
   nombre: string;
   descripcion?: string | null;
+  /** Texto que ve el gestor al cargar el documento. Opcional, máx. 500. */
+  instruccionCargue?: string | null;
   /** RF08/09 — opcionales; omitidos ⇒ límites globales por defecto. */
   mimeTypesAllowed?: string[] | null;
   maxSizeBytes?: number | null;
+  /** True = autogenerado. False u omitido = cargue. */
+  esAutogenerado?: boolean;
 }
 
-/** Payload del PUT /api/v1/admin/document-types/{id} (edición de catálogo). */
+/** Payload del PUT /api/v1/admin/document-types/{id} (edición de catálogo). `codigo` se ignora. */
 export interface UpdateDocumentTypeRequest {
-  codigo: string;
+  codigo?: string;
   nombre: string;
   descripcion?: string | null;
+  /** Texto que ve el gestor al cargar el documento. Vaciarlo lo borra. */
+  instruccionCargue?: string | null;
   /** RF08/09 — opcionales; omitidos ⇒ no se modifican. */
   mimeTypesAllowed?: string[] | null;
   maxSizeBytes?: number | null;
+  esAutogenerado?: boolean;
 }
 
 // ── Asociaciones trámite ↔ documento (#10195, AC2) ──────────────────────────

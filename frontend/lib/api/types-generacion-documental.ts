@@ -1,0 +1,395 @@
+/**
+ * Tipos del módulo "Generación documental" (HU-01, Feature #12201).
+ *
+ * Contrato: `.claude/state/diseno-feature-12201.md` §7.1/§7.2 —
+ * base `/api/v1/admin/generacion-documental`, permisos `generacion-documental.read` /
+ * `.generate`. `POST .../generate` responde SIEMPRE `application/json` con `{ id, status }`
+ * y NUNCA el binario: la descarga va por `GET /{id}/download` (presigned URL).
+ *
+ * `document_snapshot` (PII alta) no se modela aquí a propósito: no se expone en listados y
+ * el detalle de HU-01 no lo consume.
+ */
+import type {
+  StandaloneBatchStatus,
+  StandaloneDocumentStatus,
+} from "@/components/admin/generacion-documental/status-labels";
+
+export type StandaloneDocumentType = "certificado_rues" | "transferencia_dominio_generada";
+
+/** Escenario normativo A/B/C — solo en transferencia (I2); `null` en Certificado RUES. */
+export type StandaloneDocumentScenario = "A" | "B" | "C";
+
+/** Fila del historial (CF-17): metadata mínima, sin snapshot. */
+export interface StandaloneDocumentListItem {
+  id: string;
+  documentType: StandaloneDocumentType;
+  scenario: StandaloneDocumentScenario | null;
+  status: StandaloneDocumentStatus;
+  errorCode?: string | null;
+  filename?: string | null;
+  companyName?: string | null;
+  /** Autor de la generación. Alimenta el filtro por usuario del historial (CF-18). */
+  createdByUserId: string;
+  createdByUserName?: string | null;
+  createdAt: string;
+}
+
+export interface StandaloneDocumentsPagedResult {
+  items: StandaloneDocumentListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+/**
+ * Filtros del historial. `status` viaja como los estados INTERNOS que cubre la opción de
+ * usuario (`standaloneDocumentStatusQuery`), porque «En proceso» son dos: pending y
+ * processing (CF-21).
+ */
+export interface StandaloneDocumentsListParams {
+  documentType?: StandaloneDocumentType;
+  status?: StandaloneDocumentStatus[];
+  dateFrom?: string;
+  dateTo?: string;
+  userId?: string;
+  /** Solo SuperAdmin: metadata global de otro tenant (CF-20). Nunca devuelve contenido. */
+  tenantId?: string;
+  /**
+   * Solo SuperAdmin: TODAS las compañías, sin filtro de tenant. Gana sobre `tenantId` si viajan
+   * los dos. Es el único camino del listado sin `WHERE tenant_id`, así que se envía únicamente
+   * cuando el usuario lo elige a propósito — nunca por defecto.
+   */
+  allTenants?: boolean;
+  /**
+   * Lote XLSX del que provienen las filas (CF-18 en I3, HU #12211). Es un filtro MÁS: se aplica
+   * con AND junto a los de tipo, estado, fechas y usuario, no los sustituye.
+   */
+  batchId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** Respuesta de `POST /rues/generate` y `POST /transferencia/generate`. */
+export interface StandaloneDocumentGenerateResult {
+  id: string;
+  status: StandaloneDocumentStatus;
+}
+
+/** Respuesta de `GET /{id}/download` (CF-19). La URL no se loguea nunca. */
+export interface StandaloneDocumentDownloadLink {
+  url: string;
+  expiresAt: string;
+}
+
+/**
+ * Campo devuelto por la revisión previa de RUES (`POST /rues/preview`).
+ *
+ * El servidor entrega la CLAVE del campo mercantil (`rues_razon_social`, `rues_estado`…), no una
+ * etiqueta legible: el esquema `StandaloneRuesPreviewField` del contrato solo declara `key` y
+ * `value`. La traducción a español vive en el frontend, en `etiquetaDeCampoRues`.
+ */
+export interface StandaloneRuesPreviewField {
+  key: string;
+  value?: string | null;
+}
+
+/** Motivos normalizados que el servidor devuelve CON HTTP 200, no como error HTTP. */
+export type StandaloneRuesPreviewError =
+  | "invalid_request"
+  | "provider_unavailable"
+  | "provider_not_found";
+
+/**
+ * Respuesta de `POST /rues/preview`.
+ *
+ * Ojo con dos trampas que ya costaron un `TypeError` en runtime:
+ *
+ * 1. El array se llama **`campos`**, en español, no `fields`. Es lo que declara
+ *    `StandaloneRuesPreviewResult` en `contracts/openapi/core-api.v1.yaml` y lo que serializa el
+ *    record `PreviewRuesCompanyResult` del backend.
+ * 2. **`error` viaja con HTTP 200.** Una caída del proveedor no llega como 5xx: llega como
+ *    `found: false` con `error: "provider_unavailable"`. Tratar `found: false` a secas como «el
+ *    NIT no existe» convierte una avería en un diagnóstico falso sobre el NIT del usuario.
+ */
+export interface StandaloneRuesPreviewResult {
+  found: boolean;
+  nit: string;
+  campos: StandaloneRuesPreviewField[];
+  error?: StandaloneRuesPreviewError | null;
+}
+
+// ── Transferencia de dominio (HU #12207, Feature #12201) ────────────────────────────────────
+//
+// Contrato normativo: `docs/plantilla-transferencia-dominio.md`. Cubre los TRES escenarios:
+// A traspaso ordinario (art. 5.3.2.1), B transferencia unilateral de leasing al locatario
+// (art. 5.3.2.2) y C entidad financiera a un tercero (art. 5.3.2.1 sin exenciones), más el control
+// previo de régimen aplicable (VB-07). Los lotes llegan después.
+
+/** Las 13 variables de vehículo del anexo §5.1. Todas son texto: el documento transcribe. */
+export interface TransferVehiculoInput {
+  placa: string;
+  marca?: string;
+  linea?: string;
+  modeloAnio?: string;
+  claseVehiculo?: string;
+  tipoCarroceria?: string;
+  color?: string;
+  noMotor?: string;
+  noChasis?: string;
+  noSerie?: string;
+  servicio?: string;
+  noLicenciaTransito?: string;
+  organismoTransito?: string;
+}
+
+/**
+ * Una parte compareciente (anexo §5.2 y §5.3). `digitoVerificacion` no se envía: el backend lo
+ * calcula (módulo 11 DIAN) para que un NIT y su DV no puedan discrepar dentro del mismo PDF.
+ */
+export interface TransferParteInput {
+  tipoPersona?: "PN" | "PJ";
+  nombreRazonSocial?: string;
+  tipoDoc?: string;
+  numeroDoc?: string;
+  domicilio?: string;
+  representanteLegal?: string;
+  ccRepresentanteLegal?: string;
+}
+
+export type TransferTituloJuridico =
+  | "COMPRAVENTA"
+  | "DACION_EN_PAGO"
+  | "PERMUTA"
+  | "DONACION"
+  | "OTRO";
+
+/** Variables del negocio (§5.4), incluidas las tres fiscales que imprime la cláusula SEXTA. */
+export interface TransferNegocioInput {
+  tituloJuridico?: TransferTituloJuridico | "";
+  descripcionTitulo?: string;
+  precioLetras?: string;
+  precioNumeros?: string;
+  contraprestacionDescripcion?: string;
+  formaPago?: string;
+  asumeRetencionFuente?: "TRANSFERENTE" | "ADQUIRENTE" | "SEGUN_LEY";
+  asumeDerechosTramite?: "TRANSFERENTE" | "ADQUIRENTE" | "COMPARTIDOS";
+  asumeImpuestoVehiculo?: "TRANSFERENTE" | "ADQUIRENTE" | "SEGUN_LEY" | null;
+  ciudadFirma?: string;
+  fechaFirma?: string;
+}
+
+/** Declaración de gravamen del usuario (VB-A-04). FLIT no consulta el registro de garantías. */
+export interface TransferGravamenInput {
+  gravamenActivo: boolean;
+  tieneLevantamientoOAutorizacion: boolean;
+}
+
+/**
+ * Declaración de régimen aplicable (§4.0, CF-24). Es el gate previo a elegir escenario y lo evalúa
+ * `VB-07`: el backend rechaza con 422 tanto declarar una de las once condiciones de los
+ * arts. 5.3.2.3 a 5.3.2.13 como no responder, aunque el formulario se salte el control.
+ */
+export interface TransferRegimenInput {
+  ningunaAplica?: boolean | null;
+  condicionesDeclaradas?: string[];
+  declaredAt?: string | null;
+}
+
+/** Causal de la transferencia unilateral (§5.5). Fuera del catálogo: 422 con `VB-B-03`. */
+export type TransferTipoOpcionCompra = "EJERCIDA" | "AUTOMATICA" | "TERMINACION_CONTRATO";
+
+/**
+ * Antecedente de leasing del escenario B (§5.5). **No tiene campo de precio**: el acto del
+ * art. 5.3.2.2 es unilateral y no declara precio entre las partes del instrumento (`VB-B-05`).
+ *
+ * Los datos del locatario alimentan las cláusulas declarativas del PDF; **nunca** el bloque de
+ * firmas, que en el escenario B tiene un solo bloque: el de la entidad financiera (§9.2).
+ */
+export interface TransferLeasingInput {
+  transferenteEsEntidadFinanciera: boolean;
+  noContratoLeasing?: string;
+  tipoOpcionCompra?: TransferTipoOpcionCompra | "";
+  fechaTerminacion?: string | null;
+  locatarioNombre?: string;
+  locatarioTipoDoc?: string;
+  locatarioNoDoc?: string;
+}
+
+/**
+ * Cuerpo de `POST /transferencia/generate`. `escenarios` es una LISTA porque VB-05 exige
+ * «exactamente uno»: con un escalar, el caso «más de un escenario» no existiría.
+ */
+export interface TransferGenerateRequest {
+  escenarios: StandaloneDocumentScenario[];
+  vehiculo: TransferVehiculoInput;
+  transferente: TransferParteInput;
+  /** Ausente en el escenario B: el locatario no es parte del instrumento (§9.2). */
+  adquirente?: TransferParteInput;
+  negocio: TransferNegocioInput;
+  gravamen?: TransferGravamenInput;
+  regimenAplicable?: TransferRegimenInput;
+  /** Obligatorio en el escenario B; en el C solo alimenta `VB-C-01`. */
+  leasing?: TransferLeasingInput;
+}
+
+/**
+ * Hallazgo de validación del anexo §6. El mensaje NUNCA repite el valor capturado: llega así del
+ * backend y la interfaz tampoco lo reconstruye.
+ */
+export interface TransferValidationIssue {
+  code: string;
+  field: string;
+  message: string;
+}
+
+/** Respuesta de la generación: id, estado y las prevalidaciones advisory (avisos, no errores). */
+export interface TransferGenerateResult {
+  id: string;
+  status: StandaloneDocumentStatus;
+  advisories: TransferValidationIssue[];
+}
+
+// ── Prellenado standalone «placa primero» (HU #12209 frontend / #12208 backend, CF-25) ──────────
+//
+// Tres endpoints separados de la generación: `POST /prefill/vehiculo`, `/prefill/persona-juridica`
+// y `/prefill/persona-natural`. **No persisten nada**: devuelven valores hacia el formulario.
+// Sin coincidencia responden `200 { found: false }` — nunca 404 ni 502 (§7.1).
+
+/**
+ * Fuentes que pueden hidratar un campo. La declara el backend **por campo**, no por bloque: en una
+ * persona jurídica la razón social puede venir del directorio de representantes legales y el
+ * domicilio de RUES en la misma respuesta.
+ */
+export type PrefillFuente =
+  | "RUNT"
+  | "RUES"
+  | "DIRECTORIO_RL"
+  | "CONTACT_LOOKUP"
+  | (string & {});
+
+/** Un campo hidratado. `key` es el nombre del campo del formulario, no el del proveedor. */
+export interface PrefillField {
+  key: string;
+  value: string | null;
+  /** Fuente declarada para ESTE campo. Si falta, se usa la fuente efectiva del bloque. */
+  source?: PrefillFuente | null;
+}
+
+/** Respuesta común de los tres endpoints de prellenado. */
+export interface PrefillResult {
+  found: boolean;
+  /** Fuente efectiva del bloque: la primera de la cadena que respondió. */
+  source?: PrefillFuente | null;
+  fields?: PrefillField[] | null;
+  /**
+   * Solo en `/prefill/persona-juridica`: DV del NIT calculado por el backend (módulo 11 DIAN).
+   * El formulario no lo captura ni lo reenvía.
+   */
+  dv?: string | null;
+}
+
+/** Cuerpo de `POST /prefill/vehiculo`. La placa es la llave de la consulta (CF-25). */
+export interface PrefillVehiculoRequest {
+  placa: string;
+  ownerDocumentType?: string;
+  ownerDocumentNumber?: string;
+}
+
+/** Cuerpo de `POST /prefill/persona-juridica`. */
+export interface PrefillPersonaJuridicaRequest {
+  nit: string;
+}
+
+/** Cuerpo de `POST /prefill/persona-natural`. */
+export interface PrefillPersonaNaturalRequest {
+  documentType: string;
+  documentNumber: string;
+}
+
+// ── Lotes XLSX: seguimiento y descarga (CF-13/CF-14/CF-15, HU #12211) ───────────────────────
+
+/**
+ * Avance de un lote (`GET /lotes/{batchId}`). Es lo que el seguimiento sondea cada 4 segundos.
+ *
+ * `isTerminal` lo manda el backend y NO se deduce en el cliente: es la señal con la que el
+ * polling se detiene. Si el contrato gana un estado terminal nuevo, el frontend deja de sondear
+ * sin necesidad de una versión nueva.
+ */
+export interface StandaloneBatchStatusResult {
+  batchId: string;
+  status: StandaloneBatchStatus;
+  /** Filas de datos del XLSX, sin contar el encabezado. */
+  total: number;
+  generated: number;
+  errors: number;
+  /** Filas ya materializadas (generadas + en error). */
+  processed: number;
+  isTerminal: boolean;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+/**
+ * Rechazos de `POST /lotes` que describen el ARCHIVO COMPLETO, no una fila. Cuando llega uno de
+ * estos no se procesó ninguna fila y nada quedó en storage: el lote no llegó a existir.
+ *
+ * Es un catálogo cerrado a propósito. La pantalla traduce cada código a una instrucción concreta
+ * —qué hizo mal y qué hacer ahora—, que es lo que un código crudo en pantalla no da.
+ */
+export type StandaloneBatchCreateErrorCode =
+  | "too_many_rows"
+  | "template_invalid"
+  | "invalid_file"
+  | "invalid_request";
+
+/**
+ * Respuesta de `POST /lotes` (CF-11/CF-16, HU #12224). El procesamiento es asíncrono: esto confirma que el
+ * lote quedó encolado, no que los documentos existan.
+ */
+export interface StandaloneBatchCreateResult {
+  batchId: string;
+  status: StandaloneBatchStatus;
+  /** Filas de datos detectadas en el XLSX, sin contar el encabezado. */
+  total: number;
+  /**
+   * `true` cuando el backend devolvió un lote que YA existía en vez de crear uno (CF-16, respuesta
+   * 200 en lugar de 202). Se deduce del código de estado, que es lo único que los distingue: el
+   * cuerpo es idéntico.
+   */
+  alreadyExisted: boolean;
+}
+
+/** Un error de una fila del XLSX. `message` nunca refleja el valor capturado (CF-13). */
+export interface StandaloneBatchItemError {
+  code?: string | null;
+  field?: string | null;
+  message?: string | null;
+}
+
+/**
+ * Una fila del lote (`GET /lotes/{batchId}/items`).
+ *
+ * **`documentType` miente en algunas filas.** Los CHECK de la tabla solo admiten dos literales,
+ * así que una fila con un tipo desconocido —o una transferencia sin escenario válido— se
+ * persiste como `certificado_rues` con escenario nulo. En esas filas el error real vive en
+ * `validationErrors`, y es eso lo que la tabla muestra.
+ */
+export interface StandaloneBatchItem {
+  id: string;
+  rowNumber: number | null;
+  documentType: StandaloneDocumentType;
+  scenario: StandaloneDocumentScenario | null;
+  status: StandaloneDocumentStatus;
+  errorCode?: string | null;
+  errorField?: string | null;
+  validationErrors: StandaloneBatchItemError[];
+  filename?: string | null;
+  createdAt: string;
+}
+
+export interface StandaloneBatchItemsPagedResult {
+  items: StandaloneBatchItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}

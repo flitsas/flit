@@ -40,6 +40,19 @@ public sealed class ChecklistEngineMatrixComputeTests
     }
 
     [Fact]
+    public void ExcludeFromGestorCarga_QuitaGenerados_YRecalculaCompleto()
+    {
+        var r = Compute(Matriz);
+        var filtrado = ChecklistEngine.ExcludeFromGestorCarga(
+            r, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "soat", "aduana" });
+
+        filtrado.Items.Select(i => i.Item.Id).Should().Equal("factura");
+        filtrado.FaltanObligatorios.Should().Contain("factura");
+        filtrado.FaltanObligatorios.Should().NotContain("aduana");
+        filtrado.Completo.Should().BeFalse();
+    }
+
+    [Fact]
     public void Matriz_DocSubido_AutoMarcaSatisfecho()
     {
         var r = Compute(Matriz, docTipos: ["factura"]);

@@ -32,9 +32,12 @@ public sealed record UpdateConformationProfileInput(
     IReadOnlyList<ConformationDocumentRequirementInput>? DocumentRequirements = null);
 
 /// <summary>
-/// Actualiza el perfil de conformación del tipo. Solo editable en estado <c>draft</c>: un tipo
-/// <c>published</c> o <c>archived</c> devuelve <c>not_editable</c> (→ 422, AC BE-01-AC-06) para no
-/// alterar tipos vivos ni los trámites en curso que dependen de ellos. Las fuentes y las reglas de
+/// Actualiza el perfil de conformación del tipo. Editable en <c>draft</c> y en <c>published</c>;
+/// un tipo <c>archived</c> devuelve <c>not_editable</c> (→ 422).
+/// <para>El AC BE-01-AC-06 original bloqueaba también los publicados «para no alterar los trámites
+/// en curso». ADR-0050 quitó ese motivo: cada expediente congela su conformación en
+/// <c>procedure_type_snapshots</c> al crearse, así que corregir el tipo no alcanza a ninguno vivo.
+/// Editar un publicado sube <c>Version</c>.</para> Las fuentes y las reglas de
 /// conformación (HU-BE-03) se resuelven por código; código inexistente → <c>source_not_found</c> /
 /// <c>entity_not_found</c>.
 /// </summary>
@@ -55,8 +58,22 @@ public sealed class UpdateConformationProfileHandler(
         if (entity is null)
             return (null, "not_found");
 
-        if (entity.PublicationStatus != PublicationStatus.Draft)
+        // ADR-0050 — un tipo PUBLICADO sí se puede corregir; un ARCHIVADO no.
+        //
+        // El candado original abarcaba ambos para no alterar los trámites en curso. Desde que cada
+        // expediente congela su conformación en `procedure_type_snapshots` al crearse, editar el
+        // tipo ya no puede afectar a ninguno vivo: siguen leyendo su snapshot. Sin este permiso no
+        // había forma de corregir la parametrización del catálogo —los 21 tipos están publicados— y
+        // «habilitar un trámite es configuración, no despliegue» se quedaba en la mitad.
+        //
+        // Editar un publicado SUBE la versión: los expedientes nuevos se conforman con la corregida
+        // y queda registro de que el tipo cambió.
+        if (entity.PublicationStatus == PublicationStatus.Archived)
             return (null, "not_editable");
+
+        var eraPublicado = entity.PublicationStatus == PublicationStatus.Published;
+        if (eraPublicado)
+            entity.Version += 1;
 
         // FEATURE-08 / HU-BE-02 (CFD-02): entryMode, si se envía, debe ser PLATE/VIN/BOTH.
         if (TryReadEntryMode(input.GateProfile, out var entryMode)

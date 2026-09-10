@@ -27,7 +27,10 @@ public sealed record OcrFailure(int Status, string Message);
 /// (<see cref="IPdfPageExtractor"/>) y lo devuelve en base64. NO persiste nada: el OCR es stateless y
 /// ocurre ANTES del flujo S3 (presign/register) del expediente.
 /// </summary>
-public sealed class AnalyzeDocumentHandler(IDocumentOcrAnalyzer analyzer, IPdfPageExtractor? pdfExtractor = null)
+public sealed class AnalyzeDocumentHandler(
+    IDocumentOcrAnalyzer analyzer,
+    IPdfPageExtractor? pdfExtractor = null,
+    PdfOrientationNormalizer? orientationNormalizer = null)
 {
     /// <summary>Tamaño máximo del archivo a analizar (10 MB).</summary>
     public const long MaxFileBytes = 10L * 1024 * 1024;
@@ -44,7 +47,14 @@ public sealed class AnalyzeDocumentHandler(IDocumentOcrAnalyzer analyzer, IPdfPa
         if (!TryResolveMediaType(content.Span, out var mediaType))
             return (null, new OcrFailure(400, "Solo PDF, JPG o PNG"));
 
-        var analysis = await analyzer.AnalyzeAsync(tipo, content, mediaType, ct);
+        // HU #12036 — se endereza ANTES de analizar. Un escaneo girado no se lee mal: se INVENTA, y con
+        // `es_valido: true`. Solo se toca lo que se manda al modelo: el recorte de páginas y lo que se
+        // sube al expediente siguen saliendo del binario original que cargó el usuario.
+        var paraAnalizar = content;
+        if (mediaType == "application/pdf" && orientationNormalizer is not null)
+            paraAnalizar = await orientationNormalizer.NormalizeAsync(content, ct);
+
+        var analysis = await analyzer.AnalyzeAsync(tipo, paraAnalizar, mediaType, ct);
         if (!analysis.Ok)
             return (null, new OcrFailure(analysis.Status, analysis.Message ?? "No se pudo analizar el documento"));
 

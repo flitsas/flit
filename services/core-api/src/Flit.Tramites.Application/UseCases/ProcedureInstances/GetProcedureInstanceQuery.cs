@@ -62,7 +62,12 @@ public sealed record ProcedureInstanceDetailDto(
     /// <summary>Subsanación activa sobre rechazado (edición sin cambiar status).</summary>
     bool SubsanacionActiva = false,
     /// <summary>Veces que se activó la subsanación en este expediente.</summary>
-    int SubsanacionCount = 0);
+    int SubsanacionCount = 0,
+    // HU #10536 — marca de prioridad. Vive en una columna del expediente, no en FieldValues, así que
+    // el detalle era la única lectura del wizard que NO la traía: el paso 1 pinta el interruptor de
+    // "Trámite prioritario" y, al volver sobre un trámite ya creado, no tenía de dónde rehidratarlo.
+    // Opcional (default false) para no romper a los consumidores que no la lean.
+    bool Prioritario = false);
 
 public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository repo)
 {
@@ -107,7 +112,8 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
             e.PlateFlowStatus,
             e.CurrentStep,
             e.SubsanacionActiva,
-            e.SubsanacionCount);
+            e.SubsanacionCount,
+            e.Prioritario);
 
     /// <summary>
     /// HU #10871 — recorta el metadata jsonb persistido en <c>procedure_instance_status_history</c> al

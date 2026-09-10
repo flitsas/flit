@@ -83,3 +83,102 @@ export function vigenciaLabel(
   const fecha = formatFecha(validUntil, "");
   return fecha ? `Válida hasta ${fecha}` : null;
 }
+
+// ── HU #11756 (ADR-0050) — matriz de rótulos + copy por estado ───────────────
+//
+// El ADR-0050 fija CUATRO estados canónicos de identidad (distintos del texto del chip de arriba,
+// que es de HU anteriores): "sin validación", "en curso", "aprobada y vigente", "vencida". Y exige DOS
+// rótulos SIEMPRE visibles y NUNCA fusionados en una sola cadena que confunda las dos fuentes:
+//   - Identidad: {uno de los 4 estados}
+//   - Firma del baúl: vigente hasta {fecha}  |  Firma del baúl: sin firma vigente
+//
+// El copy de invitación al módulo Identidad respeta la precedencia D8 del ADR-0025 (baúl > identidad):
+// con firma de baúl vigente NO se invita a prevalidar, sin importar el estado de identidad.
+
+/** Mapeo del estado interno (`AdminIdentityStatus`) al rótulo canónico del ADR-0050. */
+const ESTADO_CANONICO: Record<AdminIdentityStatus, string> = {
+  none: "sin validación",
+  pending: "en curso",
+  valid: "aprobada y vigente",
+  expired: "vencida",
+};
+
+/** Ruta del módulo Identidad dentro de la SPA admin (dock ≡ URL, HU #11507/#11508). */
+export const IDENTITY_MODULE_HREF = "/?m=validaciones";
+
+/** Rótulo `Identidad: {estado}` — SIEMPRE presente, aunque el estado sea "sin validación". */
+export function identidadRotulo(status: string | null | undefined): string {
+  const estado = ESTADO_CANONICO[(status ?? "none") as AdminIdentityStatus] ?? ESTADO_CANONICO.none;
+  return `Identidad: ${estado}`;
+}
+
+/**
+ * Rótulo `Firma del baúl: ...` — SIEMPRE presente, con dos formas: vigente hasta {fecha} o sin firma
+ * vigente. Con `vigente=true` pero sin fecha registrada (dato incompleto) se informa "vigente" a secas
+ * en vez de prometer una fecha que no existe.
+ */
+export function firmaBaulRotulo(
+  vigente: boolean | null | undefined,
+  vigenteHasta: string | null | undefined,
+): string {
+  if (!vigente) return "Firma del baúl: sin firma vigente";
+  const fecha = vigenteHasta ? formatFecha(vigenteHasta, "") : "";
+  return fecha ? `Firma del baúl: vigente hasta ${fecha}` : "Firma del baúl: vigente";
+}
+
+/** ¿El tipo de documento corresponde a persona jurídica (NIT)? Normaliza espacios y mayúsculas. */
+function esNit(documentType: string | null | undefined): boolean {
+  return (documentType ?? "").trim().toUpperCase() === "NIT";
+}
+
+export interface IdentityCopyContext {
+  identityStatus?: string | null;
+  /** ¿Tiene firma del baúl vigente HOY? Manda sobre todo lo demás (D8, ADR-0025). */
+  firmaBaulVigente?: boolean | null;
+  /** Tipo de documento de la persona; "NIT" ⇒ persona jurídica, sin prevalidación (ADR-0036). */
+  documentType?: string | null;
+}
+
+export interface IdentityCopyResult {
+  /** Texto a mostrar bajo los rótulos; `null` cuando no hay nada que decir. */
+  message: string | null;
+  /** `true` cuando el mensaje debe ir acompañado del enlace al módulo Identidad. */
+  showLink: boolean;
+}
+
+/**
+ * Copy por estado (CF-03, HU #11756). Reglas, en orden de precedencia:
+ *
+ * 1. Firma de baúl vigente ⇒ nunca se invita a prevalidar (D8 del ADR-0025 manda sobre todo).
+ * 2. Sin firma vigente y estado `sin validación` o `vencida` ⇒ se invita a ir al módulo Identidad,
+ *    con copy DISTINTO entre ambos casos. Enlace simple, sin precargar el documento.
+ * 3. Dentro del punto 2, si el documento es NIT (persona jurídica, ADR-0036) no se enlaza a un flujo
+ *    imposible: se informa que no aplica prevalidación.
+ * 4. Estados `en curso` o `aprobada y vigente` (sin firma vigente) ⇒ sin invitación: ya está en curso
+ *    o ya quedó resuelta por el módulo Identidad.
+ */
+export function identityCopy(ctx: IdentityCopyContext): IdentityCopyResult {
+  if (ctx.firmaBaulVigente) {
+    return { message: null, showLink: false };
+  }
+
+  const status = (ctx.identityStatus ?? "none") as AdminIdentityStatus;
+  if (status !== "none" && status !== "expired") {
+    return { message: null, showLink: false };
+  }
+
+  if (esNit(ctx.documentType)) {
+    return {
+      message: "Persona jurídica (NIT): no aplica prevalidación de identidad.",
+      showLink: false,
+    };
+  }
+
+  return {
+    message:
+      status === "none"
+        ? "Esta persona todavía no tiene una validación de identidad. Puedes iniciarla desde el módulo Identidad."
+        : "La validación de identidad de esta persona venció. Puedes renovarla desde el módulo Identidad.",
+    showLink: true,
+  };
+}

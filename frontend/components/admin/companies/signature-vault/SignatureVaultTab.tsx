@@ -13,11 +13,13 @@ import {
   type SignatureVaultItem,
 } from "@/lib/api/admin-signature-vault";
 import { SignatureVaultFormPanel } from "./SignatureVaultFormPanel";
+import { SignatureVaultEditPanel } from "./SignatureVaultEditPanel";
 import { SignatureVaultDetailModal } from "./SignatureVaultDetailModal";
 import { ESTADO_BADGE, ESTADO_LABELS, formatDate } from "./signatureVaultDisplay";
+import { formatDocumentNumber } from "@/lib/display/document-number";
 
 /**
- * Pestaña "Baúl de Firmas" (HU #10644): registra, lista, consulta y anula firmas de
+ * Pestaña "Baúl de Firmas" (HU #10644): registra, lista, consulta, CORRIGE y anula firmas de
  * apoderados de la compañía. Visible solo cuando `baulFirmasActivo` está activo (lo
  * controla el contenedor). 4 estados de UI + WCAG 2.1 AA. El artefacto de firma nunca
  * se descarga al cliente.
@@ -28,6 +30,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
   const [items, setItems] = useState<SignatureVaultItem[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [detail, setDetail] = useState<SignatureVaultItem | null>(null);
+  const [toEdit, setToEdit] = useState<SignatureVaultItem | null>(null);
   const [toRevoke, setToRevoke] = useState<SignatureVaultItem | null>(null);
   const [revoking, setRevoking] = useState(false);
 
@@ -147,7 +150,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                     </td>
                     <td className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`}>
                       <span className="font-mono">
-                        {item.documentType} {maskDocument(item.documentNumber)}
+                        {item.documentType} {formatDocumentNumber(item.documentNumber)}
                       </span>
                     </td>
                     <td className={`border-y px-4 py-3 font-mono ${revoked ? "opacity-60" : ""}`}>
@@ -177,6 +180,20 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                         >
                           Ver detalle
                         </button>
+                        {/* Corregir solo sobre firmas activas: el contenido de una revocada es
+                            histórico. Sin esta acción, arreglar un código hash mal digitado obligaba
+                            a anular la firma y volver a registrarla. */}
+                        {!revoked && (
+                          <button
+                            type="button"
+                            className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold"
+                            style={{ color: "#557EFF", borderColor: "#557EFF" }}
+                            onClick={() => setToEdit(item)}
+                            aria-label={`Corregir la firma de ${item.fullName}`}
+                          >
+                            Corregir
+                          </button>
+                        )}
                         {!revoked && (
                           <button
                             type="button"
@@ -211,6 +228,16 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
       />
 
       <SignatureVaultDetailModal item={detail} onClose={() => setDetail(null)} />
+
+      <SignatureVaultEditPanel
+        tenantId={tenantId}
+        item={toEdit}
+        onClose={() => setToEdit(null)}
+        onSaved={() => {
+          show("Firma corregida.", "success");
+          void load();
+        }}
+      />
 
       {toRevoke && (
         <Modal
@@ -252,8 +279,3 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
   );
 }
 
-/** Enmascara el número de documento (PII, Ley 1581): solo los últimos 4 dígitos. */
-function maskDocument(documentNumber: string): string {
-  if (documentNumber.length <= 4) return "••••";
-  return `••••${documentNumber.slice(-4)}`;
-}

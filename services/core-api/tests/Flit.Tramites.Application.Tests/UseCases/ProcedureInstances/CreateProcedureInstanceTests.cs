@@ -1,3 +1,4 @@
+using System.Globalization;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -21,15 +22,18 @@ public sealed class CreateProcedureInstanceTests
         _sut = new CreateProcedureInstanceHandler(_repo, _typeRepo);
     }
 
-    /// <summary>Simula el repo real: genera la referencia con seq inicial y persiste OK.</summary>
+    /// <summary>
+    /// Simula el repo real: desde la HU #12151 el radicado lo asigna el DEFAULT de la columna
+    /// (secuencia global) y EF lo lee de vuelta tras el INSERT. El handler no lo calcula, así que
+    /// el stub se limita a devolver un consecutivo pelado.
+    /// </summary>
     private void StubReferenceGenerator(int seq = 1)
     {
-        _repo.AddWithUniqueReferenceAsync(Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _repo.AddWithUniqueReferenceAsync(Arg.Any<ProcedureInstance>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var instance = call.Arg<ProcedureInstance>();
-                var year = call.ArgAt<int>(1);
-                instance.ReferenceNumber = $"TRM-{year}-{seq:D6}";
+                instance.ReferenceNumber = seq.ToString(CultureInfo.InvariantCulture);
                 return Task.FromResult(AddProcedureInstanceOutcome.Created);
             });
     }
@@ -47,6 +51,7 @@ public sealed class CreateProcedureInstanceTests
         Name = code,
         Family = family,
         PublicationStatus = PublicationStatus.Published,
+        WizardEnabled = true,
         CreatedAt = DateTimeOffset.UtcNow
     };
 
@@ -94,6 +99,7 @@ public sealed class CreateProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
         _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
@@ -103,15 +109,13 @@ public sealed class CreateProcedureInstanceTests
 
         error.Should().BeNull();
         result.Should().NotBeNull();
-        var year = DateTimeOffset.UtcNow.Year;
-        result!.ReferenceNumber.Should().Be($"TRM-{year}-000001");
+        result!.ReferenceNumber.Should().Be("1");
         result.Status.Should().Be(TramiteEstado.Borrador);
 
         await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
                 i.Status == TramiteEstado.Borrador &&
                 i.StatusHistory.Any(h => h.ToStatus == TramiteEstado.Borrador && h.FromStatus == null)),
-            year,
             ct);
     }
 
@@ -126,10 +130,11 @@ public sealed class CreateProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
         _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
-        _repo.AddWithUniqueReferenceAsync(Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _repo.AddWithUniqueReferenceAsync(Arg.Any<ProcedureInstance>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(AddProcedureInstanceOutcome.ReferenceConflict));
 
         var (result, error) = await _sut.HandleAsync(Request(), ct);
@@ -149,12 +154,13 @@ public sealed class CreateProcedureInstanceTests
             Name = "X",
             Family = "matriculas",
             PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
         _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
         // tenant_id / created_by_user_id inexistente: el repo traduce la FK violation a
         // ReferencedEntityMissing → el handler responde "invalid_reference" (422, no 500).
-        _repo.AddWithUniqueReferenceAsync(Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _repo.AddWithUniqueReferenceAsync(Arg.Any<ProcedureInstance>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(AddProcedureInstanceOutcome.ReferencedEntityMissing));
 
         var (result, error) = await _sut.HandleAsync(Request(), ct);
@@ -164,37 +170,28 @@ public sealed class CreateProcedureInstanceTests
     }
 
     [Theory]
-    [InlineData("TRASPASO", "traspaso", "traspaso_standard")]
-    [InlineData("traspaso", "traspaso", "traspaso_standard")] // case-insensitive
-    [InlineData("MATRICULAS", "matricula_inicial", "matricula_inicial")]
-    [InlineData("OTROS", "matricula_inicial", "matricula_inicial")]
-    [InlineData("UNKNOWN_FAMILY", "matricula_inicial", "matricula_inicial")] // default defensivo
-    public async Task HandleAsync_SetsModalidadAndTipologiaFromFamily(
-        string family, string expectedModalidad, string expectedTipologia)
+    [InlineData("TRASPASO", "TRASPASO_STANDARD")]
+    [InlineData("traspaso", "TRASPASO_STANDARD")]
+    [InlineData("MATRICULAS", "MATRICULA_NUEVA")]
+    [InlineData("OTROS", "BLINDAJE")]
+    public async Task HandleAsync_LaInstanciaQuedaLigadaAlTipo_SinClasificacionPropia(
+        string family, string code)
     {
+        // ADR-0050 — la instancia ya no persiste modalidad ni tipología: su clasificación se deriva
+        // del tipo, así que basta con que el FK y la navegación queden bien puestos. Antes esta
+        // prueba verificaba la derivación familia → (modalidad, tipología), que ya no existe.
         var ct = TestContext.Current.CancellationToken;
-        var pt = new ProcedureType
-        {
-            Id = Guid.NewGuid(),
-            Code = "X",
-            Name = "X",
-            Family = family,
-            PublicationStatus = PublicationStatus.Published,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-        _typeRepo.GetByIdAsync(Arg.Any<Guid>(), ct).Returns(pt);
-        StubReferenceGenerator();
+        var pt = PublishedType(code, family);
+        _typeRepo.GetByIdAsync(pt.Id, Arg.Any<CancellationToken>()).Returns(pt);
 
-        var (result, error) = await _sut.HandleAsync(Request(), ct);
+        var (result, error) = await _sut.HandleAsync(
+            new CreateProcedureInstanceRequest(Guid.NewGuid(), pt.Id, Guid.NewGuid(), null), ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
         await _repo.Received(1).AddWithUniqueReferenceAsync(
-            Arg.Is<ProcedureInstance>(i =>
-                i.ModalidadEntrada == expectedModalidad &&
-                i.TipologiaCodigo == expectedTipologia),
-            Arg.Any<int>(),
-            ct);
+            Arg.Is<ProcedureInstance>(i => i.ProcedureTypeId == pt.Id && i.TypeCode == code),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -214,9 +211,7 @@ public sealed class CreateProcedureInstanceTests
         await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
                 i.ProcedureTypeId == pt.Id &&
-                i.ModalidadEntrada == "matricula_inicial" &&
-                i.TipologiaCodigo == "matricula_inicial"),
-            Arg.Any<int>(),
+                i.TypeCode == "MATRICULA_NUEVA"),
             ct);
     }
 
@@ -235,9 +230,7 @@ public sealed class CreateProcedureInstanceTests
         result!.ProcedureTypeId.Should().Be(pt.Id);
         await _repo.Received(1).AddWithUniqueReferenceAsync(
             Arg.Is<ProcedureInstance>(i =>
-                i.ModalidadEntrada == "traspaso" &&
-                i.TipologiaCodigo == "traspaso_standard"),
-            Arg.Any<int>(),
+                i.TypeCode == "TRASPASO_STANDARD"),
             ct);
     }
 
@@ -250,6 +243,7 @@ public sealed class CreateProcedureInstanceTests
         Name = "X",
         Family = "matriculas",
         PublicationStatus = PublicationStatus.Published,
+        WizardEnabled = true,
         GateProfile = gateProfile,
         CreatedAt = DateTimeOffset.UtcNow
     };
@@ -274,7 +268,7 @@ public sealed class CreateProcedureInstanceTests
         error.Should().Be("COMPANY_RULE_VIOLATION");
         result.Should().BeNull();
         await _repo.DidNotReceive().AddWithUniqueReferenceAsync(
-            Arg.Any<ProcedureInstance>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+            Arg.Any<ProcedureInstance>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -439,5 +433,40 @@ public sealed class CreateProcedureInstanceTests
         error.Should().Be("modalidad_not_available");
         result.Should().BeNull();
         await _typeRepo.DidNotReceive().GetByCodePublishedAsync(Arg.Any<string>(), ct);
+    }
+
+    // ── ADR-0050: la barrera de operación corta en el servidor ───────────────────────────────────
+
+    [Fact]
+    public async Task TipoPublicadoPeroNoHabilitado_NoCreaElTramite()
+    {
+        // Publicado significa que existe en el catálogo; habilitado, que su recorrido se puede
+        // recorrer. Antes la barrera solo filtraba el selector, así que una llamada directa —ICT,
+        // una integración, un enlace guardado— abría trámites de tipos a medio parametrizar y el
+        // gestor se encontraba con un asistente vacío en vez de con un rechazo que dice por qué.
+        var ct = TestContext.Current.CancellationToken;
+        var repo = Substitute.For<IProcedureInstanceRepository>();
+        var typeRepo = Substitute.For<IProcedureTypeRepository>();
+        var pt = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "BLINDAJE",
+            Name = "Blindaje",
+            Family = "OTROS",
+            PublicationStatus = PublicationStatus.Published,
+            WizardEnabled = false,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        typeRepo.GetByCodePublishedAsync("BLINDAJE", Arg.Any<CancellationToken>()).Returns(pt);
+
+        var (result, error) = await new CreateProcedureInstanceHandler(repo, typeRepo).HandleAsync(
+            new CreateProcedureInstanceRequest(
+                Guid.NewGuid(), null, Guid.NewGuid(), null, null, ProcedureTypeCode: "BLINDAJE"),
+            ct);
+
+        error.Should().Be("procedure_type_not_enabled");
+        result.Should().BeNull();
+        await repo.DidNotReceive().AddWithUniqueReferenceAsync(
+            Arg.Any<ProcedureInstance>(), Arg.Any<CancellationToken>());
     }
 }

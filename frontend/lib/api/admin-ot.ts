@@ -1,7 +1,8 @@
 // Cliente tipado de la API admin OT (HU #10215–#10220).
-import { API_BASE_URL, apiFetch, getToken } from "./client";
+import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
 import { downloadFile } from "./download";
 import { ApiError } from "./types";
+import type { QueryField } from "./queries";
 import type {
   CreateOtWebhookRequest,
   CreateOtDocumentTagRequest,
@@ -11,6 +12,7 @@ import type {
   OtBandejaHealth,
   OtClientProcedure,
   OtClientProcedurePagedResult,
+  OtBandejaCounters,
   OtClientProceduresParams,
   OtDocumentPrecedenceListResult,
   OtDocumentTag,
@@ -84,11 +86,65 @@ export function fetchOtClientProcedures(
   signal?: AbortSignal,
   scope?: OtApiScope,
 ): Promise<OtClientProcedurePagedResult> {
+  // Las condiciones NO caben en una query string y este endpoint no las acepta: van por
+  // `searchOtClientProcedures`. Se descartan aquí explícitamente para que llamar al GET con ellas
+  // sea un filtro que no se aplica y no un 400 raro a mitad de pantalla.
+  const { condiciones, ...enQueryString } = params;
+  void condiciones;
+
   return apiFetch<OtClientProcedurePagedResult>(`${base}/client-procedures`, {
     query: {
-      ...params,
+      ...enQueryString,
       ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
     },
+    signal,
+  });
+}
+
+/**
+ * HU #12217 — por qué puede filtrar el organismo su bandeja. El panel de filtros se pinta a partir
+ * de esta respuesta, así que un campo nuevo aparece en pantalla sin desplegar frontend.
+ */
+export function fetchOtBandejaFilterFields(
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<QueryField[]> {
+  return apiFetch<QueryField[]>(`${base}/client-procedures/fields`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
+}
+
+/**
+ * HU #12217 — la MISMA bandeja que `fetchOtClientProcedures`, por POST y aceptando condiciones.
+ *
+ * <p>Es POST y no más parámetros del GET porque placa, VIN y radicado admiten pegar una lista
+ * completa desde Excel, y unos cientos de valores no caben en una query string. Lo usan la tabla y
+ * el recorrido del export, así que un filtro nuevo llega a los dos a la vez.</p>
+ */
+export function searchOtClientProcedures(
+  params: OtClientProceduresParams = {},
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtClientProcedurePagedResult> {
+  return apiFetch<OtClientProcedurePagedResult>(`${base}/client-procedures/search`, {
+    method: "POST",
+    body: params,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
+}
+
+/**
+ * Contadores de la cabecera (GET /client-procedures/counters). Van en su propia llamada y no en la
+ * respuesta del listado porque cuentan el UNIVERSO, mientras que el listado trae una página.
+ */
+export function fetchOtBandejaCounters(
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtBandejaCounters> {
+  return apiFetch<OtBandejaCounters>(`${base}/client-procedures/counters`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     signal,
   });
 }
@@ -146,6 +202,23 @@ export function rejectOtClientProcedure(
   });
 }
 
+/**
+ * HU #12166 (Feature #12156) — el OT revoca su propia aprobación (aprobado→revocado): libera la
+ * placa y habilita re-radicar con el mismo VIN/placa. Distinto de `revokeProcedurePlate`
+ * (`admin-plate-ranges.ts`, HU #10655), que revoca una PREASIGNACIÓN antes de aprobar.
+ */
+export function revokeOtClientProcedure(
+  id: string,
+  reason?: string,
+  scope?: OtApiScope,
+): Promise<OtClientProcedure> {
+  return apiFetch<OtClientProcedure>(`${base}/client-procedures/${id}/revoke`, {
+    method: "POST",
+    body: reason?.trim() ? { reason: reason.trim() } : undefined,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
+}
+
 /** Adjunto devuelto por los endpoints de expediente OT (shape del AttachmentDto de trámites). */
 export interface OtProcedureAttachment {
   id: string;
@@ -185,11 +258,27 @@ export function descargarOtConsolidado(
  * Adjunta la Licencia de Tránsito (LT) al trámite de un cliente OT (multipart —
  * `apiFetch` es JSON-only, así que se usa fetch directo con FormData).
  */
+/**
+ * Resultado de adjuntar la LT. HU #11996 — el backend verifica el documento por OCR y devuelve el
+ * análisis junto al adjunto. `ocr` viene null cuando no se pudo analizar (proveedor caído, sin key,
+ * archivo mayor de 10 MB): eso NO es un rechazo, es «no analizado», y el adjunto se creó igual.
+ */
+export interface AdjuntarLtResult {
+  attachment: OtProcedureAttachment;
+  ocr: { ok: boolean; tipo: string; data: Record<string, unknown> | null } | null;
+}
+
 export async function adjuntarOtLicenciaTransito(
   id: string,
   file: File,
   scope?: OtApiScope,
-): Promise<OtProcedureAttachment> {
+  /**
+   * HU #12042 — análisis que el frontend YA hizo al seleccionar el archivo, para enseñárselo al OT
+   * antes de que decida. Se manda para que el backend no lo repita: además de no pagar dos veces,
+   * garantiza que lo que queda registrado en el trámite sea exactamente lo que el usuario vio.
+   */
+  ocrData?: Record<string, unknown> | null,
+): Promise<AdjuntarLtResult> {
   const origin =
     API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(`${base}/client-procedures/${id}/attachments`, origin);
@@ -199,6 +288,7 @@ export async function adjuntarOtLicenciaTransito(
 
   const formData = new FormData();
   formData.append("file", file);
+  if (ocrData) formData.append("ocr", JSON.stringify(ocrData));
 
   const token = getToken();
   const response = await fetch(url.toString(), {
@@ -214,10 +304,11 @@ export async function adjuntarOtLicenciaTransito(
     } catch {
       /* error sin cuerpo JSON */
     }
-    throw new ApiError(response.status, `Error ${response.status} al adjuntar la LT`, detail);
+    // Mensaje desde el ProblemDetails del backend, nunca la ruta/status crudos (Bug #11626).
+    throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
   }
 
-  return (await response.json()) as OtProcedureAttachment;
+  return (await response.json()) as AdjuntarLtResult;
 }
 
 /** Lista documentos del expediente OT (HU #10704/#10705). Respuesta BE: data + flags consolidado. */
@@ -255,19 +346,28 @@ export function fetchOtAttachmentPreviewUrl(
 /**
  * Genera (o reutiliza) el expediente consolidado maestro de un trámite OT — botón único
  * (Feature #10701). El backend es idempotente por la marca `consolidado_maestro_vigente`: si el
- * consolidado está vigente lo devuelve sin regenerar (`regenerado: false`); si no (nunca generado o
- * invalidado por un cambio de estado / LT) lo reconstruye (`regenerado: true`).
+ * consolidado está vigente lo devuelve sin regenerar (`regenerado: false`); si no lo reconstruye
+ * (`regenerado: true`). La marca la baja cualquier cambio del expediente (adjuntar o borrar un
+ * documento, editar datos, decisión del OT, transición de estado…).
+ *
+ * `force` la ignora y reconstruye siempre: es la salida manual del organismo —el equivalente del
+ * `force` que el asistente ya usaba— para no depender de que el servidor haya invalidado bien.
  */
 export function generarOtConsolidadoMaestro(
   id: string,
   scope?: OtApiScope,
+  force = false,
 ): Promise<{
   document: { attachmentId: string; tipo: string; filename: string; sha256: string };
   regenerado: boolean;
 }> {
   return apiFetch(`${base}/client-procedures/${id}/consolidado-maestro`, {
     method: "POST",
-    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    query: {
+      ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
+      // Solo se manda cuando se fuerza: omitido es el camino normal (ver el comentario del endpoint).
+      ...(force ? { force: true } : {}),
+    },
   });
 }
 

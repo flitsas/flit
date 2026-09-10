@@ -1,28 +1,13 @@
 /**
- * Catálogos PLACEHOLDER de transformaciones de vehículo (A4/B4 · HU #10674 · ADR-0029).
+ * Catálogos de transformaciones de vehículo (A4/B4 · HU #10674 · ADR-0029).
  *
- * Deuda explícita: listas cerradas provisionales en código. Se sustituyen cuando negocio
- * entregue el catálogo real de colores y combustibles del RUNT. Los valores de combustible
- * se mantienen alineados con los checkboxes del FUR (FurFieldMapper.MarkCombustible) para
- * que la transformación declarada se marque correctamente en el formulario.
+ * Colores: catálogo persistido en `catalogs.vehicle_colors` vía
+ * `GET /api/v1/tramites/vehicle-colors` (VehicleColorSearchSelect). Ya no hay lista
+ * placeholder en el front.
+ *
+ * Combustible: lista cerrada alineada con los checkboxes del FUR
+ * (FurFieldMapper.MarkCombustible).
  */
-
-export const VEHICLE_COLOR_CATALOG: readonly string[] = [
-  'BLANCO',
-  'NEGRO',
-  'GRIS',
-  'PLATA',
-  'ROJO',
-  'AZUL',
-  'VERDE',
-  'AMARILLO',
-  'NARANJA',
-  'CAFÉ',
-  'BEIGE',
-  'DORADO',
-  'VINOTINTO',
-  'OTRO',
-];
 
 export const VEHICLE_FUEL_CATALOG: readonly string[] = [
   'GASOLINA',

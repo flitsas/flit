@@ -38,13 +38,31 @@ internal sealed class KyverumRuntApiClient(
     /// <c>{ placa, documento, tipoDocumento? }</c>.
     /// </summary>
     public async Task<KyverumRuntVehicleResponse> ConsultarVehiculoAsync(
+        KyverumRuntVehicleQuery query, CancellationToken ct = default) =>
+        (await ConsultarVehiculoConCrudoAsync(query, ct)).Response;
+
+    /// <summary>
+    /// Igual que <see cref="ConsultarVehiculoAsync"/>, pero devuelve además el JSON <b>tal como llegó</b>
+    /// (HU #11304, ADR-0041).
+    /// </summary>
+    /// <remarks>
+    /// Sin el crudo no hay forma de saber qué mandó realmente el proveedor: cuando el DTO omite un
+    /// campo, no queda ninguna evidencia de que venía en la respuesta. Eso convirtió un modelo
+    /// deducido de fixtures en profecía autocumplida, y es lo que dejó seis celdas del certificado sin
+    /// una sola fila en toda la base. Guardarlo permite corregir el mapeo y reprocesar sin volver a
+    /// pagar la consulta.
+    ///
+    /// <para>El crudo se sanitiza antes de persistirse (<c>RawPayloadSanitizer</c>) y <b>no</b> se
+    /// vuelca en trazas ni logs.</para>
+    /// </remarks>
+    public async Task<(KyverumRuntVehicleResponse Response, string Raw)> ConsultarVehiculoConCrudoAsync(
         KyverumRuntVehicleQuery query, CancellationToken ct = default)
     {
         object body = !string.IsNullOrWhiteSpace(query.Vin)
             ? new VehiculoByVinBody(query.Vin!)
             : new VehiculoByPlacaBody(query.Placa!, query.Documento!, query.TipoDocumento);
 
-        return await SendAsync<KyverumRuntVehicleResponse>(
+        return await SendWithRawAsync<KyverumRuntVehicleResponse>(
             "/v1/vehiculos:consultar", body, r => r.Ok, ct);
     }
 
@@ -67,6 +85,11 @@ internal sealed class KyverumRuntApiClient(
     /// <c>ok:false</c> como "no encontrado". Nunca filtra la API key.
     /// </summary>
     private async Task<T> SendAsync<T>(string path, object body, Func<T, bool> isOk, CancellationToken ct)
+        where T : class =>
+        (await SendWithRawAsync(path, body, isOk, ct)).Response;
+
+    private async Task<(T Response, string Raw)> SendWithRawAsync<T>(
+        string path, object body, Func<T, bool> isOk, CancellationToken ct)
         where T : class
     {
         try
@@ -84,7 +107,12 @@ internal sealed class KyverumRuntApiClient(
             if (!response.IsSuccessStatusCode)
                 throw await BuildErrorAsync(response, ct);
 
-            var payload = await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
+            // HU #11304 — se lee el cuerpo como texto y se deserializa desde ahí, en vez de
+            // ReadFromJsonAsync directo: es la única forma de conservar el JSON tal como llegó, con
+            // los campos que el DTO no declara incluidos. Sin eso no hay evidencia de qué manda el
+            // proveedor y un mapeo equivocado es irreparable.
+            var raw = await response.Content.ReadAsStringAsync(ct);
+            var payload = JsonSerializer.Deserialize<T>(raw, JsonOptions);
 
             // 200 OK con ok:false: el RUNT no tiene el dato (vehículo/persona no encontrado). No es un
             // error HTTP — se marca IsNotFound para que el provider lo mapee a un check de "no hallado"
@@ -98,7 +126,7 @@ internal sealed class KyverumRuntApiClient(
                 throw new KyverumRuntException(providerMessage, isTransient: false, isNotFound: true);
             }
 
-            return payload;
+            return (payload, raw);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

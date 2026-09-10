@@ -49,18 +49,40 @@ public sealed class GenerarFurHandler(
     ISolicitudVirtualGenerator? solicitudVirtualGenerator = null,
     IMandatoGenerator? mandatoGenerator = null,
     IMandateRequirementPolicy? mandatePolicy = null,
+    IMandatoFirmaPolicy? mandatoFirmaPolicy = null,
     IMandateSignerDirectory? mandateDirectory = null,
     ISoatRtmCertificateGenerator? soatRtmGenerator = null,
     GetSuggestedCommercialValueHandler? avaluoHandler = null,
     IFurTemplateResolver? templateResolver = null,
     IProcedureDeedResolver? deedResolver = null,
-    IRuesActorDataResolver? ruesResolver = null)
+    IRepresentanteLegalDirectory? representanteDirectory = null,
+    Certifications.ICertificationReader? certificationReader = null,
+    IPersonalizedDocumentResolver? personalizedDocumentResolver = null,
+    IMandateCustomTemplateBlobReader? mandateTemplateBlobReader = null,
+    ITransitOfficeResolver? transitOfficeResolver = null,
+    IIdentitySignatureCapture? identitySignatureCapture = null,
+    IIdentitySignatureExtractor? identitySignatureExtractor = null)
     : IExpedienteHotDocumentsRegenerator
 {
-    // HU #10990 (Feature #10972) — resuelve el RUES por NIT cuando field_values no lo tiene para ese
-    // actor. Default seguro (NUNCA resuelve) en tests que no lo ejercitan: sin él, el certificado se
-    // emite solo si el wizard dejó las rues_* del actor, que es el comportamiento previo.
-    private readonly IRuesActorDataResolver _ruesResolver = ruesResolver ?? NullRuesActorDataResolver.Instance;
+    // Bug #11613 — respaldo del gate de organismo: resuelve el OT habilitado por id para rellenar los
+    // field_values `transit_office_*` cuando el trámite solo trae la COLUMNA transit_office_id. Default
+    // inerte (NUNCA resuelve) en tests/DI que no lo ejercitan ⇒ el gate se comporta como antes.
+    private readonly ITransitOfficeResolver _transitOfficeResolver =
+        transitOfficeResolver ?? NullTransitOfficeResolver.Instance;
+
+    // HU #11198 (AC3) — respaldo del directorio para el nombre del representante cuando el trámite no lo
+    // trajo. Default inerte (nunca responde) en los tests que no lo ejercitan: sin él, el hueco queda
+    // como estaba, que es el comportamiento previo.
+    private readonly IRepresentanteLegalDirectory _representanteDirectory =
+        representanteDirectory ?? NullRepresentanteLegalDirectory.Instance;
+
+    // HU #11305 (Feature #11301, ADR-0041) — lector documental de certificaciones. Sustituye al
+    // IRuesActorDataResolver, que consultaba el RUES EN VIVO al generar el PDF: una llamada saliente,
+    // cobrada, en cada regeneración, que además dejaba el documento a merced de que el proveedor
+    // estuviera arriba. Ahora todo sale de base de datos y generar el expediente cuesta cero llamadas
+    // externas (D4). Default nulo en los tests que no lo ejercitan: se cae al respaldo sobre
+    // field_values, que es el comportamiento previo menos la consulta.
+    private readonly Certifications.ICertificationReader? _certificationReader = certificationReader;
 
     // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
     // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
@@ -77,9 +99,16 @@ public sealed class GenerarFurHandler(
     // institucional). Default seguro (NUNCA resuelve ⇒ plantilla genérica, solo PJ) si no se inyecta.
     private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
 
+    // Convenio compañía↔organismo y firma física del mandatario: deciden si el mandato lleva bloque de
+    // firma del mandatario. Default seguro ⇒ lo lleva (es un actor obligatorio).
+    private readonly IMandatoFirmaPolicy _mandatoFirmaPolicy = mandatoFirmaPolicy ?? NullMandatoFirmaPolicy.Instance;
+
     // ADR-0036 §D9 (HU #10916) — directorio de mandatarios: rellena el firmante del PDF del mandato desde
     // instance.MandateSignerId (resuelto al aprobar). Default seguro (NUNCA resuelve) si no se inyecta.
     private readonly IMandateSignerDirectory _mandateDirectory = mandateDirectory ?? NullMandateSignerDirectory.Instance;
+
+    private readonly IMandateCustomTemplateBlobReader _mandateTemplateBlob =
+        mandateTemplateBlobReader ?? NullMandateCustomTemplateBlobReader.Instance;
 
     // HU #10920 (Feature #10918) — resuelve la plantilla de FUR según la clasificación del vehículo. Si no
     // se inyecta (tests), la plantilla es AUTOMOTOR (comportamiento previo intacto).
@@ -88,6 +117,12 @@ public sealed class GenerarFurHandler(
     // HU #10926 (ADR-0033) — resolutor de escrituras vigentes de las compañías (NIT) de los actores,
     // para adjuntarlas al consolidado. Default nulo (no resuelve) en tests que no lo ejercitan.
     private readonly IProcedureDeedResolver _deedResolver = deedResolver ?? NullProcedureDeedResolver.Instance;
+
+    // HU #11316 (Feature #11309, ADR-0042) — ÚNICO puerto de sustitución por documento personalizado de
+    // compañía. Default seguro (NUNCA sustituye) en tests/DI que no lo ejercitan, mismo patrón que el
+    // resto de puertos opcionales del handler.
+    private readonly IPersonalizedDocumentResolver _personalizedDocumentResolver =
+        personalizedDocumentResolver ?? NullPersonalizedDocumentResolver.Instance;
 
     /// <summary>
     /// HU #10860 (cascada β) — regenera el FUR y sus documentos en caliente (con fecha vigente) para
@@ -108,16 +143,34 @@ public sealed class GenerarFurHandler(
         if (instance is null)
             return (null, "not_found");
 
-        // Migración V1→V2 — un trámite migrado es una FOTO de solo lectura: NO se regeneran sus
-        // documentos. La generación BORRA y re-inserta cada tipo (fur/compraventa/certificado), así que
-        // regenerar aquí destruiría los PDFs históricos migrados y los reemplazaría por mocks del sistema.
-        if (instance.IsMigrated)
+        // Migración V1→V2 — el "modo foto" solo aplica a los migrados en estado FINAL. La generación
+        // BORRA y re-inserta cada tipo (fur/compraventa/certificado), así que regenerar sobre un
+        // aprobado o anulado destruiría los PDF históricos de V1 y los reemplazaría por mocks del
+        // sistema.
+        //
+        // Un BORRADOR migrado sí debe poder generar: se trajo para seguir trabajándolo en V2, y sin FUR
+        // no puede avanzar al consolidado ni radicarse. Ver el guard equivalente en ConsolidadoCommand,
+        // que explica por qué no basta con el gate del gestor (HU #11051).
+        if (instance.IsMigrated && TramiteEstado.EsFinal(instance.Status))
             return (null, "migrado_solo_lectura");
 
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
-        var esTraspaso = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
+        var codigo = instance.TypeCode;
         // HU #10856 — matrícula inicial no tiene revisión técnico-mecánica: se oculta la tabla RTM.
         var esMatricula = string.Equals(codigo, TramiteTipologiaCatalog.CodigoMatriculaInicial, StringComparison.OrdinalIgnoreCase);
+
+        // ADR-0051 — perfil de capacidades declaradas del tipo: sustituye la igualdad exacta con
+        // TRASPASO_STANDARD (`esTraspaso`) en las seis dimensiones que antes se decidían por código
+        // (§Contexto de la ADR). Se resuelve UNA sola vez aquí, no en cada punto de uso.
+        var profile = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        var familyCode = instance.ProcedureType?.Family;
+
+        // ADR-0051 Decisión 2 — roles que firman el FUR (comprador/vendedor/locatario), traducidos del
+        // vocabulario de catálogo (OWNER/BUYER/LESSEE) con el MISMO helper que ya usa `biometricActors`
+        // en otros consumidores (RuntConsultaExigida.ActorTypeDeEntidad). Sustituye los `esTraspaso ?
+        // [comprador,vendedor] : [comprador]` de este archivo (sellos, exclusividad baúl/sello, firmas
+        // del baúl, respaldo del directorio de RL y certificados de identidad — "mismo patrón que los
+        // sellos").
+        var signatureRoles = PartesDeclaradas.Firma(profile);
 
         // HU #10463 — la validación de identidad ya NO bloquea la GENERACIÓN del FUR/consolidado.
         // Gating PER-PERSONA (HU #10350): se referencia la identidad vigente de la persona (documento del
@@ -125,14 +178,57 @@ public sealed class GenerarFurHandler(
         // certificado (no se declara "APROBADO" en falso). La RADICACIÓN sí sigue exigiendo identidad (#10459).
         var identidadAprobada = await IdentityApprovalResolver.ResolveApprovedPartiesAsync(
             repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy);
-        var identidadValidada = BiometriaGateOk(identidadAprobada, esTraspaso);
+        // ADR-0051 Decisión 3 — BiometriaGateOk pasa a leer `biometricActors` del perfil (traducido con
+        // el mismo helper), en vez de recalcular `esTraspaso`. Un perfil sin la llave (nunca ocurre en
+        // el catálogo sembrado — ver ProcedureTypeValidator, que la exige cuando RequiresBiometrics es
+        // true) cae al comportamiento previo: comprador+vendedor si el tipo exige vendedor, solo
+        // comprador si no.
+        var biometricRoles = PartesDeclaradas.Identidad(profile);
+        var identidadValidada = BiometriaGateOk(identidadAprobada, biometricRoles);
 
-        var fv = instance.FieldValues
-            .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
+        // Dedup defensivo: `field_values` NO tiene índice único sobre (procedure_instance_id,
+        // field_key), así que un trámite con dos filas de la misma clave —escritas por dos caminos
+        // concurrentes en el pasado— hacía que ToDictionary lanzara ArgumentException y dejaba el
+        // trámite SIN poder generar documentos nunca más. Con el agrupado, gana la fila con valor no
+        // vacío más reciente y la generación sigue.
+        var fv = ProcedureFieldValues.ToDictionary(instance);
+        // Misma idea que el organismo: si la placa vive en la columna denormalizada (o en `placa`)
+        // y no en `plate`, los documentos la pintan. Si no hay ninguna, las casillas salen vacías
+        // (matrícula antes de preasignar); no se escribe "___".
+        ProcedureFieldValues.EnsurePlaca(fv, instance);
 
         // Gating organismo de tránsito: requiere transit_office_code no vacío en field_values.
-        if (string.IsNullOrWhiteSpace(Get(fv, "transit_office_code")))
+        //
+        // Bug #11613 — antes de rechazar, se rellena desde la COLUMNA instance.TransitOfficeId. Hay
+        // trámites con organismo real y sin field_values del organismo: CreateProcedureInstanceCommand
+        // escribe la columna a partir del request (es el camino de los borradores originados en ICT,
+        // que resuelven el OT por nombre) y NO escribe ninguna clave `transit_office_*`; y
+        // TramiteLifecycleService solo promueve field_values → columna al radicar, nunca al revés. En
+        // matrícula inicial el SubmitGate tampoco exige organismo, así que ese trámite se radica, llega
+        // a la bandeja del OT y al asignarle placa o aprobarlo la regeneración moría con
+        // `organismo_requerido` pese a tener organismo.
+        //
+        // El relleno es SOLO EN MEMORIA (alimenta `fv`, el diccionario que arma los documentos) y NO
+        // escribe `field_values`. La versión persistente reventaba en Postgres: el trigger
+        // `tramites.trg_field_value_immutable` (BEFORE INSERT OR UPDATE OR DELETE) solo admite escrituras
+        // en borrador, en rechazado con subsanación activa o sobre un puñado de claves del flujo de placa
+        // — y este camino corre SIEMPRE sobre trámites ya radicados. El INSERT abortaba la transacción y
+        // se perdía también el documento recién generado. Además, sin índice único sobre
+        // (procedure_instance_id, field_key), dos generaciones concurrentes podían dejar dos filas de la
+        // misma clave y romper para siempre el armado del diccionario. No persistir elimina las dos cosas.
+        if (string.IsNullOrWhiteSpace(Get(fv, "transit_office_code"))
+            && !await RellenarOrganismoEnMemoriaAsync(instance, tenantId, fv, ct))
+        {
             return (null, "organismo_requerido");
+        }
+
+        // HU #11305 (Feature #11301, ADR-0041) — TODO lo certificado del expediente se resuelve aquí,
+        // de una vez y CONTRA BASE DE DATOS. A partir de este punto generar el expediente no hace ni
+        // una llamada saliente: la consulta en vivo al RUES que corría por cada regeneración —cobrada,
+        // y capaz de dejar sin certificado un documento si el proveedor estaba caído— desaparece.
+        var certs = _certificationReader is null
+            ? Certifications.CertificationView.Empty
+            : await _certificationReader.ForDocumentsAsync(instance.Id, tenantId, fv, ct);
 
         // HU #10488 — sello de identidad (texto) por parte para el espacio de firma del FUR. Solo cuando la
         // identidad está validada (si no, el mapper pinta "NO FIRMADO"). Se resuelve la validación aprobada+
@@ -140,36 +236,114 @@ public sealed class GenerarFurHandler(
         var sellosIdentidad = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (identidadValidada)
         {
-            var roles = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
-            foreach (var role in roles)
+            // ADR-0051 Decisión 2 — quién lleva sello de identidad en su espacio de firma lo dice
+            // `signatureActors`, no `esTraspaso`.
+            foreach (var slot in SignatureSlots(instance, signatureRoles))
             {
-                var val = await ResolveApprovedValidationAsync(instance, role, DateTimeOffset.UtcNow, ct);
+                var val = await ResolveApprovedValidationAsync(instance, slot.Actor, slot.Role, DateTimeOffset.UtcNow, ct);
                 if (val is not null)
-                    sellosIdentidad[role] = BuildIdentidadSello(val);
+                    sellosIdentidad[slot.Key] = BuildIdentidadSello(val);
             }
         }
 
-        // HU #10601 — prenda vigente: marca el gravamen en el FUR cuando la decisión implica prenda
-        // (solicitar/registrar). sin_prenda/omitir/levantar no marcan gravamen.
-        var prendaVigente = await prendaRepo.GetVigenteAsync(id, tenantId, ct);
-        var tienePrenda = prendaVigente is not null && PrendaDecision.ImplicaGravamen(prendaVigente.Decision);
-        var acreedorPrenda = tienePrenda ? prendaVigente!.AcreedorNombre : null;
-        // HU #10989 — el documento del acreedor acompaña al nombre en el bloque de observaciones.
-        // Se lee solo cuando la decisión implica gravamen: una decisión previa 'registrar' que se
-        // reemplazó por 'levantar' no debe arrastrar su acreedor al FUR.
-        var acreedorPrendaDocumento = tienePrenda ? prendaVigente!.AcreedorDocumento : null;
+        // HU #10601, ampliado por HU #11257 (Feature #11254) y por ADR-0055 (HU #12129) — TODAS las
+        // decisiones vigentes de la instancia (hasta dos desde HU #12128, una por AccionFamilia):
+        // PrendaDecision.ToFurMarking(IEnumerable<string?>) resuelve YA en el dominio qué casillas
+        // marca el FUR — Constitucion → 11, Levantamiento → 12, Ambos → 11 y 12 (antes de esta HU no
+        // había productor de Ambos: la sobrecarga de una sola decisión no podía representarlo porque
+        // el modelo solo admitía una fila vigente por instancia).
+        // Defensivo: dobles de prueba sin configurar GetVigentesAsync no deben tumbar la generación
+        // del FUR con NRE — se tratan como "sin prenda vigente" (comportamiento previo intacto).
+        var prendasVigentes = await prendaRepo.GetVigentesAsync(id, tenantId, ct) ?? [];
+        var prendaMarking = PrendaDecision.ToFurMarking(prendasVigentes.Select(p => p.Decision));
+        var prendaConstitucion = prendasVigentes.FirstOrDefault(
+            p => PrendaDecision.ToFurMarking(p.Decision) == FurPrendaMarking.Constitucion);
+        var prendaLevantamiento = prendasVigentes.FirstOrDefault(
+            p => PrendaDecision.ToFurMarking(p.Decision) == FurPrendaMarking.Levantamiento);
+
+        // HU #10989, CF11 (HU #11257) — el documento del acreedor acompaña al nombre en el bloque de
+        // observaciones, tanto en constitución como en levantamiento. Se lee solo cuando la marca no es
+        // Ninguna: una fila previa 'registrar' que se reemplazó por 'levantar' no arrastra su acreedor
+        // al FUR porque siempre se lee de las filas VIGENTES, nunca de historia.
+        //
+        // Caso histórico (0 o 1 vigente, Matrícula/Traspaso incluidos): compat total con el
+        // comportamiento previo a ADR-0055 — un único hecho, así que "el" acreedor es el de esa única
+        // fila (constitución si es esa la que hay, si no, levantamiento).
+        var acreedorPrenda = prendaMarking != FurPrendaMarking.Ninguna
+            ? (prendaConstitucion ?? prendaLevantamiento)?.AcreedorNombre
+            : null;
+        var acreedorPrendaDocumento = prendaMarking != FurPrendaMarking.Ninguna
+            ? (prendaConstitucion ?? prendaLevantamiento)?.AcreedorDocumento
+            : null;
+        // Entidad ante la que se levantó el gravamen: la declara el párrafo 23 en el trámite de
+        // levantamiento de prenda. Vacía en traspaso y matrícula, donde el literal no cambia. Se lee
+        // SIEMPRE de la fila de levantamiento (nunca de la de constitución), también cuando Ambos.
+        var entidadLevantamiento = prendaLevantamiento?.LevantamientoEntidad;
+        // ADR-0055 — caso dual (Ambos): cada familia trae su PROPIO acreedor, sin mezclarlos con el de
+        // la otra (Security: no filtrar el documento de un acreedor en el bloque de la otra familia).
+        // Nulos fuera de Ambos: el bloque de observaciones usa acreedorPrenda/acreedorPrendaDocumento.
+        var acreedorLevantamientoNombreDual = prendaMarking == FurPrendaMarking.Ambos
+            ? prendaLevantamiento?.AcreedorNombre : null;
+        var acreedorLevantamientoDocumentoDual = prendaMarking == FurPrendaMarking.Ambos
+            ? prendaLevantamiento?.AcreedorDocumento : null;
 
         // HU #10645 (ADR-0025 §4) — imagen REAL de la firma del baúl por parte NIT cubierta: se descarga el
         // artefacto (best-effort) y se alimenta FurDocumentData.FirmaImagenes; el mapper la estampa en el
         // espacio de firma en vez del sello de texto. Si la descarga falla, NO rompe el FUR (cae al sello).
-        var (firmaImagenes, firmaBaulMetadatos) = await ResolveVaultSignaturesAsync(instance, esTraspaso, ct);
+        var (firmaImagenes, firmaBaulMetadatos) = await ResolveVaultSignaturesAsync(instance, signatureRoles, ct);
 
-        // HU #10920 — plantilla de FUR según la clasificación del vehículo (vehicle_class). Sin resolver → AUTOMOTOR.
-        var templateFormat = _templateResolver is not null
-            ? await _templateResolver.ResolveAsync(Get(fv, "vehicle_class"), ct)
-            : FurTemplateFormat.Automotor;
+        // Bug #11146 — UNA parte firma de UNA sola manera. Quien firma por el baúl no lleva sello de
+        // validación de identidad en ningún documento, aunque su identidad esté vigente; quien firma con
+        // la validación de identidad no lleva imagen del baúl. Los dos juntos dejaban el documento como
+        // si la parte hubiera firmado dos veces por vías distintas.
+        //
+        // Va aquí, en el único punto donde se ensamblan los datos de TODOS los documentos, y no en cada
+        // generador: la compraventa pintaba ambos y el mandato y la solicitud virtual resolvían la
+        // exclusividad cada uno por su cuenta.
+        //
+        // Hay DOS motivos distintos para retirar el sello, y confundirlos borra firmas legítimas:
+        //
+        //  · <b>Elección explícita del baúl.</b> Se retira SIEMPRE, resuelva o no la imagen: si el baúl
+        //    es el elegido y su descarga falla, la firma queda en blanco —visible— en vez de rellenarse
+        //    a escondidas con un sello que el negocio no eligió.
+        //
+        //  · <b>Sin elección</b> (el caso normal): manda la precedencia del baúl (HU #11031), pero solo
+        //    si REALMENTE hay firma. Sin ella se cae al sello de identidad, que es el comportamiento de
+        //    siempre. Retirarlo aquí por el mero hecho de ser persona jurídica dejaba sin firma a
+        //    comprador y vendedor con identidad validada y sin baúl.
+        foreach (var slot in SignatureSlots(instance, signatureRoles))
+        {
+            var eligioBaul = FirmaBaulCobertura.EligioBaulExplicitamente(slot.Actor);
+            var tieneFirmaDelBaul = firmaImagenes?.ContainsKey(slot.Key) == true;
+            if (eligioBaul || tieneFirmaDelBaul)
+                sellosIdentidad.Remove(slot.Key);
+        }
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, acreedorPrendaDocumento, firmaImagenes, firmaBaulMetadatos, templateFormat);
+        // La rúbrica hay que extraerla ANTES de GenerateFur: el certificado Kyverum se adjuntaba
+        // después y esta generación salía siempre con sello de texto (el PNG quedaba para la siguiente).
+        if (identidadValidada && identitySignatureCapture is not null)
+        {
+            foreach (var slot in SignatureSlots(instance, signatureRoles))
+            {
+                if (!sellosIdentidad.ContainsKey(slot.Key))
+                    continue;
+                await TryCaptureIdentitySignatureAsync(instance, slot.Role, slot.Actor, ct);
+            }
+        }
+
+        var firmaIdentidadImagenes = await ResolveIdentitySignatureImagesAsync(instance, signatureRoles, sellosIdentidad, ct);
+
+        // HU #10920 — plantilla + casilla numeral 4 según vehicle_class. Sin resolver → AUTOMOTOR, sin X.
+        var classification = _templateResolver is not null
+            ? await _templateResolver.ResolveMatchAsync(Get(fv, "vehicle_class"), ct)
+            : new FurClassificationMatch(FurTemplateFormat.Automotor, null);
+
+        // HU #11198 (AC3) — el nombre del representante lo manda el trámite; solo si no lo trajo se pide
+        // al directorio de la compañía. Se resuelve ANTES de ensamblar para que AssembleData siga siendo
+        // una función pura y síncrona.
+        var nombresRlDirectorio = await ResolverNombresDelDirectorioAsync(instance, signatureRoles, ct);
+
+        var data = AssembleData(instance, codigo, profile, signatureRoles, fv, identidadValidada, sellosIdentidad, prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento, acreedorLevantamientoNombreDual, acreedorLevantamientoDocumentoDual, firmaImagenes, firmaBaulMetadatos, classification.Format, nombresRlDirectorio, classification.FieldToFill, firmaIdentidadImagenes);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -179,7 +353,11 @@ public sealed class GenerarFurHandler(
         // oficial y los sellos de identidad. La del usuario NO se pierde ni se sobrescribe — el borrado
         // idempotente de abajo solo alcanza Source="system", así que ambas coexisten en el expediente.
         var generated = new List<GeneratedDocument> { generator.GenerateFur(data) };
-        if (esTraspaso)
+        // ADR-0051 Decisión 4 — la compraventa del sistema se autogenera según lo que declare el tipo
+        // (ADR-0035, matizada): `esTraspaso` exigía igualdad exacta con TRASPASO_STANDARD.
+        // TRASPASO_UNILATERAL declara `generatesSaleDocument:false` explícito (no hay compraventa entre
+        // dos partes: el locatario ya tenía el vehículo por contrato de leasing).
+        if (profile.GeneratesSaleDocumentAllowed(familyCode))
             generated.Add(generator.GenerateCompraventa(data));
 
         // ADR-0036 (HU #10914) — Solicitud de trámite virtual: SIEMPRE (persona natural y jurídica).
@@ -187,49 +365,84 @@ public sealed class GenerarFurHandler(
         if (_solicitudVirtualGenerator is not null)
             generated.Add(_solicitudVirtualGenerator.GenerateSolicitudVirtual(data));
 
-        // ADR-0036 (HU #10915) — Contrato de mandato: CONDICIONAL (persona jurídica siempre; persona
-        // natural solo si el OT lo exige). El firmante (mandatario) aún NO se resuelve en preparado: se
-        // regenera al aprobar con el firmante elegido/filtrado (HU #10916). Generar-o-limpiar: si el
-        // trámite dejó de exigir mandato en una regeneración, se retira el adjunto 'mandato' previo.
-        var mandato = await TryGenerateMandatoAsync(data, Get(fv, "transit_office_code"), instance.MandateSignerId, ct);
+        // ADR-0036 (HU #10915) — Contrato de mandato. El firmante se resuelve YA en borrador (HU-L8/L9):
+        // default OT, default compañía o elección del wizard. Sin esos, el recuadro sale «Sin firmar».
+        var mandato = await TryGenerateMandatoAsync(
+            instance,
+            data,
+            Get(fv, TransitOfficeFieldKeys.Code),
+            Get(fv, TransitOfficeFieldKeys.Name),
+            Get(fv, TransitOfficeFieldKeys.CityName) ?? Get(fv, TransitOfficeFieldKeys.City),
+            TransformacionesActivas(fv, data),
+            ct);
         if (mandato is not null)
         {
             generated.Add(mandato);
         }
         else
         {
+            // DT-3 (HU #11316) — guarda compartida: solo se retira el 'mandato' GENERADO POR EL
+            // SISTEMA. Antes esta rama borraba por Tipo sin mirar el origen y destruía también el
+            // documento personalizado de la compañía (Source='company', HU #11313) y su archivo. El
+            // mandato personalizado sobrevive a esta limpieza; volver a aplicarse cuando el trámite
+            // vuelva a exigir mandato es el bucle de persistencia de más abajo.
+            AttachmentCleanup.RetirarGenerados(instance, repo, storage,
+                a => string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (identidadValidada)
+        {
+            // Certificado de identidad: PDF REAL de Kyverum (best-effort) POR ACTOR (ADR-0053).
+            // Traspaso: cada comprador y cada vendedor; matrícula: cada comprador. Un solo actor por
+            // lado conserva los tipos históricos (certificado_identidad / _vendedor). Si falla la
+            // descarga de un actor, warning + omitir ese actor (sin mock).
+            // ADR-0051 — mismo conjunto de roles que los sellos de identidad.
+            // Retira TODOS los certificados previos del sistema antes de reemitir: si el reparto baja
+            // de 3 a 1, los sufijos _2/_3 no deben quedar huérfanos en el expediente/consolidado.
             foreach (var prev in instance.Attachments
-                         .Where(a => string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase))
+                         .Where(a => IdentityCertificateAttachmentTipo.IsIdentityCertificate(a.Tipo)
+                                     && (string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
+                                         || string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase)))
                          .ToList())
             {
                 storage.Delete(prev.StoragePath);
                 instance.Attachments.Remove(prev);
                 repo.RemoveAttachment(prev);
             }
-        }
 
-        if (identidadValidada)
-        {
-            // Certificado de identidad: PDF REAL de Kyverum (best-effort) POR PARTE. Traspaso emite el del
-            // comprador y el del vendedor; matrícula solo el del comprador (mismo patrón que los sellos).
-            // Si falla la descarga de una parte, warning + omitir esa parte (sin mock).
-            var rolesCert = esTraspaso
-                ? new[] { BiometricRules.ParteComprador, BiometricRules.ParteVendedor }
-                : new[] { BiometricRules.ParteComprador };
-            foreach (var role in rolesCert)
+            foreach (var role in signatureRoles)
             {
-                var certificado = await TryDownloadIdentityCertificateAsync(instance, role, ct);
-                if (certificado is not null)
-                    generated.Add(certificado);
+                var actors = instance.Actors
+                    .Where(a => string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(a => a.Ordinal)
+                    .ToList();
+
+                if (actors.Count == 0)
+                {
+                    // Legacy / sin actores cargados: un certificado por rol (ordinal 1).
+                    var unico = await TryDownloadIdentityCertificateAsync(instance, role, ordinal: 1, actor: null, ct);
+                    if (unico is not null)
+                        generated.Add(unico);
+                    continue;
+                }
+
+                foreach (var actor in actors)
+                {
+                    var ordinal = actor.Ordinal > 0 ? actor.Ordinal : 1;
+                    var certificado = await TryDownloadIdentityCertificateAsync(
+                        instance, role, ordinal, actor, ct);
+                    if (certificado is not null)
+                        generated.Add(certificado);
+                }
             }
         }
         else
         {
             // Sin validación de identidad, retirar cualquier certificado previo (regeneración): el
             // consolidado no debe incluir un certificado de identidad obsoleto (#10463 AC5). StartsWith
-            // cubre ambas variantes por parte (certificado_identidad y certificado_identidad_vendedor).
+            // cubre base + sufijos de ordinal (certificado_identidad, _vendedor, _2, _vendedor_2, …).
             foreach (var prev in instance.Attachments
-                         .Where(a => a.Tipo.StartsWith("certificado_identidad", StringComparison.OrdinalIgnoreCase))
+                         .Where(a => IdentityCertificateAttachmentTipo.IsIdentityCertificate(a.Tipo))
                          .ToList())
             {
                 storage.Delete(prev.StoragePath);
@@ -242,8 +455,8 @@ public sealed class GenerarFurHandler(
         // se fusione en el consolidado. Independiente de la biométrica (una persona jurídica no valida
         // identidad biométrica).
         // HU #10990 — deja de emitirse UNO por trámite desde las rues_* de instancia: se resuelve POR
-        // ACTOR (ver TryGenerateRuesCertificatesAsync). Los tipos que ya no aplican se retiran abajo.
-        var certificadosRues = await TryGenerateRuesCertificatesAsync(instance, fv, ct);
+        // ACTOR (ver TryGenerateRuesCertificates). Los tipos que ya no aplican se retiran abajo.
+        var certificadosRues = TryGenerateRuesCertificates(instance, certs);
         generated.AddRange(certificadosRues);
 
         var tiposRues = certificadosRues
@@ -290,40 +503,54 @@ public sealed class GenerarFurHandler(
         // Source=system (tipo certificado_soat_rtm). Valores ausentes en la consulta → EN BLANCO.
         if (soatRtmGenerator is not null)
         {
-            var soatVenc = Get(fv, "soat_vencimiento");
-            var rtmVenc = Get(fv, "rtm_vencimiento");
-            AvaluoInfo? avaluo = esTraspaso ? await BuildAvaluoAsync(instance.Id, tenantId, ct) : null;
+            // ADR-0051 Decisión 4 — el bloque de avalúo se imprime según `hasAppraisalBlock`, no según
+            // `esTraspaso`. TRASPASO_UNILATERAL lo declara `false` explícito (no hay avalúo entre dos
+            // partes: el locatario ya tenía el vehículo).
+            AvaluoInfo? avaluo = profile.HasAppraisalBlockAllowed(familyCode)
+                ? await BuildAvaluoAsync(instance.Id, tenantId, ct)
+                : null;
 
-            if (!string.IsNullOrWhiteSpace(soatVenc) || !string.IsNullOrWhiteSpace(rtmVenc) || avaluo is not null)
+            // D8 — se emite si hay AL MENOS UNA celda de SOAT o RTM con dato. El avalúo solo no basta:
+            // ese bloque ya va en el FUR, y un certificado con las doce casillas en blanco no
+            // certifica nada. Antes bastaba con tener una fecha de vencimiento.
+            if (certs.HasSoatOrRtmData)
             {
+                // HU #11136 — la RTM aplica solo en traspaso Y solo si el vehículo lleva matriculado
+                // más que el periodo de gracia. Antes se pintaba en todo traspaso sin mirar antigüedad.
+                // ADR-0051 — el negocio no distinguió avalúo y RTM en la especificación validada, así
+                // que la RTM se conserva ACOPLADA a `hasAppraisalBlock` hasta que haya un requerimiento
+                // que los separe (decisión documentada aquí, no en el ADR).
+                var aplicaRtm = profile.HasAppraisalBlockAllowed(familyCode)
+                    && Domain.Certifications.RtmSelection.Applies(certs.Vehicle, HoyEnColombia())
+                    && certs.Rtm is not null;
+
                 var soatRtmData = new SoatRtmCertificateData(
                     instance.Id,
                     instance.ReferenceNumber,
                     Get(fv, "plate"),
                     Get(fv, "runt_consulta_fecha"),
-                    new SoatRtmBlock(
-                        Poliza: Get(fv, "soat_poliza"),
-                        FechaVigencia: Get(fv, "soat_vigencia"),
-                        FechaVencimiento: soatVenc,
-                        FechaExpedicion: Get(fv, "soat_expedicion"),
-                        Entidad: Get(fv, "soat_aseguradora"),
-                        Estado: EstadoSoatDisplay(Get(fv, SoatGate.FieldKey))),
-                    // HU #11136 — la RTM aplica solo en traspaso Y solo si el vehículo tiene más de 5
-                    // años de matriculado. Antes se pintaba en todo traspaso sin mirar la antigüedad.
-                    !RtmCertificado.Aplica(
-                        esTraspaso: !esMatricula,
-                        fechaMatricula: Get(fv, RtmCertificado.FieldKeyFechaMatricula),
-                        hoy: DateTimeOffset.UtcNow)
-                        ? null
-                        : new SoatRtmBlock(
-                            Poliza: Get(fv, "rtm_numero"),
-                            FechaVigencia: Get(fv, "rtm_vigencia"),
-                            FechaVencimiento: rtmVenc,
-                            FechaExpedicion: Get(fv, "rtm_expedicion"),
-                            Entidad: Get(fv, "rtm_entidad"),
-                            Estado: Get(fv, "rtm_estado")),
-                    avaluo);
+                    Bloque(certs.Soat, EstadoSoatDisplay(Get(fv, SoatGate.FieldKey))),
+                    aplicaRtm ? Bloque(certs.Rtm, null) : null,
+                    avaluo,
+                    FuenteSoat: Fuente(certs.SoatFrom),
+                    FuenteRtm: aplicaRtm ? Fuente(certs.RtmFrom) : null);
                 generated.Add(soatRtmGenerator.GenerateSoatRtmCertificate(soatRtmData));
+            }
+            else
+            {
+                // HU #11307 — limpieza del huérfano. Este documento era el ÚNICO de los seis
+                // generados que no la tenía: si una regeneración dejaba de cumplir la condición de
+                // emisión (p. ej. el trámite cambió de tipología, o el dato de SOAT/RTM desapareció),
+                // el certificado anterior se quedaba adjunto y el consolidado seguía arrastrando una
+                // vigencia que ya nadie estaba afirmando.
+                foreach (var prev in instance.Attachments
+                             .Where(a => string.Equals(a.Tipo, "certificado_soat_rtm", StringComparison.OrdinalIgnoreCase))
+                             .ToList())
+                {
+                    storage.Delete(prev.StoragePath);
+                    instance.Attachments.Remove(prev);
+                    repo.RemoveAttachment(prev);
+                }
             }
         }
 
@@ -369,6 +596,54 @@ public sealed class GenerarFurHandler(
             }
         }
 
+        // HU #11316 (Feature #11309, ADR-0042) — ÚNICO punto de sustitución por documento personalizado
+        // de compañía (DT-1b). `generated` ya está COMPLETA: la aplicabilidad de cada documento la
+        // decidió la lógica de arriba (si el mandato no aplica, ya salió por la rama `else` de arriba y
+        // no hay nada que sustituir — restricción 6). Se resuelve una sola vez, contra los tipos
+        // realmente presentes; en producción la lista de tipos habilitados está VACÍA hasta las HUs
+        // #11317/#11318 (ver PersonalizedDocumentResolver), así que hoy esto nunca sustituye nada.
+        var personalizedByTipo = new Dictionary<string, ResolvedPersonalizedDocument>(StringComparer.OrdinalIgnoreCase);
+        var personalizedResolution = await _personalizedDocumentResolver.ResolveAsync(
+            tenantId, generated.Select(d => d.Tipo), ct);
+        foreach (var resolved in personalizedResolution.Resolved)
+        {
+            personalizedByTipo[resolved.Tipo] = resolved;
+        }
+        for (var i = 0; i < generated.Count; i++)
+        {
+            if (!personalizedByTipo.TryGetValue(generated[i].Tipo, out var resolved))
+                continue;
+
+            // Conserva el Tipo: el pie de página (DocumentLabels.Display), la matriz documental y el
+            // orden del expediente se heredan gratis (DT-2/CF-03). El PDF entra COMPLETO al compositor
+            // (DT-5) — sin inyectar ningún dato del trámite ni ninguna firma dentro del contenido.
+            generated[i] = new GeneratedDocument(resolved.Tipo, resolved.Filename, "application/pdf", resolved.Content);
+        }
+
+        // DT-6 — aislamiento del fallo: el personalizado no se pudo leer/abrir. `generated` ya conserva
+        // el documento del SISTEMA para ese tipo (nunca se tocó arriba); solo queda registrar el hecho,
+        // sin datos personales.
+        foreach (var unavailable in personalizedResolution.Unavailable)
+        {
+            var eventoNoDisponible = new ProcedureInstanceEvent
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = id,
+                Tipo = "documento_personalizado_no_disponible",
+                Payload = JsonSerializer.Serialize(new
+                {
+                    tipo = unavailable.Tipo,
+                    company_personalized_document_id = unavailable.PersonalizedDocumentId,
+                    tenant_id = tenantId,
+                    motivo = unavailable.Motivo,
+                }),
+                CreatedAt = now,
+            };
+            instance.Events.Add(eventoNoDisponible);
+            repo.Add(eventoNoDisponible);
+        }
+
         // (Re)generar el FUR SIEMPRE reemplaza el adjunto 'fur' (y, en traspaso, la compraventa) y puede
         // cambiar certificados/escrituras del expediente. Como el consolidado maestro (#10701) cachea su
         // copia con este flag (se pone true al generarlo en ConsolidadoMaestroCommand), hay que invalidarlo
@@ -379,12 +654,15 @@ public sealed class GenerarFurHandler(
 
         foreach (var doc in generated)
         {
-            // Idempotencia: re-generar reemplaza el adjunto previo del mismo tipo GENERADO por el sistema.
-            // Nunca se sobrescribe un documento cargado por el usuario (Source="user"), p. ej. una
-            // compraventa autenticada (HU #10859, ADR-0031 — corrige el clobber).
+            // Idempotencia: re-generar reemplaza el adjunto previo del mismo tipo GENERADO por el sistema
+            // o SUSTITUIDO por la compañía (HU #11316 amplía a 'company': sin esto, una fila 'company'
+            // previa sobreviviría junto a la nueva y quedarían DOS filas del mismo Tipo — la carrera de
+            // DT-4/CF-09). Nunca se sobrescribe un documento cargado por el usuario (Source="user"), p.
+            // ej. una compraventa autenticada (HU #10859, ADR-0031 — corrige el clobber).
             foreach (var prev in instance.Attachments.Where(a =>
                          string.Equals(a.Tipo, doc.Tipo, StringComparison.OrdinalIgnoreCase)
-                         && string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)).ToList())
+                         && (string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase))).ToList())
             {
                 storage.Delete(prev.StoragePath);
                 instance.Attachments.Remove(prev);
@@ -392,6 +670,7 @@ public sealed class GenerarFurHandler(
             }
 
             var stored = await storage.SaveAsync(id, doc.Tipo, doc.Filename, new MemoryStream(doc.Content), ct);
+            var esPersonalizado = personalizedByTipo.TryGetValue(doc.Tipo, out var personalizado);
             var attachment = new ProcedureInstanceAttachment
             {
                 Id = Guid.NewGuid(),
@@ -403,15 +682,41 @@ public sealed class GenerarFurHandler(
                 SizeBytes = stored.SizeBytes,
                 Sha256 = stored.Sha256,
                 StoragePath = stored.StoragePath,
-                Source = "system",
+                // DT-2 (HU #11316) — el adjunto sustituido por la compañía se distingue con Source
+                // "company" (barato de leer en cada guarda futura); el resto conserva "system".
+                Source = esPersonalizado ? "company" : "system",
                 UploadedAt = now,
                 // HU #10936 — traza la escritura usada en las escrituras de sistema; null en el resto.
                 SourceDeedId = deedIdPorTipo.TryGetValue(doc.Tipo, out var deedId) ? deedId : null,
+                // HU #11316 — traza la versión personalizada usada; null en cualquier otro adjunto.
+                SourcePersonalizedDocumentId = esPersonalizado ? personalizado!.PersonalizedDocumentId : null,
             };
             instance.Attachments.Add(attachment);
             repo.Add(attachment);
 
             docs.Add(new FurDocumentDto(attachment.Id, doc.Tipo, doc.Filename, stored.Sha256));
+
+            if (esPersonalizado)
+            {
+                var eventoEmitido = new ProcedureInstanceEvent
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ProcedureInstanceId = id,
+                    Tipo = "documento_personalizado_emitido",
+                    Payload = JsonSerializer.Serialize(new
+                    {
+                        tipo = doc.Tipo,
+                        company_personalized_document_id = personalizado!.PersonalizedDocumentId,
+                        version = personalizado.Version,
+                        sha256 = stored.Sha256,
+                        paginas = personalizado.PageCount,
+                    }),
+                    CreatedAt = now,
+                };
+                instance.Events.Add(eventoEmitido);
+                repo.Add(eventoEmitido);
+            }
         }
 
         // Bitácora: evento append-only de generación del FUR.
@@ -448,23 +753,57 @@ public sealed class GenerarFurHandler(
     /// identidad vigente aprobada; matrícula requiere el comprador. Se referencia la validación vigente de
     /// la persona (HU #10350), no una fila propia del trámite; el set lo resuelve el handler con el repo.
     /// </summary>
-    private static bool BiometriaGateOk(IReadOnlySet<string> identidadAprobadaPartes, bool esTraspaso) =>
-        esTraspaso
-            ? identidadAprobadaPartes.Contains("comprador") && identidadAprobadaPartes.Contains("vendedor")
-            : identidadAprobadaPartes.Contains("comprador");
+    /// <summary>
+    /// ADR-0051 Decisión 3 — comprueba TODOS los roles de <c>biometricActors</c> (ya traducidos a
+    /// actor_type) en vez del ternario <c>esTraspaso</c>. Mismo resultado que antes para los tipos ya
+    /// sembrados (comprador+vendedor en TRASPASO_STANDARD, solo comprador en matrícula);
+    /// TRASPASO_UNILATERAL pasa a exigir solo vendedor.
+    /// </summary>
+    private static bool BiometriaGateOk(
+        IReadOnlySet<string> identidadAprobadaPartes, string[] biometricRoles) =>
+        biometricRoles.Length == 0 || biometricRoles.All(identidadAprobadaPartes.Contains);
+
+    /// <summary>
+    /// HU #11641 — ¿el trámite incluye esta transformación? La bandera <c>cambio_*</c> es la
+    /// declaración explícita del gestor; el diff snapshot-RUNT vs efectivo la deduce cuando la
+    /// bandera no viaja (trámites anteriores a que existiera). Cualquiera de las dos basta.
+    /// </summary>
+    private static bool Declarada(
+        Dictionary<string, string?> fv, string bandera, string claveRunt, string claveEfectiva)
+    {
+        if (string.Equals(Get(fv, bandera)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var runt = Get(fv, claveRunt);
+        var efectivo = Get(fv, claveEfectiva);
+        return !string.IsNullOrWhiteSpace(runt)
+            && !string.IsNullOrWhiteSpace(efectivo)
+            && !string.Equals(runt.Trim(), efectivo.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
 
     private static FurDocumentData AssembleData(
-        ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
+        ProcedureInstance instance, string? codigo, ProcedureTypeGateProfile profile,
+        string[] signatureRoles, Dictionary<string, string?> fv,
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
-        bool tienePrenda, string? acreedorPrenda, string? acreedorPrendaDocumento,
+        FurPrendaMarking prendaMarking, string? acreedorPrenda, string? acreedorPrendaDocumento,
+        string? entidadLevantamiento,
+        string? acreedorLevantamientoNombreDual, string? acreedorLevantamientoDocumentoDual,
         IReadOnlyDictionary<string, byte[]>? firmaImagenes,
         IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos,
-        FurTemplateFormat templateFormat)
+        FurTemplateFormat templateFormat,
+        IReadOnlyDictionary<string, string>? nombresRlDirectorio = null,
+        string? fieldToFill = null,
+        IReadOnlyDictionary<string, byte[]>? firmaIdentidadImagenes = null)
     {
-        var partes = new List<DocumentParte>(2);
-        AddParte(partes, instance, "comprador");
-        if (esTraspaso)
-            AddParte(partes, instance, "vendedor");
+        var partes = new List<DocumentParte>(3);
+        AddParte(partes, instance, "comprador", nombresRlDirectorio);
+        // ADR-0051 Decisión 1 — RequiresSeller sigue significando exactamente lo mismo que hoy: hay
+        // parte vendedora en el FUR. Solo deja de leerse a través de `esTraspaso` (igualdad exacta de
+        // código con TRASPASO_STANDARD).
+        if (profile.RequiresSeller)
+            AddParte(partes, instance, "vendedor", nombresRlDirectorio);
+        if (instance.Actors.Any(x => string.Equals(x.ActorType, "locatario", StringComparison.OrdinalIgnoreCase)))
+            AddParte(partes, instance, "locatario", nombresRlDirectorio);
 
         var sellos = instance.Signatures
             .Where(s => s.Estado == SignatureEstados.Firmada)
@@ -488,21 +827,74 @@ public sealed class GenerarFurHandler(
             NumeroMotor: Get(fv, "vehicle_engine_number"),
             NumeroChasis: Get(fv, "vehicle_chassis"),
             NumeroSerie: Get(fv, "vehicle_series"),
-            TipoCarroceria: Get(fv, "vehicle_body_type"),
+            // A4/B4 (HU #10673) — carrocería: igual que color/combustible, el campo del FUR lleva el dato
+            // original del RUNT; la transformación declarada viaja solo en observaciones.
+            TipoCarroceria: RuntOrEffective(fv, "vehicle_body_type_runt", "vehicle_body_type"),
             TipoServicio: Get(fv, "vehicle_service"),
             Capacidad: Get(fv, "vehicle_passengers"),
             PesoBruto: Get(fv, "vehicle_weight"),
-            NumeroEjes: Get(fv, "vehicle_axles"));
+            NumeroEjes: Get(fv, "vehicle_axles"),
+            Alto: Get(fv, "vehicle_height"),
+            Ancho: Get(fv, "vehicle_width"),
+            Largo: Get(fv, "vehicle_length"),
+            NumeroLlantas: Get(fv, "vehicle_tires"),
+            TipoTraccion: Get(fv, "vehicle_traction"));
 
+        // El encabezado del FUR lleva el organismo donde el vehículo está matriculado HOY. En casi
+        // todos los tipos coincide con el canónico; en un radicado de cuenta no, porque ahí el
+        // canónico es el DESTINO —quien aprueba— y el actual vive en las claves descriptivas. La
+        // caída deja intactos los tipos que no las escriben.
+        var organismoNombre = Get(fv, TransitOfficeFieldKeys.ActualName) ?? Get(fv, TransitOfficeFieldKeys.Name);
         var organismo = new OrganismoTransito(
-            Codigo: Get(fv, "transit_office_code"),
-            Nombre: Get(fv, "transit_office_name"),
-            Ciudad: TransitOfficeCity.Legible(Get(fv, "transit_office_city")));
+            Codigo: Get(fv, TransitOfficeFieldKeys.ActualCode) ?? Get(fv, TransitOfficeFieldKeys.Code),
+            Nombre: organismoNombre,
+            Ciudad: TransitOfficeCity.ForDocuments(
+                Get(fv, TransitOfficeFieldKeys.ActualCityName) ?? Get(fv, TransitOfficeFieldKeys.CityName)
+                    ?? Get(fv, TransitOfficeFieldKeys.ActualCity) ?? Get(fv, TransitOfficeFieldKeys.City),
+                organismoNombre));
+
+        // ADR-0050 — en la familia OTROS solo entra la transformación que ES el trámite. Las banderas
+        // y el diff RUNT↔efectivo son las dos vías por las que una transformación complementaria se
+        // declaraba, y las dos quedan cerradas aquí: el PATCH ya no las acepta, pero un borrador
+        // creado antes de esa guarda puede traerlas persistidas y el FUR no debe imprimirlas.
+        var acumulaTransformaciones = profile.ComplementaryTransformationsAllowed(instance.ProcedureType?.Family);
+        bool DeclaradaOBase(string bandera, string claveRunt, string claveEfectiva, TransformacionBase cual)
+        {
+            if (ProcedureTypeLayers.TransformacionDelTipo(codigo) == cual)
+                return true;
+            return acumulaTransformaciones && Declarada(fv, bandera, claveRunt, claveEfectiva);
+        }
+
+        // El blindaje no tiene par RUNT/efectivo que comparar —no es un atributo con «valor nuevo»,
+        // es un hecho—, así que no pasa por DeclaradaOBase: su vía es la opción declarada, con la
+        // bandera suelta como respaldo para los borradores abiertos antes de que la opción existiera.
+        // Se descarta si el trámite no lo lleva, por la misma razón que las otras tres: un residuo
+        // persistido no debe imprimirse.
+        var blindajeOpcion = BlindajeOpciones.Parse(Get(fv, BlindajeOpciones.FieldKey));
+        var blindajeDelTramite =
+            ProcedureTypeLayers.TransformacionDelTipo(codigo) == TransformacionBase.Blindaje
+            || (acumulaTransformaciones
+                && string.Equals(Get(fv, MandatoObjetoComposer.Blindaje)?.Trim(), "true", StringComparison.OrdinalIgnoreCase));
+        if (!blindajeDelTramite)
+            blindajeOpcion = BlindajeOpcion.Ninguna;
+
+        var transformaciones = new FurTransformacionesDeclaradas(
+            Color: DeclaradaOBase(MandatoObjetoComposer.CambioColor, "vehicle_color_runt", "vehicle_color", TransformacionBase.Color),
+            Carroceria: DeclaradaOBase(MandatoObjetoComposer.CambioCarroceria, "vehicle_body_type_runt", "vehicle_body_type", TransformacionBase.Carroceria),
+            Combustible: DeclaradaOBase(MandatoObjetoComposer.CambioCombustible, "vehicle_fuel_runt", "vehicle_fuel", TransformacionBase.Combustible),
+            // La casilla «vehículo blindado» declara el estado con el que QUEDA el vehículo, no el
+            // trámite que se solicita: por eso el desmonte —que es un trámite de blindaje— la deja en
+            // NO. Sin opción declarada se conserva el criterio previo: el tipo (o la bandera) basta
+            // para el SI. Hasta aquí este campo nunca se poblaba, así que la casilla salía siempre en
+            // NO incluso en un blindaje.
+            Blindaje: blindajeDelTramite
+                && (blindajeOpcion == BlindajeOpcion.Ninguna
+                    || BlindajeOpciones.DejaElVehiculoBlindado(blindajeOpcion)));
 
         return new FurDocumentData(
             ProcedureInstanceId: instance.Id,
             ReferenceNumber: instance.ReferenceNumber,
-            Modalidad: instance.ModalidadEntrada,
+            Modalidad: instance.FamilyCode,
             TipologiaCodigo: codigo,
             Vehiculo: vehiculo,
             Organismo: organismo,
@@ -511,31 +903,108 @@ public sealed class GenerarFurHandler(
             Causal: instance.Commercial?.Causal,
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
-            // El recuadro OBSERVACIONES del FUR reúne tres cosas, en este orden:
-            //   1. HU #10989 — el beneficiario del gravamen, cuando la prenda lo implica.
-            //   2. HU #10987 — las observaciones que escribe el gestor (fur_observations).
-            //   3. A4/B4 (HU #10673, ADR-0029) — el texto automático de las transformaciones de
-            //      color/combustible declaradas (diff snapshot RUNT vs efectivo).
-            Observaciones: FurPrendaObservation.Join(
-                FurPrendaObservation.Compose(tienePrenda, acreedorPrenda, acreedorPrendaDocumento),
-                FurTransformationObservations.Compose(
-                    Get(fv, "fur_observations"),
-                    Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
-                    Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"))),
+            Observaciones: ComposeObservacionesP23(
+                codigo,
+                partes,
+                prendaMarking,
+                acreedorPrenda,
+                acreedorPrendaDocumento,
+                entidadLevantamiento,
+                acreedorLevantamientoNombreDual,
+                acreedorLevantamientoDocumentoDual,
+                fv,
+                transformaciones,
+                blindajeOpcion),
             FirmaImagenes: firmaImagenes,
+            FirmaIdentidadImagenes: firmaIdentidadImagenes,
             FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
-            TienePrenda: tienePrenda,
+            PrendaMarking: prendaMarking,
             AcreedorPrenda: acreedorPrenda,
-            // ADR-0036 (HU #10914/#10915) — las firmas del mandato/solicitud virtual solo aparecen
-            // fuera de edición (borrador o rechazado en subsanación).
-            FirmasVisibles: !TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva),
-            TemplateFormat: templateFormat)
+            TemplateFormat: templateFormat,
+            FieldToFill: fieldToFill,
+            // Casilla 19 "EMPRESA VINCULADORA" del FUR: opcional, mismo canal field_values que el resto
+            // del paso de vehículo/comercial. Get() ya devuelve null si la llave no existe.
+            EmpresaVinculadoraRazonSocial: Get(fv, "empresa_vinculadora_razon_social"),
+            EmpresaVinculadoraNit: Get(fv, "empresa_vinculadora_nit"),
+            // HU #11641 — subtrámites simultáneos que marcan casilla propia. Se toma la bandera
+            // DECLARADA por el gestor o, en su defecto, el diff RUNT vs efectivo: son dos formas de
+            // enterarse de lo mismo y hasta ahora el FUR solo miraba la segunda, de modo que un
+            // cambio declarado sobre un vehículo del que el RUNT no devolvió el dato original no se
+            // marcaba en ninguna parte. Es el mismo criterio (`bandera || diff`) que ya usa el
+            // wizard para pintar el subtrámite como activo, así que documento y pantalla dejan de
+            // contradecirse.
+            Transformaciones: transformaciones,
+            // ADR-0050 — identidad del tipo (qué ES) y su capacidad (qué EXIGE). La segunda decide
+            // si el FUR estampa sección de comprador, que no es deducible del nombre ni del código.
+            ProcedureTypeCode: instance.ProcedureType?.Code,
+            ProcedureTypeName: instance.ProcedureType?.Name,
+            ProcedureFamily: instance.ProcedureType?.Family,
+            RequiereVendedor: profile.RequiresSeller,
+            // ADR-0051 — roles que firman el FUR, ya traducidos a actor_type. FurFieldMapper los usa
+            // para condicionar el bloque de firma del comprador a que el tipo realmente lo exija (antes
+            // llamaba a IdentidadOrSello incondicionalmente).
+            SignatureActors: signatureRoles)
         {
             // HU #11030 — tenant contra el que se resuelve el baúl del mandatario.
             TenantIdParaFirmas = instance.TenantId,
         };
+    }
+
+    /// <summary>
+    /// Párrafo 23: concatena tipo (leasing/unilateral) + prenda + transformaciones + blindaje +
+    /// vinculadora + texto libre.
+    /// </summary>
+    private static string? ComposeObservacionesP23(
+        string? codigo,
+        IReadOnlyList<DocumentParte> partes,
+        FurPrendaMarking prendaMarking,
+        string? acreedorPrenda,
+        string? acreedorPrendaDocumento,
+        string? entidadLevantamiento,
+        string? acreedorLevantamientoNombreDual,
+        string? acreedorLevantamientoDocumentoDual,
+        Dictionary<string, string?> fv,
+        FurTransformacionesDeclaradas transformaciones,
+        BlindajeOpcion blindajeOpcion)
+    {
+        // ADR-0055 — con Ambos, cada familia trae su PROPIO acreedor (ComposeDual); en los demás
+        // casos (0 o 1 vigente, comportamiento histórico) sigue siendo el Compose de 4 parámetros.
+        var bloquePrenda = prendaMarking == FurPrendaMarking.Ambos
+            ? FurPrendaObservation.ComposeDual(
+                acreedorPrenda, acreedorPrendaDocumento,
+                acreedorLevantamientoNombreDual, acreedorLevantamientoDocumentoDual,
+                entidadLevantamiento)
+            : FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento);
+
+        var automatico = FurPrendaObservation.Join(
+            FurTramiteObservation.Compose(
+                codigo,
+                partes,
+                new FurTramiteObservationContext(
+                    CancelacionCausal: Get(fv, CancelacionCausales.FieldKey),
+                    OrganismoDestino: Get(fv, TransitOfficeFieldKeys.DestinoName)
+                                      ?? Get(fv, TransitOfficeFieldKeys.Name),
+                    Placa: Get(fv, "plate"))),
+            FurPrendaObservation.Join(
+                FurCopropiedadObservation.Compose(partes),
+                FurPrendaObservation.Join(
+                bloquePrenda,
+                FurPrendaObservation.Join(
+                    FurTransformationObservations.ComposeDeclaradas(
+                        transformaciones,
+                        Get(fv, "vehicle_color"),
+                        Get(fv, "vehicle_fuel"),
+                        Get(fv, "vehicle_body_type")),
+                    FurPrendaObservation.Join(
+                        FurBlindajeObservation.Compose(blindajeOpcion),
+                        FurServicioVinculadoraObservation.Compose(
+                            Get(fv, "vehicle_service"),
+                            Get(fv, "empresa_vinculadora_razon_social"),
+                            Get(fv, "empresa_vinculadora_nit")))))));
+
+        return FurObservacionesComposer.Componer(automatico, Get(fv, "fur_observations"));
     }
 
     /// <summary>
@@ -551,69 +1020,36 @@ public sealed class GenerarFurHandler(
     /// vigente, y si no el sello de su validación de identidad. Best-effort: cualquier fallo deja la
     /// línea de firma en blanco, nunca rompe la generación del mandato.
     /// </summary>
-    private async Task<(byte[]? Firma, string? Sello)> ResolveMandatarioFirmaAsync(
+    private async Task<(byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos)> ResolveMandatarioFirmaAsync(
         FurDocumentData data, MandateSignerCandidate signer, CancellationToken ct)
     {
-        var tipoDoc = string.IsNullOrWhiteSpace(signer.TipoDocumento) ? "CC" : signer.TipoDocumento!.Trim();
+        // La precedencia vive en MandatarioFirmaResolver: el simulador de mandatos la comparte para
+        // mostrar el documento tal como saldría del trámite (Feature #11702).
+        var (firma, sello, metadatos) = await MandatarioFirmaResolver
+            .ResolveAsync(
+                _vaultPolicy,
+                storage,
+                data.TenantIdParaFirmas,
+                signer,
+                ex => GenerarFurLog.FirmaBaulNoDisponible(logger, ex, data.ProcedureInstanceId),
+                ct)
+            .ConfigureAwait(false);
 
-        try
-        {
-            var match = await _vaultPolicy
-                .ResolveAsync(data.TenantIdParaFirmas, tipoDoc, signer.Documento.Trim(), ct)
-                .ConfigureAwait(false);
-
-            if (match is not null && !string.IsNullOrWhiteSpace(match.StoragePath))
-            {
-                var stream = await storage.OpenReadAsync(match.StoragePath, ct).ConfigureAwait(false);
-                if (stream is not null)
-                {
-                    await using (stream.ConfigureAwait(false))
-                    {
-                        using var ms = new MemoryStream();
-                        await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
-                        if (ms.Length > 0)
-                            return (ms.ToArray(), null);
-                    }
-                }
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            GenerarFurLog.FirmaBaulNoDisponible(logger, ex, data.ProcedureInstanceId);
-        }
-
-        // Sin firma del baúl: sello con el certificado de su identidad vigente, si lo hay.
-        return signer.IdentityVigente && !string.IsNullOrWhiteSpace(signer.CertificadoIdentidad)
-            ? (null, $"Validación de identidad\nFirma {signer.CertificadoIdentidad}")
-            : (null, null);
+        return (firma, sello, metadatos);
     }
 
     private async Task<(IReadOnlyDictionary<string, byte[]>? Images, IReadOnlyDictionary<string, FirmaBaulMetadata>? Metadata)> ResolveVaultSignaturesAsync(
-        ProcedureInstance instance, bool esTraspaso, CancellationToken ct)
+        ProcedureInstance instance, string[] roles, CancellationToken ct)
     {
-        var roles = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
         Dictionary<string, byte[]>? images = null;
         Dictionary<string, FirmaBaulMetadata>? metadata = null;
 
-        foreach (var role in roles)
+        foreach (var slot in SignatureSlots(instance, roles))
         {
-            var actor = instance.Actors.FirstOrDefault(a =>
-                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-            if (actor is null || !EsActorJuridico(actor.DocumentType))
+            if (slot.Actor is null || !FirmaBaulCobertura.Aplica(slot.Actor))
                 continue;
 
-            // HU #11061 — si el gestor eligió EXPLÍCITAMENTE el sello de identidad, no se consume el
-            // baúl aunque tenga firma vigente. Es el único punto donde se resuelve la imagen del baúl,
-            // así que el guard aquí honra la elección en TODOS los documentos (FUR, mandato, solicitud
-            // de trámite virtual y compraventa consumen `FirmaImagenes` de este mismo ensamblado).
-            // Sin elección explícita se mantiene la precedencia del baúl (HU #11031).
-            var (_, _, rl, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
-            if (!MecanismoFirma.ConsumeBaul(rl?.MecanismoFirma))
-                continue;
-
-            // HU #10930/#10937 — la firma del baúl es de la PERSONA: se resuelve por el documento del
-            // REPRESENTANTE LEGAL seleccionado (sujeto de identidad del actor jurídico), no por el NIT.
-            var subject = IdentitySubjectResolver.For(actor);
+            var subject = IdentitySubjectResolver.For(slot.Actor);
             if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
                 continue;
 
@@ -634,8 +1070,8 @@ public sealed class GenerarFurHandler(
                     await stream.CopyToAsync(ms, ct);
                     if (ms.Length == 0)
                         continue;
-                    (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[role] = ms.ToArray();
-                    (metadata ??= new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase))[role] =
+                    (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[slot.Key] = ms.ToArray();
+                    (metadata ??= new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase))[slot.Key] =
                         new FirmaBaulMetadata(
                             match.DocumentNumber,
                             match.FullName,
@@ -656,13 +1092,59 @@ public sealed class GenerarFurHandler(
         return (images, metadata);
     }
 
-    /// <summary>¿El actor es persona JURÍDICA (NIT/N)? Solo estos consumen el baúl de firmas (ADR-0025 §4).</summary>
-    private static bool EsActorJuridico(string? documentType)
+    /// <summary>
+    /// PNG de la rúbrica Kyverum por parte que aún firma por identidad (sello no retirado por el baúl).
+    /// Best-effort: si el path no se puede leer, esa parte queda con sello de texto.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, byte[]>?> ResolveIdentitySignatureImagesAsync(
+        ProcedureInstance instance,
+        string[] roles,
+        Dictionary<string, string> sellosIdentidad,
+        CancellationToken ct)
     {
-        var t = documentType?.Trim();
-        return string.Equals(t, "NIT", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
+        Dictionary<string, byte[]>? images = null;
+        foreach (var slot in SignatureSlots(instance, roles))
+        {
+            if (!sellosIdentidad.ContainsKey(slot.Key))
+                continue;
+
+            var val = await ResolveApprovedValidationAsync(instance, slot.Actor, slot.Role, DateTimeOffset.UtcNow, ct);
+            if (val is null || string.IsNullOrWhiteSpace(val.SignatureImagePath))
+                continue;
+
+            try
+            {
+                var stream = await storage.OpenReadAsync(val.SignatureImagePath, ct);
+                if (stream is null)
+                    continue;
+                await using (stream.ConfigureAwait(false))
+                {
+                    using var ms = new MemoryStream();
+                    await stream.CopyToAsync(ms, ct);
+                    if (ms.Length == 0)
+                        continue;
+                    var bytes = ms.ToArray();
+                    if (!IdentitySignatureImageFormat.IsSupported(bytes))
+                        continue;
+                    if (identitySignatureExtractor is not null && !identitySignatureExtractor.IsUsableInk(bytes))
+                        continue;
+                    (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[slot.Key] = bytes;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                GenerarFurLog.FirmaBaulNoDisponible(logger, ex, instance.Id);
+            }
+        }
+
+        return images;
     }
+
+    /// <summary>¿El actor es persona JURÍDICA (NIT/N)? Solo estos consumen el baúl de firmas (ADR-0025 §4).</summary>
+    // Bug #11141 — delega en el predicado compartido para que no queden dos definiciones de
+    // "persona jurídica" que puedan separarse con el tiempo.
+    private static bool EsActorJuridico(string? documentType) =>
+        FirmaBaulCobertura.EsJuridico(documentType);
 
     /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>
     private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
@@ -673,11 +1155,8 @@ public sealed class GenerarFurHandler(
     /// clonar). Devuelve null si la parte no tiene identidad aprobada vigente.
     /// </summary>
     private async Task<ProcedureInstanceBiometricValidation?> ResolveApprovedValidationAsync(
-        ProcedureInstance instance, string role, DateTimeOffset now, CancellationToken ct)
+        ProcedureInstance instance, ProcedureInstanceActor? actor, string role, DateTimeOffset now, CancellationToken ct)
     {
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-        // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
         var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
 
         // Fila propia aprobada+vigente del rol Y del documento del sujeto actual. El filtro por documento es
@@ -704,65 +1183,199 @@ public sealed class GenerarFurHandler(
     /// certificado (firmaSerie) y fechas de aprobación/vencimiento (día calendario Colombia). Multilínea: el
     /// overlay del FUR lo pinta línea a línea en el espacio de firma.
     /// </summary>
-    private static string BuildIdentidadSello(ProcedureInstanceBiometricValidation v)
-    {
-        var doc = $"{v.DocumentType} {v.DocumentNumber}".Trim();
-        var uuid = string.IsNullOrWhiteSpace(v.KyverumVerificationId) ? v.Id.ToString("D") : v.KyverumVerificationId!;
-        // HU #11015 — un guion no dice nada: si el proveedor no entregó la serie del certificado se
-        // declara explícitamente, para que quien lee el documento sepa que la firma no se pudo estampar
-        // en vez de creer que el valor se perdió al imprimir.
-        var firma = string.IsNullOrWhiteSpace(v.CertificateHash) ? "no disponible" : v.CertificateHash!;
-        // HU #11018 — formato de negocio unico en documentos: AÑO/MES/DIA, sin hora.
-        var aprob = v.ValidatedAt is { } va
-            ? va.ToOffset(ColombiaOffset).ToString(FechaDocumento.Formato, CultureInfo.InvariantCulture) : "-";
-        var vence = v.ValidUntil is { } vu
-            ? vu.ToOffset(ColombiaOffset).ToString(FechaDocumento.Formato, CultureInfo.InvariantCulture) : "-";
-        return $"Validación biométrica {doc}\nUUID {uuid}\nFirma {firma}\nAprob {aprob} · Vence {vence}";
-    }
+    private static string BuildIdentidadSello(ProcedureInstanceBiometricValidation v) =>
+        IdentidadSelloText.Build(v);
 
     /// <summary>
-    /// ADR-0036 (HU #10915) — Genera el Contrato de Mandato si el trámite lo EXIGE: persona jurídica
-    /// siempre; persona natural solo si el OT lo configura (<c>RequiresForNaturalPerson</c>). Resuelve la
-    /// config del OT por el <c>transit_office_code</c> del trámite; sin generador o sin exigencia devuelve
-    /// <c>null</c> (el caller retira el mandato previo). El firmante (mandatario) va <c>null</c>: en
-    /// preparado aún no está elegido/filtrado (HU #10916 lo resuelve al aprobar y regenera).
+    /// ADR-0036 (HU #10915) — Genera el Contrato de Mandato siempre que haya generador y código de OT
+    /// (persona natural y jurídica). Resuelve la config del OT por el <c>transit_office_code</c>;
+    /// sin generador o sin código de OT devuelve <c>null</c> (el caller retira el mandato previo).
+    /// El firmante (mandatario) va <c>null</c> en preparado: HU #10916 lo resuelve al aprobar y regenera.
     /// </summary>
+    /// <summary>
+    /// HU #11206 — transformaciones declaradas en el trámite (<c>field_values</c> con valor <c>true</c>).
+    /// Se leen aquí y no en el generador para que el documento no dependa del formato de almacenamiento.
+    /// </summary>
+    private static IReadOnlyList<string> TransformacionesActivas(
+        Dictionary<string, string?> fv,
+        FurDocumentData data)
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // ADR-0050 — las banderas sueltas de field_values son la vía de los trámites simultáneos, y
+        // la familia OTROS no los tiene. Ahí el objeto del mandato lo compone SOLO la capa del tipo
+        // base (las tres líneas de `data.Transformaciones` de abajo, ya filtradas en AssembleData, y
+        // el blindaje por código): un mandato que autorice un cambio de color «además» del blindaje
+        // faculta al mandatario para un trámite que el poderdante no encargó.
+        if (ProcedureTypeLayers.FamiliaAcumulaComplementarios(data.ProcedureFamily))
+        {
+            foreach (var clave in new[]
+                     {
+                         MandatoObjetoComposer.CambioColor,
+                         MandatoObjetoComposer.CambioCarroceria,
+                         MandatoObjetoComposer.CambioCombustible,
+                         MandatoObjetoComposer.Blindaje,
+                     })
+            {
+                if (string.Equals(Get(fv, clave)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                    keys.Add(clave);
+            }
+        }
+
+        if (data.Transformaciones.Color)
+            keys.Add(MandatoObjetoComposer.CambioColor);
+        if (data.Transformaciones.Carroceria)
+            keys.Add(MandatoObjetoComposer.CambioCarroceria);
+        if (data.Transformaciones.Combustible)
+            keys.Add(MandatoObjetoComposer.CambioCombustible);
+        if (data.Transformaciones.Blindaje)
+            keys.Add(MandatoObjetoComposer.Blindaje);
+
+        var code = data.ProcedureTypeCode ?? data.TipologiaCodigo;
+        if (!string.IsNullOrWhiteSpace(code)
+            && code.Contains("BLINDAJE", StringComparison.OrdinalIgnoreCase))
+        {
+            keys.Add(MandatoObjetoComposer.Blindaje);
+        }
+
+        return [.. keys];
+    }
+
     private async Task<GeneratedDocument?> TryGenerateMandatoAsync(
-        FurDocumentData data, string? transitOfficeCode, Guid? mandateSignerId, CancellationToken ct)
+        ProcedureInstance instance,
+        FurDocumentData data,
+        string? transitOfficeCode,
+        string? transitOfficeName,
+        string? transitOfficeCity,
+        IReadOnlyList<string> transformaciones,
+        CancellationToken ct)
     {
         if (_mandatoGenerator is null || string.IsNullOrWhiteSpace(transitOfficeCode))
             return null;
 
-        var config = await _mandatePolicy.ResolveAsync(transitOfficeCode, ct);
-        // HU #11030 — quien otorga el mandato es el MANDANTE (el vendedor en traspaso): su naturaleza es
-        // la que decide si el trámite exige mandato, no la de quien radica.
-        var esJuridica = data.Mandante?.EsJuridica ?? false;
-        var exigeMandato = esJuridica || (config?.RequiresForNaturalPerson ?? false);
-        if (!exigeMandato)
-            return null;
-
-        // HU #10916 — firmante resuelto al aprobar (instance.MandateSignerId). En preparado va null ⇒ el
-        // PDF pinta placeholders y se regenera al aprobar. Sabaneta (institucional) no lleva firmante persona.
-        MandatarioFirmante? mandatario = null;
-        if (mandateSignerId is { } signerId)
+        // El FUR puede encabezar con el OT “actual” (RUNT). El mandato se emite para el OT canónico
+        // al que va el trámite; si se usa el actual, Bogotá pintaba redacción de Bello.
+        var nombreMandato = transitOfficeName ?? data.Organismo.Nombre;
+        data = data with
         {
-            var signer = await _mandateDirectory.GetByIdAsync(signerId, ct).ConfigureAwait(false);
-            if (signer is not null)
+            Organismo = new OrganismoTransito(
+                transitOfficeCode,
+                nombreMandato,
+                TransitOfficeCity.ForDocuments(transitOfficeCity, nombreMandato) ?? data.Organismo.Ciudad),
+        };
+
+        // El ORGANISMO se llavea por id cuando el trámite lo tiene, y solo si no, por el código. El
+        // código de field_values no es una llave confiable —conviven RUNT de 7 dígitos con DIVIPOLA de
+        // 5— y cuando no coteja exacto contra el catálogo NO se encuentra ni la fila de configuración ni
+        // la plantilla de sistema: el mandato salía GENÉRICO y sin mandatario con el OT bien
+        // parametrizado. Ver IMandateRequirementPolicy.ResolveByOfficeIdAsync.
+        var transitOfficeId = MandateSignerSelectionResolver.ResolveTransitOfficeId(instance);
+        var config = transitOfficeId is { } officeIdParaConfig
+            ? await _mandatePolicy.ResolveByOfficeIdAsync(officeIdParaConfig, data.TenantIdParaFirmas, ct)
+                .ConfigureAwait(false)
+            : null;
+        config ??= await _mandatePolicy.ResolveAsync(transitOfficeCode, data.TenantIdParaFirmas, ct)
+            .ConfigureAwait(false);
+        // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
+
+        // HU-L8 — elección del trámite → default OT (aunque no esté en la compañía) → default compañía.
+        // Sin esos, Mandatario queda null (cuerpo ___ / recuadro Sin firmar). Ya no se espera a aprobar
+        // para pintar nombre y cédula cuando hay default.
+        var assignmentMode = config?.AssignmentMode;
+        // Plantilla del OT (o genérica de mandato cliente). Ya no se reescribe por PN/PJ ni por modo.
+        var templateCode = config?.TemplateCode ?? MandatoTemplateResolver.Generico;
+
+        MandatarioFirmante? mandatario = null;
+        Guid? resolvedSignerId = null;
+        if (!MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
+        {
+            if (transitOfficeId is { } officeId)
             {
-                // HU #11030 — la firma del mandatario no se pintaba nunca: el contrato salía con la línea
-                // en blanco aunque el mandatario tuviera firma en el baúl o identidad validada. Misma
-                // precedencia que el resto de documentos: imagen del baúl > sello de identidad > línea.
-                var (firma, sello) = await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
-                mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello);
+                var candidatos = await _mandateDirectory
+                    .GetCandidatesAsync(
+                        officeId, data.TenantIdParaFirmas,
+                        MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
+                    .ConfigureAwait(false);
+                candidatos = await MandateSignerSelectionResolver
+                    .WithOtDefaultAsync(candidatos, config?.OtDefaultMandateSignerId, _mandateDirectory, ct)
+                    .ConfigureAwait(false);
+
+                // En borrador/subsanación el firmante se recalcula SIEMPRE contra la config vigente
+                // (cliente×OT → OT → vacío). Congelar instance.MandateSignerId en la primera generación
+                // dejaba el PDF con un Hugo/Carlos viejo después de cambiar el default en Mandatos.
+                // Fuera de borrador (expediente ya radicado) sí manda lo guardado: es documento legal.
+                var enBorrador = TramiteEstado.PermiteEdicionDatos(
+                    instance.Status, instance.SubsanacionActiva);
+                var eleccionCongelada = enBorrador ? null : instance.MandateSignerId;
+
+                resolvedSignerId = MandateSignerDefaultResolver.Resolve(
+                    candidatos.Select(c => c.Id).ToList(),
+                    eleccionCongelada,
+                    config?.OtDefaultMandateSignerId,
+                    config?.DefaultMandateSignerId);
+
+                if (resolvedSignerId is { } signerId)
+                {
+                    var signer = candidatos.FirstOrDefault(c => c.Id == signerId)
+                        ?? await _mandateDirectory.GetByIdAsync(signerId, ct).ConfigureAwait(false);
+                    if (signer is not null)
+                    {
+                        // HU #11030 — la firma del mandatario no se pintaba nunca: el contrato salía con
+                        // la línea en blanco aunque el mandatario tuviera firma en el baúl o identidad
+                        // validada. Misma precedencia que el resto de documentos: imagen del baúl > sello
+                        // de identidad > línea.
+                        var (firma, sello, metadatos) =
+                            await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
+                        mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello, metadatos);
+
+                        if (enBorrador)
+                            instance.MandateSignerId = signerId;
+                        else if (instance.MandateSignerId is null)
+                            instance.MandateSignerId = signerId;
+                    }
+                }
             }
         }
 
+        // El convenio se llavea por (compañía del trámite, organismo). El organismo del trámite se
+        // conoce aquí por su CÓDIGO; el id lo aporta la configuración del OT, que ya se resolvió arriba
+        // por ese mismo código: sin fila de configuración no hay id y el mandato conserva el bloque, que
+        // es el default seguro.
+        var modoFirma = await _mandatoFirmaPolicy
+            .ResolveAsync(data.TenantIdParaFirmas, config?.TransitOfficeId ?? Guid.Empty, resolvedSignerId, ct)
+            .ConfigureAwait(false);
+
+        var customKind = MandatoCustomTemplateKindCodes.Resolve(config?.CustomTemplateKind);
+        byte[]? customPdf = null;
+        if (customKind == MandatoCustomTemplateKindCodes.Pdf
+            && !string.IsNullOrWhiteSpace(config?.CustomTemplateStoragePath))
+        {
+            customPdf = await _mandateTemplateBlob
+                .OpenPdfAsync(config!.CustomTemplateStoragePath!, ct)
+                .ConfigureAwait(false);
+        }
+
+        // Institucional / convenio: sin bloque MANDATARIO.
+        // Abierto o sin estampa: líneas. Si hay baúl o sello, se estampa aunque el modelo sea a mano.
+        var modoFirmaMandatario = MandatoFirmaModoResolver.Resolve(
+            assignmentMode,
+            modoFirma.TieneConvenio,
+            MandatoFirmaModoResolver.TieneEstampa(mandatario));
+
         var mandatoData = new MandatoData(
             data,
-            config?.TemplateCode ?? MandatoTemplateResolver.Generico,
+            templateCode,
             config?.InstitutionalMandataryName,
             config?.InstitutionalMandataryNit,
-            mandatario);
+            mandatario,
+            MandatoFamiliaCodes.Resolve(config?.MandataryFamily),
+            config?.ChamberCity,
+            config?.MandatarySigla,
+            transformaciones,
+            modoFirmaMandatario,
+            customKind,
+            config?.CustomTemplateBody,
+            customPdf);
 
         return _mandatoGenerator.GenerateMandato(mandatoData);
     }
@@ -770,10 +1383,12 @@ public sealed class GenerarFurHandler(
     /// <summary>
     /// HU #10589 / HU #10990 — Genera UN certificado RUES por cada actor persona jurídica del trámite.
     ///
-    /// <para><b>Resolución de datos, en orden:</b> (1) las <c>rues_*</c> de <c>field_values</c>, pero
-    /// SOLO si <c>rues_nit</c> corresponde a ESE actor — esas llaves son de instancia, así que en un
-    /// traspaso PJ → PJ la segunda consulta pisó a la primera y usarlas a ciegas mezclaba la razón
-    /// social de una compañía con la matrícula de la otra; (2) consulta en vivo al RUES.</para>
+    /// <para><b>HU #11305 (Feature #11301, ADR-0041) — se retira la consulta en vivo (D4).</b> Todo sale
+    /// del lector documental: tabla canónica → respaldo sobre <c>field_values</c> (snapshot congelado y,
+    /// si no, las <c>rues_*</c> de instancia, que son de instancia y solo sirven a UNA compañía) → nada.
+    /// Sin dato persistido <b>no se emite el certificado</b>, y esa es la contrapartida que el PO aceptó
+    /// a sabiendas: las compañías precargadas del directorio de representantes legales dejan de tener
+    /// este anexo, que hoy consiguen por una llamada saliente en cada regeneración.</para>
     ///
     /// <para><b>No se emite un certificado sin datos de registro.</b> Antes se emitía siempre que
     /// hubiera un actor NIT, aunque saliera con la razón social y 19 casillas en blanco. Un
@@ -783,8 +1398,62 @@ public sealed class GenerarFurHandler(
     /// de roles llevan sufijo (<c>certificado_rues_vendedor</c>), mismo patrón que
     /// <c>certificado_identidad</c>, de modo que ambos coexistan en el expediente.</para>
     /// </summary>
-    private async Task<List<GeneratedDocument>> TryGenerateRuesCertificatesAsync(
-        ProcedureInstance instance, Dictionary<string, string?> fv, CancellationToken ct)
+    /// <summary>Día calendario colombiano. No se usa UTC: un certificado imprime un día civil.</summary>
+    private static DateOnly HoyEnColombia() =>
+        DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).DateTime);
+
+    /// <summary>
+    /// Traduce una certificación canónica al bloque del documento. Solo formato: el parsing ya ocurrió
+    /// una vez, al persistir. Valor ausente ⇒ celda en blanco (regla HU #10856).
+    /// </summary>
+    private static SoatRtmBlock Bloque(
+        Domain.Certifications.SoatCertification? soat, string? estadoOverride) =>
+        soat is null
+            ? new SoatRtmBlock()
+            : new SoatRtmBlock(
+                Poliza: soat.PolicyNumber.ToDocumentText(),
+                FechaVigencia: soat.ValidFrom.ToDocumentText(),
+                FechaVencimiento: soat.ValidUntil.ToDocumentText(),
+                FechaExpedicion: soat.IssuedOn.ToDocumentText(),
+                Entidad: soat.Insurer.ToDocumentText(),
+                // El estado del SOAT lo sigue mandando la llave del gate: es la que ve el OT y la que
+                // el frontend compara estricto. No se deriva aquí para no abrir dos verdades.
+                Estado: estadoOverride ?? soat.Status.ToDocumentText());
+
+    private static SoatRtmBlock Bloque(
+        Domain.Certifications.RtmCertification? rtm, string? estadoOverride) =>
+        rtm is null
+            ? new SoatRtmBlock()
+            : new SoatRtmBlock(
+                Poliza: rtm.CertificateNumber.ToDocumentText(),
+                FechaVigencia: rtm.ValidFrom.ToDocumentText(),
+                FechaVencimiento: rtm.ValidUntil.ToDocumentText(),
+                FechaExpedicion: rtm.IssuedOn.ToDocumentText(),
+                Entidad: rtm.Cda.ToDocumentText(),
+                Estado: estadoOverride ?? rtm.Status.ToDocumentText());
+
+    /// <summary>
+    /// Pie de procedencia del bloque. El texto fijo del certificado afirma una consulta al RUNT que
+    /// puede no haber ocurrido: hay celdas que salen del OCR de un PDF cargado por el operador.
+    /// </summary>
+    private static string? Fuente(Domain.Certifications.CertificationProvenance? provenance)
+    {
+        if (provenance is null || provenance.ObservedAt == DateTimeOffset.MinValue)
+            return null;
+
+        var etiqueta = provenance.Source switch
+        {
+            Domain.Certifications.CertificationSourceKind.Consultation => "RUNT 2.0",
+            Domain.Certifications.CertificationSourceKind.Ocr => "documento cargado",
+            Domain.Certifications.CertificationSourceKind.User => "registro manual",
+            _ => "registro del trámite",
+        };
+
+        return provenance.ToDocumentFooter(etiqueta);
+    }
+
+    private List<GeneratedDocument> TryGenerateRuesCertificates(
+        ProcedureInstance instance, Certifications.CertificationView certs)
     {
         var docs = new List<GeneratedDocument>(2);
 
@@ -794,27 +1463,16 @@ public sealed class GenerarFurHandler(
             if (string.IsNullOrEmpty(nit))
                 continue;
 
-            // HU #11133 — orden de resolución. Primero el SNAPSHOT congelado al registrar el trámite:
-            // es la fuente de verdad del certificado y no cuesta una llamada al proveedor. Después las
-            // llaves `rues_*` de instancia (trámites anteriores al snapshot, y solo sirven a UNA
-            // compañía). La consulta EN VIVO queda como último recurso y se deja registrada, para
-            // poder medir cuántos trámites siguen dependiendo de ella y apagarla cuando sean cero.
-            IReadOnlyDictionary<string, string?>? datos =
-                RuesSnapshots.Read(Get(fv, RuesSnapshots.FieldKey), nit)
-                ?? DatosRuesDeLaInstancia(fv, nit);
-
-            if (datos is null)
-            {
-                GenerarFurLog.CertificadoRuesConsultaEnVivo(logger, instance.Id);
-                datos = await _ruesResolver.ResolveAsync(instance.Id, instance.TenantId, nit, ct);
-            }
-
-            var razonSocial = Val(datos, "rues_razon_social");
-            if (datos is null || string.IsNullOrWhiteSpace(razonSocial))
+            // El lector ya resolvió tabla → respaldo. Aquí no hay ninguna llamada saliente.
+            var merchant = certs.Merchant(nit);
+            if (merchant is null || !merchant.CanBeCertified)
             {
                 GenerarFurLog.CertificadoRuesSinDatos(logger, instance.Id);
                 continue;
             }
+
+            var datos = merchant.Fields;
+            var razonSocial = Val(datos, "rues_razon_social")!;   // CanBeCertified ya lo garantizó.
 
             var data = new RuesCertificateData(
                 instance.Id,
@@ -1028,41 +1686,106 @@ public sealed class GenerarFurHandler(
     };
 
     /// <summary>
-    /// Descarga best-effort el certificado (PDF) de la validación de identidad de una PARTE
-    /// (<paramref name="role"/> = comprador | vendedor) desde Kyverum. El adjunto del comprador conserva
-    /// el tipo <c>certificado_identidad</c> (retrocompatible); el del vendedor usa
-    /// <c>certificado_identidad_vendedor</c>, de modo que ambos coexistan en el expediente.
+    /// Extrae y persiste la rúbrica del certificado Kyverum de un actor antes de pintar el FUR.
+    /// Best-effort: no bloquea la generación.
+    /// </summary>
+    private async Task TryCaptureIdentitySignatureAsync(
+        ProcedureInstance instance,
+        string role,
+        ProcedureInstanceActor? actor,
+        CancellationToken ct)
+    {
+        if (identitySignatureCapture is null)
+            return;
+
+        var bio = await ResolveKyverumBioForActorAsync(instance, role, actor, ct);
+        if (bio is null)
+            return;
+
+        try
+        {
+            var cert = await certClient.DownloadCertificateAsync(bio.KyverumVerificationId!, ct);
+            if (cert is null || cert.Content.Length == 0)
+                return;
+            await identitySignatureCapture.EnsureFromPdfAsync(bio, cert.Content, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            GenerarFurLog.CertificadoDescargaFallo(logger, ex, instance.Id);
+        }
+    }
+
+    private static bool EsKyverumConId(ProcedureInstanceBiometricValidation v) =>
+        v.Status == BiometricEstados.Aprobado
+        && string.Equals(v.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
+        && !string.IsNullOrWhiteSpace(v.KyverumVerificationId);
+
+    /// <summary>
+    /// Validación Kyverum del actor concreto (documento del sujeto). Sin actor, cae al primer bio
+    /// aprobado del rol (comportamiento legacy de un certificado por parte).
+    /// </summary>
+    private async Task<ProcedureInstanceBiometricValidation?> ResolveKyverumBioForActorAsync(
+        ProcedureInstance instance,
+        string role,
+        ProcedureInstanceActor? actor,
+        CancellationToken ct)
+    {
+        var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
+        if (subject is not null
+            && !string.IsNullOrWhiteSpace(subject.TipoDocumento)
+            && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+        {
+            var doc = subject.NumeroDocumento.Trim();
+            var bio = instance.BiometricValidations.FirstOrDefault(v =>
+                string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
+                && EsKyverumConId(v)
+                && string.Equals(v.DocumentNumber?.Trim(), doc, StringComparison.OrdinalIgnoreCase));
+
+            if (bio is not null)
+                return bio;
+
+            var source = await repo.FindVigenteApprovedByDocumentAsync(
+                instance.TenantId, subject.TipoDocumento.Trim(), doc, DateTimeOffset.UtcNow, ct);
+            return source is not null && EsKyverumConId(source) ? source : null;
+        }
+
+        // Sin actor (o sin documento usable): primer bio del rol, como antes.
+        var porRol = instance.BiometricValidations.FirstOrDefault(v =>
+            string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase) && EsKyverumConId(v));
+        if (porRol is not null)
+            return porRol;
+
+        var actorRol = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+        var subjectRol = actorRol is null ? null : IdentitySubjectResolver.For(actorRol);
+        if (subjectRol is null
+            || string.IsNullOrWhiteSpace(subjectRol.TipoDocumento)
+            || string.IsNullOrWhiteSpace(subjectRol.NumeroDocumento))
+            return null;
+
+        var vigente = await repo.FindVigenteApprovedByDocumentAsync(
+            instance.TenantId,
+            subjectRol.TipoDocumento.Trim(),
+            subjectRol.NumeroDocumento.Trim(),
+            DateTimeOffset.UtcNow,
+            ct);
+        return vigente is not null && EsKyverumConId(vigente) ? vigente : null;
+    }
+
+    /// <summary>
+    /// Descarga el certificado Kyverum de un actor. Tipo de adjunto vía
+    /// <see cref="IdentityCertificateAttachmentTipo"/> (base histórica + sufijo de ordinal).
     /// Devuelve null (sin bloquear el FUR) si no hay validación Kyverum con id, si Kyverum no tiene
     /// certificado, o si la descarga falla — en los dos últimos casos registra un warning.
     /// </summary>
     private async Task<GeneratedDocument?> TryDownloadIdentityCertificateAsync(
-        ProcedureInstance instance, string role, CancellationToken ct)
+        ProcedureInstance instance,
+        string role,
+        int ordinal,
+        ProcedureInstanceActor? actor,
+        CancellationToken ct)
     {
-        static bool EsKyverumConId(ProcedureInstanceBiometricValidation v) =>
-            v.Status == BiometricEstados.Aprobado
-            && string.Equals(v.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(v.KyverumVerificationId);
-
-        var bio = instance.BiometricValidations.FirstOrDefault(v =>
-            string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase) && EsKyverumConId(v));
-
-        // Sin fila propia (identidad REFERENCIADA de otro trámite de la persona): se busca la validación
-        // vigente de la parte por documento para tomar su certificado Kyverum (HU #10350, sin clonar).
-        if (bio is null)
-        {
-            var actor = instance.Actors.FirstOrDefault(a =>
-                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-            // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
-            var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
-            if (subject is not null && !string.IsNullOrWhiteSpace(subject.TipoDocumento) && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
-            {
-                var source = await repo.FindVigenteApprovedByDocumentAsync(
-                    instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), DateTimeOffset.UtcNow, ct);
-                if (source is not null && EsKyverumConId(source))
-                    bio = source;
-            }
-        }
-
+        var bio = await ResolveKyverumBioForActorAsync(instance, role, actor, ct);
         if (bio is null)
             return null; // provider mock o sin id de Kyverum: no hay certificado externo que descargar.
 
@@ -1075,10 +1798,10 @@ public sealed class GenerarFurHandler(
                 return null;
             }
 
-            // Comprador: certificado_identidad (retrocompatible). Otras partes: sufijo de rol.
-            var tipo = string.Equals(role, BiometricRules.ParteComprador, StringComparison.OrdinalIgnoreCase)
-                ? "certificado_identidad"
-                : $"certificado_identidad_{role}";
+            if (identitySignatureCapture is not null)
+                await identitySignatureCapture.EnsureFromPdfAsync(bio, cert.Content, ct).ConfigureAwait(false);
+
+            var tipo = IdentityCertificateAttachmentTipo.For(role, ordinal);
             var safeRef = instance.ReferenceNumber.Replace('/', '-');
             return new GeneratedDocument(
                 tipo, $"{tipo}_{safeRef}.pdf", cert.ContentType, cert.Content);
@@ -1090,10 +1813,91 @@ public sealed class GenerarFurHandler(
         }
     }
 
-    private static void AddParte(List<DocumentParte> partes, ProcedureInstance instance, string rol)
+    /// <summary>
+    /// HU #11198 (AC3) — nombres de respaldo del directorio, por rol, SOLO para las partes jurídicas cuyo
+    /// trámite no registró el nombre del representante. Si el trámite lo trae, no se consulta nada: el
+    /// dato del trámite es el que manda (AC1/AC2) y una consulta de más solo abriría la puerta a que el
+    /// directorio termine ganando por accidente.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>?> ResolverNombresDelDirectorioAsync(
+        ProcedureInstance instance, string[] roles, CancellationToken ct)
     {
-        var a = instance.Actors.FirstOrDefault(x =>
-            string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase));
+        Dictionary<string, string>? nombres = null;
+
+        foreach (var rol in roles)
+        {
+            var actor = instance.Actors.FirstOrDefault(a =>
+                string.Equals(a.ActorType, rol, StringComparison.OrdinalIgnoreCase));
+            if (actor is null)
+                continue;
+
+            var esJuridica = ActorPersonTypes.IsJuridical(actor.PersonType)
+                || string.Equals(actor.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
+            if (!esJuridica)
+                continue;
+
+            var (_, _, rl) = ParseActorMetadata(actor.Metadata);
+            if (!string.IsNullOrWhiteSpace(rl?.NombreCompleto))
+                continue; // El trámite lo trae: no hay nada que respaldar.
+
+            var nombre = await _representanteDirectory.BuscarNombreRepresentanteAsync(
+                instance.TenantId, actor.DocumentNumber, rl?.TipoDocumento, rl?.NumeroDocumento, ct);
+            if (string.IsNullOrWhiteSpace(nombre))
+                continue;
+
+            nombres ??= [];
+            nombres[rol] = nombre;
+        }
+
+        return nombres;
+    }
+
+    private static IEnumerable<(string Role, string Key, ProcedureInstanceActor? Actor)> SignatureSlots(
+        ProcedureInstance instance, IEnumerable<string> roles)
+    {
+        foreach (var role in roles)
+        {
+            var actors = instance.Actors
+                .Where(a => string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(a => a.Ordinal)
+                .ToList();
+            if (actors.Count == 0)
+            {
+                yield return (role, role, null);
+                continue;
+            }
+
+            foreach (var actor in actors)
+                yield return (role, FurOverlayPartyKey.For(role, actor.Ordinal), actor);
+        }
+    }
+
+    private static void AddParte(
+        List<DocumentParte> partes,
+        ProcedureInstance instance,
+        string rol,
+        IReadOnlyDictionary<string, string>? nombresRlDirectorio = null)
+    {
+        var actors = instance.Actors
+            .Where(x => string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(x => x.Ordinal)
+            .ToList();
+        if (actors.Count == 0)
+        {
+            AppendParte(partes, rol, null, nombresRlDirectorio);
+            return;
+        }
+
+        foreach (var a in actors)
+            AppendParte(partes, rol, a, nombresRlDirectorio);
+    }
+
+    private static void AppendParte(
+        List<DocumentParte> partes,
+        string rol,
+        ProcedureInstanceActor? a,
+        IReadOnlyDictionary<string, string>? nombresRlDirectorio)
+    {
         var (ciudad, direccion, rl) = ParseActorMetadata(a?.Metadata);
         // HU #10688 — persona jurídica (tipo juridical o documento NIT): la razón social no se trocea en el FUR.
         var esJuridica = ActorPersonTypes.IsJuridical(a?.PersonType)
@@ -1109,9 +1913,17 @@ public sealed class GenerarFurHandler(
             ciudad,
             esJuridica,
             // ADR-0036 (HU #10914/#10915) — representante legal del mandante (solo persona jurídica).
-            RepresentanteLegalNombre: Trim(rl?.NombreCompleto),
+            // HU #11198 — el nombre lo manda SIEMPRE el trámite; el directorio es solo respaldo para
+            // cuando el trámite no lo trajo (AC3). Este es el punto ÚNICO donde se arma la parte, así que
+            // el mandato, la compraventa, la solicitud y el FUR quedan consistentes por construcción (AC4).
+            RepresentanteLegalNombre: Trim(rl?.NombreCompleto)
+                ?? (nombresRlDirectorio is not null && nombresRlDirectorio.TryGetValue(rol, out var respaldo)
+                    ? Trim(respaldo)
+                    : null),
             RepresentanteLegalTipoDoc: Trim(rl?.TipoDocumento),
-            RepresentanteLegalDocumento: Trim(rl?.NumeroDocumento)));
+            RepresentanteLegalDocumento: Trim(rl?.NumeroDocumento),
+            Ordinal: a?.Ordinal > 0 ? a.Ordinal : 1,
+            OwnershipPercentage: a?.OwnershipPercentage));
     }
 
     private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -1131,6 +1943,65 @@ public sealed class GenerarFurHandler(
         {
             return (null, null, null);
         }
+    }
+
+    /// <summary>
+    /// Bug #11613 — rellena EN MEMORIA las claves <c>transit_office_id/code/name/city</c> desde la
+    /// COLUMNA <c>instance.TransitOfficeId</c> cuando el trámite tiene organismo pero nunca escribió las
+    /// claves (borradores creados con OT explícito o resuelto por nombre, p. ej. los originados en ICT).
+    ///
+    /// <para>Devuelve <c>true</c> solo si quedó un <c>transit_office_code</c> utilizable. Si la columna
+    /// está vacía, o el OT ya no está habilitado para la empresa / está inactivo en el catálogo, NO se
+    /// inventa nada: el gate sigue devolviendo <c>organismo_requerido</c> (misma regla que
+    /// <c>PreflightCommand.AutoBindTransitOfficeForTraspasoAsync</c>).</para>
+    ///
+    /// <para><b>No escribe <c>field_values</c> a propósito.</b> El trigger
+    /// <c>tramites.trg_field_value_immutable</c> prohíbe insertar/actualizar/borrar filas de un trámite
+    /// radicado (solo deja borrador, rechazado con subsanación activa y unas claves puntuales del flujo
+    /// de placa), y este camino corre justamente sobre trámites radicados: el INSERT abortaba la
+    /// transacción y tumbaba también el documento recién generado. Los valores viajan por
+    /// <paramref name="fv"/>, el diccionario que alimenta a los generadores, y mueren con la petición.
+    /// La consecuencia asumida es que los demás lectores de la clave (checklist, config de mandato por
+    /// OT) siguen sin verla; leen la columna o vuelven a pasar por aquí.</para>
+    ///
+    /// <para>Nunca pisa un valor ya presente en <paramref name="fv"/>: lo que capturó el operador manda.</para>
+    /// </summary>
+    private async Task<bool> RellenarOrganismoEnMemoriaAsync(
+        ProcedureInstance instance,
+        Guid tenantId,
+        Dictionary<string, string?> fv,
+        CancellationToken ct)
+    {
+        if (instance.TransitOfficeId is not { } officeId || officeId == Guid.Empty)
+            return false;
+
+        var office = await _transitOfficeResolver.ResolveEnabledByIdAsync(tenantId, officeId, ct);
+        if (office is null || string.IsNullOrWhiteSpace(office.Code))
+            return false;
+
+        var rellenadas = 0;
+
+        void Rellenar(string key, string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || !string.IsNullOrWhiteSpace(Get(fv, key)))
+                return;
+
+            fv[key] = value;
+            rellenadas++;
+        }
+
+        Rellenar("transit_office_id", office.Id.ToString());
+        Rellenar(TransitOfficeFieldKeys.Code, office.Code);
+        Rellenar(TransitOfficeFieldKeys.Name, office.Name);
+        Rellenar(TransitOfficeFieldKeys.City, office.CityCode);
+        Rellenar(TransitOfficeFieldKeys.CityName, office.CityName);
+
+        // Solo se traza si de verdad se rellenó algo: un OT resuelto sin Name/CityCode y con el resto
+        // de claves ya presentes no es un relleno, y el log dejaba de distinguir un caso del otro.
+        if (rellenadas > 0)
+            GenerarFurLog.OrganismoRellenadoDesdeInstancia(logger, instance.Id, office.Id);
+
+        return !string.IsNullOrWhiteSpace(Get(fv, TransitOfficeFieldKeys.Code));
     }
 
     private sealed record ActorMetadataDto(string? Ciudad, string? Direccion, ActorMetadataRl? RepresentanteLegal);
@@ -1200,10 +2071,12 @@ internal static partial class GenerarFurLog
         Message = "Sin datos de registro del RUES para un actor jurídico (instancia {InstanceId}); se omite su certificado en vez de emitirlo en blanco.")]
     public static partial void CertificadoRuesSinDatos(ILogger logger, Guid instanceId);
 
-    // HU #11133 — el camino normal es el snapshot congelado al registrar. Esta traza marca los
-    // trámites que todavía obligan a pagar una consulta al proveedor: cuando deje de aparecer, el
-    // respaldo en vivo se puede retirar.
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Sin snapshot del RUES para un actor jurídico (instancia {InstanceId}); se consulta en vivo como respaldo.")]
-    public static partial void CertificadoRuesConsultaEnVivo(ILogger logger, Guid instanceId);
+        Message = "El trámite {InstanceId} tenía organismo en la columna pero no en field_values; se rellenaron las claves transit_office_* desde el OT {TransitOfficeId} (Bug #11613).")]
+    public static partial void OrganismoRellenadoDesdeInstancia(ILogger logger, Guid instanceId, Guid transitOfficeId);
+
+    // HU #11305 — se retiró CertificadoRuesConsultaEnVivo junto con la consulta que registraba. Esa
+    // traza existía para medir cuántos trámites obligaban a pagar una consulta al generar el PDF y
+    // poder apagarla al llegar a cero; el PO decidió apagarla sin esperar (D4), porque el contador no
+    // iba a bajar: lo alimentaba el caso de la precarga del directorio, que se conserva (D1).
 }

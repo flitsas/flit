@@ -1,6 +1,7 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using Flit.Tramites.Application.Identity;
 
 namespace Flit.Infrastructure.Documents;
 
@@ -21,6 +22,7 @@ internal enum FlitFirmaLinea
 /// debajo de ella:</para>
 /// <code>
 ///   [imagen del baúl  ó  sello de validación de identidad]
+///   [vigencia y hash, si la estampa es la del baúl (HU #11170)]
 ///   ─────────────────────────────────────────────────────
 ///   EMPRESA / NIT / NOMBRE / documento / CELULAR / CORREO
 /// </code>
@@ -40,6 +42,9 @@ internal enum FlitEstampa
     /// <summary>Imagen de la firma del baúl (gana sobre el sello, HU #11031).</summary>
     Baul,
 
+    /// <summary>Imagen recortada del certificado Kyverum (ADR-0054).</summary>
+    ImagenIdentidad,
+
     /// <summary>Sello de la validación biométrica de identidad.</summary>
     SelloIdentidad,
 
@@ -55,10 +60,15 @@ internal static class FlitFirmaBlock
     /// validación de identidad NO se añade (pintar ambos dejaba el documento como si la parte hubiera
     /// firmado de dos maneras distintas).
     /// </summary>
-    internal static FlitEstampa ResolverEstampa(byte[]? firmaBaul, string? selloIdentidad)
+    internal static FlitEstampa ResolverEstampa(byte[]? firmaBaul, string? selloIdentidad) =>
+        ResolverEstampa(firmaBaul, firmaIdentidad: null, selloIdentidad);
+
+    internal static FlitEstampa ResolverEstampa(byte[]? firmaBaul, byte[]? firmaIdentidad, string? selloIdentidad)
     {
         if (firmaBaul is { Length: > 0 })
             return FlitEstampa.Baul;
+        if (firmaIdentidad is { Length: > 0 } && IdentitySignatureImageFormat.IsSupported(firmaIdentidad))
+            return FlitEstampa.ImagenIdentidad;
         return string.IsNullOrWhiteSpace(selloIdentidad) ? FlitEstampa.Ninguna : FlitEstampa.SelloIdentidad;
     }
 
@@ -79,6 +89,11 @@ internal static class FlitFirmaBlock
     /// <param name="datos">Líneas de identificación del firmante, que van bajo la línea.</param>
     /// <param name="selloFontSize">Cuerpo del sello de identidad.</param>
     /// <param name="datosBold">La solicitud virtual imprime su bloque en negrita; el mandato no.</param>
+    /// <param name="selloBaul">
+    /// HU #11170 — vigencia y hash de la firma del baúl (<see cref="FlitFirmaBaulSello"/>), que van
+    /// bajo la imagen. Sin ellos, la imagen es un trazo sin nada que permita verificarla: el FUR sí los
+    /// estampaba y estos documentos no. Se ignora si la estampa no es la del baúl.
+    /// </param>
     internal static void Render(
         ColumnDescriptor col,
         byte[]? firmaBaul,
@@ -86,52 +101,85 @@ internal static class FlitFirmaBlock
         IEnumerable<string> datos,
         FlitFirmaLinea linea,
         float selloFontSize = 6.5f,
-        bool datosBold = false)
+        bool datosBold = false,
+        string? selloBaul = null,
+        string? etiquetaSinEstampa = null,
+        byte[]? firmaIdentidad = null,
+        bool compact = false)
     {
         ArgumentNullException.ThrowIfNull(col);
         ArgumentNullException.ThrowIfNull(datos);
 
+        var alto = compact ? 18f : ImagenAlto;
+        var datosSize = compact ? 7f : 10f;
+        var selloSize = compact ? 5.5f : selloFontSize;
+
         // 1. Estampa SOBRE la línea. Sin firma ni sello se deja el aire para la firma manuscrita, de modo
         //    que la línea no suba y el bloque conserve su altura en cualquier caso.
-        switch (ResolverEstampa(firmaBaul, selloIdentidad))
+        switch (ResolverEstampa(firmaBaul, firmaIdentidad, selloIdentidad))
         {
             case FlitEstampa.Baul:
-                col.Item().Height(ImagenAlto).Image(firmaBaul!).FitHeight();
+                col.Item().Height(alto).Image(firmaBaul!).FitHeight();
+                // La trazabilidad de la firma custodiada acompaña a la imagen, no a los datos del
+                // firmante: si el documento se lee sin ella, la imagen no se puede verificar.
+                RenderSello(col, selloBaul, selloSize);
+                break;
+
+            case FlitEstampa.ImagenIdentidad:
+                col.Item().Height(alto).Image(firmaIdentidad!).FitHeight();
+                RenderSello(col, selloIdentidad, selloSize);
                 break;
 
             case FlitEstampa.SelloIdentidad:
-                col.Item().Column(sello =>
-                {
-                    foreach (var line in selloIdentidad!.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                    {
-                        sello.Item().Text(t => t
-                            .Span(line.Trim())
-                            .FontSize(selloFontSize)
-                            .FontColor(Colors.Grey.Darken2));
-                    }
-                });
+                RenderSello(col, selloIdentidad, selloSize);
                 break;
 
             default:
-                col.Item().Height(ImagenAlto);
+                if (!string.IsNullOrWhiteSpace(etiquetaSinEstampa))
+                {
+                    col.Item().Height(alto).AlignMiddle().Text(t =>
+                        t.Span(etiquetaSinEstampa.Trim()).FontSize(compact ? 7 : 9).FontColor(Colors.Grey.Darken2));
+                }
+                else
+                {
+                    col.Item().Height(alto);
+                }
                 break;
         }
 
         // 2. La línea, SIEMPRE presente.
         if (linea == FlitFirmaLinea.Grafica)
-            col.Item().PaddingBottom(4).Width(LineaAncho).LineHorizontal(0.5f);
+            col.Item().PaddingBottom(compact ? 2 : 4).Width(compact ? 90f : LineaAncho).LineHorizontal(0.5f);
         else
-            col.Item().Text(LineaUnderscores);
+            col.Item().Text(compact ? "______________" : LineaUnderscores);
 
         // 3. Datos del firmante, bajo la línea.
         foreach (var line in datos)
         {
             col.Item().Text(t =>
             {
-                var span = t.Span(line).FontSize(10);
+                var span = t.Span(line).FontSize(datosSize);
                 if (datosBold)
                     span.Bold();
             });
         }
+    }
+
+    /// <summary>Sello multilínea en gris pequeño (trazabilidad del baúl o de la identidad).</summary>
+    private static void RenderSello(ColumnDescriptor col, string? sello, float fontSize)
+    {
+        if (string.IsNullOrWhiteSpace(sello))
+            return;
+
+        col.Item().Column(c =>
+        {
+            foreach (var line in sello.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                c.Item().Text(t => t
+                    .Span(line.Trim())
+                    .FontSize(fontSize)
+                    .FontColor(Colors.Grey.Darken2));
+            }
+        });
     }
 }

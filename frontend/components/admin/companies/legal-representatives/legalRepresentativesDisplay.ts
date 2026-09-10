@@ -15,11 +15,8 @@ export function fullName(rep: Pick<LegalRepresentativeItem, "name" | "firstLastN
     .join(" ");
 }
 
-/** Enmascara el número de documento (PII): solo los últimos 4 caracteres. */
-export function maskDocument(documentNumber: string): string {
-  if (documentNumber.length <= 4) return "••••";
-  return `••••${documentNumber.slice(-4)}`;
-}
+/** Documento completo. Punto único de presentación: `lib/display/document-number`. */
+export { formatDocumentNumber } from "@/lib/display/document-number";
 
 /** Estado de firma/identidad para el StatusBadge (tono semántico + etiqueta). */
 export function signatureStatus(hasSignatureOrIdentity: boolean): { tone: StatusTone; label: string } {

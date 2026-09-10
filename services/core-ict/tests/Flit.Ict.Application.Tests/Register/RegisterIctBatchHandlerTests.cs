@@ -112,4 +112,64 @@ public sealed class RegisterIctBatchHandlerTests
         result.Detail[1].Status.Should().Be(2);
         result.Detail[1].Message.Should().Contain("duplicado");
     }
+
+    [Fact]
+    public async Task Persisted_master_is_stamped_with_token_tenant_not_payload()
+    {
+        // Aislamiento por compañía: el master persistido lleva SIEMPRE el tenant del TOKEN, nunca uno
+        // derivado del payload. Un cliente ICT solo registra pre-trámites de su propia compañía.
+        Domain.Entities.ExternalIntegrationMaster? captured = null;
+        _repository
+            .AddAsync(
+                Arg.Do<Domain.Entities.ExternalIntegrationMaster>(m => captured = m),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Guid.NewGuid());
+
+        var (result, error) = await CreateHandler().HandleAsync(
+            new RegisterBatchCommand([ValidTraspaso("TEN001")]), Ct);
+
+        error.Should().BeNull();
+        result!.Detail[0].Status.Should().Be(1);
+        captured.Should().NotBeNull();
+        captured!.TenantId.Should().Be(_tenant.TenantId!.Value);
+    }
+
+    [Fact]
+    public async Task Row_without_document_is_rejected()
+    {
+        // company_manager_document es OBLIGATORIO (barrera 1 del aislamiento): una fila sin documento se
+        // rechaza con Status=2 y no se persiste, así el chequeo de NIT nunca queda "sin comparar".
+        var (result, error) = await CreateHandler().HandleAsync(
+            new RegisterBatchCommand([ValidTraspaso("EMP001", doc: null)]), Ct);
+
+        error.Should().BeNull();
+        result!.TotalRowsProcessed.Should().Be(0);
+        result.Detail[0].Status.Should().Be(2);
+        result.Detail[0].Message.Should().Contain("company_manager_document");
+        await _repository.DidNotReceive().AddAsync(
+            Arg.Any<Domain.Entities.ExternalIntegrationMaster>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Success_returns_flit_assigned_transaction_number()
+    {
+        // La BD asigna transaction_number vía secuencia y EF lo lee tras el INSERT (paridad v1); aquí se
+        // simula esa asignación en el mock del repositorio para verificar que /register lo devuelve como
+        // TransactionFlit (número), no el manager_id_transaction del gestor.
+        _repository
+            .AddAsync(Arg.Any<Domain.Entities.ExternalIntegrationMaster>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                ((Domain.Entities.ExternalIntegrationMaster)callInfo[0]!).TransactionNumber = 12345;
+                return Guid.NewGuid();
+            });
+
+        var (result, error) = await CreateHandler().HandleAsync(
+            new RegisterBatchCommand([ValidTraspaso("NUM001")]), Ct);
+
+        error.Should().BeNull();
+        result!.Detail[0].Status.Should().Be(1);
+        result.Detail[0].TransactionFlit.Should().Be("12345");
+    }
 }

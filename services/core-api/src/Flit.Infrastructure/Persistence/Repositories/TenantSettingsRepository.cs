@@ -147,36 +147,60 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
     private static void ApplyTo(TenantOperationalPolicy policy, TenantSettings settings)
     {
         policy.AllowInitialRegistration = settings.AllowInitialRegistration;
+        policy.BlockProcedureFamilyTraspaso = settings.BlockProcedureFamilyTraspaso;
+        policy.BlockProcedureFamilyOtros = settings.BlockProcedureFamilyOtros;
         policy.AllowMiscNewVehicles = settings.AllowMiscNewVehicles;
         policy.OnlyOwnVehicles = settings.OnlyOwnVehicles;
+        policy.OnlyOwnVehiclesMatriculas = settings.OnlyOwnVehiclesMatriculas;
+        policy.OnlyOwnVehiclesOtros = settings.OnlyOwnVehiclesOtros;
         policy.SignatureVaultEnabled = settings.SignatureVaultEnabled;
         policy.PlatePreassignEnabled = settings.PlatePreassignEnabled;
         policy.PlateFlowSkipToTerminado = settings.PlateFlowSkipToTerminado;
+        policy.ValidateSoatWithRunt = settings.ValidateSoatWithRunt;
         policy.NotificationChannel = TenantSettingsCodes.ToDb(settings.NotificationChannel);
+        policy.PersonalizedDocumentsEnabled = settings.PersonalizedDocumentsEnabled;
+        policy.TramiteApprovedEmailsEnabled = settings.TramiteApprovedEmailsEnabled;
+        policy.TramiteRejectedEmailsEnabled = settings.TramiteRejectedEmailsEnabled;
+        policy.TramiteStateEmailRecipients = SerializeStateRecipients(settings.StateEmailRecipients);
         policy.NotificationTarget = TenantSettingsCodes.ToDb(settings.NotificationTarget);
         policy.PaymentMethods = JsonSerializer.Serialize(settings.PaymentMethods);
         policy.RuntFailoverTimeoutMs = settings.RuntFailoverTimeoutMs;
         policy.ConsultationProviderConfig = SerializeConsultationConfig(settings.ConsultationProviderConfig);
         policy.AvaluoProviderConfig = SerializeAvaluoConfig(settings.AvaluoProviderConfig);
         policy.FinesQuerySource = settings.FinesQuerySource;
+        policy.TramitesModuleEnabled = settings.TramitesModuleEnabled;
+        policy.ComparendosModuleEnabled = settings.ComparendosModuleEnabled;
+        policy.ResolucionesModuleEnabled = settings.ResolucionesModuleEnabled;
     }
 
     private static TenantSettings Map(TenantOperationalPolicy entity) => new()
     {
         TenantId = entity.TenantId,
         AllowInitialRegistration = entity.AllowInitialRegistration,
+        BlockProcedureFamilyTraspaso = entity.BlockProcedureFamilyTraspaso,
+        BlockProcedureFamilyOtros = entity.BlockProcedureFamilyOtros,
         AllowMiscNewVehicles = entity.AllowMiscNewVehicles,
         OnlyOwnVehicles = entity.OnlyOwnVehicles,
+        OnlyOwnVehiclesMatriculas = entity.OnlyOwnVehiclesMatriculas,
+        OnlyOwnVehiclesOtros = entity.OnlyOwnVehiclesOtros,
         SignatureVaultEnabled = entity.SignatureVaultEnabled,
         PlatePreassignEnabled = entity.PlatePreassignEnabled,
+        ValidateSoatWithRunt = entity.ValidateSoatWithRunt,
         PlateFlowSkipToTerminado = entity.PlateFlowSkipToTerminado,
         NotificationChannel = TenantSettingsCodes.ParseChannelDb(entity.NotificationChannel),
+        PersonalizedDocumentsEnabled = entity.PersonalizedDocumentsEnabled,
+        TramiteApprovedEmailsEnabled = entity.TramiteApprovedEmailsEnabled,
+        TramiteRejectedEmailsEnabled = entity.TramiteRejectedEmailsEnabled,
+        StateEmailRecipients = DeserializeStateRecipients(entity.TramiteStateEmailRecipients),
         NotificationTarget = TenantSettingsCodes.ParseTargetDb(entity.NotificationTarget),
         PaymentMethods = DeserializePaymentMethods(entity.PaymentMethods),
         RuntFailoverTimeoutMs = entity.RuntFailoverTimeoutMs,
         ConsultationProviderConfig = DeserializeConsultationConfig(entity.ConsultationProviderConfig),
         AvaluoProviderConfig = DeserializeAvaluoConfig(entity.AvaluoProviderConfig),
         FinesQuerySource = TenantSettingsCodes.ParseFinesSource(entity.FinesQuerySource) ?? TenantSettingsCodes.FinesSourceExternal,
+        TramitesModuleEnabled = entity.TramitesModuleEnabled,
+        ComparendosModuleEnabled = entity.ComparendosModuleEnabled,
+        ResolucionesModuleEnabled = entity.ResolucionesModuleEnabled,
     };
 
     private static List<string> DeserializePaymentMethods(string json)
@@ -237,5 +261,30 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         return new AvaluoProviderConfig(
             raw.Primary ?? AvaluoProviderConfig.BaseProvider,
             raw.Enabled);
+    }
+
+    private sealed record StateRecipientsJson(
+        bool Comprador,
+        bool VendedorOPropietario,
+        bool Radicador,
+        string? ExtraEmail);
+
+    private static string SerializeStateRecipients(TramiteStateEmailRecipients value) =>
+        JsonSerializer.Serialize(
+            new StateRecipientsJson(
+                value.Comprador, value.VendedorOPropietario, value.Radicador, value.ExtraEmail),
+            WebJson);
+
+    private static TramiteStateEmailRecipients DeserializeStateRecipients(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return TramiteStateEmailRecipients.AllOn;
+
+        var raw = JsonSerializer.Deserialize<StateRecipientsJson>(json, WebJson);
+        if (raw is null)
+            return TramiteStateEmailRecipients.AllOn;
+
+        return TramiteStateEmailRecipients.FromJson(
+            raw.Comprador, raw.VendedorOPropietario, raw.Radicador, raw.ExtraEmail);
     }
 }

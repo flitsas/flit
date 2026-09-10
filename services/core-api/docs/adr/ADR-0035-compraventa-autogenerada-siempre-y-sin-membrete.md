@@ -4,6 +4,7 @@
 - **Módulo**: Trámites — Traspaso (TR), generación documental
 - **Feature**: #10852 (mejoras finales)
 - **Supersede parcialmente**: ADR-0031 (condición de autogeneración) · **Mantiene**: ADR-0031 (firmas por sello de identidad), ADR-0028 (no bloqueante)
+- **Nota**: el §2 (sin membrete) queda **supersedido** por [ADR-0053] (Propuesto). El §1 (autogenerar siempre y coexistir con la del usuario) **sigue vigente**.
 - **Deciders**: Líder Técnico FLIT
 - **Tags**: arquitectura, backend, documental, traspaso
 
@@ -21,7 +22,7 @@ El punto 2 también **corrige la nota de ADR-0031** que instruía "aplicar el me
 ## Decisión
 
 1. **Autogenerar siempre** la compraventa del sistema en traspaso, eliminando la condición `!TieneCompraventaDelUsuario`. La compraventa **subida por el usuario se conserva** como adjunto independiente (sigue protegida del borrado idempotente, que solo alcanza `Source="system"`): **ambas coexisten** en el expediente.
-2. La compraventa autogenerada se emite **sin membrete ni pie de marca** (excepción explícita a ADR-0030, cuyo alcance de marca documental **no** aplica a este documento).
+2. ~~La compraventa autogenerada se emite **sin membrete ni pie de marca** (excepción explícita a ADR-0030).~~ **Supersedido por [ADR-0053]**: el documento vuelve a llevar membrete FLIT (`FlitLetterhead`).
 3. Se mantiene sin cambios de ADR-0031: firmas por **sello de validación de identidad** (`SellosIdentidad`/`FirmaImagenes`), render **sin firmas** si la identidad no está validada, y carácter **no bloqueante** (ADR-0028).
 
 ## Alternativas consideradas
@@ -62,10 +63,11 @@ Opción 1: se acepta la posible **duplicidad** de documentos de compraventa en e
 ## ADRs relacionados
 - [ADR-0031] — Compraventa autogenerada firmada con identidad (este ADR **supersede su condición de autogeneración** y **corrige** su nota de membrete; mantiene el resto).
 - [ADR-0028] — Firma de compraventa no bloqueante (intacto).
-- [ADR-0030] — Marca documental compartida (este documento queda **excluido** del membrete).
+- [ADR-0030] — Marca documental compartida (la exclusión de membrete de este ADR §2 la **supersede** [ADR-0053]).
+- [ADR-0053] — Compraventa con membrete FLIT (Propuesto; supersede este ADR §2).
 
 ## Notas para agentes
-- **Backend Agent**: en `FurCommand`, eliminar la condición `!TieneCompraventaDelUsuario` de la autogeneración; **no** tocar el filtro de borrado idempotente (debe seguir alcanzando solo `Source="system"`). En `FurCompraventaDocumentGenerator`, no aplicar `FlitLetterhead`.
+- **Backend Agent**: en `FurCommand`, eliminar la condición `!TieneCompraventaDelUsuario` de la autogeneración; **no** tocar el filtro de borrado idempotente (debe seguir alcanzando solo `Source="system"`). El membrete lo define [ADR-0053] (`FlitLetterhead` en `FurCompraventaDocumentGenerator`).
 - **QA Agent**: casos: usuario carga compraventa → **ambas** quedan en el expediente y la del usuario **no** se sobrescribe; sin carga → solo la del sistema; identidad pendiente → autogenerada sin firmas; verificar que el consolidado incluye ambas y en orden legible.
 - **Security Agent**: sin cambios de permisos; el documento sigue conteniendo datos personales y sellos (Habeas Data).
 - **Infra Agent**: sin migración.

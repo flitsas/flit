@@ -26,14 +26,16 @@ public sealed class CreateProcedureTypeTests
 
         await _repo.AddAsync(Arg.Any<ProcedureType>(), ct);
 
-        var result = await _sut.HandleAsync(request, ct);
+        var (result, error) = await _sut.HandleAsync(request, ct);
+
+        error.Should().BeNull();
 
         result.Should().NotBeNull();
-        result.Code.Should().Be("MAT_EST");
-        result.Family.Should().Be("MATRICULAS");
-        result.PublicationStatus.Should().Be(PublicationStatus.Draft);
-        result.IsActive.Should().BeTrue();
-        result.PublishedAt.Should().BeNull();
+        result!.Code.Should().Be("MAT_EST");
+        result!.Family.Should().Be("MATRICULAS");
+        result!.PublicationStatus.Should().Be(PublicationStatus.Draft);
+        result!.IsActive.Should().BeTrue();
+        result!.PublishedAt.Should().BeNull();
 
         await _repo.Received(1).AddAsync(Arg.Any<ProcedureType>(), ct);
         await _repo.Received(1).SaveChangesAsync(ct);
@@ -45,8 +47,10 @@ public sealed class CreateProcedureTypeTests
         var ct = TestContext.Current.CancellationToken;
         var request = new CreateProcedureTypeRequest("TRASPASO", "TRAS_001", "Traspaso", "Descripción");
 
-        var result = await _sut.HandleAsync(request, ct);
+        var (result, error) = await _sut.HandleAsync(request, ct);
 
-        result.PublicationStatus.Should().Be(PublicationStatus.Draft);
+        error.Should().BeNull();
+
+        result!.PublicationStatus.Should().Be(PublicationStatus.Draft);
     }
 }

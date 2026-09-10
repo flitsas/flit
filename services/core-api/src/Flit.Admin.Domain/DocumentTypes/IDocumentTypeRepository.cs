@@ -20,6 +20,8 @@ public interface IDocumentTypeRepository
         Guid? createdBy,
         IReadOnlyList<string>? mimeTypesAllowed = null,
         long? maxSizeBytes = null,
+        bool isSystemGenerated = false,
+        string? uploadInstructions = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Listado paginado ordenado por nombre ascendente (AC2).</summary>
@@ -44,12 +46,21 @@ public interface IDocumentTypeRepository
         Guid? updatedBy,
         IReadOnlyList<string>? mimeTypesAllowed = null,
         long? maxSizeBytes = null,
+        bool? isSystemGenerated = null,
+        string? uploadInstructions = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Soft-delete: marca <c>is_active = false</c>; devuelve false si no existe (AC4).</summary>
     Task<bool> SoftDeleteAsync(
         Guid id,
         Guid? updatedBy,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Baja física: quita asociaciones (requisitos, overrides, precedencia OT) y borra el tipo.
+    /// </summary>
+    Task<bool> PurgeAsync(
+        Guid id,
         CancellationToken cancellationToken = default);
 
     /// <summary>Reactivación: marca <c>is_active = true</c>; devuelve false si no existe.</summary>

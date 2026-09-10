@@ -62,6 +62,9 @@ public sealed record TenantBiometricValidationListQuery(
     {
         BiometricProviders.Mock,
         BiometricProviders.Kyverum,
+        // Identidades traídas de V1 por la migración: poder aislarlas en la grilla es justo lo que
+        // necesita el operador para auditar una ola de migración.
+        BiometricProviders.MigracionV1,
     };
 
     private static readonly HashSet<string> ValidVigenciaEstados = new(StringComparer.OrdinalIgnoreCase)
@@ -86,7 +89,7 @@ public sealed record TenantBiometricValidationListQuery(
             return "parte inválida; use comprador o vendedor.";
 
         if (!string.IsNullOrWhiteSpace(Provider) && !ValidProviders.Contains(Provider.Trim()))
-            return "provider inválido; use mock o kyverum.";
+            return "provider inválido; use mock, kyverum o migracion_v1.";
 
         if (CreatedFrom is { } from && CreatedTo is { } to && from > to)
             return "createdFrom no puede ser posterior a createdTo.";

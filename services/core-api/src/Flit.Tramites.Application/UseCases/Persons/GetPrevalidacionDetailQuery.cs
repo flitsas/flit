@@ -32,7 +32,7 @@ public sealed class GetPrevalidacionDetailHandler(IProcedureInstanceRepository r
         {
             ProcedureInstanceId = validation.ProcedureInstanceId,
             ReferenceNumber = validation.ProcedureInstance?.ReferenceNumber,
-            Modalidad = validation.ProcedureInstance?.ModalidadEntrada,
+            Modalidad = (validation.ProcedureInstance != null && validation.ProcedureInstance.ProcedureType != null ? validation.ProcedureInstance.ProcedureType.Family : ""),
             LinkedProcedures = linked,
         }, null);
     }

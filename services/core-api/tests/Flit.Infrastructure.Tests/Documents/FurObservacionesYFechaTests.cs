@@ -60,6 +60,26 @@ public sealed class FurObservacionesYFechaTests
         Campo(Data(observaciones: null), "observations").Should().BeEmpty();
     }
 
+    // HU #11256 — el auto-encaje (`FurTextFitter.FitMultiline`) vive en el renderer (paso posterior al
+    // mapper) y solo recorta lo que se DIBUJA, nunca lo que el mapper pone en el campo. Un texto
+    // desmedido (~2.000 caracteres, compuesto de gravamen + observación manual + transformación) debe
+    // llegar íntegro al campo mapeado: si el mapper ya lo truncara, el renderer no tendría de dónde
+    // partir para envolver/reducir cuerpo antes del último recurso.
+    [Fact]
+    public void Observaciones_ComposicionDesmedida_LlegaIntegraAlCampoMapeado_SinTruncarEnElMapper()
+    {
+        var gravamen = "GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A. - NIT 890900608. ";
+        var manual = string.Join(" ", Enumerable.Repeat(
+            "Vehículo con platón adaptado y observación extendida del gestor.", 30));
+        var transformacion = " Cambio de color: ROJO. Transformación registrada conforme ADR-0029.";
+        var compuesto = gravamen + manual + transformacion;
+
+        // ~2.000 caracteres: el caso "desmedido" de las Notas para QA del diseño técnico.
+        compuesto.Length.Should().BeGreaterThan(1800);
+
+        Campo(Data(observaciones: compuesto), "observations").Should().Be(compuesto);
+    }
+
     // ── HU #10988 — fecha del trámite ────────────────────────────────────────
 
     [Fact]
@@ -68,7 +88,7 @@ public sealed class FurObservacionesYFechaTests
         var data = Data(fechaTramite: new DateTime(2026, 7, 20, 0, 0, 0, DateTimeKind.Utc));
 
         Campo(data, "processing_day").Should().Be("20");
-        Campo(data, "processing_month").Should().Be("7");
+        Campo(data, "processing_month").Should().Be("07");
         Campo(data, "processing_year").Should().Be("2026");
     }
 
@@ -79,8 +99,8 @@ public sealed class FurObservacionesYFechaTests
         var hoy = DateTime.UtcNow;
         var data = Data(fechaTramite: null);
 
-        Campo(data, "processing_day").Should().Be(hoy.Day.ToString(CultureInfo.InvariantCulture));
-        Campo(data, "processing_month").Should().Be(hoy.Month.ToString(CultureInfo.InvariantCulture));
-        Campo(data, "processing_year").Should().Be(hoy.Year.ToString(CultureInfo.InvariantCulture));
+        Campo(data, "processing_day").Should().Be(hoy.Day.ToString("00", CultureInfo.InvariantCulture));
+        Campo(data, "processing_month").Should().Be(hoy.Month.ToString("00", CultureInfo.InvariantCulture));
+        Campo(data, "processing_year").Should().Be(hoy.Year.ToString("0000", CultureInfo.InvariantCulture));
     }
 }

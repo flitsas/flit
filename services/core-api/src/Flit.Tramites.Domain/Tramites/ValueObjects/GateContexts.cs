@@ -1,7 +1,18 @@
 namespace Flit.Tramites.Domain.Tramites.ValueObjects;
 
-/// <summary>Datos mínimos de una parte para evaluar completitud en los gates.</summary>
-public sealed record ParteDatos(string? Nombre, string? Documento, string? Email);
+/// <summary>
+/// Datos mínimos de una parte para evaluar completitud en los gates.
+/// HU #11593 — Ciudad/Direccion/Telefono se suman a Nombre/Documento/Email como exigencia dura
+/// de contacto (los seis campos), para que ningún trámite avance sin poder notificar/radicar. Se
+/// dejan con default <c>null</c> para no romper los call sites existentes que aún no los pueblan.
+/// </summary>
+public sealed record ParteDatos(
+    string? Nombre,
+    string? Documento,
+    string? Email,
+    string? Ciudad = null,
+    string? Direccion = null,
+    string? Telefono = null);
 
 /// <summary>Estado de preflight (SOAT/RTM/impuesto) consolidado.</summary>
 /// <param name="Overall">Semáforo global: "green" | "amber" | "red".</param>
@@ -9,7 +20,16 @@ public sealed record ParteDatos(string? Nombre, string? Documento, string? Email
 /// <param name="ProviderError">Algún proveedor no se pudo verificar (check "error"): la información
 /// es vital, así que es un bloqueo DURO no subsanable con "aceptar riesgo" (distinto del rojo por
 /// SOAT/RTM/estado, que sí es subsanable). Obliga a reintentar la consulta antes de continuar.</param>
-public sealed record PreflightSnapshot(string? Overall, bool ImpuestoVehicularUnknown, bool ProviderError = false);
+/// <param name="VehiculoNoEncontrado">La consulta del vehículo respondió, pero el vehículo NO existe
+/// en el RUNT (check "vehiculo" en "fail"). Como <paramref name="ProviderError"/>, es un bloqueo DURO:
+/// sin vehículo verificado no hay trámite posible, así que no se subsana con "aceptar riesgo" ni
+/// forzando. Se distingue de ProviderError porque aquí la fuente SÍ respondió (no es un fallo técnico),
+/// y el mensaje al operador debe pedir corregir el identificador, no reintentar.</param>
+public sealed record PreflightSnapshot(
+    string? Overall,
+    bool ImpuestoVehicularUnknown,
+    bool ProviderError = false,
+    bool VehiculoNoEncontrado = false);
 
 /// <summary>Snapshot de una consulta RUNT contra un documento concreto.</summary>
 /// <param name="Consultado">Si la consulta se realizó.</param>

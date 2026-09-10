@@ -56,7 +56,31 @@ public sealed record CreateMandateSignerData(
     Guid? CorrelationId,
     string DocumentType = "CC",
     string? Email = null,
-    Guid? UserId = null);
+    Guid? UserId = null,
+    /// <summary>
+    /// HU #11201 — organismos donde aplica el mandatario. Vacío ⇒ solo
+    /// <see cref="TransitOfficeId"/>, que es lo que hace el alta desde el perfil del organismo.
+    /// <see cref="TransitOfficeId"/> queda como organismo PRIMARIO (deprecado, se conserva por
+    /// compatibilidad); la lista es la que decide dónde puede firmar.
+    /// </summary>
+    IReadOnlyList<Guid>? TransitOfficeIds = null,
+    /// <summary>
+    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
+    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
+    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
+    /// electrónicamente ante otro.
+    /// </summary>
+    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
+    /// <summary>
+    /// Firma del baúl elegida para el mandatario. <c>null</c> ⇒ el trámite la resuelve por documento,
+    /// que es el comportamiento previo.
+    /// </summary>
+    Guid? SignatureVaultId = null,
+    /// <summary>
+    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
+    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// </summary>
+    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null);
 
 /// <summary>Datos de edición. La huella ya viene recalculada con la fecha de registro original.</summary>
 public sealed record UpdateMandateSignerData(
@@ -70,7 +94,54 @@ public sealed record UpdateMandateSignerData(
     Guid? CorrelationId,
     string DocumentType = "CC",
     string? Email = null,
-    Guid? UserId = null);
+    Guid? UserId = null,
+    /// <summary>
+    /// HU #11201 — conjunto deseado de organismos. <c>null</c> ⇒ no se tocan (la edición desde el
+    /// perfil del organismo solo cambia datos personales y compañías, AC2). Una lista, aunque esté
+    /// vacía, REEMPLAZA el conjunto: los organismos que no vengan se retiran (AC3).
+    /// </summary>
+    IReadOnlyList<Guid>? TransitOfficeIds = null,
+    /// <summary>
+    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
+    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
+    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
+    /// electrónicamente ante otro.
+    /// </summary>
+    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
+    /// <summary>
+    /// Firma del baúl elegida para el mandatario. <c>null</c> ⇒ el trámite la resuelve por documento,
+    /// que es el comportamiento previo.
+    /// </summary>
+    Guid? SignatureVaultId = null,
+    /// <summary>
+    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
+    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// </summary>
+    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null,
+    /// <summary>
+    /// El llamante gestiona la firma del baúl y <see cref="SignatureVaultId"/> es su valor deseado
+    /// (incluido <c>null</c>, que la desvincula). En <c>false</c> la firma NO se toca.
+    ///
+    /// <para>Hace falta porque <c>Guid?</c> no distingue "no la gestiono" de "quítala": la edición desde
+    /// el perfil del organismo no maneja este campo, y sin esta señal cada guardado suyo borraría la
+    /// firma que la compañía acababa de elegir.</para>
+    /// </summary>
+    bool ActualizaFirma = false,
+    /// <summary>
+    /// Organismo que pasa a ser el PRIMARIO (<c>mandate_signers.transit_office_id</c>). Solo hace falta
+    /// cuando la edición retira de la lista al primario actual: sin repuntarlo, la fila quedaría
+    /// apuntando a un organismo donde el mandatario ya no aplica, y la reactivación —que restaura el
+    /// primario— lo resucitaría. <c>null</c> ⇒ se conserva el que ya tiene.
+    /// </summary>
+    Guid? NuevoOrganismoPrimario = null);
+
+/// <summary>
+/// Empresas representadas que un mandatario atiende en un organismo. La lista vacía significa "todas":
+/// no hay forma de decir "ninguna", porque un mandatario sin empresas no podría firmar nada.
+/// </summary>
+public sealed record MandateSignerOfficeCompanies(
+    Guid TransitOfficeId,
+    IReadOnlyList<Guid> RepresentedCompanyIds);
 
 /// <summary>Datos de inactivación.</summary>
 public sealed record InactivateMandateSignerData(

@@ -1,4 +1,5 @@
 using System.Data.Common;
+using Flit.Admin.Domain.OtMetrics;
 using Flit.Analytics.Application.Scheduling;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -11,8 +12,14 @@ namespace Flit.Infrastructure.Analytics.Scheduling;
 /// operacionales. Mismo patrón de tenant que <c>AnalyticsReadRepository</c>: se fija el GUC
 /// <c>app.current_tenant_id</c> (RLS) dentro de una transacción Y la consulta filtra
 /// explícitamente por <c>tenant_id</c>.
+///
+/// <para>Las métricas <c>ot_*</c> (alcance OT) son la excepción: NO pasan por el SQL con RLS de
+/// abajo porque su lectura es cross-tenant a propósito (cruzan las empresas con grant vigente con
+/// el organismo, eje invertido — ver <see cref="IOtMetricsReadRepository"/>). Se delegan enteras a
+/// ese repositorio en vez de reimplementar aquí su resolución de organismo/grants.</para>
 /// </summary>
-internal sealed class AlertMetricsReadRepository(FlitDbContext db) : IAlertMetricsReadRepository
+internal sealed class AlertMetricsReadRepository(
+    FlitDbContext db, IOtMetricsReadRepository otMetrics) : IAlertMetricsReadRepository
 {
     /// <summary>stuck_count: días sin transición para considerar una instancia atascada (§8: fijo).
     /// Const string para poder interpolarlo en el SQL const (C# solo permite const strings ahí).</summary>
@@ -113,6 +120,21 @@ internal sealed class AlertMetricsReadRepository(FlitDbContext db) : IAlertMetri
     public async Task<decimal> GetMetricValueAsync(
         Guid tenantId, string metric, int windowMinutes, CancellationToken ct)
     {
+        // Alcance OT: eje invertido, cross-tenant por grant — no encaja en el SQL de RLS de abajo,
+        // que asume UN tenant. `tenantId` aquí es el tenant DUEÑO del organismo (mismo que
+        // cualquier otra alerta), así que se le pide a IOtMetricsReadRepository su propia foto sin
+        // override de organismo (ya se resolvió, si hacía falta, al crear la regla).
+        if (metric is "ot_stuck_count" or "ot_rejection_rate_pct")
+        {
+            var snapshot = await otMetrics
+                .GetAlertSnapshotAsync(tenantId, windowMinutes, transitOfficeIdOverride: null, ct)
+                .ConfigureAwait(false);
+            if (snapshot is null)
+                return 0m; // Tenant sin organismo asociado: nada que medir, no un error de evaluación.
+
+            return metric == "ot_stuck_count" ? snapshot.StuckCount : snapshot.RejectionRatePct;
+        }
+
         var sql = metric switch
         {
             "rejection_rate_pct" => RejectionRateSql,

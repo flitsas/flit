@@ -7,8 +7,9 @@ namespace Flit.Ict.Api.Endpoints;
 /// <summary>
 /// Estado y reproceso de un trámite. Se conservan los PATHS y la FORMA de respuesta de v1 para no
 /// romper clientes existentes: <c>GET /api/v1/status-process/byId/{id}</c> devuelve el histórico
-/// (statusProcess[]) con códigos numéricos. El id es el TransactionFlit (manager_id_transaction) que
-/// devuelve el registro.
+/// (statusProcess[]) con códigos numéricos. El <c>{id}</c> es el TransactionFlit que devuelve el
+/// registro — el número secuencial (transaction_number, paridad v1) — y por compatibilidad también se
+/// acepta el manager_id_transaction propio del gestor (la resolución prioriza el número si es numérico).
 /// </summary>
 public static class IctStatusEndpoints
 {

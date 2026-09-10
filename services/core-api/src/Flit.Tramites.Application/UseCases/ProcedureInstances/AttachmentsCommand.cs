@@ -19,7 +19,10 @@ public sealed record AttachmentDto(
     long SizeBytes,
     string Sha256,
     string Source,
-    DateTimeOffset UploadedAt);
+    DateTimeOffset UploadedAt,
+    string? Provider = null,
+    /// <summary>True si hay auditoría de firma digital vigente para este adjunto (impronta manual).</summary>
+    bool DigitallySigned = false);
 
 public sealed record AttachmentsResponse(IReadOnlyList<AttachmentDto> Attachments);
 
@@ -29,7 +32,11 @@ public sealed record UploadAttachmentInput(
     string Filename,
     string Mimetype,
     long SizeBytes,
-    Stream Content);
+    Stream Content,
+    /// <summary>
+    /// Proveedor externo opcional (p. ej. <c>kyverum</c>). Las cargas del gestor lo dejan null.
+    /// </summary>
+    string? Provider = null);
 
 /// <summary>Reglas de validación de adjuntos (compartidas con el contrato del front).</summary>
 public static class AttachmentRules
@@ -46,9 +53,24 @@ public static class AttachmentRules
         "rtm", "paz_salvo", "cedulas", "cert_tradicion",
         // Prenda / gravamen (IT-3, Feature #10585): un DocTipo por decisión que requiere soporte.
         "prenda_solicitud", "prenda_registro", "prenda_levantamiento",
+        // Trámites simultáneos / transformaciones (prototipo Lovable DocSlot + RF33 carrocería).
+        "soporte_cambio_color", "soporte_conversion_combustible", "factura_carroceria",
+        // Certificado de blindaje: obligatorio en las cuatro opciones del tipo BLINDAJE (niveles y
+        // desmonte). El AttachmentValidator ya lo aceptaría por catálogo, pero la validación estática
+        // de la vía presigned solo mira este set.
+        "certificado_blindaje",
         // HU #10604 (R19) / #10697 — paz y salvo RNMC. RNMC ya NO bloquea el envío al OT (la medida
         // correctiva es informativa): este adjunto queda como OPCIONAL informativo, no como requisito.
         "paz_salvo_rnmc",
+        // Escritura del representante legal CARGADA por el gestor, cuando el representante capturado
+        // no está en el módulo de representantes de la compañía y por tanto no tiene escritura que el
+        // sistema pueda apalancar del directorio. Un código por rol (misma convención que
+        // 'certificado_identidad{_rol}') para que las dos partes de un traspaso puedan cargar cada una
+        // la suya. NO se reutiliza 'escritura'/'escritura_comprador': esos son documentos de sistema
+        // (is_system_generated) y la limpieza de huérfanos del expediente los retira sin mirar el
+        // `source`, así que una carga manual bajo ese código no sobreviviría a la siguiente regeneración.
+        "escritura_representante", "escritura_representante_vendedor",
+        "escritura_representante_locatario",
     };
 
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -66,8 +88,30 @@ public static class AttachmentRules
         "soat", "soat_manual",
     };
 
+    /// <summary>
+    /// HU #12046 — tipos que admiten VARIOS adjuntos a la vez. Son bolsas por definición: su nombre no
+    /// designa un documento concreto sino "lo demás", así que subir uno nuevo no puede retirar el anterior.
+    /// <para>Para todos los demás la casilla es UNA: el checklist mapea tipo → un adjunto, el consolidado
+    /// tiene una precedencia por tipo, el FUR y la Licencia de Tránsito reemplazan al regenerarse y la
+    /// impronta se protege no regenerando. La subida del gestor era la única que acumulaba, y por eso el
+    /// botón decía «Reemplazar archivo» mientras el expediente se quedaba con los dos.</para>
+    /// <para>Solo códigos que existen en el catálogo (<c>tramites.document_types</c>): un código
+    /// inexistente no protege nada y hace creer que la casilla existe. Aquí estuvo
+    /// <c>documentosTramite</c>, que solo existía en una base de pruebas local — lo cubre ahora
+    /// <c>AttachmentRulesCatalogParityTests</c>.</para>
+    /// </summary>
+    public static readonly IReadOnlySet<string> TiposMultiples = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "otro", "anexos_generales",
+    };
+
+    /// <summary>¿Subir este tipo debe RETIRAR el adjunto anterior del mismo tipo?</summary>
+    public static bool ReemplazaAlSubir(string? tipo) =>
+        !string.IsNullOrWhiteSpace(tipo) && !TiposMultiples.Contains(tipo.Trim());
+
     public static bool IsSoatEvidenceTipo(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && SoatEvidenceTipos.Contains(tipo.Trim());
+
 
     /// <summary>
     /// ¿Se permite cargar este tipo de adjunto en este estado? Regla general: editable como
@@ -75,6 +119,8 @@ public static class AttachmentRules
     /// legado <c>subsanacion</c>). Excepción de la ruta de placa (HU #10785): la evidencia de SOAT
     /// se puede cargar con el trámite <c>entregado</c> y el sub-estado interno de placa en
     /// <c>asignado</c>, para desbloquear la aprobación del OT.
+    /// <para>La Licencia de Tránsito que emite el OT NO pasa por aquí: tiene su propio gate de estado
+    /// en <see cref="AdjuntarLicenciaTransitoHandler"/>, que acepta <c>entregado</c> y <c>aprobado</c>.</para>
     /// </summary>
     public static bool AllowsUploadInState(
         string status,
@@ -130,7 +176,8 @@ public sealed record RegisterAttachmentInput(
 public sealed class UploadAttachmentHandler(
     IProcedureInstanceRepository repo,
     IAttachmentStorage storage,
-    AttachmentValidator? validator = null)
+    AttachmentValidator? validator = null,
+    IVehicleSignatureImprintRepository? imprintAudit = null)
 {
     public async Task<(AttachmentDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -154,7 +201,36 @@ public sealed class UploadAttachmentHandler(
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
+
+        // HU #12046 — «Reemplazar archivo» tiene que reemplazar. Antes esto solo añadía: el expediente se
+        // quedaba con el documento corregido Y con el que se quiso corregir, el consolidado los metía los
+        // dos (ordena por tipo y luego por fecha, sin deduplicar) y la pantalla enseñaba el PRIMERO, o sea
+        // el viejo. Misma semántica que ya tenían el FUR y la Licencia de Tránsito.
+        // Y reemplaza SOLO lo que es del mismo dueño que la carga. Un documento que generó el sistema
+        // (FUR, mandato, certificado de identidad…) o que personalizó la compañía tiene su propio ciclo
+        // de vida y no puede desaparecer porque el gestor suba un archivo en la misma casilla: `rtm`,
+        // `soat` y otros trece tipos están marcados `is_system_generated` Y son cargables a mano, así
+        // que la colisión es real. Es el mismo principio que `AttachmentCleanup` aplica en la dirección
+        // contraria —al limpiar lo generado, respeta lo cargado— y que motivó el Bug #11310.
+        var previos = AttachmentRules.ReemplazaAlSubir(tipo)
+            ? instance.Attachments
+                .Where(a => string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)
+                            && !EsDeOtroDueno(a))
+                .ToList()
+            : [];
+
         var stored = await storage.SaveAsync(id, tipo, input.Filename ?? "file", input.Content, ct);
+
+        // Se retiran DESPUÉS de guardar el nuevo: si el almacenamiento falla, el gestor conserva el que tenía.
+        // Soft-delete auditoría + conservar blob firmado (snapshot signed_storage_path).
+        var preservePaths = SoftDeleteImprintAudits(previos, imprintAudit);
+        foreach (var prev in previos)
+        {
+            if (!preservePaths.Contains(prev.StoragePath))
+                storage.Delete(prev.StoragePath);
+            instance.Attachments.Remove(prev);
+            repo.RemoveAttachment(prev);
+        }
 
         var attachment = new ProcedureInstanceAttachment
         {
@@ -168,6 +244,7 @@ public sealed class UploadAttachmentHandler(
             Sha256 = stored.Sha256,
             StoragePath = stored.StoragePath,
             Source = "user",
+            Provider = string.IsNullOrWhiteSpace(input.Provider) ? null : input.Provider.Trim().ToLowerInvariant(),
             UploadedAt = DateTimeOffset.UtcNow,
             UploadedBy = uploadedBy,
         };
@@ -187,8 +264,28 @@ public sealed class UploadAttachmentHandler(
         return (ToDto(attachment), null);
     }
 
-    internal static AttachmentDto ToDto(ProcedureInstanceAttachment a) =>
-        new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt);
+    /// <summary>
+    /// ¿Este adjunto lo puso alguien que no es el gestor que ahora sube? Lo generado por el sistema y lo
+    /// personalizado por la compañía se retiran por sus propias vías, nunca de rebote por una carga.
+    /// </summary>
+    private static bool EsDeOtroDueno(ProcedureInstanceAttachment a) =>
+        string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase);
+
+    internal static IReadOnlySet<string> SoftDeleteImprintAudits(
+        IReadOnlyList<ProcedureInstanceAttachment> previos,
+        IVehicleSignatureImprintRepository? imprintAudit)
+    {
+        if (imprintAudit is null || previos.Count == 0)
+            return new HashSet<string>(StringComparer.Ordinal);
+        return imprintAudit.SoftDeleteByAttachmentIds(
+                   previos.Select(p => p.Id),
+                   DateTimeOffset.UtcNow)
+               ?? new HashSet<string>(StringComparer.Ordinal);
+    }
+
+    internal static AttachmentDto ToDto(ProcedureInstanceAttachment a, bool digitallySigned = false) =>
+        new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt, a.Provider, digitallySigned);
 }
 
 /// <summary>
@@ -236,7 +333,9 @@ public sealed class PresignAttachmentHandler(
 /// </summary>
 public sealed class RegisterAttachmentHandler(
     IProcedureInstanceRepository repo,
-    AttachmentValidator? validator = null)
+    IAttachmentStorage? storage = null,
+    AttachmentValidator? validator = null,
+    IVehicleSignatureImprintRepository? imprintAudit = null)
 {
     public async Task<(AttachmentDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -262,6 +361,25 @@ public sealed class RegisterAttachmentHandler(
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
+
+        // Paridad HU #12046 con UploadAttachmentHandler: el front usa presign→register.
+        var previos = AttachmentRules.ReemplazaAlSubir(tipo)
+            ? instance.Attachments
+                .Where(a => string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase))
+                .ToList()
+            : [];
+
+        var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits(previos, imprintAudit);
+        foreach (var prev in previos)
+        {
+            if (storage is not null && !preservePaths.Contains(prev.StoragePath))
+                storage.Delete(prev.StoragePath);
+            instance.Attachments.Remove(prev);
+            repo.RemoveAttachment(prev);
+        }
+
         var attachment = new ProcedureInstanceAttachment
         {
             Id = Guid.NewGuid(),
@@ -397,7 +515,9 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
 }
 
 /// <summary>Lista los adjuntos de una instancia.</summary>
-public sealed class ListAttachmentsHandler(IProcedureInstanceRepository repo)
+public sealed class ListAttachmentsHandler(
+    IProcedureInstanceRepository repo,
+    IVehicleSignatureImprintRepository? imprintAudit = null)
 {
     public async Task<(AttachmentsResponse? Result, string? Error)> HandleAsync(
         Guid id,
@@ -408,9 +528,15 @@ public sealed class ListAttachmentsHandler(IProcedureInstanceRepository repo)
         if (instance is null)
             return (null, "not_found");
 
+        IReadOnlySet<Guid> signedIds = imprintAudit is null
+            ? new HashSet<Guid>()
+            : await imprintAudit
+                .ListSignedAttachmentIdsForInstanceAsync(id, ct)
+                .ConfigureAwait(false);
+
         var dtos = instance.Attachments
             .OrderBy(a => a.UploadedAt)
-            .Select(UploadAttachmentHandler.ToDto)
+            .Select(a => UploadAttachmentHandler.ToDto(a, signedIds.Contains(a.Id)))
             .ToList();
         return (new AttachmentsResponse(dtos), null);
     }
@@ -456,7 +582,8 @@ public sealed class DownloadAttachmentHandler(
 /// <summary>Borra un adjunto (FS + fila). Solo en <c>draft</c>.</summary>
 public sealed class DeleteAttachmentHandler(
     IProcedureInstanceRepository repo,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    IVehicleSignatureImprintRepository? imprintAudit = null)
 {
     public async Task<string?> HandleAsync(
         Guid id,
@@ -475,7 +602,9 @@ public sealed class DeleteAttachmentHandler(
             return "attachment_not_found";
 
         var tipo = attachment.Tipo;
-        storage.Delete(attachment.StoragePath);
+        var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits([attachment], imprintAudit);
+        if (!preservePaths.Contains(attachment.StoragePath))
+            storage.Delete(attachment.StoragePath);
         instance.Attachments.Remove(attachment);
         repo.RemoveAttachment(attachment);
 
@@ -513,7 +642,7 @@ internal static class ChecklistEstadoJson
     /// </summary>
     public static void AutoMark(ProcedureInstance instance, string docTipo)
     {
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var tip = TramiteTipologiaCatalog.Get(codigo);
         if (tip is null)
             return;
@@ -541,7 +670,7 @@ internal static class ChecklistEstadoJson
     /// </summary>
     public static void AutoUnmark(ProcedureInstance instance, string docTipo)
     {
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var tip = TramiteTipologiaCatalog.Get(codigo);
         if (tip is null)
             return;

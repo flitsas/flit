@@ -466,4 +466,47 @@ public sealed class QuipuxTipoTramiteMapTests
         mapa.Should().NotBeNull();
         mapa!.Resolve(Campos(("es_leasing", "true"))).TipoTramite.Should().Be(13);
     }
+
+    // ── ADR-0050: los tipos que eran variante ahora son tipos propios ────────────────────────────
+
+    private const string LeasingComoTipoPropio = """
+        {
+          "quipux": {
+            "familia": "MATRICULA",
+            "tipoTramite": 13,
+            "tipoRequisito": 51,
+            "prefijo": "MIL",
+            "campoPlaca": null,
+            "campoVin": "vin",
+            "maxLongitudEmpresa": 25
+          }
+        }
+        """;
+
+    [Fact]
+    public void UnBloqueSinVariante_EsElegible()
+    {
+        // MATRICULA_LEASING y TRASPASO_UNILATERAL son ya tipos del catálogo: el caso especial está
+        // en el tipo, no en una casilla del trámite, así que su bloque no lleva `variante`. Sin este
+        // camino, esos dos tipos quedarían no elegibles y sus trámites sin radicar.
+        var mapa = QuipuxTipoTramiteMap.Parse(LeasingComoTipoPropio);
+
+        mapa.Should().NotBeNull();
+        mapa!.Prefijo.Should().Be("MIL");
+        mapa.TipoTramite.Should().Be(13);
+    }
+
+    [Fact]
+    public void UnBloqueSinVariante_ResuelveIgualAunqueElTramiteTraigaLaCasillaVieja()
+    {
+        // Un trámite migrado puede seguir teniendo es_leasing = true en sus field values. Como el
+        // tipo ya no declara variante, no hay nada que aplicar: el resultado es el del bloque base.
+        var resuelto = QuipuxTipoTramiteMap.Parse(LeasingComoTipoPropio)!
+            .Resolve(new Dictionary<string, string?> { ["es_leasing"] = "true", ["vin"] = "9BWZZZ377VT004251" });
+
+        resuelto.Prefijo.Should().Be("MIL");
+        resuelto.VarianteAplicada.Should().BeFalse();
+        resuelto.UsaVin.Should().BeTrue();
+        resuelto.UsaPlaca.Should().BeFalse();
+    }
 }

@@ -30,13 +30,12 @@ public sealed class WizardMigradoReadonlyTests
     private static ProcedureInstance Traspaso(string status, bool isMigrated) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = Guid.NewGuid(),
             TenantId = Guid.NewGuid(),
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "MIG-TR-24860",
             Status = status,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             IsMigrated = isMigrated,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -58,12 +57,13 @@ public sealed class WizardMigradoReadonlyTests
         result!.TotalSteps.Should().Be(6);
         result.Steps.Should().OnlyContain(s => s.Status == "complete");
         result.Steps.Should().OnlyContain(s => s.Reasons.Count == 0);
-        // Terminal ⇒ sin acciones: no se puede radicar y no hay blockers pendientes.
+        // Terminal ⇒ sin acciones de RADICACIÓN: no se puede reenviar y no hay blockers pendientes.
         result.CanSubmit.Should().BeFalse();
         result.Blockers.Should().BeEmpty();
-        // El estado de negocio y la ausencia de transiciones se preservan (aprobado es final).
+        // El estado de negocio se preserva, foto o no: Aprobado sigue admitiendo la transición que el
+        // organismo de tránsito controla (HU #12165/#12166) — revocar su propia aprobación.
         result.Status.Should().Be(TramiteEstado.Aprobado);
-        result.AllowedTransitions.Should().BeEmpty();
+        result.AllowedTransitions.Should().BeEquivalentTo([TramiteEstado.Revocado]);
     }
 
     [Fact]
@@ -91,6 +91,22 @@ public sealed class WizardMigradoReadonlyTests
 
         result!.Steps.Should().NotBeEmpty();
         result.Steps.Should().Contain(s => s.Status != "complete");
+    }
+
+    [Fact]
+    public async Task ElOrigenMigradoViajaAlWizard_EnCualquierEstado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // El frontend lo necesita en BORRADOR —no solo en la foto terminal— para explicar en el
+        // pre-vuelo por qué las consultas de RUNT/SIMIT llegan sin hacer: no se migran porque caducan.
+        Setup(Traspaso(TramiteEstado.Borrador, isMigrated: true));
+        var (migrado, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        Setup(Traspaso(TramiteEstado.Borrador, isMigrated: false));
+        var (nativo, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        migrado!.EsMigrado.Should().BeTrue();
+        nativo!.EsMigrado.Should().BeFalse();
     }
 
     [Fact]

@@ -3,6 +3,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Flit.Ict.Grpc.Contracts;
+using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.Persistence;
 using Flit.Tramites.Domain.Integration;
 using Google.Protobuf.WellKnownTypes;
@@ -30,8 +31,11 @@ public static class IctStateReflectionExtensions
 {
     /// <summary>
     /// Cablea el reflejo de estado hacia core-ict si hay endpoint configurado
-    /// (<c>Ict:StateCallback:Address</c>). Sin endpoint es un no-op: sigue vigente solo el notifier OT
-    /// registrado en <c>AddAdminInfrastructure</c>. Debe llamarse DESPUÉS de registrar el notifier OT.
+    /// (<c>Ict:StateCallback:Address</c>) y SIEMPRE registra el fan-out de
+    /// <see cref="IProcedureStateChangeNotifier"/> vía
+    /// <see cref="Messaging.ProcedureStateChangeNotifierRegistration"/> (HU #11464).
+    /// Debe llamarse DESPUÉS de registrar <c>OtWebhookProcedureStateChangeNotifier</c>
+    /// (<c>AddAdminInfrastructure</c>).
     /// </summary>
     public static IServiceCollection AddIctStateReflection(this IServiceCollection services, IConfiguration configuration)
     {
@@ -39,47 +43,36 @@ public static class IctStateReflectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         var address = configuration["Ict:StateCallback:Address"];
-        if (string.IsNullOrWhiteSpace(address))
+        var includeIct = !string.IsNullOrWhiteSpace(address);
+
+        if (includeIct)
         {
-            // Canal inverso no configurado → solo OT (comportamiento previo intacto).
-            return services;
+            // Secreto HMAC compartido con core-ict. Reutiliza el del canal directo (Ict:ServiceToken:Secret)
+            // salvo override explícito. Sin secreto, el provider emite null y core-ict rechaza (fail-closed).
+            var secret = configuration["Ict:StateCallback:Secret"] ?? configuration["Ict:ServiceToken:Secret"];
+            services.Configure<IctStateCallbackOptions>(opts =>
+            {
+                opts.Address = address!;
+                opts.Secret = secret ?? string.Empty;
+                var issuer = configuration["Ict:StateCallback:Issuer"];
+                if (!string.IsNullOrWhiteSpace(issuer))
+                    opts.Issuer = issuer!;
+                var audience = configuration["Ict:StateCallback:Audience"];
+                if (!string.IsNullOrWhiteSpace(audience))
+                    opts.Audience = audience!;
+            });
+
+            services.AddSingleton<IctStateCallbackTokenProvider>();
+            services.AddSingleton<IctStateCallbackClientInterceptor>();
+
+            services.AddGrpcClient<IctStateCallback.IctStateCallbackClient>(options => options.Address = new Uri(address!))
+                .AddInterceptor<IctStateCallbackClientInterceptor>();
+
+            services.AddScoped<IctProcedureStateChangeNotifier>();
         }
 
-        // Secreto HMAC compartido con core-ict. Reutiliza el del canal directo (Ict:ServiceToken:Secret)
-        // salvo override explícito. Sin secreto, el provider emite null y core-ict rechaza (fail-closed).
-        var secret = configuration["Ict:StateCallback:Secret"] ?? configuration["Ict:ServiceToken:Secret"];
-        services.Configure<IctStateCallbackOptions>(opts =>
-        {
-            opts.Address = address!;
-            opts.Secret = secret ?? string.Empty;
-            var issuer = configuration["Ict:StateCallback:Issuer"];
-            if (!string.IsNullOrWhiteSpace(issuer))
-                opts.Issuer = issuer!;
-            var audience = configuration["Ict:StateCallback:Audience"];
-            if (!string.IsNullOrWhiteSpace(audience))
-                opts.Audience = audience!;
-        });
-
-        services.AddSingleton<IctStateCallbackTokenProvider>();
-        services.AddSingleton<IctStateCallbackClientInterceptor>();
-
-        services.AddGrpcClient<IctStateCallback.IctStateCallbackClient>(options => options.Address = new Uri(address!))
-            .AddInterceptor<IctStateCallbackClientInterceptor>();
-
-        services.AddScoped<IctProcedureStateChangeNotifier>();
-
-        // Compuesto OT + ICT: sobrescribe el registro de OT como IProcedureStateChangeNotifier
-        // (la última registración gana en GetRequiredService).
-        services.AddScoped<IProcedureStateChangeNotifier>(sp =>
-        {
-            var sinks = new IProcedureStateChangeNotifier[]
-            {
-                sp.GetRequiredService<OtWebhooks.OtWebhookProcedureStateChangeNotifier>(),
-                sp.GetRequiredService<IctProcedureStateChangeNotifier>(),
-            };
-            return new CompositeProcedureStateChangeNotifier(
-                sinks, sp.GetRequiredService<ILogger<CompositeProcedureStateChangeNotifier>>());
-        });
+        // Único registro de IProcedureStateChangeNotifier (HU #11464).
+        services.AddProcedureStateChangeNotifierFanOut(includeIctReflection: includeIct);
 
         return services;
     }

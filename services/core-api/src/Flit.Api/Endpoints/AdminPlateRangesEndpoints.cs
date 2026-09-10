@@ -2,7 +2,9 @@ using System.Security.Claims;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Api.Authorization;
+using Flit.Tramites.Application.Notifications;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Api.Endpoints;
@@ -44,6 +46,10 @@ public static class AdminPlateRangesEndpoints
         group.MapPost("/procedures/{instanceId:guid}/revoke", RevokeProcedurePlateAsync)
             .WithName("AdminPlateRevokeProcedure");
 
+        // HU #12167 (Feature #12156) — el OT corrige la placa dentro de la ventana de 1 hora.
+        group.MapPost("/procedures/{instanceId:guid}/update-plate", UpdateProcedurePlateAsync)
+            .WithName("AdminPlateUpdateProcedure");
+
         return app;
     }
 
@@ -69,7 +75,8 @@ public static class AdminPlateRangesEndpoints
 
     private static async Task<IResult> AssignPlateToProcedureAsync(
         Guid instanceId, AssignPlateToProcedureRequest request, HttpContext http,
-        IOtClientProcedureRepository otRepo, GenerarFurHandler furHandler,
+        IOtClientProcedureRepository otRepo, RegenerarDocumentosTrazadoHandler regeneracionTrazada,
+        IPlateAssignmentEmailEnqueuer plateAssignmentEmailEnqueuer,
         ILoggerFactory loggerFactory, CancellationToken ct)
     {
         var tenantClaim = http.User.FindFirstValue(AdminAuthorization.TenantIdClaimType);
@@ -90,17 +97,64 @@ public static class AdminPlateRangesEndpoints
                 detail: "La placa debe tener el formato de matrícula (3 letras + 3 dígitos, ej. ABC123).");
         }
 
-        var result = await otRepo.AssignPlateAsync(
-            otTenantId, instanceId, request.Plate, ResolveUserId(http.User), "ot_console", request.OutOfRange, ct)
-            .ConfigureAwait(false);
-
-        if (result is null)
+        PlateAssignmentOutcome outcome;
+        try
         {
-            return Results.Problem(statusCode: 422, title: "Unprocessable",
-                detail: request.OutOfRange
-                    ? "No se pudo asignar la placa fuera de rango: verifique que no esté ya registrada para el OT y que el trámite esté en preasignado."
-                    : "No se pudo asignar la placa: el trámite no está en preasignado, no es accesible o la placa no está disponible.");
+            outcome = await otRepo.AssignPlateAsync(
+                otTenantId, instanceId, request.Plate, ResolveUserId(http.User), "ot_console", request.OutOfRange, ct)
+                .ConfigureAwait(false);
         }
+        catch (DbUpdateException ex)
+        {
+            // Índices únicos y row_version del inventario: el operador del OT necesita saber que debe
+            // reintentar o elegir otra placa, no una traza de EF con un 500.
+            AdminPlateRegenLog.AsignacionPlacaConflicto(
+                loggerFactory.CreateLogger("AdminPlate.AssignPlate"), ex, instanceId);
+            return Results.Problem(
+                statusCode: 409,
+                title: "Conflict",
+                detail: $"No se pudo asignar la placa {request.Plate.Trim().ToUpperInvariant()}: el trámite o la placa cambiaron durante la operación. Verifique el estado del trámite e intente de nuevo.");
+        }
+
+        if (!outcome.Succeeded)
+        {
+            // Cada causa con su mensaje: el operador tiene que saber si debe elegir otra placa,
+            // registrarla fuera de rango o revisar el estado del trámite. Si el repo aportó un
+            // Detail concreto (p.ej. fuera de rango ya registrada), se prioriza sobre el genérico.
+            var plate = request.Plate.Trim().ToUpperInvariant();
+            var detail = outcome.Detail ?? outcome.Failure switch
+            {
+                PlateAssignmentFailure.PlateAlreadyAssigned =>
+                    $"La placa {plate} ya está asignada a otro trámite de este organismo de tránsito. Elija una placa diferente.",
+                PlateAssignmentFailure.PlateInUseByAnotherProcedure =>
+                    $"La placa {plate} ya está registrada en otro trámite abierto. Elija una placa diferente.",
+                PlateAssignmentFailure.PlateNotAvailable =>
+                    $"La placa {plate} no está disponible en los rangos del organismo de tránsito. Elija una del rango o regístrela como fuera de rango.",
+                PlateAssignmentFailure.NotPreassigned =>
+                    "El trámite no está en preasignado: no admite asignación de placa en su estado actual.",
+                PlateAssignmentFailure.ProcedureNotAccessible =>
+                    "El trámite no existe o el organismo de tránsito no tiene acceso vigente a él.",
+                _ => "La placa es obligatoria.",
+            };
+
+            var statusCode = outcome.Failure switch
+            {
+                PlateAssignmentFailure.PlateAlreadyAssigned => 409,
+                PlateAssignmentFailure.PlateNotAvailable => 409,
+                PlateAssignmentFailure.PlateInUseByAnotherProcedure => 409,
+                PlateAssignmentFailure.ProcedureNotAccessible => 404,
+                _ => 422,
+            };
+            var title = statusCode switch
+            {
+                409 => "Conflict",
+                404 => "Not Found",
+                _ => "Unprocessable",
+            };
+            return Results.Problem(statusCode: statusCode, title: title, detail: detail);
+        }
+
+        var result = outcome.Procedure!;
 
         // HU #10995 — al asignar la placa (Flujo B), regenerar el FUR y los demás documentos en caliente
         // para que reflejen la placa recién escrita en field_values; la regeneración del FUR además invalida
@@ -109,23 +163,144 @@ public static class AdminPlateRangesEndpoints
         var procedure = await otRepo.GetByIdAsync(otTenantId, instanceId, ct).ConfigureAwait(false);
         if (procedure is not null)
         {
+            // Bug #11613 — el generador señala los errores de negocio POR RETORNO (tupla), no por
+            // excepción: descartarlo dejaba la placa asignada y los documentos sin regenerar, en
+            // silencio y con 200 OK. El handler trazado inspecciona el retorno, loguea a Error y deja
+            // un evento consultable. Best-effort intacto: la asignación de placa NO se revierte.
             try
             {
+                // El retorno NO se descarta (era justo la forma del defecto que originó este bug): si la
+                // regeneración falló y tampoco se pudo dejar la traza en la instancia, este log es el
+                // único rastro que queda del fallo.
+                var regeneracion = await otRepo
+                    .ExecuteInClientTenantScopeAsync(
+                        procedure.ClientTenantId,
+                        () => regeneracionTrazada.HandleAsync(
+                            instanceId,
+                            procedure.ClientTenantId,
+                            RegeneracionDocumentalOrigen.AsignacionPlaca,
+                            ct),
+                        ct)
+                    .ConfigureAwait(false);
+
+                if (!regeneracion.Ok && !regeneracion.TrazaPersistida)
+                {
+                    AdminPlateRegenLog.RegeneracionSinTraza(
+                        loggerFactory.CreateLogger("AdminPlate.AssignPlateRegen"), instanceId, regeneracion.Error ?? "desconocido");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Red de seguridad: solo los fallos del scope RLS / conexión llegan hasta aquí.
+                AdminPlateRegenLog.RegeneracionPlacaOmitida(
+                    loggerFactory.CreateLogger("AdminPlate.AssignPlateRegen"), ex, instanceId);
+            }
+
+            // HU #11485 (Feature #11482, ADR-0046) — aviso de correo al comprador tras asignar placa
+            // (Flujo B). Best-effort en el scope RLS del cliente: un fallo NO revierte la asignación.
+            try
+            {
+                var plate = request.Plate.Trim().ToUpperInvariant();
                 await otRepo
                     .ExecuteInClientTenantScopeAsync(
                         procedure.ClientTenantId,
-                        () => furHandler.HandleAsync(instanceId, procedure.ClientTenantId, ct),
+                        async () =>
+                        {
+                            await plateAssignmentEmailEnqueuer
+                                .EnqueueAsync(procedure.ClientTenantId, instanceId, plate, ct)
+                                .ConfigureAwait(false);
+                            return 0;
+                        },
                         ct)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                AdminPlateRegenLog.RegeneracionPlacaOmitida(
-                    loggerFactory.CreateLogger("AdminPlate.AssignPlateRegen"), ex, instanceId);
+                AdminPlateRegenLog.CorreoAsignacionPlacaOmitido(
+                    loggerFactory.CreateLogger("AdminPlate.AssignPlateEmail"), ex, instanceId);
             }
         }
 
         return Results.Ok(result);
+    }
+
+    // HU #12167 (Feature #12156) — corrección de placa dentro de la ventana de 1 hora. Sin
+    // regeneración de documentos ni correo de aviso: a diferencia de la asignación inicial (Flujo B),
+    // esto es una corrección de digitación sobre un trámite que ya pudo haber avanzado; regenerar
+    // documentos/avisar al comprador en cada corrección no está pedido por ningún AC de la HU y
+    // duplicaría el aviso que ya salió con la asignación original.
+    private static async Task<IResult> UpdateProcedurePlateAsync(
+        Guid instanceId, UpdatePlateRequest request, HttpContext http,
+        IOtClientProcedureRepository otRepo, ILoggerFactory loggerFactory, CancellationToken ct)
+    {
+        var tenantClaim = http.User.FindFirstValue(AdminAuthorization.TenantIdClaimType);
+        if (!Guid.TryParse(tenantClaim, out var otTenantId))
+        {
+            return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "No se pudo resolver el OT.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Plate))
+        {
+            return Results.Problem(statusCode: 422, title: "Unprocessable", detail: "La placa es obligatoria.");
+        }
+
+        if (!PlateRangeRules.IsValidPlate(request.Plate.Trim().ToUpperInvariant()))
+        {
+            return Results.Problem(statusCode: 422, title: "Unprocessable",
+                detail: "La placa debe tener el formato de matrícula (3 letras + 3 dígitos, ej. ABC123).");
+        }
+
+        PlateAssignmentOutcome outcome;
+        try
+        {
+            outcome = await otRepo.UpdatePlateAsync(
+                otTenantId, instanceId, request.Plate, ResolveUserId(http.User), "ot_console", ct)
+                .ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex)
+        {
+            AdminPlateRegenLog.AsignacionPlacaConflicto(
+                loggerFactory.CreateLogger("AdminPlate.UpdatePlate"), ex, instanceId);
+            return Results.Problem(
+                statusCode: 409,
+                title: "Conflict",
+                detail: $"No se pudo corregir la placa {request.Plate.Trim().ToUpperInvariant()}: el trámite o la placa cambiaron durante la operación. Verifique el estado del trámite e intente de nuevo.");
+        }
+
+        if (!outcome.Succeeded)
+        {
+            var plate = request.Plate.Trim().ToUpperInvariant();
+            var detail = outcome.Detail ?? outcome.Failure switch
+            {
+                PlateAssignmentFailure.PlateInUseByAnotherProcedure =>
+                    $"La placa {plate} ya está registrada en otro trámite abierto. Elija una placa diferente.",
+                PlateAssignmentFailure.ProcedureNotAccessible =>
+                    "El trámite no existe o el organismo de tránsito no tiene acceso vigente a él.",
+                PlateAssignmentFailure.PlateUpdateWindowExpired =>
+                    "Pasó más de 1 hora desde la asignación de la placa: ya no se puede corregir por este medio.",
+                PlateAssignmentFailure.PlateUpdateAlreadyUsed =>
+                    "Este trámite ya usó su única oportunidad de corregir la placa.",
+                _ => "La placa es obligatoria.",
+            };
+
+            var statusCode = outcome.Failure switch
+            {
+                PlateAssignmentFailure.PlateInUseByAnotherProcedure => 409,
+                PlateAssignmentFailure.ProcedureNotAccessible => 404,
+                PlateAssignmentFailure.PlateUpdateWindowExpired => 409,
+                PlateAssignmentFailure.PlateUpdateAlreadyUsed => 409,
+                _ => 422,
+            };
+            var title = statusCode switch
+            {
+                409 => "Conflict",
+                404 => "Not Found",
+                _ => "Unprocessable",
+            };
+            return Results.Problem(statusCode: statusCode, title: title, detail: detail);
+        }
+
+        return Results.Ok(outcome.Procedure);
     }
 
     private static async Task<IResult> ListRangesAsync(
@@ -276,10 +451,25 @@ public sealed record AssignPlateToProcedureRequest(string Plate, bool OutOfRange
 /// <summary>Payload para revocar la preasignación de un trámite.</summary>
 public sealed record RevokePlateRequest(string Reason);
 
+/// <summary>HU #12167 (Feature #12156) — payload para corregir la placa dentro de la ventana de 1 hora.</summary>
+public sealed record UpdatePlateRequest(string Plate);
+
 /// <summary>Logging source-generated (CA1848) de la regeneración documental tras asignar placa. Sin PII.</summary>
 internal static partial class AdminPlateRegenLog
 {
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudieron regenerar los documentos tras asignar la placa al trámite {InstanceId}; se conservan los previos.")]
     public static partial void RegeneracionPlacaOmitida(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "La regeneración documental tras asignar la placa al trámite {InstanceId} falló con {CodigoError} y la traza NO quedó persistida; el diagnóstico solo existe en estos logs.")]
+    public static partial void RegeneracionSinTraza(ILogger logger, Guid instanceId, string codigoError);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Conflicto de persistencia al asignar la placa al trámite {InstanceId}; se responde 409 al OT.")]
+    public static partial void AsignacionPlacaConflicto(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo encolar el aviso de correo tras asignar la placa al trámite {InstanceId}; la asignación se conserva.")]
+    public static partial void CorreoAsignacionPlacaOmitido(ILogger logger, Exception ex, Guid instanceId);
 }

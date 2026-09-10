@@ -1,13 +1,11 @@
-// Dock del Shell (artefacto inferior): el FAB de inicio debe quedar SIEMPRE centrado y el
-// botón "Ayuda" (soporte universal) debe verse aunque RBAC filtre los demás módulos.
+// Dock del Shell: FAB centrado, Ayuda universal, agrupadores menú/submenú.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setDevSuperAdminToken } from "@/lib/api/client";
 import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 import { Shell } from "../Shell";
 
-// Shell usa usePathname para resaltar la ruta admin activa.
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 
 function makeToken(payload: Record<string, unknown>): string {
@@ -31,16 +29,20 @@ describe("Shell — dock", () => {
   });
 
   it("mantiene el FAB de inicio centrado: mismo nº de elementos a cada lado", () => {
-    // Número impar de entradas para ejercitar el relleno con espaciador.
     renderShell(["dashboard", "reportes", "validaciones"]);
     const fab = screen.getByRole("button", { name: "Inicio FLIT" });
     const dock = fab.parentElement;
     expect(dock).not.toBeNull();
     const children = Array.from(dock!.children);
     const fabIndex = children.indexOf(fab);
-    const before = fabIndex;
-    const after = children.length - fabIndex - 1;
-    expect(before).toBe(after);
+    expect(fabIndex).toBe(children.length - fabIndex - 1);
+  });
+
+  it("usa favicon.svg en el FAB central", () => {
+    renderShell(["dashboard"]);
+    const fab = screen.getByRole("button", { name: "Inicio FLIT" });
+    const img = fab.querySelector("img");
+    expect(img?.getAttribute("src")).toBe("/assets/favicon.svg");
   });
 });
 
@@ -49,7 +51,7 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it("muestra el roleLabel 'Admin OT' y el botón 'Tránsito', sin botones de SuperAdmin/AdminCompany", () => {
+  it("muestra Admin OT con dock de hub (sin Compañías / Documental / Tránsito único)", async () => {
     window.localStorage.setItem(
       TOKEN_STORAGE_KEY,
       makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
@@ -58,34 +60,46 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     renderShell();
 
     expect(screen.getByText("Admin OT")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tránsito" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Documental" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "RBAC Admin" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Mi Empresa" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
+
+    // Ítems directos del dock Admin OT
+    expect(screen.getByRole("button", { name: "Trámites" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preasignación" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Usuarios" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reportes" })).toBeInTheDocument();
+
+    // Administración = submenú Reglas / Documentos / Requisitos
+    await userEvent.click(screen.getByRole("button", { name: "Administración" }));
+    expect(screen.getByRole("button", { name: "Reglas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Documentos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Requisitos" })).toBeInTheDocument();
   });
 });
 
-describe("Shell — Mi Empresa (HU #10512)", () => {
+describe("Shell — Administración gestora (AdminCompany)", () => {
   afterEach(() => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it("AC1 — navega internamente al módulo de Usuarios en vez de salir de la SPA", async () => {
+  it("muestra 'Administración' y no empuja Usuarios en el menú admin", () => {
     window.localStorage.setItem(
       TOKEN_STORAGE_KEY,
       makeToken({ sub: "u1", role: "AdminCompany", email: "admin@empresa.local" }),
     );
-    const onNav = vi.fn();
     render(
-      <Shell active="dashboard" onNav={onNav}>
+      <Shell active="dashboard" onNav={vi.fn()}>
         <div>contenido</div>
       </Shell>,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Mi Empresa" }));
-
-    expect(onNav).toHaveBeenCalledWith("usuarios");
+    // Ítem único en administradores → píldora directa con el label del ítem.
+    expect(screen.getByRole("button", { name: "Administración" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mi Empresa" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
   });
 });
 
@@ -94,14 +108,111 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it("muestra la entrada 'Improntas' cuando el usuario en sesión es SuperAdmin", () => {
+  it("muestra Compañías, Tránsito e Improntas dentro de Administradores", async () => {
     setDevSuperAdminToken();
     renderShell();
+    expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tránsito" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
+    expect(screen.getByRole("button", { name: "Compañías" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Improntas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "RBAC Admin" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Auditoría" })).toBeInTheDocument();
+  });
+
+  it("anida Organismos y Causales de rechazo bajo Administradores → Tránsito", async () => {
+    setDevSuperAdminToken();
+    renderShell();
+    // El catálogo alimenta el modal de rechazo del organismo: cuelga de Tránsito, no de Compañías.
+    await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
+    await userEvent.click(screen.getByRole("button", { name: "Tránsito" }));
+    expect(screen.getByRole("button", { name: "Organismos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Causales de rechazo" })).toBeInTheDocument();
+  });
+
+  it("muestra Mandatos y Notificaciones dentro de Administradores → Plataforma, en ese orden (HU #11369 AC1)", async () => {
+    setDevSuperAdminToken();
+    renderShell();
+    expect(screen.queryByRole("button", { name: "Plataforma" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
+    await userEvent.click(screen.getByRole("button", { name: "Plataforma" }));
+
+    // Se acota al panel del dock para no confundir con el icono genérico de
+    // notificaciones del topbar (aria-label="Notificaciones", ajeno a esta HU).
+    const dockNav = screen.getByRole("navigation", { name: "Navegación principal" });
+    const mandatosBtn = within(dockNav).getByRole("button", { name: "Mandatos" });
+    const notificacionesBtn = within(dockNav).getByRole("button", { name: "Notificaciones" });
+    expect(mandatosBtn).toBeInTheDocument();
+    expect(notificacionesBtn).toBeInTheDocument();
+
+    // AC1: Mandatos y Notificaciones, EN ESE ORDEN.
+    expect(
+      mandatosBtn.compareDocumentPosition(notificacionesBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("un usuario sin sesión SuperAdmin no ve Plataforma ni Notificaciones (HU #11369 AC2)", () => {
+    renderShell();
+    expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
+
+    // Se acota al dock (la campana del topbar fue eliminada; aquí se verifica la entrada del dock).
+    const dockNav = screen.getByRole("navigation", { name: "Navegación principal" });
+    expect(within(dockNav).queryByRole("button", { name: "Plataforma" })).not.toBeInTheDocument();
+    expect(
+      within(dockNav).queryByRole("button", { name: "Notificaciones" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("muestra Log QX e ICT en Integraciones, con Log ICT y Reportes ICT anidados bajo ICT", async () => {
+    setDevSuperAdminToken();
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Integraciones" }));
+    expect(screen.getByRole("button", { name: "Log QX" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Soporte" })).not.toBeInTheDocument();
+
+    // ICT es contenedor, no destino (HU #11619): sus dos hojas aparecen al abrirlo, mismo patrón
+    // que Administradores → Plataforma.
+    expect(screen.queryByRole("button", { name: "Log ICT" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "ICT" }));
+    const dockNav = screen.getByRole("navigation", { name: "Navegación principal" });
+    expect(within(dockNav).getByRole("button", { name: "Log ICT" })).toBeInTheDocument();
+    expect(within(dockNav).getByRole("button", { name: "Reportes ICT" })).toBeInTheDocument();
   });
 
   it("no muestra la entrada 'Improntas' sin sesión SuperAdmin", () => {
     renderShell();
     expect(screen.queryByRole("button", { name: "Improntas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Shell — topbar (campana y menú de usuario)", () => {
+  afterEach(() => {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  });
+
+  it("la campana de notificaciones NO está en el topbar", () => {
+    renderShell();
+    // El botón de campana fue ocultado; no debe existir en el DOM.
+    expect(screen.queryByRole("button", { name: "Notificaciones" })).not.toBeInTheDocument();
+  });
+
+  it("al abrir el menú de usuario NO aparece 'Actualización de la información'", async () => {
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
+    expect(screen.queryByText("Actualización de la información")).not.toBeInTheDocument();
+  });
+
+  it("al abrir el menú de usuario SÍ aparece 'Cambio de contraseña'", async () => {
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
+    expect(screen.getByText("Cambio de contraseña")).toBeInTheDocument();
+  });
+
+  it("al abrir el menú de usuario SÍ aparece 'Salir de la plataforma'", async () => {
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
+    expect(screen.getByText("Salir de la plataforma")).toBeInTheDocument();
   });
 });

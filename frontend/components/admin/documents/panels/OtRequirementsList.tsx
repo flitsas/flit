@@ -1,10 +1,14 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import {
   REQUIREMENT_SELECTION_LABELS,
   type DocumentRequirementSelection,
   type DocumentType,
 } from "@/lib/api/types-documents";
+import { catalogDocumentName, catalogDocumentTitle } from "@/lib/tramites/document-labels";
+import { DocumentCatalogCaption } from "@/components/shared/DocumentCatalogCaption";
 
 // Obligatoriedad documental por Organismo de Tránsito (HU #10198) — granular SOLO para OT.
 // Por cada documento asociado al trámite, un selector de 4 opciones: «Por defecto» (hereda
@@ -31,6 +35,16 @@ export function OtRequirementsList({
   onChange,
   busy,
 }: OtRequirementsListProps) {
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const q = foldSearch(query);
+    if (!q) return documents;
+    return documents.filter((d) => {
+      const label = catalogDocumentName(d.codigo, d.nombre);
+      return foldSearch(label).includes(q) || foldSearch(d.codigo).includes(q) || foldSearch(d.nombre).includes(q);
+    });
+  }, [documents, query]);
+
   if (documents.length === 0) {
     return (
       <p className="rounded-2xl border p-6 text-center text-xs opacity-60">
@@ -40,20 +54,42 @@ export function OtRequirementsList({
   }
 
   return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 dark:bg-[#0B0F14]">
+        <Search className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
+        <label htmlFor="ot-req-doc-search" className="sr-only">
+          Buscar documento
+        </label>
+        <input
+          id="ot-req-doc-search"
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar documento por nombre o código…"
+          className="w-full bg-transparent text-xs outline-none"
+        />
+      </div>
+      {filtered.length === 0 ? (
+        <p className="rounded-2xl border p-6 text-center text-xs opacity-60">
+          Ningún documento coincide con la búsqueda.
+        </p>
+      ) : (
     <ul className="flex flex-col gap-2" aria-label="Obligatoriedad por organismo de tránsito">
-      {documents.map((d) => {
+      {filtered.map((d) => {
         const selection = selectionByDocId[d.id] ?? "DEFAULT";
+        const label = catalogDocumentTitle(d.codigo, d.nombre);
         return (
           <li
             key={d.id}
             className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
           >
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold">{d.nombre}</p>
-              <p className="truncate font-mono text-[10px] opacity-60">{d.codigo}</p>
+              <p className="truncate text-xs font-semibold">
+                <DocumentCatalogCaption nombre={d.nombre} codigo={d.codigo} />
+              </p>
             </div>
             <select
-              aria-label={`Obligatoriedad de ${d.nombre}`}
+              aria-label={`Obligatoriedad de ${label}`}
               value={selection}
               disabled={busy}
               onChange={(e) => onChange(d.id, e.target.value as DocumentRequirementSelection)}
@@ -69,5 +105,15 @@ export function OtRequirementsList({
         );
       })}
     </ul>
+      )}
+    </div>
   );
+}
+
+function foldSearch(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }

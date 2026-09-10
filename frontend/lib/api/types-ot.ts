@@ -1,3 +1,5 @@
+import type { QueryCondition } from '@/lib/api/queries';
+
 /** Tipos del módulo Administración OT (HU #10215 / #10217 / #10218). */
 
 export type OtOperationMode = "dashboard" | "quipux";
@@ -47,11 +49,23 @@ export interface OtClientProcedure {
   clientTenantName?: string;
   referenceNumber: string;
   status: string;
+  /** `matricula_inicial` | `traspaso`. Determina qué causales de rechazo ofrece el modal. */
+  familia?: string;
   /**
    * Sub-estado interno de la ruta de placa (null | preasignado | asignado | terminado),
    * ortogonal al status (que permanece en 'entregado').
    */
   plateFlowStatus?: string | null;
+  /**
+   * HU #12165/#12167 (Feature #12156) — momento en que el OT asignó la placa. Base de la ventana
+   * de 1 hora para corregirla (`updateProcedurePlate`). `null` si nunca se asignó por este flujo.
+   */
+  plateAssignedAt?: string | null;
+  /**
+   * HU #12167 — no nulo si ya se usó la única corrección permitida dentro de la ventana (bloquea un
+   * segundo intento aunque siga dentro de la hora).
+   */
+  plateUpdatedAt?: string | null;
   /**
    * Estado del SOAT (null | unknown | vencido | vigente). Informativo; la decisión OT
    * en ruta de placa requiere `terminado`.
@@ -70,6 +84,11 @@ export interface OtClientProcedure {
   submittedAt?: string | null;
   /** HU #10536 — trámite marcado como prioritario: el OT lo revisa con primacía (solo indicador). */
   prioritario?: boolean;
+  /** Propietario/vendedor (null en matrícula inicial). */
+  vendedorNombre?: string | null;
+  compradorNombre?: string | null;
+  /** Gestor que radicó el trámite. */
+  gestorNombre?: string | null;
   /** Detalle (GET by id): actores del trámite. */
   actors?: OtClientProcedureActor[];
   placa?: string | null;
@@ -77,10 +96,60 @@ export interface OtClientProcedure {
   marca?: string | null;
   linea?: string | null;
   modelo?: string | null;
+  /** Color EFECTIVO: el nuevo si el trámite declara un cambio de color. */
   color?: string | null;
   clase?: string | null;
   servicio?: string | null;
+  /** Combustible EFECTIVO. Ver {@link OtClientProcedure.color}. */
   combustible?: string | null;
+  /** Carrocería EFECTIVA. Ver {@link OtClientProcedure.color}. */
+  carroceria?: string | null;
+  cilindraje?: string | null;
+  capacidad?: string | null;
+  ejes?: string | null;
+  estadoVehiculo?: string | null;
+  numeroMotor?: string | null;
+  numeroChasis?: string | null;
+  numeroSerie?: string | null;
+  /**
+   * Valores con los que el vehículo figura en el RUNT para los tres atributos transformables.
+   * Ausente si el trámite nunca consultó el RUNT: eso NO es lo mismo que un RUNT sin datos.
+   */
+  runtSnapshot?: OtClientProcedureVehicleSnapshot | null;
+  /** Banderas `cambio_*` con las que el trámite declara la transformación. */
+  transformacionesDeclaradas?: OtClientProcedureTransformationFlags;
+  /** Datos comerciales del trámite; ausente si no se capturaron. */
+  comercial?: OtClientProcedureCommercial | null;
+  /** Decisión de prenda del trámite; ausente si no hay decisión registrada. */
+  prenda?: OtClientProcedurePrenda | null;
+}
+
+export interface OtClientProcedureVehicleSnapshot {
+  color?: string | null;
+  combustible?: string | null;
+  carroceria?: string | null;
+}
+
+export interface OtClientProcedureTransformationFlags {
+  color?: boolean;
+  combustible?: boolean;
+  carroceria?: boolean;
+}
+
+export interface OtClientProcedureCommercial {
+  valorVenta?: number | null;
+  causal?: string | null;
+  tasaImpuesto?: number | null;
+  derechos?: number | null;
+  metodoPago?: string | null;
+}
+
+export interface OtClientProcedurePrenda {
+  decision: string;
+  estado: string;
+  acreedorNombre?: string | null;
+  acreedorDocumento?: string | null;
+  levantamientoEntidad?: string | null;
 }
 
 export interface OtClientProcedureActor {
@@ -102,12 +171,60 @@ export interface OtClientProcedurePagedResult {
 
 export interface OtClientProceduresParams {
   status?: string;
+  /**
+   * Sub-estado de la ruta de placa. Varios separados por coma (`asignado,terminado`) y el valor
+   * especial `sin_ruta` para los trámites que no están en ruta de placa.
+   *
+   * Lo usan las tarjetas de la cabecera al pulsarse: tres de ellas cuentan por sub-estado de placa,
+   * no por estado del ciclo de vida, y sin esto llevarían a una lista distinta de la que contaron.
+   */
+  plateFlowStatus?: string;
   procedureTypeId?: string;
+  vin?: string;
+  placa?: string;
+  vendedor?: string;
+  comprador?: string;
+  gestor?: string;
+  /**
+   * HU #12218 — texto libre transversal: radicado (exacto), placa, VIN, nombre y documento de las
+   * partes, y razón social de la empresa cliente.
+   */
+  busqueda?: string;
+  /** HU #12217 — condiciones de la gramática de Consultas. Solo viajan por el POST de búsqueda. */
+  condiciones?: QueryCondition[];
+  /** Rango sobre la fecha de radicación (`yyyy-mm-dd` o ISO). */
+  createdFrom?: string;
+  createdTo?: string;
+  /** Rango sobre la fecha de última actualización. */
+  updatedFrom?: string;
+  updatedTo?: string;
+  /** vin | placa | vendedor | comprador | gestor | empresa | tipo_tramite | createdAt | radicado | estado */
+  sortBy?: string;
+  /** asc | desc */
+  sortDir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 }
 
 /** Diagnóstico de la bandeja OT (HU #10540/#10541 — R09): entregados con/sin grant vigente. */
+/**
+ * Contadores de la cabecera de la bandeja OT: cuánto trabajo hay de cada clase, sobre TODO lo
+ * accesible y no sobre la página cargada.
+ *
+ * Las clases NO son excluyentes ni suman el total: las dos de placa miran el sub-estado y las tres
+ * de decisión miran el estado del trámite. Un entregado con placa asignada cuenta en dos.
+ */
+export interface OtBandejaCounters {
+  transitOfficeResolved: boolean;
+  sinAsignarPlaca: number;
+  conPlacaAsignada: number;
+  aprobados: number;
+  rechazados: number;
+  sinGestion: number;
+  /** HU #12166/#12168 (Feature #12156) — trámites Aprobados que el OT revocó. */
+  revocados: number;
+}
+
 export interface OtBandejaHealth {
   transitOfficeResolved: boolean;
   transitOfficeId: string | null;
@@ -168,7 +285,35 @@ export interface OtApiLogsParams {
 }
 
 export interface RejectOtClientProcedureRequest {
+  /**
+   * Observación general del rechazo, obligatoria. No la sustituyen las causales: la causal dice
+   * QUÉ falló (dato agregable del reporte) y la observación dice CÓMO corregirlo — qué documento
+   * exactamente, qué dato no cuadra. Es el contexto de quien va a subsanar.
+   */
   reason: string;
+  /**
+   * Causales del catálogo marcadas por el revisor. Varias son válidas y esperadas: un expediente
+   * puede llegar con improntas borrosas, sin impronta y sin pago de impuestos a la vez.
+   */
+  rejectionReasonIds?: string[];
+}
+
+/** Causal del catálogo global de rechazo (administrado por SuperAdmin). */
+export interface RejectionReason {
+  id: string;
+  code: string;
+  description: string;
+  /** `matricula_inicial` | `traspaso`. */
+  modalidad: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface SaveRejectionReasonRequest {
+  code: string;
+  description: string;
+  modalidad: string;
+  sortOrder?: number;
 }
 
 export type OtRuleLogic = "AND" | "OR";
@@ -212,8 +357,14 @@ export interface OtRulesListResult {
 
 export interface OtDocumentPrecedenceItem {
   document_type_id: string;
+  /** Código del catálogo (HU #11182); empareja con el tipo del adjunto del trámite. */
+  document_code?: string;
   document_name: string;
   sort_order: number;
+  /** HU #11181 — lo produce FLIT (FUR, certificados, mandato); el gestor no lo adjunta. */
+  is_system_generated?: boolean;
+  /** HU #11182 — el OT ya guardó una posición para este documento. */
+  is_configured?: boolean;
 }
 
 export interface OtDocumentPrecedenceListResult {

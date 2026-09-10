@@ -35,7 +35,7 @@ public sealed class PendingProcedureDraftClient : IProcedureDraftClient
 {
     public Task<CreateDraftResult> CreateDraftAsync(
         ExternalIntegrationMaster master,
-        string procedureTypeCode,
+        DraftProcedureType procedureType,
         CancellationToken ct = default) =>
         Task.FromResult(new CreateDraftResult(null, null, null, "grpc_unavailable"));
 

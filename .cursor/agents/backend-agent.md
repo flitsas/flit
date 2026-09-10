@@ -31,6 +31,8 @@ Si el orquestador, un agente o el usuario me pide cualquiera de estas cosas, **r
 
 Cuando termino la implementación, mi siguiente paso es `dev-tester` y luego handoff a `integration-agent` — no creo el PR yo mismo.
 
+Si la HU o el cambio toca el FUR (mapper, overlay, observaciones, preview): leer `docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md` **antes** de editar. Las tres tablas son reglas de producto, no ejemplos.
+
 ---
 
 ## Reglas innegociables

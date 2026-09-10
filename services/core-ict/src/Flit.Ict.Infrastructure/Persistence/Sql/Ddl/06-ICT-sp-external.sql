@@ -6,13 +6,30 @@
 -- construyen las consultas núcleo por tipo: VEHICLE/VIN + actor MAIN del vendedor).
 -- =============================================================================
 
+-- Índice PARCIAL de apoyo al drenado batcheado (mismo criterio que el SP de negocio): solo indexa las
+-- filas PENDIENTES de validación externa, para que cada lote (LIMIT + ORDER BY created_at) sea un
+-- index-scan barato. Se auto-mantiene pequeño (las filas salen del índice al pasar external_validation a 2).
+CREATE INDEX IF NOT EXISTS ix_eim_pending_external
+    ON ict.external_integration_master (created_at)
+    WHERE external_validation = 0 AND process_status_id = 2 AND business_validation = 2 AND deleted_at IS NULL;
+
 CREATE OR REPLACE PROCEDURE ict.sp_processor_validation_external()
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $BODY$
 DECLARE
     rec RECORD;
+    v_batch_size integer;
 BEGIN
+    -- Tamaño de lote configurable EN CALIENTE (ict.job_settings.external_batch_size), default 500. Cada CALL
+    -- procesa A LO SUMO v_batch_size filas en UNA transacción y retorna; el job (ExternalValidationJob) lo
+    -- re-invoca en bucle hasta drenar. Igual que el SP de negocio: SIN COMMIT dentro del procedimiento
+    -- (Postgres no lo permite aquí: SECURITY DEFINER + FOR sobre query).
+    SELECT COALESCE(external_batch_size, 500) INTO v_batch_size FROM ict.job_settings WHERE id = 1;
+    IF v_batch_size IS NULL OR v_batch_size < 1 THEN
+        v_batch_size := 500;
+    END IF;
+
     FOR rec IN
         SELECT m.id AS id_master, m.tenant_id, m.transaction_type, m.plate, m.vin,
                m.manager_user, m.manager_mail, m.company_manager_document,
@@ -20,6 +37,8 @@ BEGIN
         FROM ict.external_integration_master m
         WHERE m.external_validation = 0 AND m.process_status_id = 2 AND m.business_validation = 2
           AND m.deleted_at IS NULL
+        ORDER BY m.created_at
+        LIMIT v_batch_size
     LOOP
         UPDATE ict.external_integration_master
         SET external_validation = 1, external_date_validation = now()

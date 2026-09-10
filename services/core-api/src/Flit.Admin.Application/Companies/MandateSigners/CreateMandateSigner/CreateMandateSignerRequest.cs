@@ -11,4 +11,9 @@ public sealed record CreateMandateSignerRequest(
     IReadOnlyList<Guid>? CompanyTenantIds,
     string? DocumentType = null,
     string? Email = null,
-    Guid? UserId = null);
+    Guid? UserId = null,
+    /// <summary>
+    /// HU #11201 — organismos donde aplica el mandatario. Ausente ⇒ solo el organismo de la ruta, que
+    /// es como da de alta la consola del propio organismo.
+    /// </summary>
+    IReadOnlyList<Guid>? TransitOfficeIds = null);

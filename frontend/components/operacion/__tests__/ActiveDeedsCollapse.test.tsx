@@ -76,6 +76,7 @@ describe('ActiveDeedsCollapse — collapse contraído + carga perezosa', () => {
     expect(await screen.findByText('Transportes Andinos SAS')).toBeInTheDocument();
     expect(screen.getByText('NIT 900111222')).toBeInTheDocument();
     expect(screen.getByText('Logística del Café SAS')).toBeInTheDocument();
+    expect(screen.getAllByText('Sin RL vinculado')).toHaveLength(2);
 
     // Badges de vigencia: 120 días (verde/success) y 5 días (rojo/danger).
     const vigente = screen.getByLabelText('Vigencia: 120 días restantes');
@@ -84,6 +85,31 @@ describe('ActiveDeedsCollapse — collapse contraído + carga perezosa', () => {
     expect(porVencer).toHaveTextContent('5 días');
     expect(vigente).toHaveStyle({ color: 'var(--badge-success-fg)' });
     expect(porVencer).toHaveStyle({ color: 'var(--badge-danger-fg)' });
+  });
+
+  it('muestra el RL vinculado a la escritura (nombre y documento)', async () => {
+    const deeds: ActiveDeed[] = [
+      {
+        id: 'deed-1',
+        nit: '900111222',
+        name: 'Transportes Andinos SAS',
+        diasRestantes: 120,
+        vigenciaHasta: '2026-11-20',
+        representativeId: 'rep-1',
+        representativeName: 'Juan Pérez Gómez',
+        representativeDocumentType: 'CC',
+        representativeDocumentNumber: '1038409485',
+      },
+    ];
+    mocks.fetchActiveDeeds.mockResolvedValue(deeds);
+
+    render(<ActiveDeedsCollapse />);
+    await userEvent.setup().click(
+      screen.getByRole('button', { name: /Escrituras vigentes de la compañía/i }),
+    );
+
+    expect(await screen.findByText(/RL: Juan Pérez Gómez · CC 1038409485/)).toBeInTheDocument();
+    expect(screen.queryByText('Sin RL vinculado')).toBeNull();
   });
 
   it('lista VARIAS escrituras del MISMO NIT (una fila por escritura) con su descripción', async () => {

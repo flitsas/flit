@@ -64,11 +64,13 @@ public sealed class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerge
             parts.Add(FlitCoverPageGenerator.Generate(ToCoverData(request.Cover)));
 
         // HU #10858 — pie con el nombre del documento en cada parte antes de fusionar (se estampa
-        // por parte para que cada página lleve la descripción de SU documento).
+        // por parte para que cada página lleve la descripción de SU documento). El margen inferior
+        // depende del perfil de estampado de la parte (ADR-0049): el FUR usa un margen reducido
+        // porque su contenido oficial llega más cerca del borde inferior que el resto de documentos.
         foreach (var part in request.Parts)
             parts.Add(string.IsNullOrWhiteSpace(part.DocumentName)
                 ? part.Pdf
-                : FlitPdfStamper.ApplyDocumentName(part.Pdf, part.DocumentName!));
+                : FlitPdfStamper.ApplyDocumentName(part.Pdf, part.DocumentName!, BottomCmFor(part.Profile)));
 
         var merged = Merge(parts);
 
@@ -85,6 +87,19 @@ public sealed class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerge
         "aprobado",
         "entregado",
         "preparado",
+    };
+
+    // ADR-0049: el margen inferior del pie es propiedad del tipo de documento, no del tema global.
+    // internal (no private): Flit.Infrastructure.Tests (InternalsVisibleTo) prueba directamente que
+    // el perfil de la parte resuelve al margen correcto ANTES de invocar FlitPdfStamper — la
+    // comparación de bytes del PDF compuesto completo no es viable como prueba de regresión porque
+    // PdfSharpCore asigna una etiqueta de subconjunto de fuente aleatoria en cada Save(), así que dos
+    // invocaciones independientes de ApplyDocumentName con el MISMO texto nunca producen los mismos
+    // bytes exactos aunque la geometría sea idéntica.
+    internal static float BottomCmFor(StampProfile profile) => profile switch
+    {
+        StampProfile.Formulario => FlitDocumentTheme.DocNameBottomFormularioCm,
+        _ => FlitDocumentTheme.DocNameBottomCm,
     };
 
     private static bool ShouldWatermark(string? estado) =>

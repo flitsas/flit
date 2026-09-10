@@ -29,6 +29,7 @@ Cuando el workflow o el usuario pide una tarea, delegar **siempre** al agente in
 | Deploy DEV/QA/PDN, Docker, CI/CD | `infra-agent` | `flit-rollback-procedure` |
 | TCs, E2E, bugs | `qa-agent` | `playwright-runner`, `bug-reporter` |
 | Activar/cerrar HU en ADO | skill `flit-gestion-hu` | — |
+| Dictamen normativo Mintransporte, casillas y diligenciamiento del FUR | `expert-doc-engine` | skill `expert-doc-engine` + `docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md` |
 
 ### Cuándo invocar `database-agent`
 

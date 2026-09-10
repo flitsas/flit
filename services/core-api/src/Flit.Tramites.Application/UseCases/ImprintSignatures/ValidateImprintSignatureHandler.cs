@@ -1,0 +1,128 @@
+using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ImprintSignatures;
+using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
+
+namespace Flit.Tramites.Application.UseCases.ImprintSignatures;
+
+/// <summary>
+/// Valida criptográficamente la firma de una impronta manual y persiste el log append-only (HU #12148).
+/// </summary>
+public sealed class ValidateImprintSignatureHandler
+{
+    private readonly IVehicleSignatureImprintRepository _imprintRepository;
+    private readonly IImprintSignatureValidationRepository _validationRepository;
+    private readonly IProcedureInstanceRepository _instanceRepository;
+    private readonly IImprontaManualSignatureVerifier _verifier;
+
+    public ValidateImprintSignatureHandler(
+        IVehicleSignatureImprintRepository imprintRepository,
+        IImprintSignatureValidationRepository validationRepository,
+        IProcedureInstanceRepository instanceRepository,
+        IImprontaManualSignatureVerifier verifier)
+    {
+        _imprintRepository = imprintRepository ?? throw new ArgumentNullException(nameof(imprintRepository));
+        _validationRepository = validationRepository ?? throw new ArgumentNullException(nameof(validationRepository));
+        _instanceRepository = instanceRepository ?? throw new ArgumentNullException(nameof(instanceRepository));
+        _verifier = verifier ?? throw new ArgumentNullException(nameof(verifier));
+    }
+
+    public async Task<ValidateImprintSignatureResult> HandleAsync(
+        ValidateImprintSignatureCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var validatedAt = DateTimeOffset.UtcNow;
+        var imprint = await _imprintRepository
+            .GetByIdAsync(command.VehicleSignatureImprintId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (imprint is null)
+        {
+            return new ValidateImprintSignatureResult
+            {
+                ValidationId = Guid.Empty,
+                VehicleSignatureImprintId = command.VehicleSignatureImprintId,
+                Result = ImprintSignatureValidationResults.NotFound,
+                FailureReason = "Impronta firmada no encontrada.",
+                ValidatedAt = validatedAt,
+            };
+        }
+
+        var provided = NormalizeSignature(command.ProvidedSignature);
+        if (string.IsNullOrEmpty(provided))
+        {
+            return new ValidateImprintSignatureResult
+            {
+                ValidationId = Guid.Empty,
+                VehicleSignatureImprintId = imprint.Id,
+                Result = ImprintSignatureValidationResults.Invalid,
+                FailureReason = "Debe ingresar la firma digital de la impronta.",
+                ValidatedAt = validatedAt,
+            };
+        }
+
+        // La firma pegada (PDF) se verifica contra el hash y la clave pública registrados.
+        var isValid = _verifier.Verify(imprint.PublicKey, imprint.DocumentHash, provided);
+        var result = isValid
+            ? ImprintSignatureValidationResults.Valid
+            : ImprintSignatureValidationResults.Invalid;
+        var failureReason = isValid
+            ? null
+            : "La firma ingresada no corresponde a esta impronta.";
+
+        // Placa del documento: el trámite suele vivir en tenant compañía, no en el OT validador.
+        var instance = await _instanceRepository
+            .GetByIdAsync(imprint.ProcedureInstanceId, imprint.TenantId, cancellationToken)
+            .ConfigureAwait(false);
+        var placa = NormalizePlacaSnapshot(instance?.Plate);
+
+        // Si la firma está vacía no persistimos bitácora de intento vacío con success path —
+        // pero sí persistimos valid/invalid criptográfico.
+        var log = new ImprintSignatureValidation
+        {
+            Id = Guid.NewGuid(),
+            // Tenant del validador (OT/sesión) para RLS de la bitácora; la firma sigue ligada al documento.
+            TenantId = command.TenantId,
+            VehicleSignatureImprintId = imprint.Id,
+            ProcedureInstanceId = imprint.ProcedureInstanceId,
+            Placa = placa,
+            ValidatedBy = command.ValidatedBy,
+            ValidatedAt = validatedAt,
+            Result = result,
+            FailureReason = failureReason,
+        };
+
+        _validationRepository.Add(log);
+        await _validationRepository.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return new ValidateImprintSignatureResult
+        {
+            ValidationId = log.Id,
+            VehicleSignatureImprintId = imprint.Id,
+            Result = result,
+            FailureReason = failureReason,
+            ValidatedAt = validatedAt,
+        };
+    }
+
+    /// <summary>
+    /// Placa canónica del trámite para la bitácora; <c>"-"</c> cuando el trámite no tiene placa
+    /// (la columna es obligatoria y un guion se lee mejor que una cadena vacía en el histórico).
+    /// La normalización en sí vive en <see cref="PlacaNormalizer"/> — misma regla que usan el
+    /// repositorio de improntas y el historial por placa.
+    /// </summary>
+    private static string NormalizePlacaSnapshot(string? plate) =>
+        PlacaNormalizer.NormalizeOrNull(plate) ?? "-";
+
+    /// <summary>Quita espacios y saltos (el PDF suele partir la Base64 en varias líneas).</summary>
+    internal static string NormalizeSignature(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+
+        return string.Concat(raw.Where(c => !char.IsWhiteSpace(c)));
+    }
+}

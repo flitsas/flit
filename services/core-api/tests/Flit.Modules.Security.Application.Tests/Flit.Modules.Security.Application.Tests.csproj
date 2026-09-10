@@ -14,6 +14,27 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      HU #11350 — regla de comparación de los golden de correo, ENLAZADA (no copiada) para que no
+      se bifurque entre este proyecto y el de Flit.Infrastructure.Tests.
+    -->
+    <Compile Include="..\Shared\EmailGolden.cs" Link="Shared\EmailGolden.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Golden de asunto y cuerpo de las plantillas de correo de Seguridad: la salida EXACTA que la
+      plataforma producía ANTES de extraer la composición (HU #11351).
+
+      Un REFACTOR nunca debe obligar a editarlos. Si al mover código un golden empieza a fallar,
+      lo que está mal es el refactor. Solo un cambio DELIBERADO del correo justifica regenerarlos,
+      con GOLDEN_UPDATE=1 y en un commit aparte que diga por qué — si no, cualquiera puede tapar
+      una regresión reescribiendo la prueba y llamándolo "actualizar el golden".
+    -->
+    <None Update="Fixtures/Email/*.golden.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" />

@@ -66,7 +66,7 @@ describe("RequirementsTab (AC2)", () => {
   it("lista las asociaciones del trámite", async () => {
     vi.mocked(fetchProcedureDocumentRequirements).mockResolvedValue([existing()]);
     renderTab();
-    expect(await screen.findByText("Documento A")).toBeInTheDocument();
+    expect(await screen.findByText(/Documento A/)).toBeInTheDocument();
   });
 
   it("muestra el empty state cuando no hay asociaciones", async () => {

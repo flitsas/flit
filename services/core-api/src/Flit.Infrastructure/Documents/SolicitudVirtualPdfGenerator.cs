@@ -1,5 +1,8 @@
 using Flit.Infrastructure.Documents.Branding;
+using Flit.Infrastructure.Documents.Fur;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using QuestPDF;
 using QuestPDF.Fluent;
@@ -14,8 +17,10 @@ namespace Flit.Infrastructure.Documents;
 /// Expediente Consolidado (mismo patrón que <see cref="FurCompraventaDocumentGenerator"/>). Solo varía
 /// el firmante: persona natural a nombre propio; persona jurídica su representante legal en nombre de
 /// la empresa. El texto legal (Resoluciones 12379/2012 y 20233040017145/2023) se transcribe literal.
-/// Las firmas/datos del firmante solo se pintan en estado distinto de borrador
-/// (<see cref="FurDocumentData.FirmasVisibles"/>).
+/// <para><b>Las firmas se pintan en todos los estados.</b> Ocultarlas en borrador (punto 18 del
+/// requerimiento de ADR-0036) dejaba la solicitud terminando en «Cordialmente,» y nada debajo: ni
+/// línea, ni nombre, ni documento. Lo que aún no exista sale vacío, que es lo correcto en un
+/// borrador.</para>
 /// </summary>
 public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
 {
@@ -30,18 +35,25 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
 
         // HU #11032 — la solicitud la firma el PROPIETARIO del vehículo: en un traspaso, quien vende.
         // Antes salía a nombre del radicador (el comprador), declarando por la parte equivocada.
-        var parte = data.Propietario;
+        var otorgantes = FurCompraventaCopropiedad.Otorgantes(data);
+        var copropiedad = FurCompraventaCopropiedad.EsMultiple(otorgantes);
+        var parte = copropiedad ? otorgantes[0] : data.Propietario;
         var esJuridica = parte?.EsJuridica ?? false;
-        var esTraspaso = string.Equals(
-            data.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
-        var tramite = esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL";
+        // ADR-0050 — el rótulo legal es el NOMBRE del tipo. Se resuelve con el mismo componente que
+        // el mandato: dos documentos del mismo expediente no pueden nombrar el trámite distinto.
+        var tramite = MandatoTramiteIdentity.NombreObjeto(
+            data.ProcedureTypeName,
+            data.ProcedureTypeCode,
+            data.ProcedureFamily,
+            data.TipologiaCodigo,
+            data.Modalidad);
 
         // HU #11016 — sin ciudad legible el encabezado es solo la fecha: antes se imprimía el código
         // DIVIPOLA del organismo («25286, 28 de julio de 2026»), que parecía pegado a la fecha.
         var ciudad = data.Organismo.Ciudad?.Trim();
         var fecha = FormatFechaEs(data.FechaTramite ?? DateTime.UtcNow.AddHours(-5));
         var ot = Val(data.Organismo.Nombre, "___");
-        var placa = Val(data.Placa, "___");
+        var placa = Val(data.Placa, string.Empty);
 
         var bytes = Document.Create(doc =>
         {
@@ -55,14 +67,14 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
 
                 FlitLetterhead.Content(page).Column(col =>
                 {
-                    col.Spacing(8);
+                    col.Spacing(copropiedad ? 5 : 8);
                     col.Item().Text(string.IsNullOrEmpty(ciudad) ? fecha : $"{ciudad}, {fecha}");
-                    col.Item().PaddingTop(10).AlignCenter().Text(t => t.Span("SOLICITUD TRÁMITE DE FORMA VIRTUAL").Bold());
+                    col.Item().PaddingTop(copropiedad ? 6 : 10).AlignCenter().Text(t => t.Span("SOLICITUD TRÁMITE DE FORMA VIRTUAL").Bold());
 
                     RenderKeywordText(
                         col.Item().PaddingTop(6),
-                        Parrafo1(data, parte, esJuridica, tramite, ot, placa),
-                        Parrafo1Keywords(parte, esJuridica, tramite, placa));
+                        Parrafo1(data, parte, esJuridica, tramite, ot, placa, otorgantes),
+                        Parrafo1Keywords(parte, esJuridica, tramite, placa, otorgantes));
 
                     col.Item().Text(
                         "Por lo anterior, solicito se autorice el trámite indicado y de esta manera aportar los requisitos " +
@@ -77,21 +89,24 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
                         "modifica la Resolución 12379 de 2012 \"por medio de la cual se establecen procedimientos y requisitos " +
                         "para realizar trámites ante un organismo de tránsito\".");
 
-                    col.Item().PaddingTop(10).Text("Cordialmente,");
+                    col.Item().PaddingTop(copropiedad ? 6 : 10).Text("Cordialmente,");
 
-                    if (data.FirmasVisibles)
+                    if (copropiedad)
                     {
-                        // HU #11046 — la estampa (imagen del baúl o sello de identidad) va SOBRE la línea
-                        // y los datos del firmante debajo. FlitFirmaBlock centraliza la composición y la
-                        // prioridad del baúl (HU #11031), compartidas con el contrato de mandato.
+                        col.Item().PaddingTop(8).Row(row =>
+                        {
+                            row.Spacing(6);
+                            foreach (var otorgante in otorgantes)
+                            {
+                                row.RelativeItem().Column(sig =>
+                                    PintarFirma(sig, data, otorgante, compact: true));
+                            }
+                        });
+                    }
+                    else
+                    {
                         col.Item().PaddingTop(24).Column(sig =>
-                            FlitFirmaBlock.Render(
-                                sig,
-                                FirmaBaulDe(data, parte?.Rol),
-                                SelloIdentidadDe(data, parte?.Rol),
-                                FirmaBlock(parte, esJuridica),
-                                FlitFirmaLinea.Grafica,
-                                datosBold: true));
+                            PintarFirma(sig, data, parte, compact: false));
                     }
                 });
             });
@@ -118,10 +133,18 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
         });
 
     private static string[] Parrafo1Keywords(
-        DocumentParte? parte, bool esJuridica, string tramite, string placa)
+        DocumentParte? parte, bool esJuridica, string tramite, string placa, List<DocumentParte> otorgantes)
     {
         var keys = new List<string> { tramite, placa };
-        if (esJuridica)
+        if (FurCompraventaCopropiedad.EsMultiple(otorgantes))
+        {
+            foreach (var o in otorgantes)
+            {
+                keys.Add(Val(o.Nombre, "___"));
+                keys.Add(Val(o.Documento, "___"));
+            }
+        }
+        else if (esJuridica)
         {
             keys.Add(Val(parte?.RepresentanteLegalNombre, "___"));
             keys.Add(Val(parte?.Nombre, "___"));
@@ -170,8 +193,23 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
     }
 
     private static string Parrafo1(
-        FurDocumentData data, DocumentParte? parte, bool esJuridica, string tramite, string ot, string placa)
+        FurDocumentData data,
+        DocumentParte? parte,
+        bool esJuridica,
+        string tramite,
+        string ot,
+        string placa,
+        List<DocumentParte> otorgantes)
     {
+        if (FurCompraventaCopropiedad.EsMultiple(otorgantes))
+        {
+            var lista = FurCompraventaCopropiedad.ListaComa(otorgantes, "___");
+            return $"Nosotros, {lista}, propietarios del automotor de placa {placa}, nos permitimos " +
+                $"indicar que hoy se realizará el trámite de {tramite} ante el organismo de tránsito {ot} respecto de " +
+                "nuestro automotor, dicho trámite será realizado por: propietario ( ),  un tercero (X), el cual aportará el correspondiente poder o " +
+                "contrato de mandato a la documentación del trámite.";
+        }
+
         if (esJuridica)
         {
             var rlNombre = Val(parte?.RepresentanteLegalNombre, "___");
@@ -195,33 +233,50 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
             "correspondiente poder o contrato de mandato a la documentación del trámite.";
     }
 
-    /// <summary>Imagen de la firma del baúl resuelta para el rol del firmante, o <c>null</c>.</summary>
-    private static byte[]? FirmaBaulDe(FurDocumentData data, string? rol) =>
-        rol is not null
-        && data.FirmaImagenes is not null
-        && data.FirmaImagenes.TryGetValue(rol, out var imagen)
-        && imagen.Length > 0
-            ? imagen
+    private static void PintarFirma(ColumnDescriptor sig, FurDocumentData data, DocumentParte? parte, bool compact)
+    {
+        var key = parte is null ? null : FurCompraventaCopropiedad.FirmaKey(parte);
+        var rol = parte?.Rol;
+        FlitFirmaBlock.Render(
+            sig,
+            FurCompraventaCopropiedad.ImagenDe(data.FirmaImagenes, parte, rol),
+            SelloIdentidadDe(data, parte, rol),
+            FirmaBlock(parte, parte?.EsJuridica ?? false, compact),
+            FlitFirmaLinea.Grafica,
+            datosBold: true,
+            selloBaul: FlitFirmaBaulSello.Resolve(
+                data.FirmaBaulMetadatos, key, incluirIdentificacion: false)
+                ?? FlitFirmaBaulSello.Resolve(data.FirmaBaulMetadatos, rol, incluirIdentificacion: false),
+            firmaIdentidad: FirmaIdentidadDe(data, parte, rol),
+            compact: compact);
+    }
+
+    private static byte[]? FirmaIdentidadDe(FurDocumentData data, DocumentParte? parte, string? rol)
+    {
+        var imagen = FurCompraventaCopropiedad.ImagenDe(data.FirmaIdentidadImagenes, parte, rol);
+        return imagen is not null && IdentitySignatureImageFormat.IsSupported(imagen) ? imagen : null;
+    }
+
+    private static string? SelloIdentidadDe(FurDocumentData data, DocumentParte? parte, string? rol) =>
+        data.IdentidadValidada
+            ? FurCompraventaCopropiedad.TextoDe(data.SellosIdentidad, parte, rol)
             : null;
 
-    /// <summary>Sello de validación biométrica del rol, solo si la identidad está validada.</summary>
-    private static string? SelloIdentidadDe(FurDocumentData data, string? rol) =>
-        rol is not null
-        && data.IdentidadValidada
-        && data.SellosIdentidad is not null
-        && data.SellosIdentidad.TryGetValue(rol, out var sello)
-        && !string.IsNullOrWhiteSpace(sello)
-            ? sello
-            : null;
-
-    private static IEnumerable<string> FirmaBlock(DocumentParte? parte, bool esJuridica)
+    private static IEnumerable<string> FirmaBlock(DocumentParte? parte, bool esJuridica, bool compact)
     {
         if (esJuridica)
         {
             yield return $"EMPRESA: {Val(parte?.Nombre, "___")}";
             yield return $"{MapDoc(parte?.DocumentType).ToUpperInvariant()}: {Val(parte?.Documento, "___")}";
-            yield return $"NOMBRE: {Val(parte?.RepresentanteLegalNombre, "___")}";
-            yield return $"{MapDoc(parte?.RepresentanteLegalTipoDoc).ToUpperInvariant()}: {Val(parte?.RepresentanteLegalDocumento, "___")}";
+            if (compact)
+            {
+                yield return $"RL: {Val(parte?.RepresentanteLegalNombre, "___")}";
+            }
+            else
+            {
+                yield return $"NOMBRE: {Val(parte?.RepresentanteLegalNombre, "___")}";
+                yield return $"{MapDoc(parte?.RepresentanteLegalTipoDoc).ToUpperInvariant()}: {Val(parte?.RepresentanteLegalDocumento, "___")}";
+            }
         }
         else
         {
@@ -229,8 +284,11 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
             yield return $"{MapDoc(parte?.DocumentType).ToUpperInvariant()}: {Val(parte?.Documento, "___")}";
         }
 
-        yield return $"CELULAR: {Val(parte?.Phone, "___")}";
-        yield return $"CORREO ELECTRÓNICO: {Val(parte?.Email, "___")}";
+        if (!compact)
+        {
+            yield return $"CELULAR: {Val(parte?.Phone, "___")}";
+            yield return $"CORREO ELECTRÓNICO: {Val(parte?.Email, "___")}";
+        }
     }
 
     // Nombres de mes en español SIN depender de una cultura instalada (el runtime puede correr en

@@ -106,6 +106,15 @@ public sealed class CreateCompanyHandler
             errors.Add(new CompanyValidationError("code", "Ya existe una compañía con ese código."));
         }
 
+        // Unicidad del NIT: identifica a la empresa ante el Estado, así que dos tenants con el mismo NIT
+        // son la misma empresa duplicada. Sin esta comprobación aparecían dos veces —y con la misma razón
+        // social— en los listados que las ofrecen, sin forma de distinguirlas.
+        if (nit.Length is > 0 and <= TaxIdMaxLength
+            && await _repository.TaxIdExistsAsync(nit, cancellationToken).ConfigureAwait(false))
+        {
+            errors.Add(new CompanyValidationError("nit", "Ya existe una compañía con ese NIT."));
+        }
+
         if (errors.Count > 0)
         {
             return CreateCompanyResult.Invalid(errors);

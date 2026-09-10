@@ -5,6 +5,12 @@ public sealed class GetOtClientProcedureQuery
     public Guid OtTenantId { get; init; }
 
     public Guid ProcedureInstanceId { get; init; }
+
+    /// <summary>
+    /// Organismo con el que el SuperAdmin supervisa la bandeja (ruta /admin/transit-offices/{id}).
+    /// Nulo para el ot_admin, que se resuelve por su propio tenant.
+    /// </summary>
+    public Guid? TransitOfficeId { get; init; }
 }
 
 public enum GetOtClientProcedureStatus

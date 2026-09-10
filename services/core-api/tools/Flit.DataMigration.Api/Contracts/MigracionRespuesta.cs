@@ -18,9 +18,23 @@ public sealed record MigracionRespuesta(
     YaMigradoDto? YaMigrado,
     IReadOnlyList<InstanciaDto> Instancias)
 {
+    /// <summary>
+    /// Dónde quedó el trámite en V2 al terminar ESTA petición. Nulo en dry-run y cuando la data
+    /// plana no llegó a entrar.
+    /// <para>
+    /// Es lo que permite a la consola web ofrecer el enlace al trámite recién migrado sin volver a
+    /// preguntar: hacen falta las DOS piezas, porque la ruta de V2 es <c>/tramites/{id}</c> pero un
+    /// SuperAdmin navega con el tenant explícito y sin él vería un 404 del trámite de otra empresa.
+    /// </para>
+    /// </summary>
+    public DestinoDto? Destino { get; init; }
+
     /// <summary>Cierto si alguna instancia reportó problemas (equivale al exit code 1).</summary>
     public bool ConProblemas => Instancias.Any(i => i.ConProblemas);
 }
+
+/// <summary>Coordenadas del trámite en V2: las dos piezas que arman el enlace.</summary>
+public sealed record DestinoDto(Guid V2Id, Guid TenantId);
 
 /// <summary>
 /// Contra qué se corrió. Es la comprobación que en consola hace la línea «Tabla V1»: 12.807 ids
@@ -59,6 +73,7 @@ public sealed record OrigenDto(
 /// </summary>
 public sealed record YaMigradoDto(
     Guid V2Id,
+    Guid TenantId,
     string Lote,
     string EstadoFinal,
     DateTimeOffset MigradoEl,
@@ -66,7 +81,7 @@ public sealed record YaMigradoDto(
 {
     internal static YaMigradoDto? From(MigrationMapEntry? entry) => entry is null
         ? null
-        : new(entry.V2Id, entry.BatchId, entry.FinalStatus, entry.MigratedAt, entry.Warnings);
+        : new(entry.V2Id, entry.TenantId, entry.BatchId, entry.FinalStatus, entry.MigratedAt, entry.Warnings);
 }
 
 /// <summary>Resultado de una instancia sobre este trámite.</summary>
@@ -141,6 +156,8 @@ public sealed record InstanciaDto(
                 ["yaMaterializados"] = r.Skipped,
                 ["fallidos"] = r.Failed,
                 ["yaVenianComoAdjunto"] = r.Duplicated,
+                ["identidadesMarcadas"] = r.IdentidadesMarcadas,
+                ["identidadesYaMarcadas"] = r.IdentidadesExistentes,
             },
             avisos);
     }

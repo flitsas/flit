@@ -9,6 +9,7 @@ import { resetPassword } from "@/lib/api/auth";
 import { getToken } from "@/lib/api/client";
 import { clearToken } from "@/lib/auth/session";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-policy";
+import { isPasswordReusedError, PASSWORD_REUSED_MESSAGE } from "@/lib/auth/passwordReusedError";
 
 const INPUT_CLASS =
   "w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20";
@@ -67,12 +68,18 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
       clearToken();
       setDone(true);
     } catch (err) {
+      // El token de recuperación sigue siendo válido tras este rechazo (el backend lo
+      // reordenó a propósito): no limpiar el token, no marcar `done` ni redirigir — el
+      // usuario debe poder reintentar con otra contraseña en esta misma pantalla.
       const status = (err as { status?: number }).status;
-      setError(
-        status === 400
-          ? "El enlace de recuperación es inválido o expiró. Solicita uno nuevo."
-          : "No se pudo restablecer la contraseña. Inténtalo de nuevo.",
-      );
+      const body = (err as { body?: unknown }).body;
+      if (isPasswordReusedError(status, body)) {
+        setError(PASSWORD_REUSED_MESSAGE);
+      } else if (status === 400) {
+        setError("El enlace de recuperación es inválido o expiró. Solicita uno nuevo.");
+      } else {
+        setError("No se pudo restablecer la contraseña. Inténtalo de nuevo.");
+      }
     } finally {
       setLoading(false);
     }

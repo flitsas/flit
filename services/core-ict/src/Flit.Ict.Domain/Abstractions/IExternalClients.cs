@@ -30,6 +30,18 @@ public sealed record CreateDraftResult(
 public sealed record DraftActionResult(string? Status, string? ErrorCode);
 
 /// <summary>
+/// Lo que la materialización necesita saber del tipo de trámite destino, tomado de
+/// <c>ict.procedure_type_mapping</c> (ADR-0050). Antes el cliente gRPC lo deducía del propio código
+/// —<c>Contains("TRASPASO")</c>— y del número de transacción, así que un tipo nuevo de la familia
+/// TRASPASO cuyo código no dijera «traspaso» perdía el organismo del RUNT en silencio.
+/// </summary>
+public sealed record DraftProcedureType(
+    string Code,
+    string Family,
+    bool RequiresCommercialValue,
+    bool ResolvesTransitOfficeFromRunt);
+
+/// <summary>
 /// Cliente de orquestación hacia core-api (gRPC). Materializa el pre-trámite validado como un
 /// borrador reutilizando los casos de uso de core-api, y opera su ciclo de vida (pausar/anular,
 /// servicios v1 pauseDraftProcess/abortProcess).
@@ -38,7 +50,7 @@ public interface IProcedureDraftClient
 {
     Task<CreateDraftResult> CreateDraftAsync(
         ExternalIntegrationMaster master,
-        string procedureTypeCode,
+        DraftProcedureType procedureType,
         CancellationToken ct = default);
 
     /// <summary>Pausa o reanuda un borrador ya materializado (v1 pauseDraftProcess).</summary>

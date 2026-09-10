@@ -20,6 +20,13 @@ public sealed class CompanyListItem
     /// <summary>Tipo de compañía — <c>identity.tenants.tenant_type</c>.</summary>
     public string TenantType { get; init; } = string.Empty;
 
+    /// <summary>
+    /// <c>true</c> si el tenant es un Organismo de Tránsito (existe fila en
+    /// <c>admin.transit_office_profiles</c>). Fuente de verdad OT ≠ <see cref="TenantType"/>
+    /// (los OT también usan RENTING tras RestrictTenantTypeCatalog).
+    /// </summary>
+    public bool IsTransitOffice { get; init; }
+
     /// <summary>Estado activo — <c>identity.tenants.is_active</c>.</summary>
     public bool EstadoActivo { get; init; }
 

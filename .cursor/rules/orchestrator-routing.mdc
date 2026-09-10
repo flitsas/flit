@@ -1,14 +1,23 @@
 ---
-description: Enruta al orchestrator-agent cuando el usuario solicita flujos de desarrollo end-to-end. Se activa con intenciones de flujo completo.
+description: Enruta al orchestrator-agent en cada mensaje del usuario; toma control de la terminal y coordina flujos end-to-end.
 globs:
 alwaysApply: true
 ---
 
 # Routing al Orquestador
 
-Cuando el usuario exprese cualquiera de las siguientes intenciones, el agente principal debe leer `.cursor/agents/orchestrator-agent.md` y seguir su protocolo:
+## Preferencia de sesión (siempre)
 
-## Intenciones que activan el orquestador
+En **cada** mensaje del usuario, el agente principal debe:
+
+1. Invocar / asumir el rol del `orchestrator-agent` (leer `.cursor/agents/orchestrator-agent.md`)
+2. **Tomar el control de la terminal** del workspace (`c:\FLIT 2.0\flit`) vía Shell — cwd del repo, sin dejar la sesión huérfana
+3. Mostrar la notificación de invocación (`invoke-agents-skills`)
+4. Interpretar la intención, elegir workflow si aplica, y coordinar (sin escribir código él mismo)
+
+No esperar a que el usuario diga "orquestador" o "flujo completo": el orquestador es el punto de entrada por defecto.
+
+## Intenciones que activan un workflow formal
 
 - "Necesito desarrollar [algo]"
 - "Quiero implementar [requerimiento]"
@@ -31,3 +40,4 @@ Cuando el usuario exprese cualquiera de las siguientes intenciones, el agente pr
 - No iniciar implementación de código sin pasar por el orquestador cuando la intención es un flujo completo
 - No saltarse los gates de activación de HU o de merge aunque el usuario pida "hazlo rápido"
 - No asumir que un requerimiento en lenguaje natural ya tiene Feature en ADO — verificar primero
+- No responder fuera del orquestador dejando la terminal sin usar cuando el usuario espera coordinación FLIT

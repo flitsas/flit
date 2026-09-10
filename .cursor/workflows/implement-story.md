@@ -83,6 +83,7 @@ Si la respuesta es "no" → detener y consultar cómo proceder.
 | `[AMBOS]` | `backend-agent` primero, luego `frontend-agent` cuando el backend esté mergeado |
 
 > Si el título o la descripción de la HU menciona *migración*, *schema*, *tabla*, *catálogo* o *DDL* → `database-agent`. Si menciona *endpoint*, *use case* o *repositorio* sobre tablas ya existentes → `backend-agent`.
+> Si menciona *FUR*, *Formulario Único*, *casilla*, *Anexo 46* o *Resolución 20233040017145* → consultar `expert-doc-engine` **antes** de cambiar el overlay o el mapper, y aplicar `docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md`.
 
 **Instrucción (ejemplos):**
 ```

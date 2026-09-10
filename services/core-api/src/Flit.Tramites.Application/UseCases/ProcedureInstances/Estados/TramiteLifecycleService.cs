@@ -193,14 +193,21 @@ public sealed class TramiteLifecycleService(
             // Los gates de entrega (EvaluarEntregaAsync) ya corrieron y promovieron el OT elegido.
             instance.PlateFlowStatus = command.PlateFlowStatus;
 
-            // Cierra la ventana de edición de subsanación al re-radicar.
+            // Cierra la ventana de edición de subsanación al re-radicar. El baseline ya se consumió
+            // en el diff de gates de esta misma transición, así que se suelta con la ventana.
             if (instance.SubsanacionActiva)
+            {
                 instance.SubsanacionActiva = false;
+                instance.SubsanacionBaseline = null;
+            }
         }
 
         // Si se anula o se vuelve a borrador, apagar el flag de subsanación.
         if (command.ToStatus is TramiteEstado.Anulado or TramiteEstado.Borrador)
+        {
             instance.SubsanacionActiva = false;
+            instance.SubsanacionBaseline = null;
+        }
 
         // Feature #10701 / HU #10860 — un cambio de estado invalida los consolidados persistidos
         // (maestro y wizard): el expediente cambió, así que la próxima generación debe regenerarlos
@@ -240,25 +247,15 @@ public sealed class TramiteLifecycleService(
     private async Task<string?> ResolverMandatarioAlAprobarAsync(
         ProcedureInstance instance, TramiteTransitionCommand command, CancellationToken ct)
     {
-        // ¿Exige mandato? Persona jurídica siempre; persona natural solo si el OT lo configura.
-        var comprador = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, BiometricRules.ParteComprador, StringComparison.OrdinalIgnoreCase));
-        var esJuridica = ActorPersonTypes.IsJuridical(comprador?.PersonType)
-            || string.Equals(comprador?.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
-
+        // Producto: el mandato aplica siempre (PN y PJ); aquí solo resolvemos firmante / plantilla.
         var code = instance.FieldValues.FirstOrDefault(f =>
             string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase))?.ValueText;
         var config = string.IsNullOrWhiteSpace(code)
             ? null
-            : await _mandatePolicy.ResolveAsync(code, ct).ConfigureAwait(false);
+            : await _mandatePolicy.ResolveAsync(code, instance.TenantId, ct).ConfigureAwait(false);
 
-        var exigeMandato = esJuridica || (config?.RequiresForNaturalPerson ?? false);
-        if (!exigeMandato)
-            return null;
-
-        // Sabaneta (mandatario institucional UT-SETSA): solo firma el mandante ⇒ no hay firmante persona
-        // que resolver. Cualquier otra plantilla (genérica/Bello) necesita un mandatario persona.
-        if (MandatoTemplateResolver.Resolve(config?.TemplateCode) == MandatoVariante.Sabaneta)
+        // Institucional u abierto (regla compañía×OT): no hay firmante persona que resolver.
+        if (MandatoAssignmentModeCodes.SkipsPersonSigner(config?.AssignmentMode))
             return null;
 
         // El OT debe estar promovido (se hizo en la entrega). Sin él no podemos consultar el directorio.
@@ -266,10 +263,21 @@ public sealed class TramiteLifecycleService(
             return null;
 
         var candidates = await _mandateDirectory
-            .GetCandidatesAsync(transitOfficeId, instance.TenantId, ct)
+            .GetCandidatesAsync(
+                transitOfficeId, instance.TenantId,
+                MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
+            .ConfigureAwait(false);
+        candidates = await MandateSignerSelectionResolver
+            .WithOtDefaultAsync(candidates, config?.OtDefaultMandateSignerId, _mandateDirectory, ct)
             .ConfigureAwait(false);
 
-        var resolution = MandateSignerSelector.Resolve(candidates, command.ChangedByUserId, command.MandateSignerId);
+        var elegido = MandateSignerDefaultResolver.Resolve(
+            candidates.Select(c => c.Id).ToList(),
+            command.MandateSignerId ?? instance.MandateSignerId,
+            config?.OtDefaultMandateSignerId,
+            config?.DefaultMandateSignerId);
+
+        var resolution = MandateSignerSelector.Resolve(candidates, command.ChangedByUserId, elegido);
 
         switch (resolution.Status)
         {
@@ -361,6 +369,39 @@ public sealed class TramiteLifecycleService(
             : SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos);
         if (gateErrors.Count > 0)
             return (gateErrors[0], DetalleGatePreparacion(gateErrors));
+
+        // Precondición del tipo, no un requisito documental: un cambio de carrocería necesita una
+        // carrocería de partida. El preflight ya lo corta en el paso 1; esto cierra la puerta de atrás
+        // de un borrador abierto antes de que la guarda existiera, que llegaría hasta aquí intacto.
+        // Se mira el SNAPSHOT del RUNT y no el valor efectivo, que en este trámite lleva la carrocería
+        // NUEVA. En modo warn/off no bloquea (mismo interruptor por ambiente que el preflight).
+        if (_validationPolicy.VehicleBodyTypeRequired == TramiteValidationMode.Block
+            && VehicleBodyTypePolicy.ExigeCarroceriaPrevia(instance.TypeCode)
+            && VehicleBodyTypePolicy.SinCarroceria(FieldValue(instance, VehicleBodyTypePolicy.BodyTypeRuntFieldKey)))
+        {
+            return (VehicleBodyTypePolicy.ErrorCode,
+                "No se puede preparar el trámite: el vehículo no tiene carrocería registrada en el RUNT, "
+                + "así que no hay carrocería que cambiar. Vuelve a consultar el vehículo o radica el trámite que corresponda.");
+        }
+
+        // El traslado de cuenta declara a qué organismo va, y ese dato es el objeto del trámite: sin
+        // él el FUR no puede decir a dónde se traslada. Se exige habilitado para la compañía —será
+        // ella quien radique allí después— igual que el organismo del propio trámite.
+        //
+        // No se confunde con el radicado, que es el trámite espejo: allí el destino ES el organismo
+        // del trámite y lo valida el gate de entrega, no este.
+        if (ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile)
+                .RequiresDestinationTransitOffice)
+        {
+            var destinoError = await ValidarOrganismoDestinoAsync(instance, ct).ConfigureAwait(false);
+            if (destinoError is not null)
+                return destinoError.Value;
+        }
+
+        // HU #12131/#12129 — el levantamiento de prenda sobre un vehículo sin gravamen reportado NO
+        // bloquea la preparación (regla de negocio, sin interruptor por ambiente): el gestor captura
+        // el acreedor/entidad manualmente en el paso de prenda del asistente. Antes de esta corrección
+        // esta "puerta de atrás" replicaba el bloqueo duro que ya se quitó del preflight del paso 1.
 
         // R10 (HU #10597) — gate de prenda del traspaso: con gravámenes en warn se exige una
         // decisión de prenda vigente (y su documento cuando la decisión lo requiere). "omitir" es
@@ -475,6 +516,37 @@ public sealed class TramiteLifecycleService(
     }
 
     /// <summary>
+    /// Organismo de DESTINO declarado: presente y habilitado para la compañía. Devuelve <c>null</c>
+    /// si puede avanzar, o el par (código, detalle) del bloqueo.
+    /// </summary>
+    private async Task<(string? Code, string? Detail)?> ValidarOrganismoDestinoAsync(
+        ProcedureInstance instance,
+        CancellationToken ct)
+    {
+        var destinoId = FieldValue(instance, TransitOfficeFieldKeys.DestinoId);
+        if (!Guid.TryParse(destinoId, out var id) || id == Guid.Empty)
+        {
+            return (TramiteEstadoErrores.OrganismoDestinoRequerido,
+                "Selecciona la secretaría de destino: es a dónde se traslada la cuenta y el FUR la declara.");
+        }
+
+        var habilitado = await transitOfficeGrantGate
+            .IsEnabledForTenantAsync(instance.TenantId, id, ct)
+            .ConfigureAwait(false);
+
+        // El grant pudo revocarse entre la elección y la radicación: el borrador vive días.
+        return habilitado
+            ? null
+            : (TramiteEstadoErrores.OrganismoDestinoRequerido,
+                "La secretaría de destino ya no está habilitada para la compañía. Selecciona otra "
+                + "antes de preparar el trámite.");
+    }
+
+    private static string? FieldValue(ProcedureInstance instance, string fieldKey) =>
+        instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, fieldKey, StringComparison.OrdinalIgnoreCase))?.ValueText;
+
+    /// <summary>
     /// FEATURE-08 / HU-BE-06 (AC-06) — gate de preparación para tipos dinámicos: computa los blockers
     /// del submit con <see cref="DynamicGateEvaluator.CanSubmitBlockers"/> desde el gate_profile del
     /// snapshot y las señales de la instancia. Reusa la completitud documental del gestor cuando existe.
@@ -495,6 +567,7 @@ public sealed class TramiteLifecycleService(
             FurGenerado = instance.Attachments.Any(a =>
                 string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase)),
             PreflightProviderError = LatestPreflightHasProviderError(instance),
+            PreflightVehiculoNoEncontrado = LatestPreflightHasVehiculoNoEncontrado(instance),
             UploadedDocumentCodes = new HashSet<string>(
                 instance.Attachments.Select(a => a.Tipo), StringComparer.OrdinalIgnoreCase),
         };
@@ -506,7 +579,7 @@ public sealed class TramiteLifecycleService(
     {
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
-        var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
+        var codigo = instance.TypeCode;
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.Completo ?? true;
     }
@@ -518,6 +591,19 @@ public sealed class TramiteLifecycleService(
             return false;
         var checks = GetPreflightHandler.DeserializeChecks(latest.Checks);
         return checks.Any(c => string.Equals(c.Status, "error", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>El RUNT respondió y el vehículo NO existe (check "vehiculo" en "fail"): bloqueo DURO,
+    /// igual que el error de proveedor. Ver PreflightSnapshot.VehiculoNoEncontrado.</summary>
+    private static bool LatestPreflightHasVehiculoNoEncontrado(ProcedureInstance instance)
+    {
+        var latest = instance.PreflightSnapshots.OrderByDescending(s => s.CreatedAt).FirstOrDefault();
+        if (latest is null)
+            return false;
+        var checks = GetPreflightHandler.DeserializeChecks(latest.Checks);
+        return checks.Any(c =>
+            string.Equals(c.Key, "vehiculo", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(c.Status, "fail", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Mapea partes aprobadas (comprador/vendedor/locatario) a códigos de entidad (BUYER/OWNER/LESSEE).</summary>
@@ -544,7 +630,7 @@ public sealed class TramiteLifecycleService(
         if (_validationPolicy.VehicleRegistrationState != TramiteValidationMode.Block)
             return null;
 
-        if (TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) != TramiteModalidadEntrada.MatriculaInicial)
+        if (instance.Family != ProcedureFamily.Matriculas)
             return null;
 
         var vin = instance.FieldValues.FirstOrDefault(f =>
@@ -563,45 +649,150 @@ public sealed class TramiteLifecycleService(
     }
 
     /// <summary>
-    /// R10 (HU #10597) — gate de prenda del traspaso. Solo aplica a traspaso con el semáforo de
-    /// gravámenes en <c>warn</c>: exige una decisión de prenda vigente y, si la decisión requiere
-    /// documento, su adjunto. <c>(null, null)</c> = puede prepararse. Se omite si no hay repo cableado.
+    /// Gate de prenda: (1) política compañía+OT del certificado — cualquier modalidad CON DIMENSIÓN DE
+    /// PRENDA (CF-06); (2) R10 decisión de prenda — traspaso con gravámenes en warn, Y matrícula inicial
+    /// de forma INCONDICIONAL (HU #11592, bloqueo duro que invierte deliberadamente la HU #10596: la
+    /// prenda de matrícula dejó de ser una declaración meramente informativa).
     /// </summary>
     private async Task<(string? Code, string? Detail)> EvaluarPrendaGateAsync(
         ProcedureInstance instance,
         CancellationToken ct)
     {
-        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
-        if (!esTraspaso)
+        // Un trámite sin dimensión de prenda no tiene NADA que decidir sobre un gravamen: ni capa
+        // complementaria (familia OTROS no acumula, ADR-0050) ni prenda propia del tipo. Se sale antes
+        // que nada —incluido el override del OT, que hasta ahora se evaluaba primero y para toda
+        // modalidad— porque ahí el bloqueo era INSATISFACIBLE: `RegistrarPrendaHandler` rechaza la
+        // decisión de estos tipos con `prenda_no_admitida_en_tipo` y el asistente ni siquiera pinta el
+        // paso, así que un duplicado de tarjeta o un cambio de color se quedaban sin poder prepararse.
+        // Mismo predicado que usa ese handler para ACEPTAR: quien no puede registrar una prenda no
+        // puede quedar bloqueado por no tenerla.
+        var perfil = ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile);
+        if (!perfil.AdmiteDimensionDePrenda(instance.ProcedureType?.Family, instance.ProcedureType?.Code))
             return (null, null);
 
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
 
-        // CF-06 (HU #10881) — override del OT (independiente del semáforo de gravámenes): exige el
-        // documento de prenda. SNAPSHOT (AC2): solo overrides ya activos AL CREAR el trámite aplican.
-        var otRequiereDocumento = await _prendaDocumentRequirementPolicy
-            .IsRequiredAsync(instance.ProcedureTypeId, instance.TransitOfficeId, instance.CreatedAt, ct)
-            .ConfigureAwait(false);
-        var otError = PrendaGate.EvaluateOtOverride(otRequiereDocumento, docTipos);
-        if (otError is not null)
-            return (otError,
-                "El organismo de tránsito exige el documento de prenda para este tipo de trámite.");
+        // La decisión vigente se carga ANTES del override: desde 2026-08-12 el override la necesita
+        // para no exigir un documento que la UI no ofrece cargar (sin_prenda / omitir). Sin repo
+        // cableado (tests) queda null, que el gate trata como "falta decidir" ⇒ prenda_decision_requerida.
+        var prenda = _prendaRepo is null
+            ? null
+            : await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
 
-        // R10 (HU #10597) — gate del semáforo de gravámenes (decisión de prenda vigente), solo con
-        // el repo de prenda cableado.
-        if (_prendaRepo is null || !HasGravamenWarn(instance))
+        // Compañía+OT: default exige certificado; opt-out al CreatedAt ⇒ opcional. Aplica a
+        // matrícula, traspaso y cualquier otra modalidad con OT.
+        var documentoExigido = await _prendaDocumentRequirementPolicy
+            .IsRequiredAsync(instance.TenantId, instance.TransitOfficeId, instance.CreatedAt, ct)
+            .ConfigureAwait(false);
+        var otError = PrendaGate.EvaluateOtOverride(documentoExigido, prenda?.Decision, docTipos);
+        if (otError is not null)
+            return (otError, otError == TramiteEstadoErrores.PrendaDecisionRequerida
+                ? "El organismo de tránsito exige el documento de prenda: registra la decisión de "
+                  + "prenda del trámite antes de prepararlo."
+                : "La compañía exige el documento de prenda para este organismo de tránsito.");
+
+        if (_prendaRepo is null)
             return (null, null);
 
-        var prenda = await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
+        var modalidad = instance.Family;
 
-        return PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, prenda, docTipos) switch
+        // R10 (HU #10597) — gate del semáforo de gravámenes (decisión de prenda), solo traspaso.
+        if (modalidad == ProcedureFamily.Traspaso && HasGravamenWarn(instance))
         {
-            TramiteEstadoErrores.PrendaDecisionRequerida => (TramiteEstadoErrores.PrendaDecisionRequerida,
-                "El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar el trámite."),
-            TramiteEstadoErrores.PrendaDocumentoRequerido => (TramiteEstadoErrores.PrendaDocumentoRequerido,
-                "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
+            return MapPrendaGateResult(
+                PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, prenda, docTipos),
+                prenda,
+                documentoExigido,
+                "El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar el trámite.");
+        }
+
+        // R10 aplicado a matrícula inicial (HU #11592) — INCONDICIONAL: a diferencia del traspaso, no
+        // depende de HasGravamenWarn (ese semáforo detecta gravámenes de un vehículo con historial; en
+        // matrícula el vehículo es nuevo y el gravamen, si existe, se CONSTITUYE con el trámite —mismo
+        // razonamiento que ya documenta EvaluateOtOverride para el override del OT). Sin decisión de
+        // prenda vigente, no hay soporte del gravamen: no se puede preparar el trámite.
+        if (modalidad == ProcedureFamily.Matriculas)
+        {
+            return MapPrendaGateResult(
+                PrendaGate.EvaluateMatriculaInicial(prenda, docTipos),
+                prenda,
+                documentoExigido,
+                "Registra la decisión de prenda antes de preparar el trámite.");
+        }
+
+        // El gravamen ES el trámite (inscribir / levantar prenda). Estos tipos caían en el `return`
+        // final: el único trámite cuyo objeto es la prenda era el único SIN gate de prenda, así que
+        // podía radicarse sin decisión, sin acreedor y sin certificado — y el FUR salía con la
+        // casilla 11 o 12 marcada, el numeral 20 en blanco y sin bloque en el párrafo 23.
+        //
+        // `PrendaGate` ya tenía el núcleo preparado para esto; lo que faltaba era llamarlo.
+        if (ProcedureTypeLayers.EsPrendaDeAccionUnica(instance.TypeCode))
+        {
+            // ADR-0055 (HU #12129) — con la acción complementaria activa puede haber hasta DOS hechos
+            // vigentes (constitución + levantamiento); cada uno necesita su propio documento/acreedor
+            // completos, así que el gate evalúa el CONJUNTO, no un solo `prendaVigente` (que además
+            // con dos filas vigentes ya no identifica de forma determinística cuál es "la" decisión).
+            var vigentes = _prendaRepo is null
+                ? []
+                : await _prendaRepo.GetVigentesAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false)
+                    ?? [];
+
+            var accionUnicaError = PrendaGate.EvaluateAccionUnica(vigentes, docTipos);
+
+            // El detalle del mensaje (p. ej. "falta el acreedor") debe señalar CUÁL de los hasta dos
+            // hechos lo dispara — se ubica reevaluando cada uno con la misma regla de un solo hecho.
+            var prendaDelError = vigentes.FirstOrDefault(v =>
+                PrendaGate.EvaluateAccionUnica(v, docTipos) == accionUnicaError);
+
+            return MapPrendaGateResult(
+                accionUnicaError,
+                prendaDelError,
+                // El certificado no es opcional aquí aunque el OT no lo exija por configuración: es
+                // el soporte del acto que se está radicando, no un requisito añadido del organismo.
+                documentoExigido: true,
+                "Registra la información de la prenda antes de preparar el trámite.");
+        }
+
+        return (null, null);
+    }
+
+    /// <summary>
+    /// Traduce el código de <see cref="PrendaGate"/> al par (código, detalle) del gate de preparación,
+    /// compartido entre traspaso y matrícula inicial (HU #11592) para no duplicar el mapeo.
+    /// </summary>
+    private static (string? Code, string? Detail) MapPrendaGateResult(
+        string? prendaGateCode,
+        ProcedureInstancePrenda? prenda,
+        bool documentoExigido,
+        string mensajeDecisionRequerida) => prendaGateCode switch
+        {
+            TramiteEstadoErrores.PrendaDecisionRequerida =>
+                (TramiteEstadoErrores.PrendaDecisionRequerida, mensajeDecisionRequerida),
+            TramiteEstadoErrores.PrendaDocumentoRequerido when documentoExigido =>
+                (TramiteEstadoErrores.PrendaDocumentoRequerido,
+                    "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
+            TramiteEstadoErrores.PrendaAcreedorRequerido =>
+                (TramiteEstadoErrores.PrendaAcreedorRequerido, DescribirAcreedorFaltante(prenda)),
+            TramiteEstadoErrores.PrendaEntidadLevantamientoRequerida =>
+                (TramiteEstadoErrores.PrendaEntidadLevantamientoRequerida,
+                    "Indica ante qué entidad se levantó la prenda: es lo que el FUR declara en las observaciones."),
             _ => (null, null),
         };
+
+    /// <summary>
+    /// HU #11591 — arma el mensaje de <see cref="TramiteEstadoErrores.PrendaAcreedorRequerido"/>
+    /// enumerando dinámicamente qué campo(s) del acreedor faltan (nombre, documento o ambos).
+    /// </summary>
+    private static string DescribirAcreedorFaltante(ProcedureInstancePrenda? prenda)
+    {
+        var faltantes = new List<string>();
+        if (string.IsNullOrWhiteSpace(prenda?.AcreedorNombre))
+            faltantes.Add("nombre del acreedor");
+        if (string.IsNullOrWhiteSpace(prenda?.AcreedorDocumento))
+            faltantes.Add("documento del acreedor");
+
+        return "La decisión de prenda constituye un gravamen: falta diligenciar "
+            + string.Join(" y ", faltantes) + ".";
     }
 
     /// <summary>

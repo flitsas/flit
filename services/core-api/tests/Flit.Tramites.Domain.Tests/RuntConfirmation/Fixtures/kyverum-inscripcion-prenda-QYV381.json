@@ -1,0 +1,211 @@
+{
+  "ok": true,
+  "data": {
+    "vehiculo": {
+      "placa": "QYV381",
+      "nombrePais": null,
+      "numLicencia": "10040084721",
+      "estadoAutomotor": "ACTIVO",
+      "tipoServicio": "Particular",
+      "clase": "CAMIONETA",
+      "marca": "TESLA",
+      "linea": "MODEL Y",
+      "modelo": "2026",
+      "color": "GRIS GRAFITO",
+      "numSerie": null,
+      "numMotor": null,
+      "numChasis": "LRWYGCEK5TC770611",
+      "vin": "LRWYGCEK5TC770611",
+      "cilindraje": "0",
+      "tipoCarroceria": "SUV",
+      "fechaRegistro": "2026-08-21T12:43:01.000-05:00",
+      "gravamenes": "NO",
+      "organismoTransito": "STRIA DE TTOyTTE MEDELLIN",
+      "capacidadCarga": null,
+      "codigoMedidaCarga": null,
+      "pesoBruto": "1992",
+      "numeroEjes": "2",
+      "idAutomotor": 614022238,
+      "repotenciado": "NO",
+      "idTipoServicio": 1,
+      "idClaseVehiculo": 5,
+      "diasMatriculado": "19",
+      "prendas": "SI",
+      "clasificacion": "AUTOMOVIL",
+      "esRegrabadoMotor": "NO",
+      "esRegrabadoChasis": "NO",
+      "esRegrabadoSerie": "NO",
+      "esRegrabadoVin": "NO",
+      "numRegraChasis": null,
+      "numRegraMotor": null,
+      "numRegraSerie": null,
+      "numRegraVin": null,
+      "antiguoClasico": "NO",
+      "tipoCombustible": "ELECTRICO",
+      "pasajerosTotal": null,
+      "pasajerosSentados": "5",
+      "vehiculoEnsenanza": "NO",
+      "puertas": "4",
+      "importacion": 0,
+      "fechaExpedLTImportacion": null,
+      "fechaVenciLTImportacion": null,
+      "seguridadEstado": "NO",
+      "verValidaDIAN": false,
+      "validacionDIAN": null,
+      "mostrarSolicitudes": "SI",
+      "tipoMaquinaria": null,
+      "subpartida": null,
+      "fechaMatricula": null,
+      "tarjetaRegistro": null,
+      "noIdentificacion": null
+    },
+    "tipoDocPropietario": "C",
+    "datosTecnicos": {
+      "capacidadCarga": null,
+      "pesoBrutoVehicular": "1992 Kgs",
+      "noEjes": "2",
+      "noLlantas": null,
+      "alto": null,
+      "ancho": null,
+      "largo": null,
+      "pasajerosTotal": null,
+      "pasajerosSentados": "5",
+      "rodaje": null,
+      "peso": null
+    },
+    "soat": [
+      {
+        "origen": "NACIONAL",
+        "tipoTarifa": "211",
+        "numSoat": "1508007035676000",
+        "fechaExpedicion": "2026-08-20T00:00:00.000-05:00",
+        "fechaExpediSoat": "2026-08-20T00:00:00.000-05:00",
+        "fechaInicioPoliza": "2026-08-21T00:00:00.000-05:00",
+        "fechaVencimSoat": "2027-08-20T00:00:00.000-05:00",
+        "razonSocialAsegur": "LA PREVISORA S.A.COMPAÑIA DE SEGUROS",
+        "estado": "VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "placa": null,
+        "nombrePais": null
+      }
+    ],
+    "solicitudes": [
+      {
+        "noSolicitud": "301973305",
+        "fechaSolicitud": "2026-09-03T14:46:54.000-05:00",
+        "estado": "AUTORIZADA",
+        "tramitesRealizados": "TRÁMITE INSCRIPCIÓN ALERTA, ",
+        "entidad": "STRIA DE TTOyTTE MEDELLIN"
+      },
+      {
+        "noSolicitud": "300892403",
+        "fechaSolicitud": "2026-08-21T09:23:28.000-05:00",
+        "estado": "AUTORIZADA",
+        "tramitesRealizados": "TRÁMITE MATRÍCULA INICIAL, ",
+        "entidad": "STRIA DE TTOyTTE MEDELLIN"
+      },
+      {
+        "noSolicitud": "300859535",
+        "fechaSolicitud": "2026-08-20T15:55:27.000-05:00",
+        "estado": "APROBADA",
+        "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, ",
+        "entidad": "STRIA DE TTOyTTE MEDELLIN"
+      }
+    ],
+    "garantias": [
+      {
+        "tipoDocumentoAcreedor": "NIT",
+        "numeroDocumentoAcreedor": "890903938",
+        "acreedor": "BANCOLOMBIA S.A.",
+        "fechaInscripcion": "03/09/2026",
+        "confecamaras": "SI",
+        "patrimonioAutonomo": null
+      }
+    ],
+    "garantiasPrendas": [],
+    "limitacionesPropiedad": [],
+    "polizaCaucion": {
+      "noPoliza": null,
+      "estadoPoliza": null,
+      "fechaExpedicion": null,
+      "fechaVigenciaPoliza": null,
+      "noCertificacion": null,
+      "estadoCertificado": null
+    },
+    "responsabilidadCivil": [],
+    "responsabilidadCivilHabilitar": true,
+    "tarjetaOperacion": {
+      "empresaAfiliadora": null,
+      "modalidadTransporte": null,
+      "modalidadServicio": null,
+      "radioAccion": null,
+      "fechaExpedicion": null,
+      "fechaInicio": null,
+      "fechaFin": null,
+      "estado": null,
+      "nroTarjetaOperacion": null
+    },
+    "permisosPcr": [],
+    "datosBlindaje": {
+      "blindado": null,
+      "nivelBlindaje": null,
+      "nivelBlindajeNumero": null,
+      "fechaBlindaje": null,
+      "fechaDesblindaje": null,
+      "numeroResolucion": null,
+      "tipoBlindajeNombre": null,
+      "fechaExpedicionCertificado": null,
+      "fechaExpedicionCertificadoFormatoWS": null,
+      "idDocumentoCertificadoBlindaje": null,
+      "autorizacion": null
+    },
+    "informacionGps": {
+      "noIdentificacionSerie": null,
+      "empresaHabilitacion": null
+    },
+    "informacionRepotenciado": {
+      "repotenciado": null,
+      "fechaRepotenciacion": null,
+      "modeloRepotenciado": null
+    },
+    "desintegracion": {
+      "placa": null,
+      "desintegrar": null
+    },
+    "certificadoDesintegracion": {
+      "noCertificado": null,
+      "estadoCertificado": null,
+      "fechaExpedicion": null,
+      "entidadDesintegradora": null
+    },
+    "normalizacion": [
+      {
+        "deficienciaMatriculaInicial": "NO",
+        "vehiculoNormalizado": "NO DISPONIBLE",
+        "fecha": null,
+        "numeroActoAdministrativo": null,
+        "descargaCertificado": null,
+        "solicitudNormalizacion": null
+      }
+    ],
+    "certificadoDijin": {
+      "noCertificado": null,
+      "fechaExpedicion": null,
+      "entidadCertificado": null,
+      "estadoCertificado": null
+    },
+    "registroInicial": {
+      "noCertificado": null,
+      "fechaExpedicion": null,
+      "estadoCertificado": null,
+      "placaReposicion": null
+    },
+    "registroInicialInvc": {
+      "noCertificado": null,
+      "fechaExpedicion": null,
+      "estadoCertificado": null,
+      "placaReposicion": null
+    }
+  },
+  "fromCache": false
+}

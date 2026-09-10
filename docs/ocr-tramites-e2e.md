@@ -37,7 +37,7 @@ Activar el proveedor real por variables de entorno (12-factor; tienen prioridad 
 export OCR_PROVIDER=anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
 # opcionales (valores por defecto):
-# export ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+# export ANTHROPIC_MODEL=claude-haiku-4-5
 # export ANTHROPIC_TIMEOUT_SECONDS=60
 # export ANTHROPIC_MAX_TOKENS=2000
 ```
@@ -46,7 +46,7 @@ Equivalente en `appsettings.Development.json`:
 
 ```json
 "Ocr": { "Provider": "anthropic" },
-"Anthropic": { "ApiKey": "sk-ant-...", "Model": "claude-haiku-4-5-20251001", "TimeoutSeconds": 60, "MaxTokens": 2000 }
+"Anthropic": { "ApiKey": "sk-ant-...", "Model": "claude-haiku-4-5", "TimeoutSeconds": 60, "MaxTokens": 2000 }
 ```
 
 La API key **nunca** se loguea. Sin key (o con `Ocr:Provider=mock`) el endpoint no llama a Anthropic.
@@ -75,3 +75,9 @@ Respuesta OK: `{ "ok": true, "tipo": "factura", "data": { "es_factura_valida": t
 
 Los tipos por modalidad: matrícula → `factura`, `aduana`, `impronta`, `soat`; traspaso → `impronta`, `soat`.
 Archivos entre 10 y 20 MB se suben **sin** OCR (se marcan "no analizado" en la UI).
+
+## Cargue masivo
+
+El cargue campo a campo descrito arriba no cambia. El camino adicional que reparte un expediente
+completo (o una carpeta, o un `.zip`) entre las casillas del checklist es `POST /ocr/lote`, y tiene su
+propia guía: [ocr-lote-cargue-masivo.md](./ocr-lote-cargue-masivo.md).

@@ -1,0 +1,541 @@
+import { bogotaDay, type XlsxCell } from '@/lib/xlsx';
+import { formatFecha } from '@/lib/format/date';
+import { estadoLabel } from '@/lib/tramites/estados';
+import {
+  FIRMA_TEXTO,
+  FUENTE_LABEL,
+  marcasLabel,
+  runtConfirmadoLabel,
+  stepLabel,
+  tramiteLabel,
+  vehiculo,
+} from '@/lib/tramites/tramites-row-labels';
+import type { FirmaParteEstado, InstanceSummary } from '@/lib/api/types/procedure-runtime';
+
+/**
+ * Definición de las columnas configurables de la tabla "Trámites en curso" del gestor
+ * (selector de columnas, preferencia `tramites.columns` — ver lib/api/ui-preferences.ts).
+ *
+ * Única fuente de verdad de: (a) las claves que viajan en la preferencia persistida, (b) el
+ * ancho de cada columna en la tabla y (c) la etiqueta que ve el usuario en el selector. Las
+ * columnas "Selección" (checkbox ICT) y "Acciones" son estructurales — no son parte de la
+ * preferencia; Selección solo se reserva cuando hay borradores ICT en la página.
+ */
+export interface TramitesColumnDef {
+  key: string;
+  /** Etiqueta plana: nombre del checkbox del selector y, salvo excepción, texto de la cabecera. */
+  label: string;
+  /**
+   * Ancho mínimo legible, en píxeles. Cumple DOS papeles, y por eso es el único número de ancho
+   * que declara una columna:
+   *
+   * - es el piso de la columna, y la suma de los pisos es el `minWidthPx` a partir del cual la
+   *   tabla scrollea en horizontal en vez de seguir comprimiendo;
+   * - en una columna FLEXIBLE es además su PESO de crecimiento (`minPx / 100` fr). Que el peso
+   *   derive del piso no es cosmético: garantiza que, mientras la tabla mida al menos
+   *   `minWidthPx`, ninguna columna quede por debajo de su mínimo. Con pesos escogidos a mano eso
+   *   no se sostenía — una columna con peso bajo y piso alto se quedaba corta mucho antes de que
+   *   la tabla llegara a su mínimo total;
+   * - en una columna FIJA (`fixed`) es su ancho EXACTO a cualquier ancho de tabla.
+   */
+  minPx: number;
+  /**
+   * Columna de ancho FIJO: su contenido es atómico y no gana nada con más espacio (un VIN, una
+   * fecha, "Integración", el menú de acciones). No participa del reparto del ancho sobrante, así
+   * que TODO lo que sobra va a las columnas de texto —nombres, secretaría, trámite—, que son las
+   * que sí truncan. Antes crecían todas por igual y el aire terminaba inflando la columna de VIN.
+   */
+  fixed?: boolean;
+  /**
+   * Agrupación en el desplegable "Columnas". NO altera el orden de la tabla, que lo sigue dando
+   * este arreglo: separa las columnas del listado base de los desgloses adicionales, que si no
+   * quedaban intercalados entre las base y la lista se leía revuelta.
+   */
+  group?: string;
+}
+
+const GRUPO_BASE = 'Listado';
+const GRUPO_DESGLOSE = 'Desglose adicional';
+
+export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
+  // Celdas COMPUESTAS (paridad con el diseño): `radicado` apila las fechas, `placa` apila el VIN y
+  // la marca/modelo, y `tramite` apila el chip de estado. Cada añadido es CONDICIONAL — solo se
+  // apila si la columna dedicada correspondiente está oculta (ver `shows` en TramitesTable), así
+  // activar la columna dedicada desde el selector nunca duplica el dato. Por eso estas tres piden
+  // más piso que una celda de una sola línea.
+  //
+  // El piso lo manda la línea más larga que apila, "Actualización: 2026/08/27": ~158px de texto
+  // + los 32px de padding del `<td>`. Con 190px se cortaba a "Actualización: 2026/08…" — una
+  // fecha a medias no dice nada, y a diferencia de un nombre no tiene dónde partirse bien.
+  // HU #12154 — el radicado pasa de TRM-2026-000123 a un numero pelado, asi que la columna
+  // deja de necesitar 210px. Dejarlos era regalar ancho en una tabla que va justa.
+  { key: 'radicado', label: 'Radicado', minPx: 120, group: GRUPO_BASE },
+  // Vehículo = placa + VIN + marca/línea en UNA celda. Los tres identifican el mismo objeto y el
+  // gestor los lee juntos; repartidos en tres columnas, la placa quedaba a dos columnas del VIN y
+  // había que barrer la fila a lo ancho para reconocer un vehículo.
+  //
+  // El piso lo manda el VIN, que es lo más ancho que entra: un token de 17 caracteres SIN espacios
+  // —no puede envolver como un nombre, o se lee entero o truncado—. JetBrains Mono avanza 0.6em,
+  // así que a 12px son 17 × 7.2 ≈ 123px, más los 32px de padding del `<td>` ≈ 155px. Los 180 dejan
+  // margen para que la línea de marca/modelo no envuelva a la primera de cambio.
+  //
+  // La CLAVE sigue siendo `placa`: es lo que viaja en la preferencia guardada de cada usuario.
+  // Ordena por placa; para ordenar por VIN está su columna de desglose.
+  { key: 'placa', label: 'Vehículo', minPx: 180, group: GRUPO_BASE },
+  // La celda solo trae `vendedorNombre`, así que el rótulo es "Vendedor" a secas: "Propietario /
+  // vendedor" prometía un propietario inscrito que esta columna nunca ha pintado. La CLAVE sigue
+  // siendo `propietario` — es lo que viaja en la preferencia guardada de cada usuario y
+  // renombrarla dejaría fuera de sitio a todas las preferencias ya persistidas.
+  // Cada actor lleva DENTRO su propia acreditación (identidad validada o firma del baúl): la
+  // columna "Firmas" que las agrupaba ya no existe. Estaban separadas y el gestor leía "Firmado"
+  // sin saber de quién sin cruzar la vista a otra columna; juntas, la cabecera de la columna ya
+  // dice de quién es. El piso cubre el peor caso de las DOS líneas: el nombre completo arriba y
+  // el valor más largo ("Sin registrar", ~82px) debajo, más los 32px de padding del `<td>`.
+  { key: 'propietario', label: 'Vendedor', minPx: 170, group: GRUPO_BASE },
+  { key: 'comprador', label: 'Comprador', minPx: 170, group: GRUPO_BASE },
+  { key: 'tramite', label: 'Trámite / Estado', minPx: 160, group: GRUPO_BASE },
+  // HU #12183 — dos íconos como mucho, de 20px, y nunca texto: el piso cubre los dos más el
+  // padding de la celda. Fija por eso mismo: no tiene nada que hacer con el ancho sobrante.
+  { key: 'marcas', label: 'Marcas', minPx: 84, fixed: true, group: GRUPO_BASE },
+  // Feature #12276 (HU #12312) — píldora SÍ / NO / — y nada más. Fija: tres valores de ancho
+  // constante; el piso cubre la cabecera «Confirmado en RUNT», que es lo más ancho de la columna.
+  { key: 'confirmadoRunt', label: 'Confirmado en RUNT', minPx: 132, fixed: true, group: GRUPO_BASE },
+  // Sin truncar: el nombre del organismo es la mitad del valor de la columna ("SECRETARIA
+  // DISTRITAL DE MOVILIDAD DE BOGOTA" cortado a "SECRETARIA DISTRITAL DE…" no distingue nada).
+  // Envuelve en varias líneas, así que es de las que mejor aprovecha el ancho sobrante.
+  { key: 'secretaria', label: 'Secretaría', minPx: 190, group: GRUPO_BASE },
+  { key: 'gestor', label: 'Gestor', minPx: 160, group: GRUPO_BASE },
+  // Fija: tres etiquetas conocidas y cortas ("Dashboard", "Integración", "Migrado").
+  { key: 'fuente', label: 'Fuente', minPx: 120, fixed: true, group: GRUPO_BASE },
+  // Desgloses: su dato ya viaja apilado en una celda del listado (VIN y marca/modelo bajo
+  // Vehículo, estado y paso bajo Trámite, fechas bajo Radicado). Activarlos lo MUEVE a su propia
+  // columna: el dato sale de la celda compuesta, nunca aparece dos veces.
+  //
+  // El rótulo del desglose del vehículo NO puede ser "Vehículo" —ya lo lleva la columna fundida— y
+  // "Marca / modelo" es además lo que de verdad pinta: marca + línea.
+  { key: 'vin', label: 'VIN', minPx: 168, fixed: true, group: GRUPO_DESGLOSE },
+  { key: 'vehiculo', label: 'Marca / modelo', minPx: 140, group: GRUPO_DESGLOSE },
+  { key: 'estado', label: 'Estado', minPx: 150, group: GRUPO_DESGLOSE },
+  // Fijas: "3/5" con el nombre del paso, y dos fechas de formato constante.
+  { key: 'paso', label: 'Paso', minPx: 130, fixed: true, group: GRUPO_DESGLOSE },
+  { key: 'fechaCreacion', label: 'Fecha de creación', minPx: 130, fixed: true, group: GRUPO_DESGLOSE },
+  { key: 'fechaActualizacion', label: 'Fecha de actualización', minPx: 140, fixed: true, group: GRUPO_DESGLOSE },
+] as const;
+
+/**
+ * Catálogo de claves conocidas HOY. Se persiste junto a la preferencia del usuario (`known`) para
+ * distinguir una columna que ocultó a propósito de una que todavía no existía cuando guardó: sin
+ * esto, cada columna nueva nace invisible para quien ya tenía preferencia y parece un dato que falta.
+ */
+export const TRAMITES_COLUMN_KEYS: readonly string[] = TRAMITES_COLUMNS.map((c) => c.key);
+
+/**
+ * Claves añadidas al catálogo DESPUÉS de que ya hubiera preferencias guardadas sin registro de
+ * catálogo (`known`). Solo estas se incorporan a una preferencia antigua: el resto de la selección
+ * del usuario se respeta, porque haber ocultado una columna que ya existía sí fue decisión suya.
+ *
+ * Hoy está VACÍA: la única que la ocupaba era `firmado`, y esa columna dejó de existir cuando la
+ * acreditación se metió dentro de la celda de cada actor. Se conserva el mecanismo porque en
+ * cuanto el usuario guarda una vez su preferencia pasa a llevar `known` y la deducción se vuelve
+ * exacta; esta lista solo cubre el salto desde el formato viejo.
+ */
+export const TRAMITES_COLUMNS_ADDED_SINCE_LEGACY: readonly string[] = [
+  // HU #12183 — la columna de marcas. Sin esto, para quien guardó su selección antes de que
+  // existiera `known`, la columna nacería invisible: vería el listado igual que antes y desde el
+  // selector parecería un dato que falta, no una columna que él ocultó.
+  'marcas',
+  // Feature #12276 — misma razón: la columna nace visible también para quien ya tenía preferencia.
+  'confirmadoRunt',
+];
+
+
+/**
+ * Columnas visibles por defecto: con lo que arranca un gestor que nunca ha tocado "Columnas".
+ *
+ * Es solo el punto de partida — en cuanto el gestor cambia la selección, su preferencia manda y
+ * este arreglo deja de aplicarle (ver `useUiPreferences` con scope `tramites.columns`).
+ *
+ * NINGUNA de las que faltan desapareció: `gestor` y `fuente` siguen en el catálogo y se activan
+ * desde el selector.
+ *
+ * `vin`, `vehiculo`, `paso`, `estado`, `fechaCreacion` y `fechaActualizacion` quedan fuera por
+ * otro motivo: su dato YA viaja apilado dentro de `placa`, `tramite` y `radicado` — activarlas
+ * mueve el dato a su propia columna en vez de duplicarlo.
+ */
+export const DEFAULT_TRAMITES_VISIBLE_COLUMNS: readonly string[] = [
+  'radicado',
+  'placa',
+  'propietario',
+  'comprador',
+  'tramite',
+  // HU #12183 — visible de salida: la prenda y la transformación no se ven en ninguna otra
+  // columna, y una marca que hay que activar a mano no informa a quien no sabe que existe.
+  'marcas',
+  // Feature #12276 — visible de salida: es lo único que el gestor ve del proceso de confirmación.
+  'confirmadoRunt',
+  'secretaria',
+] as const;
+
+const SELECT_COL_REM = 2.25;
+const SELECT_COL_WIDTH = `${SELECT_COL_REM}rem`;
+const SELECT_COL_MIN_PX = 36;
+/** Acciones es de ancho fijo: dentro solo va el menú "Acciones", de tamaño constante. */
+const ACTIONS_COL_PX = 150;
+/** Píxeles de piso por cada `1fr` de crecimiento (ver `minPx` en TramitesColumnDef). */
+const PX_POR_FR = 100;
+
+export interface TramitesGridLayout {
+  /** Listo para `style.gridTemplateColumns`: columnas visibles + Acciones (+ Selección si aplica). */
+  gridTemplateColumns: string;
+  /** Ancho mínimo (px) sugerido para el contenedor con `overflow-x-auto`. */
+  minWidthPx: number;
+  /** Si la grilla reserva la primera pista para el checkbox ICT. */
+  includeSelectColumn: boolean;
+}
+
+export interface BuildTramitesGridLayoutOptions {
+  /**
+   * Reserva la pista del checkbox de selección masiva ICT. Solo debe ser true cuando hay al
+   * menos un borrador ICT en el listado; si no, deja un hueco vacío al inicio de cada fila.
+   */
+  includeSelectColumn?: boolean;
+}
+
+/**
+ * Columnas visibles en el orden canónico del catálogo. Si `visibleKeys` no deja ninguna columna
+ * conocida (preferencia corrupta o vacía), cae a TODAS: nunca se construye una tabla sin columnas.
+ */
+function resolveColumns(visibleKeys: readonly string[]): readonly TramitesColumnDef[] {
+  const matched = TRAMITES_COLUMNS.filter((c) => visibleKeys.includes(c.key));
+  return matched.length > 0 ? matched : TRAMITES_COLUMNS;
+}
+
+/**
+ * Construye el `gridTemplateColumns` (y el ancho mínimo) a partir de las claves visibles. La
+ * cabecera y cada fila de TramitesTable deben invocar ESTA MISMA función con el mismo arreglo
+ * `visibleKeys`: al derivar ambas del mismo cálculo quedan alineadas por construcción sin
+ * importar cuántas columnas se oculten — evita el desalineamiento cabecera/filas típico de un
+ * grid con columnas condicionales calculadas dos veces por separado.
+ *
+ * Las columnas fijas entran como pista en `px`; las flexibles, en `fr` derivado de su piso.
+ */
+export function buildTramitesGridLayout(
+  visibleKeys: readonly string[],
+  options: BuildTramitesGridLayoutOptions = {},
+): TramitesGridLayout {
+  const includeSelectColumn = options.includeSelectColumn === true;
+  const columns = resolveColumns(visibleKeys);
+  const track = (c: TramitesColumnDef): string =>
+    c.fixed ? `${c.minPx}px` : `${(c.minPx / PX_POR_FR).toFixed(2)}fr`;
+  return {
+    includeSelectColumn,
+    gridTemplateColumns: [
+      ...(includeSelectColumn ? [SELECT_COL_WIDTH] : []),
+      ...columns.map(track),
+      `${ACTIONS_COL_PX}px`,
+    ].join(' '),
+    // Suma de pisos: como el peso de cada flexible ES su piso, a este ancho todas las columnas
+    // caen exactamente en su mínimo a la vez. Por debajo, scroll horizontal.
+    minWidthPx:
+      (includeSelectColumn ? SELECT_COL_MIN_PX : 0) +
+      columns.reduce((sum, c) => sum + c.minPx, 0) +
+      ACTIONS_COL_PX,
+  };
+}
+
+/**
+ * Construye el ancho de cada pista para el `<colgroup>` (Selección si aplica + visibles en orden
+ * canónico + Acciones), en el mismo orden en que la tabla las pinta. `<colgroup>` no admite `fr`
+ * (lo que usa `buildTramitesGridLayout`), así que aquí las pistas flexibles se expresan en
+ * porcentaje y las fijas en su propia unidad.
+ *
+ * Los porcentajes se resuelven contra el ancho de la tabla, que se pinta a `width: 100%` del
+ * contenedor: por eso ocultar columnas ya no la encoge — se reparte TODO el ancho disponible y
+ * el `minWidthPx` solo actúa de piso (a partir de ahí, scroll horizontal).
+ *
+ * El reparto NO es del 100% pelado: las pistas fijas (Selección, las columnas `fixed` y Acciones)
+ * se llevan lo suyo primero, y cada pista flexible descuenta con `calc()` su parte PROPORCIONAL
+ * de todas ellas. Así el conjunto suma exactamente el ancho de la tabla —si se repartiera el 100%
+ * íntegro entre las flexibles, la fila desbordaría por todo lo fijo— y el aire sobrante recae
+ * solo en las columnas que lo aprovechan.
+ */
+export function buildTramitesColWidths(
+  visibleKeys: readonly string[],
+  options: BuildTramitesGridLayoutOptions = {},
+): string[] {
+  const includeSelectColumn = options.includeSelectColumn === true;
+  const columns = resolveColumns(visibleKeys);
+
+  // Si el usuario dejó visibles SOLO columnas fijas, no hay ninguna que absorba el sobrante: se
+  // tratan todas como flexibles antes que devolver un reparto que no cubre el ancho de la tabla.
+  const hayFlexibles = columns.some((c) => !c.fixed);
+  const esFija = (c: TramitesColumnDef): boolean => c.fixed === true && hayFlexibles;
+
+  const pxFijos = columns.reduce((sum, c) => sum + (esFija(c) ? c.minPx : 0), 0) + ACTIONS_COL_PX;
+  const remFijos = includeSelectColumn ? SELECT_COL_REM : 0;
+  const pesoFlexible = columns.reduce((sum, c) => sum + (esFija(c) ? 0 : c.minPx), 0);
+
+  const anchoFlexible = (peso: number): string => {
+    const percent = (peso / pesoFlexible) * 100;
+    // Parte proporcional de lo fijo que cede esta columna; los descuentos suman lo fijo completo.
+    const partes = [`${percent.toFixed(4)}%`, `${((percent / 100) * pxFijos).toFixed(2)}px`];
+    if (remFijos > 0) partes.push(`${((percent / 100) * remFijos).toFixed(4)}rem`);
+    return `calc(${partes.join(' - ')})`;
+  };
+
+  return [
+    ...(includeSelectColumn ? [SELECT_COL_WIDTH] : []),
+    ...columns.map((c) => (esFija(c) ? `${c.minPx}px` : anchoFlexible(c.minPx))),
+    `${ACTIONS_COL_PX}px`,
+  ];
+}
+
+// ── Exportación a Excel (HU #12104) ────────────────────────────────────────────
+
+/**
+ * Un DATO exportable del listado. No es lo mismo que una columna: tres columnas de la tabla son
+ * compuestas —«Radicado» apila las dos fechas, «Vehículo» la placa, el VIN y la marca/modelo, y
+ * «Trámite» el estado y el paso— y en el Excel cada dato va a su propia columna. Una celda con dos
+ * valores no se puede ordenar ni sumar, que es justo para lo que se abre el archivo.
+ *
+ * `value` produce el texto que se lee; `raw` el valor TIPADO que va a la celda. Sin `raw` una fecha
+ * llegaría como cadena y la columna no se podría ordenar cronológicamente.
+ */
+export interface TramitesExportField {
+  id: string;
+  label: string;
+  value: (row: InstanceSummary) => string;
+  /** Valor tipado. Devuelve `null` para celda VACÍA: un «—» en columna numérica la vuelve texto. */
+  raw: (row: InstanceSummary) => XlsxCell;
+  /** Ancho en Excel, en caracteres. Sin esto una fecha sale como `#####`. */
+  width?: number;
+  /**
+   * Clave de la columna DEDICADA que posee este dato, cuando el dato solo se apila aquí porque esa
+   * columna está oculta. Es el mismo criterio que `shows()` usa en la tabla para decidir qué se
+   * apila: si el gestor enciende la columna de desglose, el dato SE MUDA allí — nunca sale dos
+   * veces, ni desaparece.
+   */
+  ownedBy?: string;
+  /**
+   * Clave de orden del API para este dato, si se puede ordenar por él (HU #12108).
+   *
+   * Vive en la MISMA entrada que `value`/`raw` y no en una lista aparte: el desplegable de la
+   * cabecera y el Excel hablan de los mismos datos, y con dos listas paralelas una columna nueva
+   * acabaría siendo exportable pero no ordenable, o al revés, sin que nada lo delatara.
+   */
+  sort?: string;
+
+  /**
+   * Cómo se LEE el sentido del orden en el desplegable de la cabecera. Una fecha ascendente no es
+   * «A-Z», es «más antigua primero»: etiquetar las dos igual obliga a adivinar qué hace la flecha.
+   * Desde la HU #12154 hay un tercer caso: el radicado es un NÚMERO, y «A-Z» sobre un número no
+   * significa nada — se ordena de menor a mayor, no alfabéticamente.
+   */
+  sortKind?: 'texto' | 'fecha' | 'numero';
+}
+
+/** Texto para Excel: lo que la tabla pinta como «—» aquí es celda vacía, no un guion. */
+function texto(valor: string | null | undefined): XlsxCell {
+  const limpio = valor?.trim();
+  return limpio && limpio !== '—' ? limpio : null;
+}
+
+/** Un campo de texto simple, con el mismo criterio de vacío en pantalla y en el archivo. */
+function campoTexto(
+  id: string,
+  label: string,
+  lee: (row: InstanceSummary) => string | null | undefined,
+  width?: number,
+): TramitesExportField {
+  return { id, label, value: (row) => lee(row)?.trim() || '—', raw: (row) => texto(lee(row)), width };
+}
+
+/**
+ * Acreditación de una parte, con la MISMA regla que `ActorCell`: sin actor capturado no hay firma
+ * que reportar. «Sin registrar» junto a una celda de nombre vacía se leería como una acreditación
+ * pendiente de alguien que ni siquiera existe en ese tipo de trámite (el vendedor de una matrícula
+ * inicial) o que aún no se ha capturado.
+ */
+function campoFirma(
+  id: string,
+  label: string,
+  nombreDe: (row: InstanceSummary) => string | null | undefined,
+  estadoDe: (row: InstanceSummary) => FirmaParteEstado | null | undefined,
+): TramitesExportField {
+  const lee = (row: InstanceSummary): string | null => {
+    if (!nombreDe(row)?.trim()) return null;
+    const estado = estadoDe(row);
+    return estado ? FIRMA_TEXTO[estado].label : 'Sin registrar';
+  };
+  return { id, label, value: (row) => lee(row) ?? '—', raw: (row) => texto(lee(row)), width: 16 };
+}
+
+/**
+ * Los datos que viven DENTRO de una celda compuesta y además tienen columna propia. Se declaran una
+ * sola vez y se referencian desde los dos sitios: si estuvieran escritos dos veces, el día que
+ * alguien cambie cómo se lee una fecha, el Excel diría una cosa con la columna encendida y otra con
+ * la columna apagada.
+ */
+const CAMPO_FECHA_CREACION: TramitesExportField = {
+  id: 'fechaCreacion',
+  label: 'Fecha de creación',
+  sort: 'createdAt',
+  sortKind: 'fecha',
+  value: (row) => formatFecha(row.createdAt),
+  // `bogotaDay` y no el instante UTC crudo: Excel no guarda husos, así que un trámite creado a las
+  // 22:00 saltaría al día siguiente solo dentro del archivo y contradiría la pantalla.
+  raw: (row) => bogotaDay(row.createdAt),
+  width: 16,
+};
+
+const CAMPO_FECHA_ACTUALIZACION: TramitesExportField = {
+  id: 'fechaActualizacion',
+  label: 'Fecha de actualización',
+  sort: 'updatedAt',
+  sortKind: 'fecha',
+  value: (row) => (row.updatedAt ? formatFecha(row.updatedAt) : '—'),
+  raw: (row) => bogotaDay(row.updatedAt ?? null),
+  width: 18,
+};
+
+const CAMPO_VIN = { ...campoTexto('vin', 'VIN', (row) => row.vin, 20), sort: 'vin' };
+const CAMPO_VEHICULO = campoTexto('vehiculo', 'Marca / modelo', (row) => vehiculo(row), 24);
+const CAMPO_ESTADO = { ...campoTexto('estado', 'Estado', (row) => estadoLabel(row.estado), 16), sort: 'estado' };
+const CAMPO_PASO = campoTexto('paso', 'Paso', (row) => `${row.pasoActual}/${row.totalPasos}`, 8);
+const CAMPO_PASO_NOMBRE = campoTexto('pasoNombre', 'Nombre del paso', (row) => stepLabel(row), 26);
+
+/** El mismo campo, marcado como prestado a una celda compuesta. */
+function apilado(campo: TramitesExportField, ownedBy: string): TramitesExportField {
+  return { ...campo, ownedBy };
+}
+
+/**
+ * Qué datos exporta cada columna del listado. La clave es la de `TRAMITES_COLUMNS`.
+ *
+ * Vive junto a la definición de columnas —y no en un módulo aparte— por la misma razón que
+ * `components/consultas/columns.ts` junta `value` y `raw` con la columna: para que una columna
+ * nueva no pueda nacer sin export. Con dos listas paralelas, el día que alguien añade una columna a
+ * la tabla y olvida esta, nadie se entera hasta que un informe llega incompleto a una reunión.
+ */
+const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
+  radicado: [
+    // Ancho de la columna en el .xlsx. La celda va como TEXTO a proposito: como numero, Excel
+    // le mete separador de miles (4.571) y deja de leerse como un identificador.
+    {
+      ...campoTexto('radicado', 'Radicado', (row) => row.referenceNumber, 12),
+      sort: 'radicado',
+      sortKind: 'numero',
+    },
+    apilado(CAMPO_FECHA_CREACION, 'fechaCreacion'),
+    apilado(CAMPO_FECHA_ACTUALIZACION, 'fechaActualizacion'),
+  ],
+  placa: [
+    { ...campoTexto('placa', 'Placa', (row) => row.placa, 12), sort: 'placa' },
+    apilado(CAMPO_VIN, 'vin'),
+    apilado(CAMPO_VEHICULO, 'vehiculo'),
+  ],
+  propietario: [
+    { ...campoTexto('vendedor', 'Vendedor', (row) => row.vendedorNombre, 28), sort: 'vendedor' },
+    campoFirma('vendedorFirma', 'Firma del vendedor', (r) => r.vendedorNombre, (r) => r.firmaVendedorEstado),
+  ],
+  comprador: [
+    { ...campoTexto('comprador', 'Comprador', (row) => row.compradorNombre, 28), sort: 'comprador' },
+    campoFirma('compradorFirma', 'Firma del comprador', (r) => r.compradorNombre, (r) => r.firmaCompradorEstado),
+  ],
+  marcas: [
+    // El .xlsx no puede llevar el ícono: va el texto. Sin esta columna el dato desaparecería justo
+    // en el archivo, que es donde nadie puede contrastarlo con la pantalla.
+    campoTexto('marcas', 'Marcas', (row) => marcasLabel(row), 18),
+  ],
+  // Feature #12276 — SÍ, NO o celda vacía (HU #12312 AC5). Sin orden: no es un dato por el que
+  // se ordene el listado.
+  confirmadoRunt: [campoTexto('confirmadoRunt', 'Confirmado en RUNT', (row) => runtConfirmadoLabel(row), 18)],
+  tramite: [
+    { ...campoTexto('tramite', 'Trámite', (row) => tramiteLabel(row), 22), sort: 'tipo_tramite' },
+    apilado(CAMPO_ESTADO, 'estado'),
+    apilado(CAMPO_PASO, 'paso'),
+    apilado(CAMPO_PASO_NOMBRE, 'paso'),
+  ],
+  secretaria: [
+    {
+      ...campoTexto('secretaria', 'Secretaría', (row) => row.organismoTransito, 34),
+      sort: 'organismo',
+    },
+  ],
+  // La celda apila razón social y persona, y son dos cosas distintas: la compañía que radica y
+  // quien la operó. En una sola columna no se puede agrupar por ninguna de las dos.
+  gestor: [
+    { ...campoTexto('compania', 'Compañía', (row) => row.companiaNombre, 28), sort: 'compania' },
+    { ...campoTexto('gestor', 'Gestor', (row) => row.gestorNombre, 24), sort: 'gestor' },
+  ],
+  fuente: [{ ...campoTexto('fuente', 'Fuente', (row) => FUENTE_LABEL[row.fuente ?? 'dashboard'], 14), sort: 'fuente' }],
+  vin: [CAMPO_VIN],
+  vehiculo: [CAMPO_VEHICULO],
+  estado: [CAMPO_ESTADO],
+  paso: [CAMPO_PASO, CAMPO_PASO_NOMBRE],
+  fechaCreacion: [CAMPO_FECHA_CREACION],
+  fechaActualizacion: [CAMPO_FECHA_ACTUALIZACION],
+};
+
+/**
+ * Los datos a exportar para una selección de columnas, en el ORDEN de la tabla.
+ *
+ * Recorre `TRAMITES_COLUMNS` (no la selección del usuario) para que el archivo salga siempre con el
+ * mismo orden de columnas que la pantalla, sin depender de en qué orden se fueron activando.
+ *
+ * Un subcampo prestado (`ownedBy`) se omite cuando su columna dedicada también está visible: ahí el
+ * dato ya sale por su cuenta y repetirlo daría dos columnas con lo mismo.
+ */
+export function tramitesExportFields(visibleKeys: readonly string[]): TramitesExportField[] {
+  const visibles = new Set(visibleKeys);
+  const campos: TramitesExportField[] = [];
+  const yaPuestos = new Set<string>();
+
+  for (const columna of TRAMITES_COLUMNS) {
+    if (!visibles.has(columna.key)) continue;
+    for (const campo of EXPORT_FIELDS[columna.key] ?? []) {
+      if (campo.ownedBy && visibles.has(campo.ownedBy)) continue;
+      if (yaPuestos.has(campo.id)) continue;
+      yaPuestos.add(campo.id);
+      campos.push(campo);
+    }
+  }
+
+  return campos;
+}
+
+/** Una opción de orden ofrecida por la cabecera de una columna. */
+export interface TramitesSortOption {
+  id: string;
+  label: string;
+  sort: string;
+  kind: 'texto' | 'fecha' | 'numero';
+}
+
+/**
+ * Por cuáles de sus datos se puede ordenar una columna, y con qué clave del API (HU #12108).
+ *
+ * <p>Una celda compuesta lleva varios datos —«Radicado» apila las dos fechas, «Vehículo» la placa y
+ * el VIN— y un clic en la cabecera no puede decir por cuál se ordena. Devolviendo la lista, la
+ * cabecera puede ofrecer un desplegable cuando hay más de uno y conservar el clic simple cuando hay
+ * uno solo.</p>
+ *
+ * <p>Se aplica la MISMA regla de `ownedBy` que el export: si la columna dedicada de un subcampo está
+ * visible, ese dato ya no se apila aquí y por tanto tampoco se ordena desde aquí. Si no, habría dos
+ * cabeceras distintas ordenando por lo mismo.</p>
+ */
+export function tramitesSortOptions(
+  columnKey: string,
+  visibleKeys: readonly string[],
+): TramitesSortOption[] {
+  const visibles = new Set(visibleKeys);
+
+  return (EXPORT_FIELDS[columnKey] ?? [])
+    .filter((campo) => campo.sort && !(campo.ownedBy && visibles.has(campo.ownedBy)))
+    .map((campo) => ({
+      id: campo.id,
+      label: campo.label,
+      sort: campo.sort!,
+      kind: campo.sortKind ?? 'texto',
+    }));
+}

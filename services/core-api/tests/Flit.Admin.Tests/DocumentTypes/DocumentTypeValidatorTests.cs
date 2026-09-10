@@ -64,4 +64,46 @@ public sealed class DocumentTypeValidatorTests
     [InlineData("a > b")]
     public void DescriptionWithAngleBrackets_ReturnsError(string description) =>
         DocumentTypeValidator.Validate("COD", "Nombre válido", description).Should().NotBeNull();
+
+    // HU #12065 — la instrucción de cargue (el texto que lee el gestor) valida como la descripción:
+    // opcional, tope de 500 y sin < ni >. AC3/AC4/AC5.
+
+    [Theory]
+    [InlineData("Sube el Paz y Salvo de impuestos vehiculares expedido por la Secretaría de Hacienda.")]
+    [InlineData(null)]
+    [InlineData("")]
+    public void ValidOrEmptyUploadInstructions_ReturnsNull(string? uploadInstructions) =>
+        DocumentTypeValidator
+            .Validate("COD", "Nombre válido", null, uploadInstructions)
+            .Should().BeNull();
+
+    [Fact]
+    public void UploadInstructionsAtMaxLength_ReturnsNull() =>
+        DocumentTypeValidator
+            .Validate("COD", "Nombre válido", null, new string('a', DocumentTypeValidator.UploadInstructionsMaxLength))
+            .Should().BeNull();
+
+    [Fact]
+    public void UploadInstructionsOverMaxLength_ReturnsError() =>
+        DocumentTypeValidator
+            .Validate("COD", "Nombre válido", null, new string('a', DocumentTypeValidator.UploadInstructionsMaxLength + 1))
+            .Should().Contain("instrucción de cargue");
+
+    [Theory]
+    [InlineData("Sube el <b>paz y salvo</b>")]
+    [InlineData("peso > 5 MB")]
+    public void UploadInstructionsWithAngleBrackets_ReturnsError(string uploadInstructions) =>
+        DocumentTypeValidator
+            .Validate("COD", "Nombre válido", null, uploadInstructions)
+            .Should().Contain("instrucción de cargue");
+
+    /// <summary>
+    /// La instrucción es un campo aparte: un texto válido no puede rescatar una descripción
+    /// inválida ni al revés (el mensaje debe señalar el campo que realmente falla).
+    /// </summary>
+    [Fact]
+    public void InvalidDescription_ReportedEvenWithValidUploadInstructions() =>
+        DocumentTypeValidator
+            .Validate("COD", "Nombre válido", "descripción con <b>", "Instrucción válida.")
+            .Should().Contain("descripción");
 }

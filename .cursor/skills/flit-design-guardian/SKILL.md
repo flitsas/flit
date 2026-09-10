@@ -1,6 +1,6 @@
 ---
 name: flit-design-guardian
-description: Agente guardián de diseño frontend y UX para FLIT. Use al diseñar, construir, modificar, auditar o validar interfaces FLIT (pantallas, componentes, estilos, theming) conservando con fidelidad estricta el prototipo PDF, sus colores, componentes, layout, estados, flujos, tokens, accesibilidad y reglas visuales. Se activa automáticamente al editar el frontend Next.js (frontend/app — React/TSX/CSS, Tailwind CSS 4).
+description: Agente guardián de diseño frontend y UX para FLIT. Use al diseñar, construir, modificar, auditar o validar interfaces FLIT (pantallas, componentes, estilos, theming) conservando con fidelidad la línea base vigente: tokens, dock de navegación, componentes, layout, estados, flujos, accesibilidad y reglas visuales. Se activa automáticamente al editar el frontend Next.js (frontend/app — React/TSX/CSS, Tailwind CSS 4).
 globs: ["frontend/app/**/*.tsx", "frontend/app/**/*.ts", "frontend/app/**/*.css", "frontend/components/**/*.tsx", "frontend/components/**/*.ts", "frontend/postcss.config.mjs", "frontend/app/globals.css"]
 alwaysApply: false
 ---
@@ -11,7 +11,17 @@ Usar esta habilidad cuando la tarea involucre pantallas, componentes, diseño fr
 
 ## Mandato principal
 
-Conservar el prototipo FLIT como **fuente única de verdad**. No rediseñar, modernizar, reinterpretar ni aplicar tendencias visuales externas cuando el prototipo ya define un patrón. Construir o auditar la interfaz para que mantenga layout, colores, gradientes, tipografía, componentes, estados, wizards, modales, tablas y flujos del PDF original.
+Conservar la **línea base vigente de FLIT** como fuente de verdad. No rediseñar, modernizar, reinterpretar ni aplicar tendencias visuales externas cuando ya existe un patrón. Construir o auditar la interfaz para que mantenga layout, colores, gradientes, tipografía, componentes, estados, wizards, modales, tablas y flujos vigentes.
+
+La autoridad está repartida y en este orden:
+
+| Prioridad | Fuente | Gobierna |
+|---:|---|---|
+| 1 | `frontend/app/globals.css` en `develop` | Valores reales |
+| 2 | `references/flit_design_tokens.json` | Los mismos valores, documentados |
+| 3 | `references/prototipo flit 2.0 (v4).pdf` | Composición y flujo, **no** valores |
+
+El PDF dejó de ser autoridad sobre color y navegación; sigue siéndolo sobre cómo se compone una pantalla y en qué orden ocurre un flujo.
 
 Antes de entregar cualquier resultado visual o frontend, verificar cumplimiento contra:
 
@@ -22,7 +32,8 @@ Antes de entregar cualquier resultado visual o frontend, verificar cumplimiento 
 | @.cursor/skills/flit-design-guardian/references/acceptance_checklist.md | Siempre antes de aprobar o entregar una pantalla, componente o refactor. |
 | @.cursor/skills/flit-design-guardian/templates/audit_report.md | Cuando el usuario solicite auditoría, revisión, QA visual o cumplimiento. |
 | @.cursor/skills/flit-design-guardian/references/design_research.md | Cuando se necesite justificar reglas de UX, accesibilidad, design systems o tendencias. |
-| @.cursor/skills/flit-design-guardian/references/prototipo flit 2.0 (v4).pdf | Cuando haga falta comparación visual directa contra el prototipo. |
+| @.cursor/skills/flit-design-guardian/references/prototipo flit 2.0 (v4).pdf | Cuando haga falta comparar **composición** contra el prototipo. |
+| @.cursor/skills/flit-design-guardian/references/20-agosto-notas-diseno-mi-traspasos.pdf | Para wizard MI/Traspaso: manda en **botones de consulta** (sólido `#557EFF` vs degradado) y **colores de badges/etiquetas** (success=verde, **NO cian**). Consultar cuando la tarea toque estos elementos. |
 
 ## Reglas no negociables
 
@@ -30,86 +41,100 @@ Aplicar estas reglas como compuertas bloqueantes.
 
 | Regla | Instrucción |
 |---|---|
-| Fidelidad estricta | Derivar toda pantalla de una página o patrón del prototipo. |
+| Fidelidad estricta | Derivar toda pantalla de un patrón vigente. |
 | Cero drift visual | No introducir paletas, componentes, iconos, radios, sombras o layouts ajenos. |
-| Tokens obligatorios | Usar los tokens FLIT para colores, gradientes, tipografía, espaciado, radios y sombras. |
-| Estados semánticos | Mantener verde para válido/completo, azul para acción/proceso, naranja/rojo para alerta/error y gris para inactivo/borrador. |
-| Componentización | Crear componentes reutilizables alineados al prototipo; evitar estilos ad hoc. |
-| Accesibilidad | Cumplir WCAG 2.2 AA razonable, foco visible, teclado, nombres accesibles y semántica correcta sin cambiar identidad visual. |
-| Privacidad | Tratar rostros, firmas, documentos y datos del prototipo como placeholders; no identificar personas. |
+| Tokens obligatorios | Usar los tokens FLIT para colores, gradientes, tipografía, espaciado, radios y sombras. En especial: la escala `slate-*` de Tailwind **no** es paleta FLIT. |
+| Dos capas de paleta | `brand` para contenido, `chrome` para el dock. Conviven a propósito; no fusionarlas sin decisión explícita. |
+| Estados semánticos | Cinco tonos de badge. Siete estados de trámite mapeados sobre ellos; donde dos comparten tono, exigir icono y texto. |
+| Componentización | Crear componentes reutilizables; evitar estilos ad hoc y duplicación entre flujos. |
+| Accesibilidad | WCAG 2.2 AA: foco visible, teclado, nombres accesibles, semántica correcta, contraste 4.5:1 y piso tipográfico de 12px, sin cambiar identidad visual. |
+| Privacidad | Tratar rostros, firmas, documentos y datos como placeholders; no identificar personas. |
 | Validación final | No aprobar sin checklist de fidelidad visual, UX, accesibilidad y frontend. |
 
 ## Flujo obligatorio de trabajo
 
-Seguir este proceso para cada solicitud.
-
 | Paso | Acción |
 |---:|---|
-| 1 | Identificar la pantalla o patrón base del prototipo que gobierna la tarea. |
-| 2 | Leer @.cursor/skills/flit-design-guardian/references/prototype_rules.md y, si hay implementación visual, @.cursor/skills/flit-design-guardian/references/flit_design_tokens.json. |
+| 1 | Identificar la pantalla o patrón base que gobierna la tarea. |
+| 2 | Leer `prototype_rules.md` y, si hay implementación visual, `flit_design_tokens.json`. |
 | 3 | Listar componentes reutilizables y variantes permitidas. |
 | 4 | Diseñar o construir usando únicamente patrones FLIT; si falta una pantalla exacta, componer con patrones existentes. |
 | 5 | Aplicar accesibilidad: labels, roles, foco, teclado, contraste y estados no dependientes solo de color. |
-| 6 | Ejecutar checklist de @.cursor/skills/flit-design-guardian/references/acceptance_checklist.md. |
+| 6 | Ejecutar checklist de `acceptance_checklist.md`. |
 | 7 | Entregar resultado con veredicto: **Aprobado FLIT**, **Aprobado con observaciones menores** o **No aprobado**. |
 
 ## Jerarquía de decisiones
 
-Si dos criterios entran en conflicto, obedecer esta jerarquía.
-
 | Prioridad | Fuente |
 |---:|---|
-| 1 | Prototipo FLIT original y reglas extraídas. |
-| 2 | Tokens FLIT y componentes derivados. |
-| 3 | Accesibilidad WCAG/WAI-ARIA sin alterar identidad. |
-| 4 | Buenas prácticas frontend/UX. |
-| 5 | Tendencias contemporáneas, solo si refuerzan claridad y consistencia. |
+| 1 | Línea base vigente (`globals.css`) y tokens FLIT |
+| 2 | Componentes derivados y patrones documentados |
+| 3 | Accesibilidad WCAG/WAI-ARIA sin alterar identidad |
+| 4 | Composición y flujo del prototipo v4 |
+| 5 | Buenas prácticas frontend/UX |
+| 6 | Tendencias contemporáneas, solo si refuerzan claridad y consistencia |
 
 ## Patrones visuales esenciales
 
-Preservar estos patrones en toda entrega.
-
 | Patrón | Requisito |
 |---|---|
-| App interna | Fondo azul claro, sidebar gradiente, topbar derecha, título en tarjeta blanca y contenido modular en cards. |
+| App interna | Fondo azul claro, **dock inferior flotante**, topbar derecha, título en tarjeta blanca y contenido modular en cards. |
 | Autenticación | Pantalla partida con panel visual izquierdo y formulario derecho en tarjeta clara. |
-| Botones | CTA primario en pastilla degradada turquesa/azul o turquesa/verde; “Anterior” en azul marino; cancelar/error en naranja-rojo. |
-| Tablas | Cabecera gris claro, filas cómodas, chips semánticos, progreso y acciones con iconos lineales. |
-| Wizards | Asistente lateral con pasos circulares numerados, etiquetas en tarjetas y colores por estado. |
-| Modales | Blur de fondo, overlay azulado, contenedor claro, radio amplio, X superior y CTA degradado. |
+| Botones | CTA primario (avance/cierre) en pastilla degradada `#557EFF → #00DBD5`; cierre final en `#00DBD5 → #8CC63F`; «Anterior» en navy; cancelar/error en naranja-rojo. **Consulta** (Consultar RUNT/RUES, Buscar): `#557EFF` **sólido SIN degradado** + clase `bg-[#557EFF]` (PDF 20 ago). |
+| Tablas | `<table>` semántica, cabecera `#DFE5ED`, filas cómodas, badges tintados, progreso y acciones con iconos lineales. |
+| Wizards | Stepper horizontal con pasos circulares numerados y colores por estado. |
+| Modales | Blur de fondo, overlay azulado, contenedor claro, radio amplio, X superior, CTA degradado, `role="dialog"` y focus trap. |
 | OCR/carga | Upload boxes blancos con borde punteado azul, icono centrado y texto azul. |
 | Placas | Texto en mayúscula, espaciado y visual de placa/código. |
 
 ## Política para pantallas nuevas
 
-No inventar un diseño. Componer la pantalla con la genealogía visual más cercana.
+No inventar un diseño. Componer con la genealogía visual más cercana.
 
 | Necesidad nueva | Patrón base obligatorio |
 |---|---|
-| Nueva pantalla administrativa | `AppShell` + `Sidebar` + `Topbar` + `PageHeaderCard` + cards/tablas. |
-| Nuevo formulario | Inputs y CTA de autenticación, invitación colaborador o wizard. |
-| Nuevo listado | Tabla de colaboradores o trámites. |
-| Nuevo flujo paso a paso | Wizard de nuevo traspaso o timeline de detalle de traspaso. |
-| Nueva alerta | Tarjeta de alertas o modal FLIT. |
-| Nueva métrica | KPI card del dashboard. |
-| Nuevo estado | Mapear a verde, azul, naranja/rojo o gris según semántica existente. |
+| Nueva pantalla administrativa | `AppShell` + `Dock` + `Topbar` + `PageHeaderCard` + cards/tablas |
+| Nuevo formulario | Inputs y CTA de autenticación, invitación colaborador o wizard |
+| Nuevo listado | Tabla de colaboradores o trámites |
+| Nuevo flujo paso a paso | Wizard con `WizardStepTracker` o timeline de detalle |
+| Nueva alerta | Tarjeta de alertas o modal FLIT |
+| Nueva métrica | KPI card del dashboard |
+| Nuevo estado | Mapear a uno de los cinco tonos de badge; si comparte tono con otro estado, añadir icono y texto |
 
 ## Rechazar automáticamente
 
-Corregir antes de entregar si aparece alguno de estos elementos: dark mode integral no definido, glassmorphism, neumorphism, paletas nuevas, botones rectangulares genéricos, librerías UI sin tematizar, iconografía incompatible, eliminación de tarjetas título, reordenamiento del wizard de traspaso, tablas densas ajenas, modales sin blur o uso de datos personales reales innecesarios.
+Corregir antes de entregar si aparece alguno de estos:
+
+- Superficie translúcida con blur fuera de las dos excepciones autorizadas (`--nav-vidrio` del dock y overlay de modal)
+- Neumorphism
+- Librería UI sin tematizar (shadcn/ui, Radix u otra con tokens por defecto)
+- Surface oscuro fuera de la capa `dark` del token file
+- Paletas nuevas, incluida la escala `slate-*` de Tailwind
+- Botones rectangulares o planos como CTA primario
+- Fondos blancos puros en app interna
+- Texto por debajo de 12px, u opacidad bajo 0.7 sobre texto
+- `outline-none` sin foco sustituto
+- Modal sin `role="dialog"` y focus trap
+- Grilla de `div` sustituyendo una tabla de datos
+- Badge sólido con texto blanco
+- Badge `success` con tint cian (`rgba(0,219,213,…)`): incorrecto — success = verde tintado (`#F3FBE8`/`#4F7A12`), el cian es acento tecnológico (PDF 20 ago)
+- Botón Consultar/Buscar con degradado: incorrecto — consulta = `#557EFF` sólido; el degradado es solo para CTA de avance/cierre (PDF 20 ago)
+- Iconografía de otra familia
+- Eliminación de tarjetas título
+- Reordenamiento del wizard sin HU que lo respalde
+- Reintroducción de la sidebar vertical
+- Uso de datos personales reales innecesarios
 
 ## Salida esperada
 
-Cuando se entregue diseño, código o auditoría, incluir de forma concisa:
-
 | Campo | Contenido |
 |---|---|
-| Pantalla/patrón base | Página o patrón del prototipo usado como referencia. |
-| Componentes usados | Componentes FLIT aplicados. |
-| Cumplimiento visual | Resumen de fidelidad a color, layout, tipografía, estados y componentes. |
-| Cumplimiento UX/accesibilidad | Resumen de flujo, foco, teclado, labels y semántica. |
-| Veredicto | Aprobado FLIT / Aprobado con observaciones menores / No aprobado. |
+| Pantalla/patrón base | Patrón vigente usado como referencia |
+| Componentes usados | Componentes FLIT aplicados |
+| Cumplimiento visual | Fidelidad a color, layout, tipografía, estados y componentes |
+| Cumplimiento UX/accesibilidad | Flujo, foco, teclado, labels, contraste y semántica |
+| Veredicto | Aprobado FLIT / Aprobado con observaciones menores / No aprobado |
 
 ## Nota de privacidad
 
-No identificar personas en imágenes, documentos, avatares o capturas del prototipo. Describir únicamente la función visual del elemento, como avatar, firma, evidencia documental o placeholder.
+No identificar personas en imágenes, documentos, avatares o capturas. Describir únicamente la función visual del elemento: avatar, firma, evidencia documental o placeholder.

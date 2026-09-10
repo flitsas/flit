@@ -32,6 +32,13 @@ public sealed class ActorsHandlerTests
 
     public ActorsHandlerTests()
     {
+        _repo.ListInFlightByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<ProcedureInstanceBiometricValidation>());
+        _repo.FindVigenteApprovedByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((ProcedureInstanceBiometricValidation?)null);
+
         _kyverumHandler = new IniciarKyverumVerifyHandler(
             _repo,
             _kyverumClient,
@@ -55,13 +62,12 @@ public sealed class ActorsHandlerTests
         string? tipologia = null) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? modalidad),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -520,8 +526,11 @@ public sealed class ActorsHandlerTests
         error.Should().Be("invalid_rol");
     }
 
+    // ADR-0053 (Múltiple Propietario) — "duplicate_rol" se RETIRA del contrato: un rol admite ahora
+    // 1..4 actores. Dos `ActorInput` del mismo rol con el MISMO `ordinal` (default 1, si no se
+    // especifica) ya no es "un actor de más en el rol": es un ordinal duplicado dentro del rol.
     [Fact]
-    public async Task Put_DuplicateRol_ReturnsDuplicateRol()
+    public async Task Put_SameRolSameOrdinal_ReturnsOrdinalFueraDeRango()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
@@ -531,7 +540,7 @@ public sealed class ActorsHandlerTests
         var (_, error) = await _put.HandleAsync(id, tenant,
             new PutActorsRequest([Comprador(doc: "1"), Comprador(doc: "2")]), ct);
 
-        error.Should().Be("duplicate_rol");
+        error.Should().Be("ordinal_fuera_de_rango");
     }
 
     // ── Reemplazo total del set ───────────────────────────────────────────────

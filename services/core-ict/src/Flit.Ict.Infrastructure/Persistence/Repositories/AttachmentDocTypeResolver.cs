@@ -15,6 +15,7 @@ public sealed class AttachmentDocTypeResolver(IctDbContext db) : IAttachmentDocT
     private const string Fallback = "otro";
 
     private Dictionary<int, DocTipoRow>? _cache;
+    private Dictionary<int, string>? _families;
 
     public async Task<string> ResolveDocTypeAsync(int transactionType, int idAttachment, CancellationToken ct = default)
     {
@@ -24,23 +25,30 @@ public sealed class AttachmentDocTypeResolver(IctDbContext db) : IAttachmentDocT
             return Fallback;
         }
 
-        var tipo = Modality(transactionType) switch
+        _families ??= await LoadFamiliesAsync(ct);
+        _families.TryGetValue(transactionType, out var family);
+
+        // Un tipo sin familia declarada cae a la columna de OTROS, que es la genérica: es preferible
+        // un doc tipo genérico a heredar el de matrícula por no encontrar el mapeo.
+        var tipo = family switch
         {
-            Modalidad.Matricula => row.Matricula,
-            Modalidad.Traspaso => row.Traspaso,
+            "MATRICULAS" => row.Matricula,
+            "TRASPASO" => row.Traspaso,
             _ => row.Otros,
         };
         return string.IsNullOrWhiteSpace(tipo) ? Fallback : tipo;
     }
 
-    private enum Modalidad { Matricula, Traspaso, Otros }
-
-    private static Modalidad Modality(int transactionType) => transactionType switch
-    {
-        1 or 2 => Modalidad.Matricula,
-        3 or 4 => Modalidad.Traspaso,
-        _ => Modalidad.Otros,
-    };
+    /// <summary>
+    /// La familia sale de <c>ict.procedure_type_mapping</c> (ADR-0050). Antes era un switch
+    /// <c>1|2 / 3|4 / resto</c>: los 12 tipos restantes se resolvían todos como OTROS por descarte, y
+    /// habilitar el 14 (cancelación de matrícula) habría tomado la columna equivocada sin que nada
+    /// fallara — solo el expediente habría quedado con el doc tipo de otra familia.
+    /// </summary>
+    private async Task<Dictionary<int, string>> LoadFamiliesAsync(CancellationToken ct) =>
+        await db.ProcedureTypeMappings
+            .AsNoTracking()
+            .ToDictionaryAsync(m => (int)m.ExternalTransactionType, m => m.Family, ct);
 
     private async Task<Dictionary<int, DocTipoRow>> LoadAsync(CancellationToken ct)
     {

@@ -30,6 +30,9 @@ public static class VinPolicyEvaluator
     private const string EstadoRechazado = TramiteEstado.Rechazado;
     private const string EstadoAnulado = TramiteEstado.Anulado;
     private const string EstadoCompletado = TramiteEstado.Aprobado;
+    // HU #12165/#12166 (Feature #12156) — un Aprobado que el OT revocó (Revocado) libera el VIN igual
+    // que Rechazado/Anulado: el AC3 de HU #12166 exige poder re-radicar el mismo VIN sin bloqueo.
+    private const string EstadoRevocado = TramiteEstado.Revocado;
 
     /// <summary>
     /// Matrícula inicial = modalidad VIN-first sin tipología de traspaso/otra
@@ -52,7 +55,8 @@ public static class VinPolicyEvaluator
 
         var bloqueantes = existentes
             .Where(t => !string.Equals(t.Estado, EstadoRechazado, StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(t.Estado, EstadoAnulado, StringComparison.OrdinalIgnoreCase))
+                && !string.Equals(t.Estado, EstadoAnulado, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(t.Estado, EstadoRevocado, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         if (bloqueantes.Count == 0)

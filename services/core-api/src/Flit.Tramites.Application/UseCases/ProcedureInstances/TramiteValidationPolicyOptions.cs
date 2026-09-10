@@ -49,6 +49,12 @@ public sealed class TramiteValidationPolicyOptions
 
     /// <summary>CF-03 (HU #10877) — precondición registral "vehículo ya matriculado" (422).</summary>
     public TramiteValidationSetting VehicleRegistrationState { get; set; } = new();
+
+    /// <summary>
+    /// Precondición registral del cambio de carrocería: el RUNT tiene que reportar una carrocería
+    /// sobre la que cambiar (422).
+    /// </summary>
+    public TramiteValidationSetting VehicleBodyTypeRequired { get; set; } = new();
 }
 
 /// <summary>
@@ -58,7 +64,8 @@ public sealed class TramiteValidationPolicyOptions
 /// </summary>
 public sealed class TramiteValidationPolicy(
     TramiteValidationMode duplicateActiveProcedure,
-    TramiteValidationMode vehicleRegistrationState)
+    TramiteValidationMode vehicleRegistrationState,
+    TramiteValidationMode vehicleBodyTypeRequired = TramiteValidationMode.Block)
 {
     /// <summary>CF-01 — modo efectivo del bloqueo de duplicidad.</summary>
     public TramiteValidationMode DuplicateActiveProcedure { get; } = duplicateActiveProcedure;
@@ -66,13 +73,16 @@ public sealed class TramiteValidationPolicy(
     /// <summary>CF-03 — modo efectivo del bloqueo por precondición registral.</summary>
     public TramiteValidationMode VehicleRegistrationState { get; } = vehicleRegistrationState;
 
+    /// <summary>Modo efectivo del bloqueo "sin carrocería que cambiar".</summary>
+    public TramiteValidationMode VehicleBodyTypeRequired { get; } = vehicleBodyTypeRequired;
+
     /// <summary>
-    /// Política por defecto: ambas validaciones en bloqueo duro. Es la que usan los handlers cuando no
-    /// se les inyecta ninguna (tests que no ejercitan la configurabilidad) ⇒ comportamiento idéntico al
-    /// previo a esta historia.
+    /// Política por defecto: todas las validaciones en bloqueo duro. Es la que usan los handlers cuando
+    /// no se les inyecta ninguna (tests que no ejercitan la configurabilidad) ⇒ comportamiento idéntico
+    /// al previo a esta historia.
     /// </summary>
     public static TramiteValidationPolicy BlockAll { get; } =
-        new(TramiteValidationMode.Block, TramiteValidationMode.Block);
+        new(TramiteValidationMode.Block, TramiteValidationMode.Block, TramiteValidationMode.Block);
 
     /// <summary>
     /// Resuelve los modos efectivos desde la configuración. <paramref name="onUnrecognized"/> recibe
@@ -88,7 +98,8 @@ public sealed class TramiteValidationPolicy(
 
         return new TramiteValidationPolicy(
             ResolveOne(nameof(options.DuplicateActiveProcedure), options.DuplicateActiveProcedure, onUnrecognized),
-            ResolveOne(nameof(options.VehicleRegistrationState), options.VehicleRegistrationState, onUnrecognized));
+            ResolveOne(nameof(options.VehicleRegistrationState), options.VehicleRegistrationState, onUnrecognized),
+            ResolveOne(nameof(options.VehicleBodyTypeRequired), options.VehicleBodyTypeRequired, onUnrecognized));
     }
 
     /// <summary>

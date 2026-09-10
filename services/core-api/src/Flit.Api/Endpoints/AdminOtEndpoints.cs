@@ -2,11 +2,14 @@ using System.Globalization;
 using System.Security.Claims;
 using Flit.Admin.Application.OtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.GetOtBandejaCounters;
 using Flit.Admin.Application.OtClientProcedures.GetOtBandejaHealth;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.RevokeOtClientProcedure;
 using Flit.Admin.Application.OtDocumentPrecedence;
+using Flit.Queries.Domain;
 using Flit.Admin.Application.OtDocumentPrecedence.ListOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentPrecedence.UpdateOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentTags;
@@ -21,6 +24,7 @@ using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
+using Flit.Tramites.Application.UseCases.ImprintSignatures;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Application.OtRequirements.GetOtRequirements;
@@ -38,6 +42,7 @@ using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.UserManagement.DeleteUser;
 using Flit.Modules.Security.Application.UserManagement.SuspendUser;
@@ -99,16 +104,21 @@ public static class AdminOtEndpoints
             .WithName("AdminOtGetRequirements")
             .WithSummary("Obtiene los requisitos configurables del OT (RNMC, ruta de placa, identidad)")
             .Produces(StatusCodes.Status200OK)
+            // SuperAdmin debe indicar transitOfficeId (400) y ese organismo debe tener tenant OT (404).
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         group.MapPut("/requirements", UpdateRequirementsAsync)
             .AddEndpointFilter(new ConfigAuditFailureFilter("ot_requirements", "update"))
             .WithName("AdminOtUpdateRequirements")
             .WithSummary("Configura los requisitos del OT (auditado por trigger de BD)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         group.MapPost("/webhooks", CreateWebhookAsync)
@@ -149,9 +159,36 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // Filtros con la gramática de Consultas (HU #12217). Dos rutas, por lo mismo que en el
+        // listado del gestor: el catálogo se pide por GET, pero las condiciones viajan por POST
+        // porque placa, VIN y radicado admiten pegar una lista completa desde Excel y unos cientos
+        // de valores no caben en una query string. El GET de arriba se deja INTACTO: lo siguen
+        // usando las tarjetas de la cabecera y los enlaces profundos de los reportes.
+        group.MapGet("/client-procedures/fields", GetClientProceduresFilterFieldsAsync)
+            .WithName("AdminOtClientProceduresFilterFields")
+            .WithSummary("Campos por los que el organismo puede filtrar su bandeja")
+            .Produces<IReadOnlyList<QueryFieldDto>>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPost("/client-procedures/search", SearchClientProceduresAsync)
+            .WithName("AdminOtSearchClientProcedures")
+            .WithSummary("Bandeja del organismo filtrada con la gramática de consultas")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         group.MapGet("/client-procedures/health", GetClientProceduresHealthAsync)
             .WithName("AdminOtClientProceduresHealth")
             .WithSummary("Diagnóstico de la bandeja OT: trámites entregados con/sin grant vigente (R09)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapGet("/client-procedures/counters", GetClientProceduresCountersAsync)
+            .WithName("AdminOtGetClientProceduresCounters")
+            .WithSummary("Contadores de la cabecera de la bandeja OT (carga por clase de trabajo)")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
@@ -183,6 +220,15 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
+        group.MapPost("/client-procedures/{id:guid}/revoke", RevokeClientProcedureAsync)
+            .WithName("AdminOtRevokeClientProcedure")
+            .WithSummary("Revoca un trámite Aprobado de un cliente OT (HU #12166): libera la placa y habilita re-radicar")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         group.MapPost("/client-procedures/{id:guid}/consolidado", GenerateClientProcedureConsolidadoAsync)
             .WithName("AdminOtGenerateClientProcedureConsolidado")
             .WithSummary("Genera/regenera el expediente consolidado de un trámite de cliente OT")
@@ -202,7 +248,7 @@ public static class AdminOtEndpoints
 
         group.MapPost("/client-procedures/{id:guid}/consolidado-maestro", GenerateClientProcedureConsolidadoMaestroAsync)
             .WithName("AdminOtGenerateClientProcedureConsolidadoMaestro")
-            .WithSummary("Genera/regenera el expediente consolidado maestro desde la tabla maestra (sin gate FUR)")
+            .WithSummary("Genera/regenera el expediente consolidado maestro desde la tabla maestra (sin gate FUR). ?force=true reconstruye saltándose la caché de vigencia")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -417,6 +463,62 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
+        // HU #11552 / ADR-0048 — reactiva una invitación cancelada del tenant OT resuelto (propio
+        // para ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin). Necesaria además de
+        // la de SecurityEndpoints porque AdminCompanyPolicy no incluye ot_admin: con solo esa, el
+        // OT podría cancelar pero no reactivar. Reactivar es UNA sola acción: pending + token
+        // nuevo + reenvío del correo, no idempotente (segunda llamada → 409).
+        group.MapPost("/invitations/{invitationId:guid}/reactivate", ReactivateInvitationAsync)
+            .WithName("AdminOtReactivateInvitation")
+            .WithSummary("Reactiva una invitación cancelada del tenant OT")
+            .WithDescription("Vuelve la invitación a 'pending' con un token SIEMPRE nuevo (el enlace anterior deja "
+                + "de ser válido) y reenvía el correo. 409 si no está cancelada, si el correo ya está en uso o si "
+                + "algún rol de la invitación ya no está activo; 429 si no ha pasado el cooldown anti-abuso.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status429TooManyRequests);
+
+        group.MapGet("/imprint-signatures", ListImprintSignaturesAsync)
+            .WithName("AdminOtListImprintSignatures")
+            .WithSummary("Lista improntas firmadas por placa (HU #12148)")
+            .WithDescription("Consulta las auditorías de firma digital de impronta manual asociadas a la placa. "
+                + "No expone private_key.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPost("/imprint-signatures/{id:guid}/validate", ValidateImprintSignatureAsync)
+            .WithName("AdminOtValidateImprintSignature")
+            .WithSummary("Valida la firma digital de una impronta manual (HU #12148)")
+            .WithDescription("Verifica RSA-SHA256 del hash registrado y persiste el resultado en bitácora append-only.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/imprint-signatures/{id:guid}/preview-url", GetImprintSignaturePreviewUrlAsync)
+            .WithName("AdminOtGetImprintSignaturePreviewUrl")
+            .WithSummary("URL de previsualización del PDF firmado de una impronta (HU #12173)")
+            .WithDescription("Presigned GET inline desde signed_storage_path o el adjunto vigente. No expone private_key.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status503ServiceUnavailable);
+
+        group.MapGet("/imprint-signatures/{id:guid}/validations", ListImprintSignatureValidationsAsync)
+            .WithName("AdminOtListImprintSignatureValidations")
+            .WithSummary("Historial de validaciones de firma de una impronta (HU #12176)")
+            .WithDescription("Bitácora append-only ordenada por validated_at DESC.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
     }
 
@@ -496,32 +598,27 @@ public static class AdminOtEndpoints
     private static async Task<IResult> GetRequirementsAsync(
         HttpContext httpContext,
         GetOtRequirementsHandler handler,
-        ITransitOfficeCatalog transitOfficeCatalog,
+        FlitDbContext db,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        // El scope se resuelve con el MISMO helper que el resto del hub (usuarios, bandeja…):
+        // para ot_admin es su propio tenant; para SuperAdmin, el tenant OT DUEÑO del organismo
+        // pedido. Antes se usaba el tenant del token y el transitOfficeId se perdía en el handler,
+        // de modo que el SuperAdmin leía SIEMPRE el OT de su propio tenant (en QA, Barranquilla)
+        // con el titulo de otro organismo.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
-        }
-
-        if (!TryResolveScopedTransitOfficeId(
-                httpContext.User,
-                transitOfficeId,
-                transitOfficeCatalog,
-                out var scopedOfficeId,
-                out var officeError))
-        {
-            return officeError!;
+            return scopeError;
         }
 
         var response = await handler.HandleAsync(
             new GetOtRequirementsQuery
             {
                 TenantId = tenantId,
-                TransitOfficeId = scopedOfficeId,
+                TransitOfficeId = transitOfficeId,
             },
             cancellationToken).ConfigureAwait(false);
 
@@ -532,13 +629,20 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         UpdateOtRequirementsRequest request,
         UpdateOtRequirementsHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        // El frontend ya mandaba ?transitOfficeId= en el PUT (admin-ot.ts), pero este método NO lo
+        // declaraba: ASP.NET lo descartaba y se escribía contra el tenant del token. Resultado: el
+        // SuperAdmin pisaba los requisitos de SU OT (en QA, Barranquilla) creyendo configurar otro.
+        // Se resuelve el tenant OT dueño y se escribe con él, que además es el único que satisface
+        // la política RLS ot_requirements_write y el UNIQUE de tenant_id.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         try
@@ -633,6 +737,237 @@ public static class AdminOtEndpoints
     {
         var sub = user.FindFirstValue("sub");
         return Guid.TryParse(sub, out var userId) ? userId : null;
+    }
+
+    private static async Task<IResult> ListImprintSignaturesAsync(
+        HttpContext httpContext,
+        ListImprintSignaturesByPlacaHandler handler,
+        FlitDbContext db,
+        [FromQuery] string? placa,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        // SuperAdmin opera el hub OT con tenant de compañía en el JWT; el scope real es el
+        // tenant OT dueño del organismo (?transitOfficeId=), igual que requisitos/usuarios.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        if (string.IsNullOrWhiteSpace(placa))
+        {
+            return Results.BadRequest(new { error = "placa es obligatoria" });
+        }
+
+        var result = await handler.HandleAsync(
+            new ListImprintSignaturesByPlacaQuery
+            {
+                TenantId = tenantId,
+                Placa = placa,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        var data = await EnrichImprintListLastValidationsAsync(
+            db, tenantId, result.Data, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data });
+    }
+
+    private static async Task<IResult> ValidateImprintSignatureAsync(
+        HttpContext httpContext,
+        Guid id,
+        ValidateImprintSignatureHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        [FromBody] ValidateImprintSignatureRequest? body,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var validatedBy = ResolveUserId(httpContext.User);
+        if (validatedBy is null)
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim sub" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (body is null || string.IsNullOrWhiteSpace(body.Signature))
+        {
+            return Results.BadRequest(new { error = "signature es obligatoria (firma digital pegada desde el PDF)." });
+        }
+
+        var result = await handler.HandleAsync(
+            new ValidateImprintSignatureCommand
+            {
+                TenantId = tenantId,
+                VehicleSignatureImprintId = id,
+                ValidatedBy = validatedBy.Value,
+                ProvidedSignature = body.Signature,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Found)
+        {
+            return Results.NotFound(new
+            {
+                vehicleSignatureImprintId = result.VehicleSignatureImprintId,
+                result = result.Result,
+                failureReason = result.FailureReason,
+                validatedAt = result.ValidatedAt,
+            });
+        }
+
+        return Results.Ok(new
+        {
+            validationId = result.ValidationId,
+            vehicleSignatureImprintId = result.VehicleSignatureImprintId,
+            result = result.Result,
+            failureReason = result.FailureReason,
+            validatedAt = result.ValidatedAt,
+        });
+    }
+
+    private static async Task<IResult> GetImprintSignaturePreviewUrlAsync(
+        HttpContext httpContext,
+        Guid id,
+        GetImprintSignaturePreviewUrlHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (_, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var (preview, error) = await handler.HandleAsync(id, cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Impronta firmada no encontrada" }),
+            "file_missing" => Results.NotFound(new { error = "PDF de impronta no disponible" }),
+            "storage_unavailable" => Results.Json(
+                new { error = "storage_unavailable" },
+                statusCode: StatusCodes.Status503ServiceUnavailable),
+            _ => Results.Ok(new { url = preview!.Url, expiresAt = preview.ExpiresAt }),
+        };
+    }
+
+    private static async Task<IResult> ListImprintSignatureValidationsAsync(
+        HttpContext httpContext,
+        Guid id,
+        ListImprintSignatureValidationsHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var result = await handler.HandleAsync(
+            new ListImprintSignatureValidationsQuery { VehicleSignatureImprintId = id },
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Found)
+        {
+            return Results.NotFound(new { error = "Impronta firmada no encontrada" });
+        }
+
+        var data = await EnrichValidationSummariesAsync(
+            db, tenantId, result.Data, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { data });
+    }
+
+    /// <summary>
+    /// Resuelve email y rol visible del validador para la bitácora OT (HU #12177).
+    /// Prefiere el rol del tenant OT del hub; si no hay, cualquier rol activo (p. ej. SuperAdmin).
+    /// </summary>
+    private static async Task<IReadOnlyList<ImprintSignatureValidationSummaryDto>> EnrichValidationSummariesAsync(
+        FlitDbContext db,
+        Guid scopeTenantId,
+        IReadOnlyList<ImprintSignatureValidationSummaryDto> rows,
+        CancellationToken cancellationToken)
+    {
+        if (rows.Count == 0)
+            return rows;
+
+        var userIds = rows.Select(r => r.ValidatedBy).Where(id => id != Guid.Empty).Distinct().ToArray();
+        if (userIds.Length == 0)
+            return rows;
+
+        var emails = await db.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.Email })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var emailById = emails.ToDictionary(u => u.Id, u => u.Email);
+
+        var roleRows = await (
+            from a in db.UserRoleAssignments.AsNoTracking()
+            join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+            where a.DeletedAt == null && userIds.Contains(a.UserId)
+            select new { a.UserId, a.TenantId, RoleLabel = r.Name ?? r.Code, r.Code }
+        ).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var roleByUser = new Dictionary<Guid, string>();
+        foreach (var group in roleRows.GroupBy(x => x.UserId))
+        {
+            var preferred = group.FirstOrDefault(x => x.TenantId == scopeTenantId)
+                ?? group.FirstOrDefault(x => string.Equals(x.Code, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+                ?? group.FirstOrDefault(x => string.Equals(x.Code, "ot_admin", StringComparison.OrdinalIgnoreCase))
+                ?? group.FirstOrDefault();
+            if (preferred is not null)
+                roleByUser[group.Key] = preferred.RoleLabel;
+        }
+
+        return rows.Select(row => row with
+        {
+            ValidatedByEmail = emailById.TryGetValue(row.ValidatedBy, out var email) ? email : null,
+            ValidatedByRole = roleByUser.TryGetValue(row.ValidatedBy, out var role) ? role : null,
+        }).ToList();
+    }
+
+    private static async Task<IReadOnlyList<ImprintSignatureDto>> EnrichImprintListLastValidationsAsync(
+        FlitDbContext db,
+        Guid scopeTenantId,
+        IReadOnlyList<ImprintSignatureDto> rows,
+        CancellationToken cancellationToken)
+    {
+        var summaries = rows
+            .Select(r => r.LastValidation)
+            .Where(v => v is not null)
+            .Cast<ImprintSignatureValidationSummaryDto>()
+            .ToList();
+        if (summaries.Count == 0)
+            return rows;
+
+        var enriched = await EnrichValidationSummariesAsync(db, scopeTenantId, summaries, cancellationToken)
+            .ConfigureAwait(false);
+        var byId = enriched.ToDictionary(v => v.Id);
+
+        return rows.Select(row =>
+        {
+            if (row.LastValidation is null)
+                return row;
+            return byId.TryGetValue(row.LastValidation.Id, out var last)
+                ? row with { LastValidation = last }
+                : row;
+        }).ToList();
     }
 
     private static async Task<IResult> ListWebhooksAsync(
@@ -753,12 +1088,102 @@ public static class AdminOtEndpoints
         });
     }
 
+    private static async Task<IResult> GetClientProceduresFilterFieldsAsync(
+        HttpContext httpContext,
+        GetOtBandejaFilterFieldsHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var campos = await handler
+            .HandleAsync(tenantId, scopedOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Sin organismo resoluble no hay catálogo, pero tampoco es un error del cliente: la barra de
+        // filtros degrada con elegancia y la bandeja se pinta igual.
+        return Results.Ok(campos ?? []);
+    }
+
+    /// <summary>
+    /// La MISMA bandeja que el GET, aceptando además condiciones de la gramática de Consultas.
+    /// </summary>
+    private static async Task<IResult> SearchClientProceduresAsync(
+        HttpContext httpContext,
+        ListOtClientProceduresHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromBody] OtBandejaSearchRequest body,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        // Un campo o un operador fuera del catálogo se RECHAZA. Ignorarlo devolvería una bandeja más
+        // amplia de la pedida con apariencia de estar filtrada, y nadie revisa un resultado que
+        // parece correcto.
+        if (OtBandejaQueryConditions.Validate(body.Condiciones) is { } problema)
+        {
+            return Results.BadRequest(new { error = problema });
+        }
+
+        var result = await handler
+            .HandleAsync(body.ToQuery(tenantId, scopedOfficeId), cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(new
+        {
+            data = result.Data,
+            totalCount = result.TotalCount,
+            page = result.Page,
+            pageSize = result.PageSize,
+        });
+    }
+
     private static async Task<IResult> ListClientProceduresAsync(
         HttpContext httpContext,
         ListOtClientProceduresHandler handler,
         ITransitOfficeCatalog transitOfficeCatalog,
         string? status,
+        string? plateFlowStatus,
         Guid? procedureTypeId,
+        string? vin,
+        string? placa,
+        string? vendedor,
+        string? comprador,
+        string? gestor,
+        string? sortBy,
+        string? sortDir,
         int? page,
         int? pageSize,
         [FromQuery] Guid? transitOfficeId,
@@ -787,7 +1212,15 @@ public static class AdminOtEndpoints
             OtTenantId = tenantId,
             TransitOfficeId = scopedOfficeId,
             Status = status,
+            PlateFlowStatus = plateFlowStatus,
             ProcedureTypeId = procedureTypeId,
+            Vin = vin,
+            Placa = placa,
+            Vendedor = vendedor,
+            Comprador = comprador,
+            Gestor = gestor,
+            SortBy = sortBy,
+            SortDir = sortDir,
             Page = page,
             PageSize = pageSize,
         }, cancellationToken).ConfigureAwait(false);
@@ -834,10 +1267,11 @@ public static class AdminOtEndpoints
         return Results.Ok(result);
     }
 
-    private static async Task<IResult> GetClientProcedureAsync(
-        Guid id,
+    private static async Task<IResult> GetClientProceduresCountersAsync(
         HttpContext httpContext,
-        GetOtClientProcedureHandler handler,
+        GetOtBandejaCountersHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (!TryResolveTenantId(httpContext.User, out var tenantId))
@@ -847,10 +1281,60 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var result = await handler.HandleAsync(new GetOtBandejaCountersQuery
+        {
+            OtTenantId = tenantId,
+            TransitOfficeId = scopedOfficeId,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> GetClientProcedureAsync(
+        Guid id,
+        HttpContext httpContext,
+        GetOtClientProcedureHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        // El detalle era el ÚNICO de la familia que no aceptaba el organismo supervisado: la lista,
+        // el diagnóstico, los contadores, aprobar, rechazar y la placa sí. El resultado era que al
+        // SuperAdmin le salía la fila en la bandeja y un 404 al abrirla, así que su detalle se
+        // quedaba sin actores ni especificaciones del vehículo. Para el ot_admin no cambia nada:
+        // el resolutor descarta el override de quien no es SuperAdmin.
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
         var result = await handler.HandleAsync(new GetOtClientProcedureQuery
         {
             OtTenantId = tenantId,
             ProcedureInstanceId = id,
+            TransitOfficeId = scopedOfficeId,
         }, cancellationToken).ConfigureAwait(false);
 
         return result.Status switch
@@ -867,7 +1351,7 @@ public static class AdminOtEndpoints
         ApproveOtClientProcedureHandler handler,
         IOtClientProcedureRepository otRepository,
         MandatoApprovalHandler mandatoApproval,
-        GenerarFurHandler furHandler,
+        RegenerarDocumentosTrazadoHandler regeneracionTrazada,
         ILoggerFactory loggerFactory,
         ITransitOfficeCatalog transitOfficeCatalog,
         [FromQuery] Guid? transitOfficeId,
@@ -946,17 +1430,36 @@ public static class AdminOtEndpoints
         // NO revierte la aprobación ya persistida.
         if (result.Status == ApproveOtClientProcedureStatus.Approved)
         {
+            // Bug #11613 — el retorno del generador es una tupla (Result, Error) y un error de negocio
+            // NO lanza excepción: descartarlo dejaba el trámite sin documentos regenerados, sin log y
+            // con 200 OK. El handler trazado inspecciona ese retorno, loguea a Error y persiste un
+            // evento consultable en la instancia. Sigue siendo best-effort: la aprobación NO se revierte.
             try
             {
-                await otRepository
+                // El retorno NO se descarta (es la forma exacta del defecto que originó este bug): si
+                // la regeneración falló y además no se pudo dejar la traza en la instancia, el único
+                // rastro posible es este log — sin él el fallo desaparecería por completo.
+                var regeneracion = await otRepository
                     .ExecuteInClientTenantScopeAsync(
                         procedure.ClientTenantId,
-                        () => furHandler.HandleAsync(id, procedure.ClientTenantId, cancellationToken),
+                        () => regeneracionTrazada.HandleAsync(
+                            id,
+                            procedure.ClientTenantId,
+                            RegeneracionDocumentalOrigen.AprobacionOt,
+                            cancellationToken),
                         cancellationToken)
                     .ConfigureAwait(false);
+
+                if (!regeneracion.Ok && !regeneracion.TrazaPersistida)
+                {
+                    AdminOtMandatoLog.RegeneracionSinTraza(
+                        loggerFactory.CreateLogger("AdminOt.ApproveMandato"), id, regeneracion.Error ?? "desconocido");
+                }
             }
             catch (Exception ex)
             {
+                // Red de seguridad: el handler trazado ya absorbe los fallos del generador; aquí solo
+                // caen los del propio scope RLS / conexión, que no tienen dónde persistirse.
                 AdminOtMandatoLog.RegeneracionMandatoOmitida(
                     loggerFactory.CreateLogger("AdminOt.ApproveMandato"), ex, id);
             }
@@ -1018,6 +1521,52 @@ public static class AdminOtEndpoints
             RejectOtClientProcedureStatus.ValidationFailed => Results.Json(
                 new { errors = result.Errors.Select(e => new { field = e.Field, message = e.Message }) },
                 statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.Ok(result.Procedure),
+        };
+    }
+
+    private static async Task<IResult> RevokeClientProcedureAsync(
+        Guid id,
+        HttpContext httpContext,
+        RevokeOtClientProcedureRequest? request,
+        RevokeOtClientProcedureHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var result = await handler.HandleAsync(new RevokeOtClientProcedureCommand
+        {
+            OtTenantId = tenantId,
+            ProcedureInstanceId = id,
+            RevokedBy = ResolveUserId(httpContext.User),
+            Reason = request?.Reason,
+            TransitOfficeId = scopedOfficeId,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            RevokeOtClientProcedureStatus.NotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
+            RevokeOtClientProcedureStatus.InvalidState => Results.Conflict(new { error = "INVALID_STATE" }),
+            RevokeOtClientProcedureStatus.QuipuxReadOnly => Results.Json(
+                new { error = "QUIPUX_READONLY" },
+                statusCode: StatusCodes.Status403Forbidden),
             _ => Results.Ok(result.Procedure),
         };
     }
@@ -1151,12 +1700,23 @@ public static class AdminOtEndpoints
         ITransitOfficeCatalog transitOfficeCatalog,
         Flit.Tramites.Application.UseCases.ProcedureInstances.AdjuntarLicenciaTransitoHandler handler,
         IFormFile? file,
+        // HU #12042 — el frontend analiza el documento al seleccionarlo, para enseñarle el veredicto al
+        // OT antes de que decida, y manda aquí ESE resultado. Si llega, no se vuelve a analizar.
+        [FromForm(Name = "ocr")] string? ocrJson,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
         {
             return Results.BadRequest(new { error = "missing_file", message = "Falta el archivo (file)." });
+        }
+
+        // Un JSON corrupto no puede tumbar la carga: se ignora y el backend analiza por su cuenta.
+        System.Text.Json.Nodes.JsonObject? ocrPrecomputado = null;
+        if (!string.IsNullOrWhiteSpace(ocrJson))
+        {
+            try { ocrPrecomputado = System.Text.Json.Nodes.JsonNode.Parse(ocrJson) as System.Text.Json.Nodes.JsonObject; }
+            catch (System.Text.Json.JsonException) { ocrPrecomputado = null; }
         }
 
         var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
@@ -1183,9 +1743,9 @@ public static class AdminOtEndpoints
             file.Length,
             stream);
 
-        var (result, error) = await repository.ExecuteInClientTenantScopeAsync(
+        var (result, error, ocr) = await repository.ExecuteInClientTenantScopeAsync(
             access!.ClientTenantId,
-            () => handler.HandleAsync(id, access.ClientTenantId, input, ResolveUserId(httpContext.User), cancellationToken),
+            () => handler.HandleAsync(id, access.ClientTenantId, input, ResolveUserId(httpContext.User), ocrPrecomputado, cancellationToken),
             cancellationToken).ConfigureAwait(false);
 
         return error switch
@@ -1195,7 +1755,12 @@ public static class AdminOtEndpoints
             "file_too_large" => Results.BadRequest(new { error = "file_too_large", message = "El archivo excede el tamaño máximo permitido para este documento." }),
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
             "estado_invalido" => Results.Conflict(new { error = "INVALID_STATE", message = "La Licencia de Tránsito solo se adjunta con el trámite entregado o aprobado." }),
-            _ => Results.Created($"/api/v1/admin/ot/client-procedures/{id}/attachments/{result!.Id}", result),
+            // HU #11996 — el adjunto se crea SIEMPRE; `ocr` es informativo y puede venir null cuando el
+            // análisis no se pudo hacer (proveedor caído, sin key, archivo >10 MB). La pantalla lo
+            // presenta como «no analizado», nunca como un fallo del cargue.
+            _ => Results.Created(
+                $"/api/v1/admin/ot/client-procedures/{id}/attachments/{result!.Id}",
+                new { attachment = result, ocr }),
         };
     }
 
@@ -1210,6 +1775,10 @@ public static class AdminOtEndpoints
         Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
         Flit.Tramites.Application.UseCases.ProcedureInstances.GenerarConsolidadoMaestroHandler handler,
         [FromQuery] Guid? transitOfficeId,
+        // NULLABLE a propósito, por lo mismo que documenta ConsolidadoEndpoints (Bug #11139): un
+        // `bool` de query sin `?` es OBLIGATORIO en Minimal APIs y omitirlo devolvería 400. El camino
+        // normal del OT ("Ver consolidado") no lo manda; solo lo hace "Regenerar".
+        [FromQuery] bool? force,
         CancellationToken cancellationToken)
     {
         var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
@@ -1246,7 +1815,7 @@ public static class AdminOtEndpoints
                 }
 
                 return await handler
-                    .HandleAsync(id, access.ClientTenantId, precedencia, cancellationToken)
+                    .HandleAsync(id, access.ClientTenantId, precedencia, force ?? false, cancellationToken)
                     .ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
@@ -1594,28 +2163,72 @@ public static class AdminOtEndpoints
             return Results.Unauthorized();
         }
 
-        // El rol destino se resuelve automáticamente: en un tenant OT solo existe el
-        // rol de sistema ot_admin (sin roles personalizados — decisión de alcance v1).
+        // El alta OT ya no fuerza siempre ot_admin: acepta los roles que el administrador
+        // seleccione del catálogo TRANSIT_OFFICE. Sin selección explícita se conserva el
+        // comportamiento histórico (ot_admin), para no romper a los clientes existentes.
         // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id), así que
         // se resuelve por Code únicamente (una sola fila ot_admin en todo el sistema).
-        var role = await db.Roles.AsNoTracking()
-            .FirstOrDefaultAsync(
-                r => r.Code == TransitOfficeTenantWriteRepositoryRoleCode && r.IsActive && r.DeletedAt == null,
-                cancellationToken)
-            .ConfigureAwait(false);
+        var requestedRoleIds = (request.RoleIds ?? []).Distinct().ToList();
+        List<Guid> roleIds;
 
-        if (role is null)
+        // Un usuario tiene UN rol: lo que define lo que puede hacer son los permisos de ese rol.
+        if (requestedRoleIds.Count > 1)
         {
             return Results.Json(
-                new { error = "ROLE_NOT_FOUND", message = "El tenant OT no tiene configurado el rol ot_admin." },
-                statusCode: StatusCodes.Status409Conflict);
+                new { error = "SINGLE_ROLE_ONLY", message = "Un usuario solo puede tener un rol. Selecciona uno." },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        if (requestedRoleIds.Count == 0)
+        {
+            var role = await db.Roles.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    r => r.Code == TransitOfficeTenantWriteRepositoryRoleCode && r.IsActive && r.DeletedAt == null,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (role is null)
+            {
+                return Results.Json(
+                    new { error = "ROLE_NOT_FOUND", message = "El tenant OT no tiene configurado el rol ot_admin." },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            roleIds = [role.Id];
+        }
+        else
+        {
+            var selectedRoles = await db.Roles.AsNoTracking()
+                .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (selectedRoles.Count != requestedRoleIds.Count)
+            {
+                return Results.Json(
+                    new { error = "ROLE_NOT_FOUND", message = "Alguno de los roles seleccionados no existe o está inactivo." },
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+
+            if (selectedRoles.Exists(r => r.TargetEntityType != TenantTypes.TransitOffice))
+            {
+                return Results.Json(
+                    new
+                    {
+                        error = "ROLE_TARGET_ENTITY_TYPE_MISMATCH",
+                        message = "Alguno de los roles seleccionados no aplica a un organismo de tránsito.",
+                    },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            roleIds = requestedRoleIds;
         }
 
         try
         {
             var result = await handler.HandleAsync(
                 new CreateInvitationCommand(
-                    tenantId, request.Email, request.FullName ?? string.Empty, [role.Id], invitedBy.Value),
+                    tenantId, request.Email, request.FullName ?? string.Empty, roleIds, invitedBy.Value),
                 cancellationToken).ConfigureAwait(false);
 
             return Results.Created(
@@ -1630,21 +2243,30 @@ public static class AdminOtEndpoints
         }
         catch (InvitationAlreadyPendingException)
         {
+            // HU #11580 — código único de cara al cliente (indistinguibilidad); la causa
+            // concreta queda en auditoría vía ConfigAuditFailureContext, no en la respuesta.
+            // NOTA: esta ruta (/users/invite) no tiene AdminAuditFilter ni ConfigAuditFailureFilter
+            // enganchado — SetErrorCode aquí no tiene efecto hasta que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "invitation_already_pending");
             return Results.Json(
-                new { error = "INVITATION_ALREADY_PENDING", message = "Ya existe una invitación pendiente para este correo." },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserAlreadyExistsException)
         {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
             return Results.Json(
-                new { error = "USER_ALREADY_EXISTS", message = "Este correo ya tiene una cuenta activa en el sistema." },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
-        catch (UserEmailBelongsToDeletedAccountException ex)
+        catch (UserEmailBelongsToDeletedAccountException)
         {
             // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted.
+            // HU #11580 — código único de cara al cliente; la causa concreta queda en
+            // auditoría vía ConfigAuditFailureContext.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
             return Results.Json(
-                new { error = "EMAIL_BELONGS_TO_DELETED_USER", message = ex.Message },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
     }
@@ -1764,10 +2386,22 @@ public static class AdminOtEndpoints
 
         var pending = await db.UserInvitations
             .AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.Status == "pending")
+            .Where(x => x.TenantId == tenantId && InvitationListingStatuses.Visible.Contains(x.Status))
             .OrderByDescending(x => x.CreatedAt)
+            // El rol de la invitación pendiente/cancelada ya está decidido: se muestra para que
+            // la columna Perfil / Rol no quede en "—" hasta que el usuario active su cuenta.
             .Select(x => new OtUserDto(
-                x.Id.ToString(), x.FullName, x.Email, null, null, null, "pending", x.CreatedAt, false, 0L))
+                x.Id.ToString(),
+                x.FullName,
+                x.Email,
+                db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Name).FirstOrDefault(),
+                db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Code).FirstOrDefault(),
+                x.RoleId,
+                // HU #11552 / ADR-0048: estado real, no el literal "pending" hardcodeado.
+                x.Status,
+                x.CreatedAt,
+                false,
+                0L))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         return Results.Ok(new { data = activeUsers.Concat(usersWithoutRole).Concat(pending).ToList() });
@@ -1816,14 +2450,21 @@ public static class AdminOtEndpoints
         }
         catch (UserAlreadyExistsException)
         {
+            // NOTA: esta ruta (PATCH /users/{userId}) no tiene AdminAuditFilter ni
+            // ConfigAuditFailureFilter enganchado — SetErrorCode aquí no tiene efecto hasta
+            // que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
             return Results.Json(
-                new { error = "USER_ALREADY_EXISTS", message = "Este correo ya tiene una cuenta activa en el sistema." },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
-        catch (UserEmailBelongsToDeletedAccountException ex)
+        catch (UserEmailBelongsToDeletedAccountException)
         {
+            // HU #11580 — código único de cara al cliente; la causa concreta queda en
+            // auditoría vía ConfigAuditFailureContext.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
             return Results.Json(
-                new { error = "EMAIL_BELONGS_TO_DELETED_USER", message = ex.Message },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserProfileConcurrencyException ex)
@@ -2089,6 +2730,92 @@ public static class AdminOtEndpoints
         }
     }
 
+    private static async Task<IResult> ReactivateInvitationAsync(
+        Guid invitationId,
+        HttpContext httpContext,
+        FlitDbContext db,
+        ReactivateInvitationHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var reactivatedBy = ResolveUserId(httpContext.User);
+        if (reactivatedBy is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            var result = await handler.HandleAsync(
+                new ReactivateInvitationCommand(invitationId, tenantId, reactivatedBy.Value),
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.Ok(new { invitationId = result.InvitationId, email = result.Email, emailSent = result.EmailSent });
+        }
+        catch (InvitationNotFoundException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_FOUND", message = "La invitación no existe o no pertenece al tenant OT resuelto." },
+                statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (InvitationNotCancelledException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_CANCELLED", message = "La invitación no está cancelada, así que no se puede reactivar." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (InvitationAlreadyPendingException)
+        {
+            // NOTA: esta ruta (/invitations/{invitationId}/reactivate) no tiene AdminAuditFilter
+            // ni ConfigAuditFailureFilter enganchado — SetErrorCode aquí no tiene efecto hasta
+            // que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "invitation_already_pending");
+            return Results.Json(
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (UserAlreadyExistsException)
+        {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
+            return Results.Json(
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (UserEmailBelongsToDeletedAccountException)
+        {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
+            return Results.Json(
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (RoleNotFoundException)
+        {
+            return Results.Json(
+                new { error = "ROLE_NOT_FOUND", message = "Alguno de los roles de la invitación ya no existe o está inactivo." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (ResendCooldownActiveException ex)
+        {
+            var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(ex.RetryAfter.TotalSeconds));
+            httpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+            return Results.Json(
+                new
+                {
+                    error = "RESEND_COOLDOWN_ACTIVE",
+                    message = $"Debes esperar antes de reactivar esta invitación de nuevo. Intenta en {retryAfterSeconds} segundos.",
+                    retryAfterSeconds,
+                },
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+    }
+
     /// <summary>Código del único rol de tenant OT — ver <c>TransitOfficeTenantWriteRepository.OtAdminRoleCode</c>.</summary>
     private const string TransitOfficeTenantWriteRepositoryRoleCode = "ot_admin";
 
@@ -2140,7 +2867,11 @@ public static class AdminOtEndpoints
         return (targetTenantId, null);
     }
 
-    private sealed record InviteOtUserRequest(string Email, string? FullName);
+    private sealed record ValidateImprintSignatureRequest(string Signature);
+
+    // RoleIds opcional: si viene vacío se conserva el comportamiento histórico (ot_admin
+    // forzado); si trae roles, deben pertenecer al catálogo TRANSIT_OFFICE.
+    private sealed record InviteOtUserRequest(string Email, string? FullName, Guid[]? RoleIds = null);
 
     // HU #10621 — DisplayName/Email opcionales ("no tocar ese campo"); RowVersion obligatorio
     // (concurrencia optimista, AC4 — el valor que el frontend leyó de OtUserDto.RowVersion).
@@ -2169,10 +2900,73 @@ public static class AdminOtEndpoints
         DateTimeOffset? DeletedAt = null);
 }
 
+/// <summary>
+/// Cuerpo de <c>POST /client-procedures/search</c> (HU #12217).
+///
+/// <para>Conserva los filtros sueltos del GET además de <see cref="Condiciones"/>: <c>status</c> y
+/// <c>plateFlowStatus</c> los sigue mandando la tira de tarjetas de la cabecera, que no es un filtro
+/// que el usuario escriba sino un atajo a un recuento ya hecho, y los enlaces profundos de los
+/// reportes entran por ahí también.</para>
+/// </summary>
+internal sealed record OtBandejaSearchRequest
+{
+    public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
+
+    /// <summary>Texto libre de la barra de búsqueda (HU #12218).</summary>
+    public string? Busqueda { get; init; }
+
+    public string? Status { get; init; }
+    public string? PlateFlowStatus { get; init; }
+    public Guid? ProcedureTypeId { get; init; }
+    public string? Vin { get; init; }
+    public string? Placa { get; init; }
+    public string? Vendedor { get; init; }
+    public string? Comprador { get; init; }
+    public string? Gestor { get; init; }
+
+    public DateTimeOffset? CreatedFrom { get; init; }
+    public DateTimeOffset? CreatedTo { get; init; }
+    public DateTimeOffset? UpdatedFrom { get; init; }
+    public DateTimeOffset? UpdatedTo { get; init; }
+
+    public string? SortBy { get; init; }
+    public string? SortDir { get; init; }
+    public int? Page { get; init; }
+    public int? PageSize { get; init; }
+
+    public ListOtClientProceduresQuery ToQuery(Guid otTenantId, Guid? transitOfficeId) => new()
+    {
+        OtTenantId = otTenantId,
+        TransitOfficeId = transitOfficeId,
+        Condiciones = Condiciones,
+        Busqueda = Busqueda,
+        Status = Status,
+        PlateFlowStatus = PlateFlowStatus,
+        ProcedureTypeId = ProcedureTypeId,
+        Vin = Vin,
+        Placa = Placa,
+        Vendedor = Vendedor,
+        Comprador = Comprador,
+        Gestor = Gestor,
+        CreatedFrom = CreatedFrom,
+        CreatedTo = CreatedTo,
+        UpdatedFrom = UpdatedFrom,
+        UpdatedTo = UpdatedTo,
+        SortBy = SortBy,
+        SortDir = SortDir,
+        Page = Page,
+        PageSize = PageSize,
+    };
+}
+
 /// <summary>Logging source-generated (CA1848) de la aprobación OT. Sin PII.</summary>
 internal static partial class AdminOtMandatoLog
 {
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo regenerar el mandato al aprobar el trámite {InstanceId}; se conserva el mandato previo.")]
     public static partial void RegeneracionMandatoOmitida(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "La regeneración documental al aprobar el trámite {InstanceId} falló con {CodigoError} y la traza NO quedó persistida; el diagnóstico solo existe en estos logs.")]
+    public static partial void RegeneracionSinTraza(ILogger logger, Guid instanceId, string codigoError);
 }

@@ -4,6 +4,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Certifications;
+using Flit.Tramites.Domain.Certifications.Normalization;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure.Consultations;
@@ -64,11 +66,26 @@ internal sealed class VerifikRuesConsultationProvider(
             if (!response.IsSuccessStatusCode)
                 return ProviderUnavailable();
 
-            var payload = await response.Content.ReadFromJsonAsync<VerifikRuesResponse>(JsonOptions, ct);
+            // HU #11306 — se lee como texto y se deserializa desde ahí para conservar el JSON tal como
+            // llegó. Aquí importa el doble: el bloque `legalRepresentatives` trae una lista
+            // estructurada de representantes cuya forma real NO está documentada en ninguna captura,
+            // y este modelo solo declara `faculty`. Guardar el crudo es lo que permitirá modelarla sin
+            // volver a pagar la consulta, en vez de adivinar nombres de campo — que es exactamente el
+            // fallo que originó este Feature.
+            var raw = await response.Content.ReadAsStringAsync(ct);
+            var payload = JsonSerializer.Deserialize<VerifikRuesResponse>(raw, JsonOptions);
             if (payload is null)
                 return ProviderUnavailable();
 
-            return Map(payload, nit);
+            return Map(payload, nit) with
+            {
+                RawPayload = new RawProviderPayload(
+                    ProviderKey: Key_,
+                    SubjectKind: RawProviderPayload.CompanySubject,
+                    SubjectKey: nit,
+                    PayloadJson: raw,
+                    QueriedAt: DateTimeOffset.UtcNow),
+            };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -160,9 +177,14 @@ internal sealed class VerifikRuesConsultationProvider(
     private static ConsultationResult Map(VerifikRuesResponse payload, string? nit)
     {
         var registry = payload.Data?.CommercialRegistry;
-        var razonSocial = string.IsNullOrWhiteSpace(registry?.BusinessName) ? "Sin razón social" : registry!.BusinessName!;
-        var estado = string.IsNullOrWhiteSpace(registry?.RegistrationStatus) ? "DESCONOCIDO" : registry!.RegistrationStatus!;
-        var activa = estado.Equals("ACTIVA", StringComparison.OrdinalIgnoreCase);
+        // HU #11306 — se RETIRAN los rellenos "Sin razón social" y "DESCONOCIDO". Parecían inocuos y
+        // no lo eran: se escribían en field_values como si fueran datos del RUES, hacían pasar el
+        // criterio de emisión del certificado y producían un documento oficial que afirmaba, en la
+        // casilla de razón social, la frase "Sin razón social". Ausente ⇒ celda en blanco y, si no hay
+        // razón social, no se emite el certificado (regla HU #10856 llevada hasta el final).
+        var razonSocial = Limpio(registry?.BusinessName);
+        var estado = Limpio(registry?.RegistrationStatus);
+        var activa = string.Equals(estado, "ACTIVA", StringComparison.OrdinalIgnoreCase);
 
         var check = new ConsultationCheck(
             "rues",
@@ -171,7 +193,9 @@ internal sealed class VerifikRuesConsultationProvider(
             Key_,
             activa
                 ? $"Empresa activa en RUES: {razonSocial}"
-                : $"Estado en RUES: {estado}");
+                : estado is not null
+                    ? $"Estado en RUES: {estado}"
+                    : "El RUES no reportó el estado de la empresa");
 
         var actividades = payload.Data?.EconomicActivities;
 
@@ -209,7 +233,44 @@ internal sealed class VerifikRuesConsultationProvider(
         if (!string.IsNullOrWhiteSpace(nitValue))
             hydrated.Add(new HydratedField("rues_nit", nitValue, null));
 
-        return new ConsultationResult(Key_, activa ? "green" : "yellow", [check], hydrated);
+        return new ConsultationResult(
+            Key_, activa ? "green" : "yellow", [check], hydrated,
+            Certifications: BuildBundle(registry, nitValue, razonSocial, estado, payload));
+    }
+
+    /// <summary>
+    /// Traduce el registro mercantil al modelo canónico (HU #11306, ADR-0041), para que el certificado
+    /// deje de depender de un snapshot congelado en <c>field_values</c> — que es inmutable fuera de
+    /// borrador y por eso obligaba a consultar en vivo al generar el PDF.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="MerchantRegistration.LegalRepresentatives"/> queda <b>vacío</b> a propósito: el
+    /// servicio entrega una lista estructurada de representantes, pero no hay ninguna captura real que
+    /// documente sus nombres de campo, y este modelo solo declara <c>faculty</c>. Inventarlos sería
+    /// repetir el defecto que originó el Feature. El payload crudo ya se persiste, así que modelarla
+    /// después no costará una nueva consulta.
+    /// </remarks>
+    private static CertificationBundle? BuildBundle(
+        VerifikRuesCommercialRegistry? registry, string? nit, string? razonSocial, string? estado,
+        VerifikRuesResponse payload)
+    {
+        if (string.IsNullOrWhiteSpace(nit))
+            return null;
+
+        var registration = new MerchantRegistration(
+            nit.Trim(),
+            EntityNameNormalizer.Normalize(razonSocial),
+            CertificateNumberNormalizer.Normalize(Limpio(registry?.RegistrationNumber)),
+            VigencyStatusNormalizer.ForMerchantRegistration(estado),
+            ColombianCertificateDate.Parse(Limpio(registry?.RegistrationDate)),
+            ColombianCertificateDate.Parse(Limpio(registry?.RenewalDate)),
+            EntityNameNormalizer.Normalize(Limpio(registry?.ChamberCommerce)),
+            EntityNameNormalizer.Normalize(CategoriaLegible(payload.Data?.Category)),
+            EntityNameNormalizer.Normalize(Limpio(registry?.Address)),
+            EntityNameNormalizer.Normalize(Limpio(registry?.City)),
+            []);
+
+        return registration.HasAnyValue ? CertificationBundle.ForCompany(registration) : null;
     }
 
     private static ConsultationResult NotFound(string nit) =>

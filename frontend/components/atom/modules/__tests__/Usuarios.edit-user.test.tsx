@@ -110,9 +110,9 @@ describe("Usuarios — botón Editar (#10622)", () => {
     await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     await waitFor(() =>
+      // El correo es la credencial de acceso: se muestra en solo lectura y no viaja en el PATCH.
       expect(updateUser).toHaveBeenCalledWith("user-active", {
         displayName: "Ana Torres Ruiz",
-        email: "ana@flit.local",
         rowVersion: 2,
       }),
     );

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { BellPlus, History, Pencil, Trash2 } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
+import { CompanyNotice } from "../CompanyNotice";
 import { cn } from "@/lib/utils";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -10,16 +11,32 @@ import {
   deleteAlertRule,
   fetchAlertRules,
   updateAlertRule,
+  type AlertMetric,
   type AlertRule,
   type AlertRuleInput,
 } from "@/lib/api/analytics-scheduling";
+import {
+  createOtAlertRule,
+  deleteOtAlertRule,
+  fetchOtAlertRules,
+  updateOtAlertRule,
+} from "@/lib/api/ot-scheduling";
 import { METRIC_LABELS, OPERATOR_LABELS, formatDateTime } from "./labels";
 import { AlertRuleForm } from "./AlertRuleForm";
 import { AlertEventsHistory } from "./AlertEventsHistory";
 
 interface AlertsSectionProps {
   tenantId?: string;
+  /** SuperAdmin sin compañía elegida en el filtro superior: en vez de llamar a la API (que exige
+   * tenant concreto y respondería 400), se muestra un aviso — mismo patrón que SchedulesSection. */
+  needsCompany?: boolean;
+  /** Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): cuando se indica, la
+   * sección gestiona las alertas propias de ESE organismo (endpoint /admin/ot/alert-rules) en
+   * vez de las de una compañía — mutuamente excluyente con `tenantId`/`needsCompany`. */
+  otTransitOfficeId?: string;
 }
+
+const OT_METRICS: AlertMetric[] = ["ot_rejection_rate_pct", "ot_stuck_count"];
 
 type SubView = "rules" | "history";
 
@@ -27,7 +44,7 @@ type SubView = "rules" | "history";
  * Sección "Alertas" (Reportes 2.0, HU-D): tabla de reglas + formulario crear/editar +
  * eliminación con confirmación y sub-vista "Historial de disparos" (alert-events paginado).
  */
-export function AlertsSection({ tenantId }: AlertsSectionProps) {
+export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeId }: AlertsSectionProps) {
   const [items, setItems] = useState<AlertRule[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [subView, setSubView] = useState<SubView>("rules");
@@ -37,15 +54,18 @@ export function AlertsSection({ tenantId }: AlertsSectionProps) {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (needsCompany) return;
     setStatus("loading");
     try {
-      const data = await fetchAlertRules(tenantId);
+      const data = otTransitOfficeId
+        ? await fetchOtAlertRules(otTransitOfficeId)
+        : await fetchAlertRules(tenantId);
       setItems(data.items);
       setStatus(data.items.length === 0 ? "empty" : "ready");
     } catch {
       setStatus("error");
     }
-  }, [tenantId]);
+  }, [tenantId, needsCompany, otTransitOfficeId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
@@ -53,14 +73,22 @@ export function AlertsSection({ tenantId }: AlertsSectionProps) {
   }, [load]);
 
   async function handleCreate(input: AlertRuleInput) {
-    await createAlertRule(input, tenantId);
+    if (otTransitOfficeId) {
+      await createOtAlertRule(input, otTransitOfficeId);
+    } else {
+      await createAlertRule(input, tenantId);
+    }
     setCreating(false);
     await load();
   }
 
   async function handleUpdate(input: AlertRuleInput) {
     if (!editing) return;
-    await updateAlertRule(editing.id, input, tenantId);
+    if (otTransitOfficeId) {
+      await updateOtAlertRule(editing.id, input, otTransitOfficeId);
+    } else {
+      await updateAlertRule(editing.id, input, tenantId);
+    }
     setEditing(null);
     await load();
   }
@@ -69,7 +97,11 @@ export function AlertsSection({ tenantId }: AlertsSectionProps) {
     if (!confirmDelete) return;
     setActionError(null);
     try {
-      await deleteAlertRule(confirmDelete.id, tenantId);
+      if (otTransitOfficeId) {
+        await deleteOtAlertRule(confirmDelete.id, otTransitOfficeId);
+      } else {
+        await deleteAlertRule(confirmDelete.id, tenantId);
+      }
       setConfirmDelete(null);
       await load();
     } catch {
@@ -107,18 +139,31 @@ export function AlertsSection({ tenantId }: AlertsSectionProps) {
             <History className="h-3.5 w-3.5" aria-hidden="true" /> Historial de disparos
           </button>
         </div>
-        {subView === "rules" && !formOpen && (
+        {subView === "rules" && !formOpen && !needsCompany && (
           <CreateButton size="sm" label="Nueva alerta" icon={BellPlus} onClick={() => setCreating(true)} />
         )}
       </div>
 
       {subView === "history" ? (
-        <AlertEventsHistory rules={items} tenantId={tenantId} />
+        <AlertEventsHistory rules={items} tenantId={tenantId} otTransitOfficeId={otTransitOfficeId} />
+      ) : needsCompany ? (
+        <CompanyNotice message="Como SuperAdmin debes elegir una compañía en el filtro superior para ver o crear sus alertas." />
       ) : (
         <>
-          {creating && <AlertRuleForm onSubmit={handleCreate} onCancel={() => setCreating(false)} />}
+          {creating && (
+            <AlertRuleForm
+              allowedMetrics={otTransitOfficeId ? OT_METRICS : undefined}
+              onSubmit={handleCreate}
+              onCancel={() => setCreating(false)}
+            />
+          )}
           {editing && (
-            <AlertRuleForm initial={editing} onSubmit={handleUpdate} onCancel={() => setEditing(null)} />
+            <AlertRuleForm
+              initial={editing}
+              allowedMetrics={otTransitOfficeId ? OT_METRICS : undefined}
+              onSubmit={handleUpdate}
+              onCancel={() => setEditing(null)}
+            />
           )}
 
           {!formOpen && (

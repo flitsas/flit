@@ -10,4 +10,9 @@ public sealed record UpdateDocumentTypeRequest(
     string? Descripcion,
     // RF08/09 — límites por tipo. Opcionales: null/omitido ⇒ no se modifican (conserva lo existente).
     IReadOnlyList<string>? MimeTypesAllowed = null,
-    long? MaxSizeBytes = null);
+    long? MaxSizeBytes = null,
+    // Null ⇒ conserva el origen. True = autogenerado; false = cargue.
+    bool? EsAutogenerado = null,
+    // HU #12065 — instrucción que lee el gestor. Igual que `descripcion`: el PUT manda el texto
+    // completo, así que vaciarla la borra.
+    string? InstruccionCargue = null);

@@ -5,6 +5,15 @@ public interface IUserRoleAssignmentRepository
     Task<bool> UserBelongsToTenantAsync(Guid userId, Guid tenantId, CancellationToken ct);
 
     /// <summary>
+    /// Tenant EFECTIVO del usuario: su <c>HomeTenantId</c> si lo tiene y, si no, el tenant de su
+    /// asignación de rol activa más antigua (mismo criterio con que <c>AuthUserRepository</c>
+    /// resuelve el tenant del JWT al iniciar sesión). <c>null</c> si el usuario no existe o no
+    /// pertenece a ningún tenant. Lo usa el SuperAdmin, cuyo propio tenant es el interno de FLIT
+    /// y por tanto nunca coincide con el del usuario que administra.
+    /// </summary>
+    Task<Guid?> GetUserTenantAsync(Guid userId, CancellationToken ct);
+
+    /// <summary>
     /// Devuelve el rol si existe, está activo y no borrado (catálogo global, HU #10505), junto
     /// con su <c>TargetEntityType</c> — o <c>null</c> si no aplica (HU #10506: la asignación
     /// valida que el rol sea compatible con el tipo de tenant destino).

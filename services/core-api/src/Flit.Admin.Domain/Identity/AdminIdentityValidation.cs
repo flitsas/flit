@@ -31,7 +31,10 @@ public sealed class AdminIdentityValidation
         DateTimeOffset? validatedAt,
         DateTimeOffset? validUntil,
         DateTimeOffset createdAt,
-        DateTimeOffset? updatedAt)
+        DateTimeOffset? updatedAt,
+        int attempts,
+        int maxAttempts,
+        string? lastAttemptAt)
     {
         Id = id;
         TenantId = tenantId;
@@ -53,6 +56,9 @@ public sealed class AdminIdentityValidation
         ValidUntil = validUntil;
         CreatedAt = createdAt;
         UpdatedAt = updatedAt;
+        Attempts = attempts;
+        MaxAttempts = maxAttempts;
+        LastAttemptAt = lastAttemptAt;
     }
 
     public Guid Id { get; }
@@ -113,6 +119,27 @@ public sealed class AdminIdentityValidation
 
     public DateTimeOffset? UpdatedAt { get; private set; }
 
+    /// <summary>
+    /// Intentos fallidos YA CONTADOS (HU #11504). Cada uno corresponde a una clave de intento DISTINTA
+    /// (<see cref="LastAttemptAt"/> dedup) reportada por el proveedor como <c>rechazado_intento</c> (no
+    /// terminal). Se incrementa exclusivamente desde <see cref="RegisterFailedAttempt"/>.
+    /// </summary>
+    public int Attempts { get; private set; }
+
+    /// <summary>
+    /// Tope de intentos antes de terminalizar en <see cref="AdminIdentityEstados.Rechazado"/>. Default
+    /// <see cref="AdminIdentityRules.KyverumMaxIntentos"/> al crear/rehidratar sin valor explícito.
+    /// </summary>
+    public int MaxAttempts { get; private set; }
+
+    /// <summary>
+    /// Clave del ÚLTIMO intento YA CONTADO en <see cref="Attempts"/> (p. ej. <c>AttemptAt</c> de Kyverum:
+    /// el <c>validadoAt</c> del intento). Kyverum reporta el MISMO intento fallido en cada consulta hasta
+    /// que el sujeto reintente: se compara EXACTO contra este valor para no contar dos veces el mismo
+    /// intento en pollings sucesivos. Null hasta el primer intento fallido registrado.
+    /// </summary>
+    public string? LastAttemptAt { get; private set; }
+
     /// <summary>¿Está APROBADA y VIGENTE en <paramref name="now"/>? Reuso de identidad (30 días).</summary>
     public bool EsAprobadaVigente(DateTimeOffset now) =>
         Status == AdminIdentityEstados.Aprobado && AdminIdentityRules.EsVigente(ValidUntil, ValidatedAt, now);
@@ -137,7 +164,8 @@ public sealed class AdminIdentityValidation
         string? providerStatus,
         string? providerPayload,
         DateTimeOffset now,
-        Guid? id = null)
+        Guid? id = null,
+        int maxAttempts = AdminIdentityRules.KyverumMaxIntentos)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(subjectType);
         ArgumentException.ThrowIfNullOrWhiteSpace(documentType);
@@ -176,7 +204,10 @@ public sealed class AdminIdentityValidation
             validatedAt: null,
             validUntil: null,
             createdAt: now,
-            updatedAt: null);
+            updatedAt: null,
+            attempts: 0,
+            maxAttempts: maxAttempts,
+            lastAttemptAt: null);
     }
 
     /// <summary>Rehidrata el agregado desde persistencia (sin aplicar invariantes de alta).</summary>
@@ -200,10 +231,14 @@ public sealed class AdminIdentityValidation
         DateTimeOffset? validatedAt,
         DateTimeOffset? validUntil,
         DateTimeOffset createdAt,
-        DateTimeOffset? updatedAt) =>
+        DateTimeOffset? updatedAt,
+        int attempts = 0,
+        int maxAttempts = AdminIdentityRules.KyverumMaxIntentos,
+        string? lastAttemptAt = null) =>
         new(id, tenantId, subjectType, subjectRef, documentType, documentNumber, name, email, status,
             provider, captureUrl, kyverumVerificationId, webhookSecretEncrypted, providerStatus,
-            providerPayload, certificateHash, validatedAt, validUntil, createdAt, updatedAt);
+            providerPayload, certificateHash, validatedAt, validUntil, createdAt, updatedAt,
+            attempts, maxAttempts, lastAttemptAt);
 
     /// <summary>
     /// Marca APROBADA en <paramref name="now"/>: estado <c>aprobado</c> + <see cref="ValidatedAt"/> +
@@ -244,6 +279,73 @@ public sealed class AdminIdentityValidation
         Status = AdminIdentityEstados.Rechazado;
         ProviderStatus = Normalize(providerStatus) ?? ProviderStatus;
         UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// Registra un INTENTO FALLIDO reportado por el proveedor cuando la validación NO se cerró (p.ej.
+    /// <c>rechazado_intento</c> de Kyverum: un intento falló pero quedan reintentos). HU #11504 — la
+    /// contraparte preventiva del Bug #11503 para el camino admin: sin este conteo, el día que se cablee
+    /// un llamador real de <see cref="AdminIdentityValidation"/> contra Kyverum, un intento fallido
+    /// aislado quedaría sin ningún mecanismo que decida cuándo terminalizar.
+    ///
+    /// <para><b>Dedup por <paramref name="attemptKey"/>:</b> Kyverum reporta el MISMO intento fallido en
+    /// cada consulta hasta que el sujeto reintente en su móvil; contar por cada poll agotaría
+    /// <see cref="MaxAttempts"/> en tres consultas seguidas sin que el ciudadano hubiera hecho nada. Si
+    /// <paramref name="attemptKey"/> coincide EXACTO (ordinal) con <see cref="LastAttemptAt"/>, es un
+    /// no-op: no incrementa ni actualiza <see cref="UpdatedAt"/>. Una clave <c>null</c> TAMPOCO cuenta:
+    /// sin clave no hay forma de distinguir un intento nuevo de la re-lectura del mismo, y contarlo
+    /// agotaría los intentos por pollings repetidos — que es el modo de fallo del Bug #11503 que esta HU
+    /// previene. Se refresca el estado del proveedor y la validación sigue abierta hasta que el proveedor
+    /// la cierre o expire: la dirección segura del error es tardar, nunca congelar de más.</para>
+    ///
+    /// <para>Idempotente sobre un agregado ya TERMINAL (aprobado/rechazado/expirado): no reabre ni
+    /// recuenta, igual que <see cref="Reject"/> y <see cref="Expire"/>.</para>
+    ///
+    /// <para>Al alcanzar <see cref="MaxAttempts"/>, aplica el rechazo TERMINAL reutilizando
+    /// <see cref="Reject"/> (misma semántica que un cierre autoritativo del proveedor). La decisión de
+    /// terminalizar por conteo vive AQUÍ, en el dominio — nunca en el servicio ni en el adaptador del
+    /// proveedor.</para>
+    ///
+    /// <para>Devuelve <c>true</c> si el agregado cambió (se contó el intento, se refrescó el estado del
+    /// proveedor, o se terminalizó); <c>false</c> si fue un no-op (terminal previo o intento duplicado).</para>
+    /// </summary>
+    public bool RegisterFailedAttempt(DateTimeOffset now, string? attemptKey, string? providerStatus = null)
+    {
+        if (Status is AdminIdentityEstados.Aprobado or AdminIdentityEstados.Rechazado or AdminIdentityEstados.Expirado)
+        {
+            return false;
+        }
+
+        var key = Normalize(attemptKey);
+        if (key is null)
+        {
+            // Sin clave no se puede distinguir un intento nuevo de la re-lectura del mismo. Contar aquí
+            // agotaría los intentos a base de pollings, así que solo se refresca la traza del proveedor.
+            var traced = !string.Equals(ProviderStatus, Normalize(providerStatus) ?? ProviderStatus, StringComparison.Ordinal);
+            ProviderStatus = Normalize(providerStatus) ?? ProviderStatus;
+            if (traced)
+                UpdatedAt = now;
+            return traced;
+        }
+
+        if (string.Equals(key, LastAttemptAt, StringComparison.Ordinal))
+        {
+            // Mismo intento ya contado (poll repetido): no incrementa ni toca UpdatedAt.
+            return false;
+        }
+
+        Attempts++;
+        LastAttemptAt = key;
+        ProviderStatus = Normalize(providerStatus) ?? ProviderStatus;
+        UpdatedAt = now;
+
+        if (Attempts >= MaxAttempts)
+        {
+            // Intentos agotados → rechazo TERMINAL (reutiliza Reject: misma semántica de cierre).
+            Reject(now, providerStatus);
+        }
+
+        return true;
     }
 
     /// <summary>Marca EXPIRADA en <paramref name="now"/> (el enlace venció sin resolver). Idempotente.</summary>
@@ -316,6 +418,21 @@ public static class AdminIdentityRules
     /// aprobación es el día 1; vence en el día 31 (<c>ValidatedAt + 30</c> ya NO es vigente).
     /// </summary>
     public const int VigenciaDias = 30;
+
+    /// <summary>
+    /// Intentos que Kyverum permite dentro de UNA validación antes de cerrarla rechazada (HU #11504).
+    /// Kyverum NO expone este límite en su API: es un valor OBSERVADO, el mismo que usa el camino de
+    /// trámite (<c>ProcedureInstanceBiometricValidation.BiometricRules.KyverumMaxIntentos</c>).
+    ///
+    /// <para><b>Por qué es una constante propia y no una referencia compartida:</b> <c>Flit.Tramites.Domain</c>
+    /// no referencia ningún proyecto y <c>Flit.Admin.Domain</c> solo referencia <c>Flit.Queries.Domain</c> —
+    /// no existe un kernel compartido entre los dos contextos acotados, y crear uno (o acoplar Admin a
+    /// Tramites) solo para una constante sería peor que la duplicación. La PARIDAD de este valor con el de
+    /// trámites la sostiene
+    /// <c>Flit.Admin.Tests.Identity.AdminIdentityMaxAttemptsParityTests</c> (el proyecto de tests sí puede
+    /// referenciar ambos dominios): si alguien cambia un valor sin el otro, ese test falla.</para>
+    /// </summary>
+    public const int KyverumMaxIntentos = 3;
 
     /// <summary>Huso horario de Colombia (UTC-5, sin horario de verano).</summary>
     private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);

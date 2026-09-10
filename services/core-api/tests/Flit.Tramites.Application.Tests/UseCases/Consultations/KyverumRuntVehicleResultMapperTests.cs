@@ -55,6 +55,15 @@ public sealed class KyverumRuntVehicleResultMapperTests
 
         // tipoDocPropietario "C" del RUNT → siembra owner_document_type en código FLIT (CC).
         Field(result, "owner_document_type").Should().Be("CC");
+
+        // Prendas SI + data.garantias → detalle hidratado (antes solo se persistían los flags SI/NO).
+        Field(result, "runt_tiene_prendas").Should().Be("SI");
+        Field(result, "runt_tiene_gravamenes").Should().Be("NO");
+        Field(result, "runt_nombre_acreedor").Should().Be("BANCOLOMBIA S.A.");
+        var gravamenesJson = result.HydratedFields.First(f => f.FieldKey == "runt_gravamenes").ValueJson;
+        gravamenesJson.Should().Contain("BANCOLOMBIA S.A.");
+        gravamenesJson.Should().Contain("890903938");
+        gravamenesJson.Should().Contain("13/06/2026");
     }
 
     // ── Placa Yamaha JNH38H — traspaso, SOAT múltiple (1 VIGENTE + 1 NO VIGENTE), sin gravámenes ─
@@ -178,5 +187,40 @@ public sealed class KyverumRuntVehicleResultMapperTests
 
         Status(result, "tecnomecanica").Should().Be("fail");
         Field(result, "rtm_estado").Should().Be("NO VIGENTE");
+    }
+
+    [Fact]
+    public void DatosTecnicos_HidratanDimensionesEjesYLlantas_CuandoNoVienenEnVehiculo()
+    {
+        var json = """
+        {
+          "ok": true,
+          "data": {
+            "vehiculo": {
+              "placa": "S07249",
+              "vin": "9F9CHJ3UMEP185065",
+              "clase": "SEMIREMOLQUE",
+              "estadoAutomotor": "ACTIVO"
+            },
+            "datosTecnicos": {
+              "alto": "2000",
+              "ancho": "2980",
+              "largo": "15500",
+              "noEjes": "3",
+              "noLlantas": "12",
+              "rodaje": "ORUGAS"
+            }
+          }
+        }
+        """;
+        var response = JsonSerializer.Deserialize<KyverumRuntVehicleResponse>(json, WebJsonOptions)!;
+        var result = KyverumRuntVehicleResultMapper.MapVehicle(response);
+
+        Field(result, "vehicle_axles").Should().Be("3");
+        Field(result, "vehicle_height").Should().Be("2000");
+        Field(result, "vehicle_width").Should().Be("2980");
+        Field(result, "vehicle_length").Should().Be("15500");
+        Field(result, "vehicle_tires").Should().Be("12");
+        Field(result, "vehicle_traction").Should().Be("ORUGAS");
     }
 }

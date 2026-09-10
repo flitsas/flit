@@ -58,6 +58,7 @@ public sealed class ConsultarEstadoQuipuxHandlerTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = instanceId,
             TenantId = tenantId,
             Status = TramiteEstado.Entregado,
@@ -133,6 +134,7 @@ public sealed class ConsultarEstadoQuipuxHandlerTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = instanceId,
             TenantId = tenantId,
             Status = TramiteEstado.Entregado,
@@ -198,6 +200,7 @@ public sealed class ConsultarEstadoQuipuxHandlerTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = instanceId,
             TenantId = tenantId,
             Status = TramiteEstado.Entregado,

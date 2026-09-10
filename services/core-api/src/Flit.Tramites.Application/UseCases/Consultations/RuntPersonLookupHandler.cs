@@ -1,4 +1,6 @@
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -87,6 +89,24 @@ public sealed class RuntPersonLookupHandler(
         await cacheService.SavePersonResultAsync(
             tenantId, RuntSourceCode, documentType, documentNumber, instanceId, result.HydratedFields, now, ct);
 
+        // Evidencia de que ESTE documento se consultó de verdad en el RUNT dentro de este trámite.
+        // El gate de actores la exige cuando el tipo de trámite marca el actor con requiresRunt: sin
+        // ella, el wizard daba la consulta por hecha con solo tener el documento digitado.
+        if (dto.Found)
+        {
+            await repo.AddEventAsync(
+                new ProcedureInstanceEvent
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ProcedureInstanceId = instanceId,
+                    Tipo = RuntPersonaConsultada.Tipo,
+                    Payload = RuntPersonaConsultada.Payload(documentType, documentNumber),
+                    CreatedAt = now,
+                },
+                ct);
+        }
+
         return (dto, null);
     }
 
@@ -172,6 +192,9 @@ public sealed class RuntPersonLookupHandler(
             FullName: found ? fullName : null,
             FirstName: found ? GetHydrated(fields, "person_first_name") : null,
             LastName: found ? GetHydrated(fields, "person_last_name") : null,
+            SecondName: found ? GetHydrated(fields, "person_second_name") : null,
+            FirstLastName: found ? GetHydrated(fields, "person_first_last_name") : null,
+            SecondLastName: found ? GetHydrated(fields, "person_second_last_name") : null,
             DocumentType: documentType,
             DocumentNumber: documentNumber,
             LicenseStatus: found ? GetHydrated(fields, "person_license_status") : null,
@@ -238,6 +261,13 @@ internal static partial class RuntPersonLookupLog
 /// person_full_name no vacío. Cuando Found=false, los campos de nombre van en null y el
 /// frontend cae al ingreso manual.
 /// </summary>
+/// <remarks>
+/// El nombre viene desglosado en cuatro componentes además de <see cref="FullName"/>:
+/// <see cref="FirstName"/> es el PRIMER nombre (no todos los de pila) y <see cref="LastName"/>
+/// conserva los dos apellidos juntos. Los proveedores ya no entregan el nombre en un solo campo
+/// confiable — el RUNT enmascara los de display — así que la separación la resuelve
+/// <see cref="DriverNameResolver"/> y no el consumidor.
+/// </remarks>
 public sealed record RuntPersonDto(
     bool Found,
     string? FullName,
@@ -253,4 +283,7 @@ public sealed record RuntPersonDto(
     string? NroPazYSalvo = null,
     bool HasActiveLicense = false,
     string? LicenseCategories = null,
-    IReadOnlyList<FineDetail>? Fines = null);
+    IReadOnlyList<FineDetail>? Fines = null,
+    string? SecondName = null,
+    string? FirstLastName = null,
+    string? SecondLastName = null);

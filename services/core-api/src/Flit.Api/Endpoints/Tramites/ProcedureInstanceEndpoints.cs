@@ -3,7 +3,10 @@ using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.PlatePreassign;
+using Flit.Api.Authorization;
 using Flit.Api.Middleware;
+using Flit.Queries.Domain;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Tramites.Enums;
@@ -14,6 +17,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Api.Endpoints.Tramites;
 
@@ -58,20 +62,29 @@ internal static class ProcedureInstanceEndpoints
                 CreatedByUserId = ResolveUserId(http.User) ?? request.CreatedByUserId,
             };
 
-            // #5 — La compañía debe habilitar explícitamente la matrícula inicial vía el
-            // toggle "Permitir matrícula inicial" (admin/companies). Por defecto está en OFF:
-            // solo se permite crear ese trámite si existe configuración del tenant Y el flag
-            // está en true. Sin fila de settings (tenant no configurado) → NO permitido, para
-            // que una compañía sin configuración no radique matrícula inicial por accidente.
+            // Bloqueo por familia (config compañía → Trámites). Activo = no permitir crear.
+            // También se evalúa en CreateProcedureInstanceHandler por procedureType.Family.
             if (EsMatriculaInicial(effectiveRequest.Modalidad))
             {
                 var settings = await settingsHandler.HandleAsync(
                     new GetTenantSettingsQuery { TenantId = effectiveRequest.TenantId }, ct);
-                if (settings is not { SwitchesMatricula.AllowInitialRegistration: true })
+                var blocked = settings?.SwitchesMatricula.BlockProcedureFamily?.Matriculas
+                    ?? settings is not { SwitchesMatricula.AllowInitialRegistration: true };
+                if (blocked)
                     return Results.Problem(
                         statusCode: 422,
                         title: "Unprocessable Entity",
-                        detail: "La compañía no tiene habilitada la matrícula inicial. Contacta al administrador para activarla.");
+                        detail: "La compañía tiene bloqueada la creación de trámites de matrículas. Contacta al administrador.");
+            }
+            else if (EsTraspaso(effectiveRequest.Modalidad))
+            {
+                var settings = await settingsHandler.HandleAsync(
+                    new GetTenantSettingsQuery { TenantId = effectiveRequest.TenantId }, ct);
+                if (settings?.SwitchesMatricula.BlockProcedureFamily?.Traspaso == true)
+                    return Results.Problem(
+                        statusCode: 422,
+                        title: "Unprocessable Entity",
+                        detail: "La compañía tiene bloqueada la creación de trámites de traspaso. Contacta al administrador.");
             }
 
             var (result, error) = await handler.HandleAsync(effectiveRequest, ct);
@@ -83,6 +96,11 @@ internal static class ProcedureInstanceEndpoints
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
                 "invalid_reference" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tenant, el usuario o el tipo de trámite indicado no existe."),
                 "reference_conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo generar un número de referencia único. Reintente."),
+                "procedure_family_blocked" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "La compañía tiene bloqueada la creación de trámites de esta familia. Contacta al administrador."),
+                // ADR-0050 — el tipo existe y está publicado, pero su recorrido todavía no está
+                // habilitado para operarse. Se distingue de `not_published` a propósito: uno es un
+                // problema del catálogo y el otro, de la parametrización.
+                "procedure_type_not_enabled" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tipo de trámite todavía no está habilitado para crearse. Contacta al administrador."),
                 // FEATURE-08 / HU-BE-02 (CFD-03): validaciones iniciales configurables por gate_profile.
                 "COMPANY_RULE_VIOLATION" => Results.Problem(statusCode: 422, title: "COMPANY_RULE_VIOLATION", detail: "El OT del operador no cumple la regla de compañía del tipo."),
                 "OT_NOT_AUTHORIZED_FOR_TYPE" => Results.Problem(statusCode: 422, title: "OT_NOT_AUTHORIZED_FOR_TYPE", detail: "El OT del operador no está habilitado/operable para este tipo."),
@@ -98,12 +116,272 @@ internal static class ProcedureInstanceEndpoints
         group.MapGet("/instances", async (
             HttpContext http,
             ListProcedureInstancesHandler handler,
+            ListProcedureInstancesFilteredHandler filteredHandler,
+            [FromQuery] string? vin,
+            [FromQuery] string? placa,
+            [FromQuery] string? vendedor,
+            [FromQuery] string? comprador,
+            [FromQuery] string? gestor,
+            [FromQuery] bool? firmado,
+            [FromQuery] string? estado,
+            [FromQuery] string? modalidad,
+            [FromQuery] string? organismoTransito,
+            [FromQuery] string? tipoCodigo,
+            [FromQuery] string? busqueda,
+            [FromQuery] bool? prioritario,
+            [FromQuery] DateTimeOffset? createdFrom,
+            [FromQuery] DateTimeOffset? createdTo,
+            [FromQuery] DateTimeOffset? updatedFrom,
+            [FromQuery] DateTimeOffset? updatedTo,
+            [FromQuery] string? sortBy,
+            [FromQuery] string? sortDir,
+            [FromQuery] int? skip,
+            [FromQuery] int? take,
             CancellationToken ct) =>
         {
             var (tenantId, _) = ResolveTenantContext(http);
-            var items = await handler.HandleAsync(tenantId, ct);
-            return Results.Ok(new { items });
+
+            // Filtrado/ordenamiento server-side (WHERE/ORDER BY en SQL): solo se activa el camino nuevo
+            // cuando el caller pide EXPLÍCITAMENTE algún filtro, orden o paginación. Sin ningún parámetro
+            // el comportamiento histórico (TOP-N más reciente, sin filtros) queda intacto — no rompe
+            // consumidores existentes que llaman este mismo endpoint sin query string.
+            var pideFiltradoOrdenado =
+                !string.IsNullOrWhiteSpace(vin) || !string.IsNullOrWhiteSpace(placa)
+                || !string.IsNullOrWhiteSpace(vendedor) || !string.IsNullOrWhiteSpace(comprador)
+                || !string.IsNullOrWhiteSpace(gestor) || firmado is not null
+                || !string.IsNullOrWhiteSpace(estado) || !string.IsNullOrWhiteSpace(modalidad)
+                || !string.IsNullOrWhiteSpace(organismoTransito) || !string.IsNullOrWhiteSpace(tipoCodigo)
+                || !string.IsNullOrWhiteSpace(busqueda) || prioritario is not null
+                || createdFrom is not null || createdTo is not null
+                || updatedFrom is not null || updatedTo is not null
+                || !string.IsNullOrWhiteSpace(sortBy) || !string.IsNullOrWhiteSpace(sortDir)
+                || skip is not null || take is not null;
+
+            if (!pideFiltradoOrdenado)
+            {
+                var items = await handler.HandleAsync(tenantId, ct);
+                return Results.Ok(new { items });
+            }
+
+            var request = new ProcedureInstanceListRequest
+            {
+                TenantId = tenantId,
+                Skip = skip ?? 0,
+                Take = take ?? ListProcedureInstancesHandler.MaxItems,
+                Vin = vin,
+                Placa = placa,
+                Vendedor = vendedor,
+                Comprador = comprador,
+                Gestor = gestor,
+                Firmado = firmado,
+                Estados = ParseEstados(estado),
+                Modalidad = modalidad,
+                OrganismoTransito = organismoTransito,
+                TipoCodigo = tipoCodigo,
+                Busqueda = busqueda,
+                Prioritario = prioritario,
+                CreatedFrom = createdFrom,
+                CreatedTo = createdTo,
+                UpdatedFrom = updatedFrom,
+                UpdatedTo = updatedTo,
+                SortBy = sortBy,
+                // Default DESC (igual que el orden histórico); "asc" (case-insensitive) es el único
+                // valor que invierte a ascendente — cualquier otro texto se trata como "no asc" (DESC).
+                SortDescending = !string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase),
+            };
+
+            var (filteredItems, total) = await filteredHandler.HandleAsync(request, ct);
+            return Results.Ok(new { items = filteredItems, total });
         }).WithName("ListProcedureInstances");
+
+        // ── GET /instances/plate-history — Historial operativo por placa (Feature #12189, HU #12192) ──
+        //
+        // Endpoint propio y no un parámetro más del listado, aunque por dentro reutilice el MISMO
+        // handler filtrado: lo que cambia no es el filtro sino el ALCANCE y las garantías. El listado
+        // sirve a la operación diaria de una empresa; esto responde "todo lo que le ha pasado a esta
+        // placa", con permiso propio (historial-placa.read), orden cronológico fijado por contrato y
+        // —para SuperAdmin— visión de todas las compañías. Meterlo en /instances habría cambiado el
+        // contrato que ya consumen el listado y DR. FLIT.
+        //
+        // Tres decisiones que NO son del cliente y por eso no viajan como parámetros:
+        //   1) Alcance por rol (D1) — lo resuelve PlateHistoryScope, no un tenant que llegue en la URL.
+        //   2) Orden — SIEMPRE createdAt DESC. Dejarlo en un `sortBy` opcional significaba que sin él
+        //      el orden lo decidía el handler y no el criterio "más reciente primero".
+        //   3) Normalización de la placa — Trim + upper EN EL SERVIDOR. Si dependiera del cliente,
+        //      "abc123 " devolvería vacío desde curl y resultados desde la SPA.
+        //
+        // Los trámites con borrado lógico quedan fuera (D2): el repositorio aplica DeletedAt == null
+        // siempre, aquí solo se comprueba que nadie lo rompa.
+        group.MapGet("/instances/plate-history", async (
+            HttpContext http,
+            ListProcedureInstancesFilteredHandler filteredHandler,
+            [FromQuery] string? placa,
+            [FromQuery] int? skip,
+            [FromQuery] int? take,
+            CancellationToken ct) =>
+        {
+            var (contextTenantId, isSuperAdmin) = ResolveTenantContext(http);
+            var alcance = PlateHistoryScope.Resolve(contextTenantId, isSuperAdmin);
+            if (!alcance.Allowed)
+                return Results.Problem(
+                    statusCode: alcance.StatusCode, title: "Forbidden", detail: alcance.Detail);
+
+            // Sin placa no hay historial que pedir: 400 explícito en vez de devolver el listado
+            // completo de la compañía, que es lo que haría un filtro nulo.
+            var placaNormalizada = PlacaNormalizer.NormalizeOrNull(placa);
+            if (placaNormalizada is null)
+                return Results.Problem(
+                    statusCode: 400, title: "Bad Request",
+                    detail: "Indique la placa cuyo historial quiere consultar (parámetro 'placa').");
+
+            // La consulta se arma a partir del ALCANCE, no de variables sueltas: el tenant (incluido
+            // el null global) sale de PlateHistoryScope y el orden/tope los fija el contrato.
+            var request = PlateHistoryScope.BuildRequest(alcance, placaNormalizada, skip, take);
+
+            // Placa sin trámites → 200 con lista vacía y total 0. NUNCA 404: la placa no es un
+            // recurso de esta API, y un 404 haría que el cliente pintara un error donde solo hay
+            // ausencia de historial.
+            var (items, total) = await filteredHandler.HandleAsync(request, ct);
+            return Results.Ok(new { items, total });
+        })
+            .RequirePermission("historial-placa.read")
+            .WithName("ListProcedureInstancesPlateHistory")
+            .WithSummary("Historial de trámites de una placa, del más reciente al más antiguo")
+            .WithDescription("Devuelve los trámites asociados a una placa ordenados por fecha de "
+                + "creación descendente, con el total del universo para paginar. El alcance lo "
+                + "decide el rol de quien consulta: SuperAdmin ve la placa en todas las compañías "
+                + "(cada fila trae su tenantId y companiaNombre) y cualquier otro rol solo en la "
+                + "suya. Excluye los trámites con borrado lógico. La placa se normaliza en el "
+                + "servidor (sin espacios de borde y en mayúsculas). Una placa sin trámites "
+                + "responde 200 con items vacío y total 0, nunca 404. Requiere el permiso "
+                + "historial-placa.read (SuperAdmin bypassa).")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // ── Filtros con la gramática de Consultas (HU #12106) ────────────────────────────────────
+        //
+        // GET /instances/fields — por qué se puede filtrar. El constructor de filtros del listado se
+        // pinta a partir de esta respuesta, así que un campo nuevo aparece en pantalla sin desplegar
+        // frontend. Las opciones de 'organismo' y 'tipo_tramite' vienen resueltas con lo que esta
+        // empresa tiene de verdad: ofrecer un organismo con el que nunca ha tramitado sería ofrecer un
+        // filtro que solo puede devolver cero.
+        group.MapGet("/instances/fields", async (
+            HttpContext http,
+            GetTramitesQueryFieldsHandler handler,
+            CancellationToken ct) =>
+        {
+            var (tenantId, _) = ResolveTenantContext(http);
+            return Results.Ok(await handler.HandleAsync(tenantId, ct));
+        })
+            .WithName("TramitesFilterFields")
+            .WithSummary("Campos por los que se puede filtrar el listado de trámites")
+            .Produces<IReadOnlyList<QueryFieldDto>>(StatusCodes.Status200OK);
+
+        // POST /instances/search — el MISMO listado que el GET, pero aceptando condiciones.
+        //
+        // Es POST y no más parámetros del GET por una razón concreta: placa, VIN y radicado admiten
+        // pegar una lista completa desde Excel (`AdmiteLista` en el catálogo), y unos cientos de
+        // valores no caben en una query string. El GET se deja INTACTO —lo siguen usando el listado
+        // actual y el recorrido del export— en vez de romper su contrato.
+        group.MapPost("/instances/search", async (
+            HttpContext http,
+            ListProcedureInstancesFilteredHandler handler,
+            [FromBody] TramitesSearchRequest body,
+            CancellationToken ct) =>
+        {
+            var (tenantId, _) = ResolveTenantContext(http);
+
+            // Un campo o un operador fuera del catálogo se RECHAZA. Ignorarlo devolvería un listado más
+            // amplio del pedido con apariencia de estar filtrado, y nadie revisa un resultado que
+            // parece correcto.
+            if (TramitesQueryConditions.Validate(body.Condiciones) is { } problema)
+                return Results.BadRequest(new { error = problema });
+
+            var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId), ct);
+            return Results.Ok(new { items, total });
+        })
+            .WithName("SearchProcedureInstances")
+            .WithSummary("Listado de trámites filtrado con la gramática de consultas")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest);
+
+        // POST /instances/estado-counts — la tira de KPIs bajo esas mismas condiciones. Endpoint
+        // aparte por lo mismo que su gemelo GET: los conteos se piden con un juego de filtros DISTINTO
+        // (sin `estado`), y mezclarlos obligaría a decidir a qué aplica el filtro de estado.
+        group.MapPost("/instances/estado-counts", async (
+            HttpContext http,
+            CountProcedureInstancesByStatusHandler handler,
+            [FromBody] TramitesSearchRequest body,
+            CancellationToken ct) =>
+        {
+            var (tenantId, _) = ResolveTenantContext(http);
+
+            if (TramitesQueryConditions.Validate(body.Condiciones) is { } problema)
+                return Results.BadRequest(new { error = problema });
+
+            return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId), ct));
+        })
+            .WithName("SearchProcedureInstanceEstadoCounts")
+            .WithSummary("Conteo por estado del universo que cumple las condiciones")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest);
+
+        // GET /api/v1/tramites/instances/estado-counts — conteo por estado del UNIVERSO que matchea los
+        // filtros, para la tira de KPIs del listado.
+        //
+        // Endpoint aparte y no un campo más en la respuesta de /instances: esa respuesta es un objeto
+        // con `items` que ya consumen otros clientes, y los conteos se piden con un juego de filtros
+        // DISTINTO (sin `estado`) — meterlos en la misma llamada obligaría a decidir si el filtro de
+        // estado aplica a los items, a los conteos o a los dos.
+        group.MapGet("/instances/estado-counts", async (
+            HttpContext http,
+            CountProcedureInstancesByStatusHandler handler,
+            [FromQuery] string? vin,
+            [FromQuery] string? placa,
+            [FromQuery] string? vendedor,
+            [FromQuery] string? comprador,
+            [FromQuery] string? gestor,
+            [FromQuery] bool? firmado,
+            [FromQuery] string? modalidad,
+            [FromQuery] string? organismoTransito,
+            [FromQuery] string? tipoCodigo,
+            [FromQuery] string? busqueda,
+            [FromQuery] bool? prioritario,
+            [FromQuery] DateTimeOffset? createdFrom,
+            [FromQuery] DateTimeOffset? createdTo,
+            [FromQuery] DateTimeOffset? updatedFrom,
+            [FromQuery] DateTimeOffset? updatedTo,
+            CancellationToken ct) =>
+        {
+            var (tenantId, _) = ResolveTenantContext(http);
+
+            // `estado` NO se acepta aquí: las tarjetas dicen cuántos hay de cada estado bajo el resto de
+            // criterios. Filtrarlas por el estado ya elegido dejaría las otras seis en cero.
+            var request = new ProcedureInstanceListRequest
+            {
+                TenantId = tenantId,
+                Vin = vin,
+                Placa = placa,
+                Vendedor = vendedor,
+                Comprador = comprador,
+                Gestor = gestor,
+                Firmado = firmado,
+                Modalidad = modalidad,
+                OrganismoTransito = organismoTransito,
+                TipoCodigo = tipoCodigo,
+                Busqueda = busqueda,
+                Prioritario = prioritario,
+                CreatedFrom = createdFrom,
+                CreatedTo = createdTo,
+                UpdatedFrom = updatedFrom,
+                UpdatedTo = updatedTo,
+            };
+
+            var counts = await handler.HandleAsync(request, ct);
+            return Results.Ok(new { counts });
+        }).WithName("CountProcedureInstancesByEstado");
 
         // GET /api/v1/tramites/transit-offices — Organismos de tránsito HABILITADOS para la
         // empresa (tenant del header). #2: el operador solo puede elegir/enviar a los OT que la
@@ -129,6 +407,54 @@ internal static class ProcedureInstanceEndpoints
 
             return Results.Ok(new { items });
         }).WithName("ListEnabledTransitOffices");
+
+        // HU #11203 — mandatarios que pueden firmar el mandato de este trámite, con su documento y la
+        // vigencia de su identidad, más cuál está elegido. Se consulta al registrar, no al aprobar.
+        group.MapGet("/instances/{id:guid}/mandate-signers", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ListMandateSignerOptionsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
+                : Results.Ok(result);
+        }).WithName("ListProcedureInstanceMandateSigners");
+
+        // HU #11203 (AC4/AC5) — fija quién firma. Solo en borrador o subsanación.
+        group.MapPut("/instances/{id:guid}/mandate-signer", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            SetMandateSignerBody body,
+            SetMandateSignerHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var error = await handler.HandleAsync(id, tenantId.Value, body.MandateSignerId, ct);
+            return error switch
+            {
+                null => Results.NoContent(),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_draft" => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "El trámite ya salió de borrador: el mandatario que firma no puede cambiarse."),
+                "sin_organismo" => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "El trámite todavía no tiene organismo de tránsito."),
+                _ => Results.Problem(
+                    statusCode: 422,
+                    title: "Unprocessable Entity",
+                    detail: "El mandatario no está habilitado para el organismo de tránsito del trámite."),
+            };
+        }).WithName("SetProcedureInstanceMandateSigner");
 
         group.MapGet("/instances/{id:guid}", async (
             Guid id,
@@ -162,6 +488,8 @@ internal static class ProcedureInstanceEndpoints
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden modificar field_values en borrador o con subsanación activa."),
                 // B11 (HU #10659) — en traspaso el OT proviene del RUNT y no puede modificarse.
                 "ot_traspaso_no_modificable" => Results.Problem(statusCode: 409, title: "Conflict", detail: "En un traspaso el organismo de tránsito proviene del RUNT y no puede modificarse."),
+                // ADR-0050 — la familia OTROS no acumula trámites simultáneos: el cambio ES el trámite.
+                PatchFieldValuesHandler.ComplementoNoAdmitidoError => Results.Problem(statusCode: 409, title: PatchFieldValuesHandler.ComplementoNoAdmitidoError, detail: "Este tipo de trámite no admite declarar otra transformación del vehículo: radica un trámite aparte para ese cambio."),
                 "unknown_field" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "field_key no corresponde a ningún campo del tipo de trámite."),
                 _ => Results.Ok(result)
             };
@@ -214,13 +542,24 @@ internal static class ProcedureInstanceEndpoints
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "prenda_decision_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "La decisión de prenda no es válida (solicitar|registrar|levantar|omitir|sin_prenda)."),
+                // CF-06 (HU #10881) — el organismo exige el certificado: "asumo el riesgo" no es una
+                // elección disponible en ese trámite. 409 y no 400: la decisión es válida en general,
+                // lo que choca es la regla del OT.
+                RegistrarPrendaHandler.OmitirNoAdmitidoError => Results.Problem(statusCode: 409, title: RegistrarPrendaHandler.OmitirNoAdmitidoError, detail: "El organismo de tránsito exige el certificado de prenda: registra o levanta la prenda, o declara que el vehículo no tiene."),
+                // ADR-0050 — el tipo no tiene dimensión de gravamen (familia OTROS que no es de prenda).
+                RegistrarPrendaHandler.PrendaNoAdmitidaError => Results.Problem(statusCode: 409, title: RegistrarPrendaHandler.PrendaNoAdmitidaError, detail: "Este tipo de trámite no gestiona prenda: para inscribirla o levantarla radica el trámite de prenda correspondiente."),
                 // R17 (HU #10599) — un trámite en estado final no admite modificar la prenda.
                 TramiteEstadoErrores.EstadoFinal => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.EstadoFinal, detail: "El trámite está en estado final y no admite modificar la prenda."),
+                // ADR-0055 (HU #12129, AC3) — Matrícula/Traspaso no admiten una segunda decisión vigente.
+                RegistrarPrendaHandler.SegundaDecisionVigenteNoAdmitidaError => Results.Problem(statusCode: 409, title: RegistrarPrendaHandler.SegundaDecisionVigenteNoAdmitidaError, detail: "Este tipo de trámite no admite dos hechos de prenda vigentes: registra o levanta uno solo."),
                 _ => Results.Ok(result)
             };
         }).WithName("PutProcedureInstancePrenda");
 
-        // Lectura de la decisión de prenda vigente del trámite (o null si no hay ninguna).
+        // Lectura de las decisiones de prenda VIGENTES del trámite: 0, 1 o hasta 2 (ADR-0055, HU
+        // #12129, AC4) — array, no objeto nullable. PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA pueden
+        // traer constitución + levantamiento simultáneas; Matrícula/Traspaso siguen devolviendo, en
+        // la práctica, 0 o 1 elemento.
         group.MapGet("/instances/{id:guid}/prenda", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
@@ -324,6 +663,7 @@ internal static class ProcedureInstanceEndpoints
                 TramiteEstadoErrores.TramitePausado => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.TramitePausado, detail: "El trámite está pausado: reanúdelo antes de radicar."),
                 TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia, detail: "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
+                "procedure_type_not_enabled" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tipo de trámite todavía no está habilitado para crearse. Contacta al administrador."),
                 TramiteEstadoErrores.DocumentosIncompletos => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.DocumentosIncompletos, detail: "Faltan documentos obligatorios para radicar."),
                 TramiteEstadoErrores.IdentidadNoAprobada => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.IdentidadNoAprobada, detail: "La validación de identidad no está aprobada o no está vigente."),
                 // HU #10459 — gate completo de traspaso: la firma de compraventa bloquea la radicación.
@@ -342,10 +682,15 @@ internal static class ProcedureInstanceEndpoints
                 // R10 (HU #10597) — gate de prenda del traspaso.
                 TramiteEstadoErrores.PrendaDecisionRequerida => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDecisionRequerida, detail: "El vehículo tiene gravámenes: registra una decisión de prenda antes de radicar."),
                 TramiteEstadoErrores.PrendaDocumentoRequerido => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDocumentoRequerido, detail: "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
+                // CF-06 (HU #10881) — el override compañía+OT, que NO nace de la decisión del gestor.
+                TramiteEstadoErrores.PrendaDocumentoRequeridoOt => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDocumentoRequeridoOt, detail: "El organismo de tránsito exige adjuntar el documento de prenda para este trámite."),
                 // CF-03 (HU #10877) — precondición registral "vehículo ya matriculado" (doble fuente
                 // RUNT/FLIT), SEGUNDO momento (el estado pudo cambiar desde el preflight). Bloqueo DURO
                 // no subsanable.
                 VehicleStatePolicy.ErrorCode => Results.Problem(statusCode: 422, title: VehicleStatePolicy.ErrorCode, detail: "El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite."),
+                // Precondición del cambio de carrocería, SEGUNDO momento: cierra la puerta de atrás de
+                // un borrador abierto antes de que la guarda del paso 1 existiera.
+                VehicleBodyTypePolicy.ErrorCode => Results.Problem(statusCode: 422, title: VehicleBodyTypePolicy.ErrorCode, detail: "El vehículo no tiene carrocería registrada en el RUNT: no es posible radicar un cambio de carrocería."),
                 _ => Results.Ok(result)
             };
         }).WithName("SubmitProcedureInstance");
@@ -410,7 +755,7 @@ internal static class ProcedureInstanceEndpoints
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(
+            var (result, error, warning) = await handler.HandleAsync(
                 id, tenantId.Value, ResolveUserId(http.User), body ?? new CompletePlateFlowRequest(), ct);
             return error switch
             {
@@ -421,10 +766,21 @@ internal static class ProcedureInstanceEndpoints
                 "plate_flow_not_asignado" => Results.Problem(
                     statusCode: 409, title: "plate_flow_not_asignado",
                     detail: "Solo se puede procesar cuando el sub-estado de placa es asignado."),
+                CompletePlateFlowHandler.SoatNoVigente => Results.Problem(
+                    statusCode: 409, title: CompletePlateFlowHandler.SoatNoVigente,
+                    detail: "El RUNT no reporta un SOAT vigente para el vehículo. La compañía tiene "
+                        + "desactivada la opción de continuar sin SOAT vigente: registra un SOAT vigente y vuelve a intentarlo."),
                 TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(
                     statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
                     detail: "El trámite cambió mientras se procesaba. Recarga e inténtalo de nuevo."),
-                _ => Results.Ok(result)
+                // 200 con advertencia: el trámite avanzó, pero el gestor tiene que saber con qué salvedad.
+                _ => Results.Ok(new CompletePlateFlowResponse(
+                    result,
+                    warning,
+                    warning == CompletePlateFlowHandler.SoatNoVigenteAdvertencia
+                        ? "El trámite se envió al OT SIN SOAT vigente: el RUNT no lo reporta vigente. "
+                            + "La compañía permite continuar, pero el OT puede rechazarlo por este motivo."
+                        : null))
             };
         }).WithName("CompletePlateFlow");
 
@@ -511,7 +867,11 @@ internal static class ProcedureInstanceEndpoints
                     statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
                     detail: errorDetail ?? "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
                 // R10 (HU #10597) — gate de prenda del traspaso (409, subsanable con la decisión/documento).
-                TramiteEstadoErrores.PrendaDecisionRequerida or TramiteEstadoErrores.PrendaDocumentoRequerido =>
+                // CF-06 (HU #10881) — y el override compañía+OT, con código propio desde 2026-08-12 para que
+                // el mensaje pueda decir que el origen es una regla del organismo, no la decisión del gestor.
+                TramiteEstadoErrores.PrendaDecisionRequerida
+                    or TramiteEstadoErrores.PrendaDocumentoRequerido
+                    or TramiteEstadoErrores.PrendaDocumentoRequeridoOt =>
                     Results.Problem(statusCode: 409, title: errorCode, detail: errorDetail),
                 // ADR-0036 §D9 (HU #10916) — al aprobar hay varios mandatarios y ninguno cotejó: elegir uno
                 // (409, subsanable reintentando con mandateSignerId).
@@ -591,13 +951,27 @@ internal static class ProcedureInstanceEndpoints
                     body.Vin,
                     body.Plate,
                     body.OwnerDocumentType,
-                    body.OwnerDocumentNumber),
+                    body.OwnerDocumentNumber,
+                    body.TransitOfficeId,
+                    body.ProcedureTypeCode),
                 ct);
 
             return err switch
             {
                 "modalidad_not_available" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay un tipo de trámite publicado para la modalidad indicada."),
-                "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el VIN (matrícula inicial) o la placa (traspaso) para consultar."),
+                "procedure_type_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "El tipo de trámite indicado no existe o no está publicado."),
+                "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el identificador del vehículo (VIN o placa, según el tipo de trámite) para consultar."),
+                // HU #11199 (AC2) — en matrícula inicial la consulta por VIN no corre sin secretaría.
+                TransitOfficeSelectionPolicy.RequiredErrorCode => Results.Problem(
+                    statusCode: 400,
+                    title: TransitOfficeSelectionPolicy.RequiredErrorCode,
+                    detail: "Seleccione la secretaría de tránsito antes de consultar el vehículo."),
+                // HU #11199 (AC3) / HU #11200 (AC2/AC3) — el organismo no está activo en FLIT o no está
+                // habilitado para la compañía gestora.
+                TransitOfficeSelectionPolicy.UnavailableErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: TransitOfficeSelectionPolicy.UnavailableErrorCode,
+                    detail: "El organismo de tránsito no está activo en FLIT o no está habilitado para la compañía."),
                 InitialProcedureValidationGate.DuplicateActiveProcedure => Results.Problem(
                     statusCode: 409,
                     title: InitialProcedureValidationGate.DuplicateActiveProcedure,
@@ -612,9 +986,50 @@ internal static class ProcedureInstanceEndpoints
                         ["vehicleStatus"] = vehicleState?.VehicleStatus,
                         ["procedureType"] = vehicleState?.ProcedureType,
                     }),
+                // El vehículo no tiene carrocería que cambiar. Se avisa aquí —con el trámite todavía
+                // sin crear— para que el gestor pueda escoger otro tipo sin arrastrar un expediente.
+                VehicleBodyTypePolicy.ErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: VehicleBodyTypePolicy.ErrorCode,
+                    detail: "El vehículo no tiene carrocería registrada en el RUNT: no es posible radicar un cambio de carrocería.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["procedureType"] = VehicleBodyTypePolicy.ProcedureTypeCambioCarroceria,
+                    }),
                 _ => Results.Ok(result),
             };
         }).WithName("RunProcedureInstancePreflightPreview");
+
+        // HU sin ADO 2026-08-11 — consulta RUES por NIT SIN trámite creado (paso 1, casilla 19 del FUR:
+        // "EMPRESA VINCULADORA"). Hermano de /preflight-preview: no lleva instancia en la ruta y NO
+        // persiste nada (ver XML doc de RuesPreviewHandler / ADR-0041 — procedure_instance_id NOT NULL
+        // es imposible de cumplir aquí). "El proveedor no encontró el NIT" (200, found:false) y "el
+        // proveedor no respondió" (503) son casos DISTINTOS a propósito: el frontend los trata distinto
+        // (found:false → cae al ingreso manual; 503 → reintentar o avisar que el servicio no está
+        // disponible).
+        group.MapPost("/rues-preview", async (
+            RuesPreviewBody body,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            RuesPreviewHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(body.DocumentNumber, tenantId.Value, ct);
+
+            return error switch
+            {
+                "invalid_request" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Se requiere documentNumber (NIT)."),
+                "provider_not_found" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor RUES no está disponible."),
+                // El proveedor está registrado pero la consulta falló (no-200, timeout, red, respuesta
+                // ilegible). Se responde 503 igual que si no estuviera configurado: para el operador
+                // ambos son "reintenta en unos minutos", y lo que NO puede pasar es que se le diga que
+                // su NIT no existe cuando el problema está del lado del servicio.
+                "provider_unavailable" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "No fue posible consultar el RUES en este momento. Reintenta en unos minutos."),
+                _ => Results.Ok(result),
+            };
+        }).WithName("RuesPreview");
 
         // CF-02 (HU #10879 AC5 / #10883 AC4) — creación del trámite AL AVANZAR al segundo paso, con el
         // vehículo ya consultado. Reemplaza al POST /instances "vacío" en el flujo del wizard: crea,
@@ -641,15 +1056,39 @@ internal static class ProcedureInstanceEndpoints
                     body.OwnerDocumentType,
                     body.OwnerDocumentNumber,
                     body.PreviewToken,
-                    body.TransitOfficeId),
+                    body.TransitOfficeId,
+                    body.TipoServicioCode,
+                    body.EmpresaVinculadoraNit,
+                    body.EmpresaVinculadoraRazonSocial,
+                    body.ProcedureTypeCode),
                 ct);
 
             return err switch
             {
-                "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el VIN (matrícula inicial) o la placa (traspaso) para crear el trámite."),
+                "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el identificador del vehículo (VIN o placa, según el tipo de trámite) para crear el trámite."),
+                // ADR-0050 — el tipo elegido no existe o no está publicado. Se distingue de
+                // `modalidad_not_available`: aquí el catálogo SÍ se consultó y el code no está.
+                "procedure_type_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "El tipo de trámite indicado no existe o no está publicado."),
+                // HU sin ADO 2026-08-11 — tipoServicioCode debe ser uno de los 6 códigos cerrados
+                // (VehicleServiceTypeCode). Es entrada estructurada del selector, no texto libre del
+                // RUNT: un valor fuera del catálogo se rechaza en vez de caer en silencio a "Particular".
+                "invalid_tipo_servicio" => Results.Problem(
+                    statusCode: 400,
+                    title: "Bad Request",
+                    detail: "tipoServicioCode inválido: debe ser uno de PARTICULAR, PUBLICO, DIPLOMATICO, OFICIAL, ESPECIAL, OTROS."),
+                // HU #11199 (AC1/AC3) — la secretaría del paso 1 se re-confirma al crear el trámite.
+                TransitOfficeSelectionPolicy.RequiredErrorCode => Results.Problem(
+                    statusCode: 400,
+                    title: TransitOfficeSelectionPolicy.RequiredErrorCode,
+                    detail: "Seleccione la secretaría de tránsito antes de continuar."),
+                TransitOfficeSelectionPolicy.UnavailableErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: TransitOfficeSelectionPolicy.UnavailableErrorCode,
+                    detail: "El organismo de tránsito no está activo en FLIT o no está habilitado para la compañía."),
                 "modalidad_not_available" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay un tipo de trámite publicado para la modalidad indicada."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
+                "procedure_type_not_enabled" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tipo de trámite todavía no está habilitado para crearse. Contacta al administrador."),
                 "invalid_reference" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tenant, el usuario o el tipo de trámite indicado no existe."),
                 "reference_conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo generar un número de referencia único. Reintente."),
                 "COMPANY_RULE_VIOLATION" => Results.Problem(statusCode: 422, title: "COMPANY_RULE_VIOLATION", detail: "El OT del operador no cumple la regla de compañía del tipo."),
@@ -685,7 +1124,8 @@ internal static class ProcedureInstanceEndpoints
     private static async Task<(Guid Tenant, IResult? Error)> ResolveEffectiveTenantAsync(
         HttpContext http,
         Guid bodyTenantId,
-        string? modalidad,
+        /// <summary>Familia del trámite a crear (o la modalidad heredada, que se traduce).</summary>
+        string? familyCode,
         GetTenantSettingsHandler settingsHandler,
         CancellationToken ct)
     {
@@ -710,17 +1150,34 @@ internal static class ProcedureInstanceEndpoints
                 detail: "El usuario autenticado no tiene una compañía asignada."));
         }
 
-        if (EsMatriculaInicial(modalidad))
+        // ADR-0050 — el bloqueo por compañía cubre las TRES familias. Antes solo miraba matrículas y
+        // traspaso: un trámite de la familia OTROS pasaba el gate sin que nadie lo evaluara, así que
+        // el interruptor `otros` de la configuración de la compañía no bloqueaba nada.
+        var familia = ProcedureFamilyCodes.FromCodeOrLegacyModalidad(familyCode);
+        if (familia is null)
+            return (effectiveTenant, null);
+
+        var settings = await settingsHandler.HandleAsync(
+            new GetTenantSettingsQuery { TenantId = effectiveTenant }, ct);
+        var bloqueo = settings?.SwitchesMatricula.BlockProcedureFamily;
+
+        var (bloqueada, etiqueta) = familia switch
         {
-            var settings = await settingsHandler.HandleAsync(
-                new GetTenantSettingsQuery { TenantId = effectiveTenant }, ct);
-            if (settings is not { SwitchesMatricula.AllowInitialRegistration: true })
-            {
-                return (effectiveTenant, Results.Problem(
-                    statusCode: 422,
-                    title: "Unprocessable Entity",
-                    detail: "La compañía no tiene habilitada la matrícula inicial. Contacta al administrador para activarla."));
-            }
+            ProcedureFamily.Matriculas => (
+                // La matrícula conserva su interruptor histórico `AllowInitialRegistration` como
+                // respaldo: la compañía sin ajustes cargados no puede crearlas.
+                bloqueo?.Matriculas ?? settings is not { SwitchesMatricula.AllowInitialRegistration: true },
+                "matrículas"),
+            ProcedureFamily.Traspaso => (bloqueo?.Traspaso == true, "traspaso"),
+            _ => (bloqueo?.Otros == true, "otros trámites"),
+        };
+
+        if (bloqueada)
+        {
+            return (effectiveTenant, Results.Problem(
+                statusCode: 422,
+                title: "Unprocessable Entity",
+                detail: $"La compañía tiene bloqueada la creación de trámites de {etiqueta}. Contacta al administrador."));
         }
 
         return (effectiveTenant, null);
@@ -730,6 +1187,32 @@ internal static class ProcedureInstanceEndpoints
     /// Tenant + rol resueltos por <see cref="TenantEnforcementMiddleware"/> desde el JWT.
     /// <c>TenantId == null</c> solo ocurre para un SuperAdmin sin acotar (ver todo).
     /// </summary>
+    /// <summary>
+    /// `estado` acepta UNO o VARIOS separados por coma (<c>?estado=borrador,preparado</c>): la consulta
+    /// natural del gestor —"todo lo que no está cerrado"— son varios estados a la vez, y la coma evita
+    /// repetir el parámetro N veces.
+    /// <para>
+    /// Los valores desconocidos se DESCARTAN en silencio en vez de devolver 400: un estado que no existe
+    /// no puede casar ninguna fila, así que el resultado correcto es "no filtra por eso", igual que hace
+    /// <c>ProcedureInstanceSortFields.Resolve</c> con un <c>sortBy</c> inventado. Si tras descartar no
+    /// queda ninguno, se devuelve null y el filtro no se aplica.
+    /// </para>
+    /// </summary>
+    internal static List<string>? ParseEstados(string? estado)
+    {
+        if (string.IsNullOrWhiteSpace(estado)) return null;
+
+        var validos = estado
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(e => e.ToLowerInvariant())
+            .Where(e => TramiteEstado.EsValido(e)
+                || string.Equals(e, TramiteEstado.Subsanacion, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return validos.Count > 0 ? validos : null;
+    }
+
     private static (Guid? TenantId, bool IsSuperAdmin) ResolveTenantContext(HttpContext http)
     {
         var isSuperAdmin = http.Items.TryGetValue(TenantEnforcementMiddleware.SuperAdminItemKey, out var sa)
@@ -751,7 +1234,14 @@ internal static class ProcedureInstanceEndpoints
     private static bool EsMatriculaInicial(string? modalidad) =>
         string.Equals(
             modalidad?.Trim(),
-            TramiteModalidadEntradaCodes.MatriculaInicial,
+            ProcedureFamilyCodes.Matriculas,
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>La modalidad solicitada es traspaso (tolerante a espacios/caja).</summary>
+    private static bool EsTraspaso(string? modalidad) =>
+        string.Equals(
+            modalidad?.Trim(),
+            ProcedureFamilyCodes.Traspaso,
             StringComparison.OrdinalIgnoreCase);
 }
 
@@ -785,16 +1275,36 @@ internal sealed record PauseProcedureInstancesBulkRequest(
 internal sealed record SetCurrentStepRequest(string? Step);
 
 /// <summary>
+/// Respuesta de POST /instances/{id}/plate-flow/complete. El trámite avanzó (<c>Instance</c>), pero
+/// puede traer una salvedad que el gestor debe ver: <c>WarningCode</c> para lógica y
+/// <c>WarningMessage</c> ya redactado para la UI. Ambos van en null cuando no hay nada que advertir.
+/// </summary>
+internal sealed record CompletePlateFlowResponse(
+    ProcedureInstanceSummary? Instance,
+    string? WarningCode,
+    string? WarningMessage);
+
+/// <summary>
 /// Body de POST /preflight-preview (CF-02). <c>TenantId</c> solo lo usa el SuperAdmin sin
 /// <c>X-Tenant-Id</c>; para un usuario de compañía el backend lo impone desde el JWT.
 /// </summary>
+/// <summary>HU #11203 — cuerpo de la elección del mandatario que firma el mandato del trámite.</summary>
+internal sealed record SetMandateSignerBody(Guid MandateSignerId);
+
 internal sealed record PreflightPreviewBody(
     Guid TenantId,
     string Modalidad,
     string? Vin,
     string? Plate,
     string? OwnerDocumentType,
-    string? OwnerDocumentNumber);
+    string? OwnerDocumentNumber,
+    /// <summary>HU #11199 — secretaría del paso 1; obligatoria en matrícula inicial.</summary>
+    Guid? TransitOfficeId,
+    /// <summary>ADR-0050 — `code` del tipo elegido; decide qué identificador exige la consulta.</summary>
+    string? ProcedureTypeCode = null);
+
+/// <summary>Body de POST /rues-preview (HU sin ADO 2026-08-11). NIT a consultar en RUES.</summary>
+internal sealed record RuesPreviewBody(string? DocumentNumber);
 
 /// <summary>
 /// Body de POST /instances/from-consulta (CF-02). <c>PreviewToken</c> es el de la consulta del paso 1:
@@ -809,4 +1319,87 @@ internal sealed record CreateFromConsultaBody(
     string? OwnerDocumentType,
     string? OwnerDocumentNumber,
     string? PreviewToken,
-    Guid? TransitOfficeId);
+    Guid? TransitOfficeId,
+    /// <summary>
+    /// HU sin ADO 2026-08-11 — casilla 18 del FUR (tipo de servicio), elegido por el operador en
+    /// MATRÍCULA INICIAL. Uno de los 6 códigos cerrados de <see cref="VehicleServiceTypeCode"/>. Se
+    /// ignora fuera de matrícula inicial (mismo criterio que <see cref="TransitOfficeId"/>).
+    /// </summary>
+    string? TipoServicioCode = null,
+    /// <summary>
+    /// HU sin ADO 2026-08-11 — casilla 19 del FUR (empresa vinculadora). Solo tiene efecto cuando
+    /// <see cref="TipoServicioCode"/> es <c>PUBLICO</c>; con cualquier otro valor (o ausente) se
+    /// ignora, ver <c>CreateProcedureInstanceFromConsultaHandler</c>.
+    /// </summary>
+    /// <summary>
+    /// ADR-0050 — <c>code</c> del tipo elegido en el catálogo. Cuando viene MANDA sobre
+    /// <see cref="Modalidad"/>, que queda solo como familia para el bloqueo por compañía.
+    /// </summary>
+    string? ProcedureTypeCode = null,
+    string? EmpresaVinculadoraNit = null,
+    string? EmpresaVinculadoraRazonSocial = null);
+
+/// <summary>
+/// Cuerpo de <c>POST /instances/search</c> y <c>POST /instances/estado-counts</c> (HU #12106).
+///
+/// <para>Conserva los filtros sueltos del GET además de <see cref="Condiciones"/> para que la
+/// migración del frontend pueda ser gradual: la barra de filtros nueva manda condiciones, y las
+/// pestañas de familia y la tarjeta de estado —que son navegación, no filtros— siguen viajando como
+/// hasta ahora sin tener que expresarse como condición.</para>
+/// </summary>
+internal sealed record TramitesSearchRequest
+{
+    public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
+
+    public string? Vin { get; init; }
+    public string? Placa { get; init; }
+    public string? Vendedor { get; init; }
+    public string? Comprador { get; init; }
+    public string? Gestor { get; init; }
+    public bool? Firmado { get; init; }
+    /// <summary>Estados separados por coma, igual que el query string del GET.</summary>
+    public string? Estado { get; init; }
+    public string? Modalidad { get; init; }
+    public string? OrganismoTransito { get; init; }
+    public string? TipoCodigo { get; init; }
+    /// <summary>HU #12187 — texto libre transversal (radicado exacto; el resto por subcadena).</summary>
+    public string? Busqueda { get; init; }
+    /// <summary>HU #12187 — <c>true</c> = solo los marcados como prioritarios.</summary>
+    public bool? Prioritario { get; init; }
+    public DateTimeOffset? CreatedFrom { get; init; }
+    public DateTimeOffset? CreatedTo { get; init; }
+    public DateTimeOffset? UpdatedFrom { get; init; }
+    public DateTimeOffset? UpdatedTo { get; init; }
+
+    public string? SortBy { get; init; }
+    public string? SortDir { get; init; }
+    public int? Skip { get; init; }
+    public int? Take { get; init; }
+
+    public ProcedureInstanceListRequest ToRequest(Guid? tenantId) => new()
+    {
+        TenantId = tenantId,
+        Skip = Skip ?? 0,
+        Take = Take ?? ListProcedureInstancesHandler.MaxItems,
+        Condiciones = Condiciones,
+        Vin = Vin,
+        Placa = Placa,
+        Vendedor = Vendedor,
+        Comprador = Comprador,
+        Gestor = Gestor,
+        Firmado = Firmado,
+        Estados = ProcedureInstanceEndpoints.ParseEstados(Estado),
+        Modalidad = Modalidad,
+        OrganismoTransito = OrganismoTransito,
+        TipoCodigo = TipoCodigo,
+        Busqueda = Busqueda,
+        Prioritario = Prioritario,
+        CreatedFrom = CreatedFrom,
+        CreatedTo = CreatedTo,
+        UpdatedFrom = UpdatedFrom,
+        UpdatedTo = UpdatedTo,
+        SortBy = SortBy,
+        // Default DESC, igual que el GET: solo "asc" invierte.
+        SortDescending = !string.Equals(SortDir, "asc", StringComparison.OrdinalIgnoreCase),
+    };
+}

@@ -37,7 +37,8 @@ public sealed class ListMandateSignersHandler
                 s.IdentityStatus,
                 s.RegisteredAt,
                 s.IsActive,
-                s.CompanyTenantIds)),
+                s.CompanyTenantIds,
+                s.TransitOfficeIds)),
         ];
     }
 }

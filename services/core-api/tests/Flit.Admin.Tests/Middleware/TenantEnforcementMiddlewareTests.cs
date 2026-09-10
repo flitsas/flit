@@ -199,6 +199,32 @@ public sealed class TenantEnforcementMiddlewareTests
         ctx.Response.StatusCode.Should().Be(401);
     }
 
+    // HU sin ADO 2026-08-11 — consulta RUES del paso 1 SIN trámite creado (casilla 19 del FUR): mismo
+    // caso que PreflightPreview arriba, sin instancia en la ruta.
+    [Fact]
+    public async Task RuesPreview_CompanyUser_ResuelveTenantDelToken()
+    {
+        var ctx = Context("/api/v1/tramites/rues-preview",
+            User("Radicador", CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        // El header del cliente NO manda: el tenant sale del token, igual que en el resto del runtime.
+        ctx.Request.Headers["X-Tenant-Id"].ToString().Should().Be(CompanyTenant);
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
+    }
+
+    [Fact]
+    public async Task RuesPreview_NoAutenticado_Returns401()
+    {
+        var ctx = Context("/api/v1/tramites/rues-preview");
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(401);
+    }
+
     // HU #10943 (hallazgo de review, IDOR cross-tenant) — antes IsRuntimeScoped comparaba
     // "/api/v1/tramites/biometric-validations" con Equals EXACTO: el listado/create quedaban
     // scopeados, pero las rutas HIJAS (PATCH /{id} y POST /{id}/resend — editar/reenviar una

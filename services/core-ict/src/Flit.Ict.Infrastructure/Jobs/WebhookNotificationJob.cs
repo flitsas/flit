@@ -17,7 +17,8 @@ namespace Flit.Ict.Infrastructure.Jobs;
 public sealed partial class WebhookNotificationJob(
     IServiceScopeFactory scopeFactory,
     IOptions<IctJobOptions> options,
-    ILogger<WebhookNotificationJob> logger) : IctPollingJob(scopeFactory, options, logger)
+    IIctJobSettingsProvider settings,
+    ILogger<WebhookNotificationJob> logger) : IctPollingJob(scopeFactory, options, settings, logger)
 {
     private const int MaxAttempts = 8;
 
@@ -25,51 +26,42 @@ public sealed partial class WebhookNotificationJob(
         Guid Id, string TargetUrl, string ManagerIdTransaction, string IctEstado,
         string Message, int TransactionType, short Attempts, short StatusValidation, Guid? ProcedureInstanceId);
 
-    protected override TimeSpan PollInterval => TimeSpan.FromSeconds(Options.WebhookPollSeconds);
+    protected override TimeSpan PollInterval => TimeSpan.FromSeconds(JobSettings.WebhookPollSeconds);
 
     protected override string JobName => "webhook-notification";
 
-    protected override async Task RunCycleAsync(IServiceScope scope, CancellationToken ct)
+    protected override Task RunCycleAsync(IServiceScope scope, CancellationToken ct) =>
+        // Advisory lock (guarda multi-réplica): solo UNA réplica entrega el lote por ciclo, lo que evita la
+        // DOBLE ENTREGA del mismo webhook cuando hay 2+ réplicas (antes este job era el único sin el lock).
+        // Se prefiere sobre FOR UPDATE SKIP LOCKED para no retener locks de fila durante la entrega HTTP
+        // (lenta); es el mismo mecanismo que ya usan los otros 4 jobs del pipeline. La conexión (abierta y
+        // con el lock) la provee RunUnderAdvisoryLockAsync.
+        RunUnderAdvisoryLockAsync(
+            scope, IctAdvisoryLock.Keys.Webhook, connection => DeliverPendingAsync(scope, connection, ct), ct);
+
+    private async Task DeliverPendingAsync(IServiceScope scope, DbConnection connection, CancellationToken ct)
     {
-        var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
         var http = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>().CreateClient("ict-webhook");
-        var connection = db.Database.GetDbConnection();
-        var wasClosed = connection.State != ConnectionState.Open;
-        if (wasClosed)
+        var pending = await ReadPendingAsync(connection, JobSettings.WebhookBatchSize, ct);
+        foreach (var wh in pending)
         {
-            await connection.OpenAsync(ct);
-        }
-
-        try
-        {
-            var pending = await ReadPendingAsync(connection, ct);
-            foreach (var wh in pending)
+            // Anti-SSRF: el target_url viene del payload de ingesta. Un destino interno/privado o un
+            // esquema no-http se descarta como fallo terminal (no reintentar; no se arregla solo).
+            if (!await WebhookTargetGuard.IsPublicHttpTargetAsync(wh.TargetUrl, ct))
             {
-                // Anti-SSRF: el target_url viene del payload de ingesta. Un destino interno/privado o un
-                // esquema no-http se descarta como fallo terminal (no reintentar; no se arregla solo).
-                if (!await WebhookTargetGuard.IsPublicHttpTargetAsync(wh.TargetUrl, ct))
-                {
-                    Log.TargetBlocked(logger, wh.Id, wh.TargetUrl);
-                    await MarkDeliveredAsync(connection, wh.Id, responseOk: false, ct);
-                    continue;
-                }
-
-                var delivered = await TryDeliverAsync(http, wh, ct);
-                if (delivered)
-                {
-                    await MarkDeliveredAsync(connection, wh.Id, responseOk: true, ct);
-                }
-                else
-                {
-                    await ScheduleRetryAsync(connection, wh.Id, wh.Attempts, ct);
-                }
+                Log.TargetBlocked(logger, wh.Id, wh.TargetUrl);
+                await MarkDeliveredAsync(connection, wh.Id, responseOk: false, ct);
+                continue;
             }
-        }
-        finally
-        {
-            if (wasClosed)
+
+            var delivered = await TryDeliverAsync(http, wh, ct);
+            if (delivered)
             {
-                await connection.CloseAsync();
+                await MarkDeliveredAsync(connection, wh.Id, responseOk: true, ct);
+            }
+            else
+            {
+                await ScheduleRetryAsync(connection, wh.Id, wh.Attempts, ct);
             }
         }
     }
@@ -112,7 +104,7 @@ public sealed partial class WebhookNotificationJob(
 #pragma warning restore CA1031
     }
 
-    private static async Task<List<PendingWebhook>> ReadPendingAsync(DbConnection connection, CancellationToken ct)
+    private static async Task<List<PendingWebhook>> ReadPendingAsync(DbConnection connection, int limit, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
         // JOIN al master para adjuntar la correlación del trámite (procedure_instance_id) al payload v2.
@@ -123,8 +115,9 @@ public sealed partial class WebhookNotificationJob(
             LEFT JOIN ict.external_integration_master m ON m.id = w.id_transaction
             WHERE w.is_notified = false AND w.next_attempt_at <= now()
             ORDER BY w.created_at
-            LIMIT 50
+            LIMIT @limit
             """;
+        AddParam(cmd, "limit", limit);
         var list = new List<PendingWebhook>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))

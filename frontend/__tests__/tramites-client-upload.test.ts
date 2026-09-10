@@ -3,8 +3,10 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   base64ToPdfFile,
   evaluateOcr,
-  isOcrTipo,
+  esTipoOcr,
   normalizeVin,
+  resumirVins,
+  vinsDelDocumento,
 } from '@/hooks/useProcedureDocuments';
 
 /**
@@ -159,6 +161,42 @@ describe('evaluateOcr / helpers OCR', () => {
     expect(evaluateOcr({ es_factura_valida: false }, 'ABC').rechazado).toBe(true);
   });
 
+  it('el rechazo por tipo explica el porqué en vez de quedarse en la frase genérica', () => {
+    // 1) lo que el propio OCR observó
+    expect(
+      evaluateOcr({ es_valido: false, observaciones: 'Es un anexo de nacionalización.' }, null).motivo,
+    ).toContain('Es un anexo de nacionalización.');
+    // 2) sin observaciones, al menos qué creyó que era
+    expect(
+      evaluateOcr({ es_valido: false, tipo_documento: 'certificado_importacion' }, null).motivo,
+    ).toContain('certificado importacion');
+    // 3) sin nada, un mensaje que no deja al operador a ciegas
+    expect(evaluateOcr({ es_valido: false }, null).motivo).toContain('no se reconoció');
+  });
+
+  it('acepta cuando el trámite está DENTRO de un documento que ampara varios vehículos', () => {
+    // Una declaración de importación cubre el lote entero del contenedor: comparar la cadena
+    // completa rechazaría un documento legítimo sólo por traer a los demás vehículos.
+    const lote = 'LRWYGCFJ0TC771798, LRWYGCFJ0TC771994, LRWYGCFJ0TC772031';
+    expect(evaluateOcr({ es_valido: true, vehiculo_vin: lote }, 'LRWYGCFJ0TC771994').rechazado).toBe(
+      false,
+    );
+    const fuera = evaluateOcr({ es_valido: true, vehiculo_vin: lote }, 'LRWYGCEK3TC767884');
+    expect(fuera.rechazado).toBe(true);
+    // …y el motivo no vomita la lista completa
+    expect(fuera.motivo).toContain('y 1 más');
+  });
+
+  it('vinsDelDocumento parte la lista sin romper VIN con espacios o guiones', () => {
+    expect(vinsDelDocumento('AAA-111, bbb 222')).toEqual(['AAA111', 'BBB222']);
+    expect(vinsDelDocumento('')).toEqual([]);
+  });
+
+  it('resumirVins deja pasar listas cortas y recorta las largas', () => {
+    expect(resumirVins('AAA, BBB')).toBe('AAA, BBB');
+    expect(resumirVins('AAA, BBB, CCC, DDD')).toBe('AAA, BBB y 2 más');
+  });
+
   it('rechaza cuando no hay datos', () => {
     expect(evaluateOcr(null, 'ABC').rechazado).toBe(true);
   });
@@ -184,17 +222,42 @@ describe('evaluateOcr / helpers OCR', () => {
     expect(evaluateOcr({ es_valido: true, vehiculo_vin: 'AAA' }, null).rechazado).toBe(false);
   });
 
+  it('rechaza cuando la API marca ok=false aunque el JSON traiga es_valido', () => {
+    const r = evaluateOcr({ es_valido: true }, null, false);
+    expect(r.rechazado).toBe(true);
+    expect(r.motivo).toContain('no confirmó');
+  });
+
+  it('con ok=false y es_valido false usa el motivo de tipo', () => {
+    expect(
+      evaluateOcr({ es_valido: false, observaciones: 'Es una factura.' }, null, false).motivo,
+    ).toContain('Es una factura.');
+  });
+
   it('normalizeVin deja sólo alfanuméricos en mayúsculas', () => {
     expect(normalizeVin('abc-123 xyz')).toBe('ABC123XYZ');
     expect(normalizeVin(null)).toBe('');
   });
 
-  it('isOcrTipo respeta los tipos por modalidad', () => {
-    expect(isOcrTipo('matricula_inicial', 'factura')).toBe(true);
-    expect(isOcrTipo('matricula_inicial', 'aduana')).toBe(true);
-    expect(isOcrTipo('matricula_inicial', 'otro')).toBe(false);
-    expect(isOcrTipo('traspaso', 'impronta')).toBe(true);
-    expect(isOcrTipo('traspaso', 'factura')).toBe(false);
+  // HU #12034 — el OCR de un documento ya no depende de la modalidad del trámite, sino de que el
+  // backend declare que ese tipo tiene prompt.
+  it('esTipoOcr resuelve por el código del documento, sin importar la modalidad', () => {
+    const tipos = new Set(['factura', 'aduana', 'impronta']);
+
+    expect(esTipoOcr(tipos, 'factura')).toBe(true);
+    expect(esTipoOcr(tipos, 'aduana')).toBe(true);
+    expect(esTipoOcr(tipos, 'otro')).toBe(false);
+  });
+
+  it('esTipoOcr no distingue mayúsculas', () => {
+    expect(esTipoOcr(new Set(['soat']), 'SOAT')).toBe(true);
+  });
+
+  it('esTipoOcr falla ABIERTO cuando no se pudo consultar el backend', () => {
+    // Devolver false dejaría el documento sin analizar y sin ningún error visible: es exactamente
+    // el fallo silencioso que esta HU elimina. Se intenta, y si el tipo no tiene prompt el backend
+    // lo rechaza sin bloquear la carga.
+    expect(esTipoOcr(null, 'cualquier_cosa')).toBe(true);
   });
 
   it('base64ToPdfFile produce un File PDF con nombre .pdf', () => {

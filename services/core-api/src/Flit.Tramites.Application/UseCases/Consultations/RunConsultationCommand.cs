@@ -1,7 +1,10 @@
 using System.Globalization;
 using System.Text.Json;
+using Flit.Tramites.Application.UseCases.Certifications;
+using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
 
@@ -37,7 +40,8 @@ public sealed class RunConsultationHandler(
     IProcedureInstanceRepository instanceRepo,
     ICatalogRepository catalogRepo,
     IConsultationProviderRegistry registry,
-    ExternalQueryCacheService cacheService)
+    ExternalQueryCacheService cacheService,
+    ICertificationIngestionService? certificationIngestion = null)
 {
     private const string ConsultationSource = "consultation";
     private const string EntityScopeActor = "actor";
@@ -136,6 +140,12 @@ public sealed class RunConsultationHandler(
         // persistida en field_values.
         if (!string.IsNullOrWhiteSpace(sourceCode))
             await SaveToCacheAsync(template, fieldValues, tenantId, sourceCode, instanceId, result.HydratedFields, now, ct);
+
+        // HU #11304 — el almacén canónico. Va DESPUÉS del guardado en field_values y es best-effort:
+        // una consulta ya respondida y persistida no puede caerse porque la ingesta falle. Solo se
+        // alimenta del camino real de proveedor: un HIT de caché no trae bundle (la caché guarda
+        // HydratedField[], no certificaciones) y no debe reescribir procedencia con una fecha vieja.
+        await IngestCertificationsAsync(instanceId, tenantId, result, now, ct);
 
         return (result, null);
     }
@@ -271,6 +281,48 @@ public sealed class RunConsultationHandler(
         return null;
     }
 
+    /// <summary>
+    /// Entrega al almacén canónico lo que el mapper certificó (HU #11304, ADR-0041).
+    /// </summary>
+    /// <remarks>
+    /// Best-effort a propósito: cuando esto se llama, la consulta ya se respondió y
+    /// <c>field_values</c> ya está guardado. Un fallo del almacén canónico degrada al camino anterior
+    /// —el expediente se sigue generando desde <c>field_values</c>— pero no puede convertir una
+    /// consulta buena, y cobrada, en un error para el operador.
+    /// </remarks>
+    private async Task IngestCertificationsAsync(
+        Guid instanceId, Guid tenantId, ConsultationResult result, DateTimeOffset now, CancellationToken ct)
+    {
+        if (certificationIngestion is null || result.Certifications is null || result.FromCache)
+            return;
+
+        var provenance = new CertificationProvenance(
+            CertificationSourceKind.Consultation,
+            result.Provider,
+            result.QueriedAt ?? now,
+            MapperVersion: ResolveMapperVersion(result.Provider));
+
+        try
+        {
+            await certificationIngestion.IngestAsync(
+                instanceId, tenantId, result.Certifications, provenance, result.RawPayload, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Silencio deliberado y acotado: no hay logger en esta capa y el dato ya quedó en
+            // field_values. La evidencia del fallo, si vuelve a ocurrir, sale del reproceso desde el
+            // payload crudo — que es justo lo que esta tabla existe para permitir.
+        }
+    }
+
+    private static string ResolveMapperVersion(string provider) => provider switch
+    {
+        "kyverum_runt" => KyverumRuntVehicleResultMapper.MapperVersion,
+        "verifik" => VerifikResultMapper.MapperVersion,
+        "intempo" => IntempoVehicleResultMapper.MapperVersion,
+        _ => CertificationProvenance.UnknownMapperVersion,
+    };
+
     private static void UpsertHydratedFields(
         ProcedureInstance instance,
         Guid tenantId,
@@ -284,6 +336,13 @@ public sealed class RunConsultationHandler(
             var existing = instance.FieldValues.FirstOrDefault(f => f.FieldKey == field.FieldKey);
             if (existing is not null)
             {
+                // HU #11304 (D2) — una corrección manual sobrevive a la reconsulta. Hasta aquí este
+                // bloque sobrescribía sin mirar el `source` previo, así que un operador que arreglaba
+                // un dato a mano lo perdía en la siguiente consulta, en silencio y sin rastro. La
+                // regla vive en el dominio para que sea la misma que aplica el almacén canónico.
+                if (!ConsultationWinsOver(existing, now))
+                    continue;
+
                 existing.ValueText = field.ValueText;
                 existing.ValueJson = field.ValueJson;
                 existing.Source = ConsultationSource;
@@ -310,6 +369,50 @@ public sealed class RunConsultationHandler(
                 repo.Add(fieldValue);
             }
         }
+    }
+
+    /// <summary>
+    /// Llaves de <c>field_values</c> a las que se les aplica la precedencia de D2 (HU #11304).
+    /// </summary>
+    /// <remarks>
+    /// <b>El guardián va acotado a propósito.</b> D2 se decidió sobre las celdas de los certificados;
+    /// aplicarlo a todo <c>field_values</c> cambiaría el comportamiento del asistente entero — por
+    /// ejemplo, un VIN tecleado con una errata dejaría de corregirse con el que devuelve el RUNT,
+    /// porque el valor del operador es <c>user</c> y ganaría siempre. Ese no es el alcance de este
+    /// Feature ni lo que el PO decidió.
+    /// </remarks>
+    private static readonly HashSet<string> CertificationFieldKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "soat_poliza", "soat_aseguradora", "soat_expedicion", "soat_vigencia", "soat_vencimiento",
+        SoatGate.FieldKey,
+        "rtm_numero", "rtm_entidad", "rtm_expedicion", "rtm_vigencia", "rtm_vencimiento", "rtm_estado",
+    };
+
+    /// <summary>
+    /// ¿Puede la consulta pisar el valor que ya está guardado? (HU #11304, D2.)
+    /// </summary>
+    /// <remarks>
+    /// Aplica <see cref="CertificationPrecedence"/> —la MISMA regla del almacén canónico— sobre el
+    /// <c>source</c> del <c>field_value</c>, y solo sobre las llaves de certificación. Fuera de esas
+    /// llaves el comportamiento no cambia: la consulta sigue mandando.
+    /// </remarks>
+    private static bool ConsultationWinsOver(ProcedureInstanceFieldValue existing, DateTimeOffset now)
+    {
+        if (!CertificationFieldKeys.Contains(existing.FieldKey))
+            return true;
+
+        var incoming = new CertificationProvenance(
+            CertificationSourceKind.Consultation, ConsultationSource, now);
+
+        var stored = new CertificationProvenance(
+            CertificationSourceCodes.FromCode(existing.Source),
+            existing.Source,
+            existing.UpdatedAt ?? existing.CreatedAt);
+
+        return CertificationPrecedence.Wins(
+            incoming, stored,
+            incomingHasValue: true,
+            existingHasValue: !string.IsNullOrWhiteSpace(existing.ValueText) || existing.ValueJson is not null);
     }
 
     private static bool IsNotDraftViolation(Exception ex)

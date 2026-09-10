@@ -3,7 +3,6 @@
 import { type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Shell, type ModuleId } from '@/components/atom/Shell';
-import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { ToastProvider } from '@/components/admin/Toast';
 import { useAccessibleModules } from '@/hooks/useAccessibleModules';
 import { useAuthGate } from '@/hooks/useAuthGate';
@@ -15,9 +14,9 @@ import { useAuthGate } from '@/hooks/useAuthGate';
  * - Auth: sin sesión activa (useAuthGate), navega a /login en vez de renderizar.
  * - Dock: "Trámites" navega a /tramites; el resto vuelve a / (allí viven por
  *   setState; deep-link por módulo queda para después — fuera de alcance).
- * - Chrome compartido (ModuleTitle + tab Operación) se pinta aquí salvo en modo
- *   inmersivo: /tramites/[instanceId] da todo el viewport al wizard (Track A).
- * - Contenedor hijo: scroll único (overflow-y-auto) + pb-24 para el dock.
+ * - Contenedor hijo: en listado y detalle el scroll vive en `main` del Shell
+ *   (`[data-shell-scroll]`). En detalle (modo inmersivo) no se clipa el viewport:
+ *   el contenido crece y el asistente de seguimiento es sticky flotante.
  */
 export default function TramitesLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -46,13 +45,13 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
     // tránsito" sigue visible tras la redirección que dispara Finalizar.
     <ToastProvider>
     <Shell active="tramites" onNav={handleNav} onLogout={logout} visibleModuleCodes={modulesLoading ? [] : accessibleCodes}>
-      <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
-        {!immersive && (
-          <ModuleTitle
-            title="Gestión Integral de Trámites"
-            subtitle="Embudo de tus trámites vehiculares"
-          />
-        )}
+      <div
+        className={
+          immersive
+            ? 'app-bg flex min-h-full flex-col gap-3 px-6 pt-4 pb-24 text-[#162744] dark:text-white'
+            : 'app-bg flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10 text-[#162744] dark:text-white'
+        }
+      >
         {children}
       </div>
     </Shell>

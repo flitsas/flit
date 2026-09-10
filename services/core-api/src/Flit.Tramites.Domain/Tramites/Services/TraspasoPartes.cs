@@ -56,6 +56,26 @@ public static class TraspasoPartes
     }
 
     /// <summary>
+    /// ADR-0053 §4.4 nivel 1 (Múltiple Propietario) — ¿hay dos o más actores de un MISMO lado
+    /// (vendedores entre sí, o compradores entre sí) que comparten documento? BLOQUEADA SIEMPRE, sin
+    /// condición de conteo: "nadie es copropietario de sí mismo". Compara cada par de la lista por
+    /// documento normalizado (mismo criterio de <see cref="TramiteDocumento.Normalizar"/> que
+    /// <see cref="DetectarDuplicadas"/>); documentos vacíos no cuentan como coincidencia. Método NUEVO
+    /// — <see cref="DetectarDuplicadas"/> no se toca, para no arriesgar el caso 1-a-1 vigente.
+    /// </summary>
+    public static bool DetectarDuplicadosIntraLado(IReadOnlyList<ParteDatos> lado)
+    {
+        ArgumentNullException.ThrowIfNull(lado);
+
+        var documentos = lado
+            .Select(p => TramiteDocumento.Normalizar(p.Documento))
+            .Where(d => d.Length > 0)
+            .ToList();
+
+        return documentos.Count != documentos.Distinct(StringComparer.Ordinal).Count();
+    }
+
+    /// <summary>
     /// ¿La parte necesita (re)envío de enlace biométrico? No re-enviar si está aprobado/en curso/enviado
     /// (paridad <c>parteTraspasoRequiereReenvio</c>).
     /// </summary>

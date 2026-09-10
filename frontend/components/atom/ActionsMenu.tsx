@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { MoreVertical, type LucideIcon } from "lucide-react";
+import { ChevronDown, type LucideIcon } from "lucide-react";
 
 // Menú de acciones accesible "⋯ Acciones" (HU #10194 — consolidación de config OT en
 // tabla). Genérico para columnas de acciones de cualquier tabla admin: botón disparador
@@ -20,6 +20,11 @@ export interface ActionsMenuItem {
   disabled?: boolean;
   /** Motivo del deshabilitado; se usa como tooltip cuando `disabled` es true. */
   disabledReason?: string;
+  /**
+   * Destaca el ítem (punto ámbar) cuando el disparador tiene `attention` por esta acción
+   * (p. ej. "Procesar" pendiente tras asignar placa).
+   */
+  attention?: boolean;
 }
 
 export interface ActionsMenuProps {
@@ -193,10 +198,21 @@ export function ActionsMenu({
                 close();
                 item.onSelect();
               }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-[#557EFF]/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-[#557EFF]/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
+                item.attention
+                  ? "bg-amber-50 text-[#92400e] hover:bg-amber-100/80 dark:bg-amber-500/10 dark:text-amber-200"
+                  : ""
+              }`}
             >
               {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
-              <span>{item.label}</span>
+              <span className="flex-1">{item.label}</span>
+              {item.attention ? (
+                <span
+                  className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                  aria-hidden="true"
+                  title="Acción pendiente"
+                />
+              ) : null}
             </button>
           );
         })}
@@ -220,14 +236,21 @@ export function ActionsMenu({
             return !o;
           });
         }}
-        className={`relative inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition hover:bg-[#557EFF]/10 ${
+        // Forma del diseño: rótulo a la izquierda y chevron a la derecha, sobre un botón con
+        // borde neutro y texto de marca. El kebab de tres puntos que había antes se lee como "más
+        // opciones" —algo accesorio— cuando aquí vive la acción principal de la fila: aprobar,
+        // rechazar, asignar placa. El chevron dice lo que de verdad pasa: se despliega una lista.
+        className={`relative flex w-full items-center justify-between gap-1 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition hover:bg-[#557EFF]/10 ${
           attention
             ? "border-amber-400/70 bg-amber-50 text-[#92400e] hover:bg-amber-100/80 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/15"
-            : ""
+            : "border-[#DFE5ED] bg-white text-[#557EFF] dark:border-white/15 dark:bg-[#0B0F14]"
         }`}
       >
-        <MoreVertical className="h-3.5 w-3.5" aria-hidden="true" />
         {triggerLabel}
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 transition ${open ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        />
         {attention ? (
           <span className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5" aria-hidden="true">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />

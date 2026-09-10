@@ -77,6 +77,23 @@ public interface IProcedureInstanceRepository
     Task<IReadOnlyList<ProcedureInstance>> ListWithSummaryGraphAsync(Guid? tenantId, int limit, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #12182 — instancias, de entre las indicadas, con una decisión de prenda VIGENTE que sea un
+    /// hecho de gravamen. Alimenta la marca de prenda del listado.
+    ///
+    /// <para>Va en una consulta aparte y no como <c>Include</c> del grafo porque la decisión vive en
+    /// su propia tabla (<c>procedure_instance_prendas</c>) y la instancia no la navega. Una consulta
+    /// por listado, nunca por fila.</para>
+    ///
+    /// <para><b>Solo la VIGENTE, y solo si es un hecho.</b> Las filas están versionadas: mirarlas
+    /// todas diría «tiene prenda» de un trámite al que se le quitó. Y <c>omitir</c>/<c>sin_prenda</c>
+    /// son exactamente lo contrario a tenerla. Es el mismo predicado que usa la consulta de la
+    /// empresa (<c>CompanyQueryRepository</c>), a propósito: dos superficies que responden lo mismo
+    /// sobre el mismo trámite no pueden discrepar.</para>
+    /// </summary>
+    Task<IReadOnlySet<Guid>> ListInstanceIdsConPrendaVigenteAsync(
+        IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve el nombre (razón social) de cada tenant indicado, para la columna "Compañía" del
     /// listado multi-tenant del SuperAdmin (#1). Devuelve un mapa id→nombre; ids sin tenant se omiten.
     /// </summary>
@@ -136,6 +153,76 @@ public interface IProcedureInstanceRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// HU #11270 — listado agrupado por persona (tenant + documento Trim+Upper): una fila por
+    /// documento con la validación más reciente (<c>DISTINCT ON</c> / equivalente) y el contador
+    /// del grupo. No altera el listado plano. Solo lectura.
+    /// </summary>
+    Task<(IReadOnlyList<ReadModels.BiometricPersonGroupProjection> Rows, int TotalPersons)>
+        ListBiometricValidationsGroupedByPersonAsync(
+            Guid tenantId,
+            int skip,
+            int take,
+            BiometricPersonGroupFilter? filter,
+            DateTimeOffset now,
+            CancellationToken ct = default);
+
+    /// <summary>
+    /// Cuenta PERSONAS (tenant + documento Trim+Upper) agrupadas por el estado de su validación más
+    /// reciente, sobre el mismo conjunto filtrado que
+    /// <see cref="ListBiometricValidationsGroupedByPersonAsync"/>. Alimenta los KPIs de la grilla
+    /// agrupada, que cuenta personas — no validaciones — para que los contadores cuadren con las filas
+    /// que el gestor tiene delante. Solo lectura.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, int>> CountBiometricPersonsByEstadoAsync(
+        Guid tenantId,
+        BiometricPersonGroupFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11270 — candidatos para calcular la peor alerta de las personas de una página:
+    /// validaciones no terminales o creadas/actualizadas en los últimos <paramref name="alertWindowDays"/> días.
+    /// Clave de documento ya normalizada (Trim+Upper). Solo lectura.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsForPersonAlertScanAsync(
+        Guid tenantId,
+        IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)> documents,
+        int alertWindowDays,
+        DateTimeOffset now,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11272 — todas las validaciones de una persona (documento normalizado) en el tenant,
+    /// más reciente primero, con tope/paginación. <paramref name="AnyNonTerminal"/> indica si existe
+    /// alguna no terminal (para detener polling). Solo lectura.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstanceBiometricValidation> Rows, int Total, bool AnyNonTerminal)>
+        ListBiometricValidationsByPersonAsync(
+            Guid tenantId,
+            string documentType,
+            string documentNumber,
+            int skip,
+            int take,
+            CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11765 (ADR-0050) — la validación MÁS RECIENTE de CADA persona (documento normalizado,
+    /// ver <see cref="Identity.DocumentCanonicalNormalization"/>) del tenant, en UNA sola consulta
+    /// (sin N+1). Reemplaza a <c>admin.admin_identity_validations</c> como fuente de la vigencia de
+    /// identidad de los lectores admin de representantes legales y mandatarios (que proyectan
+    /// listados largos). No filtra por actividad reciente: a diferencia de
+    /// <see cref="ListBiometricValidationsForPersonAlertScanAsync"/>, aquí se necesita SIEMPRE la
+    /// última fila —exista o no actividad— para poder clasificarla igual que la resolución de una
+    /// sola persona (<c>IdentityVigenciaPorDocumentoResolver.ResolveAsync</c>). Solo devuelve UNA
+    /// fila por persona (la más reciente); ausentes en <paramref name="documents"/> sin ninguna
+    /// validación simplemente no aparecen en el resultado.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListLatestBiometricValidationsByPersonsAsync(
+        Guid tenantId,
+        IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)> documents,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Carga la instancia con sus validaciones biométricas + actores (Slice M4 — simular biométrica:
     /// resuelve el actor de la parte para poblar nombre/documento/email de la validación aprobada).
     /// </summary>
@@ -170,6 +257,15 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<ProcedureInstanceBiometricValidation?> FindVigenteApprovedByDocumentAsync(
         Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11265 — validaciones EN VUELO (<c>pendiente_envio</c> / <c>enviado</c> / <c>en_proceso</c>)
+    /// del documento en el tenant (standalone o ligadas a instancias no eliminadas). Igualdad exacta de
+    /// tipo/número como <see cref="FindVigenteApprovedByDocumentAsync"/> (no cambia el gate, AC5).
+    /// Solo lectura; lista acotada (máx. 20) ordenada por actividad reciente.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListInFlightByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default);
 
     /// <summary>
     /// Claves (<see cref="Entities.BiometricRules.IdentidadKey"/>) de todas las identidades APROBADAS y VIGENTES
@@ -252,6 +348,14 @@ public interface IProcedureInstanceRepository
     /// <summary>Encola un evento de bitácora (append-only) para persistir en el próximo SaveChanges.</summary>
     Task AddEventAsync(ProcedureInstanceEvent evt, CancellationToken ct = default);
 
+    /// <summary>
+    /// Documentos que se consultaron REALMENTE en el RUNT dentro de este trámite, en la forma
+    /// <c>TIPO|NUMERO</c> de <see cref="Tramites.Services.RuntPersonaConsultada.Key"/>. Lo usa el gate
+    /// de actores para exigir la consulta en vez de darla por hecha con el documento digitado.
+    /// </summary>
+    Task<IReadOnlySet<string>> ListRuntConsultedDocumentKeysAsync(
+        Guid id, Guid tenantId, CancellationToken ct = default);
+
     /// <summary>Último snapshot de preflight de la instancia (por created_at desc), o null.</summary>
     Task<ProcedureInstancePreflightSnapshot?> GetLatestPreflightAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
@@ -261,14 +365,13 @@ public interface IProcedureInstanceRepository
     Task<int> CountByTenantAndYearAsync(Guid tenantId, int year, CancellationToken ct = default);
 
     /// <summary>
-    /// Inserta la instancia generando un <c>ReferenceNumber</c> único con formato
-    /// <c>TRM-{year}-{seq:D6}</c> a partir de MAX(seq) + 1 por (tenant, year). Si el insert
-    /// colisiona contra el constraint <c>uq_procedure_instances_tenant_reference</c> (creaciones
-    /// concurrentes), regenera el siguiente seq y reintenta. Si una FK no existe
-    /// (tenant/usuario/tipo) devuelve <c>ReferencedEntityMissing</c> (→ 422); si se agotan los
-    /// reintentos de referencia devuelve <c>ReferenceConflict</c> (→ 409).
+    /// Inserta la instancia. El <c>ReferenceNumber</c> NO se calcula aquí: desde la HU #12151 lo
+    /// asigna el <c>DEFAULT</c> de la columna, un consecutivo GLOBAL servido por la secuencia
+    /// <c>tramites.procedure_instance_reference_seq</c>. Al ser atómico no hay colisión que
+    /// reintentar. Si una FK no existe (tenant/usuario/tipo) devuelve
+    /// <c>ReferencedEntityMissing</c> (→ 422).
     /// </summary>
-    Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, int year, CancellationToken ct = default);
+    Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, CancellationToken ct = default);
 
     /// <summary>
     /// Resuelve el <c>FormField.Id</c> de un <paramref name="fieldKey"/> dentro del grafo
@@ -328,6 +431,13 @@ public interface IProcedureInstanceRepository
         Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #11470 — despachos de correo de cambio de estado del trámite.
+    /// <c>null</c> si la instancia no existe en el tenant; lista vacía si no hay avisos.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureStateChangeEmailDispatch>?> ListEmailDispatchesAsync(
+        Guid instanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve el <c>DisplayName</c> de un usuario contra <c>identity.users</c> (operador que radica
     /// una generación de impronta desde el trámite). Null si el usuario no existe.
     /// </summary>
@@ -364,7 +474,96 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<ProcedureInstanceActor?> FindLatestActorContactAsync(
         Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default);
+
+    /// <summary>
+    /// Listado FILTRADO y ORDENADO server-side (a diferencia de <see cref="ListWithSummaryGraphAsync"/>,
+    /// que trae el TOP-N más reciente sin filtros ni paginación real): el <c>WHERE</c>/<c>ORDER BY</c> se
+    /// resuelve en SQL sobre columnas propias o denormalizadas (VIN/placa/vendedor/comprador — migración
+    /// TramitesCamposBusqueda), NUNCA en memoria. Carga el mismo grafo que
+    /// <see cref="ListWithSummaryGraphAsync"/> (necesario para <c>ListProcedureInstancesHandler.ToSummary</c>)
+    /// solo para las filas de la página pedida. <paramref name="tenantId"/> <c>null</c> = TODOS los
+    /// tenants (superadmin, #1). Devuelve también el TOTAL de filas que matchean el filtro (sin
+    /// paginar), para que el caller arme la paginación.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstance> Items, int Total)> ListWithSummaryGraphFilteredAsync(
+        Guid? tenantId,
+        int skip,
+        int take,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Conteo por ESTADO del ciclo de vida, aplicando <paramref name="filter"/> sobre TODO el universo
+    /// (no sobre una página): un <c>GROUP BY status</c> en SQL, sin cargar entidades ni el grafo.
+    /// <para>
+    /// Existe porque la tira de KPIs del listado necesita el conteo del universo completo mientras la
+    /// tabla trae solo una página. Calcularlo en el cliente sobre las filas ya traídas daba números que
+    /// solo eran ciertos si el tenant cabía entero en la ventana; a partir de ahí la tarjeta decía "69
+    /// borradores" cuando el tenant tenía muchos más.
+    /// </para>
+    /// <para>
+    /// Quien pide los conteos debe pasar el filtro SIN <see cref="ProcedureInstanceListFilter.Estados"/>:
+    /// las tarjetas muestran cuántos hay de cada estado bajo el resto de criterios, y acotarlas al estado
+    /// ya elegido dejaría las otras seis en cero.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyDictionary<string, int>> CountByStatusFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Las opciones de los filtros que dependen de los datos del tenant: los organismos con los que
+    /// esta empresa tramita de verdad y los tipos de trámite que usa (HU #12106).
+    ///
+    /// <para>Se resuelven contra los datos y no contra el catálogo completo de la plataforma porque
+    /// ofrecer un organismo con el que nunca se ha tramitado es ofrecer un filtro que solo puede
+    /// devolver cero — el mismo criterio que sigue el catálogo de Consultas.</para>
+    /// </summary>
+    Task<TramitesFilterOptions> GetFilterOptionsAsync(Guid? tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12162 (AC2) — evalúa al usuario destino de una reasignación de gestor: existencia,
+    /// pertenencia al tenant y disponibilidad (activo, sin suspensión vigente). <c>null</c> si el
+    /// usuario no existe en absoluto; con resultado no-null, el caller decide con
+    /// <see cref="ReadModels.GestorCandidate.IsAvailable"/>. Ver XML doc de
+    /// <see cref="ReadModels.GestorCandidate"/> para el porqué de reusar el mismo criterio de
+    /// pertenencia que el módulo Security en vez de una validación paralela.
+    /// </summary>
+    Task<ReadModels.GestorCandidate?> FindGestorCandidateAsync(
+        Guid userId, Guid tenantId, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12162 (AC-selector) — gestores DISPONIBLES (activos, no eliminados, sin suspensión vigente,
+    /// pertenecientes al tenant) para el selector de reasignación (HU #12163), ordenados por nombre
+    /// visible. Deliberadamente NO reutiliza <c>GET /api/v1/security/users</c>: ese endpoint mezcla
+    /// usuarios reales con invitaciones pendientes (ids que no son FK válidas de
+    /// <c>assigned_to_user_id</c>), no filtra por disponibilidad y está gateado por un permiso de
+    /// administración de usuarios distinto del de esta acción (<c>AdminTramiteReasignarGestor</c>).
+    /// </summary>
+    Task<IReadOnlyList<ReadModels.GestorOption>> ListAvailableGestoresAsync(
+        Guid tenantId, DateTimeOffset now, CancellationToken ct = default);
 }
+
+/// <summary>Opciones de filtro que salen de los datos del tenant, no de una lista fija.</summary>
+/// <param name="Organismos">Nombres de organismo presentes en los trámites, ordenados.</param>
+/// <param name="Tipos">Tipos de trámite usados: código canónico y nombre que se muestra.</param>
+/// <param name="MetodosPago">Métodos de pago realmente registrados; es texto libre en la base.</param>
+/// <param name="Companias">
+/// Compañías con trámites. Solo se llena cuando la consulta NO viene acotada a un tenant: para
+/// quien solo ve la suya, ofrecer el filtro sería ofrecer una única opción que no acota nada.
+/// </param>
+public sealed record TramitesFilterOptions(
+    IReadOnlyList<string> Organismos,
+    IReadOnlyList<TramitesFilterTipoOption> Tipos,
+    IReadOnlyList<string> MetodosPago,
+    IReadOnlyList<TramitesFilterCompaniaOption> Companias);
+
+public sealed record TramitesFilterTipoOption(string Code, string Name, string Family);
+
+public sealed record TramitesFilterCompaniaOption(Guid Id, string Nombre);
 
 /// <summary>
 /// Proyección de lectura de una fila de <c>procedure_instance_status_history</c> con el nombre
@@ -379,6 +578,20 @@ public sealed record ProcedureInstanceStatusHistoryEntry(
     string? ChangedByName,
     string? Reason)
 {
+    /// <summary>
+    /// HU #12184 — razón social de la compañía a la que pertenecía quien ejecutó el movimiento.
+    ///
+    /// <para>No es el tenant del trámite, que ya se conoce y es el mismo en todas las filas: es
+    /// <b>quién hizo cada paso</b>. Un trámite lo abre una compañía y lo mueve, después, quien lo
+    /// revisa. Sin este dato el historial dice «Preparado · Laura Restrepo» y no distingue si Laura
+    /// es de la empresa dueña o del organismo.</para>
+    ///
+    /// <para><c>null</c> si el movimiento lo hizo un proceso automático, si el usuario ya no existe
+    /// o si no se le puede resolver compañía. Es opcional a propósito: los movimientos anteriores a
+    /// esta HU no la traen y el historial tiene que seguir leyéndose igual.</para>
+    /// </summary>
+    public string? ChangedByCompania { get; init; }
+
     /// <summary>
     /// Metadata jsonb crudo del evento. En eventos de migración V1→V2 conserva el actor REAL de V1
     /// (<c>usuario</c>/<c>usuario_rol</c>/<c>usuario_email</c>) y el marcador <c>origen=migration_v1</c>,

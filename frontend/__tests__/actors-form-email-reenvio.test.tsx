@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   saveActors: vi.fn(),
   getInstance: vi.fn(),
   getBiometricState: vi.fn(),
+  runtPersonLookup: vi.fn(),
+  actorContactLookup: vi.fn(),
+  lookupLegalRepresentativeByNit: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -19,6 +22,9 @@ vi.mock('@/lib/api/tramites-client', () => ({
     saveActors: mocks.saveActors,
     getInstance: mocks.getInstance,
     getBiometricState: mocks.getBiometricState,
+    runtPersonLookup: mocks.runtPersonLookup,
+    actorContactLookup: mocks.actorContactLookup,
+    lookupLegalRepresentativeByNit: mocks.lookupLegalRepresentativeByNit,
   },
 }));
 
@@ -33,6 +39,11 @@ const PERSISTED_COMPRADOR = {
   nombreCompleto: 'Juan Perez',
   email: 'juan@old.com',
   personType: 'natural' as const,
+  // HU #11595 — ciudad, dirección y teléfono ahora son obligatorios: sin ellos el submit se
+  // bloquea antes de llegar al flujo de confirmación de correo que testea este archivo.
+  telefono: '3001234567',
+  ciudad: 'Bogota',
+  direccion: 'Calle 1 # 2-3',
 };
 
 function activeValidation(overrides: Partial<Record<string, unknown>> = {}) {
@@ -61,10 +72,27 @@ beforeEach(() => {
   mocks.getInstance.mockResolvedValue({ fieldValues: [] });
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'kyverum' });
+  mocks.lookupLegalRepresentativeByNit.mockResolvedValue(null);
+  mocks.actorContactLookup.mockResolvedValue({ found: false });
+  mocks.runtPersonLookup.mockResolvedValue({
+    found: true,
+    fullName: 'Juan Perez',
+    documentType: 'CC',
+    documentNumber: '123',
+    source: 'RUNT',
+    mode: 'mock',
+  });
 });
+
+/** Consulta RUNT del comprador hidratado (gate de guardado). */
+async function consultPersistedComprador(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Consultar RUNT' }));
+  await screen.findByText(/Persona encontrada en RUNT/i);
+}
 
 async function changeEmail(newEmail: string) {
   const user = userEvent.setup();
+  await consultPersistedComprador(user);
   const email = await screen.findByLabelText(/Correo electrónico/);
   await user.clear(email);
   await user.type(email, newEmail);
@@ -144,7 +172,9 @@ describe('ActorsForm — aviso de reenvío al editar el correo (HU #10886 AC1)',
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
     await screen.findByDisplayValue('Juan Perez');
 
-    await userEvent.click(screen.getByRole('button', { name: /Guardar actores/ }));
+    const user = userEvent.setup();
+    await consultPersistedComprador(user);
+    await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
     await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

@@ -18,8 +18,17 @@ public sealed class OtClientProcedureResponse
 
     public string Status { get; init; } = string.Empty;
 
+    /// <summary>Familia del tipo (MATRICULAS | TRASPASO | OTROS): determina qué causales de rechazo aplican.</summary>
+    public string Familia { get; init; } = string.Empty;
+
     /// <summary>Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado).</summary>
     public string? PlateFlowStatus { get; init; }
+
+    /// <summary>HU #12165/#12167 (Feature #12156) — base de la ventana de 1 hora para corregir la placa.</summary>
+    public DateTimeOffset? PlateAssignedAt { get; init; }
+
+    /// <summary>HU #12167 — no nulo si ya se usó la única corrección permitida dentro de la ventana.</summary>
+    public DateTimeOffset? PlateUpdatedAt { get; init; }
 
     /// <summary>HU #10804 (Feature #10587) — estado del SOAT (soat_estado): null | unknown | vencido | vigente.
     /// El frontend oculta Aprobar/Rechazar salvo ruta estándar o placa asignada con SOAT vigente.</summary>
@@ -49,13 +58,73 @@ public sealed class OtClientProcedureResponse
 
     public string? Placa { get; init; }
     public string? Vin { get; init; }
+    /// <summary>Propietario/vendedor (null en matrícula inicial).</summary>
+    public string? VendedorNombre { get; init; }
+    public string? CompradorNombre { get; init; }
+    /// <summary>Gestor que radicó el trámite.</summary>
+    public string? GestorNombre { get; init; }
     public string? Marca { get; init; }
     public string? Linea { get; init; }
     public string? Modelo { get; init; }
+    /// <summary>Color EFECTIVO: el nuevo si el trámite declara un cambio. Contrastar con <see cref="RuntSnapshot"/>.</summary>
     public string? Color { get; init; }
     public string? Clase { get; init; }
     public string? Servicio { get; init; }
+    /// <summary>Combustible EFECTIVO. Ver <see cref="Color"/>.</summary>
     public string? Combustible { get; init; }
+    /// <summary>Carrocería EFECTIVA. Ver <see cref="Color"/>.</summary>
+    public string? Carroceria { get; init; }
+    public string? Cilindraje { get; init; }
+    public string? Capacidad { get; init; }
+    public string? Ejes { get; init; }
+    public string? EstadoVehiculo { get; init; }
+    public string? NumeroMotor { get; init; }
+    public string? NumeroChasis { get; init; }
+    public string? NumeroSerie { get; init; }
+
+    /// <summary>HU #11929 — valores del RUNT para los atributos transformables; null si el trámite no los capturó.</summary>
+    public OtClientProcedureVehicleSnapshotResponse? RuntSnapshot { get; init; }
+
+    /// <summary>HU #11929 — banderas cambio_color / cambio_combustible / cambio_carroceria.</summary>
+    public OtClientProcedureTransformationFlagsResponse TransformacionesDeclaradas { get; init; } = new();
+
+    /// <summary>HU #11929 — datos comerciales; null si el trámite no los tiene.</summary>
+    public OtClientProcedureCommercialResponse? Comercial { get; init; }
+
+    /// <summary>HU #11929 — decisión de prenda; null si el trámite no tiene decisión registrada.</summary>
+    public OtClientProcedurePrendaResponse? Prenda { get; init; }
+}
+
+public sealed class OtClientProcedureVehicleSnapshotResponse
+{
+    public string? Color { get; init; }
+    public string? Combustible { get; init; }
+    public string? Carroceria { get; init; }
+}
+
+public sealed class OtClientProcedureTransformationFlagsResponse
+{
+    public bool Color { get; init; }
+    public bool Combustible { get; init; }
+    public bool Carroceria { get; init; }
+}
+
+public sealed class OtClientProcedureCommercialResponse
+{
+    public decimal? ValorVenta { get; init; }
+    public string? Causal { get; init; }
+    public decimal? TasaImpuesto { get; init; }
+    public decimal? Derechos { get; init; }
+    public string? MetodoPago { get; init; }
+}
+
+public sealed class OtClientProcedurePrendaResponse
+{
+    public string Decision { get; init; } = string.Empty;
+    public string Estado { get; init; } = string.Empty;
+    public string? AcreedorNombre { get; init; }
+    public string? AcreedorDocumento { get; init; }
+    public string? LevantamientoEntidad { get; init; }
 }
 
 public sealed class OtClientProcedureActorResponse
@@ -71,7 +140,22 @@ public sealed class OtClientProcedureActorResponse
 
 public sealed class RejectOtClientProcedureRequest
 {
+    /// <summary>
+    /// Observación general del rechazo, en texto libre y obligatoria. NO la sustituyen las
+    /// causales: la causal dice QUÉ falló (dato agregable del reporte) y la observación dice CÓMO
+    /// corregirlo — qué documento exactamente, qué dato no cuadra, qué se espera del gestor. Es el
+    /// contexto que necesita quien va a subsanar, y por eso se pide aunque se marquen varias causales.
+    /// </summary>
     public string Reason { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Causales del catálogo marcadas por el revisor. Varias son válidas y esperadas: un expediente
+    /// puede llegar con improntas borrosas, sin impronta y sin pago de impuestos a la vez, y el
+    /// gestor necesita saberlo todo. Se validan contra el catálogo activo de la modalidad del
+    /// trámite; una causal ajena o inactiva devuelve 422 en vez de descartarse en silencio (el
+    /// revisor creería haberla registrado).
+    /// </summary>
+    public IReadOnlyList<Guid>? RejectionReasonIds { get; init; }
 
     /// <summary>
     /// HU #10871 (AC1) — checklist de ítems subsanables (opcional). Con al menos un ítem, el trámite
@@ -92,6 +176,12 @@ public sealed class ApproveOtClientProcedureRequest
     public Guid? MandateSignerId { get; init; }
 }
 
+/// <summary>HU #12166 (Feature #12156) — motivo opcional de la revocación (auditoría, no exigido por AC).</summary>
+public sealed class RevokeOtClientProcedureRequest
+{
+    public string? Reason { get; init; }
+}
+
 internal static class OtClientProcedureMapper
 {
     public static OtClientProcedureResponse ToResponse(Domain.OtClientProcedures.OtClientProcedure procedure) =>
@@ -104,7 +194,10 @@ internal static class OtClientProcedureMapper
             ClientTenantName = procedure.ClientTenantName,
             ReferenceNumber = procedure.ReferenceNumber,
             Status = procedure.Status,
+            Familia = procedure.Familia,
             PlateFlowStatus = procedure.PlateFlowStatus,
+            PlateAssignedAt = procedure.PlateAssignedAt,
+            PlateUpdatedAt = procedure.PlateUpdatedAt,
             SoatEstado = procedure.SoatEstado,
             PlatePreferredLastDigit = procedure.PlatePreferredLastDigit,
             SoatPagado = procedure.SoatPagado,
@@ -125,6 +218,9 @@ internal static class OtClientProcedureMapper
             }).ToList(),
             Placa = procedure.Placa,
             Vin = procedure.Vin,
+            VendedorNombre = procedure.VendedorNombre,
+            CompradorNombre = procedure.CompradorNombre,
+            GestorNombre = procedure.GestorNombre,
             Marca = procedure.Marca,
             Linea = procedure.Linea,
             Modelo = procedure.Modelo,
@@ -132,5 +228,47 @@ internal static class OtClientProcedureMapper
             Clase = procedure.Clase,
             Servicio = procedure.Servicio,
             Combustible = procedure.Combustible,
+            Carroceria = procedure.Carroceria,
+            Cilindraje = procedure.Cilindraje,
+            Capacidad = procedure.Capacidad,
+            Ejes = procedure.Ejes,
+            EstadoVehiculo = procedure.EstadoVehiculo,
+            NumeroMotor = procedure.NumeroMotor,
+            NumeroChasis = procedure.NumeroChasis,
+            NumeroSerie = procedure.NumeroSerie,
+            RuntSnapshot = procedure.RuntSnapshot is null
+                ? null
+                : new OtClientProcedureVehicleSnapshotResponse
+                {
+                    Color = procedure.RuntSnapshot.Color,
+                    Combustible = procedure.RuntSnapshot.Combustible,
+                    Carroceria = procedure.RuntSnapshot.Carroceria,
+                },
+            TransformacionesDeclaradas = new OtClientProcedureTransformationFlagsResponse
+            {
+                Color = procedure.TransformacionesDeclaradas.Color,
+                Combustible = procedure.TransformacionesDeclaradas.Combustible,
+                Carroceria = procedure.TransformacionesDeclaradas.Carroceria,
+            },
+            Comercial = procedure.Comercial is null
+                ? null
+                : new OtClientProcedureCommercialResponse
+                {
+                    ValorVenta = procedure.Comercial.ValorVenta,
+                    Causal = procedure.Comercial.Causal,
+                    TasaImpuesto = procedure.Comercial.TasaImpuesto,
+                    Derechos = procedure.Comercial.Derechos,
+                    MetodoPago = procedure.Comercial.MetodoPago,
+                },
+            Prenda = procedure.Prenda is null
+                ? null
+                : new OtClientProcedurePrendaResponse
+                {
+                    Decision = procedure.Prenda.Decision,
+                    Estado = procedure.Prenda.Estado,
+                    AcreedorNombre = procedure.Prenda.AcreedorNombre,
+                    AcreedorDocumento = procedure.Prenda.AcreedorDocumento,
+                    LevantamientoEntidad = procedure.Prenda.LevantamientoEntidad,
+                },
         };
 }

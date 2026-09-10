@@ -16,6 +16,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Capturas reales de Kyverum y Verifik (2026-09-10) para el motor de Confirmación RUNT (HU #12308):
+         son los casos de prueba, no los fixtures recortados del repo que omiten solicitudes[]. -->
+    <Content Include="RuntConfirmation\Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

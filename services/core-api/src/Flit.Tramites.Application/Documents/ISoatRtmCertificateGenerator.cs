@@ -28,7 +28,12 @@ public sealed record SoatRtmCertificateData(
     SoatRtmBlock Soat,
     // RTM: null oculta la tabla (p. ej. matrícula inicial no tiene revisión técnico-mecánica).
     SoatRtmBlock? Rtm,
-    AvaluoInfo? Avaluo);
+    AvaluoInfo? Avaluo,
+    // HU #11305 (ADR-0041) — pie de procedencia por bloque: quién dijo el dato y cuándo.
+    // El texto fijo del certificado afirma una consulta al RUNT que puede no haber ocurrido: hay
+    // celdas que salen del OCR de un PDF cargado por el operador. Nulo ⇒ no se pinta pie.
+    string? FuenteSoat = null,
+    string? FuenteRtm = null);
 
 /// <summary>
 /// Genera el "Certificado de vigencia SOAT Y RTM" (HU #10856) como PDF real con membrete FLIT, para

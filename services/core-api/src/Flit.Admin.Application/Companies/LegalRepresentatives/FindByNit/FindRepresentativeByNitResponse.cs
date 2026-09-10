@@ -32,7 +32,12 @@ public sealed record RepresentativeOptionDto(
     string? Email,
     string? Telefono,
     bool FirmaVigente,
-    bool IdentidadVigente);
+    bool IdentidadVigente,
+    string? RazonSocial = null,
+    string? CompanyEmail = null,
+    string? CompanyAddress = null,
+    string? CompanyCity = null,
+    string? CompanyPhone = null);
 
 /// <summary>Compañía representada precargada (razón social + contacto). <c>Nit</c> es PII.</summary>
 public sealed record RepresentativeCompanyDto(

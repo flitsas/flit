@@ -12,11 +12,13 @@ public sealed class CreateDeedHandler
 {
     private readonly IDeedDocumentStorage _storage;
     private readonly IDeedRepository _repository;
+    private readonly IDeedReader _reader;
 
-    public CreateDeedHandler(IDeedDocumentStorage storage, IDeedRepository repository)
+    public CreateDeedHandler(IDeedDocumentStorage storage, IDeedRepository repository, IDeedReader reader)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
     }
 
     public async Task<CreateDeedResult> HandleAsync(
@@ -25,13 +27,34 @@ public sealed class CreateDeedHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        var companies = DeedValidation.NormalizeCompanies(command.RepresentedCompanyIds);
         var errors = DeedValidation.ValidateMetadata(
-            command.Description, command.VigenciaDesde, command.VigenciaHasta, command.RepresentedCompanyIds);
+            command.Description, command.VigenciaDesde, command.VigenciaHasta, companies);
 
         if (string.IsNullOrWhiteSpace(command.Sha256))
         {
             errors.Add(new DeedValidationError(
                 "sha256", "documento_requerido", "El hash del documento PDF es obligatorio."));
+        }
+
+        foreach (var companyId in companies)
+        {
+            if (command.RepresentativeId is null)
+            {
+                break;
+            }
+
+            var existing = await _reader
+                .FindActiveByCompanyAsync(command.TenantId, companyId, cancellationToken)
+                .ConfigureAwait(false);
+            if (existing is not null)
+            {
+                errors.Add(new DeedValidationError(
+                    "representedCompanyIds",
+                    "escritura_unica",
+                    "Esta empresa ya tiene una escritura. Edita la existente."));
+                break;
+            }
         }
 
         if (errors.Count > 0)

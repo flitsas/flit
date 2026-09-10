@@ -16,7 +16,8 @@ public sealed record CertificadoIdentidadResult(byte[] Content, string ContentTy
 /// </summary>
 public sealed class DescargarCertificadoIdentidadHandler(
     IProcedureInstanceRepository repo,
-    IKyverumCertificateClient certClient)
+    IKyverumCertificateClient certClient,
+    IIdentitySignatureCapture? signatureCapture = null)
 {
     public async Task<(CertificadoIdentidadResult? Result, string? Error)> HandleAsync(
         Guid instanceId, Guid tenantId, Guid validationId, CancellationToken ct = default)
@@ -44,9 +45,17 @@ public sealed class DescargarCertificadoIdentidadHandler(
         try
         {
             var cert = await certClient.DownloadCertificateAsync(bio.KyverumVerificationId!, ct);
-            return cert is null
-                ? (null, "sin_certificado")
-                : (new CertificadoIdentidadResult(cert.Content, cert.ContentType, cert.FileName), null);
+            if (cert is null)
+                return (null, "sin_certificado");
+
+            if (signatureCapture is not null)
+            {
+                var outcome = await signatureCapture.EnsureFromPdfAsync(bio, cert.Content, ct).ConfigureAwait(false);
+                if (outcome == IdentitySignatureCaptureOutcome.Captured)
+                    await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
+
+            return (new CertificadoIdentidadResult(cert.Content, cert.ContentType, cert.FileName), null);
         }
         catch (KyverumCertificateException ex)
         {

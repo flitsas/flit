@@ -103,6 +103,18 @@ public sealed class MockDocumentOcrAnalyzer : IDocumentOcrAnalyzer
                 ["vehiculo_vin"] = "",
                 ["observaciones"] = ObservacionMock,
             },
+            "mandato_config" => new JsonObject
+            {
+                ["suggestedTemplateCode"] = "sabaneta",
+                ["requiresForNaturalPerson"] = true,
+                ["mandataryFamily"] = "organismo_transito",
+                ["institutionalMandataryName"] =
+                    "UNION TEMPORAL SERVICIOS ESPECIALIZADOS DE TRANSITO Y TRANSPORTE DE SABANETA SETSA",
+                ["institutionalMandataryNit"] = "900273813-7",
+                ["chamberCity"] = "Medellín",
+                ["mandatarySigla"] = "UT-SETSA",
+                ["notes"] = ObservacionMock,
+            },
             _ => new JsonObject
             {
                 ["es_valido"] = true,

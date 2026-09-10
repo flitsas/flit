@@ -1,0 +1,74 @@
+namespace Flit.Tramites.Application.UseCases.Consultations;
+
+/// <summary>
+/// Núcleo de resolución del proveedor RUES (persona JURÍDICA por NIT) compartido entre
+/// <see cref="RuesPersonLookupHandler"/> (con instancia, persiste) y <see cref="RuesPreviewHandler"/>
+/// (sin instancia, HU sin ADO 2026-08-11, NO persiste). Antes de esta extracción cada handler
+/// resolvía el proveedor y armaba el <see cref="ConsultationContext"/> por su cuenta: dos copias del
+/// mismo <c>registry.Resolve("verifik_rues")</c> + plantilla <c>RUES_ACTOR_JURIDICAL</c> que se
+/// habrían podido divergir con el tiempo (p. ej. si alguien cambiaba la clave del provider en un
+/// handler y olvidaba el otro).
+/// </summary>
+public static class RuesActorJuridicalLookup
+{
+    public const string ProviderKey = "verifik_rues";
+    public const string TemplateCode = "RUES_ACTOR_JURIDICAL";
+
+    /// <summary>
+    /// Resuelve el proveedor RUES y consulta el NIT. <paramref name="instanceId"/> es
+    /// <see cref="Guid.Empty"/> cuando no hay trámite todavía (preview) — mismo convenio que usa
+    /// <c>RunPreflightPreviewHandler.RunVehiculoAsync</c> para "sin instancia". Devuelve
+    /// <c>Error = "provider_not_found"</c> si el proveedor no está registrado; nunca lanza.
+    /// </summary>
+    public static async Task<(ConsultationResult? Result, string? Error)> ConsultAsync(
+        IConsultationProviderRegistry registry,
+        Guid instanceId,
+        Guid tenantId,
+        string nit,
+        CancellationToken ct)
+    {
+        var provider = registry.Resolve(ProviderKey);
+        if (provider is null)
+            return (null, "provider_not_found");
+
+        var fieldValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["nit"] = nit,
+            ["documentNumber"] = nit,
+        };
+
+        var ctx = new ConsultationContext(instanceId, tenantId, TemplateCode, fieldValues);
+        var result = await provider.ConsultAsync(ctx, ct);
+        if (IsProviderFailure(result))
+            return (null, "provider_unavailable");
+
+        return (result, null);
+    }
+
+    /// <summary>
+    /// Distingue "el proveedor no respondió" (check error) de "el NIT no existe" (check unknown).
+    /// Ambos llegan con cero campos hidratados; sin este filtro el operador ve "empresa no encontrada".
+    /// </summary>
+    public static bool IsProviderFailure(ConsultationResult result)
+    {
+        foreach (var check in result.Checks)
+        {
+            if (string.Equals(check.Status, "error", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Busca <paramref name="fieldKey"/> en los campos hidratados por la consulta.</summary>
+    public static string? GetHydrated(IReadOnlyList<HydratedField> fields, string fieldKey)
+    {
+        foreach (var f in fields)
+        {
+            if (string.Equals(f.FieldKey, fieldKey, StringComparison.OrdinalIgnoreCase))
+                return f.ValueText;
+        }
+
+        return null;
+    }
+}

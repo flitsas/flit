@@ -99,6 +99,10 @@ describe("SignatureVaultFormPanel (HU #10644)", () => {
     await fillValidForm();
     await userEvent.click(screen.getByRole("button", { name: /registrar firma/i }));
 
-    expect(await screen.findByText(/ya existe una firma activa/i)).toBeInTheDocument();
+    // Desde la HU #11193 el servidor SUSTITUYE la firma activa, así que este código ya no significa
+    // «anúlala primero»: solo llega cuando la sustitución no se pudo completar. El copy anterior
+    // mandaba al usuario a hacer algo que ya no hace falta.
+    expect(await screen.findByText(/no se pudo sustituir la firma activa/i)).toBeInTheDocument();
+    expect(screen.queryByText(/anúlala antes de registrar una nueva/i)).not.toBeInTheDocument();
   });
 });

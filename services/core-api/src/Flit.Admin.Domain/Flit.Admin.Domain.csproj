@@ -5,4 +5,8 @@
     <RootNamespace>Flit.Admin.Domain</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Flit.Queries.Domain\Flit.Queries.Domain.csproj" />
+  </ItemGroup>
+
 </Project>

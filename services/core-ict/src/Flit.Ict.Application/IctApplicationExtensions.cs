@@ -1,6 +1,7 @@
 using Flit.Ict.Application.Attachments;
 using Flit.Ict.Application.Auth.Login;
 using Flit.Ict.Application.Auth.Rotate;
+using Flit.Ict.Application.Clients;
 using Flit.Ict.Application.Edit;
 using Flit.Ict.Application.Register;
 using Flit.Ict.Application.Status;
@@ -25,6 +26,11 @@ public static class IctApplicationExtensions
         services.AddScoped<ReprocessHandler>();
         services.AddScoped<AbortDraftHandler>();
         services.AddScoped<PauseDraftHandler>();
+        // Administración (CRUD) de clientes ICT (submódulo Usuarios y Roles, permiso ict.clients.manage).
+        services.AddScoped<CreateIntegrationClientHandler>();
+        services.AddScoped<ListIntegrationClientsHandler>();
+        services.AddScoped<UpdateIntegrationClientHandler>();
+        services.AddScoped<ResetIntegrationClientSecretHandler>();
         return services;
     }
 }

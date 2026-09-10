@@ -3,6 +3,7 @@ using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 using Flit.Admin.Tests.TestDoubles;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
@@ -36,6 +37,17 @@ public sealed class CreateTransitOfficeHandlerTests
 
         await using (var act = NewContext(db))
         {
+            act.TransitOffices.Add(new TransitOffice
+            {
+                Id = MedellinOfficeId,
+                Code = "5001000",
+                Name = "MEDELLIN",
+                DepartmentCode = "05",
+                CityCode = "05001",
+                IsActive = true,
+            });
+            await act.SaveChangesAsync(TestContext.Current.CancellationToken);
+
             var handler = new CreateTransitOfficeHandler(
                 new TransitOfficeTenantWriteRepository(act, NullAuditContextAccessor.Instance), new StaticTransitOfficeCatalog());
 
@@ -74,6 +86,15 @@ public sealed class CreateTransitOfficeHandlerTests
             p => p.TenantId == tenant.Id, cancellationToken: TestContext.Current.CancellationToken);
         profile.TransitOfficeId.Should().Be(MedellinOfficeId);
         profile.OperationMode.Should().Be("dashboard");
+
+        var mandate = await verify.TransitOfficeMandateConfigs.SingleAsync(
+            c => c.TransitOfficeId == MedellinOfficeId,
+            cancellationToken: TestContext.Current.CancellationToken);
+        mandate.TemplateCode.Should().Be("municipio");
+        mandate.AssignmentMode.Should().Be("signer");
+        mandate.ChamberCity.Should().Be("Medellín");
+        mandate.InstitutionalMandataryName.Should().BeNull();
+        mandate.InstitutionalMandataryNit.Should().BeNull();
     }
 
     [Fact]

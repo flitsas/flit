@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Flit.Tramites.Application.Ocr;
 using Microsoft.Extensions.Logging;
@@ -28,32 +27,13 @@ internal sealed class AnthropicDocumentOcrAnalyzer(
         if (!vision.Ok)
             return new DocumentOcrAnalysis(false, null, vision.Status, vision.Message);
 
-        var json = StripCodeFences(vision.Text!);
-        try
-        {
-            if (JsonNode.Parse(json) is JsonObject obj)
-                return new DocumentOcrAnalysis(true, obj, 200, null);
-        }
-        catch (JsonException)
-        {
-            // Cae al retorno de error de abajo.
-        }
+        // Tolerante a fences y a la prosa que el modelo añade cuando el documento no encaja del todo
+        // en el esquema pedido; ver OcrModelJson.
+        if (OcrModelJson.ExtractObject(vision.Text) is { } obj)
+            return new DocumentOcrAnalysis(true, obj, 200, null);
 
         OcrParseLog.ParseFailed(logger, tipo);
         return new DocumentOcrAnalysis(false, null, 500, "No se pudo extraer datos del documento");
-    }
-
-    /// <summary>Quita fences de markdown (```json … ```) que el modelo pueda envolver alrededor del JSON.</summary>
-    private static string StripCodeFences(string text)
-    {
-        var t = text.Trim();
-        if (t.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
-            t = t["```json".Length..];
-        else if (t.StartsWith("```", StringComparison.Ordinal))
-            t = t["```".Length..];
-        if (t.EndsWith("```", StringComparison.Ordinal))
-            t = t[..^3];
-        return t.Trim();
     }
 }
 

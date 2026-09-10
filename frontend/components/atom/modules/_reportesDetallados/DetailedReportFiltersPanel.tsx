@@ -1,13 +1,25 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
+import type { ProcedureFamily, ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
 import type { TransitOfficeOption } from "@/lib/api/types/procedure-runtime";
 import type { CompanyListItem } from "@/lib/api/types";
 import { statusLabel } from "../_reportes/categories";
 import { CompanySelector } from "../_reportes/CompanySelector";
 import { DateRangeFilter } from "../_reportes/DateRangeFilter";
-import { groupProcedureTypes, PROCEDURE_STATUSES, type DetailedReportFiltersState, type TriState } from "./filters";
+import {
+  TipoTramiteSelect,
+  agruparTiposTramite,
+  type SeleccionTipoTramite,
+} from "@/components/consultas/tipo-tramite";
+import { familyToCategory, PROCEDURE_STATUSES, type DetailedReportFiltersState, type TriState } from "./filters";
+
+/** Vuelta atrás de `familyToCategory`, para leer el filtro que ya venía guardado o en la URL. */
+const CATEGORIA_A_FAMILIA: Record<string, ProcedureFamily> = {
+  matriculas: "MATRICULAS",
+  traspasos: "TRASPASO",
+  otros: "OTROS",
+};
 
 const inputClass =
   "h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-[#162744] outline-none focus:border-[#557EFF] dark:bg-[#0B0F14] dark:text-white";
@@ -37,18 +49,22 @@ export function DetailedReportFiltersPanel({
     onChange({ ...filters, ...partial });
   }
 
-  // Selector unificado tipo/categoría: el valor codifica si se filtra por una categoría
-  // completa (`cat:<categoria>`) o por un tipo de trámite concreto (`type:<guid>`).
-  const groups = groupProcedureTypes(procedureTypes);
-  const procedureValue = filters.procedureTypeId
-    ? `type:${filters.procedureTypeId}`
+  // El selector es el mismo que usan los reportes del organismo y los de la empresa: una sola
+  // implementación es lo que evita que un informe ofrezca «Blindaje» y el de al lado no.
+  //
+  // La traducción vive aquí porque este informe filtra contra `category` de la vista BI
+  // (minúsculas, en plural) y no contra el código de familia. Son el mismo eje con dos nombres, y
+  // el sitio para reconciliarlos es el borde de este panel, no el componente compartido.
+  const grupos = agruparTiposTramite(procedureTypes);
+  const seleccion: SeleccionTipoTramite = filters.procedureTypeId
+    ? { tipoId: filters.procedureTypeId }
     : filters.category
-      ? `cat:${filters.category}`
-      : "";
+      ? { familia: CATEGORIA_A_FAMILIA[filters.category] }
+      : {};
 
-  function handleProcedureChange(value: string) {
-    if (value.startsWith("cat:")) patch({ category: value.slice(4), procedureTypeId: undefined });
-    else if (value.startsWith("type:")) patch({ procedureTypeId: value.slice(5), category: undefined });
+  function handleProcedureChange(sel: SeleccionTipoTramite) {
+    if (sel.tipoId) patch({ procedureTypeId: sel.tipoId, category: undefined });
+    else if (sel.familia) patch({ category: familyToCategory(sel.familia), procedureTypeId: undefined });
     else patch({ category: undefined, procedureTypeId: undefined });
   }
 
@@ -68,25 +84,14 @@ export function DetailedReportFiltersPanel({
           />
         )}
 
-        <FilterField id="dr-type" label="Tipo / categoría de trámite" minWidth={200}>
-          <select
+        <FilterField id="dr-type" label="Tipo de trámite" minWidth={200}>
+          <TipoTramiteSelect
             id="dr-type"
             className={inputClass}
-            value={procedureValue}
-            onChange={(e) => handleProcedureChange(e.target.value)}
-          >
-            <option value="">Todos los tipos</option>
-            {groups.map((group) => (
-              <optgroup key={group.category} label={group.label}>
-                <option value={`cat:${group.category}`}>Toda la categoría: {group.label}</option>
-                {group.types.map((type) => (
-                  <option key={type.id} value={`type:${type.id}`}>
-                    {type.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+            grupos={grupos}
+            value={seleccion}
+            onChange={handleProcedureChange}
+          />
         </FilterField>
 
         <FilterField id="dr-ot" label="Organismo de tránsito" minWidth={200}>

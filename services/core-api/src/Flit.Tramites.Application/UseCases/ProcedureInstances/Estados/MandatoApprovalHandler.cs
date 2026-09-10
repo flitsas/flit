@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 
@@ -16,8 +17,9 @@ public enum MandatoApprovalOutcome
     RequiereSeleccion,
 
     /// <summary>
-    /// El mandatario resuelto NO tiene identidad validada vigente (HU #10911/#10916): debe validar su
-    /// identidad antes de firmar (⇒ 409 mandatario_identidad_requerida).
+    /// El mandatario resuelto no tiene NINGUNA de las dos formas de firmar —ni firma del baúl vigente ni
+    /// identidad validada vigente—, así que debe conseguir una antes de firmar
+    /// (⇒ 409 mandatario_identidad_requerida).
     /// </summary>
     IdentidadRequerida,
 }
@@ -36,8 +38,12 @@ public sealed record MandatoApprovalDecision(MandatoApprovalOutcome Outcome, Gui
 /// </summary>
 public sealed class MandatoApprovalHandler(
     IProcedureInstanceRepository repo,
-    IMandateSignerDirectory directory)
+    IMandateSignerDirectory directory,
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IMandateRequirementPolicy? mandatePolicy = null)
 {
+    private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
+
     public async Task<MandatoApprovalDecision> CheckAsync(
         Guid instanceId,
         Guid clientTenantId,
@@ -45,36 +51,66 @@ public sealed class MandatoApprovalHandler(
         Guid? explicitSignerId,
         CancellationToken ct = default)
     {
+        _ = vaultPolicy;
         var instance = await repo.GetByIdWithFurGraphAsync(instanceId, clientTenantId, ct).ConfigureAwait(false);
         if (instance is null)
             return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
 
-        // El mandato aplica sii ya se generó su adjunto (en preparado, cuando ExigeMandato). Sin él, no se
-        // exige firmante — evita el 409 espurio en trámites que no requieren mandato pero cuyo OT sí tiene
-        // mandatarios registrados.
+        // El mandato aplica sii ya se generó su adjunto DEL SISTEMA (en preparado, cuando ExigeMandato).
+        // Sin él, no se exige firmante — evita el 409 espurio en trámites que no requieren mandato pero
+        // cuyo OT sí tiene mandatarios registrados.
+        //
+        // HU #11317 (Feature #11309, ADR-0042 §supersede parcial) — excluye los adjuntos de mandato con
+        // Source="company": ese PDF es un documento ESTÁTICO de la compañía (sin bloques de firma del
+        // mandatario, sin consultar directorio ni política de firma), así que su sola presencia NO
+        // implica que el trámite exija un mandatario que firme. Si el gate lo mirara sin distinguir el
+        // origen, un mandato personalizado bloquearía SIEMPRE la aprobación con 409
+        // mandatario_requerido/mandatario_identidad_requerida, aunque nadie vaya a firmarlo. Cuando el
+        // adjunto es del sistema (Source="system", el caso de siempre) el gate exige mandatario
+        // exactamente como antes.
         var exigeMandato = instance.Attachments.Any(a =>
-            string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase));
+            string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase));
         if (!exigeMandato || instance.TransitOfficeId is not { } transitOfficeId)
             return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
 
+        var officeCode = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        var mandateConfig = string.IsNullOrWhiteSpace(officeCode)
+            ? null
+            : await _mandatePolicy.ResolveAsync(officeCode, clientTenantId, ct).ConfigureAwait(false);
+
+        // Abierto / institucional: aprobar sin firmante persona (tipo por compañía×OT).
+        if (MandatoAssignmentModeCodes.SkipsPersonSigner(mandateConfig?.AssignmentMode))
+        {
+            return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
+        }
+
         var candidates = await directory
-            .GetCandidatesAsync(transitOfficeId, instance.TenantId, ct)
+            .GetCandidatesAsync(
+                transitOfficeId, instance.TenantId,
+                MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
+            .ConfigureAwait(false);
+        candidates = await MandateSignerSelectionResolver
+            .WithOtDefaultAsync(candidates, mandateConfig?.OtDefaultMandateSignerId, directory, ct)
             .ConfigureAwait(false);
 
-        var resolution = MandateSignerSelector.Resolve(candidates, approvingUserId, explicitSignerId);
+        var elegido = MandateSignerDefaultResolver.Resolve(
+            candidates.Select(c => c.Id).ToList(),
+            explicitSignerId ?? instance.MandateSignerId,
+            mandateConfig?.OtDefaultMandateSignerId,
+            mandateConfig?.DefaultMandateSignerId);
 
+        var resolution = MandateSignerSelector.Resolve(candidates, approvingUserId, elegido);
+
+        // El OT puede emitir el mandato en blanco (sin identidad, baúl ni firma a mano).
+        // Quién firma sigue resolviéndose; cómo firma no bloquea la aceptación.
         return resolution.Status switch
         {
-            // Un único candidato / cotejo por usuario / selección explícita válida. El firmante debe tener
-            // identidad validada VIGENTE (HU #10911/#10916): si no, se exige validar antes de aprobar.
-            MandateSignerResolutionStatus.Resolved when resolution.Signer!.IdentityVigente =>
-                new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer.Id),
             MandateSignerResolutionStatus.Resolved =>
-                new MandatoApprovalDecision(MandatoApprovalOutcome.IdentidadRequerida, null),
-            // Varios sin match: el aprobador debe elegir (409).
+                new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer!.Id),
             MandateSignerResolutionStatus.RequiereSeleccion =>
                 new MandatoApprovalDecision(MandatoApprovalOutcome.RequiereSeleccion, null),
-            // Sin mandatarios configurados (p. ej. Sabaneta institucional): aprobar sin firmante persona.
             _ => new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null),
         };
     }

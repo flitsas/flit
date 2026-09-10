@@ -12,7 +12,7 @@ public sealed class LegalRepresentative
     private LegalRepresentative(
         Guid id,
         Guid tenantId,
-        Guid representedCompanyId,
+        Guid? representedCompanyId,
         string documentType,
         string documentNumber,
         string firstLastName,
@@ -47,7 +47,8 @@ public sealed class LegalRepresentative
 
     public Guid TenantId { get; }
 
-    public Guid RepresentedCompanyId { get; }
+    /// <summary>Compañía primaria denormalizada (nullable / deprecada desde HU #10932). Null = persona sin NITs aún.</summary>
+    public Guid? RepresentedCompanyId { get; }
 
     public string DocumentType { get; }
 
@@ -79,10 +80,10 @@ public sealed class LegalRepresentative
     /// <summary>¿Tiene firma del baúl o validación de identidad resuelta?</summary>
     public bool HasSignatureOrIdentity => SignatureVaultId is not null || IdentityValidationRef is not null;
 
-    /// <summary>Crea un representante activo, sin firma/identidad resuelta (se vincula aparte).</summary>
+    /// <summary>Crea un representante activo, sin firma/identidad resuelta (se vincula aparte). Compañía opcional.</summary>
     public static LegalRepresentative Create(
         Guid tenantId,
-        Guid representedCompanyId,
+        Guid? representedCompanyId,
         string documentType,
         string documentNumber,
         string firstLastName,
@@ -106,7 +107,7 @@ public sealed class LegalRepresentative
 
         if (representedCompanyId == Guid.Empty)
         {
-            throw new ArgumentException("La compañía representada es obligatoria.", nameof(representedCompanyId));
+            representedCompanyId = null;
         }
 
         return new LegalRepresentative(
@@ -131,7 +132,7 @@ public sealed class LegalRepresentative
     public static LegalRepresentative Rehydrate(
         Guid id,
         Guid tenantId,
-        Guid representedCompanyId,
+        Guid? representedCompanyId,
         string documentType,
         string documentNumber,
         string firstLastName,

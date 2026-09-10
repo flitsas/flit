@@ -3,7 +3,13 @@
 // cada elemento tiene `.toLowerCase()` propio (bug real detectado en pruebas manuales:
 // "r?.toLowerCase is not a function" al iniciar sesión con un usuario multi-rol).
 import { describe, expect, it } from "vitest";
-import { isAdminCompany, isOtAdmin, isSuperAdmin, type JwtPayload } from "../jwt";
+import {
+  canAdminResetPassword,
+  isAdminCompany,
+  isOtAdmin,
+  isSuperAdmin,
+  type JwtPayload,
+} from "../jwt";
 
 describe("isSuperAdmin / isAdminCompany / isOtAdmin — claim roles como array de objetos", () => {
   it("no lanza y detecta SuperAdmin cuando roles es [{id, code}, ...] con 2+ roles", () => {
@@ -52,5 +58,22 @@ describe("isSuperAdmin / isAdminCompany / isOtAdmin — claim roles como array d
     expect(isAdminCompany({})).toBe(false);
     expect(isOtAdmin({})).toBe(false);
     expect(isSuperAdmin(null)).toBe(false);
+  });
+});
+
+describe("canAdminResetPassword (HU-B auth-parity)", () => {
+  it("permite SuperAdmin y AdminCompany", () => {
+    expect(canAdminResetPassword({ role_code: "SuperAdmin" })).toBe(true);
+    expect(canAdminResetPassword({ roles: [{ id: "1", code: "AdminCompany" }] })).toBe(true);
+  });
+
+  it("permite el permiso security.users.reset_password", () => {
+    expect(
+      canAdminResetPassword({ permissions: ["security.users.reset_password"] }),
+    ).toBe(true);
+  });
+
+  it("niega a un operador sin rol ni permiso", () => {
+    expect(canAdminResetPassword({ role_code: "Radicador", permissions: [] })).toBe(false);
   });
 });

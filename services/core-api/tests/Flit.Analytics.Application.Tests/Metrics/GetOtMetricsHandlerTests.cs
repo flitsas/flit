@@ -47,7 +47,12 @@ public sealed class GetOtMetricsHandlerTests
         result.Should().NotBeNull();
         result!.Previous.Should().BeNull();
         result.Comparison.Should().BeNull();
-        result.Current.Should().Be(MetricsTestData.OtMetrics());
+        // Equivalencia estructural y no Be(): el DTO es un record con colecciones, y la igualdad de
+        // record las compara por referencia. Funcionaba solo mientras todas venían vacías (los
+        // arrays vacíos son singletons); con una colección con datos, dos fixtures idénticos ya no
+        // son el mismo objeto. Lo que este test verifica es que el handler devuelve el resultado
+        // del repositorio sin tocarlo, y eso es equivalencia estructural.
+        result.Current.Should().BeEquivalentTo(MetricsTestData.OtMetrics());
         await _repo.Received(1).GetOtMetricsAsync(
             new MetricsFilter(Tenant, From, To, StuckDays: 7), Ct);
     }

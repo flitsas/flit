@@ -34,6 +34,8 @@ export interface IctLogPage {
 export interface IctLogFilters {
   logType?: IctLogType;
   correlationId?: string;
+  /** Búsqueda de texto sobre la ruta (p.ej. el número de trámite: "82"). */
+  search?: string;
   from?: string;
   to?: string;
   page?: number;
@@ -45,6 +47,7 @@ export function fetchIctLogs(filters: IctLogFilters = {}, signal?: AbortSignal):
     query: {
       logType: filters.logType,
       correlationId: filters.correlationId,
+      search: filters.search,
       from: filters.from,
       to: filters.to,
       page: filters.page,

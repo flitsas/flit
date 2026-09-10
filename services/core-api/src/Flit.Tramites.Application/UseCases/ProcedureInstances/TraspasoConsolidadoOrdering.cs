@@ -24,6 +24,12 @@ internal static class TraspasoConsolidadoOrdering
         "certificado_identidad_vendedor",
         // HU #10589 — certificado RUES de la persona jurídica, tras el de identidad.
         "certificado_rues",
+        // HU #11307 — el certificado RUES del VENDEDOR y el de vigencia SOAT/RTM faltaban en esta
+        // lista: caían al final por defecto (rank = Precedence.Length + 1), mezclados con "otro" y
+        // ordenados solo por fecha de carga. El expediente que ve el organismo de tránsito los
+        // presentaba en un sitio arbitrario que además cambiaba entre regeneraciones.
+        "certificado_rues_vendedor",
+        "certificado_soat_rtm",
         // HU #10762 — certificado RNMC (medidas correctivas), junto a los demás certificados generados.
         "certificado_rnmc",
         "compraventa",
@@ -54,20 +60,13 @@ internal static class TraspasoConsolidadoOrdering
     };
 
     internal static IReadOnlyList<ProcedureInstanceAttachment> SelectOrdered(
-        IEnumerable<ProcedureInstanceAttachment> attachments)
-    {
-        var rank = Precedence
-            .Select((tipo, index) => (tipo, index))
-            .ToDictionary(x => x.tipo, x => x.index, StringComparer.OrdinalIgnoreCase);
-
-        return attachments
-            .Where(a => !Excluded.Contains(a.Tipo))
-            .Where(a => !a.Tipo.StartsWith("biometric_", StringComparison.OrdinalIgnoreCase))
-            .Where(a => IsMergeableMime(a.Mimetype))
-            .OrderBy(a => rank.TryGetValue(a.Tipo, out var r) ? r : Precedence.Length + 1)
-            .ThenBy(a => a.UploadedAt)
-            .ToList();
-    }
+        IEnumerable<ProcedureInstanceAttachment> attachments) =>
+        ConsolidadoAttachmentRank.OrderByPrecedence(
+            attachments,
+            Precedence,
+            a => !Excluded.Contains(a.Tipo)
+                 && !a.Tipo.StartsWith("biometric_", StringComparison.OrdinalIgnoreCase)
+                 && IsMergeableMime(a.Mimetype));
 
     private static bool IsMergeableMime(string? mimetype) =>
         string.Equals(mimetype, "application/pdf", StringComparison.OrdinalIgnoreCase)

@@ -30,6 +30,13 @@ internal sealed class ProcedureTypeConfiguration : IEntityTypeConfiguration<Proc
         builder.Property(x => x.Version).IsRequired().HasDefaultValue(1);
         builder.Property(x => x.GateProfile).HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");
 
+        // ADR-0050 — barrera de operación. La columna la crea el DDL 79; aquí solo se mapea, como el
+        // resto de esta tabla (ExcludeFromMigrations).
+        builder.Property(x => x.WizardEnabled)
+            .HasColumnName("wizard_enabled")
+            .IsRequired()
+            .HasDefaultValue(false);
+
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
 

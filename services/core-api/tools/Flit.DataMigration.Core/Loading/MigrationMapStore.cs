@@ -131,6 +131,75 @@ public sealed class MigrationMapStore(Flit.Infrastructure.Persistence.FlitDbCont
         return rows.Count == 0 ? null : JsonSerializer.Deserialize<MigrationMapEntry>(rows[0], EntryJson);
     }
 
+    /// <summary>
+    /// Lo mismo que <see cref="FindEntryAsync"/> pero para muchos ids de golpe, indexado por id de
+    /// V1. Los que nunca se migraron simplemente no aparecen en el diccionario.
+    /// <para>
+    /// Existe por la consola web: al recargar la página hay que reconciliar hasta doscientas filas
+    /// de un CSV contra la libreta. Una consulta por fila serían doscientos viajes para pintar una
+    /// tabla, y el navegador las lanzaría en paralelo contra un host cuyo tope de concurrencia son
+    /// dos. Aquí es <c>= ANY</c> sobre la clave primaria: un viaje y un index scan.
+    /// </para>
+    /// <para>
+    /// El parámetro va como <c>long[]</c> y no interpolado en el SQL. Con <c>SqlQueryRaw</c> es
+    /// tentador construir la lista a mano —son enteros, "no hay inyección posible"—, pero eso
+    /// también convierte cada tamaño de lote en un plan distinto en la caché de Postgres.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyDictionary<long, MigrationMapEntry>> FindEntriesAsync(
+        string v1Table, IReadOnlyCollection<long> v1Ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(v1Ids);
+
+        if (v1Ids.Count == 0)
+        {
+            return new Dictionary<long, MigrationMapEntry>();
+        }
+
+        var rows = await db.Database
+            .SqlQueryRaw<string>(
+                """
+                SELECT json_build_object(
+                           'v1Id',        v1_id,
+                           'v2Id',        v2_id,
+                           'tenantId',    tenant_id,
+                           'batchId',     batch_id,
+                           'finalStatus', final_status,
+                           'warnings',    warnings,
+                           'migratedAt',  migrated_at)::text AS "Value"
+                FROM migration.migration_map
+                WHERE v1_table = {0} AND v1_id = ANY({1})
+                """,
+                v1Table, v1Ids.Distinct().ToArray())
+            .ToListAsync(cancellationToken);
+
+        var encontrados = new Dictionary<long, MigrationMapEntry>(rows.Count);
+        foreach (var row in rows)
+        {
+            var fila = JsonSerializer.Deserialize<MigrationMapRow>(row, EntryJson);
+            if (fila is not null)
+            {
+                encontrados[fila.V1Id] = fila.Entry;
+            }
+        }
+
+        return encontrados;
+    }
+
+    /// <summary>La misma fila que <see cref="MigrationMapEntry"/> más el id de V1 que la indexa.</summary>
+    private sealed record MigrationMapRow(
+        long V1Id,
+        Guid V2Id,
+        Guid TenantId,
+        string BatchId,
+        string FinalStatus,
+        IReadOnlyList<string> Warnings,
+        DateTimeOffset MigratedAt)
+    {
+        internal MigrationMapEntry Entry =>
+            new(V2Id, TenantId, BatchId, FinalStatus, Warnings, MigratedAt);
+    }
+
     /// <summary>camelCase para casar con las claves del <c>json_build_object</c> de arriba.</summary>
     private static readonly JsonSerializerOptions EntryJson = new(JsonSerializerDefaults.Web)
     {

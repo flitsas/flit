@@ -144,6 +144,40 @@ public sealed class KyverumVerifyClientTests
     }
 
     [Fact]
+    public async Task GetStatus_RechazadoTopLevel_WithoutClosedAt_ReturnsRechazadoIntento()
+    {
+        // Bug #11503: Kyverum reporta el status top-level "rechazado" tras CADA intento fallido dentro de
+        // una misma validación (no solo al agotar los 3). Sin `result.closedAt` (señal de cierre real del
+        // proveedor) NO es terminal: debe mapear a "rechazado_intento" para que el reconciliador decida con
+        // el conteo de intentos, no congelar la validación en rechazado tras el primer intento.
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((_, _) => Json(HttpStatusCode.OK,
+            """{"id":"kyv_1","status":"rechazado","result":{"aprobado":false},"subjects":[{"rol":"comprador","status":"rechazado","score":40,"motivo":"El rostro no es completamente visible"}]}"""));
+
+        var result = await Client(handler).GetStatusAsync("kyv_1", "comprador", ct);
+
+        result.Should().NotBeNull();
+        result!.Status.Should().Be("rechazado_intento");
+        result.RawPayloadSanitized.Should().Contain("closed_at");
+    }
+
+    [Fact]
+    public async Task GetStatus_RechazadoTopLevel_WithClosedAt_ReturnsRechazadoTerminal()
+    {
+        // Con `result.closedAt` presente, Kyverum SÍ cerró la validación (agotó reintentos): ahí el
+        // "rechazado" top-level es terminal.
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((_, _) => Json(HttpStatusCode.OK,
+            """{"id":"kyv_1","status":"rechazado","result":{"aprobado":false,"closedAt":"2026-08-13T10:00:00Z"},"subjects":[{"rol":"comprador","status":"rechazado","score":30}]}"""));
+
+        var result = await Client(handler).GetStatusAsync("kyv_1", "comprador", ct);
+
+        result.Should().NotBeNull();
+        result!.Status.Should().Be("rechazado");
+        result.RawPayloadSanitized.Should().Contain("2026-08-13T10:00:00Z");
+    }
+
+    [Fact]
     public async Task GetStatus_NotFound_ReturnsNull()
     {
         var ct = TestContext.Current.CancellationToken;

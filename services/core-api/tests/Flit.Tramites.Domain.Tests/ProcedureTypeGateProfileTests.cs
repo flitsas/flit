@@ -83,6 +83,19 @@ public sealed class ProcedureTypeGateProfileTests
     }
 
     [Theory]
+    [InlineData(null, true)]
+    [InlineData("AUTO", true)]
+    [InlineData("OPERATOR_CHOICE", true)]
+    [InlineData("operator_choice", true)]
+    [InlineData("MANUAL", false)]
+    [InlineData("manual", false)]
+    public void AllowsAutomaticImpronta_SoloManualLaApaga(string? source, bool esperado)
+    {
+        var json = source is null ? "{}" : $$"""{"improntaSource":"{{source}}"}""";
+        ProcedureTypeGateProfile.FromJson(json).AllowsAutomaticImpronta().Should().Be(esperado);
+    }
+
+    [Theory]
     [InlineData("PLATE", true)]
     [InlineData("VIN", true)]
     [InlineData("BOTH", true)]
@@ -93,5 +106,98 @@ public sealed class ProcedureTypeGateProfileTests
     public void IsValidEntryMode_AcceptsOnlyCatalog(string? value, bool valid)
     {
         ProcedureTypeGateProfile.IsValidEntryMode(value).Should().Be(valid);
+    }
+
+    // ── Quién elige el organismo de tránsito ─────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("OPERATOR", true)]
+    [InlineData("operator", true)]
+    [InlineData("RUNT", false)]
+    [InlineData("runt", false)]
+    public void OperatorChoosesTransitOffice_LoDeclaradoManda(string fuente, bool esperado)
+    {
+        // Un radicado de cuenta entra por PLACA y aun así lo elige el operador: deducirlo del
+        // identificador no puede describir ese caso, por eso se declara.
+        var perfil = ProcedureTypeGateProfile.FromJson(
+            $$"""{"entryMode":"PLATE","transitOfficeSource":"{{fuente}}"}""");
+
+        perfil.OperatorChoosesTransitOffice().Should().Be(esperado);
+    }
+
+    [Theory]
+    [InlineData("VIN", true)]
+    [InlineData("PLATE", false)]
+    [InlineData(null, false)]
+    public void OperatorChoosesTransitOffice_SinDeclarar_CaeAlModoDeEntrada(string? entryMode, bool esperado)
+    {
+        // Ausente NO es RUNT: es el criterio anterior a la llave, para que los veinte tipos
+        // restantes y los snapshots ya congelados se comporten exactamente igual que antes.
+        var json = entryMode is null ? "{}" : $$"""{"entryMode":"{{entryMode}}"}""";
+
+        ProcedureTypeGateProfile.FromJson(json).OperatorChoosesTransitOffice().Should().Be(esperado);
+    }
+
+    // ── AdmiteDimensionDePrenda ──────────────────────────────────────────────────────────
+    // Predicado ÚNICO de «este expediente puede tener una decisión de prenda», compartido por el gate
+    // de preparación, el blocker del asistente y RegistrarPrendaHandler.
+
+    [Theory]
+    [InlineData("MATRICULAS")]
+    [InlineData("TRASPASO")]
+    public void AdmiteDimensionDePrenda_FamiliasQueAcumulan_Admiten(string familia)
+    {
+        // La prenda del art. 5.1.8 se añade por encima del tipo base: sigue admitida.
+        ProcedureTypeGateProfile.FromJson("{}")
+            .AdmiteDimensionDePrenda(familia, "MATRICULA_INICIAL")
+            .Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("DUPLICADO_TARJETA")]
+    [InlineData("CAMBIO_COLOR")]
+    [InlineData("CAMBIO_CARROCERIA")]
+    [InlineData("CANCELACION_MATRICULA")]
+    public void AdmiteDimensionDePrenda_OtrosNoPrendario_NoAdmite(string tipo)
+    {
+        // El caso que motivó el predicado: en OTROS el cambio ES el trámite (ADR-0050), así que no
+        // hay gravamen que decidir — y por tanto tampoco por el que bloquear al preparar.
+        ProcedureTypeGateProfile.FromJson("{}")
+            .AdmiteDimensionDePrenda("OTROS", tipo)
+            .Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("PRENDA_INSCRIPCION")]
+    [InlineData("LEVANTAMIENTO_PRENDA")]
+    [InlineData("LEVANTAR_INSCRIBIR_PRENDA")]
+    [InlineData("CAMBIO_ACREEDOR")]
+    public void AdmiteDimensionDePrenda_TipoPrendarioDeOtros_SiAdmite(string tipo)
+    {
+        // Estos viven en OTROS pero la prenda ES el trámite: conservan su gate íntegro. Acotar el
+        // override no puede dejar sin decisión de prenda justo a los trámites de prenda.
+        ProcedureTypeGateProfile.FromJson("{}")
+            .AdmiteDimensionDePrenda("OTROS", tipo)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void AdmiteDimensionDePrenda_PerfilQueLaDeclara_GanaALaFamilia()
+    {
+        // Precedencia perfil → familia, igual que ComplementaryPrendaAllowed: un tipo de OTROS que
+        // declare explícitamente el gravamen complementario vuelve a admitirlo sin tocar código.
+        ProcedureTypeGateProfile.FromJson("""{"allowsComplementaryPrenda":true}""")
+            .AdmiteDimensionDePrenda("OTROS", "CAMBIO_COLOR")
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void AdmiteDimensionDePrenda_SinFamiliaNiTipo_Admite()
+    {
+        // Fail-safe deliberado: un expediente cuyo tipo llegue sin clasificar conserva el
+        // comportamiento previo (gate activo) en vez de perder la prenda en silencio.
+        ProcedureTypeGateProfile.FromJson("{}")
+            .AdmiteDimensionDePrenda(null, null)
+            .Should().BeTrue();
     }
 }

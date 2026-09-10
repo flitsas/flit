@@ -19,6 +19,14 @@ internal sealed class ProcedureInstancePrendaRepository(FlitDbContext db) : IPro
                     && x.Estado == PrendaEstado.Vigente,
                 ct);
 
+    public async Task<IReadOnlyList<ProcedureInstancePrenda>> GetVigentesAsync(Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default) =>
+        await db.ProcedureInstancePrendas
+            .Where(x => x.ProcedureInstanceId == procedureInstanceId
+                && x.TenantId == tenantId
+                && x.Estado == PrendaEstado.Vigente)
+            .OrderBy(x => x.AccionFamilia)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<ProcedureInstancePrenda>> ListByInstanceAsync(Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default) =>
         await db.ProcedureInstancePrendas
             .Where(x => x.ProcedureInstanceId == procedureInstanceId && x.TenantId == tenantId)

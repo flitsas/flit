@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using Flit.Analytics.Application.Dtos;
@@ -7,9 +7,11 @@ namespace Flit.Infrastructure.Analytics.Scheduling;
 
 /// <summary>
 /// Plantillas HTML EN ESPAÑOL de los correos del scheduler (Reportes 2.0, HU-D). Paleta FLIT
-/// (#557EFF primario / #162744 tinta). <c>IEmailSender</c> solo soporta HtmlBody (sin adjuntos),
-/// por eso el informe viaja como RESUMEN de KPIs en el cuerpo — limitación documentada en §8
-/// del contrato (el archivo excel/pdf adjunto queda como mejora futura).
+/// (#557EFF primario / #162744 tinta). El cuerpo siempre lleva el resumen de KPIs de trámites
+/// (mismo dato para los 5 tipos — es lo único que <see cref="Abstractions.IAnalyticsReadRepository"/>
+/// resume sin filtrar por tipo); el archivo REAL del tipo (Excel/PDF) va adjunto — ver
+/// <see cref="AnalyticsSchedulerProcessor.BuildAttachmentAsync"/>. Para "uso"/"ot", cuyos datos no
+/// son trámites por categoría, el cuerpo lo aclara en vez de fingir que esa tabla les pertenece.
 /// </summary>
 internal static class SchedulerEmailComposer
 {
@@ -61,8 +63,24 @@ internal static class SchedulerEmailComposer
     public static string OperatorLabel(string @operator) =>
         OperatorLabels.TryGetValue(@operator, out var label) ? label : @operator;
 
+    /// <summary>
+    /// Asunto + cuerpo del informe programado (HU #11352 — antes el asunto lo interpolaba
+    /// <c>AnalyticsSchedulerProcessor</c>; ahora la plantilla completa vive en un solo lugar).
+    /// </summary>
+    public static (string Subject, string Html) BuildScheduledReport(
+        string scheduleName,
+        string reportType,
+        string periodLabel,
+        IReadOnlyList<CategoryMetricsDto> overview,
+        IReadOnlyList<TopProducerDto> topProducers)
+    {
+        var subject = $"[FLIT] {scheduleName} — {periodLabel}";
+        var html = BuildScheduledReportHtml(scheduleName, reportType, periodLabel, overview, topProducers);
+        return (subject, html);
+    }
+
     /// <summary>Cuerpo del informe programado: KPIs por categoría + top de radicadores del periodo.</summary>
-    public static string BuildScheduledReportHtml(
+    private static string BuildScheduledReportHtml(
         string scheduleName,
         string reportType,
         string periodLabel,
@@ -75,6 +93,15 @@ internal static class SchedulerEmailComposer
             $"<p style=\"margin:0 0 4px\"><strong>Tipo de informe:</strong> {WebUtility.HtmlEncode(ReportTypeLabel(reportType))}</p>");
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 16px\"><strong>Periodo:</strong> {WebUtility.HtmlEncode(periodLabel)}</p>");
+
+        if (reportType is "uso" or "ot")
+        {
+            sb.Append(
+                "<p style=\"margin:0 0 16px\">El detalle de este informe (\""
+                + WebUtility.HtmlEncode(ReportTypeLabel(reportType))
+                + "\") va en el archivo adjunto. Este correo agrega, además, el resumen general de "
+                + "trámites del periodo:</p>");
+        }
 
         sb.Append(CultureInfo.InvariantCulture, $"<h3 style=\"color:{Ink};margin:16px 0 8px\">Trámites por categoría</h3>");
         if (overview.Count == 0)
@@ -116,13 +143,33 @@ internal static class SchedulerEmailComposer
             sb.Append("</table>");
         }
 
-        sb.Append("<p style=\"margin:16px 0 0;font-size:12px;color:#6b7a94\">El archivo adjunto (Excel/PDF) no está disponible por este canal; este correo incluye el resumen de indicadores del periodo.</p>");
+        sb.Append("<p style=\"margin:16px 0 0;font-size:12px;color:#6b7a94\">Revisa el archivo adjunto para el detalle completo del periodo.</p>");
         CloseLayout(sb);
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Asunto + cuerpo del correo de alerta (HU #11352 — mismo traslado que el informe
+    /// programado: el asunto deja de interpolarse en <c>AnalyticsSchedulerProcessor</c>).
+    /// </summary>
+    public static (string Subject, string Html) BuildAlert(
+        string ruleName,
+        string metric,
+        string @operator,
+        decimal threshold,
+        decimal value,
+        int windowMinutes,
+        DateTimeOffset triggeredAtUtc,
+        TimeZoneInfo timeZone)
+    {
+        var subject = $"[FLIT] Alerta: {ruleName}";
+        var html = BuildAlertHtml(
+            ruleName, metric, @operator, threshold, value, windowMinutes, triggeredAtUtc, timeZone);
+        return (subject, html);
+    }
+
     /// <summary>Cuerpo del correo de alerta: métrica, umbral, valor observado y ventana.</summary>
-    public static string BuildAlertHtml(
+    private static string BuildAlertHtml(
         string ruleName,
         string metric,
         string @operator,
@@ -147,6 +194,55 @@ internal static class SchedulerEmailComposer
             $"<p style=\"margin:0\"><strong>Fecha del disparo:</strong> {local.ToString("dd/MM/yyyy HH:mm", Es)} (hora de Bogotá)</p>");
         CloseLayout(sb);
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Asunto + cuerpo del informe programado tipo "consulta" (Reportes 2.0, HU-D, segunda ola):
+    /// no comparte plantilla con <see cref="BuildScheduledReport"/> porque no hay overview/top
+    /// radicadores que mostrar — el contenido REAL va en el Excel adjunto, este cuerpo solo dice
+    /// qué consulta es y si se truncó por el tope de filas.
+    /// </summary>
+    public static (string Subject, string Html) BuildConsultaReport(
+        string scheduleName, string queryName, int total, bool truncated, int rowCap)
+    {
+        var subject = $"[FLIT] {scheduleName}";
+        var sb = new StringBuilder();
+        OpenLayout(sb, "Informe programado FLIT · Consulta personalizada", scheduleName);
+        sb.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 4px\"><strong>Consulta:</strong> {WebUtility.HtmlEncode(queryName)}</p>");
+        sb.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 16px\"><strong>Resultados:</strong> {total.ToString(Es)}</p>");
+        sb.Append(
+            "<p style=\"margin:0 0 16px\">El detalle va en el Excel adjunto. El rango de fechas de la "
+            + "consulta es relativo (p. ej. \"últimos 7 días\"), así que cada envío trae el periodo "
+            + "actual, no el que tenía cuando se guardó.</p>");
+        if (truncated)
+        {
+            sb.Append(
+                $"<p style=\"margin:0 0 16px;color:#B45309\"><strong>Aviso:</strong> el adjunto trae las "
+                + $"primeras {rowCap.ToString(Es)} de {total.ToString(Es)} filas. Entra a Consultas en la "
+                + "app para ver o exportar el resto.</p>");
+        }
+
+        CloseLayout(sb);
+        return (subject, sb.ToString());
+    }
+
+    /// <summary>
+    /// Cuerpo del correo cuando la SavedQuery de un informe tipo "consulta" ya no existe (se borró
+    /// después de programar el informe) — se avisa en vez de enviar un correo vacío sin explicación.
+    /// </summary>
+    public static (string Subject, string Html) BuildConsultaReportMissing(string scheduleName)
+    {
+        var subject = $"[FLIT] {scheduleName} — consulta no disponible";
+        var sb = new StringBuilder();
+        OpenLayout(sb, "Informe programado FLIT · Consulta personalizada", scheduleName);
+        sb.Append(
+            "<p style=\"margin:0\">La consulta guardada que alimentaba este informe ya no existe "
+            + "(se borró después de programarlo). Este informe no traerá adjunto hasta que se vuelva a "
+            + "programar sobre una consulta guardada vigente.</p>");
+        CloseLayout(sb);
+        return (subject, sb.ToString());
     }
 
     /// <summary>Mensaje plano en español que se persiste en <c>alert_events.message</c>.</summary>

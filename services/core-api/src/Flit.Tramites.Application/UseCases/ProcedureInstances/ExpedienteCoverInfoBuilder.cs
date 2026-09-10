@@ -10,31 +10,38 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// </summary>
 public static class ExpedienteCoverInfoBuilder
 {
-    public static ExpedienteCoverInfo FromInstance(ProcedureInstance instance)
+    /// <param name="instance">Instancia con <c>FieldValues</c> cargados.</param>
+    /// <param name="companiaRadicadora">
+    /// Bug #11612 - compania radicadora resuelta EN MEMORIA por <see cref="CompaniaRadicadoraResolver"/>
+    /// (razon social del tenant dueno del tramite). Es un valor de RESERVA: solo se usa cuando el tramite
+    /// no trae la clave en <c>field_values</c>, asi que nunca pisa lo que capturo el operador. No se
+    /// persiste: el trigger de inmutabilidad de <c>field_values</c> prohibe escribir en un tramite ya
+    /// radicado (ver el resolver).
+    /// </param>
+    public static ExpedienteCoverInfo FromInstance(ProcedureInstance instance, string? companiaRadicadora = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
 
-        var fv = instance.FieldValues
-            .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
+        // Tolerante a claves duplicadas: field_values no tiene indice unico y un ToDictionary directo
+        // tumbaria la portada entera con ArgumentException.
+        var fv = ProcedureFieldValues.ToDictionary(instance);
 
         return new ExpedienteCoverInfo(
             CodigoTramite: instance.ReferenceNumber,
             Placa: Get(fv, "plate"),
-            TipoTramite: HumanizeModalidad(instance.ModalidadEntrada),
+            // ADR-0050 — el rótulo es el NOMBRE del tipo, tal como está en el catálogo. Antes se
+            // humanizaba la modalidad, así que la portada de un blindaje o de un levantamiento de
+            // prenda decía "Matricula inicial": el expediente afirmaba ser un trámite que no era.
+            TipoTramite: instance.TypeName,
             SecretariaTransito: Get(fv, "transit_office_name"),
-            CompaniaRadicadora: Get(fv, "company_name") ?? Get(fv, "radicadora"));
+            CompaniaRadicadora: Get(fv, "company_name")
+                                ?? Get(fv, "radicadora")
+                                ?? Normalizar(companiaRadicadora));
     }
+
+    private static string? Normalizar(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
         fv.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
-
-    private static string HumanizeModalidad(string? modalidad)
-    {
-        if (string.IsNullOrWhiteSpace(modalidad))
-            return "-";
-
-        // "matricula_inicial" -> "Matricula inicial"; primera letra en mayúscula, guiones bajos a espacios.
-        var text = modalidad.Trim().Replace('_', ' ');
-        return char.ToUpperInvariant(text[0]) + text[1..];
-    }
 }

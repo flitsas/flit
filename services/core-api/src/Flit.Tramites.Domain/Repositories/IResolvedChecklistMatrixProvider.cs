@@ -6,7 +6,15 @@ namespace Flit.Tramites.Domain.Repositories;
 /// <c>DocTipo</c> del ítem), nombre visible, obligatoriedad y orden ya resuelto por precedencia
 /// OT &gt; Default.
 /// </summary>
-public sealed record ResolvedChecklistDoc(string Codigo, string Nombre, bool Obligatorio, short Orden);
+public sealed record ResolvedChecklistDoc(
+    string Codigo,
+    string Nombre,
+    bool Obligatorio,
+    short Orden,
+    /// <summary>Buzón dummy (CFD-06): se lista en el checklist pero no bloquea el avance.</summary>
+    bool EsDummy = false,
+    /// <summary>Lo genera el sistema: no se pide en Requisitos ni bloquea el wizard/radicación.</summary>
+    bool EsGeneradoSistema = false);
 
 /// <summary>
 /// Puerto que provee la matriz documental resuelta del gestor para un trámite (HU #10522,

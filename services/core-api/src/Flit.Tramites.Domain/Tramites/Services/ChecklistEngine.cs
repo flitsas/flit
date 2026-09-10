@@ -243,7 +243,17 @@ public static class ChecklistEngine
         IReadOnlyCollection<string>? docTipos)
     {
         var manual = checklistEstado ?? new Dictionary<string, bool>();
-        var docs = new HashSet<string>(docTipos ?? []);
+        // El emparejamiento docTipo ↔ tipo del adjunto IGNORA mayúsculas, porque los dos extremos no
+        // guardan el código igual: `document_types.code` conserva lo que escribió el administrador en
+        // el módulo Documental (el saneador solo filtra a [A-Za-z0-9-]), mientras que la subida
+        // persiste `procedure_instance_attachments.tipo` en minúsculas. Con comparación sensible, un
+        // documento con una sola mayúscula en el código se subía —fichero y fila incluidos— y el
+        // checklist seguía pidiéndolo: para el gestor, «no carga».
+        //
+        // No se arregla normalizando el catálogo: conviven a propósito códigos con distinto casing
+        // (`SOAT` del seed de organismos y `soat` del catálogo operativo), así que pasarlos todos a
+        // minúsculas los colisionaría contra uq_document_types_code.
+        var docs = new HashSet<string>(docTipos ?? [], StringComparer.OrdinalIgnoreCase);
 
         var items = checklistItems.Select(it =>
         {
@@ -272,5 +282,41 @@ public static class ChecklistEngine
             ObligatoriosSatisfechos: obligatorios.Count - faltanObligatorios.Count,
             FaltanObligatorios: faltanObligatorios,
             Completo: faltanObligatorios.Count == 0);
+    }
+
+    /// <summary>
+    /// Quita del checklist de carga los documentos que el sistema genera o apalanca. Siguen
+    /// asociados en Documental y salen en el consolidado; no se muestran ni bloquean Requisitos.
+    /// </summary>
+    public static ChecklistResultado ExcludeFromGestorCarga(
+        ChecklistResultado source,
+        IReadOnlySet<string> generatedDocTipos)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(generatedDocTipos);
+        if (generatedDocTipos.Count == 0 || source.Items.Count == 0)
+            return source;
+
+        var excluded = new HashSet<string>(generatedDocTipos, StringComparer.OrdinalIgnoreCase);
+        var remaining = source.Items
+            .Where(i =>
+                string.IsNullOrEmpty(i.Item.DocTipo)
+                || !excluded.Contains(i.Item.DocTipo!))
+            .ToList();
+        if (remaining.Count == source.Items.Count)
+            return source;
+
+        var obligatorios = remaining.Where(i => i.Item.Obligatorio).ToList();
+        var faltan = obligatorios.Where(i => !i.Satisfecho).Select(i => i.Item.Id).ToList();
+        return source with
+        {
+            Items = remaining,
+            Total = remaining.Count,
+            Satisfechos = remaining.Count(i => i.Satisfecho),
+            ObligatoriosTotal = obligatorios.Count,
+            ObligatoriosSatisfechos = obligatorios.Count - faltan.Count,
+            FaltanObligatorios = faltan,
+            Completo = faltan.Count == 0,
+        };
     }
 }

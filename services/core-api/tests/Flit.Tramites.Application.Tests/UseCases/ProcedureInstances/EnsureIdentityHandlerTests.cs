@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -89,7 +90,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns(source);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.Reusada);
@@ -108,7 +109,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns((ProcedureInstanceBiometricValidation?)null);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -123,7 +124,7 @@ public sealed class EnsureIdentityHandlerTests
         instance.BiometricValidations.Add(Validation(BiometricEstados.Aprobado, DateTimeOffset.UtcNow, parte: "comprador"));
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.YaVigente);
@@ -140,7 +141,7 @@ public sealed class EnsureIdentityHandlerTests
         instance.BiometricValidations.Add(Validation(BiometricEstados.EnProceso, null, parte: "comprador"));
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.EnProceso);
@@ -159,7 +160,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns((ProcedureInstanceBiometricValidation?)null);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -179,7 +180,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns((ProcedureInstanceBiometricValidation?)null);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -197,7 +198,7 @@ public sealed class EnsureIdentityHandlerTests
         instance.BiometricValidations.Add(previa);
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.YaVigente);
@@ -208,20 +209,56 @@ public sealed class EnsureIdentityHandlerTests
     public async Task Handle_SinActorParaLaParte_SinActor()
     {
         var ct = TestContext.Current.CancellationToken;
-        var instance = MatriculaConComprador(); // solo tiene comprador
+        // La parte SÍ valida identidad en este tipo (matrícula declara `biometricActors:["BUYER"]`),
+        // pero todavía no hay actor capturado: ahí el desenlace sigue siendo «sin actor».
+        var instance = MatriculaConComprador();
+        instance.Actors.Clear();
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "vendedor", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.SinActor);
     }
 
     [Fact]
+    public async Task Handle_ParteQueElTipoNoSometeAValidacion_NoDisparaNada()
+    {
+        // ADR-0051 — el handler resolvía el actor y seguía adelante sin preguntar nunca si esa parte
+        // firma. En `TRASPASO_UNILATERAL` el locatario se persiste como `comprador` —no hay rol propio
+        // para una única parte entrante—, así que descartarlo por el NOMBRE del rol no lo atrapaba y
+        // le salía el correo de validación a quien no firma (art. 5.3.2.2). Aquí se usa la matrícula,
+        // que declara solo BUYER, porque el defecto es el mismo: la parte no declarada no se asegura.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConComprador();
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "vendedor", ct: ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.ParteNoValidaIdentidad);
+        _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceBiometricValidation>());
+    }
+
+    [Fact]
+    public async Task Handle_ParteDeclarada_SigueAsegurandose()
+    {
+        // La guarda es aditiva: la parte que el tipo SÍ declara sigue el camino de siempre.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConComprador();
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().NotBe(EnsureIdentityOutcomes.ParteNoValidaIdentidad);
+    }
+
+    [Fact]
     public async Task Handle_ParteInvalida_Error()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), TenantId, "tercero", ct);
+        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), TenantId, "tercero", ct: ct);
         result.Should().BeNull();
         error.Should().Be("parte_invalida");
     }
@@ -233,7 +270,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.GetByIdWithBiometricsAndActorsAsync(Arg.Any<Guid>(), TenantId, ct)
             .Returns((ProcedureInstance?)null);
 
-        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), TenantId, "comprador", ct: ct);
 
         result.Should().BeNull();
         error.Should().Be("not_found");
@@ -253,7 +290,7 @@ public sealed class EnsureIdentityHandlerTests
         var vault = new FakeVaultPolicy(Match());
         var sut = new EnsureIdentityHandler(_repo, vault);
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.FirmaBaul);
@@ -276,7 +313,7 @@ public sealed class EnsureIdentityHandlerTests
             .Returns(Validation(BiometricEstados.Aprobado, DateTimeOffset.UtcNow.AddDays(-2)));
         var sut = new EnsureIdentityHandler(_repo, new FakeVaultPolicy(Match()));
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.FirmaBaul);
@@ -295,7 +332,7 @@ public sealed class EnsureIdentityHandlerTests
         var vault = new FakeVaultPolicy(null);
         var sut = new EnsureIdentityHandler(_repo, vault);
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -315,7 +352,7 @@ public sealed class EnsureIdentityHandlerTests
         var vault = new FakeVaultPolicy(Match());
         var sut = new EnsureIdentityHandler(_repo, vault);
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -334,7 +371,7 @@ public sealed class EnsureIdentityHandlerTests
         var vault = new FakeVaultPolicy(Match());
         var sut = new EnsureIdentityHandler(_repo, vault);
 
-        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.YaVigente);
@@ -360,7 +397,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns(standalone);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.Reusada);
@@ -384,7 +421,7 @@ public sealed class EnsureIdentityHandlerTests
         _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
             .Returns((ProcedureInstanceBiometricValidation?)null);
 
-        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
 
         error.Should().BeNull();
         result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
@@ -395,11 +432,11 @@ public sealed class EnsureIdentityHandlerTests
 
     private static ProcedureInstance MatriculaConComprador() => new()
     {
+        ProcedureType = ProcedureTypeFixture.For(TramiteModalidadEntradaCodes.MatriculaInicial),
         Id = Guid.NewGuid(),
         TenantId = TenantId,
         ReferenceNumber = "TRM-2026-000100",
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
         CreatedAt = DateTimeOffset.UtcNow,
         Actors =
         {
@@ -433,6 +470,48 @@ public sealed class EnsureIdentityHandlerTests
         };
 
     /// <summary>Matrícula cuyo comprador es una persona JURÍDICA (NIT) — el único caso que consume el baúl.</summary>
+    [Fact]
+    public async Task Handle_EligioSelloDeIdentidad_NoConsumeElBaul_YLanzaLaBiometrica()
+    {
+        // Bug espejo del #11141 (hallado en validación manual). Esta ruta tenía una TERCERA copia de la
+        // regla "¿aplica el baúl?" que solo miraba si el actor era jurídico, sin consultar el mecanismo
+        // elegido. Con «Sello de validación de identidad» seleccionado y firma del baúl vigente
+        // respondía firma_baul, así que la biométrica que el gestor acababa de pedir no se lanzaba nunca
+        // y la firma acababa saliendo en blanco.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConCompradorNit();
+        instance.Actors.First().Metadata = MetadataConMecanismo("identidad");
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+        _repo.FindVigenteApprovedByDocumentAsync(
+                TenantId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns((ProcedureInstanceBiometricValidation?)null);
+        var vault = new FakeVaultPolicy(Match());
+        var sut = new EnsureIdentityHandler(_repo, vault);
+
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
+        // Ni siquiera se pregunta por la firma: el mecanismo elegido ya decide que no se va a consumir.
+        vault.Calls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_EligioElBaulExplicitamente_ConservaLaCoberturaPorBaul()
+    {
+        // La otra mitad de la misma regla: elegir el baúl teniéndolo vigente sigue cubriendo la identidad.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConCompradorNit();
+        instance.Actors.First().Metadata = MetadataConMecanismo("baul");
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+        var sut = new EnsureIdentityHandler(_repo, new FakeVaultPolicy(Match()));
+
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct: ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.FirmaBaul);
+    }
+
     private static ProcedureInstance MatriculaConCompradorNit()
     {
         var instance = MatriculaConComprador();
@@ -451,6 +530,23 @@ public sealed class EnsureIdentityHandlerTests
         v.DocumentNumber = Nit;
         return v;
     }
+
+    /// <summary>
+    /// Metadata del actor con el mecanismo de firma elegido por el gestor (HU #11061). Va en el mismo
+    /// jsonb que el representante legal, que es de donde lo lee <c>FirmaBaulCobertura</c>.
+    /// </summary>
+    private static string MetadataConMecanismo(string mecanismo) =>
+        JsonSerializer.Serialize(new
+        {
+            representanteLegal = new
+            {
+                tipoDocumento = "CC",
+                numeroDocumento = "1090123456",
+                nombreCompleto = "Ana Representante",
+                email = "rep@empresa.com",
+                mecanismoFirma = mecanismo,
+            },
+        });
 
     private static SignatureVaultMatch Match() => new(
         Guid.NewGuid(), "Renting SAS", "sig-hash", "vault/firma.png", "art-sha",

@@ -21,26 +21,22 @@ vi.mock("@/lib/api/tramites-client", () => ({
   },
 }));
 
-// HU #10887 — el toggle dedicado que también expone esta sección (dependencias del hijo).
-vi.mock("@/lib/api/admin-procedure-documents", () => ({
-  fetchProcedureDocumentRequirements: vi.fn().mockResolvedValue([]),
-}));
-vi.mock("@/lib/api/admin-document-requirement-overrides", () => ({
-  fetchDocumentRequirementOverrides: vi.fn().mockResolvedValue([]),
-  setDocumentRequirementOverride: vi.fn(),
+// Toggle prenda opcional por compañía (hub OT).
+vi.mock("@/lib/api/admin-ot-prenda-document-policies", () => ({
+  fetchOtPrendaDocumentPoliciesForOffice: vi.fn().mockResolvedValue([]),
+  setOtPrendaDocumentPolicyForOffice: vi.fn(),
 }));
 
 import {
   createOtDocumentTag,
   fetchOtDocumentPrecedence,
   fetchOtDocumentTags,
+  updateOtDocumentPrecedence,
 } from "@/lib/api/admin-ot";
-import { fetchProcedureDocumentRequirements } from "@/lib/api/admin-procedure-documents";
 import {
-  fetchDocumentRequirementOverrides,
-  setDocumentRequirementOverride,
-} from "@/lib/api/admin-document-requirement-overrides";
-import type { ProcedureDocumentRequirement } from "@/lib/api/types-documents";
+  fetchOtPrendaDocumentPoliciesForOffice,
+  setOtPrendaDocumentPolicyForOffice,
+} from "@/lib/api/admin-ot-prenda-document-policies";
 
 const OT_ID = "ot-hub-1";
 
@@ -100,23 +96,99 @@ describe("DocumentsSection — HU #10224", () => {
   });
 });
 
-// HU #10887 — el toggle "Documento de prenda obligatorio" se expone también en el detalle
-// de la OT (pestaña Prelación), reutilizando PledgeDocumentOverrideToggle con el
-// transitOfficeId del hub y el tipo de trámite seleccionado en esta misma sección.
-describe("DocumentsSection — HU #10887 (toggle documento de prenda en el hub OT)", () => {
-  const pledgeRequirement: ProcedureDocumentRequirement = {
-    id: "req-prenda",
-    procedureTypeId: "pt-1",
-    documentTypeId: "doc-prenda",
-    ordenDefault: 10,
-    obligatorio: false,
-    documento: {
-      codigo: "inscripcion_prenda",
-      nombre: "Inscripción / Registro de Prenda",
-      estado: "activo",
+// HU #11185 — la pantalla de prelación pasa a ser operativa: lista completa del tipo de trámite,
+// reordenamiento con teclado que guarda, aviso de aplicación diferida y rollback si falla.
+describe("DocumentsSection — HU #11185 (prelación operativa)", () => {
+  const listaCompleta = [
+    {
+      document_type_id: "doc-fur",
+      document_code: "fur",
+      document_name: "Formulario Único de Registro (FUR)",
+      sort_order: 1,
+      is_system_generated: true,
+      is_configured: false,
     },
-  };
+    {
+      document_type_id: "doc-soat",
+      document_code: "soat",
+      document_name: "SOAT",
+      sort_order: 2,
+      is_system_generated: false,
+      is_configured: false,
+    },
+  ];
 
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchOtDocumentPrecedence).mockResolvedValue({ data: listaCompleta });
+    vi.mocked(fetchOtDocumentTags).mockResolvedValue({ data: [] });
+  });
+
+  it("AC1 lista todos los documentos que aplican, marcando los que genera el sistema", async () => {
+    renderSection();
+
+    expect(await screen.findByText("Formulario Único de Registro (FUR)")).toBeInTheDocument();
+    expect(screen.getByText("SOAT")).toBeInTheDocument();
+    // El FUR lo produce FLIT; el SOAT lo adjunta el gestor.
+    expect(screen.getAllByText("Generado")).toHaveLength(1);
+  });
+
+  it("AC3 y AC4 reordenar con teclado guarda y avisa de que aplica en la próxima generación", async () => {
+    vi.mocked(updateOtDocumentPrecedence).mockResolvedValue({
+      data: [
+        { ...listaCompleta[1], sort_order: 1 },
+        { ...listaCompleta[0], sort_order: 2 },
+      ],
+    });
+    const user = userEvent.setup();
+    renderSection();
+
+    const handle = await screen.findByLabelText(/Reordenar Formulario Único de Registro/i);
+    handle.focus();
+    // La primera flecha toma el documento (patrón WCAG de la lista); la segunda lo baja.
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(updateOtDocumentPrecedence).toHaveBeenCalledWith({
+        procedure_type_id: "pt-1",
+        items: [
+          { document_type_id: "doc-soat", sort_order: 1 },
+          { document_type_id: "doc-fur", sort_order: 2 },
+        ],
+      }),
+    );
+    expect(
+      await screen.findByText(/Orden guardado\. Aplica a partir de la próxima generación/i),
+    ).toBeInTheDocument();
+  });
+
+  it("AC5 si falla el guardado avisa y la lista vuelve al orden anterior", async () => {
+    vi.mocked(updateOtDocumentPrecedence).mockRejectedValue(new Error("500"));
+    const user = userEvent.setup();
+    renderSection();
+
+    const handle = await screen.findByLabelText(/Reordenar Formulario Único de Registro/i);
+    handle.focus();
+    // La primera flecha toma el documento (patrón WCAG de la lista); la segunda lo baja.
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByText(/No se pudo guardar el orden/i)).toBeInTheDocument();
+    await waitFor(() => {
+      const nombres = screen
+        .getAllByRole("listitem")
+        .map((li) => li.textContent ?? "");
+      expect(nombres[0]).toContain("Formulario Único de Registro (FUR)");
+      expect(nombres[1]).toContain("SOAT");
+    });
+  });
+});
+
+// Documento de prenda opcional por compañía en el hub OT.
+describe("DocumentsSection — prenda opcional por compañía", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchOtDocumentPrecedence).mockResolvedValue({
@@ -125,37 +197,23 @@ describe("DocumentsSection — HU #10887 (toggle documento de prenda en el hub O
     vi.mocked(fetchOtDocumentTags).mockResolvedValue({ data: [] });
   });
 
-  it("muestra el toggle con el transitOfficeId del hub y el trámite seleccionado, y al activarlo persiste", async () => {
-    vi.mocked(fetchProcedureDocumentRequirements).mockResolvedValue([pledgeRequirement]);
-    vi.mocked(fetchDocumentRequirementOverrides).mockResolvedValue([]);
-    vi.mocked(setDocumentRequirementOverride).mockResolvedValue(undefined);
+  it("lista compañías del OT y permite activar prenda opcional", async () => {
+    vi.mocked(fetchOtPrendaDocumentPoliciesForOffice).mockResolvedValue([
+      { tenantId: "t1", tenantName: "Gestora Uno", documentOptional: false },
+    ]);
+    vi.mocked(setOtPrendaDocumentPolicyForOffice).mockResolvedValue(undefined);
 
     const user = userEvent.setup();
     renderSection();
 
-    expect(
-      await screen.findByText("Documento de prenda por Organismo de Tránsito"),
-    ).toBeInTheDocument();
-    expect(fetchProcedureDocumentRequirements).toHaveBeenCalledWith("pt-1", expect.anything());
-    expect(fetchDocumentRequirementOverrides).toHaveBeenCalledWith(
-      "pt-1",
-      OT_ID,
-      expect.anything(),
-    );
+    expect(await screen.findByText("Documento de prenda por compañía")).toBeInTheDocument();
+    expect(fetchOtPrendaDocumentPoliciesForOffice).toHaveBeenCalledWith(OT_ID, expect.anything());
 
-    const toggle = await screen.findByRole("switch", { name: "Documento de prenda obligatorio" });
-    expect(toggle).toHaveAttribute("aria-checked", "false");
-
+    const toggle = await screen.findByRole("switch", { name: /gestora uno — prenda opcional/i });
     await user.click(toggle);
 
     await waitFor(() =>
-      expect(setDocumentRequirementOverride).toHaveBeenCalledWith({
-        procedureTypeId: "pt-1",
-        documentTypeId: "doc-prenda",
-        transitOfficeId: OT_ID,
-        estado: "REQUIRED",
-      }),
+      expect(setOtPrendaDocumentPolicyForOffice).toHaveBeenCalledWith(OT_ID, "t1", true),
     );
-    expect(toggle).toHaveAttribute("aria-checked", "true");
   });
 });

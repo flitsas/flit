@@ -62,17 +62,16 @@ describe("SignatureVaultTab (HU #10644)", () => {
     expect(await screen.findByText("Ana Gómez")).toBeInTheDocument();
   });
 
-  it("lista las firmas enmascarando el documento y sin descargar el binario", async () => {
+  it("lista las firmas con el documento completo y sin descargar el binario", async () => {
     vi.mocked(fetchSignatureVault).mockResolvedValue([ITEM]);
     renderTab();
     expect(await screen.findByText("Ana Gómez")).toBeInTheDocument();
-    expect(screen.getByText(/••••5432/)).toBeInTheDocument();
+    expect(screen.getByText(/1098765432/)).toBeInTheDocument();
+    expect(screen.queryByText(/••••/)).not.toBeInTheDocument();
     expect(screen.getByText("Activa")).toBeInTheDocument();
     // El código hash se muestra; el NIT ya no es una columna del baúl.
     expect(screen.getByText("AB12CD34")).toBeInTheDocument();
     expect(screen.queryByText(/900123456/)).not.toBeInTheDocument();
-    // El número completo del documento no debe renderizarse.
-    expect(screen.queryByText(/1098765432/)).not.toBeInTheDocument();
   });
 
   it("anula una firma tras confirmar en el diálogo", async () => {

@@ -282,7 +282,7 @@ public sealed class IctOrchestrationService(
             try
             {
                 var (ensured, ensureError) = await ensureIdentityHandler.HandleAsync(
-                    summary.Id, tenantId, parte, context.CancellationToken);
+                    summary.Id, tenantId, parte, ct: context.CancellationToken);
                 if (ensureError is not null || ensured is null)
                 {
                     AppendWarning(reply, "identity_warning:" + (ensureError ?? "ensure_null"));
@@ -301,7 +301,7 @@ public sealed class IctOrchestrationService(
                     }
                     else
                     {
-                        await simularBiometriaHandler.HandleAsync(summary.Id, tenantId, parte, context.CancellationToken);
+                        await simularBiometriaHandler.HandleAsync(summary.Id, tenantId, parte, ct: context.CancellationToken);
                     }
                 }
             }

@@ -16,6 +16,14 @@ public sealed class ProcedureInstanceAttachment
     public string Sha256 { get; set; } = string.Empty;
     public string StoragePath { get; set; } = string.Empty;
     public string Source { get; set; } = "user";
+
+    /// <summary>
+    /// Proveedor externo del documento cuando FLIT lo generó vía integración (p. ej.
+    /// <c>kyverum</c> para Certificado de Improntas Digitales). <c>null</c> = carga manual
+    /// u origen no proveedor. No confundir con <see cref="Source"/>.
+    /// </summary>
+    public string? Provider { get; set; }
+
     public DateTimeOffset UploadedAt { get; set; }
     public Guid? UploadedBy { get; set; }
 
@@ -26,6 +34,22 @@ public sealed class ProcedureInstanceAttachment
     /// cualquier otro adjunto (FUR, certificados, cargas de usuario).
     /// </summary>
     public Guid? SourceDeedId { get; set; }
+
+    /// <summary>
+    /// HU #11313/#11316 (ADR-0042) — referencia a la versión (admin.company_personalized_documents.id)
+    /// que entró al registro cuando este adjunto es un documento personalizado de compañía
+    /// (<c>Source = "company"</c>). Espejo exacto de <see cref="SourceDeedId"/>. <c>null</c> en
+    /// cualquier otro adjunto.
+    /// </summary>
+    public Guid? SourcePersonalizedDocumentId { get; set; }
+
+    /// <summary>
+    /// HU #12166 (Feature #12156) — al revocar un trámite Aprobado, el FUR/certificados vigentes
+    /// quedan marcados como históricos (visibles, no borrados): documentan lo que el OT tuvo a la
+    /// vista al aprobar, pero ya no representan el estado vigente del vehículo tras la revocación.
+    /// Default false. Ningún otro flujo lo pone en true hoy.
+    /// </summary>
+    public bool IsHistorico { get; set; }
 
     public ProcedureInstance? ProcedureInstance { get; set; }
 }

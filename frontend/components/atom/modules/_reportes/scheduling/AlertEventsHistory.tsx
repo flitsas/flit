@@ -9,12 +9,15 @@ import {
   type AlertEvent,
   type AlertRule,
 } from "@/lib/api/analytics-scheduling";
+import { acknowledgeOtAlertEvent, fetchOtAlertEvents } from "@/lib/api/ot-scheduling";
 import { formatDateTime } from "./labels";
 
 interface AlertEventsHistoryProps {
   /** Filtro opcional por regla. */
   rules: AlertRule[];
   tenantId?: string;
+  /** Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola). Ver {@link AlertsSection}. */
+  otTransitOfficeId?: string;
 }
 
 const PAGE_SIZE = 10;
@@ -23,7 +26,7 @@ const PAGE_SIZE = 10;
  * Sub-vista "Historial de disparos" (Reportes 2.0, HU-D): alert-events paginados, más
  * recientes primero, filtrables por regla. Muestra valor vs umbral y si se notificó.
  */
-export function AlertEventsHistory({ rules, tenantId }: AlertEventsHistoryProps) {
+export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: AlertEventsHistoryProps) {
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -34,19 +37,16 @@ export function AlertEventsHistory({ rules, tenantId }: AlertEventsHistoryProps)
   const load = useCallback(async () => {
     setStatus("loading");
     try {
-      const data = await fetchAlertEvents({
-        ruleId: ruleId || undefined,
-        page,
-        pageSize: PAGE_SIZE,
-        tenantId,
-      });
+      const data = otTransitOfficeId
+        ? await fetchOtAlertEvents({ ruleId: ruleId || undefined, page, pageSize: PAGE_SIZE, transitOfficeId: otTransitOfficeId })
+        : await fetchAlertEvents({ ruleId: ruleId || undefined, page, pageSize: PAGE_SIZE, tenantId });
       setEvents(data.items);
       setTotalCount(data.totalCount);
       setStatus(data.items.length === 0 ? "empty" : "ready");
     } catch {
       setStatus("error");
     }
-  }, [ruleId, page, tenantId]);
+  }, [ruleId, page, tenantId, otTransitOfficeId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
@@ -56,7 +56,9 @@ export function AlertEventsHistory({ rules, tenantId }: AlertEventsHistoryProps)
   async function handleAck(id: string) {
     setAcking(id);
     try {
-      const updated = await acknowledgeAlertEvent(id, tenantId);
+      const updated = otTransitOfficeId
+        ? await acknowledgeOtAlertEvent(id, otTransitOfficeId)
+        : await acknowledgeAlertEvent(id, tenantId);
       setEvents((prev) => prev.map((ev) => (ev.id === id ? updated : ev)));
     } catch {
       // Silencioso: el estado no cambia; el usuario puede reintentar.

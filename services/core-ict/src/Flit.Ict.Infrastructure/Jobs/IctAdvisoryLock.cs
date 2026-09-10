@@ -19,6 +19,7 @@ internal static class IctAdvisoryLock
         public const long External = 4810002;
         public const long Orchestrator = 4810003;
         public const long SendToCoreApi = 4810004;
+        public const long Webhook = 4810005;
     }
 
     public static async Task<bool> TryLockAsync(DbConnection connection, long key, CancellationToken ct)

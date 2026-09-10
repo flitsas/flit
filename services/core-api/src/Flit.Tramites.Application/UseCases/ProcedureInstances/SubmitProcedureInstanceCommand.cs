@@ -129,7 +129,7 @@ public sealed class SubmitProcedureInstanceHandler(
         if (detail is null)
             return route;
 
-        if (!string.Equals(detail.ModalidadEntrada, "matricula_inicial", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(detail.FamilyCode, "matricula_inicial", StringComparison.OrdinalIgnoreCase))
             return route;
 
         var plate = detail.FieldValues

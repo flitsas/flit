@@ -10,21 +10,27 @@ namespace Flit.Modules.Quipux.Domain.Mapeo;
 /// familia: <c>id_parinttrasec_registration</c>, <c>id_parinttrasec_transfer</c> e
 /// <c>id_parinttrasec_otherservice</c> (con el valor 2 = "integrada con Quipux").
 /// <para>Vocabulario propio de la integración, deliberadamente separado de
-/// <c>Flit.Tramites.Domain.Enums.ProcedureFamily</c>: aquella taxonomía es de FLIT y su columna
-/// <c>procedure_types.family</c> está hoy inconsistente (cuatro valores por seeds solapados). La
-/// familia Quipux se declara en <c>external_refs-&gt;'quipux'-&gt;&gt;'familia'</c>, junto al resto del
-/// mapeo, para que añadir un trámite siga siendo un UPDATE y no dependa de un dato poco fiable.
+/// <c>Flit.Tramites.Domain.Enums.ProcedureFamily</c>: son taxonomías de dos sistemas distintos y no
+/// tienen por qué coincidir —la secretaría puede clasificar como «otros servicios» un trámite que
+/// para FLIT es de matrículas—. La familia Quipux se declara en
+/// <c>external_refs-&gt;'quipux'-&gt;&gt;'familia'</c>, junto al resto del mapeo, para que añadir un
+/// trámite siga siendo un UPDATE.
+/// <para>Antes esta separación se justificaba además porque <c>procedure_types.family</c> era un
+/// dato poco fiable (convivían cuatro valores, <c>VEHICULAR</c> incluido, por seeds solapados).
+/// ADR-0050 cerró eso con un CHECK de tres valores, así que el motivo que queda es el de arriba.
+/// El DDL 83 verifica que las dos taxonomías no se contradigan en los casos donde sí deben
+/// corresponderse.</para>
 /// </para>
 /// </remarks>
 public static class QuipuxFamilia
 {
-    /// <summary>Matrículas. Bandera <c>transit_offices.quipux_matricula</c>.</summary>
+    /// <summary>Matrículas. Bandera <c>transit_offices.quipux_registration</c>.</summary>
     public const string Matricula = "MATRICULA";
 
-    /// <summary>Traspasos. Bandera <c>transit_offices.quipux_traspaso</c>.</summary>
+    /// <summary>Traspasos. Bandera <c>transit_offices.quipux_transfer</c>.</summary>
     public const string Traspaso = "TRASPASO";
 
-    /// <summary>Resto de trámites. Bandera <c>transit_offices.quipux_otros</c>.</summary>
+    /// <summary>Resto de trámites. Bandera <c>transit_offices.quipux_other</c>.</summary>
     public const string Otros = "OTROS";
 
     public static readonly IReadOnlyList<string> Todas = [Matricula, Traspaso, Otros];

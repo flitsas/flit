@@ -3,11 +3,15 @@ using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.SetCompanyStatus;
 using Flit.Admin.Application.Companies.UpdateCompany;
+using Flit.Admin.Application.Companies.Settings.GetActiveModules;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
+using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerSignatureImage;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
 using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
@@ -39,12 +43,20 @@ using Flit.Admin.Application.DocumentRequirementOverrides.SetDocumentRequirement
 using Flit.Admin.Application.DocumentRequirements.CreateProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.DeleteProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.ListProcedureDocumentRequirements;
+using Flit.Admin.Application.DocumentRequirements.PreviewInformativos;
 using Flit.Admin.Application.DocumentRequirements.UpdateProcedureDocumentRequirement;
+using Flit.Admin.Application.RejectionReasons;
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
+using Flit.Admin.Application.DocumentTypes.PurgeDocumentType;
 using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
+using Flit.Admin.Application.GeneracionDocumental.Download;
+using Flit.Admin.Application.GeneracionDocumental.GenerateRues;
+using Flit.Admin.Application.GeneracionDocumental.GenerateTransferencia;
+using Flit.Admin.Application.GeneracionDocumental.List;
+using Flit.Admin.Application.GeneracionDocumental.Prefill;
 using Flit.Admin.Application.Improntas.GenerarImpronta;
 using Flit.Admin.Application.Improntas.ListImprontas;
 using Flit.Admin.Application.ProcedureInstances.CreateProcedureInstance;
@@ -61,10 +73,12 @@ using Flit.Admin.Application.OtWebhooks.ListOtWebhooks;
 using Flit.Admin.Application.OtWebhooks.ProcessOtWebhookCallback;
 using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.GetOtBandejaCounters;
 using Flit.Admin.Application.OtClientProcedures.GetOtBandejaHealth;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
+using Flit.Admin.Application.OtClientProcedures.RevokeOtClientProcedure;
 using Flit.Admin.Application.OtDocumentPrecedence.ListOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentPrecedence.UpdateOtDocumentPrecedence;
 using Flit.Admin.Application.OtDocumentTags.CreateOtDocumentTag;
@@ -78,6 +92,8 @@ using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
+using Flit.Admin.Application.Banners.GetBannerImage;
+using Flit.Admin.Application.Banners.ListActiveBanners;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -108,6 +124,9 @@ public static class DependencyInjection
         services.AddScoped<GetTenantSettingsHandler>();
         services.AddScoped<UpdateTenantSettingsHandler>();
         services.AddSingleton<ITenantPolicyResolver, SnapshotTenantPolicyResolver>();
+
+        // HU #12251 (Feature #12249) — flags de módulos activos del dashboard, sin AdminCompanyPolicy.
+        services.AddScoped<GetActiveModulesHandler>();
 
         // HU #10191 — interceptor propiedad vehicular + API whitelist.
         services.AddScoped<IVehicleOwnershipGuard, VehicleOwnershipGuard>();
@@ -146,6 +165,10 @@ public static class DependencyInjection
         services.AddScoped<GetOtBlockingPoliciesHandler>();
         services.AddScoped<SetOtBlockingPolicyHandler>();
 
+        // Documento de prenda: opt-out por compañía + OT (default obligatorio).
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.OtPrendaDocumentPolicy.GetOtPrendaDocumentPoliciesHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.OtPrendaDocumentPolicy.SetOtPrendaDocumentPolicyHandler>();
+
         // HU #10679 — consulta global (cross-tenant, SuperAdmin) del rastro unificado de
         // auditoría administrativa/seguridad. IAdminAuditLogRepository se registra en
         // AddAdminInfrastructure.
@@ -158,13 +181,22 @@ public static class DependencyInjection
         services.AddScoped<InactivateMandateSignerHandler>();
         services.AddScoped<ReactivateMandateSignerHandler>();
         services.AddScoped<ListMandateSignersHandler>();
+        services.AddScoped<GetMandateSignerSignatureImageHandler>();
         services.AddScoped<ListOtCompaniesHandler>();
+
+        // HU #11202 — vista inversa: la COMPAÑÍA registra sus mandatarios y elige en qué organismos
+        // aplican. Reusa los handlers de arriba para no duplicar operabilidad, huella ni identidad.
+        services.AddScoped<ListCompanyMandateSignersHandler>();
+        services.AddScoped<ListCompanyTransitOfficesHandler>();
+        services.AddScoped<CreateCompanyMandateSignerHandler>();
+        services.AddScoped<UpdateCompanyMandateSignerHandler>();
 
         // HU #10643 (ADR-0025) — baúl de firmas: CRUD SuperAdmin. ISignatureVaultReader/Repository
         // e ISignatureVaultArtifactStorage se registran en AddAdminInfrastructure.
         services.AddScoped<Companies.SignatureVault.CreateSignatureVault.CreateSignatureVaultHandler>();
         services.AddScoped<Companies.SignatureVault.ListSignatureVault.ListSignatureVaultHandler>();
         services.AddScoped<Companies.SignatureVault.GetSignatureVault.GetSignatureVaultByIdHandler>();
+        services.AddScoped<Companies.SignatureVault.UpdateSignatureVault.UpdateSignatureVaultHandler>();
         services.AddScoped<Companies.SignatureVault.RevokeSignatureVault.RevokeSignatureVaultHandler>();
 
         // HU #10900 (ADR-0033) — resolutor de firma/identidad al guardar un representante legal
@@ -201,10 +233,25 @@ public static class DependencyInjection
         services.AddScoped<Companies.Deeds.ListActiveDeeds.ListActiveDeedsForTenantHandler>();
         services.AddScoped<Companies.LegalRepresentatives.FindByNit.FindRepresentativeByNitHandler>();
 
-        // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
-        // correo (agnóstico del sujeto). Proveedor/repositorio/linker se registran en
-        // AddAdminInfrastructure; el reloj se toma de TimeProvider.System (vigencia determinista).
-        services.AddScoped<Identity.IAdminIdentityValidationService, Identity.AdminIdentityValidationService>();
+        // HU #11313 (Feature #11309, ADR-0042) — documentos personalizados por compañía: alta de
+        // versión, confirmación (validación de integridad del PDF) y listado del historial.
+        // ICompanyPersonalizedDocumentRepository/Storage e IPdfDocumentInspector se registran en
+        // AddAdminInfrastructure.
+        services.AddScoped<Companies.PersonalizedDocuments.PdfIntegrityValidator>();
+        services.AddScoped<Companies.PersonalizedDocuments.Create.CreatePersonalizedDocumentVersionHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.Confirm.ConfirmPersonalizedDocumentVersionHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.List.ListPersonalizedDocumentsHandler>();
+
+        // HU #11363 (Feature #11348) — bitácora consultable de intentos de envío. El repositorio
+        // (INotificationDeliveryLogRepository) se registra en AddAdminInfrastructure.
+        services.AddScoped<Companies.NotificationDeliveryLogs.List.ListNotificationDeliveryLogsHandler>();
+
+        // HU #11314 (Feature #11309, ADR-0042) — ciclo de vida del documento personalizado:
+        // reactivar una versión histórica, «volver al documento del sistema» (sin borrar nada) y
+        // vista previa sin activar (presigned GET inline, ADR-0029).
+        services.AddScoped<Companies.PersonalizedDocuments.Activate.ActivatePersonalizedDocumentVersionHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.Deactivate.DeactivatePersonalizedDocumentHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.GetView.GetPersonalizedDocumentViewHandler>();
 
         // HU #10468 — listado paginado/filtrable del historial de improntas (ADR-0022).
         // IImprontaRepository se registra en AddAdminInfrastructure.
@@ -215,7 +262,41 @@ public static class DependencyInjection
         services.AddScoped<ListDocumentTypesHandler>();
         services.AddScoped<UpdateDocumentTypeHandler>();
         services.AddScoped<DeleteDocumentTypeHandler>();
+        services.AddScoped<PurgeDocumentTypeHandler>();
         services.AddScoped<ReactivateDocumentTypeHandler>();
+
+        // HU #12239 (Feature #12236) -- CRUD de banners promocionales (admin.banners, ADR-0058).
+        // IBannerRepository e IBannerImageStorage se registran en Flit.Infrastructure.AddAdminInfrastructure.
+        services.AddScoped<Banners.CreateBanner.CreateBannerHandler>();
+        services.AddScoped<Banners.UpdateBanner.UpdateBannerHandler>();
+        services.AddScoped<Banners.ListBanners.ListBannersHandler>();
+        services.AddScoped<Banners.SetBannerActive.SetBannerActiveHandler>();
+        services.AddScoped<Banners.DeleteBanner.DeleteBannerHandler>();
+
+        // Causales de rechazo — catálogo global (CRUD SuperAdmin). Sustituye al motivo escrito a
+        // mano como dato agregable del reporte de motivos del organismo y de la empresa.
+        services.AddScoped<ListRejectionReasonsHandler>();
+        services.AddScoped<CreateRejectionReasonHandler>();
+        services.AddScoped<UpdateRejectionReasonHandler>();
+        services.AddScoped<SetRejectionReasonActiveHandler>();
+
+        // Reportes del organismo de tránsito: hasta ahora el módulo de reportes solo existía para
+        // la empresa gestora, y el organismo operaba sin ningún instrumento propio.
+        services.AddScoped<OtMetrics.GetOtOperationalPanelHandler>();
+        services.AddScoped<OtMetrics.GetOtPerformanceHandler>();
+        services.AddScoped<OtMetrics.GetOtRejectionReasonsHandler>();
+        services.AddScoped<OtMetrics.GetOtDrilldownHandler>();
+        services.AddScoped<OtMetrics.GetOtReportHandler>();
+        services.AddScoped<OtMetrics.ListOtClientCompaniesHandler>();
+        services.AddScoped<OtMetrics.GetOtReviewersReportHandler>();
+        services.AddScoped<OtMetrics.ListOtReviewerOptionsHandler>();
+
+        // Consultas propias: el usuario del organismo arma su búsqueda, la guarda y la exporta.
+        services.AddScoped<OtQueries.ExecuteOtQueryHandler>();
+        services.AddScoped<OtQueries.GetOtQueryFieldsHandler>();
+        services.AddScoped<OtQueries.ListOtSavedQueriesHandler>();
+        services.AddScoped<OtQueries.SaveOtQueryHandler>();
+        services.AddScoped<OtQueries.DeleteOtSavedQueryHandler>();
 
         // HU #10195 — asociación de documentos a tipos de trámite (CRUD SuperAdmin).
         services.AddScoped<CreateProcedureDocumentRequirementHandler>();
@@ -233,6 +314,9 @@ public static class DependencyInjection
         // HU #10198 — obligatoriedad documental por OT (3 estados, granular solo para OT).
         services.AddScoped<SetDocumentRequirementOverrideHandler>();
         services.AddScoped<ListDocumentRequirementOverridesHandler>();
+
+        // Preview informativo de documentos (paso 1 wizard, sin instancia).
+        services.AddScoped<PreviewDocumentosInformativosHandler>();
 
         // HU #10521 (RF31) — parámetros documentales por compañía gestora.
         services.AddScoped<CompanyDocumentParams.ListCompanyDocumentParamsHandler>();
@@ -261,11 +345,15 @@ public static class DependencyInjection
 
         // HU #10217 — trámites de clientes OT (tenant admin).
         services.AddScoped<ListOtClientProceduresHandler>();
+        services.AddScoped<GetOtBandejaFilterFieldsHandler>();
         services.AddScoped<GetOtClientProcedureHandler>();
         services.AddScoped<ApproveOtClientProcedureHandler>();
         services.AddScoped<RejectOtClientProcedureHandler>();
+        // HU #12166 (Feature #12156) — el OT revoca su propia aprobación.
+        services.AddScoped<RevokeOtClientProcedureHandler>();
         // HU #10540 (R09) — diagnóstico de bandeja OT (entregados con/sin grant).
         services.AddScoped<GetOtBandejaHealthHandler>();
+        services.AddScoped<GetOtBandejaCountersHandler>();
 
         // HU #10221 — motor de reglas AND/OR.
         services.AddScoped<CreateOtRuleHandler>();
@@ -283,6 +371,52 @@ public static class DependencyInjection
         // IImprontaExternalClient (HU #10465) e IImprontaRepository (HU #10466) se registran en
         // Flit.Infrastructure (InfrastructureExtensions/AddAdminInfrastructure).
         services.AddScoped<GenerarImprontaHandler>();
+
+        // HU #12203 (Feature #12201) — generación documental SIN trámite. Los puertos
+        // (IStandaloneDocumentStorage / IStandaloneRuesCertificateRenderer /
+        // IStandaloneRuesCompanyLookup) y el repositorio se registran en
+        // Flit.Infrastructure.AddAdminInfrastructure.
+        services.AddScoped<GenerateRuesDocumentHandler>();
+        services.AddScoped<PreviewRuesCompanyHandler>();
+
+        // HU #12204 (Feature #12201) — historial tenant-scoped y redescarga presignada auditada.
+        services.AddScoped<ListStandaloneDocumentsHandler>();
+        services.AddScoped<GetStandaloneDocumentDownloadHandler>();
+
+        // HU #12206 (Feature #12201) — fachadas standalone de prellenado (CF-25). Ninguno de estos
+        // handlers recibe repositorio ni storage: el prellenado NO persiste. Los puertos
+        // (IStandaloneVehiclePrefill / IStandaloneRuntPersonPrefill / IStandaloneActorContactLookup)
+        // se registran en Flit.Infrastructure.AddAdminInfrastructure; el directorio de representantes
+        // (ILegalRepresentativeReader) ya está registrado para el módulo de compañías.
+        services.AddScoped<PrefillVehiculoHandler>();
+        services.AddScoped<PrefillPersonaJuridicaHandler>();
+        services.AddScoped<PrefillPersonaNaturalHandler>();
+
+        // HU #12207 (Feature #12201) — Documento de Transferencia de Dominio, escenario A. La
+        // política de validaciones (TransferValidationPolicy) es una función pura sin estado y no
+        // se registra: HU-06 la extiende con VB-B-*, VB-C-* y VB-07 en ese mismo archivo. El puerto
+        // IStandaloneTransferGenerator se registra en Flit.Infrastructure; NO se inyecta ningún
+        // lector del baúl de firmas (modo MANUSCRITA fijo, anexo §9.0).
+        services.AddScoped<GenerateTransferenciaHandler>();
+
+        // HU #12210 (Feature #12201, I3) — carga masiva XLSX. El runner del lote se registra scoped
+        // porque arrastra repositorios y handlers scoped; el BackgroundService de Infrastructure
+        // abre un scope por ciclo y lo resuelve ahí. Los puertos del parser y de la plantilla se
+        // registran en Flit.Infrastructure.AddAdminInfrastructure.
+        services.AddScoped<GeneracionDocumental.Batches.CreateBatchHandler>();
+        services.AddScoped<GeneracionDocumental.Batches.StandaloneDocumentBatchRunner>();
+
+        // HU #12211 (Feature #12201, I3) — seguimiento del lote y descarga ZIP. Los tres consultan
+        // por tenant y ninguno persiste nada: el ZIP se arma contra el cuerpo de la respuesta y no
+        // llega a storage ni a base de datos (CF-15).
+        services.AddScoped<GeneracionDocumental.Batches.GetBatchStatusHandler>();
+        services.AddScoped<GeneracionDocumental.Batches.ListBatchItemsHandler>();
+        services.AddScoped<GeneracionDocumental.Batches.DownloadBatchZipHandler>();
+
+        // HU #12240 (Feature #12236, Feature #12231) — banners: endpoint publico de banners
+        // activos + imagen por streaming con ETag. Sin filtro de tenant (ADR-0058).
+        services.AddScoped<ListActiveBannersHandler>();
+        services.AddScoped<GetBannerImageHandler>();
 
         return services;
     }

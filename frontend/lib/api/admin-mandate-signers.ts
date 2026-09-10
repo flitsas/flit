@@ -1,7 +1,8 @@
 // Cliente tipado de mandatarios (firmantes de mandato) por OT (ADR-0023, ampliado por ADR-0036).
 // Módulo Admin OT (SuperAdmin u ot_admin). Endpoints acotados por transitOfficeId en la ruta.
 // El número de documento y el correo son PII (Ley 1581): se reciben solo para precargar el formulario.
-import { apiFetch } from "./client";
+import { apiFetch, API_BASE_URL, getToken, friendlyErrorMessage } from "./client";
+import { ApiError } from "./types";
 
 /** Un mandatario asignado a una compañía (ADR-0036: multiplicidad ⇒ una compañía puede tener varios). */
 export interface AssignedSigner {
@@ -40,6 +41,15 @@ export interface MandateSigner {
   registeredAt: string;
   isActive: boolean;
   companyTenantIds: string[];
+  /**
+   * HU #11201 — organismos donde aplica el mandatario. `transitOfficeId` es solo el primario
+   * (deprecado): esta lista es la que dice dónde puede firmar.
+   */
+  transitOfficeIds?: string[];
+  /** Subconjunto de los anteriores donde el mandatario firma a mano. */
+  physicalSignatureOfficeIds?: string[];
+  /** Empresas representadas por organismo; vacío para un organismo ⇒ aplica a todas allí. */
+  officeCompanies?: MandateSignerOfficeCompanies[];
 }
 
 /**
@@ -77,17 +87,6 @@ export interface MandateSignerSaved {
   identity?: "sent" | "reused" | "failed" | "notattempted";
 }
 
-/** Resultado de iniciar/reenviar la validación de identidad del mandatario (ADR-0036, HU #10911). */
-export interface MandateSignerIdentityResult {
-  id: string;
-  status: string;
-  captureUrl: string | null;
-  validUntil: string | null;
-  reused: boolean;
-  /** HU #11028 — `"mock"` cuando la validación fue simulada en un ambiente de prueba. */
-  provider?: string;
-}
-
 function base(transitOfficeId: string): string {
   return `/api/v1/admin/transit-offices/${transitOfficeId}/mandate-signers`;
 }
@@ -99,21 +98,6 @@ export async function fetchMandateSigners(
 ): Promise<MandateSigner[]> {
   const result = await apiFetch<{ data: MandateSigner[] }>(base(transitOfficeId), { signal });
   return result.data;
-}
-
-/**
- * GET — igual que `fetchMandateSigners` pero conservando si el ambiente permite SIMULAR validaciones
- * de identidad (HU #11028). La consola solo ofrece esa acción cuando el backend la habilita.
- */
-export async function fetchMandateSignersWithFlags(
-  transitOfficeId: string,
-  signal?: AbortSignal,
-): Promise<{ signers: MandateSigner[]; mockIdentityEnabled: boolean }> {
-  const result = await apiFetch<{ data: MandateSigner[]; mockIdentityEnabled?: boolean }>(
-    base(transitOfficeId),
-    { signal },
-  );
-  return { signers: result.data, mockIdentityEnabled: result.mockIdentityEnabled === true };
 }
 
 /** GET /companies — compañías del OT con sus mandatarios asignados (RF34 + multiselect). */
@@ -165,58 +149,171 @@ export function reactivateMandateSigner(
   });
 }
 
-/**
- * POST /{signerId}/identity/send — inicia la validación de identidad del mandatario por correo
- * (ADR-0036, HU #10911). Lanza ApiValidationError en 422 (email_requerido / ot_sin_alta); el proveedor
- * no disponible es 503 y su error definitivo 502.
- */
-export function sendMandateSignerIdentity(
+/** GET PNG de la firma del baúl del mandatario (preview del ojo). 404 si no hay imagen. */
+export async function fetchMandateSignerSignatureImage(
   transitOfficeId: string,
   mandateSignerId: string,
-): Promise<MandateSignerIdentityResult> {
-  return apiFetch<MandateSignerIdentityResult>(
-    `${base(transitOfficeId)}/${mandateSignerId}/identity/send`,
-    { method: "POST" },
-  );
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const baseUrl =
+    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const url = new URL(`${base(transitOfficeId)}/${mandateSignerId}/signature-image`, baseUrl);
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(url.toString(), { method: "GET", headers, signal });
+  if (!response.ok) {
+    let detail: unknown = null;
+    try {
+      const text = await response.text();
+      detail = text ? JSON.parse(text) : null;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(
+      response.status,
+      friendlyErrorMessage(detail as Record<string, unknown> | null),
+      detail,
+    );
+  }
+
+  const blob = await response.blob();
+  return blob.type.startsWith("image/") ? blob : new Blob([blob], { type: "image/png" });
+}
+
+// HU #11759 (ADR-0050, DA-5) — se retiran `sendMandateSignerIdentity`, `resendMandateSignerIdentity`,
+// `linkMandateSignerIdentity` y `mockMandateSignerIdentity` (OT-scoped, HU #10911/#11028): huérfanas
+// desde la HU #11202 (confirmado por grep, cero consumidores) y, además, las rutas que llamaban ya
+// responden 410 Gone desde la HU #11758.
+
+// ── HU #11202 — mandatarios desde el configurador de la COMPAÑÍA ──────────────
+// Vista inversa: la empresa registra a la persona y marca en cuáles de SUS organismos aplica, en vez
+// de que cada organismo elija compañías. Mismos objetos de dominio; cambia la ruta y quién manda.
+
+/** Organismo de tránsito habilitado para la compañía (opción del multiselect). */
+export interface CompanyTransitOfficeOption {
+  transitOfficeId: string;
+  code: string;
+  name: string;
+}
+
+/** Datos que la compañía captura de un mandatario. */
+export interface CompanyMandateSignerInput {
+  fullName: string;
+  documentType: string;
+  documentNumber: string;
+  email: string | null;
+  /** Organismos donde aplica. Al editar, REEMPLAZA a los anteriores: quitar uno lo retira. */
+  transitOfficeIds: string[];
+  /**
+   * Subconjunto de los anteriores donde el mandatario firma A MANO: el contrato deja la línea con sus
+   * datos debajo y no estampa firma del baúl ni sello de identidad.
+   */
+  physicalSignatureOfficeIds?: string[];
+  /**
+   * Firma del baúl elegida para el mandatario. `null` ⇒ el trámite la resuelve por documento, que es
+   * el comportamiento previo.
+   */
+  signatureVaultId?: string | null;
+  /**
+   * Empresas representadas por organismo. Omitir la entrada de un organismo ⇒ el mandatario aplica a
+   * todas las empresas allí.
+   */
+  officeCompanies?: MandateSignerOfficeCompanies[];
+}
+
+/** Empresa representada de la compañía: las que se dan de alta en el formulario del representante. */
+export interface RepresentedCompanyOption {
+  id: string;
+  /** NIT. Es lo que distingue dos empresas con la misma razón social. */
+  documentNumber: string;
+  name: string;
 }
 
 /**
- * POST /{signerId}/identity/link — vincula al mandatario una validación que la PERSONA ya hizo y sigue
- * vigente (HU #11028). No envía correo ni crea nada: lanza ApiError 409 `sin_identidad_vigente` cuando
- * esa persona no tiene ninguna identidad aprobada y vigente.
+ * Empresas representadas para las que el mandatario firma en un organismo. Lista vacía ⇒ aplica a
+ * TODAS las de ese organismo, que es como se comportan los mandatarios que ya existen.
  */
-export function linkMandateSignerIdentity(
-  transitOfficeId: string,
-  mandateSignerId: string,
-): Promise<MandateSignerIdentityResult> {
-  return apiFetch<MandateSignerIdentityResult>(
-    `${base(transitOfficeId)}/${mandateSignerId}/identity/link`,
-    { method: "POST" },
-  );
+export interface MandateSignerOfficeCompanies {
+  transitOfficeId: string;
+  representedCompanyIds: string[];
 }
 
-/**
- * POST /{signerId}/identity/mock — SIMULA una validación aprobada (HU #11028). Solo disponible en
- * ambientes de prueba: con la simulación deshabilitada el backend responde 403 `simulacion_deshabilitada`.
- * La validación queda marcada como simulada (`provider: "mock"`), nunca se confunde con una real.
- */
-export function mockMandateSignerIdentity(
-  transitOfficeId: string,
-  mandateSignerId: string,
-): Promise<MandateSignerIdentityResult> {
-  return apiFetch<MandateSignerIdentityResult>(
-    `${base(transitOfficeId)}/${mandateSignerId}/identity/mock`,
-    { method: "POST" },
+/** GET — empresas representadas de la compañía. Ya vienen únicas por NIT. */
+export async function fetchRepresentedCompanies(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<RepresentedCompanyOption[]> {
+  const r = await apiFetch<{ items: RepresentedCompanyOption[] }>(
+    `${companyBase(tenantId)}/represented-companies`,
+    { signal },
   );
+  return r?.items ?? [];
 }
 
-/** POST /{signerId}/identity/resend — reenvía (respeta la vigencia: no reenvía si ya está aprobada). */
-export function resendMandateSignerIdentity(
-  transitOfficeId: string,
-  mandateSignerId: string,
-): Promise<MandateSignerIdentityResult> {
-  return apiFetch<MandateSignerIdentityResult>(
-    `${base(transitOfficeId)}/${mandateSignerId}/identity/resend`,
-    { method: "POST" },
+// HU #11757 (ADR-0050) — se retira `mandateSignerIdentityAction` (send/resend/link desde el
+// configurador de la COMPAÑÍA): confirmado por grep, sin otro consumidor real (solo un mock de test).
+// El módulo Identidad es la única fuente que puede originar una validación; esa ruta también
+// responderá 410 Gone (HU #11758).
+
+function companyBase(tenantId: string): string {
+  return `/api/v1/admin/companies/${tenantId}/mandate-signers`;
+}
+
+/** GET — mandatarios de la compañía, con sus organismos. */
+export async function fetchCompanyMandateSigners(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<MandateSigner[]> {
+  const result = await apiFetch<{ data: MandateSigner[] }>(companyBase(tenantId), { signal });
+  return result.data;
+}
+
+/** GET /transit-offices — organismos que la compañía puede elegir (AC2). */
+export async function fetchCompanyTransitOffices(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<CompanyTransitOfficeOption[]> {
+  const result = await apiFetch<{ data: CompanyTransitOfficeOption[] }>(
+    `${companyBase(tenantId)}/transit-offices`,
+    { signal },
   );
+  return result.data;
+}
+
+/** POST — alta del mandatario en los organismos elegidos. 422 si alguno no está habilitado. */
+export function createCompanyMandateSigner(
+  tenantId: string,
+  body: CompanyMandateSignerInput,
+): Promise<MandateSignerSaved> {
+  return apiFetch<MandateSignerSaved>(companyBase(tenantId), { method: "POST", body });
+}
+
+/** PUT /{signerId} — edición de datos y organismos. */
+export function updateCompanyMandateSigner(
+  tenantId: string,
+  mandateSignerId: string,
+  body: CompanyMandateSignerInput,
+): Promise<MandateSignerSaved> {
+  return apiFetch<MandateSignerSaved>(`${companyBase(tenantId)}/${mandateSignerId}`, {
+    method: "PUT",
+    body,
+  });
+}
+
+/** POST /{signerId}/inactivate — baja lógica del mandatario. */
+export function inactivateCompanyMandateSigner(
+  tenantId: string,
+  mandateSignerId: string,
+): Promise<void> {
+  return apiFetch<void>(`${companyBase(tenantId)}/${mandateSignerId}/inactivate`, { method: "POST" });
+}
+
+/** POST /{signerId}/reactivate — reactiva un mandatario inactivado. */
+export function reactivateCompanyMandateSigner(
+  tenantId: string,
+  mandateSignerId: string,
+): Promise<void> {
+  return apiFetch<void>(`${companyBase(tenantId)}/${mandateSignerId}/reactivate`, { method: "POST" });
 }

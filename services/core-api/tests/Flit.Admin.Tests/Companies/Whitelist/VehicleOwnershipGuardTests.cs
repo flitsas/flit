@@ -4,6 +4,7 @@ using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Flit.Admin.Domain.Companies.Whitelist;
 using FluentAssertions;
 using Xunit;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Admin.Tests.Companies.Whitelist;
 
@@ -136,6 +137,62 @@ public sealed class VehicleOwnershipGuardTests
 
         // Una radicación nueva sí aplica la política live (regla activa) → bloquea.
         result.IsAllowed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Family_MatriculasFlag_BlocksWhenOnlyOwnOnMatriculas()
+    {
+        var guard = new VehicleOwnershipGuard(
+            new FakeOwnershipChecker(isOwned: false),
+            new FakeWhitelistRepository());
+
+        var policy = new TenantSettings
+        {
+            TenantId = TenantId,
+            AllowInitialRegistration = true,
+            AllowMiscNewVehicles = true,
+            OnlyOwnVehicles = false,
+            OnlyOwnVehiclesMatriculas = true,
+            SignatureVaultEnabled = false,
+            NotificationChannel = NotificationChannel.FlitSmtp,
+            NotificationTarget = NotificationTarget.Radicador,
+            PaymentMethods = [],
+        };
+
+        var context = new VehicleOwnershipCheckContext(
+            TenantId, "VIN123", "operador@empresa.com", policy, ProcedureFamilyCodes.Matriculas);
+
+        var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
+
+        result.IsAllowed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Family_MatriculasFlag_DoesNotAffectTraspasoWhenTraspasoOff()
+    {
+        var guard = new VehicleOwnershipGuard(
+            new FakeOwnershipChecker(isOwned: false),
+            new FakeWhitelistRepository());
+
+        var policy = new TenantSettings
+        {
+            TenantId = TenantId,
+            AllowInitialRegistration = true,
+            AllowMiscNewVehicles = true,
+            OnlyOwnVehicles = false,
+            OnlyOwnVehiclesMatriculas = true,
+            SignatureVaultEnabled = false,
+            NotificationChannel = NotificationChannel.FlitSmtp,
+            NotificationTarget = NotificationTarget.Radicador,
+            PaymentMethods = [],
+        };
+
+        var context = new VehicleOwnershipCheckContext(
+            TenantId, "ABC123", "operador@empresa.com", policy, ProcedureFamilyCodes.Traspaso);
+
+        var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
+
+        result.IsAllowed.Should().BeTrue();
     }
 
     // ---------- Helpers / dobles ----------

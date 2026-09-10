@@ -13,7 +13,19 @@ internal static class MetricsTestData
         [],
         [],
         new ReincidenceDto(18, 11, 1.4, 3),
-        new StuckDto(7, []));
+        new StuckDto(7, []),
+        // Causales tipificadas: dos causales sobre 18 rechazos. Los porcentajes NO suman 100 % a
+        // propósito — un rechazo puede llevar varias, y el fixture lo refleja (66,7 + 38,9).
+        [
+            new RejectionByReasonCatalogDto(
+                Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                "soat_no_vigente", "SOAT no vigente", 12, 66.7),
+            new RejectionByReasonCatalogDto(
+                Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                "impuestos_no_vigentes", "Impuestos no vigentes", 7, 38.9),
+        ],
+        1.06,
+        new InternalCycleDto(38.5, 26.0, 96.0));
 
     public static FunnelCoreDto FunnelCore() => new(
         [

@@ -1,9 +1,11 @@
+using System.Linq;
 using System.Text;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Tramites.Application.Documents;
 using FluentAssertions;
 using PdfSharpCore.Fonts;
 using Xunit;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Infrastructure.Tests.Documents;
 
@@ -43,8 +45,9 @@ public sealed class FurOverlayDocumentGeneratorTests
 
     private static FurDocumentData TraspasoData() => FullData() with
     {
-        Modalidad = "traspaso",
-        TipologiaCodigo = "traspaso_standard",
+        // ADR-0050 — la tipología es el code del tipo; antes bastaba con la modalidad.
+        TipologiaCodigo = "TRASPASO_STANDARD",
+        Modalidad = ProcedureFamilyCodes.Traspaso,
         Vehiculo = FullData().Vehiculo with
         {
             Marca = "BAJAJ",
@@ -92,6 +95,33 @@ public sealed class FurOverlayDocumentGeneratorTests
     }
 
     [Fact]
+    public void GenerateFurFillAll_ProducesTwoPagePdfWithAllManifestFields()
+    {
+        if (!TemplatesExist()) return;
+
+        var manifest = FurFieldManifestLoader.LoadEmbedded();
+        var values = FurFillAllOverlay.FromManifest(manifest);
+        values.Count.Should().Be(manifest.Fields.Count);
+        values.Keys.Should().BeEquivalentTo(manifest.Fields.Select(f => f.Id));
+        values["processing_day"].Text.Should().Be("08");
+        values["processing_month"].Text.Should().Be("08");
+        values["processing_year"].Text.Should().Be("2026");
+        values["plate_letter"].Text.Should().Be("ABC");
+        values["plate_number"].Text.Should().Be("123");
+        foreach (var value in values.Values)
+        {
+            var hasText = !string.IsNullOrEmpty(value.Text);
+            var hasImage = value.ImageBytes is { Length: > 0 };
+            (hasText || hasImage).Should().BeTrue();
+        }
+
+        var doc = CreateGenerator().GenerateFurFillAll();
+        doc.Filename.Should().Be("fur_FILLALL_AUTOMOTOR.pdf");
+        Encoding.ASCII.GetString(doc.Content, 0, 4).Should().Be("%PDF");
+        CountPages(doc.Content).Should().Be(2);
+    }
+
+    [Fact]
     public void GenerateCompraventa_ProducesPdf()
     {
         var doc = CreateGenerator().GenerateCompraventa(TraspasoData());
@@ -119,6 +149,30 @@ public sealed class FurOverlayDocumentGeneratorTests
     }
 
     [Fact]
+    public void GenerateCompraventa_ConFirmaDelBaul_ProducePdfConSuTrazabilidad()
+    {
+        // HU #11170 — la compraventa estampaba la imagen del baúl y nada más: al hacerse exclusivas la
+        // imagen y el sello de identidad (Bug #11146), esa firma se quedó sin vigencia ni hash. El texto
+        // impreso se verifica con render; aquí, que el bloque acepte los metadatos sin romperse.
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        var data = TraspasoData() with
+        {
+            IdentidadValidada = true,
+            FirmaImagenes = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase) { ["vendedor"] = png },
+            FirmaBaulMetadatos = new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["vendedor"] = new FirmaBaulMetadata(
+                    "52123456", "Ana Gómez", new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), Guid.NewGuid(), "ABC-123"),
+            },
+        };
+
+        var pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+    }
+
+    [Fact]
     public void GenerateCompraventa_IdentidadPendiente_ProducePdfSinFirmas_SinLanzar()
     {
         // HU #10859: sin validación de identidad, la compraventa se emite igual (sin firmas), no bloquea.
@@ -129,6 +183,100 @@ public sealed class FurOverlayDocumentGeneratorTests
 
         act.Should().NotThrow();
         Encoding.ASCII.GetString(pdf!, 0, 4).Should().Be("%PDF");
+    }
+
+    [Fact]
+    public void GenerateCompraventa_ConMembreteYTabla_CabeEnUnaPagina()
+    {
+        // ADR-0053: membrete + chips de vehículo no deben empujar las firmas a una segunda hoja.
+        var data = TraspasoData() with
+        {
+            FechaTramite = new DateTime(2026, 8, 27, 0, 0, 0, DateTimeKind.Utc),
+            IdentidadValidada = true,
+            ValorVenta = 45_800_000m,
+            SellosIdentidad = new Dictionary<string, string>
+            {
+                ["comprador"] = "Validación biométrica · UUID-c · Firma KV · 2026",
+                ["vendedor"] = "Validación biométrica · UUID-v · Firma KV · 2026",
+            },
+            Vehiculo = TraspasoData().Vehiculo with
+            {
+                Marca = "YAMAHA",
+                Linea = "NMAX",
+                Modelo = "2026",
+                Vin = "JYARJ12E0GA000001",
+                NumeroChasis = "JYARJ12E0GA000001",
+                NumeroMotor = "E3P4-000001",
+                Placa = "JNH38H",
+            },
+        };
+
+        var pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+        CountPages(pdf).Should().Be(1);
+    }
+
+    [Fact]
+    public void GenerateCompraventa_SinLineaDeFirma_CabeEnUnaPaginaConHuecoDeEstampa()
+    {
+        // Sin línea horizontal: hueco de 32 pt + dos PJ con sello no deben ir a segunda hoja.
+        var vendedor = new DocumentParte(
+            "vendedor",
+            "COMERCIALIZADORA DE VEHICULOS DEL NORTE S.A.S.",
+            "890903938",
+            null,
+            "NIT",
+            EsJuridica: true,
+            RepresentanteLegalNombre: "MARIA FERNANDA GONZALEZ RESTREPO",
+            RepresentanteLegalTipoDoc: "CC",
+            RepresentanteLegalDocumento: "1038409485");
+        var comprador = new DocumentParte(
+            "comprador",
+            "INVERSIONES DEL SUR S.A.S.",
+            "901555444-2",
+            null,
+            "NIT",
+            EsJuridica: true,
+            RepresentanteLegalNombre: "JUAN ESTEBAN PEREZ",
+            RepresentanteLegalTipoDoc: "CC",
+            RepresentanteLegalDocumento: "1020304050");
+        var data = TraspasoData() with
+        {
+            FechaTramite = new DateTime(2026, 8, 27, 0, 0, 0, DateTimeKind.Utc),
+            IdentidadValidada = true,
+            ValorVenta = 45_000_000m,
+            Partes = [vendedor, comprador],
+            SellosIdentidad = new Dictionary<string, string>
+            {
+                ["vendedor"] = "Validación biométrica CC 1038409485\nUUID kv-123\nFirma ABC-XYZ\nAprob 2026/07/20 · Vence 2026/08/19",
+                ["comprador"] = "Validación biométrica CC 1020304050\nUUID kv-456\nFirma DEF-UVW\nAprob 2026/07/21 · Vence 2026/08/20",
+            },
+        };
+
+        var pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+        // Dos PJ + sellos de 4 líneas ocupan más que la guía (PN). El aire de los párrafos se
+        // conserva; si no cabe, puede ir a una segunda hoja — no se compacta el cuerpo otra vez.
+        CountPages(pdf).Should().BeLessThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public void GenerateCompraventa_CitaLegalVaDespuesDeFechaYRef_ProducePdfDeUnaPagina()
+    {
+        // El orden Fecha → Ref. → cita se valida en el generador (layout) y con render visual:
+        // QuestPDF/Skia no deja literales extraíbles en el PDF (igual que MandatoPdfGeneratorTests).
+        var data = TraspasoData() with
+        {
+            FechaTramite = new DateTime(2026, 8, 27, 0, 0, 0, DateTimeKind.Utc),
+            Vehiculo = TraspasoData().Vehiculo with { Placa = "JNH38H" },
+        };
+
+        var pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+        CountPages(pdf).Should().Be(1);
     }
 
     [Fact]
@@ -196,7 +344,7 @@ public sealed class FurOverlayDocumentGeneratorTests
         var data = FullData() with { FechaTramite = new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc) };
         var values = FurFieldMapper.Map(data);
         values["processing_day"].Text.Should().Be("15");
-        values["processing_month"].Text.Should().Be("3");
+        values["processing_month"].Text.Should().Be("03");
         values["processing_year"].Text.Should().Be("2026");
     }
 
@@ -275,6 +423,19 @@ public sealed class FurOverlayDocumentGeneratorTests
         var values = FurFieldMapper.Map(data);
         values["plate_letter"].Text.Should().Be("ABC");
         values["plate_number"].Text.Should().Be("123");
+    }
+
+    [Fact]
+    public void FurFieldMapper_SinPlaca_CasillasDeLetrasYNumerosVacias()
+    {
+        var data = TraspasoData() with
+        {
+            Vehiculo = TraspasoData().Vehiculo with { Placa = null },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        values["plate_letter"].Text.Should().BeEmpty();
+        values["plate_number"].Text.Should().BeEmpty();
     }
 
     // ── HU #10463 — sello "NO FIRMADO" cuando no hay validación de identidad ──
@@ -502,5 +663,40 @@ public sealed class FurOverlayDocumentGeneratorTests
         using var ms = new MemoryStream(pdf);
         using var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(ms, PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import);
         return doc.PageCount;
+    }
+
+    // ── ADR-0050: la parte vendedora la declara el tipo ──────────────────────────────────────────
+    // Antes se decidía buscando "TRASPASO" dentro de la tipología o de la modalidad.
+
+    [Fact]
+    public void UnTipoQueDeclaraParteVendedora_EstampaLaSeccionDelComprador()
+    {
+        var data = FullData() with
+        {
+            TipologiaCodigo = "TRANSFERENCIA_DOMINIO",  // no contiene la palabra "TRASPASO"
+            Modalidad = "TRASPASO",
+            RequiereVendedor = true,
+        };
+
+        var values = FurFieldMapper.Map(data);
+
+        values["vehicle_buyer_name"].Text.Should().NotBeEmpty(
+            "el tipo declara parte vendedora, así que el FUR lleva sección de comprador");
+    }
+
+    [Fact]
+    public void UnTramiteDeOtrosNoEstampaSeccionDeComprador()
+    {
+        // Un blindaje tiene un único titular: estampar un comprador inventaría una parte.
+        var data = FullData() with
+        {
+            TipologiaCodigo = "BLINDAJE",
+            Modalidad = "OTROS",
+            RequiereVendedor = false,
+        };
+
+        var values = FurFieldMapper.Map(data);
+
+        values["vehicle_buyer_name"].Text.Should().BeEmpty();
     }
 }

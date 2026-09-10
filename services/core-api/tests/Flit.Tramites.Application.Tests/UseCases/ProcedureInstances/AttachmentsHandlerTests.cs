@@ -92,13 +92,12 @@ public sealed class AttachmentsHandlerTests
         bool subsanacionActiva = false) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? modalidad),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = modalidad,
-            TipologiaCodigo = tipologia,
             ChecklistEstado = checklistEstado,
             SubsanacionActiva = subsanacionActiva,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -239,7 +238,9 @@ public sealed class AttachmentsHandlerTests
         result!.Tipo.Should().Be("factura");
         result.Sha256.Should().Be("deadbeef");
         result.Source.Should().Be("user");
+        result.Provider.Should().BeNull();
         instance.Attachments.Should().ContainSingle();
+        instance.Attachments.Single().Provider.Should().BeNull();
         _storage.Saved.Should().ContainSingle();
         // El adjunto NUEVO se marca Added explícito → INSERT (PK store-generated con Id ya seteado).
         _repo.Received(1).Add(Arg.Is<ProcedureInstanceAttachment>(a => a.Tipo == "factura"));
@@ -738,17 +739,36 @@ public sealed class AttachmentsHandlerTests
     }
 
     [Fact]
-    public async Task Checklist_UnknownTipologia_Returns422()
+    public async Task Checklist_TipoSinDocumentosConfigurados_DevuelveListaVacia_NoError()
     {
+        // ANTES devolvía 422 «La tipología del trámite no está configurada», y el paso de Requisitos
+        // entero se rompía con un mensaje sobre una estructura interna que el gestor no puede
+        // accionar. `TramiteTipologiaCatalog` describe DOS códigos —es el catálogo previo a
+        // ADR-0050— así que cualquiera de los otros diecinueve tipos que aún no tuviera matriz
+        // documental caía ahí. «Todavía no hay documentos configurados» es un estado legítimo y el
+        // asistente ya sabe pintarlo.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        var instance = Instance(id, tenant, modalidad: "desconocida", tipologia: "no_existe");
+        var instance = Instance(id, tenant);
+        instance.ProcedureType = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "BLINDAJE",
+            Name = "Blindaje",
+            Family = ProcedureFamilyCodes.Otros,
+        };
         _repo.GetByIdWithChecklistGraphAsync(id, tenant, ct).Returns(instance);
 
-        var (_, error) = await _checklist.HandleAsync(id, tenant, ct);
+        var (result, error) = await _checklist.HandleAsync(id, tenant, ct);
 
-        error.Should().Be("tipologia_not_found");
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Items.Should().BeEmpty();
+        result.FaltanObligatorios.Should().BeEmpty();
+        // Sin obligatorios que satisfacer, el checklist no bloquea. No se pierde ninguna guarda: el
+        // gate de radicación ya trataba la ausencia de catálogo como «completo».
+        result.Completo.Should().BeTrue();
     }
 
     // ── HU #10522 (RF17/RF22) — checklist desde la matriz viva del gestor ─────────
@@ -771,25 +791,30 @@ public sealed class AttachmentsHandlerTests
                 new ResolvedChecklistDoc("factura", "Factura de Venta", true, 10),
                 new ResolvedChecklistDoc("soat", "SOAT (vigente)", true, 20),
             ]));
-        var handler = new GetChecklistHandler(_repo, _companyParams, matrixProvider);
+        var catalog = Substitute.For<IDocumentTypeCatalog>();
+        catalog.ListSystemGeneratedCodesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlySet<string>>(
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "soat", "mandato" }));
+        var handler = new GetChecklistHandler(_repo, _companyParams, matrixProvider, catalog);
 
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        result!.Items.Select(i => i.Key).Should().Equal("factura", "soat");
-        result.FaltanObligatorios.Should().Contain("soat"); // el gestor lo hizo obligatorio
+        result!.Items.Select(i => i.Key).Should().Equal("factura");
+        result.FaltanObligatorios.Should().Contain("factura");
+        result.FaltanObligatorios.Should().NotContain("soat");
+        result.Items.Should().NotContain(i => i.Key == "mandato");
     }
 
     [Fact]
-    public async Task Checklist_SinMatriz_CaeAlCatalogo()
+    public async Task Checklist_SinMatriz_ListaVacia_NoUsaCatalogoHardcodeado()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        var instance = Instance(id, tenant, tipologia: TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        var instance = Instance(id, tenant, tipologia: TramiteTipologiaCatalog.CodigoTraspasoStandard);
         _repo.GetByIdWithChecklistGraphAsync(id, tenant, ct).Returns(instance);
 
-        // El gestor no tiene matriz para este procedure_type ⇒ matriz vacía ⇒ catálogo.
         var matrixProvider = Substitute.For<IResolvedChecklistMatrixProvider>();
         matrixProvider
             .GetForAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
@@ -799,10 +824,9 @@ public sealed class AttachmentsHandlerTests
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        // Catálogo vivo de matrícula intacto: aduana obligatorio, "otro" presente.
-        result!.Items.Should().Contain(i => i.Key == "aduana");
-        result.Items.Should().Contain(i => i.Key == "otro");
-        result.FaltanObligatorios.Should().Contain("aduana");
+        result!.Items.Should().BeEmpty();
+        result.Completo.Should().BeTrue();
+        result.FaltanObligatorios.Should().BeEmpty();
     }
 
     [Fact]
@@ -822,5 +846,132 @@ public sealed class AttachmentsHandlerTests
         error.Should().BeNull();
         result!.Items.Should().Contain(i => i.Key == "aduana");
         result.FaltanObligatorios.Should().Contain("aduana");
+    }
+
+    // ── HU #12046 — «Reemplazar archivo» tiene que reemplazar ──────────────────────────────
+
+    /// <summary>
+    /// El botón dice «Reemplazar archivo» desde siempre, pero la subida solo AÑADÍA. Medido en la BD de
+    /// desarrollo: los únicos expedientes con dos adjuntos del mismo tipo son los de esa prueba. El daño no
+    /// se veía en la pantalla —enseñaba uno de los dos— sino en el consolidado, que ordena por tipo y luego
+    /// por fecha SIN deduplicar: el organismo recibía el documento corregido y también el que se corrigió.
+    /// </summary>
+    [Fact]
+    public async Task Upload_MismoTipo_ReemplazaElAnterior()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(name: "viejo.pdf"), null, ct);
+        var (result, error) = await _upload.HandleAsync(id, tenantId, Pdf(name: "nuevo.pdf"), null, ct);
+
+        error.Should().BeNull();
+        instance.Attachments.Should().ContainSingle().Which.Filename.Should().Be("nuevo.pdf");
+        result!.Filename.Should().Be("nuevo.pdf");
+        // El binario del anterior también se retira: dejarlo huérfano en el almacenamiento sería pagar por
+        // guardar un archivo que ya nadie puede alcanzar.
+        _storage.Deleted.Should().ContainSingle().Which.Should().Contain("viejo.pdf");
+    }
+
+    /// <summary>
+    /// El borrado va DESPUÉS de guardar el nuevo: si el almacenamiento falla, el gestor se queda con el
+    /// documento que ya tenía en vez de con la casilla vacía.
+    /// </summary>
+    [Fact]
+    public async Task Upload_MismoTipo_NoBorraElAnteriorAntesDeGuardarElNuevo()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+        await _upload.HandleAsync(id, tenantId, Pdf(name: "viejo.pdf"), null, ct);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(name: "nuevo.pdf"), null, ct);
+
+        _storage.Saved.Should().HaveCount(2);
+        _storage.Saved[1].Should().Contain("nuevo.pdf", "el nuevo se guarda antes de retirar el anterior");
+    }
+
+    [Fact]
+    public async Task Upload_TipoDistinto_NoTocaLosDemas()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "factura", name: "f.pdf"), null, ct);
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "soat", name: "s.pdf"), null, ct);
+
+        instance.Attachments.Select(a => a.Tipo).Should().BeEquivalentTo(["factura", "soat"]);
+        _storage.Deleted.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// `otro` es una bolsa: su nombre no designa un documento concreto sino «lo demás», así que subir uno
+    /// nuevo no puede retirar el anterior. Es la excepción, y por eso está declarada.
+    /// </summary>
+    [Fact]
+    public async Task Upload_TipoBolsa_Acumula()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "otro", name: "uno.pdf"), null, ct);
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "otro", name: "dos.pdf"), null, ct);
+
+        instance.Attachments.Should().HaveCount(2);
+        _storage.Deleted.Should().BeEmpty();
+        AttachmentRules.ReemplazaAlSubir("otro").Should().BeFalse();
+        AttachmentRules.ReemplazaAlSubir("factura").Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Trece tipos del catálogo están marcados <c>is_system_generated</c> Y son cargables a mano —entre
+    /// ellos <c>rtm</c> y <c>soat</c>, que además tienen OCR—. Si subir en esa casilla retirase lo que
+    /// generó el sistema, una carga del gestor destruiría en silencio un documento del expediente. Es el
+    /// principio que `AttachmentCleanup` aplica en la dirección contraria y que motivó el Bug #11310.
+    /// </summary>
+    [Theory]
+    [InlineData("system")]
+    [InlineData("company")]
+    public async Task Upload_NoRetiraLoQueGeneroElSistemaNiLaCompania(string source)
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            Tipo = "rtm",
+            Filename = "rtm-generado.pdf",
+            Mimetype = "application/pdf",
+            SizeBytes = 10,
+            Sha256 = "x",
+            StoragePath = "p/rtm-generado.pdf",
+            Source = source,
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "rtm", name: "rtm-del-gestor.pdf"), null, ct);
+
+        instance.Attachments.Should().HaveCount(2);
+        _storage.Deleted.Should().BeEmpty();
+    }
+
+    /// <summary>La carga del gestor sí retira la carga anterior del gestor: ese es el reemplazo.</summary>
+    [Fact]
+    public async Task Upload_SiRetiraLaCargaAnteriorDelMismoOrigen()
+    {
+        var (id, tenantId, ct) = (Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+        var instance = Instance(id, tenantId);
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "rtm", name: "viejo.pdf"), null, ct);
+        await _upload.HandleAsync(id, tenantId, Pdf(tipo: "rtm", name: "nuevo.pdf"), null, ct);
+
+        instance.Attachments.Should().ContainSingle().Which.Filename.Should().Be("nuevo.pdf");
     }
 }

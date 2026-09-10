@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerSignatureImage;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
@@ -79,21 +80,29 @@ public static class AdminMandateSignersEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapGet("/{mandateSignerId:guid}/signature-image", GetSignatureImageAsync)
+            .WithName("AdminMandateSignerSignatureImage")
+            .WithSummary("Devuelve el PNG de la firma del baúl del mandatario")
+            .Produces(StatusCodes.Status200OK, contentType: "image/png")
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
     }
 
     private static async Task<IResult> ListAsync(
         Guid transitOfficeId,
         [FromServices] ListMandateSignersHandler handler,
-        [FromServices] Flit.Admin.Application.Identity.AdminIdentityMockOptions mockOptions,
         CancellationToken cancellationToken)
     {
         var result = await handler
             .HandleAsync(new ListMandateSignersQuery { TransitOfficeId = transitOfficeId }, cancellationToken)
             .ConfigureAwait(false);
 
-        // HU #11028 — la consola solo ofrece "Simular validación" si el ambiente la tiene habilitada.
-        return Results.Ok(new { data = result, mockIdentityEnabled = mockOptions.Enabled });
+        // HU #11764 (ADR-0050) — se retira `mockIdentityEnabled`: el botón "Simular validación" ya no
+        // existe (su ruta responde 410 Gone) y el flag no tenía otro consumidor.
+        return Results.Ok(new { data = result });
     }
 
     private static async Task<IResult> ListCompaniesAsync(
@@ -124,6 +133,8 @@ public static class AdminMandateSignersEndpoints
             DocumentType = request.DocumentType ?? "CC",
             Email = request.Email,
             UserId = request.UserId,
+            // HU #11201 — la misma persona puede firmar en varios organismos.
+            TransitOfficeIds = request.TransitOfficeIds,
             CreatedBy = ResolveUserId(httpContext.User),
         };
 
@@ -161,6 +172,7 @@ public static class AdminMandateSignersEndpoints
             DocumentType = request.DocumentType ?? "CC",
             Email = request.Email,
             UserId = request.UserId,
+            TransitOfficeIds = request.TransitOfficeIds,
             UpdatedBy = ResolveUserId(httpContext.User),
         };
 
@@ -216,6 +228,26 @@ public static class AdminMandateSignersEndpoints
         return outcome == ReactivateMandateSignerOutcome.Reactivated
             ? Results.NoContent()
             : Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en este organismo." });
+    }
+
+    private static async Task<IResult> GetSignatureImageAsync(
+        Guid transitOfficeId,
+        Guid mandateSignerId,
+        [FromServices] GetMandateSignerSignatureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(transitOfficeId, mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            GetMandateSignerSignatureImageOutcome.Ok =>
+                Results.File(result.Content!, "image/png"),
+            GetMandateSignerSignatureImageOutcome.NotFound =>
+                Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en este organismo." }),
+            _ => Results.NotFound(new { error = "Este mandatario no tiene imagen de firma en el baúl." }),
+        };
     }
 
     /// <summary>422 con el sobre estándar de errores; nunca incluye PII.</summary>

@@ -47,6 +47,18 @@ public interface ISignatureVaultPolicy
         string documentType,
         string documentNumber,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Firma del MANDATARIO: misma resolución por documento y vigencia, pero <b>sin</b> el flag
+    /// <c>signature_vault_enabled</c> de la compañía. Ese flag gobierna a las partes del trámite
+    /// (mandante / RL); el mandatario tiene su propia firma y se estampa si existe.
+    /// </summary>
+    Task<SignatureVaultMatch?> ResolveMandatarioAsync(
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        CancellationToken cancellationToken = default) =>
+        ResolveAsync(tenantId, documentType, documentNumber, cancellationToken);
 }
 
 /// <summary>

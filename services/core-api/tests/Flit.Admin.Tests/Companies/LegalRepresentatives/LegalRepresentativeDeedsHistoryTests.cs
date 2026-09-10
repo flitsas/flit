@@ -1,12 +1,14 @@
 using Flit.Admin.Application.Companies.LegalRepresentatives;
 using Flit.Admin.Application.Companies.LegalRepresentatives.CreateLegalRepresentative;
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
+using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using SignatureVaultAggregate = Flit.Admin.Domain.Companies.SignatureVault.SignatureVault;
 
 namespace Flit.Admin.Tests.Companies.LegalRepresentatives;
 
@@ -130,10 +132,11 @@ public sealed class LegalRepresentativeDeedsHistoryTests
         await using var ctx = NewContext();
         var repA = await SeedRepAsync(ctx, [NitA], doc: "111");
         var repB = await SeedRepAsync(ctx, [NitA], doc: "222");
-        var companyA = await CompanyIdAsync(ctx, repA, NitA); // misma compañía (upsert por NIT).
+        var companyA = await CompanyIdAsync(ctx, repA, NitA);
+        var companyB = await CompanyIdAsync(ctx, repB, NitA);
 
         var deedA = await SeedDeedAsync(ctx, "Escritura de A", new(2026, 1, 1), new(2026, 12, 31), [companyA], repA);
-        var deedB = await SeedDeedAsync(ctx, "Escritura de B", new(2026, 1, 1), new(2026, 12, 31), [companyA], repB);
+        var deedB = await SeedDeedAsync(ctx, "Escritura de B", new(2026, 1, 1), new(2026, 12, 31), [companyB], repB);
         await SeedDeedAsync(ctx, "Escritura legada", new(2026, 1, 1), new(2026, 12, 31), [companyA], representativeId: null);
 
         var reader = new DbLegalRepresentativeReader(ctx, Clock);
@@ -173,6 +176,7 @@ public sealed class LegalRepresentativeDeedsHistoryTests
         var writer = new LegalRepresentativeWriter(
             new FakeProcedureTypeCatalog(),
             new FakeSignatureResolver(),
+            new FakeSignatureVaultReader(),
             repo, reader, Clock);
         var create = new CreateLegalRepresentativeHandler(writer);
 
@@ -248,6 +252,25 @@ public sealed class LegalRepresentativeDeedsHistoryTests
             DateOnly today,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(LegalRepresentativeSignatureResolution.None);
+    }
+
+    private sealed class FakeSignatureVaultReader : ISignatureVaultReader
+    {
+        public Task<SignatureVaultAggregate?> FindActiveByNitAsync(Guid tenantId, string nitEmpresa, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultAggregate?>(null);
+
+        public Task<SignatureVaultAggregate?> FindActiveByDocumentAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultAggregate?>(null);
+
+        public Task<SignatureVaultAggregate?> FindActiveByNumberAsync(
+            Guid tenantId, string documentNumber, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultAggregate?>(null);
+
+        public Task<IReadOnlyList<SignatureVaultItem>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<SignatureVaultItem>>([]);
+
+        public Task<SignatureVaultItem?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultItem?>(null);
     }
 
     private sealed class StubTimeProvider : TimeProvider

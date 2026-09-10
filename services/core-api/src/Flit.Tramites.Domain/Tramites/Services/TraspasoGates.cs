@@ -9,8 +9,13 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// Fuente única de verdad de "paso completo / puede avanzar / inmutabilidad de pasos cerrados",
 /// reutilizada luego por API (checks server-side) y UI (sidebar + Continuar).
 ///
-/// <para>HU #10935 — orden del wizard: los documentos van DESPUÉS de los actores
-/// (consulta → vendedor → comprador → documentos → comercial → fur).</para>
+/// <para>HU #10935 — orden del wizard: los documentos van DESPUÉS de los actores.</para>
+///
+/// <para>Paridad de pasos con matrícula — los datos comerciales (valor de venta) se absorben en el
+/// paso de Documentos (4), y el paso 5 pasa a ser Identidad (biométrica de AMBAS partes, antes
+/// evaluada de forma diferida en el paso 6). Orden resultante: consulta → vendedor → comprador →
+/// documentos → identidad → fur — la MISMA secuencia de matrícula (donde el vendedor no existe y
+/// los pasos se funden).</para>
 /// </summary>
 public static class TraspasoGates
 {
@@ -21,12 +26,13 @@ public static class TraspasoGates
         new Dictionary<int, IReadOnlyList<string>>
         {
             // El paz y salvo de impuesto se confirma en el paso 1 (junto a la consulta/preflight).
-            // HU #10935 — los actores pasan al frente (2 vendedor, 3 comprador) y Documentos (4) no
-            // tiene claves de datos propias en field_values (su completitud sale del checklist).
+            // HU #10935 — los actores pasan al frente (2 vendedor, 3 comprador). Documentos (4)
+            // ahora también aloja los datos comerciales (valor de venta); Identidad (5) no tiene
+            // claves propias en field_values (la biométrica vive en su propia entidad).
             [1] = ["paz_salvo_impuesto", "impuesto_consulta"],
             [2] = ["vendedor", "runt_vendedor"],
             [3] = ["comprador", "runt_comprador", "simit_comprador"],
-            [5] = ["comercial"],
+            [4] = ["comercial"],
         };
 
     /// <summary>Paso N (1–6) completado → puede avanzar a N+1. Paridad <c>pasoTraspasoCompleto</c>.</summary>
@@ -50,22 +56,29 @@ public static class TraspasoGates
                 // avanza con un dato vital sin verificar; hay que reejecutar la consulta.
                 if (ctx.Preflight?.ProviderError == true)
                     return GateResult.Block("preflight_provider_error", "No fue posible verificar la información del vehículo en el RUNT. Vuelve a ejecutar la consulta antes de continuar");
+                // Bloqueo DURO: el RUNT respondió y el vehículo NO existe. Sin vehículo no hay trámite,
+                // así que no se subsana con "aceptar riesgo" ni forzando; hay que corregir el identificador.
+                if (ctx.Preflight?.VehiculoNoEncontrado == true)
+                    return GateResult.Block("vehiculo_no_encontrado", "El vehículo no se encontró en el RUNT. Verifica la placa y el documento del propietario antes de continuar");
                 if (ImpuestoGateBloquea(ctx.Preflight, ctx.PazSalvoImpuestoVerificado, forzar))
                     return GateResult.Block("impuesto_pendiente", "Confirma paz y salvo de impuesto vehicular antes de continuar");
                 return GateResult.Allowed;
 
             case 2:
                 // HU #10935 — Paso 2 = Vendedor (antes iba en el paso 3): parte + RUNT consultado.
-                if (!ParteCompleta(ctx.Vendedor))
-                    return GateResult.Block("vendedor_incompleto", "Completa nombre, documento y email del vendedor");
+                // HU #11593 — la parte exige los seis datos de contacto (nombre, documento, email,
+                // ciudad, dirección, teléfono); el mensaje enumera los campos faltantes reales.
+                if (!ParteCompletaRule.EstaCompleta(ctx.Vendedor))
+                    return GateResult.Block("vendedor_incompleto", ParteCompletaRule.MensajeFaltantes("vendedor", ctx.Vendedor));
                 if (!RuntConsultado(ctx.RuntVendedor, ctx.Vendedor?.Documento))
                     return GateResult.Block("runt_vendedor", "Consulta RUNT del vendedor antes de continuar");
                 return GateResult.Allowed;
 
             case 3:
                 // HU #10935 — Paso 3 = Comprador (antes iba en el paso 4): parte + RUNT + SIMIT.
-                if (!ParteCompleta(ctx.Comprador))
-                    return GateResult.Block("comprador_incompleto", "Completa nombre, documento y email del comprador");
+                // HU #11593 — misma exigencia de los seis datos de contacto que el vendedor.
+                if (!ParteCompletaRule.EstaCompleta(ctx.Comprador))
+                    return GateResult.Block("comprador_incompleto", ParteCompletaRule.MensajeFaltantes("comprador", ctx.Comprador));
                 if (!RuntConsultado(ctx.RuntComprador, ctx.Comprador?.Documento))
                     return GateResult.Block("runt_comprador", "Consulta RUNT del comprador antes de continuar");
                 return SimitCompradorGate(ctx, forzar);
@@ -77,19 +90,30 @@ public static class TraspasoGates
                 // caído/timeout) NO se subsana con "aceptar riesgo" ni forzando; hay que reintentar.
                 if (ctx.Preflight?.ProviderError == true)
                     return GateResult.Block("preflight_provider_error", "No fue posible verificar la información en el RUNT/SIMIT/RNMC. Vuelve a ejecutar la consulta antes de continuar");
+                // Mismo bloqueo DURO del paso 1: sin vehículo verificado no se avanza a documentos.
+                if (ctx.Preflight?.VehiculoNoEncontrado == true)
+                    return GateResult.Block("vehiculo_no_encontrado", "El vehículo no se encontró en el RUNT. Verifica la placa y el documento del propietario antes de continuar");
                 if (PreflightBloquea(ctx.Preflight, forzar || ctx.RiesgoPreflightAceptado))
                     return GateResult.Block("preflight_red", "Hay bloqueos críticos (SOAT/RTM). Subsana antes de continuar");
                 if (!ctx.DocumentosObligatoriosCompletos)
                     return GateResult.Block("documentos_incompletos", "Sube los documentos obligatorios antes de continuar");
+                // Paridad con matrícula (mismos 6 pasos) — el hueco que dejó el antiguo paso "comercial"
+                // (5) lo ocupa Identidad; sus datos (valor de venta) se absorben aquí, en Documentos.
+                var comercial = ValidarComercial(ctx);
+                if (!comercial.Ok)
+                    return comercial;
                 return GateResult.Allowed;
 
             case 5:
-                return ValidarComercial(ctx);
+                // Paso 5 = Identidad: biométrica aprobada de AMBAS partes (vendedor + comprador).
+                // Antes se evaluaba de forma diferida en el paso 6 (FUR); ahora es un gate propio de
+                // la cascada, igual que el paso 4 (Identidad) de matrícula.
+                return GateFur(ctx.Biometria, forzar);
 
             case 6:
-                // Paso 6 = Generar FUR. Los documentos ya se exigen en el paso 4; aquí el gating
-                // (biometría de ambas partes + firma + FUR) se evalúa de forma diferida en
-                // WizardStateQuery.BuildTraspaso. PasoCompleto(6) no bloquea por documentos.
+                // Paso 6 = Generar FUR. Documentos (4) e Identidad (5) ya se exigen antes; aquí solo
+                // queda el FUR generado, que es IO y se evalúa de forma diferida en
+                // WizardStateQuery.BuildTraspaso. PasoCompleto(6) no bloquea por sí mismo.
                 return GateResult.Allowed;
 
             default:
@@ -186,7 +210,11 @@ public static class TraspasoGates
         return GateResult.Allowed;
     }
 
-    /// <summary>Gate de generación del FUR: exige biometría de ambas partes salvo forzar. Paridad <c>gateFurTraspaso</c>.</summary>
+    /// <summary>
+    /// Gate de identidad: exige biometría de ambas partes salvo forzar. Paridad <c>gateFurTraspaso</c>.
+    /// Reutilizado por <see cref="PasoCompleto"/>(5) — Identidad — desde que ese paso absorbió la
+    /// exigencia de biometría que antes evaluaba (solo para mostrar razones, sin bloquear) el paso 6.
+    /// </summary>
     public static GateResult GateFur(BiometriaSnapshot? biometria, bool forzarContinuar)
     {
         if (forzarContinuar)
@@ -195,10 +223,14 @@ public static class TraspasoGates
             return GateResult.Allowed;
         return GateResult.Block(
             "biometria_pendiente",
-            "Valida la biométrica de vendedor y comprador antes de generar el FUR");
+            "Valida la biométrica de vendedor y comprador antes de continuar");
     }
 
-    /// <summary>Valida el paso comercial (valor de venta &gt; 0). Paridad <c>validateTraspasoComercial</c>.</summary>
+    /// <summary>
+    /// Valida el paso comercial (valor de venta &gt; 0). Paridad <c>validateTraspasoComercial</c>.
+    /// Sus datos viven ahora en el paso 4 (Documentos): <see cref="PasoCompleto"/>(4) delega en este
+    /// método tras el checklist de documentos obligatorios.
+    /// </summary>
     public static GateResult ValidarComercial(TraspasoGateContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
@@ -245,12 +277,6 @@ public static class TraspasoGates
             return false;
         return !pazSalvoVerificado;
     }
-
-    private static bool ParteCompleta(ParteDatos? parte) =>
-        parte is not null &&
-        !string.IsNullOrWhiteSpace(parte.Nombre) &&
-        !string.IsNullOrWhiteSpace(parte.Documento) &&
-        TramiteDocumento.EmailValido(parte.Email);
 
     private static bool RuntConsultado(RuntSnapshot? runt, string? documentoParte)
     {

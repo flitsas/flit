@@ -54,6 +54,10 @@ describe("useAuthGate", () => {
   it("logout limpia el token y navega a /login sin returnUrl", async () => {
     const future = Math.floor(Date.now() / 1000) + 3600;
     window.localStorage.setItem("flit:jwt", makeToken({ sub: "u1", exp: future }));
+    window.sessionStorage.setItem(
+      "flit.dr-flit.session.v1",
+      JSON.stringify({ open: true, state: { messages: [{ id: "x" }] } }),
+    );
 
     const { result } = renderHook(() => useAuthGate());
     await waitFor(() => expect(result.current.hydrated).toBe(true));
@@ -62,5 +66,6 @@ describe("useAuthGate", () => {
 
     expect(replace).toHaveBeenCalledWith("/login");
     expect(window.localStorage.getItem("flit:jwt")).toBeNull();
+    expect(window.sessionStorage.getItem("flit.dr-flit.session.v1")).toBeNull();
   });
 });

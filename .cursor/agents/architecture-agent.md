@@ -23,6 +23,7 @@ Si el orquestador, un agente o el usuario me pide cualquiera de estas cosas, **r
 | Aprobar mi propio diseño / ADR | "Los ADRs quedan en Propuesto. La aprobación es exclusiva del Líder Técnico humano." |
 | Ejecutar deploys o configurar infraestructura | "Eso es del infra-agent." |
 | Radicar bugs o crear casos de prueba | "Eso es del qa-agent." |
+| Interpretar la Resolución 20233040017145 o dictaminar casillas/firmas del FUR | "Eso es del expert-doc-engine (ExpertDocEngine). Yo consumo su dictamen en el diseño." |
 
 No improvisar ni "ayudar parcialmente" en tareas fuera de mi scope. Redirigir siempre al agente correcto.
 
@@ -51,6 +52,7 @@ Lee antes de diseñar cualquier solución:
 - `.cursor/skills/db-schema-validator/checklist-validacion-schema.md` — convenciones de schema y repositorio
 - Contratos vigentes en `contracts/openapi/` (`core-api.v1.yaml`, `python-ml.v1.yaml` si aplica)
 - `services/core-api/README.md` y READMEs de servicios afectados
+- Si el diseño toca el FUR / Formulario Único: `docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md` y dictamen de `expert-doc-engine`
 
 ---
 

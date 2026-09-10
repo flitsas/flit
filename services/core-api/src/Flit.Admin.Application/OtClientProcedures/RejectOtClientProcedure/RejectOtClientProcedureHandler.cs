@@ -1,5 +1,6 @@
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtProfile;
+using Flit.Admin.Domain.RejectionReasons;
 
 namespace Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
 
@@ -18,14 +19,17 @@ public sealed class RejectOtClientProcedureHandler
 
     private readonly IOtClientProcedureRepository _repository;
     private readonly IQuipuxReadOnlyGuard _quipuxReadOnlyGuard;
+    private readonly IRejectionReasonRepository _rejectionReasons;
 
     public RejectOtClientProcedureHandler(
         IOtClientProcedureRepository repository,
-        IQuipuxReadOnlyGuard quipuxReadOnlyGuard)
+        IQuipuxReadOnlyGuard quipuxReadOnlyGuard,
+        IRejectionReasonRepository rejectionReasons)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _quipuxReadOnlyGuard = quipuxReadOnlyGuard
             ?? throw new ArgumentNullException(nameof(quipuxReadOnlyGuard));
+        _rejectionReasons = rejectionReasons ?? throw new ArgumentNullException(nameof(rejectionReasons));
     }
 
     public async Task<RejectOtClientProcedureResult> HandleAsync(
@@ -66,6 +70,30 @@ public sealed class RejectOtClientProcedureHandler
             return RejectOtClientProcedureResult.InvalidState();
         }
 
+        // Causales del catálogo: se validan contra la familia del tipo y su estado activo. Una
+        // causal ajena o retirada devuelve 422 en vez de descartarse en silencio — descartarla
+        // dejaría al revisor creyendo que la registró, y al reporte sin ese motivo.
+        var requestedReasonIds = command.Request.RejectionReasonIds?
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList() ?? [];
+
+        IReadOnlyList<Guid> reasonIds = [];
+        if (requestedReasonIds.Count > 0)
+        {
+            reasonIds = await _rejectionReasons
+                .FilterValidIdsAsync(requestedReasonIds, existing.Familia, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (reasonIds.Count != requestedReasonIds.Count)
+            {
+                return RejectOtClientProcedureResult.ValidationFailed(
+                    new FieldError(
+                        "rejectionReasonIds",
+                        "Alguna causal no existe, está retirada o no corresponde a la familia del trámite."));
+            }
+        }
+
         // Con ítems del checklist: observación (rechazado + metadata). Sin ítems: rechazo definitivo.
         var items = command.Request.Items?.Where(i => i is not null).ToList()
             ?? [];
@@ -79,6 +107,7 @@ public sealed class RejectOtClientProcedureHandler
                 command.RejectedBy,
                 OtTransitionSource.OtAdmin,
                 command.TransitOfficeId,
+                reasonIds,
                 cancellationToken).ConfigureAwait(false)
             : await _repository.RejectAsync(
                 command.OtTenantId,
@@ -87,6 +116,7 @@ public sealed class RejectOtClientProcedureHandler
                 command.RejectedBy,
                 OtTransitionSource.OtAdmin,
                 command.TransitOfficeId,
+                reasonIds,
                 cancellationToken).ConfigureAwait(false);
 
         return updated is null

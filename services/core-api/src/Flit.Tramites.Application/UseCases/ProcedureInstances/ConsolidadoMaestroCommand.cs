@@ -21,8 +21,22 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public sealed class GenerarConsolidadoMaestroHandler(
     IProcedureInstanceRepository repo,
     IExpedienteConsolidadoMerger merger,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    IOtConfiguredDocumentOrderProvider? otOrderProvider = null,
+    Domain.Integration.ICompaniaRadicadoraDirectory? companiaRadicadoraDirectory = null,
+    IImprontaManualStamper? improntaManualStamper = null,
+    Domain.Integration.ISignatureVaultPolicy? signatureVaultPolicy = null,
+    IVehicleSignatureImprintRepository? vehicleSignatureImprintRepository = null)
 {
+    // Bug #11612 — nombre de la compañía radicadora para la portada, resuelto desde el tenant dueño
+    // del trámite. Default inerte (NUNCA resuelve) en tests/composiciones que no lo cablean ⇒ la
+    // portada queda como estaba.
+    private readonly Domain.Integration.ICompaniaRadicadoraDirectory _companiaRadicadoraDirectory =
+        companiaRadicadoraDirectory ?? Domain.Integration.NullCompaniaRadicadoraDirectory.Instance;
+
+    private readonly Domain.Integration.ISignatureVaultPolicy _signatureVaultPolicy =
+        signatureVaultPolicy ?? Domain.Integration.NullSignatureVaultPolicy.Instance;
+
     private static readonly HashSet<string> ConsolidadoTipos = new(StringComparer.OrdinalIgnoreCase)
     {
         "consolidado",
@@ -35,10 +49,17 @@ public sealed class GenerarConsolidadoMaestroHandler(
     /// (la capa Application no referencia Admin). Si es null/vacío, se cae al orden por modalidad
     /// (<see cref="ConsolidadoOrderingResolver"/>) como respaldo.
     /// </param>
+    /// <param name="force">
+    /// El organismo pide explícitamente reconstruir el PDF, saltándose el atajo de caché. Es el
+    /// equivalente para el OT del <c>force</c> que <c>ExpedienteVisor</c> ya usaba en el wizard: si
+    /// una vía de invalidación falla o el operador simplemente duda de lo que está viendo, tiene una
+    /// salida en la interfaz en vez de depender de que el servidor haya adivinado bien.
+    /// </param>
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         IReadOnlyList<string>? matrizPrecedencia = null,
+        bool force = false,
         CancellationToken ct = default)
     {
         // Graph con FieldValues (HU #10857): necesarios para los datos de la portada (placa, secretaría).
@@ -52,7 +73,13 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // (transición de estado o adjuntar la LT), forzando la regeneración en la próxima petición.
         var vigente = instance.Attachments
             .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado_maestro", StringComparison.OrdinalIgnoreCase));
-        if (instance.ConsolidadoMaestroVigente && vigente is not null)
+
+        // Bug #11612 — el atajo de caché queda EXACTAMENTE como estaba: la compañía radicadora ya no
+        // deja marcador persistido (ver CompaniaRadicadoraResolver) y condicionar el atajo a "falta la
+        // compañía" regeneraría el maestro en CADA acceso, no una sola vez. Limitación asumida (AC4 del
+        // Bug #11612): un trámite antiguo con el maestro vigente conserva el guión hasta que se
+        // invalide por las vías normales.
+        if (!force && instance.ConsolidadoMaestroVigente && vigente is not null)
         {
             var vigenteDto = new ConsolidadoDocumentDto(vigente.Id, vigente.Tipo, vigente.Filename, vigente.Sha256);
             return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
@@ -67,11 +94,21 @@ public sealed class GenerarConsolidadoMaestroHandler(
             .Where(a => !ConsolidadoTipos.Contains(a.Tipo))
             .ToList();
 
-        // AC1: orden por la matriz resuelta (documentos no clasificados al final como "Anexos"); si
-        // no hay matriz disponible, respaldo al orden por modalidad.
-        var ordered = matrizPrecedencia is { Count: > 0 }
-            ? GenericConsolidadoOrdering.SelectByResolvedMatrix(fuentes, matrizPrecedencia)
-            : ConsolidadoOrderingResolver.Select(fuentes, instance.ModalidadEntrada);
+        // HU #11184 — si el OT configuró la prelación de este tipo de trámite, manda ella, y sin
+        // cabecera fija: el FUR y los demás generados ocupan la posición que el organismo eligió.
+        // Resolverla aquí dentro hace que el envío por el canal de radicación (Quipux) use el mismo
+        // orden que la consola, sin tener que componerlo en cada llamador (AC5).
+        var configurado = await ResolverOrdenOtAsync(instance, ct).ConfigureAwait(false);
+
+        // AC1 (HU #10706): sin configuración del OT, orden por la matriz resuelta (documentos no
+        // clasificados al final como "Anexos"); si tampoco hay matriz, respaldo por modalidad.
+        var ordered = configurado.Count > 0
+            ? GenericConsolidadoOrdering.SelectByPrecedence(
+                fuentes, ConsolidadoDocumentCodeMap.ToPrecedence(configurado))
+            : matrizPrecedencia is { Count: > 0 }
+                ? GenericConsolidadoOrdering.SelectByResolvedMatrix(fuentes, matrizPrecedencia)
+                : ConsolidadoOrderingResolver.Select(fuentes, instance.FamilyCode);
+        ordered = GenerarConsolidadoHandler.SanitizeConsolidadoParts(ordered);
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 
@@ -85,7 +122,13 @@ public sealed class GenerarConsolidadoMaestroHandler(
             var bytes = await ReadAllBytesAsync(stream, ct);
             try
             {
-                pdfParts.Add(merger.NormalizeToPdf(bytes, attachment.Mimetype));
+                var pdf = merger.NormalizeToPdf(bytes, attachment.Mimetype);
+                pdf = await ImprontaManualStampApplier
+                    .MaybeStampAsync(
+                        pdf, attachment, instance, storage, improntaManualStamper, ct,
+                        _signatureVaultPolicy, repo, vehicleSignatureImprintRepository)
+                    .ConfigureAwait(false);
+                pdfParts.Add(pdf);
             }
             catch (NotSupportedException)
             {
@@ -95,10 +138,16 @@ public sealed class GenerarConsolidadoMaestroHandler(
             }
         }
 
+        // Bug #11612 — se resuelve solo cuando se va a componer el PDF y viaja a la portada por
+        // parámetro: NO se escribe en field_values (trigger de inmutabilidad en trámites radicados).
+        var companiaRadicadora = await CompaniaRadicadoraResolver
+            .ResolverAsync(instance, tenantId, _companiaRadicadoraDirectory, ct)
+            .ConfigureAwait(false);
+
         // HU #10857 — expediente maestro con portada institucional (primera página).
         var mergeRequest = new MergeRequest(
-            Parts: ordered.Zip(pdfParts, (a, pdf) => new MergePart(pdf, DocumentLabels.Display(a.Tipo))).ToList(),
-            Cover: ExpedienteCoverInfoBuilder.FromInstance(instance),
+            Parts: ordered.Zip(pdfParts, (a, pdf) => new MergePart(pdf, DocumentLabels.Display(a.Tipo), DocumentLabels.ProfileFor(a.Tipo))).ToList(),
+            Cover: ExpedienteCoverInfoBuilder.FromInstance(instance, companiaRadicadora),
             EstadoTramite: instance.Status);
         var merged = merger.Compose(mergeRequest);
         var now = DateTimeOffset.UtcNow;
@@ -160,6 +209,31 @@ public sealed class GenerarConsolidadoMaestroHandler(
 
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
         return (new GenerarConsolidadoResult(dto), null);
+    }
+
+    /// <summary>
+    /// Orden configurado por el OT para el tipo de trámite, o vacío si no configuró nada. Un fallo
+    /// leyéndolo no puede dejar al organismo sin expediente: se cae al comportamiento anterior.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ResolverOrdenOtAsync(ProcedureInstance instance, CancellationToken ct)
+    {
+        if (otOrderProvider is null)
+            return [];
+
+        try
+        {
+            return await otOrderProvider
+                .GetConfiguredOrderAsync(instance.ProcedureTypeId, instance.TransitOfficeId, ct)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return [];
+        }
     }
 
     private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)

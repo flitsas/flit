@@ -46,7 +46,8 @@ public sealed class ListOtCompaniesHandler
                 c.LegalName,
                 c.IsActive,
                 c.IsEnabled,
-                signersByCompany.GetValueOrDefault(c.CompanyTenantId, []))),
+                signersByCompany.GetValueOrDefault(c.CompanyTenantId, []),
+                c.TaxId)),
         ];
     }
 }

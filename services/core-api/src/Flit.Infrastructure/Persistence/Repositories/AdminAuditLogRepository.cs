@@ -137,10 +137,89 @@ internal sealed class AdminAuditLogRepository : IAdminAuditLogRepository
                 a.TargetEntityType,
                 a.TargetEntityId,
                 a.ClientIp,
-                a.ChangedAt))
+                a.ChangedAt,
+                null,
+                null,
+                null,
+                a.FieldName,
+                a.OldValue,
+                a.NewValue))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return new PagedResult<AdminAuditLogEntry>(items, totalCount);
+        var resolved = await ResolveNamesAsync(items, cancellationToken).ConfigureAwait(false);
+
+        return new PagedResult<AdminAuditLogEntry>(resolved, totalCount);
+    }
+
+    /// <summary>
+    /// Traduce los UUID de actor y entidad afectada a nombres legibles. Se hace sobre la página
+    /// ya materializada (máx. <c>MaxPageSize</c> filas) con dos consultas por lote, en vez de
+    /// joins en la consulta principal: <c>target_entity_id</c> es polimórfico (apunta a usuario,
+    /// rol o invitación según <c>target_entity_type</c>) y no admite un join único.
+    /// </summary>
+    private async Task<List<AdminAuditLogEntry>> ResolveNamesAsync(
+        List<AdminAuditLogEntry> items,
+        CancellationToken cancellationToken)
+    {
+        var ids = items
+            .SelectMany(e => new[] { e.ChangedBy, e.TargetEntityId })
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+        {
+            return items;
+        }
+
+        var users = await _context.Users
+            .AsNoTracking()
+            .Where(u => ids.Contains(u.Id))
+            .Select(u => new { u.Id, u.DisplayName, u.Email })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var roles = await _context.Roles
+            .AsNoTracking()
+            .Where(r => ids.Contains(r.Id))
+            .Select(r => new { r.Id, r.Name })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var userById = users.ToDictionary(u => u.Id);
+        var roleNameById = roles.ToDictionary(r => r.Id, r => r.Name);
+
+        return items.ConvertAll(e =>
+        {
+            string? actorName = null;
+            string? actorEmail = null;
+            if (e.ChangedBy is { } actorId && userById.TryGetValue(actorId, out var actor))
+            {
+                actorName = actor.DisplayName;
+                actorEmail = actor.Email;
+            }
+
+            string? targetName = null;
+            if (e.TargetEntityId is { } targetId)
+            {
+                if (userById.TryGetValue(targetId, out var targetUser))
+                {
+                    targetName = targetUser.DisplayName;
+                }
+                else if (roleNameById.TryGetValue(targetId, out var roleName))
+                {
+                    targetName = roleName;
+                }
+            }
+
+            return e with
+            {
+                ChangedByName = actorName,
+                ChangedByEmail = actorEmail,
+                TargetName = targetName,
+            };
+        });
     }
 }

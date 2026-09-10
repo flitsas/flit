@@ -424,6 +424,32 @@ public sealed class PlatePreassignTests
         r.Error.Should().Contain("ya está registrada");
     }
 
+    [Fact] // La placa ya está registrada por OTRA compañía del mismo OT → falla con motivo, no revienta
+           // contra uq_plate_range_details_office_plate (que es por OT, sin tenant).
+    public async Task ReserveOutOfRange_RegistradaPorOtraCompania_Falla()
+    {
+        var db = NewDbName();
+        var otraCompania = Guid.NewGuid();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+
+        await using (var a = NewContext(db))
+        {
+            await new PlateRangeRepository(a).ReserveOutOfRangePlateAsync(
+                otraCompania, office, "QXU030", Guid.NewGuid(), TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new PlateRangeRepository(ctx);
+        var r = await repo.ReserveOutOfRangePlateAsync(company, office, "QXU030", Guid.NewGuid(), TestContext.Current.CancellationToken);
+        r.Success.Should().BeFalse();
+        r.Error.Should().Contain("ya está asignada");
+
+        await using var verify = NewContext(db);
+        (await verify.PlateRangeDetails.CountAsync(d => d.Plate == "QXU030", TestContext.Current.CancellationToken))
+            .Should().Be(1);
+    }
+
     [Fact] // Si la placa ya existe DISPONIBLE (fuera o dentro de rango), la reserva (no duplica).
     public async Task ReserveOutOfRange_ExistenteDisponible_Reserva()
     {

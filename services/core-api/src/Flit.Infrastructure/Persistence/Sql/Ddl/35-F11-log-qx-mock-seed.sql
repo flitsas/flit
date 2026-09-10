@@ -23,25 +23,32 @@ SET LOCAL row_security = off;
 -- 1. Trámites QXSEED (5) — uno por familia. ON CONFLICT: no se pisan si ya existen.
 --    WHERE EXISTS: si el seed del usuario/tenant no corrió, se omite en vez de fallar la migración.
 -- ============================================================================
+-- HU #12151 — fuera reference_number: lo asigna el DEFAULT (secuencia global) y un valor con
+-- prefijo violaría ck_procedure_instances_reference_numerico. La idempotencia se apoya en el id,
+-- que ya era un GUID fijo.
+-- Fuera también modalidad_entrada: ADR-0050 eliminó esa columna y nadie actualizó este seed, que
+-- llevaba roto en develop desde entonces. Va en el MISMO INSERT, así que no se podía verificar el
+-- cambio del radicado sin corregirlo.
+-- Rango sintético 93xxxxxxxx: ver la nota del seed 16 sobre por qué hace falta un valor.
 INSERT INTO tramites.procedure_instances
     (id, tenant_id, procedure_type_id, reference_number, created_by_user_id,
-     transit_office_id, status, modalidad_entrada, checklist_estado)
+     transit_office_id, status, checklist_estado)
 SELECT
     v.id, '0ad1c0de-0000-4000-8000-000000000008'::uuid, pt.id, v.reference_number,
     '22222222-2222-2222-2222-222222222222'::uuid, 'aaaaaaaa-0001-4000-8000-000000000001'::uuid,
-    'entregado', v.modalidad, '{}'::jsonb
+    'entregado', '{}'::jsonb
 FROM (VALUES
-    ('5eed0001-0000-4000-8000-000000000001'::uuid, 'TRASPASO_STANDARD', 'QXSEED-001', 'traspaso'),
-    ('5eed0001-0000-4000-8000-000000000002'::uuid, 'MATRICULA_NUEVA', 'QXSEED-002', 'matricula_inicial'),
-    ('5eed0001-0000-4000-8000-000000000003'::uuid, 'TRASPASO_STANDARD', 'QXSEED-003', 'traspaso'),
-    ('5eed0001-0000-4000-8000-000000000004'::uuid, 'MATRICULA_NUEVA', 'QXSEED-004', 'matricula_inicial'),
-    ('5eed0001-0000-4000-8000-000000000005'::uuid, 'TRASPASO_STANDARD', 'QXSEED-005', 'traspaso')
-) AS v(id, procedure_type_code, reference_number, modalidad)
+    ('5eed0001-0000-4000-8000-000000000001'::uuid, 'TRASPASO_STANDARD', '9300000001'),
+    ('5eed0001-0000-4000-8000-000000000002'::uuid, 'MATRICULA_NUEVA', '9300000002'),
+    ('5eed0001-0000-4000-8000-000000000003'::uuid, 'TRASPASO_STANDARD', '9300000003'),
+    ('5eed0001-0000-4000-8000-000000000004'::uuid, 'MATRICULA_NUEVA', '9300000004'),
+    ('5eed0001-0000-4000-8000-000000000005'::uuid, 'TRASPASO_STANDARD', '9300000005')
+) AS v(id, procedure_type_code, reference_number)
 JOIN tramites.procedure_types pt ON pt.code = v.procedure_type_code
 WHERE EXISTS (SELECT 1 FROM identity.users u   WHERE u.id = '22222222-2222-2222-2222-222222222222')
   AND EXISTS (SELECT 1 FROM identity.tenants t WHERE t.id = '0ad1c0de-0000-4000-8000-000000000008')
   AND EXISTS (SELECT 1 FROM catalogs.transit_offices o WHERE o.id = 'aaaaaaaa-0001-4000-8000-000000000001')
-ON CONFLICT (tenant_id, reference_number) DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================================
 -- 2. Placas (field_values) — habilitan la búsqueda por placa.

@@ -209,4 +209,24 @@ describe('PrevalidacionDetailDrawer (HU #11008)', () => {
     expect(within(section).getByText(/Matrícula inicial/i)).toBeInTheDocument();
     expect(within(section).getByText(/Traspaso/i)).toBeInTheDocument();
   });
+
+  it('muestra el QR Kyverum aunque el estado sea terminal si hay captureUrl', async () => {
+    mocks.getPrevalidacionDetail.mockResolvedValueOnce(
+      detail({
+        status: 'expirado',
+        expired: true,
+        captureUrl: 'https://capture.kyverum.co/tok-expirado',
+        procedureInstanceId: 'inst-1',
+        referenceNumber: 'TRM-2026-000006',
+      }),
+    );
+
+    render(<PrevalidacionDetailDrawer validationId="pv-1" onClose={() => {}} />);
+
+    expect(await screen.findByTestId('identity-capture-qr')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /abrir captura kyverum/i })).toHaveAttribute(
+      'href',
+      'https://capture.kyverum.co/tok-expirado',
+    );
+  });
 });

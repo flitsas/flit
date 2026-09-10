@@ -31,6 +31,7 @@ public sealed class ProcedureInstanceStatusHistoryQueryTests
         db.Users.Add(new User { Id = UserId, Email = $"gestor-{UserId:N}@flit.io", DisplayName = "Ana Gestora" });
         db.ProcedureInstances.Add(new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = InstanceId,
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),

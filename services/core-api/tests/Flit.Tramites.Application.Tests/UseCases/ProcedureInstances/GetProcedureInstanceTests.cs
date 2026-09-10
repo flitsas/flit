@@ -40,6 +40,7 @@ public sealed class GetProcedureInstanceTests
         var tenantId = Guid.NewGuid();
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
@@ -107,6 +108,7 @@ public sealed class GetProcedureInstanceTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
@@ -160,6 +162,7 @@ public sealed class GetProcedureInstanceTests
 
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.Matricula,
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),

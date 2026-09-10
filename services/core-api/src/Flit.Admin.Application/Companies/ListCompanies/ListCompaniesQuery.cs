@@ -17,6 +17,12 @@ public sealed class ListCompaniesQuery
 
     public DateOnly? FechaHasta { get; init; }
 
+    /// <summary>
+    /// Si es <c>true</c> (default cuando es nulo), excluye Organismos de Tránsito del listado.
+    /// Pasar <c>false</c> para incluirlos (uso interno / retrocompatibilidad).
+    /// </summary>
+    public bool? ExcludeTransitOffices { get; init; }
+
     /// <summary>Página solicitada. Si es nula o &lt; 1 se normaliza a 1.</summary>
     public int? Page { get; init; }
 

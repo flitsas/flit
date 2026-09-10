@@ -220,7 +220,7 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
             Id = tenantId,
             Code = $"OT-DRO-{Guid.NewGuid():N}"[..20],
             LegalName = "OT DocReqOverrides auth tests",
-            TaxId = "900999998-8",
+            TaxId = TestNit.Unique(),
             TenantType = "RENTING",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,

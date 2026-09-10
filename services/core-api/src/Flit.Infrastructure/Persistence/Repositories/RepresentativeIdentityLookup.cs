@@ -9,8 +9,10 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// para el resolutor de firma/identidad del módulo Admin, la validación biométrica APROBADA y
 /// VIGENTE de una persona por documento. Consulta directamente
 /// <c>tramites.procedure_instance_biometric_validations</c> con el MISMO criterio de vigencia que
-/// <c>ProcedureInstanceRepository.FindVigenteApprovedByDocumentAsync</c> (reuso HU #10350): filtro
-/// grueso por timestamp en SQL + corte fino por día calendario con
+/// <c>ProcedureInstanceRepository.FindVigenteApprovedByDocumentAsync</c> (reuso HU #10350), compuesto con
+/// los extension methods de <see cref="BiometricDocumentMatchQuery"/> (Bug #11583): documento normalizado
+/// (Trim+Upper), ventana de vigencia y prevalidaciones standalone son la MISMA cláusula para ambos
+/// consumidores, filtro grueso por timestamp en SQL + corte fino por día calendario con
 /// <see cref="BiometricRules.EsAprobadaVigente"/> en memoria. Así Admin no depende de
 /// <c>Tramites.Domain</c> ni de <c>IProcedureInstanceRepository</c> (evita la ambigüedad de DI entre
 /// las dos implementaciones registradas). <c>DocumentNumber</c> es PII (Ley 1581): no loguear.
@@ -34,9 +36,6 @@ internal sealed class RepresentativeIdentityLookup : IRepresentativeIdentityLook
         ArgumentException.ThrowIfNullOrWhiteSpace(tipoDocumento);
         ArgumentException.ThrowIfNullOrWhiteSpace(documento);
 
-        var tipoDoc = tipoDocumento.Trim();
-        var doc = documento.Trim();
-
         // Npgsql solo acepta offset 0 (UTC) al escribir un parámetro `timestamptz`: los llamadores
         // (resolutor de guardado y lookup por NIT) anclan "ahora" a la medianoche de Colombia
         // (offset -05:00), lo que rompía la consulta con ArgumentException → 500. Se reconvierte a UTC
@@ -44,18 +43,13 @@ internal sealed class RepresentativeIdentityLookup : IRepresentativeIdentityLook
         // Colombia con .ToOffset, así que la vigencia no cambia. Mismo criterio que
         // ProcedureInstanceBiometricValidation.FechaFinVigencia (que también devuelve UTC por esto).
         var nowUtc = now.ToUniversalTime();
-        var cutoff = nowUtc.AddDays(-(BiometricRules.VigenciaDias + 1));
 
         var candidates = await _context.ProcedureInstanceBiometricValidations
             .AsNoTracking()
-            .Where(v => v.TenantId == tenantId
-                && v.Status == BiometricEstados.Aprobado
-                && v.DocumentType == tipoDoc
-                && v.DocumentNumber == doc
-                && ((v.ValidUntil != null && v.ValidUntil > nowUtc)
-                    || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
-                && v.ProcedureInstance != null
-                && v.ProcedureInstance.DeletedAt == null)
+            .Where(v => v.TenantId == tenantId && v.Status == BiometricEstados.Aprobado)
+            .WhereDocumentoVigenteCandidato(tipoDocumento, documento)
+            .WhereVentanaVigencia(nowUtc)
+            .WhereInstanciaVigente()
             .OrderByDescending(v => v.ValidatedAt)
             .Take(10)
             .ToListAsync(cancellationToken)

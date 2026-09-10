@@ -1,5 +1,6 @@
 using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Domain.Auth;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Modules.Security.Application.Auth.AdminResetPassword;
 
@@ -10,21 +11,39 @@ namespace Flit.Modules.Security.Application.Auth.AdminResetPassword;
 ///
 /// Ámbito: Superadmin (rol o permiso global) puede sobre cualquier tenant; un admin de
 /// compañía requiere el permiso de reset y que el usuario pertenezca a su mismo tenant.
+///
+/// HU #11358 AC3 — un fallo del transporte de correo (resultado tipado, no excepción) NO
+/// interrumpe el flujo: la contraseña ya quedó actualizada y el endpoint responde igual,
+/// sin exponer la causa técnica del fallo de envío al llamador.
 /// </summary>
-public sealed class AdminResetPasswordHandler(
+public sealed partial class AdminResetPasswordHandler(
     IUserAccountRepository userAccountRepository,
     ITemporaryPasswordGenerator temporaryPasswordGenerator,
     IPasswordHasher passwordHasher,
     IEmailSender emailSender,
     IAdminAuditWriter auditWriter,
-    IAuditContextAccessor auditContext)
+    IAuditContextAccessor auditContext,
+    ILogger<AdminResetPasswordHandler> logger)
 {
     /// <summary>Permiso requerido para resetear contraseñas dentro del propio tenant.</summary>
     public const string ResetPermission = "security.users.reset_password";
 
     /// <summary>Permiso/rol que concede ámbito global (cualquier tenant).</summary>
     public const string SuperAdminRole = "SuperAdmin";
+
+    /// <summary>Rol de administrador de compañía gestora (mismo tenant).</summary>
+    public const string AdminCompanyRole = "AdminCompany";
+
     public const string GlobalResetPermission = "security.users.reset_password.all";
+
+    /// <summary>
+    /// HU #11553 AC3 — tope de reintentos de generación cuando la temporal colisiona con la
+    /// vigente. El admin no elige la contraseña (la produce <see cref="ITemporaryPasswordGenerator"/>),
+    /// así que una colisión no es un error accionable por él: se regenera en silencio. 5 intentos
+    /// da margen amplio (la probabilidad de colisión real es despreciable) a costo insignificante
+    /// (un hash + verify más por intento); solo si se agota es un fallo real del generador.
+    /// </summary>
+    private const int MaxTemporaryPasswordAttempts = 5;
 
     public async Task HandleAsync(AdminResetPasswordCommand command, CancellationToken cancellationToken)
     {
@@ -55,23 +74,52 @@ public sealed class AdminResetPasswordHandler(
             throw;
         }
 
-        var temporaryPassword = temporaryPasswordGenerator.Generate();
+        // HU #11553 AC3 — la temporal generada no puede coincidir con la vigente (comparación solo
+        // contra el hash actual, sin histórico). Como el admin NO elige la contraseña, una
+        // colisión no es un error del admin: se regenera en silencio, sin auditar, hasta el tope.
+        var currentHash = await userAccountRepository.GetPasswordHashAsync(target.UserId, cancellationToken);
+
+        string temporaryPassword;
+        var attempts = 0;
+        bool reusesCurrent;
+        do
+        {
+            temporaryPassword = temporaryPasswordGenerator.Generate();
+            attempts++;
+            reusesCurrent = currentHash is not null && passwordHasher.Verify(temporaryPassword, currentHash);
+        }
+        while (reusesCurrent && attempts < MaxTemporaryPasswordAttempts);
+
+        if (reusesCurrent)
+        {
+            // Tope agotado: esto NO debería ocurrir jamás — ahí sí es un fallo real del
+            // generador (no un caso accionable por el admin) y merece rastro de auditoría.
+            await AuditAsync(command, target.UserId, AuditVocabulary.Results.Failure, "password_reused", cancellationToken)
+                .ConfigureAwait(false);
+            throw new PasswordReusedException();
+        }
+
         var hash = passwordHasher.Hash(temporaryPassword);
 
         await userAccountRepository.UpdatePasswordHashAsync(
             target.UserId, hash, DateTimeOffset.UtcNow, mustChangePassword: true, cancellationToken);
 
+        var composed = AdminResetPasswordEmailTemplate.Compose(target.DisplayName, temporaryPassword);
+        // HU #11363 AC1 — id estable del catálogo (TemplateIds.AdminResetPassword en Flit.Infrastructure).
         var message = new EmailMessage(
-            target.Email,
-            target.DisplayName,
-            "Tu contraseña fue restablecida — FLIT",
-            BuildBody(target.DisplayName, temporaryPassword));
+            target.TenantId, "security.admin-reset-password", target.Email, target.DisplayName, composed.Subject, composed.HtmlBody);
 
-        await emailSender.SendAsync(message, cancellationToken);
+        var sendResult = await emailSender.SendAsync(message, cancellationToken);
+        if (!sendResult.Success)
+            LogEmailFailed(logger, target.UserId, sendResult.Outcome);
 
         await AuditAsync(command, target.UserId, AuditVocabulary.Results.Success, null, cancellationToken)
             .ConfigureAwait(false);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No fue posible enviar el correo de reset administrativo para el usuario {UserId}. Cause: {Outcome}.")]
+    private static partial void LogEmailFailed(ILogger logger, Guid userId, EmailSendOutcome outcome);
 
     // HU #10678 — sin contraseñas en el rastro: actor = admin que ejecuta, afectado = usuario objetivo.
     private async Task AuditAsync(
@@ -105,22 +153,17 @@ public sealed class AdminResetPasswordHandler(
         if (isSuperAdmin)
             return;
 
-        var hasPermission = command.CallerPermissions.Contains(ResetPermission);
         var sameTenant = command.CallerTenantId is not null && target.TenantId == command.CallerTenantId;
+        if (!sameTenant)
+            throw new AdminScopeException();
 
-        if (!hasPermission || !sameTenant)
+        // AdminCompany del mismo tenant (paridad de producto) o permiso explícito en el JWT.
+        var isAdminCompany = string.Equals(
+            command.CallerRoleCode, AdminCompanyRole, StringComparison.OrdinalIgnoreCase);
+        var hasPermission = command.CallerPermissions.Contains(ResetPermission);
+
+        if (!isAdminCompany && !hasPermission)
             throw new AdminScopeException();
     }
 
-    private static string BuildBody(string displayName, string temporaryPassword)
-    {
-        var name = string.IsNullOrWhiteSpace(displayName) ? "usuario" : displayName;
-        return $"""
-            <p>Hola {System.Net.WebUtility.HtmlEncode(name)},</p>
-            <p>Un administrador restableció tu contraseña en FLIT. Tu contraseña temporal es:</p>
-            <p><strong>{System.Net.WebUtility.HtmlEncode(temporaryPassword)}</strong></p>
-            <p>Por seguridad, deberás definir una nueva contraseña la próxima vez que inicies sesión.</p>
-            <p>— Equipo FLIT</p>
-            """;
-    }
 }

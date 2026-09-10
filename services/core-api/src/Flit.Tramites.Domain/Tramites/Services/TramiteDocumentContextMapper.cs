@@ -64,6 +64,14 @@ public static class TramiteDocumentContextMapper
 
         var esPersonaNatural = !esNit && actors.Any(a => ActorPersonTypes.IsNatural(a.PersonType));
 
+        // Nota: se evaluó reusar VehicleServiceTypeCode.Resolve (mismo campo, normalizado para la
+        // casilla 18 del FUR) en vez de este "Contains" directo, pero esta bandera es un booleano
+        // de negocio independiente (RF33: ¿el servicio es especial en algún sentido, para exigir
+        // documentos adicionales?), no una selección exclusiva de casilla. Resolve() resuelve un
+        // texto compuesto a UN código con precedencia (p. ej. "OFICIAL ESPECIAL" resolvería a
+        // OFICIAL); usarlo aquí podría apagar silenciosamente la exigencia de documentos para
+        // combinaciones donde otra categoría gane la precedencia, cambiando un comportamiento de
+        // negocio ya vigente sin que nadie lo pidiera. Este "Contains" se deja tal cual.
         var servicioEspecial = fieldValues.Any(f =>
             string.Equals(f.FieldKey, VehicleServiceFieldKey, StringComparison.OrdinalIgnoreCase)
             && f.ValueText is not null
@@ -76,11 +84,15 @@ public static class TramiteDocumentContextMapper
         var tieneLeasing = LeerBool(fieldValues, LeasingFieldKey);
         var cambioCarroceria = LeerBool(fieldValues, CambioCarroceriaFieldKey);
 
-        // ADR-0036 (HU #10913) — el mandato aplica a persona jurídica SIEMPRE, y a persona natural solo
-        // si el OT lo exige (config.RequiresForNaturalPerson, p. ej. Sabaneta). Sin config del OF ⇒ solo
-        // persona jurídica (default conservador, sin regresión).
-        var exigeMandato = esNit
-            || (esPersonaNatural && mandateConfig is { RequiresForNaturalPerson: true });
+        // Producto: el contrato de mandato aplica siempre (persona natural y jurídica).
+        const bool exigeMandato = true;
+
+        // Causal de la cancelación de matrícula, declarada por el gestor en el paso de requerimientos.
+        // Se lee siempre (no solo si el tipo es CANCELACION_MATRICULA): el campo no existe en los
+        // demás trámites, así que ahí resuelve a `Ninguna` y no exige nada — y las reglas que la
+        // consumen solo se cargan para ese tipo.
+        var cancelacionCausal = CancelacionCausales.Parse(
+            LeerTexto(fieldValues, CancelacionCausales.FieldKey));
 
         return new TramiteDocumentContext(
             // Aduana es obligatorio de base en matrícula (catálogo + matriz del gestor); no se
@@ -95,7 +107,8 @@ public static class TramiteDocumentContextMapper
             TieneTramitador: tieneTramitador,
             CambioCarroceria: cambioCarroceria,
             ServicioEspecial: servicioEspecial,
-            ExigeMandato: exigeMandato);
+            ExigeMandato: exigeMandato,
+            CancelacionCausal: cancelacionCausal);
     }
 
     private static string? LeerTexto(IEnumerable<ProcedureInstanceFieldValue> fieldValues, string fieldKey) =>

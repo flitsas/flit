@@ -104,6 +104,7 @@ internal static class ConsultationEndpoints
                 "invalid_request" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Se requiere documentNumber (NIT)."),
                 "instance_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "provider_not_found" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor RUES no está disponible."),
+                "provider_unavailable" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "No fue posible consultar el RUES en este momento. Reintenta en unos minutos."),
                 _ => Results.Ok(result)
             };
         }).WithName("RuesPersonLookup");

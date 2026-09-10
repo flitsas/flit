@@ -111,7 +111,8 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         var db = NewDbName();
         await using (var seed = NewContext(db))
         {
-            seed.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "X", Name = "X", IsActive = true });
+            seed.ProcedureTypes.Add(new ProcedureType {
+            Family = "MATRICULAS", Id = ProcedureTypeId, Code = "X", Name = "X", IsActive = true });
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -207,6 +208,44 @@ public sealed class ResolvedDocumentMatrixHandlerTests
         result.Data.Single(d => d.DocumentTypeId == DocC).Obligatorio.Should().BeTrue();
     }
 
+    // ---------- HU #11181 AC3/AC4: los documentos generados NO entran al checklist ----------
+
+    [Fact]
+    public async Task HU11181_GeneratedDocumentTypes_DoNotLeakIntoChecklistMatrix()
+    {
+        // La marca `is_system_generated` sirve para ORDENAR el expediente, no para pedir documentos:
+        // el checklist del gestor sigue saliendo de procedure_document_requirements. Si el resolutor
+        // empezara a unir los generados, el gestor vería documentos nuevos que nadie debe adjuntar.
+        var db = NewDbName();
+        await SeedRequirementsAsync(db);
+        await using (var seed = NewContext(db))
+        {
+            seed.DocumentTypes.Add(new DocumentType
+            {
+                Id = Guid.Parse("dddd4444-4444-4444-4444-444444444444"),
+                Code = "fur",
+                Name = "Formulario Único de Registro (FUR)",
+                IsActive = true,
+                IsSystemGenerated = true,
+                GeneratedSortOrder = 1,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var result = await Handler(ctx).HandleAsync(new GetResolvedDocumentMatrixQuery
+        {
+            ProcedureTypeId = ProcedureTypeId,
+            TransitOfficeId = TransitOfficeId,
+        }, TestContext.Current.CancellationToken);
+
+        // Los mismos 3 documentos de la matriz base, con su obligatoriedad intacta.
+        result.Data.Should().HaveCount(3);
+        result.Data.Should().NotContain(d => d.Codigo == "fur");
+        result.Data.Single(d => d.DocumentTypeId == DocA).Obligatorio.Should().BeTrue();
+    }
+
     // ---------- Helpers ----------
 
     private static Flit.Infrastructure.Persistence.Entities.Tramites.DocumentRequirementOverride RequirementOverride(
@@ -247,7 +286,8 @@ public sealed class ResolvedDocumentMatrixHandlerTests
     private static async Task SeedRequirementsAsync(string dbName)
     {
         await using var ctx = NewContext(dbName);
-        ctx.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "TRASPASO", Name = "Traspaso", IsActive = true });
+        ctx.ProcedureTypes.Add(new ProcedureType {
+        Family = "MATRICULAS", Id = ProcedureTypeId, Code = "traspaso", Name = "Traspaso", IsActive = true });
         ctx.DocumentTypes.AddRange(
             new DocumentType { Id = DocA, Code = "DOCA", Name = "Documento A", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
             new DocumentType { Id = DocB, Code = "DOCB", Name = "Documento B", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },

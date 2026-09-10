@@ -25,12 +25,12 @@ public sealed class WizardStateDynamicTests
 
     private static ProcedureInstance Base(string modalidad = "matricula_inicial") => new()
     {
+        ProcedureType = ProcedureTypeFixture.For(modalidad),
         Id = Guid.NewGuid(),
         TenantId = Guid.NewGuid(),
         ProcedureTypeId = Guid.NewGuid(),
         ReferenceNumber = "TRM-2026-000001",
         Status = TramiteEstado.Borrador,
-        ModalidadEntrada = modalidad,
         CreatedAt = DateTimeOffset.UtcNow,
     };
 
@@ -67,9 +67,11 @@ public sealed class WizardStateDynamicTests
     }
 
     [Fact]
-    public async Task FlagDisabled_UsesStaticPath_NoSectionType()
+    public async Task SinFlag_ElMotorDinamicoEsElUnicoCamino()
     {
-        // BE-06-AC-02: sin regresión — camino estático (BuildMatricula = 5 pasos, sin sectionType).
+        // ADR-0050 — el flag F08_DynamicProcedures dejó de gobernar el wizard: la conformación sale
+        // siempre del tipo. Antes, con el flag apagado se caía a BuildMatricula/BuildTraspaso; ese
+        // camino estático es lo que se retira, y con él modalidad_entrada.
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("matricula_inicial");
         _repo.GetByIdWithWizardGraphAsync(instance.Id, instance.TenantId, ct).Returns(instance);
@@ -78,9 +80,9 @@ public sealed class WizardStateDynamicTests
         var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
-        result!.TotalSteps.Should().Be(5); // matrícula estática
-        result.Steps.Should().OnlyContain(s => s.SectionType == null);
-        await _snapshots.DidNotReceive().GetByInstanceIdAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        result!.Steps.Should().OnlyContain(s => s.SectionType != null,
+            "la conformación viene del tipo aunque la política diga que el flag está apagado");
+        result.TotalSteps.Should().Be(5, "los 5 pasos del fixture de matrícula, iguales que el seed 81");
     }
 
     [Fact]

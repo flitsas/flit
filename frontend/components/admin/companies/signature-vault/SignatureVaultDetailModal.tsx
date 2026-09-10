@@ -31,7 +31,10 @@ export function SignatureVaultDetailModal({ item, onClose }: SignatureVaultDetai
         <Field label="Apoderado" value={item.fullName} />
         <Field label="Estado" value={ESTADO_LABELS[item.estado] ?? item.estado} />
         <Field label="Documento" value={`${item.documentType} ${item.documentNumber}`} />
-        {item.codigoHash ? <Field label="Código hash" value={item.codigoHash} /> : null}
+        {/* Se pinta siempre, con "—" si falta: ocultar la fila hacía que una firma SIN código hash
+            —la que sale en los documentos sin línea «Hash:»— se viera igual que una completa. El
+            listado ya lo mostraba así, y esconder aquí lo que allí se ve era la incoherencia. */}
+        <Field label="Código hash" value={item.codigoHash || "—"} />
         <Field label="Vigencia desde" value={formatDate(item.vigenciaDesde)} />
         <Field label="Vigencia hasta" value={formatDate(item.vigenciaHasta)} />
         <Field label="Fecha de registro" value={registro ? formatDate(registro) : "—"} />

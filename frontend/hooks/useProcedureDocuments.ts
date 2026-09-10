@@ -2,38 +2,73 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useRevalidateOnFocus } from './useRevalidateOnFocus';
 import type {
   ChecklistView,
   DocumentOcrResult,
   ProcedureAttachment,
-  WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
 // ── OCR de documentos ────────────────────────────────────────────────
-// Tipos que pasan por OCR semántico antes de subir al expediente, por modalidad.
-// Matrícula: factura + aduana + impronta + soat. Traspaso: sólo impronta + soat.
-// HU #10977 (Feature #10972) — se añade `rtm` en AMBAS modalidades: el certificado de vigencia
-// SOAT y RTM pide número, entidad, expedición y vigencia de la revisión, y esos tres últimos no
-// los entrega ningún proveedor de consulta. Salen del propio certificado del CDA.
-export const OCR_TIPOS: Record<WizardModalidad, readonly string[]> = {
-  matricula_inicial: ['factura', 'aduana', 'impronta', 'soat', 'rtm'],
-  traspaso: ['impronta', 'soat', 'rtm'],
-};
+/**
+ * HU #12034 — QUÉ documentos pasan por OCR lo dice el backend, no esta capa.
+ *
+ * Antes había aquí un `OCR_TIPOS` indexado por modalidad que se mantenía a mano. Duplicaba lo que ya
+ * sabe la base —`procedure_document_requirements` cruzado con el `entryMode` del tipo de trámite— y el
+ * cargue masivo ya lo intersectaba con los documentos visibles del checklist, así que era un filtro
+ * redundante sobre el que sí funciona. Su coste era real: si alguien asignaba un documento a un trámite
+ * de la modalidad «equivocada», el análisis no corría y **no aparecía ningún error en ninguna parte**.
+ *
+ * Ahora el prompt y su disponibilidad se resuelven por el CÓDIGO del documento, que es como funcionaba
+ * el backend desde el principio (`DocumentOcrPrompts.PromptFor(tipo)`). Asignar el documento a un
+ * trámite basta; no hay una segunda lista que actualizar.
+ */
+let tiposOcrPromesa: Promise<ReadonlySet<string> | null> | null = null;
+
+/**
+ * Los tipos con OCR, cacheados en el módulo: se piden una sola vez por sesión de navegador.
+ * Devuelve `null` si no se pudieron averiguar — ver `esTipoOcr` para qué se hace con ese null.
+ */
+export function cargarTiposOcr(): Promise<ReadonlySet<string> | null> {
+  // El `Promise.resolve().then` no es adorno: convierte en rechazo cualquier excepción SÍNCRONA del
+  // cliente (por ejemplo si el método no existiera). Sin él, `cargarTiposOcr` lanzaría en vez de
+  // devolver null y tumbaría la subida entera — justo lo contrario de lo que promete esta función.
+  tiposOcrPromesa ??= Promise.resolve()
+    .then(() => tramitesClient.listOcrTipos())
+    .then((tipos) => new Set(tipos.map((t) => t.toLowerCase())) as ReadonlySet<string>)
+    .catch(() => {
+      // No se cachea el fallo: la siguiente subida vuelve a intentarlo.
+      tiposOcrPromesa = null;
+      return null;
+    });
+  return tiposOcrPromesa;
+}
+
+/** Solo para tests: olvida la lista cacheada. */
+export function resetTiposOcrCache(): void {
+  tiposOcrPromesa = null;
+}
+
+/**
+ * ¿Este tipo pasa por OCR? Con `tipos` en `null` —no se pudo consultar el backend— responde que SÍ, a
+ * propósito: el análisis se intenta, y si el tipo no tuviera prompt el backend lo rechaza y el fallo se
+ * traga sin bloquear la carga. Se falla ABIERTO porque el defecto que esta HU cierra es justamente el
+ * contrario: que un documento con OCR se subiera en silencio sin analizar.
+ */
+export function esTipoOcr(tipos: ReadonlySet<string> | null, tipo: string): boolean {
+  return tipos === null || tipos.has(tipo.toLowerCase());
+}
 
 /**
  * HU #10975 — tipos cuyo JSON de OCR se PERSISTE en `field_values` además de analizarse.
- * Es un subconjunto de OCR_TIPOS: factura/aduana/impronta se analizan para validar el documento,
- * pero no alimentan ningún certificado. La whitelist real (y la regla de precedencia frente al
- * RUNT) vive en el backend; esto solo evita mandar peticiones que se descartarían.
+ * Es un subconjunto de los tipos con OCR: factura/aduana/impronta se analizan para validar el
+ * documento, pero no alimentan ningún certificado. La whitelist real (y la regla de precedencia frente
+ * al RUNT) vive en el backend; esto solo evita mandar peticiones que se descartarían.
  */
-const OCR_TIPOS_PERSISTIBLES: readonly string[] = ['soat', 'rtm'];
+export const OCR_TIPOS_PERSISTIBLES: readonly string[] = ['soat', 'rtm'];
 
 /** Límite del OCR (10 MB, el del endpoint). Archivos mayores (≤20 MB) se suben sin analizar. */
 export const OCR_MAX_BYTES = 10 * 1024 * 1024;
-
-export function isOcrTipo(modalidad: WizardModalidad, tipo: string): boolean {
-  return OCR_TIPOS[modalidad].includes(tipo);
-}
 
 /** Estado OCR por tipo que consume la UI del checklist. */
 export type OcrStatus = 'verified' | 'rejected' | 'skipped';
@@ -61,28 +96,76 @@ export function normalizeVin(value: string | null | undefined): string {
 }
 
 /**
- * Aplica las validaciones del frontend sobre el JSON del OCR: validez de tipo
- * (`es_factura_valida` para factura, `es_valido` para el resto) y cruce del VIN del documento
- * (`vehiculo_vin` o `vehiculo_chasis`) con el VIN del trámite. Devuelve si el documento queda rechazado.
+ * Un documento puede amparar VARIOS vehículos: una declaración de importación cubre el lote entero
+ * que entró en el contenedor, y el OCR devuelve los VIN separados por comas en un solo campo. Por eso
+ * el cruce es por pertenencia y no por igualdad — comparar la cadena completa rechazaría una
+ * declaración legítima sólo por traer a los otros 49 vehículos del lote.
+ *
+ * No se parte por espacios a propósito: `normalizeVin` ya los ignora dentro de un VIN ("VIN 123").
+ */
+const SEPARADOR_VINS = /[,;/\n]+/;
+
+export function vinsDelDocumento(value: string): string[] {
+  return value
+    .split(SEPARADOR_VINS)
+    .map((v) => normalizeVin(v))
+    .filter(Boolean);
+}
+
+/** Cuántos VIN se muestran antes de resumir el resto. Un lote de 50 hace ilegible el mensaje. */
+const MAX_VINS_VISIBLES = 2;
+
+/** Deja el listado de VIN en algo legible: los primeros y un contador del resto. */
+export function resumirVins(value: string): string {
+  const vins = value.split(SEPARADOR_VINS).map((v) => v.trim()).filter(Boolean);
+  if (vins.length <= MAX_VINS_VISIBLES) return value;
+  const resto = vins.length - MAX_VINS_VISIBLES;
+  return `${vins.slice(0, MAX_VINS_VISIBLES).join(', ')} y ${resto} más`;
+}
+
+/** Motivo del rechazo por tipo, usando lo que el propio OCR haya explicado. */
+function motivoDeTipo(data: Record<string, unknown>): string {
+  const base = 'El documento no pasó la validación de tipo';
+  const nota = pickString(data.observaciones).trim();
+  if (nota) return `${base}: ${nota.length > 200 ? `${nota.slice(0, 200)}…` : nota}`;
+  const identificado = pickString(data.tipo_documento).trim();
+  if (identificado && identificado !== 'otro') {
+    return `${base}: el análisis lo identificó como «${identificado.replace(/_/g, ' ')}».`;
+  }
+  return `${base}: no se reconoció como el documento esperado.`;
+}
+
+/**
+ * Aplica las validaciones del frontend sobre el JSON del OCR: `ok` de la API (si viene en falso),
+ * validez de tipo (`es_factura_valida` / `es_valido`) y cruce del VIN del documento
+ * (`vehiculo_vin` o `vehiculo_chasis`) con el VIN del trámite.
  */
 export function evaluateOcr(
   data: Record<string, unknown> | null,
   instanceVin: string | null,
+  apiOk?: boolean,
 ): OcrEvaluation {
+  if (apiOk === false) {
+    if (data) {
+      const validez = data.es_factura_valida ?? data.es_valido;
+      if (validez === false) return { rechazado: true, motivo: motivoDeTipo(data) };
+    }
+    return { rechazado: true, motivo: 'El análisis no confirmó el documento.' };
+  }
   if (!data) {
     return { rechazado: true, motivo: 'No se pudieron leer los datos del documento.' };
   }
   const validez = data.es_factura_valida ?? data.es_valido;
   if (validez === false) {
-    return { rechazado: true, motivo: 'El documento no pasó la validación de tipo.' };
+    return { rechazado: true, motivo: motivoDeTipo(data) };
   }
   const docVin = pickString(data.vehiculo_vin) || pickString(data.vehiculo_chasis);
   const tramite = normalizeVin(instanceVin);
-  const documento = normalizeVin(docVin);
-  if (tramite && documento && tramite !== documento) {
+  const documento = vinsDelDocumento(docVin);
+  if (tramite && documento.length > 0 && !documento.includes(tramite)) {
     return {
       rechazado: true,
-      motivo: `El VIN del documento (${docVin}) no coincide con el del trámite.`,
+      motivo: `El VIN del documento (${resumirVins(docVin)}) no coincide con el del trámite.`,
     };
   }
   return { rechazado: false };
@@ -142,9 +225,29 @@ function withoutTipoInSet(set: ReadonlySet<string>, tipo: string): Set<string> {
   return next;
 }
 
+function withoutOcrForTipo(
+  ocrResults: Record<string, OcrUiResult>,
+  tipo: string,
+): Record<string, OcrUiResult> {
+  const needle = tipo.toLowerCase();
+  const next = { ...ocrResults };
+  for (const key of Object.keys(next)) {
+    if (key.toLowerCase() === needle) delete next[key];
+  }
+  return next;
+}
+
+export function ocrResultForTipo(
+  ocrResults: Record<string, OcrUiResult>,
+  tipo: string,
+): OcrUiResult | undefined {
+  if (ocrResults[tipo]) return ocrResults[tipo];
+  const needle = tipo.toLowerCase();
+  return Object.entries(ocrResults).find(([key]) => key.toLowerCase() === needle)?.[1];
+}
+
 export interface UseProcedureDocumentsOptions {
   /** Modalidad del trámite: decide qué tipos pasan por OCR. */
-  modalidad?: WizardModalidad;
   tenantId?: string;
 }
 
@@ -159,7 +262,7 @@ export interface UseProcedureDocumentsOptions {
 export function useProcedureDocuments(
   instanceId: string | null,
   // Sin default hardcodeado de tenant: lo resuelve `tenantHeader` (tenant activo del `?t=` → JWT).
-  { modalidad = 'matricula_inicial', tenantId }: UseProcedureDocumentsOptions = {},
+  { tenantId }: UseProcedureDocumentsOptions = {},
 ) {
   const [state, setState] = useState<ProcedureDocumentsState>(INITIAL_STATE);
 
@@ -167,30 +270,57 @@ export function useProcedureDocuments(
   // instancia; en la modalidad VIN-first el paso de documentos viene después de consultar/persistir el VIN.
   const vinRef = useRef<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!instanceId) return;
-    setState((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const [checklist, attachments] = await Promise.all([
-        tramitesClient.getChecklist(instanceId, tenantId),
-        tramitesClient.getAttachments(instanceId, tenantId),
-      ]);
-      setState((s) => ({ ...s, checklist, attachments, loading: false }));
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        loading: false,
-        error:
-          err instanceof Error
-            ? err.message
-            : 'Error al cargar los documentos',
-      }));
-    }
-  }, [instanceId, tenantId]);
+  // Marca de refresco en vuelo: al volver a la pestaña pueden llegar `focus` y `visibilitychange`
+  // casi a la vez, y sin esto se pedirían dos checklists para la misma vuelta.
+  const refrescandoRef = useRef(false);
+
+  /**
+   * Relee checklist y adjuntos.
+   *
+   * En segundo plano (`background`) NO toca `loading` ni `error`: se dispara sola al recuperar el
+   * foco, y poner la vista en «cargando» o pintar un error mientras el gestor está capturando sería
+   * peor que el dato viejo que viene a corregir. Si falla, se conserva lo que ya está en pantalla.
+   */
+  const refresh = useCallback(
+    async (opts?: { background?: boolean }) => {
+      if (!instanceId) return;
+      if (refrescandoRef.current) return;
+      refrescandoRef.current = true;
+      if (!opts?.background) setState((s) => ({ ...s, loading: true, error: null }));
+      try {
+        const [checklist, attachments] = await Promise.all([
+          tramitesClient.getChecklist(instanceId, tenantId),
+          tramitesClient.getAttachments(instanceId, tenantId),
+        ]);
+        setState((s) => ({ ...s, checklist, attachments, loading: false }));
+      } catch (err) {
+        if (opts?.background) return;
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Error al cargar los documentos',
+        }));
+      } finally {
+        refrescandoRef.current = false;
+      }
+    },
+    [instanceId, tenantId],
+  );
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Un documento dado de alta en Documental mientras esta pantalla estaba abierta no llegaba hasta
+  // reabrir el trámite: sin casilla donde cargarlo y sin frenar el paso. Al volver a la pestaña se
+  // relee el checklist, que es donde el servidor ya declara el requisito nuevo.
+  const revalidarEnFoco = useCallback(() => {
+    void refresh({ background: true });
+  }, [refresh]);
+  useRevalidateOnFocus(revalidarEnFoco, Boolean(instanceId));
 
   // Lee el VIN de la instancia (best-effort; su fallo no bloquea el checklist).
   useEffect(() => {
@@ -216,37 +346,45 @@ export function useProcedureDocuments(
     async (tipo: string, file: File) => {
       if (!instanceId) return false;
 
-      // Re-subir un tipo reinicia su OCR previo: se limpia hasta tener nuevo resultado.
-      setState((s) => {
-        const rest = { ...s.ocrResults };
-        delete rest[tipo];
-        return { ...s, error: null, ocrResults: rest };
-      });
-
       let fileToUpload = file;
-      const usaOcr = isOcrTipo(modalidad, tipo);
+      const usaOcr = esTipoOcr(await cargarTiposOcr(), tipo);
+      const analizaAhora = usaOcr && file.size <= OCR_MAX_BYTES;
 
-      if (usaOcr && file.size <= OCR_MAX_BYTES) {
-        // 1) OCR antes de subir.
-        setState((s) => ({
-          ...s,
-          analyzingTipos: withTipoInSet(s.analyzingTipos, tipo),
-        }));
-        let ocr: DocumentOcrResult;
+      // Reemplazo: la marca es del archivo anterior. Se apaga al instante (no al terminar el OCR)
+      // para no dejar el rechazo viejo mientras se analiza el nuevo.
+      setState((s) => ({
+        ...s,
+        error: null,
+        ocrResults: withoutOcrForTipo(s.ocrResults, tipo),
+        analyzingTipos: analizaAhora ? withTipoInSet(s.analyzingTipos, tipo) : s.analyzingTipos,
+      }));
+
+      if (analizaAhora) {
+        // HU #11996 — el OCR NUNCA impide cargar. Antes, un fallo HTTP aquí hacía `return false` y el
+        // documento no se subía: como el proveedor devuelve 503 ante cualquier problema suyo (sin key,
+        // caído, respuesta inválida), una caída de la IA dejaba al operador sin poder adjuntar NADA de
+        // los tipos con OCR. Ahora se degrada igual que un archivo de 10–20 MB: sube y queda "no
+        // analizado". El análisis es una ayuda, no una compuerta.
+        let ocr: DocumentOcrResult | null = null;
         try {
-          ocr = await tramitesClient.analyzeDocument(tipo, file, tenantId);
-        } catch (err) {
-          // Fallo HTTP del OCR → NO se sube. El operador puede reintentar / adjuntar manualmente.
+          ocr = await tramitesClient.analyzeDocument(tipo.toLowerCase(), file, tenantId);
+        } catch {
           setState((s) => ({
             ...s,
             analyzingTipos: withoutTipoInSet(s.analyzingTipos, tipo),
-            error:
-              err instanceof Error ? err.message : 'Error al analizar el documento',
+            ocrResults: {
+              ...s.ocrResults,
+              [tipo]: {
+                status: 'skipped',
+                motivo: 'No se pudo analizar el documento automáticamente: se subió sin verificar.',
+                data: null,
+              },
+            },
           }));
-          return false;
         }
 
-        const evaluation = evaluateOcr(ocr.data, vinRef.current);
+        if (ocr) {
+        const evaluation = evaluateOcr(ocr.data, vinRef.current, ocr.ok);
         const ocrUi: OcrUiResult = {
           status: evaluation.rechazado ? 'rejected' : 'verified',
           motivo: evaluation.motivo,
@@ -272,12 +410,13 @@ export function useProcedureDocuments(
         // Best-effort deliberado: si esta llamada falla, el adjunto ya se sube igual — el documento
         // es el entregable y los field_values son un enriquecimiento del certificado, así que un
         // fallo aquí no puede costarle al operador el cargue que ya hizo.
-        if (!evaluation.rechazado && ocr.data && OCR_TIPOS_PERSISTIBLES.includes(tipo)) {
+        if (!evaluation.rechazado && ocr.data && OCR_TIPOS_PERSISTIBLES.some((x) => x.toLowerCase() === tipo.toLowerCase())) {
           try {
-            await tramitesClient.persistOcrFields(instanceId, tipo, ocr.data, tenantId);
+            await tramitesClient.persistOcrFields(instanceId, tipo.toLowerCase(), ocr.data, tenantId);
           } catch {
             // Silencio intencionado: ver comentario de arriba.
           }
+        }
         }
       } else if (usaOcr && file.size > OCR_MAX_BYTES) {
         // 10–20 MB: se salta el OCR (excede el límite del análisis), se sube igual y se marca "no analizado".
@@ -317,13 +456,21 @@ export function useProcedureDocuments(
         return false;
       }
     },
-    [instanceId, tenantId, modalidad, refresh],
+    [instanceId, tenantId, refresh],
   );
 
   const remove = useCallback(
     async (attachmentId: string) => {
       if (!instanceId) return false;
-      setState((s) => ({ ...s, deletingId: attachmentId, error: null }));
+      setState((s) => {
+        const att = s.attachments.find((a) => a.id === attachmentId);
+        return {
+          ...s,
+          deletingId: attachmentId,
+          error: null,
+          ocrResults: att ? withoutOcrForTipo(s.ocrResults, att.tipo) : s.ocrResults,
+        };
+      });
       try {
         await tramitesClient.deleteAttachment(
           instanceId,

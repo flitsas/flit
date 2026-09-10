@@ -25,8 +25,24 @@ internal sealed class DocumentTypeConfiguration : IEntityTypeConfiguration<Docum
         builder.Property(x => x.Code).HasMaxLength(50).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(150).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(500);
+
+        // HU #12065 (DDL 102) — instrucción de cargue que lee el gestor en el paso Requisitos.
+        // Convive con Description, que es la nota interna del administrador.
+        builder.Property(x => x.UploadInstructions)
+            .HasColumnName("upload_instructions")
+            .HasMaxLength(500);
+
         builder.Property(x => x.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(x => x.CreatedAt).IsRequired();
+
+        // HU #11181 — documentos generados por el sistema (DDL 46-HU11181): la marca y su orden
+        // por defecto en el expediente. La marca excluye el tipo del checklist de carga del gestor
+        // (sigue asociado para el consolidado y la prelación del OT).
+        builder.Property(x => x.IsSystemGenerated)
+            .HasColumnName("is_system_generated")
+            .IsRequired()
+            .HasDefaultValue(false);
+        builder.Property(x => x.GeneratedSortOrder).HasColumnName("generated_sort_order");
 
         // HU #10520 — validación de carga por tipo. La columna es jsonb (DDL HU #10155); se
         // (de)serializa la lista de MIME con un value converter + comparer (colección mutable).

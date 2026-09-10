@@ -14,6 +14,7 @@ const items: CompanyListItem[] = [
     razonSocial: "FLIT SAS",
     code: "FLITSAS",
     tenantType: "FLIT",
+    isTransitOffice: false,
     estadoActivo: true,
     fechaCreacion: "2026-01-15T10:00:00Z",
     rowVersion: 1,
@@ -24,6 +25,7 @@ const items: CompanyListItem[] = [
     razonSocial: "Movilidad Antioquia",
     code: "MOVANT",
     tenantType: "RENTING",
+    isTransitOffice: true,
     estadoActivo: false,
     fechaCreacion: "2026-02-20T10:00:00Z",
     rowVersion: 2,
@@ -47,11 +49,14 @@ describe("CompanyListTable (AC1)", () => {
 
     expect(screen.getByText("NIT")).toBeInTheDocument();
     expect(screen.getByText("Razón Social")).toBeInTheDocument();
+    expect(screen.getByText("Tipo")).toBeInTheDocument();
     expect(screen.getByText("Estado")).toBeInTheDocument();
     expect(screen.getByText("Fecha creación")).toBeInTheDocument();
 
     expect(screen.getByText("FLIT SAS")).toBeInTheDocument();
     expect(screen.getByText("Movilidad Antioquia")).toBeInTheDocument();
+    expect(screen.getByText("Empresa")).toBeInTheDocument();
+    expect(screen.getByText("OT")).toBeInTheDocument();
     expect(screen.getByText("Activa")).toBeInTheDocument();
     expect(screen.getByText("Inactiva")).toBeInTheDocument();
   });
@@ -138,6 +143,7 @@ describe("CompanyListTable (AC1)", () => {
         razonSocial: "Empresa Demo FLIT",
         code: "DEMO",
         tenantType: "standard",
+        isTransitOffice: false,
         estadoActivo: true,
         fechaCreacion: "2026-03-10T10:00:00Z",
         rowVersion: 3,

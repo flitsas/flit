@@ -4,7 +4,7 @@
 // DateTimeOffset?). También cubre que un usuario suspendido ahora se ve como "Bloqueado" en la
 // columna "Estado" (antes seguía mostrando "Activo", sin ninguna señal visible en la tabla).
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Usuarios } from "../Usuarios";
 import { getUsers, blockUser } from "@/lib/api/security";
@@ -106,7 +106,10 @@ describe("Usuarios — bloquear usuario (ajuste QA: desactivación indefinida, H
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
-    expect(screen.getByText("Bloqueado")).toBeInTheDocument();
-    expect(screen.queryByText("Activo")).not.toBeInTheDocument();
+    // Chip de estado en la fila (también existe la opción del filtro "Bloqueado"/"Activo").
+    const row = screen.getByText("Ana Torres").closest("div.grid");
+    expect(row).toBeTruthy();
+    expect(within(row as HTMLElement).getByText("Bloqueado")).toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText("Activo")).not.toBeInTheDocument();
   });
 });

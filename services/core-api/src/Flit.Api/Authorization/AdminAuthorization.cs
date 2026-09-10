@@ -45,6 +45,15 @@ public static class AdminAuthorization
     public const string OtModuleForbiddenMessage =
         "Acceso restringido: se requiere rol SuperAdmin u ot_admin";
 
+    /// <summary>
+    /// Policy de administración de usuarios del PROPIO alcance: SuperAdmin, AdminCompany
+    /// y ot_admin. Existe para que un ot_admin pueda cambiar el rol de los usuarios de su
+    /// organismo sin tener que ensanchar <see cref="AdminCompanyPolicy"/>, que protege otras
+    /// rutas donde ot_admin no debe entrar. El alcance por tenant lo sigue imponiendo el
+    /// handler (<c>UserOutOfScopeException</c>), no la policy.
+    /// </summary>
+    public const string UserAdminPolicy = "UserAdmin";
+
     /// <summary>Claim JWT del tenant autenticado.</summary>
     public const string TenantIdClaimType = "tenant_id";
 }

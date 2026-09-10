@@ -139,6 +139,86 @@ export function canReadIctLogs(payload: JwtPayload | null): boolean {
   return isSuperAdmin(payload) || hasPermission(payload, ICT_LOGS_READ_PERMISSION);
 }
 
+/** Permiso para administrar (CRUD) los clientes de integración ICT (ronda 2, Feature #10888). */
+export const ICT_CLIENTS_MANAGE_PERMISSION = "ict.clients.manage";
+
+/** Puede administrar los clientes ICT (submódulo de Usuarios y Roles): permiso `ict.clients.manage` o SuperAdmin. */
+export function canManageIctClients(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, ICT_CLIENTS_MANAGE_PERMISSION);
+}
+
+/** Permiso de lectura del módulo "Generación documental" (Feature #12201). */
+export const GENERACION_DOCUMENTAL_READ_PERMISSION = "generacion-documental.read";
+
+/**
+ * Puede entrar al módulo de generación documental: permiso `generacion-documental.read` o
+ * SuperAdmin (bypass total, igual que el gate del backend). Se usa en el borde
+ * (middleware) para no redirigir a /403 a un AdminCompany que sí tiene el módulo; la
+ * visibilidad del dock y el gate de la página se resuelven por módulos accesibles.
+ */
+export function canReadGeneracionDocumental(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, GENERACION_DOCUMENTAL_READ_PERMISSION);
+}
+
+/** Permiso para administrar la configuración global de Confirmación RUNT (Feature #12276, HU #12313). */
+export const RUNT_CONFIRMATION_SETTINGS_MANAGE_PERMISSION = "runt_confirmation.settings.manage";
+
+/** Permiso para leer el historial interno de Confirmación RUNT (Feature #12276, HU #12313). */
+export const RUNT_CONFIRMATION_HISTORY_READ_PERMISSION = "runt_confirmation.history.read";
+
+/**
+ * Puede administrar la configuración de Confirmación RUNT (pestaña Configuración): permiso
+ * `runt_confirmation.settings.manage` o SuperAdmin (bypass total, igual que el backend).
+ */
+export function canManageRuntConfirmation(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, RUNT_CONFIRMATION_SETTINGS_MANAGE_PERMISSION);
+}
+
+/**
+ * Puede ver el historial de Confirmación RUNT (pestaña Historial): permiso
+ * `runt_confirmation.history.read` o SuperAdmin.
+ */
+export function canReadRuntConfirmationHistory(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, RUNT_CONFIRMATION_HISTORY_READ_PERMISSION);
+}
+
+/**
+ * Puede entrar al submódulo Plataforma → Confirmación RUNT: basta UNO de los dos permisos. Los dos
+ * slugs son independientes a propósito (un rol puede recibir el historial sin la configuración), así
+ * que la entrada de menú y el gate de borde se abren con cualquiera y cada pestaña se gatea aparte.
+ */
+export function canAccessRuntConfirmation(payload: JwtPayload | null): boolean {
+  return canManageRuntConfirmation(payload) || canReadRuntConfirmationHistory(payload);
+}
+
+/** Permiso del módulo de banners promocionales (Feature #12236, HU #12241). */
+export const BANNERS_MANAGE_PERMISSION = "banners.manage";
+
+/**
+ * Puede administrar (listar/crear/editar/eliminar) banners promocionales: permiso
+ * `banners.manage` o SuperAdmin (bypass total, igual que `RequirePermission` en
+ * `AdminBannersEndpoints.cs`). El módulo NO es exclusivo de SuperAdmin: igual que
+ * `generacion-documental.read`, cualquier rol con este permiso concedido debe entrar.
+ */
+export function canManageBanners(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, BANNERS_MANAGE_PERMISSION);
+}
+
+/** Permiso de reset administrativo de contraseña en el propio tenant (HU #10170). */
+export const RESET_PASSWORD_PERMISSION = "security.users.reset_password";
+
+/**
+ * Puede restablecer contraseñas de usuarios del tenant: SuperAdmin (global), AdminCompany
+ * (mismo tenant en API) o el permiso `security.users.reset_password`.
+ */
+export function canAdminResetPassword(payload: JwtPayload | null): boolean {
+  return (
+    isSuperAdmin(payload) ||
+    isAdminCompany(payload) ||
+    hasPermission(payload, RESET_PASSWORD_PERMISSION)
+  );
+}
+
 /**
  * Indica si el payload contiene el rol ot_admin (comparación case-insensitive).
  */

@@ -1,16 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BellRing, CalendarClock, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { ReportType } from "@/lib/api/analytics-scheduling";
 import { SchedulesSection } from "./SchedulesSection";
 import { AlertsSection } from "./AlertsSection";
+import type { SchedulePresetConsulta } from "./ScheduleForm";
 
 export interface SchedulingPanelProps {
   open: boolean;
   onClose: () => void;
   /** Solo SuperAdmin: compañía objetivo (los endpoints HU-D exigen tenant concreto). */
   tenantId?: string;
+  /** SuperAdmin sin compañía elegida en el filtro superior — ver {@link SchedulesSection}. */
+  needsCompany?: boolean;
+  /**
+   * "Programar este informe" (HU-D, segunda ola): abre directo en "Informes programados" con el
+   * formulario de creación ya prellenado. El alcance de la consulta (empresa/superadmin) decide
+   * si la sección usa el CRUD de empresa o el de SuperAdmin — ver {@link SchedulesSection}.
+   */
+  presetConsulta?: SchedulePresetConsulta | null;
+  /** Se llama una vez el preset ya abrió el formulario, para no reabrirlo en cada render. */
+  onConsumePreset?: () => void;
+  /** Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): gestiona los informes y
+   * alertas propios de ESE organismo — ver {@link SchedulesSection}/{@link AlertsSection}. */
+  otTransitOfficeId?: string;
+  /**
+   * Restringe el selector "Tipo de informe" a estos (Reportes 2.0, HU-D, cuarta ola: el panel de
+   * ICT solo ofrece sus 4 tipos ict_*). Ignorado cuando se pasa `otTransitOfficeId`, que ya trae
+   * su propia restricción fija — ver {@link SchedulesSection}.
+   */
+  allowedReportTypes?: ReportType[];
 }
 
 type Tab = "schedules" | "alerts";
@@ -21,8 +42,16 @@ type Tab = "schedules" | "alerts";
  * alert-rules + historial de disparos). La integración lo monta desde Reportes con un
  * botón; este componente es el entregable standalone (no toca Reportes.tsx).
  */
-export function SchedulingPanel({ open, onClose, tenantId }: SchedulingPanelProps) {
+export function SchedulingPanel({
+  open, onClose, tenantId, needsCompany = false, presetConsulta, onConsumePreset, otTransitOfficeId,
+  allowedReportTypes,
+}: SchedulingPanelProps) {
   const [tab, setTab] = useState<Tab>("schedules");
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reacciona a un preset que llega de fuera, no a estado propio
+    if (presetConsulta) setTab("schedules");
+  }, [presetConsulta]);
 
   if (!open) return null;
 
@@ -54,7 +83,9 @@ export function SchedulingPanel({ open, onClose, tenantId }: SchedulingPanelProp
               Programación y alertas
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Informes periódicos por correo y alertas por umbral sobre las métricas del tenant.
+              {otTransitOfficeId
+                ? "Informes periódicos por correo y alertas por umbral sobre el panel de tu organismo."
+                : "Informes periódicos por correo y alertas por umbral sobre las métricas de tu compañía."}
             </p>
           </div>
           <button
@@ -90,9 +121,20 @@ export function SchedulingPanel({ open, onClose, tenantId }: SchedulingPanelProp
 
         <div className="p-5">
           {tab === "schedules" ? (
-            <SchedulesSection tenantId={tenantId} />
+            <SchedulesSection
+              tenantId={tenantId}
+              needsCompany={needsCompany}
+              presetConsulta={presetConsulta ?? null}
+              onConsumePreset={onConsumePreset}
+              otTransitOfficeId={otTransitOfficeId}
+              allowedReportTypes={allowedReportTypes}
+            />
           ) : (
-            <AlertsSection tenantId={tenantId} />
+            <AlertsSection
+              tenantId={tenantId}
+              needsCompany={needsCompany}
+              otTransitOfficeId={otTransitOfficeId}
+            />
           )}
         </div>
       </div>

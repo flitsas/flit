@@ -24,8 +24,15 @@ internal static class ProcedureTypeEndpoints
             CreateProcedureTypeHandler handler,
             CancellationToken ct) =>
         {
-            var result = await handler.HandleAsync(request, ct);
-            return Results.Created($"/api/v1/superadmin/procedure-types/{result.Id}", result);
+            var (result, error) = await handler.HandleAsync(request, ct);
+            return error switch
+            {
+                "invalid_code" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El código debe ir en MAYÚSCULAS, con letras, dígitos o guion bajo, y entre 3 y 60 caracteres. Es la llave con la que el tipo viaja a las integraciones."),
+                "invalid_name" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El nombre del tipo es obligatorio: es el rótulo del trámite en el mandato y en la portada del expediente."),
+                "invalid_family" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Familia inválida: use MATRICULAS, TRASPASO u OTROS."),
+                "code_taken" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe un tipo de trámite con ese código."),
+                _ => Results.Created($"/api/v1/superadmin/procedure-types/{result!.Id}", result),
+            };
         }).WithName("CreateProcedureType");
 
         group.MapGet("/procedure-types/{id:guid}", async (
@@ -49,6 +56,7 @@ internal static class ProcedureTypeEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
+                "invalid_family" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Familia inválida: use MATRICULAS, TRASPASO u OTROS."),
                 "conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Cannot update a published procedure type."),
                 _ => Results.Ok(result)
             };
@@ -63,7 +71,7 @@ internal static class ProcedureTypeEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
-                "conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Cannot delete a procedure type with active instances."),
+                "conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se puede retirar un tipo que tiene trámites: quedarían apuntando a un tipo archivado."),
                 _ => Results.NoContent()
             };
         }).WithName("DeleteProcedureType");
@@ -96,6 +104,26 @@ internal static class ProcedureTypeEndpoints
                 _ => Results.Ok(result)
             };
         }).WithName("ArchiveProcedureType");
+
+        // ADR-0050 — barrera de operación: si el gestor puede elegir este tipo al crear un trámite.
+        // Va aparte del PUT del tipo a propósito: aquel congela la definición al publicar, y los tipos
+        // del catálogo están publicados, así que por ahí la barrera nunca se habría podido mover.
+        group.MapPut("/procedure-types/{id:guid}/wizard-enabled", async (
+            Guid id,
+            SetWizardEnabledBody body,
+            SetWizardEnabledHandler handler,
+            CancellationToken ct) =>
+        {
+            var (result, error, detail) = await handler.HandleAsync(id, body.Enabled, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
+                // 422 y no 409: no es un conflicto de estado sino una precondición de negocio, y el
+                // cuerpo trae la lista de lo que falta para poder habilitarlo.
+                SetWizardEnabledHandler.NotReady => Results.UnprocessableEntity(detail),
+                _ => Results.Ok(result)
+            };
+        }).WithName("SetProcedureTypeWizardEnabled");
 
         group.MapGet("/procedure-types/{id:guid}/conformation-rules", async (
             Guid id,
@@ -201,3 +229,6 @@ internal static class ProcedureTypeEndpoints
         }).WithName("ValidateProcedureType");
     }
 }
+
+/// <summary>Cuerpo de PUT /procedure-types/{id}/wizard-enabled.</summary>
+internal sealed record SetWizardEnabledBody(bool Enabled);

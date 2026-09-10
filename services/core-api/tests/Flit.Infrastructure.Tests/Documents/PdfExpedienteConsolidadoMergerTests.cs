@@ -1,5 +1,6 @@
 using System.Text;
 using Flit.Infrastructure.Documents;
+using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using FluentAssertions;
 using QuestPDF.Fluent;
@@ -86,6 +87,48 @@ public sealed class PdfExpedienteConsolidadoMergerTests
             Parts: [new MergePart(MinimalPdf(), "Certificado RUES"), new MergePart(MinimalPdf(), "SOAT")],
             Cover: null,
             EstadoTramite: estado);
+
+        byte[]? composed = null;
+        var act = () => composed = Merger.Compose(request);
+
+        act.Should().NotThrow();
+        Encoding.UTF8.GetString(composed!.AsSpan(0, 4)).Should().Be("%PDF");
+        PageCount(composed!).Should().Be(2);
+    }
+
+    [Fact]
+    public void BottomCmFor_ResolvesThemeMarginPerProfile()
+    {
+        // ADR-0049: prueba directa de la resolución perfil → margen que Compose invoca ANTES de
+        // llamar a FlitPdfStamper.ApplyDocumentName para cada parte
+        // (`FlitPdfStamper.ApplyDocumentName(part.Pdf, part.DocumentName!, BottomCmFor(part.Profile))`
+        // — PdfExpedienteConsolidadoMerger.cs). No se compara el PDF compuesto byte a byte porque
+        // PdfSharpCore asigna una etiqueta de subconjunto de fuente aleatoria en cada Save(): dos
+        // invocaciones independientes de ApplyDocumentName con el MISMO texto no producen los mismos
+        // bytes exactos aunque la geometría sí sea idéntica.
+        PdfExpedienteConsolidadoMerger.BottomCmFor(StampProfile.Formulario)
+            .Should().Be(FlitDocumentTheme.DocNameBottomFormularioCm);
+        PdfExpedienteConsolidadoMerger.BottomCmFor(StampProfile.Default)
+            .Should().Be(FlitDocumentTheme.DocNameBottomCm);
+    }
+
+    [Fact]
+    public void Compose_MixedStampProfiles_DoesNotThrow_AndKeepsPageCount()
+    {
+        // Integración: MergeRequest con perfiles mixtos (Formulario para el FUR, Default para el
+        // resto) llega completo a Compose sin lanzar, conservando una página por parte — la
+        // geometría exacta por perfil está cubierta en BrandingModuleTests
+        // (ApplyDocumentName_FormularioProfile_FallsWithinFurFreeBand /
+        // ApplyDocumentName_DefaultProfile_OnLetterheadDocuments_StaysAboveFooterWhiteBand) y la
+        // resolución perfil → margen en BottomCmFor_ResolvesThemeMarginPerProfile.
+        var request = new MergeRequest(
+            Parts:
+            [
+                new MergePart(MinimalPdf(), "Formulario Único de Registro (FUR)", StampProfile.Formulario),
+                new MergePart(MinimalPdf(), "Certificado RUES", StampProfile.Default),
+            ],
+            Cover: null,
+            EstadoTramite: null);
 
         byte[]? composed = null;
         var act = () => composed = Merger.Compose(request);

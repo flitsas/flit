@@ -70,6 +70,18 @@ public sealed class AlertRuleValidationTests
     }
 
     [Theory]
+    [InlineData("ot_rejection_rate_pct")]
+    [InlineData("ot_stuck_count")]
+    public void Metricas_de_alcance_ot_estan_en_el_vocabulario(string metric)
+    {
+        // Reportes 2.0 HU-D (tercera ola): alertas del propio Organismo de Tránsito.
+        var (result, error) = SchedulingValidation.ValidateAlertRule(Valid(metric: metric));
+
+        error.Should().BeNull();
+        result!.Metric.Should().Be(metric);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("eq")]
     public void Operador_fuera_del_vocabulario_devuelve_error(string? @operator)

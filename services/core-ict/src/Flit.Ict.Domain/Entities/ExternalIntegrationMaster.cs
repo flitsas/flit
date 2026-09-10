@@ -23,6 +23,13 @@ public sealed class ExternalIntegrationMaster : AuditableEntity
 
     public string ManagerIdTransaction { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Identificador numérico secuencial del trámite asignado por FLIT (llave pública, paridad v1).
+    /// Lo genera la secuencia <c>ict.transaction_number_seq</c> en la BD; EF lo lee tras el INSERT.
+    /// La PK sigue siendo <see cref="AuditableEntity.Id"/> (uuid).
+    /// </summary>
+    public long TransactionNumber { get; set; }
+
     public int TransactionOperation { get; set; }
 
     public string? TransactionFlit { get; set; }

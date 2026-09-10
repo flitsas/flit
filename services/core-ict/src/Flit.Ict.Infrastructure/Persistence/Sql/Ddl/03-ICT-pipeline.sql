@@ -125,6 +125,12 @@ CREATE TABLE IF NOT EXISTS ict.external_integration_webhook_master (
 );
 CREATE INDEX IF NOT EXISTS ix_eiwm_pending
     ON ict.external_integration_webhook_master (is_notified, next_attempt_at) WHERE is_notified = false;
+-- Índice de la FK a master (id_transaction). Sin él, el ON DELETE CASCADE —y toda anulación/borrado de
+-- master— hace un SEQ SCAN de esta tabla POR CADA master afectado (medido: borrar 746k masters se colgaba
+-- >14 min; con el índice, 61 s). Las otras hijas de master ya indexan su FK; esta columna se llama
+-- id_transaction (no master_id) y se quedó sin índice por esa asimetría de nombre.
+CREATE INDEX IF NOT EXISTS ix_eiwm_id_transaction
+    ON ict.external_integration_webhook_master (id_transaction);
 ALTER TABLE ict.external_integration_webhook_master ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation ON ict.external_integration_webhook_master;
 CREATE POLICY tenant_isolation ON ict.external_integration_webhook_master

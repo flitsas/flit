@@ -41,6 +41,8 @@ public sealed class ListCompaniesHandler
             EstadoActivo = query.EstadoActivo,
             FechaDesde = query.FechaDesde,
             FechaHasta = query.FechaHasta,
+            // Default true: el admin de compañías B2B no lista Organismos de Tránsito.
+            ExcludeTransitOffices = query.ExcludeTransitOffices ?? true,
             Page = page,
             PageSize = pageSize,
         };

@@ -57,32 +57,60 @@ public sealed class ListActiveDeedsForTenantHandler
             .ConfigureAwait(false);
         var companiesById = companies.ToDictionary(c => c.Id);
 
-        // Una fila por cada par (escritura × compañía representada): NO se colapsa por NIT, de modo que
-        // una compañía con dos escrituras vigentes aparezca DOS veces (Feature #10929). Id/Description
-        // de la escritura distinguen las filas del mismo NIT.
-        var rows = new List<ActiveDeedResponse>();
+        var repIds = deeds
+            .Where(d => d.RepresentativeId is not null)
+            .Select(d => d.RepresentativeId!.Value)
+            .Distinct()
+            .ToArray();
+        var repsById = await _representativeReader
+            .FindBriefByIdsAsync(query.TenantId, repIds, cancellationToken)
+            .ConfigureAwait(false);
+
+        var candidates = new List<(DeedItem Deed, RepresentedCompanyItem Company, DateTimeOffset Recency)>();
         foreach (var deed in deeds)
         {
-            var diasRestantes = deed.VigenciaHasta.DayNumber - today.DayNumber;
+            if (deed.RepresentativeId is Guid rid)
+            {
+                if (!repsById.TryGetValue(rid, out var brief) || !brief.IsActive)
+                {
+                    continue;
+                }
+            }
+
             foreach (var companyId in deed.RepresentedCompanyIds)
             {
-                if (!companiesById.TryGetValue(companyId, out var company))
+                if (!companiesById.TryGetValue(companyId, out var company) || !company.IsActive)
                 {
                     continue;
                 }
 
-                rows.Add(new ActiveDeedResponse(
-                    deed.Id,
-                    company.DocumentNumber,
-                    company.Name,
-                    diasRestantes,
-                    deed.VigenciaHasta,
-                    deed.Description));
+                candidates.Add((deed, company, deed.UpdatedAt ?? deed.CreatedAt));
             }
         }
 
-        return [.. rows
-            .OrderBy(d => d.VigenciaHasta)
-            .ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase)];
+        var rows = candidates
+            .GroupBy(c => (c.Deed.RepresentativeId, c.Company.Id))
+            .Select(g => g.OrderByDescending(x => x.Recency).ThenByDescending(x => x.Deed.Id).First())
+            .Select(x =>
+            {
+                repsById.TryGetValue(x.Deed.RepresentativeId ?? Guid.Empty, out var rep);
+                var diasRestantes = x.Deed.VigenciaHasta.DayNumber - today.DayNumber;
+                return new ActiveDeedResponse(
+                    x.Deed.Id,
+                    x.Company.DocumentNumber,
+                    x.Company.Name,
+                    diasRestantes,
+                    x.Deed.VigenciaHasta,
+                    x.Deed.Description,
+                    x.Deed.RepresentativeId,
+                    rep?.FullName,
+                    rep?.DocumentType,
+                    rep?.DocumentNumber);
+            })
+            .OrderByDescending(d => d.VigenciaHasta)
+            .ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return rows;
     }
 }

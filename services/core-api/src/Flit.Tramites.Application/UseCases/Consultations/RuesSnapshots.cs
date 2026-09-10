@@ -81,6 +81,13 @@ public static class RuesSnapshots
             : null;
     }
 
+    /// <summary>
+    /// NITs con snapshot congelado en este trámite (HU #11305). Lo usa el lector documental para
+    /// recorrer el respaldo sin tener que saber de antemano qué compañías se consultaron.
+    /// </summary>
+    public static IReadOnlyList<string> Nits(string? documento) =>
+        [.. Deserializar(documento).Where(e => e.Value.Fields.Count > 0).Select(e => e.Key)];
+
     /// <summary>Fecha en que se consultó el NIT indicado, para trazabilidad.</summary>
     public static DateTimeOffset? QueriedAt(string? documento, string? nit)
     {

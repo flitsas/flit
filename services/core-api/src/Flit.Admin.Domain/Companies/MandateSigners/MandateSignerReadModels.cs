@@ -50,6 +50,24 @@ public sealed class MandateSignerItem
 
     /// <summary>Compañías (tenants gestores) actualmente asignadas al mandatario.</summary>
     public IReadOnlyList<Guid> CompanyTenantIds { get; init; } = [];
+
+    /// <summary>
+    /// HU #11201 — organismos donde aplica el mandatario. <see cref="TransitOfficeId"/> es solo el
+    /// primario (deprecado): esta lista es la que dice dónde puede firmar.
+    /// </summary>
+    public IReadOnlyList<Guid> TransitOfficeIds { get; init; } = [];
+
+    /// <summary>
+    /// Subconjunto de <see cref="TransitOfficeIds"/> donde el mandatario firma A MANO: el contrato deja
+    /// la línea de guiones bajos y no estampa firma del baúl ni sello de identidad.
+    /// </summary>
+    public IReadOnlyList<Guid> PhysicalSignatureOfficeIds { get; init; } = [];
+
+    /// <summary>
+    /// Empresas representadas para las que firma, POR ORGANISMO. Lista vacía para un organismo ⇒ aplica
+    /// a todas las empresas allí. Lo necesita el formulario para precargar la selección al editar.
+    /// </summary>
+    public IReadOnlyList<MandateSignerOfficeCompanies> OfficeCompanies { get; init; } = [];
 }
 
 /// <summary>
@@ -61,11 +79,29 @@ public sealed class OtCompanyOption
     public Guid CompanyTenantId { get; init; }
     public string LegalName { get; init; } = string.Empty;
 
+    /// <summary>
+    /// NIT de la compañía. Sin él, dos empresas homónimas eran indistinguibles en pantalla: se veían
+    /// dos filas con el mismo nombre y nada que permitiera elegir la correcta.
+    /// </summary>
+    public string? TaxId { get; init; }
+
     /// <summary>La compañía (tenant) está activa — <c>identity.tenants.is_active</c>.</summary>
     public bool IsActive { get; init; }
 
     /// <summary>El grant compañía↔OT está habilitado — <c>admin.tenant_transit_office_grants.is_enabled</c>.</summary>
     public bool IsEnabled { get; init; }
+}
+
+/// <summary>
+/// HU #11202 — organismo de tránsito asignado a una compañía gestora, para elegir dónde aplica un
+/// mandatario. Solo se ofrecen los que la compañía tiene habilitados: registrar un mandatario en un
+/// organismo donde no puede radicar no serviría de nada.
+/// </summary>
+public sealed class CompanyTransitOfficeOption
+{
+    public Guid TransitOfficeId { get; init; }
+    public string Code { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 }
 
 /// <summary>

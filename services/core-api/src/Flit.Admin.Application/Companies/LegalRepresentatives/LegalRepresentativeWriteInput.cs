@@ -4,7 +4,9 @@ namespace Flit.Admin.Application.Companies.LegalRepresentatives;
 /// Datos normalizados de alta/edición de un representante legal, compartidos por los handlers Create y
 /// Update (HU #10901). <c>Id</c> nulo = alta. Incluye los datos de la compañía representada (para el
 /// upsert por NIT) y del representante. <c>DocumentNumber</c> y <c>CompanyNit</c> son PII (Ley 1581):
-/// no loguear.
+/// no loguear. <c>SignatureVaultId</c> permite elegir explícitamente la firma del baúl (HU #11175,
+/// AC3): si viene, se valida contra tenencia, documento del representante, activa y vigente; si no
+/// viene, la firma la resuelve <see cref="ILegalRepresentativeSignatureResolver"/> (AC5).
 /// </summary>
 public sealed record LegalRepresentativeWriteInput(
     Guid TenantId,
@@ -26,7 +28,8 @@ public sealed record LegalRepresentativeWriteInput(
     string? Phone,
     IReadOnlyList<Guid> ProcedureTypeIds,
     Guid? ActorBy,
-    IReadOnlyList<LegalRepresentativeCompanyInput>? Companies = null);
+    IReadOnlyList<LegalRepresentativeCompanyInput>? Companies = null,
+    Guid? SignatureVaultId = null);
 
 /// <summary>
 /// Una compañía anidada del representante (HU #10932): la vista representante-céntrica envía la lista

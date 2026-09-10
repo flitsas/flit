@@ -10,14 +10,16 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 public sealed record ConsultationTenantOverride(
     IReadOnlyDictionary<string, ConsultationChainSelection>? Chains,
     int? FailoverTimeoutMs,
-    // FEATURE 02 — política "solo vehículos propios" del tenant, expuesta al wizard para adaptar la
-    // captura del propietario en el paso de consulta (autorelleno del NIT del tenant). Default false.
+    // FEATURE 02 — política "solo vehículos propios" familia TRASPASO (legado del wizard).
     bool OnlyOwnVehicles = false,
-    // FEATURE 05 — fuente de la consulta de comparendos del tenant (internal|external), creada en
-    // FEATURE 02 y consumida por FinesProviderResolver. Viaja aquí y no en un puerto propio porque
-    // el preflight YA lee este override una vez por corrida: cero lecturas extra a la base.
-    // Precedente: OnlyOwnVehicles tampoco es una cadena de proveedores.
-    string FinesQuerySource = FinesSourceCodes.External);
+    // FEATURE 05 — fuente de la consulta de comparendos del tenant (internal|external).
+    string FinesQuerySource = FinesSourceCodes.External,
+    bool OnlyOwnVehiclesMatriculas = false,
+    bool OnlyOwnVehiclesOtros = false,
+    /// <summary>Bloqueo de creación: MATRICULAS (⇔ NOT allow_initial_registration).</summary>
+    bool BlockProcedureFamilyMatriculas = false,
+    bool BlockProcedureFamilyTraspaso = false,
+    bool BlockProcedureFamilyOtros = false);
 
 /// <summary>Proveedor primario + orden de fallback para un tipo de consulta (clave: vehicle_vin|vehicle_plate|conductor).</summary>
 public sealed record ConsultationChainSelection(string Primary, IReadOnlyList<string> Fallback);

@@ -52,7 +52,37 @@ internal sealed class TransitOfficeResolver : ITransitOfficeResolver
 
         return match is null
             ? null
-            : new ResolvedTransitOffice(match.Id, match.Code, match.Name, match.CityCode);
+            : new ResolvedTransitOffice(match.Id, match.Code, match.Name, match.CityCode, match.CityName);
+    }
+
+    /// <summary>
+    /// HU #11199 — mismas dos condiciones que la resolución por nombre, en el mismo orden: el grant
+    /// vigente de la empresa y la entrada del catálogo. <c>GetById</c> solo devuelve organismos
+    /// <c>is_active</c>, así que desactivar un OT lo deja fuera aunque el grant siga vivo.
+    /// </summary>
+    public async Task<ResolvedTransitOffice?> ResolveEnabledByIdAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default)
+    {
+        if (transitOfficeId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var enabledIds = await _grants
+            .ListEnabledOfficeIdsAsync(tenantId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!enabledIds.Contains(transitOfficeId))
+        {
+            return null;
+        }
+
+        var entry = _catalog.GetById(transitOfficeId);
+        return entry is null
+            ? null
+            : new ResolvedTransitOffice(entry.Id, entry.Code, entry.Name, entry.CityCode, entry.CityName);
     }
 
     /// <summary>

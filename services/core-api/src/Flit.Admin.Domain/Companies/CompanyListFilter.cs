@@ -23,6 +23,12 @@ public sealed class CompanyListFilter
     /// <summary>Límite superior inclusivo (día completo) de fecha de creación. Opcional.</summary>
     public DateOnly? FechaHasta { get; init; }
 
+    /// <summary>
+    /// Si es <c>true</c>, excluye tenants con perfil de Organismo de Tránsito
+    /// (<c>admin.transit_office_profiles</c>). Por defecto <c>true</c> en el handler.
+    /// </summary>
+    public bool ExcludeTransitOffices { get; init; }
+
     /// <summary>Página solicitada (1-based, ya normalizada).</summary>
     public required int Page { get; init; }
 

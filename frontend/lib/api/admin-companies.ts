@@ -12,6 +12,7 @@ import type {
   CreateCompanyRequest,
   OtBlockingPolicy,
   OtConsultationRestriction,
+  OtPrendaDocumentPolicy,
   TenantSettings,
   TenantSettingsUpdate,
   TransitGrantsResponse,
@@ -143,6 +144,31 @@ export function removeTransitGrant(tenantId: string, transitOfficeId: string): P
 }
 
 /**
+ * GET /{tenantId}/transit-agreements — ids de OT con los que la compañía tiene CONVENIO comercial.
+ *
+ * No confundir con los transit-grants: aquellos habilitan la radicación (y la radicación los exige);
+ * el convenio solo decide si el contrato de mandato lleva bloque de firma del mandatario.
+ */
+export function fetchTransitAgreements(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<TransitGrantsResponse> {
+  return apiFetch<TransitGrantsResponse>(`${base}/${tenantId}/transit-agreements`, { signal });
+}
+
+/** PUT /{tenantId}/transit-agreements/{transitOfficeId} — marca o desmarca el convenio (idempotente). */
+export function setTransitAgreement(
+  tenantId: string,
+  transitOfficeId: string,
+  active: boolean,
+): Promise<void> {
+  return apiFetch<void>(`${base}/${tenantId}/transit-agreements/${transitOfficeId}`, {
+    method: "PUT",
+    body: { active },
+  });
+}
+
+/**
  * GET /{tenantId}/ot-consultation-restrictions — restricciones de consulta por OT
  * (HU #10759 AC1/AC5). Tabla dispersa: solo vuelven los pares configurados
  * explícitamente; la ausencia de fila equivale a consulta permitida.
@@ -202,6 +228,28 @@ export function setOtBlockingPolicy(
     `${base}/${tenantId}/ot-blocking-policies/${transitOfficeId}/${criterion}`,
     { method: "PUT", body: { blocks } },
   );
+}
+
+/** GET — OTs donde el check de prenda opcional está activo (tabla dispersa). */
+export function fetchOtPrendaDocumentPolicies(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<OtPrendaDocumentPolicy[]> {
+  return apiFetch<OtPrendaDocumentPolicy[]>(`${base}/${tenantId}/ot-prenda-document-policies`, {
+    signal,
+  });
+}
+
+/** PUT — documentOptional=true deja de exigir prenda; false vuelve a obligatoria. */
+export function setOtPrendaDocumentPolicy(
+  tenantId: string,
+  transitOfficeId: string,
+  documentOptional: boolean,
+): Promise<void> {
+  return apiFetch<void>(`${base}/${tenantId}/ot-prenda-document-policies/${transitOfficeId}`, {
+    method: "PUT",
+    body: { documentOptional },
+  });
 }
 
 /** GET /{tenantId}/audit-log — historial paginado DESC (AC5). */

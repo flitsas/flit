@@ -16,5 +16,8 @@ public interface IProcedureTypeRepository
     Task ReplaceStepsAsync(Guid procedureTypeId, List<ProcedureStep> steps, CancellationToken ct = default);
     Task AddFormFieldsAsync(IEnumerable<FormField> fields, CancellationToken ct = default);
     Task<bool> HasInstancesAsync(Guid procedureTypeId, CancellationToken ct = default);
+
+    /// <summary>¿El código ya está ocupado en el catálogo? Incluye tipos archivados.</summary>
+    Task<bool> CodeExistsAsync(string code, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken ct = default);
 }

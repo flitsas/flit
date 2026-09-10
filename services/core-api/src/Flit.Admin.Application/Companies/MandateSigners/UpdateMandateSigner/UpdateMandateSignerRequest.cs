@@ -7,4 +7,9 @@ public sealed record UpdateMandateSignerRequest(
     IReadOnlyList<Guid>? CompanyTenantIds,
     string? DocumentType = null,
     string? Email = null,
-    Guid? UserId = null);
+    Guid? UserId = null,
+    /// <summary>
+    /// HU #11201 — conjunto deseado de organismos. Ausente ⇒ no se tocan (la consola del organismo solo
+    /// edita datos personales y compañías). Presente ⇒ reemplaza: los que no vengan se retiran.
+    /// </summary>
+    IReadOnlyList<Guid>? TransitOfficeIds = null);

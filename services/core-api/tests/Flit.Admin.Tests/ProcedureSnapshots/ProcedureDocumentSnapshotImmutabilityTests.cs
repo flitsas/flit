@@ -95,7 +95,8 @@ public sealed class ProcedureDocumentSnapshotImmutabilityTests
     private static async Task SeedAsync(string dbName)
     {
         await using var ctx = NewContext(dbName);
-        ctx.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "TRASPASO", Name = "Traspaso", IsActive = true });
+        ctx.ProcedureTypes.Add(new ProcedureType {
+        Family = "MATRICULAS", Id = ProcedureTypeId, Code = "traspaso", Name = "Traspaso", IsActive = true });
         ctx.Tenants.Add(new Tenant { Id = ClienteId, Code = "C1", LegalName = "Cliente 1" });
         ctx.Users.Add(new User { Id = Actor, Email = "op@cliente.co", DisplayName = "Operador", Status = "active", CreatedAt = DateTimeOffset.UtcNow });
         ctx.DocumentTypes.AddRange(

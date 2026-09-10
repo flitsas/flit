@@ -85,7 +85,8 @@ public sealed class ProcedureDocumentRequirementUsageGuardTests
     {
         var requirementId = Guid.NewGuid();
         await using var ctx = NewContext(dbName);
-        ctx.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "TRASPASO", Name = "Traspaso", IsActive = true });
+        ctx.ProcedureTypes.Add(new ProcedureType {
+        Family = "MATRICULAS", Id = ProcedureTypeId, Code = "traspaso", Name = "Traspaso", IsActive = true });
         ctx.DocumentTypes.Add(new DocumentType { Id = documentTypeId, Code = "DOC", Name = "Documento", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
         ctx.ProcedureDocumentRequirements.Add(new ProcedureDocumentRequirement
         {

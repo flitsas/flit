@@ -247,7 +247,8 @@ public sealed class DocumentRequirementOverrideHandlerTests
     private static async Task SeedCatalogAsync(string dbName)
     {
         await using var ctx = NewContext(dbName);
-        ctx.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "TRASPASO", Name = "Traspaso", IsActive = true });
+        ctx.ProcedureTypes.Add(new ProcedureType {
+        Family = "MATRICULAS", Id = ProcedureTypeId, Code = "traspaso", Name = "Traspaso", IsActive = true });
         ctx.DocumentTypes.AddRange(
             new DocumentType { Id = DocId, Code = "RUT", Name = "Registro Único Tributario", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },
             new DocumentType { Id = SecondDocId, Code = "CC", Name = "Cédula de ciudadanía", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });

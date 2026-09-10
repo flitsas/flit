@@ -81,12 +81,24 @@ public sealed class V1SnapshotClient(HttpClient http, V1SnapshotEndpoint endpoin
     /// Devuelve el snapshot del trámite, o <c>null</c> si V1 no lo conoce (404).
     /// Los binarios pesan, así que el timeout del <see cref="HttpClient"/> debe ser generoso.
     /// </summary>
-    public async Task<V1Snapshot?> GetAsync(long v1Id, CancellationToken cancellationToken)
+    /// <param name="consolidatedOverride">
+    /// Modo de consolidado para ESTE trámite, por encima del de la configuración. Existe porque el
+    /// modo correcto depende del estado del trámite y no del lote: un borrador se sigue trabajando en
+    /// V2 y su consolidado se regenera allí, así que arrastrar el de V1 (9-12 MB) solo transporta un
+    /// documento provisional que va a quedar superado. <c>null</c> = usar el de la configuración.
+    /// </param>
+    public async Task<V1Snapshot?> GetAsync(
+        long v1Id,
+        string? consolidatedOverride,
+        CancellationToken cancellationToken)
     {
         var path = endpoint.Path.Trim('/');
+        var consolidated = string.IsNullOrWhiteSpace(consolidatedOverride)
+            ? endpoint.Consolidated
+            : consolidatedOverride;
         var url = string.Create(
             CultureInfo.InvariantCulture,
-            $"{path}/{v1Id}/snapshot?include={endpoint.Include}&consolidated={endpoint.Consolidated}");
+            $"{path}/{v1Id}/snapshot?include={endpoint.Include}&consolidated={consolidated}");
 
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         if (!string.IsNullOrWhiteSpace(endpoint.AuthToken))

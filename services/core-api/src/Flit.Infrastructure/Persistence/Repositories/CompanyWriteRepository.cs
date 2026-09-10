@@ -26,6 +26,9 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
     public Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default) =>
         _context.Tenants.AsNoTracking().AnyAsync(t => t.Code == code, cancellationToken);
 
+    public Task<bool> TaxIdExistsAsync(string taxId, CancellationToken cancellationToken = default) =>
+        _context.Tenants.AsNoTracking().AnyAsync(t => t.TaxId == taxId, cancellationToken);
+
     public async Task<CompanyListItem> CreateAsync(
         NewCompany company,
         CancellationToken cancellationToken = default)
@@ -55,7 +58,7 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
         _context.Tenants.Add(entity);
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        return Project(entity);
+        return await ProjectAsync(entity, cancellationToken, isTransitOffice: false).ConfigureAwait(false);
     }
 
     public async Task<CompanyListItem?> SetActiveAsync(
@@ -85,7 +88,7 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
             await _context.Entry(entity).ReloadAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return Project(entity);
+        return await ProjectAsync(entity, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<CompanyListItem?> GetByIdAsync(
@@ -97,7 +100,9 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
             .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken)
             .ConfigureAwait(false);
 
-        return entity is null ? null : Project(entity);
+        return entity is null
+            ? null
+            : await ProjectAsync(entity, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<CompanyListItem?> UpdateAsync(
@@ -140,18 +145,31 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
             await _context.Entry(entity).ReloadAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return Project(entity);
+        return await ProjectAsync(entity, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    private static CompanyListItem Project(Tenant entity) => new()
+    private async Task<CompanyListItem> ProjectAsync(
+        Tenant entity,
+        CancellationToken cancellationToken,
+        bool? isTransitOffice = null)
     {
-        Id = entity.Id,
-        Nit = entity.TaxId,
-        RazonSocial = entity.LegalName,
-        Code = entity.Code,
-        TenantType = entity.TenantType,
-        EstadoActivo = entity.IsActive,
-        FechaCreacion = entity.CreatedAt,
-        RowVersion = entity.RowVersion,
-    };
+        var isOt = isTransitOffice
+            ?? await _context.TransitOfficeProfiles
+                .AsNoTracking()
+                .AnyAsync(p => p.TenantId == entity.Id, cancellationToken)
+                .ConfigureAwait(false);
+
+        return new CompanyListItem
+        {
+            Id = entity.Id,
+            Nit = entity.TaxId,
+            RazonSocial = entity.LegalName,
+            Code = entity.Code,
+            TenantType = entity.TenantType,
+            IsTransitOffice = isOt,
+            EstadoActivo = entity.IsActive,
+            FechaCreacion = entity.CreatedAt,
+            RowVersion = entity.RowVersion,
+        };
+    }
 }

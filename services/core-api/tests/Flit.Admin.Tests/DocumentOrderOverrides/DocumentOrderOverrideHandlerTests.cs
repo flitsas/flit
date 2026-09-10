@@ -421,7 +421,8 @@ public sealed class DocumentOrderOverrideHandlerTests
     private static async Task SeedCatalogAsync(string dbName)
     {
         await using var ctx = NewContext(dbName);
-        ctx.ProcedureTypes.Add(new ProcedureType { Id = ProcedureTypeId, Code = "TRASPASO", Name = "Traspaso", IsActive = true });
+        ctx.ProcedureTypes.Add(new ProcedureType {
+        Family = "MATRICULAS", Id = ProcedureTypeId, Code = "traspaso", Name = "Traspaso", IsActive = true });
         ctx.Tenants.Add(new Tenant { Id = ClienteId, Code = "CLI-1", LegalName = "Cliente Uno", TaxId = "900111222", TenantType = "RENTING", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
         ctx.DocumentTypes.AddRange(
             new DocumentType { Id = DocId, Code = "RUT", Name = "Registro Único Tributario", IsActive = true, CreatedAt = DateTimeOffset.UtcNow },

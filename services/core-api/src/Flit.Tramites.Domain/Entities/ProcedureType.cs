@@ -25,6 +25,16 @@ public sealed class ProcedureType
     /// Evaluado por <c>DynamicGateEvaluator</c> cuando el flag F08_DynamicProcedures está activo.
     /// </summary>
     public string GateProfile { get; set; } = "{}";
+
+    /// <summary>
+    /// Barrera de operación (ADR-0050): el tipo puede elegirse al crear un trámite. Es independiente
+    /// de <see cref="PublicationStatus"/>, que solo gobierna la visibilidad en administración: un
+    /// tipo puede estar publicado y visible en el catálogo sin que exista todavía un recorrido
+    /// operable para él.
+    /// <para>Se enciende cuando el tipo tiene pasos parametrizados, matriz documental, causales y
+    /// homologación Quipux/ICT si aplica.</para>
+    /// </summary>
+    public bool WizardEnabled { get; set; }
     public long RowVersion { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public Guid? CreatedBy { get; set; }

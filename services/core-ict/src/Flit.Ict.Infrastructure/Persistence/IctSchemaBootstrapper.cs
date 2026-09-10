@@ -15,6 +15,15 @@ public sealed class IctDatabaseOptions
 
     /// <summary>Aplica el DDL embebido al arrancar (idempotente). Default true.</summary>
     public bool AutoMigrate { get; init; } = true;
+
+    /// <summary>
+    /// Siembra datos de DESARROLLO al arrancar (cliente de prueba <c>ictdev</c> + logs/pre-trámites mock).
+    /// Default <c>false</c>. NO se puede gatear por <c>IsDevelopment()</c> porque DEV/QA/PDN corren con
+    /// <c>ASPNETCORE_ENVIRONMENT=Development</c>: eso sembraría un cliente con contraseña conocida y datos
+    /// falsos en producción. El flag solo se activa en el arranque LOCAL (launchSettings.json) y nunca en
+    /// los compose del VPS (donde queda en su default false).
+    /// </summary>
+    public bool SeedDevData { get; init; }
 }
 
 /// <summary>

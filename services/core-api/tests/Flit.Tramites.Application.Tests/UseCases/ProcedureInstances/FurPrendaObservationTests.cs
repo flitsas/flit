@@ -1,83 +1,124 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using Xunit;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
 /// <summary>
-/// HU #10989 (Feature #10972) — el acreedor de la prenda se capturaba en el wizard, se persistía,
-/// llegaba hasta el generador y se descartaba: el FUR marcaba la casilla de gravamen pero no decía a
-/// favor de quién. Aquí se cubre el bloque de observaciones que lo declara.
+/// HU #10989 (Feature #10972), ampliado por HU #11257 (Feature #11254, CF11) — el acreedor de la
+/// prenda se capturaba en el wizard, se persistía, llegaba hasta el generador y se descartaba: el FUR
+/// marcaba la casilla de gravamen pero no decía a favor de quién. Aquí se cubre el bloque de
+/// observaciones que lo declara, tanto en constitución como en levantamiento.
 /// </summary>
 public sealed class FurPrendaObservationTests
 {
-    [Fact]
-    public void Compose_ConAcreedorYDocumento_DeclaraElBeneficiario()
-    {
-        var texto = FurPrendaObservation.Compose(true, "BANCO XYZ S.A.", "890900608");
+    // ── Constitución ───────────────────────────────────────────────────────
 
-        texto.Should().Be("GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A. - NIT 890900608");
+    [Fact]
+    public void Compose_Constitucion_ConAcreedorYDocumento_DeclaraBeneficiarioYDocumento()
+    {
+        var texto = FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "BANCO XYZ S.A.", "890900608");
+
+        texto.Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 
     [Fact]
-    public void Compose_SinDocumento_NoDejaSeparadoresSueltos()
+    public void Compose_Constitucion_SinDocumento_SoloNombre()
     {
-        var texto = FurPrendaObservation.Compose(true, "BANCO XYZ S.A.", null);
-
-        texto.Should().Be("GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A.");
-        texto.Should().NotEndWith("-");
-        texto.Should().NotContain("NIT");
+        FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "FONDEICON", null)
+            .Should().Be("Inscripción de prenda a favor de FONDEICON");
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Compose_SinNombreDeAcreedor_NoInventaContenido(string? nombre)
+    public void Compose_Constitucion_SinNombreDeAcreedor_NoInventaContenido(string? nombre)
     {
         // La casilla del FUR se marca por su propia vía; lo que se omite aquí es solo el texto.
-        FurPrendaObservation.Compose(true, nombre, "890900608").Should().BeNull();
+        FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, nombre, "890900608").Should().BeNull();
+    }
+
+    // ── Levantamiento (CF11, HU #11257) ───────────────────────────────────
+
+    [Fact]
+    public void Compose_Levantamiento_ConAcreedorYDocumento_DeclaraBeneficiarioYDocumento()
+    {
+        var texto = FurPrendaObservation.Compose(FurPrendaMarking.Levantamiento, "BANCO XYZ S.A.", "890900608");
+
+        texto.Should().Be("Levantamiento de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 
     [Fact]
-    public void Compose_SinGravamen_NoEscribeNada()
+    public void Compose_Levantamiento_SinDocumento_ImprimeSoloElNombre()
     {
-        // Decisiones sin_prenda / omitir / levantar: aunque queden datos de una decisión anterior.
-        FurPrendaObservation.Compose(false, "BANCO XYZ S.A.", "890900608").Should().BeNull();
+        var texto = FurPrendaObservation.Compose(FurPrendaMarking.Levantamiento, "BANCO XYZ S.A.", null);
+
+        texto.Should().Be("Levantamiento de prenda a favor de BANCO XYZ S.A.");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Compose_Levantamiento_SinNombreDeAcreedor_NoImprimeNada(string? nombre)
+    {
+        // Sin nombre de acreedor capturado no se imprime nada: no se inventa contenido, igual que en
+        // la ruta de constitución.
+        FurPrendaObservation.Compose(FurPrendaMarking.Levantamiento, nombre, "890900608").Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_Levantamiento_NuncaUsaElLiteralDeConstitucion()
+    {
+        var texto = FurPrendaObservation.Compose(FurPrendaMarking.Levantamiento, "BANCO XYZ S.A.", null);
+
+        texto.Should().NotContain(FurPrendaObservation.Etiqueta);
+        texto.Should().StartWith(FurPrendaObservation.EtiquetaLevantamiento);
+    }
+
+    // ── Ninguna ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Compose_Ninguna_NoEscribeNada()
+    {
+        // Decisiones sin_prenda / omitir: aunque queden datos de una decisión anterior.
+        FurPrendaObservation.Compose(FurPrendaMarking.Ninguna, "BANCO XYZ S.A.", "890900608").Should().BeNull();
     }
 
     [Fact]
     public void Compose_RecortaLosEspaciosDelCaptura()
     {
-        FurPrendaObservation.Compose(true, "  BANCO XYZ S.A.  ", "  890900608  ")
-            .Should().Be("GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A. - NIT 890900608");
+        FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "  BANCO XYZ S.A.  ", "  890900608  ")
+            .Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 
     // ── Join: el gravamen se antepone al resto del recuadro ──────────────────
 
     [Fact]
-    public void Join_AnteponeElGravamenAlRestoDeObservaciones()
+    public void Join_AnteponeElGravamenAlRestoDeObservaciones_SeparadoPorComa()
     {
         var resultado = FurPrendaObservation.Join(
-            "GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A.",
-            "Vehículo con platón adaptado. Cambio de color: ROJO.");
+            "Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608",
+            "Color nuevo(NUEVO COLOR: ROJO)");
 
         resultado.Should().Be(
-            "GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A. Vehículo con platón adaptado. Cambio de color: ROJO.");
+            "Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608, Color nuevo(NUEVO COLOR: ROJO)");
     }
 
     [Fact]
     public void Join_SinGravamen_DevuelveElRestoIntacto()
     {
         // Regresión ADR-0029: un trámite sin prenda debe conservar exactamente el texto previo.
-        FurPrendaObservation.Join(null, "Cambio de color: ROJO.").Should().Be("Cambio de color: ROJO.");
+        FurPrendaObservation.Join(null, "Color nuevo(NUEVO COLOR: ROJO)").Should().Be("Color nuevo(NUEVO COLOR: ROJO)");
     }
 
     [Fact]
     public void Join_SoloGravamen_DevuelveElBloque()
     {
-        FurPrendaObservation.Join("GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A.", null)
-            .Should().Be("GRAVAMEN / PRENDA A FAVOR DE: BANCO XYZ S.A.");
+        FurPrendaObservation.Join("Inscripción de prenda a favor de BANCO XYZ S.A.", null)
+            .Should().Be("Inscripción de prenda a favor de BANCO XYZ S.A.");
     }
 
     [Theory]
@@ -87,5 +128,75 @@ public sealed class FurPrendaObservationTests
     public void Join_SinNada_DejaElRecuadroComoEstaba(string? a, string? b)
     {
         FurPrendaObservation.Join(a, b).Should().BeNull();
+    }
+
+    [Fact]
+    public void Compose_Ambos_UneLevantamientoYConstitucionConComa()
+    {
+        var texto = FurPrendaObservation.Compose(FurPrendaMarking.Ambos, "BANCO XYZ S.A.", "890900608");
+        texto.Should().StartWith(FurPrendaObservation.EtiquetaLevantamiento);
+        texto.Should().Contain(FurPrendaObservation.Etiqueta);
+        texto.Should().Contain(", ");
+        texto.Should().Contain("número de documento 890900608");
+    }
+
+    // ── Levantamiento con entidad: el trámite dedicado declara DÓNDE se hizo ─────────────────────
+
+    [Fact]
+    public void Compose_Levantamiento_ConEntidadYAcreedor_DeclaraDondeYAFavorDeQuien()
+    {
+        // Corrección QA: el numeral 20 «A FAVOR DE» solo tiene espacio para el NOMBRE del acreedor,
+        // sin documento — antes el recuadro se cortaba en la entidad y el NIT no quedaba escrito en
+        // ningún lugar del FUR. Ahora el recuadro es quien lo declara.
+        var texto = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, "BANCO SANTANDER COLOMBIA S.A.", "890903938",
+            levantamientoEntidad: "NOTARÍA 15 DE MEDELLÍN");
+
+        texto.Should().Be(
+            "Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN, a favor de BANCO SANTANDER COLOMBIA S.A. identificado con número de documento 890903938");
+    }
+
+    [Fact]
+    public void Compose_Levantamiento_ConEntidadYAcreedorSinDocumento_OmiteElSufijoVacio()
+    {
+        var texto = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, "FONDEICON", null,
+            levantamientoEntidad: "NOTARÍA 15 DE MEDELLÍN");
+
+        texto.Should().Be("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN, a favor de FONDEICON");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Compose_Levantamiento_SinEntidad_ConservaElLiteralDeSiempre(string? entidad)
+    {
+        // No regresión: traspaso y matrícula NO capturan la entidad, así que su texto no cambia.
+        var texto = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, "BANCO XYZ S.A.", "890900608", entidad);
+
+        texto.Should().Be("Levantamiento de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
+    }
+
+    [Fact]
+    public void Compose_Levantamiento_ConEntidadYSinAcreedor_SoloDeclaraLaEntidad()
+    {
+        // Sin acreedor persistido (dato legado o flujo que no lo captura), el recuadro conserva el
+        // literal de solo-entidad: no inventa un beneficiario que no existe.
+        FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, null, null, "NOTARÍA 15 DE MEDELLÍN")
+            .Should().Be("Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN");
+    }
+
+    [Fact]
+    public void Compose_Ambos_ConEntidad_DeclaraElBeneficiarioEnAmbosBloques()
+    {
+        var texto = FurPrendaObservation.Compose(
+            FurPrendaMarking.Ambos, "BANCO XYZ S.A.", "890900608", "NOTARÍA 15 DE MEDELLÍN");
+
+        texto.Should().StartWith(
+            "Levantamiento de prenda ante NOTARÍA 15 DE MEDELLÍN, a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
+        texto.Should().Contain("Inscripción de prenda a favor de BANCO XYZ S.A. identificado con número de documento 890900608");
     }
 }

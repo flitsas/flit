@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Infrastructure.Documents.Fur;
 
@@ -14,21 +16,24 @@ public static class FurFieldMapper
     {
         ArgumentNullException.ThrowIfNull(data);
         var esTraspaso = IsTraspaso(data);
-        var propietario = ResolvePropietario(data, esTraspaso);
-        var comprador = esTraspaso ? ResolveComprador(data) : null;
+        var propietarios = ResolvePropietarios(data, esTraspaso);
+        var compradores = esTraspaso ? ResolveCompradores(data) : [];
+        var propietario = propietarios.Count > 0 ? propietarios[0] : null;
+        var comprador = compradores.Count > 0 ? compradores[0] : null;
         var (placaLetras, placaNumeros) = SplitPlaca(data.Placa);
-        var (propAp1, propAp2, propNom) = NameParts(propietario);
-        var (compAp1, compAp2, compNom) = NameParts(comprador);
+        var (propAp1, propAp2, propNom) = JoinNameColumns(propietarios);
+        var (compAp1, compAp2, compNom) = JoinNameColumns(compradores);
         var fecha = data.FechaTramite ?? DateTime.UtcNow;
 
         var dict = new Dictionary<string, FurFieldValue>(StringComparer.OrdinalIgnoreCase)
         {
             ["traffic_secretary_name"] = Text(Upper(data.Organismo.Nombre)),
-            ["traffic_secretary_city"] = Text(data.Organismo.Ciudad),
+            // Misma mayúscula que el nombre: el blank del OT espera ciudad legible (no código DIVIPOLA).
+            ["traffic_secretary_city"] = Text(Upper(data.Organismo.Ciudad)),
             ["traffic_secretary_code"] = Text(data.Organismo.Codigo),
-            ["processing_day"] = Text(fecha.Day.ToString(CultureInfo.InvariantCulture)),
-            ["processing_month"] = Text(fecha.Month.ToString(CultureInfo.InvariantCulture)),
-            ["processing_year"] = Text(fecha.Year.ToString(CultureInfo.InvariantCulture)),
+            ["processing_day"] = Text(fecha.Day.ToString("00", CultureInfo.InvariantCulture)),
+            ["processing_month"] = Text(fecha.Month.ToString("00", CultureInfo.InvariantCulture)),
+            ["processing_year"] = Text(fecha.Year.ToString("0000", CultureInfo.InvariantCulture)),
             ["plate_letter"] = Text(placaLetras),
             ["plate_number"] = Text(placaNumeros),
             ["vehicle_brand"] = Text(Upper(data.Vehiculo.Marca)),
@@ -42,52 +47,89 @@ public static class FurFieldMapper
             ["vehicle_chassis_number"] = Text(Upper(data.Vehiculo.NumeroChasis)),
             ["vehicle_serial_number"] = Text(Upper(data.Vehiculo.NumeroSerie)),
             ["vehicle_vin_number"] = Text(Upper(data.Vehiculo.Vin)),
-            ["vehicle_owner_first_last_name"] = Text(Upper(propAp1)),
-            ["vehicle_owner_second_last_name"] = Text(Upper(propAp2)),
-            ["vehicle_owner_name"] = Text(Upper(propNom)),
-            ["vehicle_owner_document_number"] = Text(propietario?.Documento),
+            ["vehicle_owner_first_last_name"] = CopropiedadText(Upper(propAp1), propietarios.Count),
+            ["vehicle_owner_second_last_name"] = CopropiedadText(Upper(propAp2), propietarios.Count),
+            ["vehicle_owner_name"] = CopropiedadText(Upper(propNom), propietarios.Count),
+            ["vehicle_owner_document_number"] = CopropiedadText(JoinDocumentos(propietarios), propietarios.Count),
             ["vehicle_owner_address"] = Text(DisplayOrDash(propietario?.Address)),
             ["vehicle_owner_city"] = Text(DisplayOrDash(propietario?.City)),
             ["vehicle_owner_phone"] = Text(DisplayOrDash(propietario?.Phone)),
             ["observations"] = Text(BuildObservations(data)),
+            // Casilla 19 "EMPRESA VINCULADORA". Solo se llena cuando el trámite trae el dato (servicio
+            // público con empresa vinculadora); si no, queda en blanco como el resto del recuadro
+            // (Text() ya devuelve "" ante null/whitespace — misma convención que el resto del mapper).
+            ["linked_company_name"] = Text(Upper(data.EmpresaVinculadoraRazonSocial)),
+            ["linked_company_nit"] = Text(data.EmpresaVinculadoraNit),
         };
 
-        SetSignature(
+        if (data.TemplateFormat is FurTemplateFormat.Remolques or FurTemplateFormat.Maquinaria)
+        {
+            dict["vehicle_axles"] = Text(data.Vehiculo.NumeroEjes);
+            dict["vehicle_height"] = Text(ToFurMeters(data.Vehiculo.Alto));
+            dict["vehicle_width"] = Text(ToFurMeters(data.Vehiculo.Ancho));
+            dict["vehicle_length"] = Text(ToFurMeters(data.Vehiculo.Largo));
+        }
+
+        SetSignatureRow(
             dict,
             "vehicle_owner_signature",
             data,
-            propietario?.Rol,
+            propietarios,
             IdentidadOrSello(
                 data,
-                esTraspaso ? "vendedor" : "comprador",
+                propietario is null
+                    ? (esTraspaso ? "vendedor" : "comprador")
+                    : FurOverlayPartyKey.For(propietario.Rol, propietario.Ordinal),
                 esTraspaso ? ["vendedor", "propietario"] : ["comprador", "propietario"]));
 
-        MarkTramite(dict, esTraspaso, data);
-        MarkClase(dict, data.Vehiculo.Clase);
-        MarkCombustible(dict, data.Vehiculo.Combustible);
+        MarkTramite(dict, data);
+        MarkAlertas(dict, data);
+        MarkClase(dict, data);
+        if (data.TemplateFormat == FurTemplateFormat.Maquinaria)
+        {
+            MarkTraccionMaquinaria(dict, data.Vehiculo.TipoTraccion);
+            MarkCabinaMaquinaria(dict);
+            MarkCombustibleMaquinaria(dict, data.Vehiculo.Combustible);
+        }
+        else
+        {
+            MarkCombustible(dict, data.Vehiculo.Combustible);
+        }
         MarkServicio(dict, data.Vehiculo.TipoServicio);
-        MarkCheckbox(dict, "is_armored_vehicle_no", true);
+        MarkCheckbox(dict, "is_armored_vehicle_yes", data.Transformaciones.Blindaje);
+        MarkCheckbox(dict, "is_armored_vehicle_no", !data.Transformaciones.Blindaje);
         MarkCheckbox(dict, "is_dismantling_armor_no", true);
 
         if (esTraspaso && comprador is not null)
         {
-            dict["vehicle_buyer_first_last_name"] = Text(Upper(compAp1));
-            dict["vehicle_buyer_second_last_name"] = Text(Upper(compAp2));
-            dict["vehicle_buyer_name"] = Text(Upper(compNom));
-            dict["vehicle_buyer_document_number"] = Text(comprador.Documento);
+            dict["vehicle_buyer_first_last_name"] = CopropiedadText(Upper(compAp1), compradores.Count);
+            dict["vehicle_buyer_second_last_name"] = CopropiedadText(Upper(compAp2), compradores.Count);
+            dict["vehicle_buyer_name"] = CopropiedadText(Upper(compNom), compradores.Count);
+            dict["vehicle_buyer_document_number"] = CopropiedadText(JoinDocumentos(compradores), compradores.Count);
             dict["vehicle_buyer_address"] = Text(DisplayOrDash(comprador.Address));
             dict["vehicle_buyer_city"] = Text(DisplayOrDash(comprador.City));
             dict["vehicle_buyer_phone"] = Text(DisplayOrDash(comprador.Phone));
-            // HU #11035 — el sello del comprador baja 4pt (el campo declara 8pt, frente a 6,5pt del
-            // propietario): con la reducción uniforme de 2pt seguía saliéndose del recuadro.
-            SetSignature(
-                dict,
-                "vehicle_buyer_signature",
-                data,
-                comprador.Rol,
-                IdentidadOrSello(data, "comprador", ["comprador"]),
-                selloFontSizeDelta: -4);
-            MarkDocType(dict, comprador.Documento, comprador.DocumentType, "vehicle_buyer");
+            // ADR-0051 — el comprador solo lleva sello/imagen de firma si el tipo lo declara firmante
+            // (data.SignatureActors). TRASPASO_UNILATERAL declara ["vendedor"]: el comprador (locatario)
+            // NO firma, aunque sí aparece con sus datos en esta sección. `null` (llave ausente) = sin
+            // restricción, comportamiento previo a esta llave.
+            if (data.SignatureActors is null || data.SignatureActors.Contains("comprador", StringComparer.OrdinalIgnoreCase))
+            {
+                // HU #11035 — el sello del comprador baja 4pt (el campo declara 8pt, frente a 6,5pt del
+                // propietario): con la reducción uniforme de 2pt seguía saliéndose del recuadro.
+                SetSignatureRow(
+                    dict,
+                    "vehicle_buyer_signature",
+                    data,
+                    compradores,
+                    IdentidadOrSello(data, FurOverlayPartyKey.For(comprador.Rol, comprador.Ordinal), ["comprador"]),
+                    selloFontSizeDelta: -4);
+            }
+            else
+            {
+                dict["vehicle_buyer_signature"] = Text("");
+            }
+            MarkDocTypes(dict, compradores, "vehicle_buyer");
         }
         else
         {
@@ -106,14 +148,18 @@ public static class FurFieldMapper
             MarkDocType(dict, null, null, "vehicle_buyer");
         }
 
-        MarkDocType(dict, propietario?.Documento, propietario?.DocumentType, "vehicle_owner");
+        MarkDocTypes(dict, propietarios, "vehicle_owner");
 
         // HU #10463 — sin validación de identidad aprobada, el espacio de firma del FUR muestra
         // "NO FIRMADO" (matrícula: propietario; traspaso: vendedor + comprador).
+        // ADR-0051 — el comprador solo recibe el sello "NO FIRMADO" si el tipo lo declara firmante:
+        // sin esta guarda, TRASPASO_UNILATERAL estampaba "NO FIRMADO" en un espacio de firma que el
+        // tipo ni siquiera exige (el comprador/locatario no firma este documento).
         if (!data.IdentidadValidada)
         {
             dict["vehicle_owner_signature"] = Text(NoFirmadoSello);
-            if (esTraspaso)
+            if (esTraspaso
+                && (data.SignatureActors is null || data.SignatureActors.Contains("comprador", StringComparer.OrdinalIgnoreCase)))
                 dict["vehicle_buyer_signature"] = Text(NoFirmadoSello);
         }
 
@@ -142,6 +188,20 @@ public static class FurFieldMapper
             return;
         }
 
+        if (!string.IsNullOrWhiteSpace(rol)
+            && data.FirmaIdentidadImagenes is not null
+            && TryGetFirmaImagen(data.FirmaIdentidadImagenes, rol, out var identidadPng)
+            && IdentitySignatureImageFormat.IsSupported(identidadPng))
+        {
+            var leyenda = data.SellosIdentidad is not null
+                && data.SellosIdentidad.TryGetValue(rol, out var sello)
+                && !string.IsNullOrWhiteSpace(sello)
+                    ? sello
+                    : fallbackText;
+            dict[fieldId] = new FurFieldValue(null, identidadPng, leyenda, FontSizeDelta: selloFontSizeDelta);
+            return;
+        }
+
         // HU #11031 — el sello de la validación de identidad se imprime 2pt más pequeño que el resto
         // del campo: son cuatro líneas dentro del espacio de firma y con el cuerpo del manifiesto se
         // salían del recuadro. El sello previo de firma electrónica conserva su tamaño.
@@ -154,42 +214,111 @@ public static class FurFieldMapper
         dict[fieldId] = new FurFieldValue(Val(fallbackText), FontSizeDelta: esSelloIdentidad ? selloFontSizeDelta : 0);
     }
 
-    private static string? TryBuildFirmaBaulSidecar(
-        IReadOnlyDictionary<string, FirmaBaulMetadata>? metadata,
-        string rol)
+    /// <summary>
+    /// Un recuadro de firma por lado: 1 firmante usa el layout histórico; 2–4 se pintan en columnas.
+    /// </summary>
+    private static void SetSignatureRow(
+        Dictionary<string, FurFieldValue> dict,
+        string fieldId,
+        FurDocumentData data,
+        List<DocumentParte> partes,
+        string fallbackText,
+        double selloFontSizeDelta = -2)
     {
-        if (metadata is null)
-            return null;
-
-        foreach (var key in FirmaRolKeys(rol))
+        if (partes.Count == 0)
         {
-            if (!metadata.TryGetValue(key, out var meta))
-                continue;
-
-            var lines = new List<string>
-            {
-                $"Doc. {meta.DocumentNumber}",
-                meta.FullName,
-                // HU #11018 — formato de negocio unico en documentos: AÑO/MES/DIA.
-                $"Vig. {meta.VigenciaDesde:yyyy/MM/dd} — {meta.VigenciaHasta:yyyy/MM/dd}",
-            };
-
-            // HU #10930 (Feature #10929): se estampa el codigo_hash digitado en el baúl (meta.Hash), NO el
-            // UUID de la fila. Si el baúl no trae código (firmas previas / null), se OMITE la línea "Hash"
-            // en vez de imprimir el GUID (que confundía al operador).
-            if (!string.IsNullOrWhiteSpace(meta.Hash))
-            {
-                lines.Add($"Hash: {meta.Hash}");
-            }
-
-            return string.Join('\n', lines);
+            dict[fieldId] = new FurFieldValue(Val(fallbackText), FontSizeDelta: selloFontSizeDelta);
+            return;
         }
 
-        return null;
+        if (partes.Count == 1)
+        {
+            var principal = partes[0];
+            SetSignature(
+                dict,
+                fieldId,
+                data,
+                FurOverlayPartyKey.For(principal.Rol, principal.Ordinal),
+                fallbackText,
+                selloFontSizeDelta);
+            return;
+        }
+
+        var stamps = new List<FurOverlaySignatureStamp>(partes.Count);
+        foreach (var p in partes)
+        {
+            var key = FurOverlayPartyKey.For(p.Rol, p.Ordinal);
+            var sello = IdentidadOrSello(data, key, [p.Rol]);
+            var texto = string.IsNullOrWhiteSpace(sello)
+                ? $"{(p.Nombre ?? "").Trim()} {p.Documento}".Trim()
+                : sello;
+            if (string.IsNullOrWhiteSpace(texto))
+                texto = fallbackText;
+            stamps.Add(BuildSignatureStamp(data, key, texto, selloFontSizeDelta));
+        }
+
+        dict[fieldId] = new FurFieldValue(null, SignatureStamps: stamps);
     }
+
+    private static FurOverlaySignatureStamp BuildSignatureStamp(
+        FurDocumentData data,
+        string? rol,
+        string fallbackText,
+        double selloFontSizeDelta)
+    {
+        if (!string.IsNullOrWhiteSpace(rol)
+            && data.FirmaImagenes is not null
+            && TryGetFirmaImagen(data.FirmaImagenes, rol, out var image))
+        {
+            return new FurOverlaySignatureStamp(image, TryBuildFirmaBaulSidecar(data.FirmaBaulMetadatos, rol), null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(rol)
+            && data.FirmaIdentidadImagenes is not null
+            && TryGetFirmaImagen(data.FirmaIdentidadImagenes, rol, out var identidadPng)
+            && IdentitySignatureImageFormat.IsSupported(identidadPng))
+        {
+            var leyenda = data.SellosIdentidad is not null
+                && data.SellosIdentidad.TryGetValue(rol, out var sello)
+                && !string.IsNullOrWhiteSpace(sello)
+                    ? sello
+                    : fallbackText;
+            return new FurOverlaySignatureStamp(identidadPng, leyenda, null, selloFontSizeDelta);
+        }
+
+        var esSelloIdentidad = !string.IsNullOrWhiteSpace(rol)
+            && data.SellosIdentidad is not null
+            && data.SellosIdentidad.TryGetValue(rol, out var selloIdentidad)
+            && !string.IsNullOrWhiteSpace(selloIdentidad)
+            && string.Equals(selloIdentidad, fallbackText, StringComparison.Ordinal);
+
+        return new FurOverlaySignatureStamp(
+            null,
+            null,
+            Val(fallbackText),
+            esSelloIdentidad ? selloFontSizeDelta : CopropiedadFontDelta(2));
+    }
+
+    /// <summary>
+    /// Sello de trazabilidad junto a la imagen de la firma del baúl. El texto lo arma
+    /// <see cref="FlitFirmaBaulSello"/>, compartido con la compraventa, el mandato y la solicitud de
+    /// trámite virtual (HU #11170): antes vivía aquí y por eso era el único documento que lo llevaba.
+    /// El FUR es el que SÍ incluye la identificación del firmante, porque su espacio de firma no la
+    /// imprime en ninguna otra parte.
+    /// </summary>
+    private static string? TryBuildFirmaBaulSidecar(
+        IReadOnlyDictionary<string, FirmaBaulMetadata>? metadata,
+        string rol) =>
+        FlitFirmaBaulSello.Resolve(metadata, rol, incluirIdentificacion: true);
 
     private static bool TryGetFirmaImagen(IReadOnlyDictionary<string, byte[]> images, string rol, out byte[] bytes)
     {
+        if (images.TryGetValue(rol, out var exact) && exact.Length > 0)
+        {
+            bytes = exact;
+            return true;
+        }
+
         foreach (var key in FirmaRolKeys(rol))
         {
             if (images.TryGetValue(key, out var img) && img.Length > 0)
@@ -203,38 +332,138 @@ public static class FurFieldMapper
         return false;
     }
 
-    private static IEnumerable<string> FirmaRolKeys(string rol)
+    /// <summary>
+    /// Alias de rol para resolver la firma. Delega en <see cref="FlitFirmaBaulSello.RolKeys"/> para que
+    /// la imagen y su sello de trazabilidad se busquen SIEMPRE con las mismas llaves y en el mismo
+    /// orden: si divergieran, una parte podría quedar con firma estampada y sin vigencia ni hash.
+    /// </summary>
+    private static IEnumerable<string> FirmaRolKeys(string rol) => FlitFirmaBaulSello.RolKeys(rol);
+
+    /// <summary>
+    /// Numeral 3 del FUR. Las casillas objetivo (tipo ∪ prenda ∪ transformaciones) están en
+    /// <c>docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md</c>. Este método es el emisor actual; no
+    /// contradigas el artefacto en un cambio nuevo sin actualizarlo en el mismo PR.
+    /// </summary>
+    private static void MarkTramite(Dictionary<string, FurFieldValue> dict, FurDocumentData data)
     {
-        var n = Norm(rol);
-        yield return rol;
-        if (n.Contains("COMPRADOR")) yield return "comprador";
-        if (n.Contains("VENDEDOR")) yield return "vendedor";
-        if (n.Contains("PROPIETARIO")) yield return "propietario";
+        var marks = FurNumeral3Marks.Resolve(data);
+        foreach (var n in FurNumeral3Marks.Emittable)
+            MarkCheckbox(dict, FurNumeral3Marks.FieldId(n), marks.Contains(n));
+        // Casillas 6 y 14 no se declaran: no hay tipo en el catálogo (REGLAS-NUMERAL-3).
     }
 
-    private static void MarkTramite(Dictionary<string, FurFieldValue> dict, bool esTraspaso, FurDocumentData data)
+    /// <summary>
+    /// Numeral 20 DATOS DE ALERTA. Inscripción/registro de prenda → LIM. PROPIEDAD (2) + A FAVOR DE.
+    /// Levantamiento → OTRO (4) + A FAVOR DE. Hurto (1) y embargo (3) no se marcan desde el gravamen.
+    /// <para>Duplicado de placa y duplicado de tarjeta marcan también OTRO (4), pero por TIPO de
+    /// trámite y no por gravamen: ahí no hay acreedor, así que A FAVOR DE queda vacía — la misma
+    /// convención que un gravamen sin nombre (sí X en la columna, campo vacío).</para>
+    /// </summary>
+    private static void MarkAlertas(Dictionary<string, FurFieldValue> dict, FurDocumentData data)
     {
-        MarkCheckbox(dict, "requested_process_1", !esTraspaso);
-        MarkCheckbox(dict, "requested_process_2", esTraspaso);
-        // HU #10601 — marca el gravamen (prenda) cuando la decisión vigente del trámite lo implica.
-        MarkCheckbox(dict, "requested_process_11", data.TienePrenda);
+        var marking = data.PrendaMarking;
+        var inscribe = marking is FurPrendaMarking.Constitucion or FurPrendaMarking.Ambos;
+        var levanta = marking is FurPrendaMarking.Levantamiento or FurPrendaMarking.Ambos;
+        MarkCheckbox(dict, "alert_data_code_1", false);
+        MarkCheckbox(dict, "alert_data_code_2", inscribe);
+        MarkCheckbox(dict, "alert_data_code_3", false);
+        MarkCheckbox(dict, "alert_data_code_4", levanta || MarcaOtroPorTipo(Norm(data.TipologiaCodigo)));
+        dict["alert_data_code_5"] = Text(inscribe || levanta ? Upper(data.AcreedorPrenda) : "");
     }
 
-    private static void MarkClase(Dictionary<string, FurFieldValue> dict, string? clase)
+    /// <summary>
+    /// Tipos cuyo numeral 20 se marca en OTRO por sí mismos, sin gravamen de por medio
+    /// (<c>docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md</c>, numeral 20).
+    ///
+    /// <para><c>RADICADO_CUENTA</c> entra por la misma vía que los duplicados: marca OTRO por el tipo
+    /// de trámite, no por un gravamen, así que «A FAVOR DE» queda vacía — no hay acreedor que
+    /// escribir. El organismo de destino se declara en el párrafo 23, no aquí.</para>
+    /// </summary>
+    private static bool MarcaOtroPorTipo(string code) =>
+        code is "DUPLICADO_PLACA" or "DUPLICADO_TARJETA" or "RADICADO_CUENTA" or "TRASLADO_CUENTA";
+
+    private static void MarkClase(Dictionary<string, FurFieldValue> dict, FurDocumentData data)
     {
-        var n = Norm(clase);
-        MarkCheckbox(dict, "vehicle_class_1", n.Contains("AUTOMOVIL"));
-        MarkCheckbox(dict, "vehicle_class_5", n.Contains("CAMIONETA"));
-        MarkCheckbox(dict, "vehicle_class_9", n.Contains("MOTOCICLETA") || n == "MOTO");
+        var token = string.IsNullOrWhiteSpace(data.FieldToFill)
+            ? data.Vehiculo.Clase
+            : data.FieldToFill;
+        var markId = FurNumeral4Marks.FieldId(token);
+        foreach (var id in FurNumeral4Marks.IdsFor(data.TemplateFormat))
+            MarkCheckbox(dict, id, markId.Length > 0 && string.Equals(id, markId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Numeral 8 del FUR de maquinaria. El blank numera: 1 llantas, 2 orugas, 3 cilindros, 4 mixto.
+    /// Producto: si el RUNT trae uno de los tres tipos conocidos se marca ese; en cualquier otro caso
+    /// (vacío, mixto, valor no reconocible) se marca la 4 (la casilla de «otros» del numeral).
+    /// </summary>
+    private static void MarkTraccionMaquinaria(Dictionary<string, FurFieldValue> dict, string? traccion)
+    {
+        var n = Norm(traccion);
+        var llantas = n.Contains("LLANT");
+        var orugas = n.Contains("ORUGA");
+        var cilindros = n.Contains("CILINDR") || n.Contains("CILUNDR");
+        var conocidos = (llantas ? 1 : 0) + (orugas ? 1 : 0) + (cilindros ? 1 : 0);
+        if (conocidos != 1)
+        {
+            llantas = false;
+            orugas = false;
+            cilindros = false;
+        }
+
+        MarkCheckbox(dict, "vehicle_traction_llantas", llantas);
+        MarkCheckbox(dict, "vehicle_traction_orugas", orugas);
+        MarkCheckbox(dict, "vehicle_traction_cilindros", cilindros);
+        MarkCheckbox(dict, "vehicle_traction_otros", conocidos != 1);
+    }
+
+    /// <summary>
+    /// Numeral 16 del FUR de maquinaria: 1 cerrada, 2 parasol, 3 sin cabina, 4 otros.
+    /// Producto: siempre se marca otros; el RUNT no hidrata cabina.
+    /// </summary>
+    private static void MarkCabinaMaquinaria(Dictionary<string, FurFieldValue> dict)
+    {
+        MarkCheckbox(dict, "vehicle_cabin_cerrada", false);
+        MarkCheckbox(dict, "vehicle_cabin_parasol", false);
+        MarkCheckbox(dict, "vehicle_cabin_sin", false);
+        MarkCheckbox(dict, "vehicle_cabin_otros", true);
+    }
+
+    /// <summary>
+    /// Numeral 20 del FUR de maquinaria (no es la fila de 8 combustibles del automotor):
+    /// 1 gasolina, 2 diésel, 3 eléctrico, 4 gas, 5 mixto, 6 otros. Sin valor válido → 6.
+    /// </summary>
+    private static void MarkCombustibleMaquinaria(Dictionary<string, FurFieldValue> dict, string? combustible)
+    {
+        var n = Norm(combustible);
+        var id = n.Contains("GASOLINA") || n.Contains("GASOL") ? "vehicle_fuel_maq_1"
+            : n.Contains("DIESEL") && !n.Contains("BIODIESEL") ? "vehicle_fuel_maq_2"
+            : n.Contains("ELECTRIC") ? "vehicle_fuel_maq_3"
+            : IsGasFuel(n) ? "vehicle_fuel_maq_4"
+            : n.Contains("MIXTO") || n.Contains("HIBRID") ? "vehicle_fuel_maq_5"
+            : "vehicle_fuel_maq_6";
+
+        for (var i = 1; i <= 6; i++)
+        {
+            var key = $"vehicle_fuel_maq_{i}";
+            MarkCheckbox(dict, key, string.Equals(key, id, StringComparison.Ordinal));
+        }
     }
 
     private static void MarkCombustible(Dictionary<string, FurFieldValue> dict, string? combustible)
     {
         var n = Norm(combustible);
         MarkCheckbox(dict, "vehicle_fuel_type_1", n.Contains("GASOLINA") || n.Contains("GASOL"));
-        MarkCheckbox(dict, "vehicle_fuel_type_2", n.Contains("DIESEL"));
+        // HU #11641 — BIODIESEL contiene "DIESEL": el Contains suelto marcaba las casillas 2 y 8 a la
+        // vez y el formulario dejaba de decir con qué se mueve el vehículo. Mismo defecto que ya se
+        // corrigió en MarkServicio con "SERVICIO PUBLICO ESPECIAL".
+        MarkCheckbox(dict, "vehicle_fuel_type_2", n.Contains("DIESEL") && !n.Contains("BIODIESEL"));
         MarkCheckbox(dict, "vehicle_fuel_type_3", IsGasFuel(n));
-        MarkCheckbox(dict, "vehicle_fuel_type_4", n.Contains("MIXTO"));
+        // HU #11641 — HIBRIDO comparte casilla con MIXTO. El formulario oficial no tiene casilla de
+        // híbrido, y «MIXTO» es literalmente su caso: el vehículo se mueve con más de una fuente de
+        // energía. El catálogo del wizard ofrecía HIBRIDO desde su creación sin que ninguna casilla
+        // lo recogiera, así que estos vehículos salían con la sección 7 en blanco.
+        MarkCheckbox(dict, "vehicle_fuel_type_4", n.Contains("MIXTO") || n.Contains("HIBRID"));
         MarkCheckbox(dict, "vehicle_fuel_type_5", n.Contains("ELECTRIC"));
         MarkCheckbox(dict, "vehicle_fuel_type_6", n.Contains("HIDROGEN"));
         MarkCheckbox(dict, "vehicle_fuel_type_7", n.Contains("ETANOL"));
@@ -246,16 +475,22 @@ public static class FurFieldMapper
         || n.Contains("GAS NATURAL")
         || (n.Contains("GAS") && !n.Contains("GASOL") && !n.Contains("GASOLINA"));
 
+    /// <summary>
+    /// Casilla 18 del FUR. Delega en <see cref="VehicleServiceTypeCode.Resolve"/> para reducir el
+    /// valor de <c>vehicle_service</c> (texto libre del RUNT o código de matrícula inicial) a UN
+    /// solo código canónico y marcar exactamente una casilla — antes cada casilla se evaluaba con
+    /// un <c>Contains</c> independiente y un valor compuesto del RUNT como "SERVICIO PUBLICO
+    /// ESPECIAL" marcaba PÚBLICO y ESPECIAL a la vez.
+    /// </summary>
     private static void MarkServicio(Dictionary<string, FurFieldValue> dict, string? servicio)
     {
-        var n = Norm(servicio);
-        var isParticular = string.IsNullOrEmpty(n) || n.Contains("PARTICULAR") || n.Contains("PARTICUL");
-        MarkCheckbox(dict, "vehicle_service_type_1", isParticular);
-        MarkCheckbox(dict, "vehicle_service_type_2", n.Contains("PUBLICO") || n.Contains("PUBLIC"));
-        MarkCheckbox(dict, "vehicle_service_type_3", n.Contains("DIPLOMAT"));
-        MarkCheckbox(dict, "vehicle_service_type_4", n.Contains("OFICIAL"));
-        MarkCheckbox(dict, "vehicle_service_type_5", n.Contains("ESPECIAL"));
-        MarkCheckbox(dict, "vehicle_service_type_6", n.Contains("OTRO"));
+        var codigo = VehicleServiceTypeCode.Resolve(servicio);
+        MarkCheckbox(dict, "vehicle_service_type_1", codigo == VehicleServiceTypeCode.Particular);
+        MarkCheckbox(dict, "vehicle_service_type_2", codigo == VehicleServiceTypeCode.Publico);
+        MarkCheckbox(dict, "vehicle_service_type_3", codigo == VehicleServiceTypeCode.Diplomatico);
+        MarkCheckbox(dict, "vehicle_service_type_4", codigo == VehicleServiceTypeCode.Oficial);
+        MarkCheckbox(dict, "vehicle_service_type_5", codigo == VehicleServiceTypeCode.Especial);
+        MarkCheckbox(dict, "vehicle_service_type_6", codigo == VehicleServiceTypeCode.Otros);
     }
 
     private static void MarkDocType(
@@ -332,10 +567,12 @@ public static class FurFieldMapper
     /// </summary>
     private static string IdentidadOrSello(FurDocumentData data, string role, string[] fallbackPartes)
     {
-        if (data.SellosIdentidad is not null
-            && data.SellosIdentidad.TryGetValue(role, out var sello)
-            && !string.IsNullOrWhiteSpace(sello))
-            return sello;
+        if (data.SellosIdentidad is not null)
+        {
+            if (data.SellosIdentidad.TryGetValue(role, out var sello)
+                && !string.IsNullOrWhiteSpace(sello))
+                return sello;
+        }
 
         return SellosTexto(data.SellosFirma, fallbackPartes);
     }
@@ -354,42 +591,97 @@ public static class FurFieldMapper
         return "";
     }
 
+    private static void MarkDocTypes(
+        Dictionary<string, FurFieldValue> dict,
+        List<DocumentParte> partes,
+        string prefix)
+    {
+        foreach (var id in DocTypeCheckboxIds)
+            MarkCheckbox(dict, $"{prefix}_document_type_{id}", false);
+
+        if (partes.Count == 0)
+            return;
+
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var parte in partes)
+        {
+            var doc = parte.Documento?.Trim() ?? "";
+            if (doc.Length == 0)
+                continue;
+            var selected = ResolveDocTypeCheckbox(Norm(parte.DocumentType), doc);
+            if (selected is null)
+                continue;
+            counts[selected] = counts.GetValueOrDefault(selected) + 1;
+        }
+
+        foreach (var (id, repeat) in counts)
+            dict[$"{prefix}_document_type_{id}"] = new FurFieldValue("X", CheckboxRepeat: Math.Clamp(repeat, 1, 4));
+    }
+
     private static DocumentParte? ResolvePropietario(FurDocumentData data, bool esTraspaso)
     {
-        if (esTraspaso)
-        {
-            foreach (var p in data.Partes)
+        var list = ResolvePropietarios(data, esTraspaso);
+        return list.Count > 0 ? list[0] : null;
+    }
+
+    private static List<DocumentParte> ResolvePropietarios(FurDocumentData data, bool esTraspaso)
+    {
+        IEnumerable<DocumentParte> query = esTraspaso
+            ? data.Partes.Where(p =>
             {
                 var rol = Norm(p.Rol);
-                if (rol.Contains("VENDEDOR") || rol.Contains("PROPIETARIO"))
-                    return p;
-            }
-            return null;
-        }
-
-        foreach (var p in data.Partes)
-        {
-            var rol = Norm(p.Rol);
-            if (rol.Contains("COMPRADOR") || rol.Contains("PROPIETARIO"))
-                return p;
-        }
-
-        return data.Partes.Count > 0 ? data.Partes[0] : null;
+                return rol.Contains("VENDEDOR") || rol.Contains("PROPIETARIO");
+            })
+            : data.Partes.Where(p =>
+            {
+                var rol = Norm(p.Rol);
+                return rol.Contains("COMPRADOR") || rol.Contains("PROPIETARIO");
+            });
+        var list = query.OrderBy(p => p.Ordinal).ToList();
+        if (list.Count == 0 && !esTraspaso && data.Partes.Count > 0)
+            list.Add(data.Partes[0]);
+        return list;
     }
+
+    private static List<DocumentParte> ResolveCompradores(FurDocumentData data) =>
+        data.Partes
+            .Where(p => Norm(p.Rol).Contains("COMPRADOR"))
+            .OrderBy(p => p.Ordinal)
+            .ToList();
 
     private static DocumentParte? ResolveComprador(FurDocumentData data)
     {
-        foreach (var p in data.Partes)
-        {
-            if (Norm(p.Rol).Contains("COMPRADOR"))
-                return p;
-        }
-        return null;
+        var list = ResolveCompradores(data);
+        return list.Count > 0 ? list[0] : null;
     }
 
+    /// <summary>
+    /// ¿El FUR lleva sección de parte vendedora? Lo declara el tipo (ADR-0050).
+    /// <para>Antes se decidía buscando la palabra "TRASPASO" dentro de la tipología o de la
+    /// modalidad. Además de dar por traspaso cualquier código que la contuviera, dejaba fuera los
+    /// tipos que sí tienen parte saliente sin llamarse así. Se conserva la heurística como respaldo
+    /// para los documentos que aún no traen la capacidad.</para>
+    /// </summary>
     private static bool IsTraspaso(FurDocumentData data) =>
-        Norm(data.TipologiaCodigo).Contains("TRASPASO")
+        data.RequiereVendedor
+        || Norm(data.TipologiaCodigo).Contains("TRASPASO")
         || Norm(data.Modalidad).Contains("TRASPASO");
+
+    /// <summary>
+    /// El blank de remolques/maquinaria pide largo/ancho/alto en metros. Kyverum/Verifik suelen
+    /// mandar milímetros enteros (p. ej. 2000). Valores ≥ 100 se tratan como mm.
+    /// </summary>
+    internal static string ToFurMeters(string? raw)
+    {
+        var v = Val(raw);
+        if (v.Length == 0)
+            return "";
+        if (!decimal.TryParse(v.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var n))
+            return v;
+        if (n >= 100m)
+            n /= 1000m;
+        return n.ToString("0.###", CultureInfo.InvariantCulture);
+    }
 
     private static FurFieldValue Text(string? value) => new(Val(value));
 
@@ -437,6 +729,44 @@ public static class FurFieldMapper
         if (parte is null)
             return ("", "", "");
         return parte.EsJuridica ? ("", "", parte.Nombre?.Trim() ?? "") : SplitName(parte.Nombre);
+    }
+
+    private static (string Ap1, string Ap2, string Nom) JoinNameColumns(List<DocumentParte> partes)
+    {
+        if (partes.Count == 0)
+            return ("", "", "");
+        if (partes.Count == 1 || partes.Any(p => p.EsJuridica))
+            return NameParts(partes[0]);
+
+        var slices = partes.Select(NameParts).ToList();
+        return (
+            JoinTokens(slices.Select(s => s.Ap1)),
+            JoinTokens(slices.Select(s => s.Ap2)),
+            JoinTokens(slices.Select(s => s.Nom)));
+    }
+
+    private static string JoinTokens(IEnumerable<string> tokens) =>
+        string.Join("\n", tokens.Where(t => !string.IsNullOrWhiteSpace(t)));
+
+    /// <summary>Cuerpo más chico cuando hay 2–4 renglones en la misma casilla del blank.</summary>
+    internal static double CopropiedadFontDelta(int count) => Math.Clamp(count, 1, 4) switch
+    {
+        1 => 0,
+        2 => -1.5,
+        3 => -2.5,
+        _ => -3.2,
+    };
+
+    private static FurFieldValue CopropiedadText(string? value, int count) =>
+        new(Val(value), FontSizeDelta: CopropiedadFontDelta(count));
+
+    private static string JoinDocumentos(List<DocumentParte> partes)
+    {
+        var docs = partes
+            .Select(p => p.Documento?.Trim())
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .Select(d => d!);
+        return string.Join("\n", docs);
     }
 
     private static (string Ap1, string Ap2, string Nom) SplitName(string? full)

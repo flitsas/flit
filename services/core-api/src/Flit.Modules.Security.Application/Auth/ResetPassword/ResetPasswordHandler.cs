@@ -46,6 +46,16 @@ public sealed class ResetPasswordHandler(
             throw new InvalidResetTokenException();
         }
 
+        // HU #11553 AC2 — reutilización se valida ANTES de consumir el token: un rechazo por
+        // reutilización no debe invalidar el enlace, el usuario reintenta con otra contraseña.
+        var currentHash = await userAccountRepository.GetPasswordHashAsync(record.UserId, cancellationToken);
+        if (currentHash is not null && passwordHasher.Verify(command.NewPassword, currentHash))
+        {
+            await AuditAsync(record.UserId, AuditVocabulary.Results.Failure, "password_reused", cancellationToken)
+                .ConfigureAwait(false);
+            throw new PasswordReusedException();
+        }
+
         var newHash = passwordHasher.Hash(command.NewPassword);
         await userAccountRepository.UpdatePasswordHashAsync(
             record.UserId, newHash, now, mustChangePassword: false, cancellationToken);

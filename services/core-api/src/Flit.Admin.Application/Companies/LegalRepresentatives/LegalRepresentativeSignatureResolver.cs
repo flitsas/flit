@@ -42,11 +42,12 @@ public sealed class LegalRepresentativeSignatureResolver : ILegalRepresentativeS
         DateOnly today,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(nitCompania);
         ArgumentException.ThrowIfNullOrWhiteSpace(tipoDocumento);
         ArgumentException.ThrowIfNullOrWhiteSpace(documentoRepresentante);
 
         var documento = documentoRepresentante.Trim();
+        // nitCompania es legado: el baúl se resuelve por documento de la persona (HU #10932).
+        _ = nitCompania;
 
         // (1) Firma del baúl activa + vigente de la PERSONA (por documento — HU #10932). El baúl se
         // deprecó del NIT: la firma es única de la persona en el tenant y aplica a todas sus compañías.

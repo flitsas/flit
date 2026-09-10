@@ -26,12 +26,28 @@ internal sealed class ProcedureInstanceActorConfiguration : IEntityTypeConfigura
             .HasColumnName("es_representante_legal")
             .IsRequired()
             .HasDefaultValue(false);
+
+        // ADR-0053 (Múltiple Propietario): posición del actor dentro de su lado + reparto de
+        // propiedad. Los CHECK de rango (ordinal 1..4, porcentaje NULL o (0,100]) viven solo en la
+        // migración SQL (mismo patrón que el resto del repo: este Configuration no declara
+        // HasCheckConstraint para ningún CHECK existente en procedure_instance_actors).
+        builder.Property(x => x.Ordinal)
+            .HasColumnName("ordinal")
+            .IsRequired()
+            .HasDefaultValue(1);
+        builder.Property(x => x.OwnershipPercentage)
+            .HasColumnName("ownership_percentage")
+            .HasColumnType("numeric(5,2)");
+
         builder.Property(x => x.Metadata).HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");
         builder.Property(x => x.CreatedAt).IsRequired();
 
-        builder.HasIndex(x => new { x.ProcedureInstanceId, x.ProcedureEntityId })
+        // Reemplaza el índice único (instance, entity) — que hasta ADR-0053 imponía "un actor por
+        // rol" — por (instance, entity, ordinal): cada copropietario (ordinal 1..4) es una fila
+        // propia; el índice sigue impidiendo duplicar la MISMA posición dentro del mismo rol.
+        builder.HasIndex(x => new { x.ProcedureInstanceId, x.ProcedureEntityId, x.Ordinal })
             .IsUnique()
-            .HasDatabaseName("uq_procedure_instance_actors_instance_entity");
+            .HasDatabaseName("uq_procedure_instance_actors_instance_entity_ordinal");
 
         builder.HasIndex(x => x.TenantId)
             .HasDatabaseName("ix_procedure_instance_actors_tenant_id");

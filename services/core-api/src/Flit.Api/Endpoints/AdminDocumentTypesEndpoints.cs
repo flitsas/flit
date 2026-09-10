@@ -3,6 +3,7 @@ using Flit.Admin.Application.DocumentTypes;
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
+using Flit.Admin.Application.DocumentTypes.PurgeDocumentType;
 using Flit.Admin.Application.DocumentTypes.ReactivateDocumentType;
 using Flit.Admin.Application.DocumentTypes.UpdateDocumentType;
 using Flit.Admin.Domain.DocumentTypes;
@@ -31,7 +32,7 @@ public static class AdminDocumentTypesEndpoints
             .WithName("AdminDocumentTypeCreate")
             .WithSummary("Crea un tipo de documento")
             .WithDescription("Da de alta un tipo de documento en el catálogo maestro. "
-                + "Valida código y nombre; 422 si el payload es inválido o el código ya existe. Requiere SuperAdmin.")
+                + "Valida el nombre y genera el código. 422 si el payload es inválido. Requiere SuperAdmin.")
             .Produces<DocumentTypeResponse>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -51,8 +52,8 @@ public static class AdminDocumentTypesEndpoints
         group.MapPut("/{id:guid}", UpdateAsync)
             .WithName("AdminDocumentTypeUpdate")
             .WithSummary("Actualiza un tipo de documento")
-            .WithDescription("Modifica código y nombre de un tipo de documento existente. "
-                + "404 si no existe, 422 si el payload es inválido. Requiere SuperAdmin.")
+            .WithDescription("Modifica nombre y metadatos de un tipo de documento existente. "
+                + "El código de sistema no cambia. 404 si no existe, 422 si el payload es inválido. Requiere SuperAdmin.")
             .Produces<DocumentTypeResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -77,6 +78,16 @@ public static class AdminDocumentTypesEndpoints
             .WithSummary("Reactiva un tipo de documento desactivado")
             .WithDescription("Contraparte del soft-delete: vuelve a marcar el documento como activo. "
                 + "Idempotente (reactivar uno ya activo retorna 204), 404 si no existe. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapDelete("/{id:guid}/permanent", PurgeAsync)
+            .WithName("AdminDocumentTypePurge")
+            .WithSummary("Elimina permanentemente un tipo de documento")
+            .WithDescription("Borra el tipo y lo quita de requisitos, overrides y precedencia OT. "
+                + "204 si se eliminó, 404 si no existe. Requiere SuperAdmin.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -109,13 +120,19 @@ public static class AdminDocumentTypesEndpoints
         CancellationToken cancellationToken,
         [FromQuery] int? page = null,
         [FromQuery] int? pageSize = null,
-        [FromQuery] bool? includeInactive = null)
+        [FromQuery] bool? includeInactive = null,
+        [FromQuery] string? q = null,
+        [FromQuery] string? origen = null,
+        [FromQuery] string? estado = null)
     {
         var query = new ListDocumentTypesQuery
         {
             Page = page,
             PageSize = pageSize,
             IncludeInactive = includeInactive,
+            Search = q,
+            Origen = origen,
+            Estado = estado,
         };
 
         var result = await handler.HandleAsync(query, cancellationToken).ConfigureAwait(false);
@@ -171,6 +188,20 @@ public static class AdminDocumentTypesEndpoints
                 statusCode: StatusCodes.Status409Conflict),
             _ => Results.NotFound(new ErrorResponse($"No existe el tipo de documento {id}.")),
         };
+    }
+
+    private static async Task<IResult> PurgeAsync(
+        Guid id,
+        [FromServices] PurgeDocumentTypeHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(
+            new PurgeDocumentTypeCommand { Id = id },
+            cancellationToken).ConfigureAwait(false);
+
+        return result.Outcome == PurgeDocumentTypeOutcome.Purged
+            ? Results.NoContent()
+            : Results.NotFound(new ErrorResponse($"No existe el tipo de documento {id}."));
     }
 
     private static async Task<IResult> ReactivateAsync(

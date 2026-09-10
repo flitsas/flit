@@ -21,7 +21,10 @@ public sealed record ProcedureSectionDto(
     string Title,
     short SortOrder,
     string Layout,
-    List<FormFieldDto> FormFields);
+    List<FormFieldDto> FormFields,
+    /// <summary>Renderer de la sección (CFD-09). Sin este campo el configurador no podía leer ni
+    /// devolver el <c>section_type</c>, y cada guardado lo degradaba a <c>generic_form</c>.</summary>
+    string SectionType = Flit.Tramites.Domain.Enums.ProcedureSectionTypes.GenericForm);
 
 public sealed record ProcedureStepDto(
     Guid Id,
@@ -65,7 +68,8 @@ public sealed class GetProcedureStepsHandler(IProcedureTypeRepository repository
                     f.LockReason,
                     f.ConsultationTemplateId,
                     f.Options,
-                    f.ValidationSchema)).ToList()
+                    f.ValidationSchema)).ToList(),
+                sec.SectionType
             )).ToList()
         )).ToList();
 

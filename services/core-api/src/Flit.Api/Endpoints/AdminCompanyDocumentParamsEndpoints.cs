@@ -17,7 +17,8 @@ public static class AdminCompanyDocumentParamsEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/document-params")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithTags("Admin · Documentos");
 
         group.MapGet("/", ListAsync)

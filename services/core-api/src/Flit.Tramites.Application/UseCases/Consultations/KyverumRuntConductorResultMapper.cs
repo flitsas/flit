@@ -23,9 +23,10 @@ public static class KyverumRuntConductorResultMapper
     public static ConsultationResult Map(KyverumRuntPersonaResponse response)
     {
         var persona = response.Persona;
-        var nombres = persona?.Nombres?.Trim();
-        var apellidos = persona?.Apellidos?.Trim();
-        var found = !string.IsNullOrWhiteSpace(nombres) || !string.IsNullOrWhiteSpace(apellidos);
+        var names = ResolveNames(response);
+        var fullName = DriverNameResolver.ResolveFullName(
+            response.Identidad?.NombreCompleto ?? persona?.NombreCompleto, names);
+        var found = names.HasAny || fullName.Length > 0;
 
         var checks = new List<ConsultationCheck>();
 
@@ -55,7 +56,7 @@ public static class KyverumRuntConductorResultMapper
             }
         }
 
-        var hydrated = MapHydratedFields(response, nombres, apellidos, found);
+        var hydrated = MapHydratedFields(response, names, fullName, found);
 
         var hasActiveLicense = found && HasActiveLicense(response);
         var hasPendingFines = found && response.Multas is not null &&
@@ -69,19 +70,40 @@ public static class KyverumRuntConductorResultMapper
     private static bool HasActiveLicense(KyverumRuntPersonaResponse response) =>
         response.Licencias?.Any(l => string.Equals(l?.EstadoLicencia, "ACTIVA", StringComparison.OrdinalIgnoreCase)) == true;
 
+    /// <summary>
+    /// Nombre real de la persona. <c>persona.nombres</c>/<c>apellidos</c> llegan ENMASCARADOS desde la
+    /// actualización del RUNT y por eso no se leen nunca: la fuente es <c>identidad</c> y, si no vino,
+    /// los desglosados de <c>persona</c>. El <c>nombreCompleto</c> queda como último recurso porque
+    /// obliga a separar por heurística lo que el proveedor ya trae separado.
+    /// </summary>
+    private static DriverNames ResolveNames(KyverumRuntPersonaResponse response)
+    {
+        var identidad = response.Identidad;
+        var fromIdentidad = DriverNameResolver.FromParts(
+            identidad?.PrimerNombre, identidad?.SegundoNombre,
+            identidad?.PrimerApellido, identidad?.SegundoApellido);
+        if (fromIdentidad.HasAny)
+            return fromIdentidad;
+
+        var persona = response.Persona;
+        var fromPersona = DriverNameResolver.FromParts(
+            persona?.PrimerNombre, persona?.SegundoNombre,
+            persona?.PrimerApellido, persona?.SegundoApellido);
+        if (fromPersona.HasAny)
+            return fromPersona;
+
+        return DriverNameResolver.FromFullName(identidad?.NombreCompleto ?? persona?.NombreCompleto);
+    }
+
     private static List<HydratedField> MapHydratedFields(
-        KyverumRuntPersonaResponse response, string? nombres, string? apellidos, bool found)
+        KyverumRuntPersonaResponse response, DriverNames names, string fullName, bool found)
     {
         if (!found)
             return [];
 
         var fields = new List<HydratedField>();
 
-        var fullName = string.Join(" ", new[] { nombres, apellidos }
-            .Where(p => !string.IsNullOrWhiteSpace(p)));
-        Add(fields, "person_full_name", fullName);
-        Add(fields, "person_first_name", nombres);
-        Add(fields, "person_last_name", apellidos);
+        DriverNameResolver.AddHydratedNames(fields, names, fullName);
         Add(fields, "person_license_status", response.Persona?.EstadoConductor?.Trim());
         Add(fields, "person_citizen_status", response.Persona?.EstadoPersona?.Trim());
 

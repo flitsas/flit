@@ -41,6 +41,10 @@ internal sealed class AdminIdentityValidationConfiguration
         builder.Property(x => x.ProviderStatus).HasMaxLength(40);
         builder.Property(x => x.ProviderPayload).HasColumnType("jsonb");
         builder.Property(x => x.CertificateHash).HasMaxLength(200);
+        // HU #11504 — conteo de intentos antes de terminalizar un rechazo (ver 74-HU11504-...sql).
+        builder.Property(x => x.Attempts).HasDefaultValue(0).IsRequired();
+        builder.Property(x => x.MaxAttempts).HasDefaultValue(3).IsRequired();
+        builder.Property(x => x.LastAttemptAt).HasMaxLength(100);
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
 

@@ -21,19 +21,27 @@ public sealed class IniciarKyverumVerifyHandlerTests
     private readonly IIdentityValidationEventPublisher _events = Substitute.For<IIdentityValidationEventPublisher>();
     private readonly IniciarKyverumVerifyHandler _handler;
 
-    public IniciarKyverumVerifyHandlerTests() =>
+    public IniciarKyverumVerifyHandlerTests()
+    {
+        _repo.ListInFlightByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<ProcedureInstanceBiometricValidation>());
+        _repo.FindVigenteApprovedByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((ProcedureInstanceBiometricValidation?)null);
         _handler = new IniciarKyverumVerifyHandler(
             _repo, _kyverum, _protector, _events, Substitute.For<IIdentityValidationAuditLog>());
+    }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status = TramiteEstado.Borrador) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For("matricula_inicial"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = status,
-            ModalidadEntrada = "matricula_inicial",
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -69,7 +77,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
         StubProviderOk();
 
-        var (result, error) = await _handler.HandleAsync(id, tenant, Input(), ct);
+        var (result, error, _) = await _handler.HandleAsync(id, tenant, Input(), ct);
 
         error.Should().BeNull();
         result!.CaptureUrl.Should().Be("https://capture/kyv_123");
@@ -101,7 +109,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         var kyvExpiry = DateTimeOffset.UtcNow.AddMinutes(20);
         StubProviderOk(expiresAt: kyvExpiry);
 
-        var (_, error) = await _handler.HandleAsync(id, tenant, Input(), ct);
+        var (_, error, _) = await _handler.HandleAsync(id, tenant, Input(), ct);
 
         error.Should().BeNull();
         var v = instance.BiometricValidations.Should().ContainSingle().Subject;
@@ -118,7 +126,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
         StubProviderOk(); // sin expiresAt
 
-        var (_, error) = await _handler.HandleAsync(id, tenant, Input(), ct);
+        var (_, error, _) = await _handler.HandleAsync(id, tenant, Input(), ct);
 
         error.Should().BeNull();
         var v = instance.BiometricValidations.Should().ContainSingle().Subject;
@@ -149,7 +157,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
         StubProviderOk(verificationId: "kyv_new", captureUrl: "https://capture/kyv_new");
 
-        var (result, error) = await _handler.HandleAsync(id, tenant, Input(parte: "comprador"), ct);
+        var (result, error, _) = await _handler.HandleAsync(id, tenant, Input(parte: "comprador"), ct);
 
         error.Should().BeNull();
         result!.CaptureUrl.Should().Be("https://capture/kyv_new");
@@ -180,10 +188,47 @@ public sealed class IniciarKyverumVerifyHandlerTests
         });
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
-        var (_, error) = await _handler.HandleAsync(id, tenant, Input(parte: "comprador"), ct);
+        var (_, error, _) = await _handler.HandleAsync(id, tenant, Input(parte: "comprador"), ct);
 
         error.Should().Be("biometria_activa");
         await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Iniciar_IdentidadVigenteDeOtroTramite_Returns409ConflictSinLlamarProveedor()
+    {
+        // HU #11265 AC1
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+        var vigenteId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        _repo.FindVigenteApprovedByDocumentAsync(tenant, "CC", "123456", Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new ProcedureInstanceBiometricValidation
+            {
+                Id = vigenteId,
+                TenantId = tenant,
+                ProcedureInstanceId = Guid.NewGuid(),
+                DocumentType = "CC",
+                DocumentNumber = "123456",
+                Status = BiometricEstados.Aprobado,
+                ValidatedAt = now.AddDays(-3),
+                ValidUntil = now.AddDays(27),
+                TokenHash = "h",
+                ExpiresAt = now.AddHours(1),
+                CreatedAt = now.AddDays(-3),
+            });
+
+        var (_, error, conflict) = await _handler.HandleAsync(id, tenant, Input(parte: "comprador"), ct);
+
+        error.Should().Be("biometria_activa");
+        conflict.Should().NotBeNull();
+        conflict!.Motivo.Should().Be(IdentitySendMotivo.IdentidadVigente);
+        conflict.ValidationId.Should().Be(vigenteId);
+        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+        instance.BiometricValidations.Should().BeEmpty();
     }
 
     [Fact]
@@ -198,7 +243,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         _kyverum.StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new KyverumVerifyException("no disponible", transient: true));
 
-        var (result, error) = await _handler.HandleAsync(id, tenant, Input(), ct);
+        var (result, error, _) = await _handler.HandleAsync(id, tenant, Input(), ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
@@ -218,7 +263,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         _kyverum.StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new KyverumVerifyException("rechazado", transient: false));
 
-        var (_, error) = await _handler.HandleAsync(id, tenant, Input(), ct);
+        var (_, error, _) = await _handler.HandleAsync(id, tenant, Input(), ct);
 
         error.Should().Be("proveedor_error");
     }
@@ -231,7 +276,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         var tenant = Guid.NewGuid();
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, status: "submitted"));
 
-        var (_, error) = await _handler.HandleAsync(id, tenant, Input(), ct);
+        var (_, error, _) = await _handler.HandleAsync(id, tenant, Input(), ct);
 
         error.Should().Be("not_draft");
         await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
@@ -255,7 +300,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         });
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
-        var (_, error) = await _handler.HandleAsync(id, tenant, Input(parte: "comprador"), ct);
+        var (_, error, _) = await _handler.HandleAsync(id, tenant, Input(parte: "comprador"), ct);
 
         error.Should().Be("biometria_activa");
     }
@@ -264,7 +309,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
     public async Task Iniciar_InvalidParte_Returns400()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (_, error) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), Input(parte: "tercero"), ct);
+        var (_, error, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), Input(parte: "tercero"), ct);
         error.Should().Be("parte_invalida");
     }
 
@@ -280,7 +325,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         StubProviderOk();
 
         // El wizard envía solo la parte: los datos del sujeto deben salir del actor del trámite.
-        var (result, error) = await _handler.HandleAsync(id, tenant, ParteOnlyInput(), ct);
+        var (result, error, _) = await _handler.HandleAsync(id, tenant, ParteOnlyInput(), ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
@@ -301,7 +346,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         var tenant = Guid.NewGuid();
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(Instance(id, tenant));
 
-        var (_, error) = await _handler.HandleAsync(id, tenant, ParteOnlyInput(), ct);
+        var (_, error, _) = await _handler.HandleAsync(id, tenant, ParteOnlyInput(), ct);
 
         error.Should().Be("actor_requerido");
         await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
@@ -317,7 +362,7 @@ public sealed class IniciarKyverumVerifyHandlerTests
         AddActor(instance, "comprador", email: null);   // Kyverum necesita el correo para notificar.
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
-        var (_, error) = await _handler.HandleAsync(id, tenant, ParteOnlyInput(), ct);
+        var (_, error, _) = await _handler.HandleAsync(id, tenant, ParteOnlyInput(), ct);
 
         error.Should().Be("datos_incompletos");
     }

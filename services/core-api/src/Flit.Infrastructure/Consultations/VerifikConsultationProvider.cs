@@ -164,9 +164,22 @@ internal sealed class VerifikConsultationProvider(
     private static ConsultationResult MockResult(string? vin, string? plate)
     {
         var effectiveVin = string.IsNullOrWhiteSpace(vin) ? "LRWYGCEKXTC564524" : vin;
-        // Sentinel de PRUEBA (solo modo mock): placa que empieza por "SNV" => SOAT NO VIGENTE, para
-        // ejercitar la ruta de novedad de fuentes externas (p.ej. desde ICT) sin depender de datos reales.
-        var soatVencido = plate?.Trim().StartsWith("SNV", StringComparison.OrdinalIgnoreCase) == true;
+        // Sentinels de PRUEBA (solo modo mock), por prefijo de placa. El registro real es un vehículo
+        // verde y sin novedades, así que sin ellos los bloqueos duros de la familia OTROS no son
+        // alcanzables en local: no hay forma de que el mock diga «este vehículo no tiene carrocería»
+        // ni «el RUNT afirma que no tiene gravamen». Cada uno mueve UN dato del registro canónico.
+        //
+        //   SNV… → SOAT no vigente          (novedad de fuentes externas, p. ej. desde ICT)
+        //   SCA… → sin carrocería           (bloquea CAMBIO_CARROCERIA)
+        //   SGR… → RUNT afirma sin gravamen (bloquea LEVANTAMIENTO_PRENDA)
+        //   CPR… → RUNT reporta prenda      (levantamiento válido, y precarga del numeral 20)
+        var prefijo = plate?.Trim() ?? string.Empty;
+        bool Sentinel(string codigo) => prefijo.StartsWith(codigo, StringComparison.OrdinalIgnoreCase);
+
+        var soatVencido = Sentinel("SNV");
+        var sinCarroceria = Sentinel("SCA");
+        var sinGravamen = Sentinel("SGR");
+        var conPrenda = Sentinel("CPR");
         return VerifikResultMapper.MapVehicle(new VerifikVehicleResponse
         {
             Data = new VerifikVehicleData
@@ -181,7 +194,7 @@ internal sealed class VerifikConsultationProvider(
                     Modelo = "2026",
                     Color = "PLATA METALICO",
                     ClaseVehiculo = "CAMIONETA",
-                    TipoCarroceria = "SUV",
+                    TipoCarroceria = sinCarroceria ? "SIN CARROCERIA" : "SUV",
                     TipoServicio = "Particular",
                     TipoCombustible = "ELECTRICO",
                     Cilindraje = "0",
@@ -189,8 +202,11 @@ internal sealed class VerifikConsultationProvider(
                     NoEjes = "2",
                     PesoBruto = "1992",
                     EstadoDelVehiculo = "ACTIVO",
-                    // El registro real no trajo señal de gravámenes/prendas ni RTM: se dejan sin
-                    // dato (checks 'unknown', no bloquean). SOAT vigente + estado ACTIVO → overall green.
+                    // El registro real no trajo señal de gravámenes/prendas ni RTM: sin sentinel se
+                    // dejan sin dato (check 'unknown', que no bloquea porque «no sé» no es «no tiene»).
+                    // SOAT vigente + estado ACTIVO → overall green.
+                    TieneGravamenes = sinGravamen ? "NO" : conPrenda ? "SI" : null,
+                    Prendas = sinGravamen ? "NO" : conPrenda ? "SI" : null,
                     FechaMatricula = "06/05/2026",
                 },
                 Soat =

@@ -104,15 +104,23 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
   }, [tab, loadTags]);
 
   const handleReorder = async (items: OtDocumentPrecedenceItem[]) => {
-    const result = await updateOtDocumentPrecedence({
-      procedure_type_id: procedureTypeId,
-      items: items.map((i) => ({
-        document_type_id: i.document_type_id,
-        sort_order: i.sort_order,
-      })),
-    });
-    setPrecedence(result.data);
-    show("Orden actualizado.", "success");
+    try {
+      const result = await updateOtDocumentPrecedence({
+        procedure_type_id: procedureTypeId,
+        items: items.map((i) => ({
+          document_type_id: i.document_type_id,
+          sort_order: i.sort_order,
+        })),
+      });
+      setPrecedence(result.data);
+      // HU #11185 AC4 — reordenar no rehace los expedientes ya emitidos (decisión D6): el
+      // organismo tiene que saber desde cuándo aplica lo que acaba de guardar.
+      show("Orden guardado. Aplica a partir de la próxima generación del expediente.", "success");
+    } catch (error) {
+      // AC5 — se informa y la lista vuelve al orden anterior (el rollback lo hace la lista).
+      show("No se pudo guardar el orden. Se restauró el anterior.", "error");
+      throw error;
+    }
   };
 
   const confirmDelete = async () => {
@@ -161,26 +169,27 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
             </select>
           </label>
 
-          {procedureTypeId && (
-            <section className="space-y-2 rounded-2xl border p-4">
-              <h3 className="text-xs font-semibold text-foreground">
-                Documento de prenda por Organismo de Tránsito
-              </h3>
-              <PledgeDocumentOverrideToggle
-                procedureTypeId={procedureTypeId}
-                transitOfficeId={transitOfficeId}
-              />
-            </section>
-          )}
+          <section className="space-y-2 rounded-2xl border p-4">
+            <h3 className="text-xs font-semibold text-foreground">
+              Documento de prenda por compañía
+            </h3>
+            <PledgeDocumentOverrideToggle transitOfficeId={transitOfficeId} />
+          </section>
 
           <UiStateBoundary
             status={precStatus}
-            emptyMessage="No hay documentos configurados para este trámite."
+            emptyMessage="Este tipo de trámite no tiene documentos asociados todavía."
             errorMessage="Error al cargar la prelación."
             onRetry={() => void loadPrecedence()}
             skeletonRows={4}
           >
-            <DocumentPrecedenceList items={precedence} onReorder={handleReorder} />
+            <>
+              <p className="text-[11px] opacity-70">
+                Arrastra un documento —o usa las flechas y Enter— hasta la página que quieres que
+                ocupe. El orden nuevo aplica a partir de la próxima generación del expediente.
+              </p>
+              <DocumentPrecedenceList items={precedence} onReorder={handleReorder} />
+            </>
           </UiStateBoundary>
         </div>
       )}

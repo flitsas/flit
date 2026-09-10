@@ -83,6 +83,23 @@ describe("evaluateAdminAccess (AC6)", () => {
     expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
   });
 
+  it("permite AdminCompany en /admin/companies (HU #11228)", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "AdminCompany", tenant_id: "t1" }),
+      "/admin/companies/t1",
+    );
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("deniega AdminCompany fuera de /admin/companies (HU #11228)", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "AdminCompany", tenant_id: "t1" }),
+      "/admin/transit-offices",
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+
   it("redirige a /403 cuando el token de SuperAdmin ya expiró", () => {
     const decision = evaluateAdminAccess(makeToken({ role: "SuperAdmin", exp: PAST_EXP }));
     expect(decision.allowed).toBe(false);

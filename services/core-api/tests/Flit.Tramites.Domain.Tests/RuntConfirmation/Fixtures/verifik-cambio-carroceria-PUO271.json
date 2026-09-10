@@ -1,0 +1,167 @@
+{
+  "data": {
+    "datosTecnicos": {
+      "alto": null,
+      "ancho": null,
+      "capacidadCarga": "2030 Kgs",
+      "largo": null,
+      "noEjes": "2",
+      "noLlantas": null,
+      "pasajerosSentados": "2",
+      "pasajerosTotal": null,
+      "peso": null,
+      "pesoBrutoVehicular": "4600 Kgs",
+      "rodaje": null
+    },
+    "documentNumber": "890903938",
+    "documentType": "NIT",
+    "garantiasFavorDe": [],
+    "garantiasMobiliarias": [],
+    "informacionBlindaje": {
+      "autorizacion": null,
+      "blindado": null,
+      "fechaBlindaje": null,
+      "fechaDesblindaje": null,
+      "fechaExpedicionCertificado": null,
+      "fechaExpedicionCertificadoFormatoWS": null,
+      "idDocumentoCertificadoBlindaje": null,
+      "nivelBlindaje": null,
+      "nivelBlindajeNumero": null,
+      "numeroResolucion": null,
+      "tipoBlindajeNombre": null
+    },
+    "informacionGeneral": {
+      "capacidadCarga": "2030",
+      "cilindraje": "2499",
+      "claseVehiculo": "CAMIONETA",
+      "clasificacion": "AUTOMOVIL",
+      "color": "BLANCO",
+      "diasMatriculado": "221",
+      "esRegrabadoChasis": "NO",
+      "esRegrabadoMotor": "NO",
+      "esRegrabadoSerie": "NO",
+      "esRegrabadoVin": "NO",
+      "estadoDelVehiculo": "ACTIVO",
+      "fechaExpedLTImportacion": null,
+      "fechaMatricula": "01/02/2026",
+      "fechaVenciLTImportacion": null,
+      "idTipoServicio": "2",
+      "linea": "BJ1044VAJB3-1A",
+      "marca": "FOTON",
+      "modelo": "2026",
+      "mostrarSolicitudes": "SI",
+      "noChasis": "LVBV3JBB8TE002364",
+      "noEjes": "2",
+      "noIdentificacion": null,
+      "noLicenciaTransito": "10039666130",
+      "noMotor": "S057385",
+      "noPlaca": "PUO271",
+      "noSerie": "LVBV3JBB8TE002364",
+      "noVin": "LVBV3JBB8TE002364",
+      "nombrePais": null,
+      "organismoTransito": "STRIA TTEyTTO ENVIGADO",
+      "pasajerosSentados": "2",
+      "pasajerosTotal": null,
+      "pesoBruto": "4600",
+      "prendas": "NO",
+      "puertas": "2",
+      "repotenciado": "NO",
+      "seguridadEstado": "NO",
+      "subpartida": null,
+      "tarjetaServicio": "NO",
+      "tieneGravamenes": "NO",
+      "tieneLTImportacion": false,
+      "tipoCarroceria": "FURGON",
+      "tipoCombustible": "DIESEL",
+      "tipoMaquinaria": null,
+      "tipoServicio": "Público",
+      "validacionDIAN": "No Exitoso",
+      "vehiculoEnsenanza": "NO",
+      "verValidaDIAN": false
+    },
+    "limitacionPropiedad": [],
+    "normalizacionSaneamiento": [
+      {
+        "deficienciaMatriculaInicial": "NO",
+        "descargaCertificado": null,
+        "fecha": null,
+        "numeroActoAdministrativo": null,
+        "solicitudNormalizacion": null,
+        "vehiculoNormalizado": "NO DISPONIBLE"
+      }
+    ],
+    "plate": "PUO271",
+    "polizasResponsabilidadCivil": [],
+    "soat": [
+      {
+        "entidadExpideSoat": "SEGUROS GENERALES SURAMERICANA S.A.",
+        "estado": "VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "fechaExpediSoat": "29/01/2026",
+        "fechaExpedicion": "29/01/2026",
+        "fechaVencimiento": "29/01/2027",
+        "fechaVigencia": "30/01/2026",
+        "noPoliza": "42834423",
+        "nombrePais": null,
+        "origen": "NACIONAL",
+        "placa": null,
+        "tipoTarifa": "310"
+      }
+    ],
+    "solicitudes": [
+      {
+        "entidad": "STRIA TTEyTTO ENVIGADO",
+        "estado": "AUTORIZADA",
+        "fechaSolicitud": "29/07/2026",
+        "noSolicitud": "299244836",
+        "tramitesRealizados": "TRÁMITE TRANSFORMACIÓN, "
+      },
+      {
+        "entidad": "STRIA TTEyTTO ENVIGADO",
+        "estado": "AUTORIZADA",
+        "fechaSolicitud": "11/06/2026",
+        "noSolicitud": "295751939",
+        "tramitesRealizados": "TRÁMITE TRASPASO, "
+      },
+      {
+        "entidad": "STRIA TTEyTTO ENVIGADO",
+        "estado": "REGISTRADA",
+        "fechaSolicitud": "10/06/2026",
+        "noSolicitud": "295691896",
+        "tramitesRealizados": "TRÁMITE TRASPASO, "
+      },
+      {
+        "entidad": "STRIA TTEyTTO ENVIGADO",
+        "estado": "AUTORIZADA",
+        "fechaSolicitud": "31/01/2026",
+        "noSolicitud": "286529841",
+        "tramitesRealizados": "TRÁMITE MATRÍCULA INICIAL, "
+      },
+      {
+        "entidad": "STRIA TTEyTTO ENVIGADO",
+        "estado": "APROBADA",
+        "fechaSolicitud": "29/01/2026",
+        "noSolicitud": "286377897",
+        "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, "
+      }
+    ],
+    "tarjetaOperacion": {
+      "empresaAfiliadora": null,
+      "estado": null,
+      "fechaExpedicion": null,
+      "fechaFin": null,
+      "fechaInicio": null,
+      "modalidadTransporte": null,
+      "nroTarjetaOperacion": null,
+      "radioAccion": null,
+      "servicio": null
+    },
+    "tecnoMecanica": [],
+    "vin": "LVBV3JBB8TE002364"
+  },
+  "signature": {
+    "dateTime": "September 10, 2026 1:47 PM",
+    "message": "Certified by Verifik.co"
+  },
+  "id": "JDEU4"
+}

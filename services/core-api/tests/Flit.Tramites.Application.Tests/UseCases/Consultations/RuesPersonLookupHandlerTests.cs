@@ -46,6 +46,7 @@ public sealed class RuesPersonLookupHandlerTests
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId) => new()
     {
+        ProcedureType = ProcedureTypeFixture.Matricula,
         Id = id,
         TenantId = tenantId,
         ProcedureTypeId = Guid.NewGuid(),
@@ -89,6 +90,27 @@ public sealed class RuesPersonLookupHandlerTests
         var (result, error) = await _sut.HandleAsync(id, tenantId, "900123456", ct);
 
         error.Should().Be("provider_not_found");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_FalloDelProveedor_NoSeConfundeConNitInexistente()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(Instance(id, tenantId));
+        var providerResult = new ConsultationResult("verifik_rues", "red",
+            [
+                new ConsultationCheck("provider", "Consulta RUES", "error", "verifik_rues",
+                    "No fue posible verificar la información en RUES en este momento."),
+            ],
+            []);
+        _registry.Resolve("verifik_rues").Returns(new FakeProvider(providerResult));
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, "890903938", ct);
+
+        error.Should().Be("provider_unavailable");
         result.Should().BeNull();
     }
 

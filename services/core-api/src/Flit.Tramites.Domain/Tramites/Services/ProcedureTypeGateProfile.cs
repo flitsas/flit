@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Domain.Tramites.Services;
 
@@ -16,6 +17,14 @@ public sealed record ProcedureTypeGateProfile
     public string? EntryMode { get; init; }
     public bool RequiresSeller { get; init; }
     public bool RequiresBuyer { get; init; }
+
+    /// <summary>
+    /// El trámite interviene un ARRENDATARIO además del propietario (<c>LESSEE</c>). Es una parte
+    /// declarativa: se identifica, recibe los correos del trámite y se estampa en el FUR, pero no
+    /// valida identidad ni firma — eso lo hace el propietario. Que valide o no lo decide
+    /// <c>biometricActors</c>, no esta llave.
+    /// </summary>
+    public bool RequiresLessee { get; init; }
     public bool AllowsMultipleBuyer { get; init; }
     public bool AllowsMultipleSeller { get; init; }
     public bool RequiresCommercialValue { get; init; }
@@ -23,6 +32,26 @@ public sealed record ProcedureTypeGateProfile
     public bool RequiresBiometrics { get; init; }
     public IReadOnlyList<string> BiometricActors { get; init; } = [];
     public bool RequiresSignature { get; init; }
+
+    /// <summary>
+    /// ADR-0051 — separa "hay parte vendedora en el FUR" (<see cref="RequiresSeller"/>, sin cambio de
+    /// significado) de "esa parte se captura tecleando datos en el wizard". <c>true</c> es el
+    /// comportamiento previo a esta llave (todo tipo que hoy exige vendedor lo captura por
+    /// formulario), por eso el default cuando la llave está AUSENTE del JSON es <c>true</c> —
+    /// modelado con el field initializer, no con <c>bool?</c>, porque aquí no hace falta distinguir
+    /// "ausente" de "declarado en su valor por defecto": ambos casos deben comportarse igual.
+    /// </summary>
+    public bool SellerCapturedViaForm { get; init; } = true;
+
+    /// <summary>
+    /// ADR-0051 — roles (vocabulario <c>OWNER</c>/<c>BUYER</c>/<c>LESSEE</c>, el mismo de
+    /// <see cref="BiometricActors"/>, traducido con <c>RuntConsultaExigida.ActorTypeDeEntidad</c>)
+    /// que firman el FUR. Lista cruda: un JSON sin la llave (o con arreglo vacío) no distingue
+    /// "ausente" de "declarado vacío" — ningún tipo real declara cero firmantes, así que ambos casos
+    /// resuelven al default. Resuélvelo SIEMPRE con <see cref="ResolveSignatureActors"/>, nunca
+    /// leyendo la propiedad cruda.
+    /// </summary>
+    public IReadOnlyList<string> SignatureActors { get; init; } = [];
     public bool RequiresPlateRequest { get; init; }
     public bool ValidateCompanyRule { get; init; }
     public bool ValidateOtOperability { get; init; }
@@ -32,11 +61,95 @@ public sealed record ProcedureTypeGateProfile
     public bool HasPrendaGate { get; init; }
     public string? SimitMode { get; init; }
 
+    /// <summary>
+    /// El expediente admite declarar transformaciones (color / carrocería / combustible / blindaje)
+    /// POR ENCIMA del tipo base — los «trámites simultáneos» del art. 5.1.8.
+    ///
+    /// <para><c>null</c> (la llave no está en el JSON) NO significa <c>false</c>: significa «lo que
+    /// diga la familia», y por eso es anulable donde el resto del perfil son <c>bool</c>. Un perfil
+    /// grabado antes de esta llave —o el snapshot congelado de un borrador en curso— seguiría
+    /// comportándose como siempre en vez de perder los simultáneos en silencio. Resuélvelo SIEMPRE
+    /// con <see cref="ComplementaryTransformationsAllowed"/>, nunca leyendo la propiedad directa.</para>
+    /// </summary>
+    public bool? AllowsComplementaryTransformations { get; init; }
+
+    /// <summary>
+    /// El expediente admite un gravamen POR ENCIMA del tipo base. No se refiere a la prenda de un
+    /// tipo de prenda (ahí la prenda ES el trámite, ver <see cref="ProcedureTypeLayers.EsTipoPrendaBase"/>),
+    /// sino a la que se añade a un trámite de otra naturaleza. Misma semántica de <c>null</c> que
+    /// <see cref="AllowsComplementaryTransformations"/>.
+    /// </summary>
+    public bool? AllowsComplementaryPrenda { get; init; }
+
+    /// <summary>
+    /// ADR-0051 — el expediente autogenera compraventa (ADR-0035). Mismo idioma de <c>null</c> que
+    /// <see cref="AllowsComplementaryTransformations"/>: ausente no es <c>false</c>, es "lo que diga
+    /// la combinación <see cref="RequiresSeller"/> + familia", resuelto SIEMPRE con
+    /// <see cref="GeneratesSaleDocumentAllowed"/>. <c>TRASPASO_UNILATERAL</c> es la primera excepción
+    /// declarada explícitamente en <c>false</c>: no hay compraventa entre dos partes porque el
+    /// locatario ya tenía el vehículo por contrato de leasing.
+    /// </summary>
+    public bool? GeneratesSaleDocument { get; init; }
+
+    /// <summary>
+    /// ADR-0051 — el FUR imprime bloque de avalúo comercial (resuelto contra Fasecolda vía VIN).
+    /// Misma semántica de <c>null</c> que <see cref="GeneratesSaleDocument"/>, resuelto SIEMPRE con
+    /// <see cref="HasAppraisalBlockAllowed"/>.
+    /// </summary>
+    public bool? HasAppraisalBlock { get; init; }
+
+    /// <summary>
+    /// Quién decide el organismo de tránsito del trámite: el RUNT o el operador.
+    ///
+    /// <para>Hasta ahora esto se deducía del modo de entrada —entra por VIN ⇒ lo elige el operador;
+    /// entra por placa ⇒ lo impone el RUNT— y funcionaba porque las dos ramas agotaban el catálogo.
+    /// Un radicado de cuenta lo rompe: entra por placa (el vehículo ya está matriculado) y sin
+    /// embargo el organismo lo elige el operador, porque el trámite consiste precisamente en llevar
+    /// la cuenta a OTRO organismo. Deducirlo del identificador no puede describir ese caso.</para>
+    ///
+    /// <para><c>null</c> NO es <c>RUNT</c>: significa «lo que diga el modo de entrada», que es el
+    /// comportamiento previo. Resuélvelo SIEMPRE con <see cref="OperatorChoosesTransitOffice"/>.</para>
+    /// </summary>
+    public string? TransitOfficeSource { get; init; }
+
+    /// <summary>El organismo lo impone el RUNT (donde el vehículo está matriculado).</summary>
+    public const string TransitOfficeSourceRunt = "RUNT";
+
+    /// <summary>El organismo lo elige el operador entre los habilitados para su compañía.</summary>
+    public const string TransitOfficeSourceOperator = "OPERATOR";
+
+    /// <summary>
+    /// El trámite DECLARA un organismo de destino además del suyo. No es lo mismo que
+    /// <see cref="TransitOfficeSource"/>: aquí el trámite se radica y se aprueba donde siempre —el
+    /// organismo actual del vehículo— y el destino es un dato que el formulario declara.
+    ///
+    /// <para>Es el traslado de cuenta: lo expide el organismo de ORIGEN, que valida el paz y salvo y
+    /// da salida a la cuenta; el propietario tiene después 60 días hábiles para radicarla en el
+    /// nuevo. El radicado de cuenta es el trámite espejo y NO lleva esta llave: allí el destino es el
+    /// organismo del trámite, no un dato declarado.</para>
+    /// </summary>
+    public bool RequiresDestinationTransitOffice { get; init; }
+
     /// <summary>Entrada por placa (vehículo ya matriculado).</summary>
     public const string EntryModePlate = "PLATE";
 
     /// <summary>Entrada por VIN (vehículo nuevo, aún sin placa).</summary>
     public const string EntryModeVin = "VIN";
+
+    /// <summary>
+    /// Cómo se obtiene la impronta en este tipo. Independiente de <c>is_mandatory</c> en la matriz.
+    /// Ausente ⇒ se puede generar (Kyverum / FUR), incluso si el documento es opcional.
+    /// </summary>
+    public string? ImprontaSource { get; init; }
+
+    /// <summary>El sistema genera la impronta (Kyverum / consolidado / paso FUR).</summary>
+    public const string ImprontaSourceAuto = "AUTO";
+
+    /// <summary>Solo carga de archivo; no se llama al proveedor ni se difiere al FUR.</summary>
+    public const string ImprontaSourceManual = "MANUAL";
+
+    /// <summary>El gestor elige generar o cargar, y puede revertir.</summary>
+    public const string ImprontaSourceOperatorChoice = "OPERATOR_CHOICE";
 
     /// <summary>Entrada por placa o VIN (el operador elige).</summary>
     public const string EntryModeBoth = "BOTH";
@@ -70,4 +183,94 @@ public sealed record ProcedureTypeGateProfile
     /// <summary><c>true</c> si <paramref name="value"/> es un modo de entrada válido (PLATE/VIN/BOTH).</summary>
     public static bool IsValidEntryMode(string? value) =>
         value is EntryModePlate or EntryModeVin or EntryModeBoth;
+
+    /// <summary>
+    /// ¿Este trámite admite transformaciones complementarias? Lo declarado en el perfil manda; sin
+    /// declaración, la familia decide (OTROS no acumula: el cambio ES el trámite).
+    /// </summary>
+    public bool ComplementaryTransformationsAllowed(string? familyCode) =>
+        AllowsComplementaryTransformations ?? ProcedureTypeLayers.FamiliaAcumulaComplementarios(familyCode);
+
+    /// <summary>¿Admite un gravamen complementario? Misma precedencia perfil → familia.</summary>
+    public bool ComplementaryPrendaAllowed(string? familyCode) =>
+        AllowsComplementaryPrenda ?? ProcedureTypeLayers.FamiliaAcumulaComplementarios(familyCode);
+
+    /// <summary>
+    /// ADR-0051 — roles que firman el FUR. Lo declarado en el perfil manda; sin declaración (o con
+    /// arreglo vacío), <c>RequiresSeller</c> decide: con parte vendedora firman propietario y
+    /// comprador (comportamiento previo de <c>TRASPASO_STANDARD</c> y de todo tipo con
+    /// <c>requiresSeller:true</c>); sin ella, solo el comprador (matrícula, <c>OTROS</c>).
+    /// </summary>
+    public IReadOnlyList<string> ResolveSignatureActors() =>
+        SignatureActors.Count > 0
+            ? SignatureActors
+            : RequiresSeller ? ["OWNER", "BUYER"] : ["BUYER"];
+
+    /// <summary>
+    /// ¿Este trámite autogenera compraventa (ADR-0035)? Lo declarado en el perfil manda; sin
+    /// declaración, decide la combinación parte vendedora + familia TRASPASO — el comportamiento
+    /// previo a esta llave, sin excepción.
+    /// </summary>
+    public bool GeneratesSaleDocumentAllowed(string? familyCode) =>
+        GeneratesSaleDocument ?? (RequiresSeller && FamilyIsTraspaso(familyCode));
+
+    /// <summary>
+    /// ¿El FUR imprime bloque de avalúo comercial? Misma precedencia perfil → (vendedor + familia
+    /// TRASPASO) que <see cref="GeneratesSaleDocumentAllowed"/>.
+    /// </summary>
+    public bool HasAppraisalBlockAllowed(string? familyCode) =>
+        HasAppraisalBlock ?? (RequiresSeller && FamilyIsTraspaso(familyCode));
+
+    private static bool FamilyIsTraspaso(string? familyCode) =>
+        ProcedureFamilyCodes.FromCode(familyCode) == ProcedureFamily.Traspaso;
+
+    /// <summary>
+    /// ¿Este expediente tiene dimensión de prenda EN ABSOLUTO? Une los dos únicos caminos por los que
+    /// un trámite puede llegar a tener una decisión de prenda: que la admita como capa complementaria
+    /// (<see cref="ComplementaryPrendaAllowed"/>, matrícula y traspaso) o que la prenda SEA el trámite
+    /// (<see cref="ProcedureTypeLayers.EsTipoPrendaBase"/>).
+    ///
+    /// <para><b>Por qué existe.</b> Es literalmente la condición que <c>RegistrarPrendaHandler</c> exige
+    /// para aceptar una decisión de prenda. Estaba escrita a mano solo ahí, mientras el override del OT
+    /// (CF-06, HU #10881) bloqueaba «cualquier modalidad con OT» — redactado cuando solo existían
+    /// matrícula y traspaso, antes de que ADR-0050 introdujera la familia OTROS. El resultado era un
+    /// bloqueo INSATISFACIBLE: un duplicado de tarjeta o un cambio de color exigían
+    /// <c>prenda_decision_requerida</c> al preparar, el asistente no pintaba el paso de prenda
+    /// (<c>ComplementaryPrendaAllowed("OTROS")</c> es false) y la API rechazaba la decisión con
+    /// <c>prenda_no_admitida_en_tipo</c>. El gate pedía lo que el sistema se negaba a aceptar.</para>
+    ///
+    /// <para>Compartirlo —gate de preparación, blocker del asistente y camino de escritura— es lo que
+    /// impide que vuelvan a divergir: quien no puede REGISTRAR una prenda tampoco puede quedar bloqueado
+    /// por no tenerla. No relaja ninguna regla vigente: matrícula inicial (HU #11592), traspaso con
+    /// gravamen (R10) y los tipos prendarios conservan su gate intacto.</para>
+    /// </summary>
+    /// <param name="familyCode">Familia del tipo; ausente ⇒ se trata como acumulable (mismo fail-safe
+    /// que <see cref="ProcedureTypeLayers.FamiliaAcumulaComplementarios"/>: no apaga en silencio la
+    /// prenda de un expediente cuyo tipo llegue sin clasificar).</param>
+    /// <param name="typeCode">Código del tipo, para reconocer aquellos cuya prenda ES el trámite.</param>
+    public bool AdmiteDimensionDePrenda(string? familyCode, string? typeCode) =>
+        ComplementaryPrendaAllowed(familyCode) || ProcedureTypeLayers.EsTipoPrendaBase(typeCode);
+
+    /// <summary>
+    /// ¿El organismo de tránsito lo elige el operador? Lo declarado manda; sin declaración decide el
+    /// modo de entrada (VIN ⇒ el vehículo aún no tiene organismo, lo elige el operador), que es el
+    /// comportamiento previo a esta llave.
+    /// </summary>
+    public bool OperatorChoosesTransitOffice()
+    {
+        if (string.Equals(TransitOfficeSource, TransitOfficeSourceOperator, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(TransitOfficeSource, TransitOfficeSourceRunt, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return string.Equals(EntryMode, EntryModeVin, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// ¿Este tipo admite generación automática de impronta? Solo <see cref="ImprontaSourceManual"/>
+    /// la apaga. Ausente, <c>AUTO</c> o <c>OPERATOR_CHOICE</c> la permiten — el obligatorio de la
+    /// matriz no entra en esta pregunta.
+    /// </summary>
+    public bool AllowsAutomaticImpronta() =>
+        !string.Equals(ImprontaSource, ImprontaSourceManual, StringComparison.OrdinalIgnoreCase);
 }

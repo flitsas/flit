@@ -15,11 +15,44 @@ const FECHA_CORTA = new Intl.DateTimeFormat("es-CO", {
 });
 
 /**
+ * Fecha de CALENDARIO pura (`AAAA-MM-DD`), sin hora ni zona: es lo que serializa un `DateOnly` del
+ * backend (vigencias de escrituras, del baúl de firmas y de identidad).
+ */
+const FECHA_CALENDARIO = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** ¿El día del match existe realmente? Descarta meses y días fuera de rango (30/02, 13/45…). */
+function esFechaReal([, year, month, day]: RegExpExecArray): boolean {
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+  const utc = new Date(Date.UTC(y, m - 1, d));
+  return (
+    utc.getUTCFullYear() === y && utc.getUTCMonth() === m - 1 && utc.getUTCDate() === d
+  );
+}
+
+/**
  * Fecha de negocio: `AAAA/MM/DD`, sin hora. Devuelve `fallback` si el valor no es una fecha válida
  * (el listado no debe romperse por un dato corrupto).
+ *
+ * HU #11194 — una fecha de calendario NO se convierte de zona. `new Date("2026-07-01")` la
+ * interpreta como medianoche UTC y, al formatearla en Bogotá (UTC−5), sale el día anterior:
+ * `2026/06/30`. Por eso toda vigencia se veía un día antes en consulta mientras la edición
+ * (que recibe la cadena cruda en un `<input type="date">`) mostraba la correcta.
+ * Los instantes (`timestamptz`) sí se siguen convirtiendo a la hora de Colombia.
  */
 export function formatFecha(value: string | Date | null | undefined, fallback = "—"): string {
   if (value === null || value === undefined || value === "") return fallback;
+
+  if (typeof value === "string") {
+    const calendario = FECHA_CALENDARIO.exec(value.trim());
+    // La forma `AAAA-MM-DD` no basta: "2026-13-45" la cumple y no es una fecha. Se comprueba que el
+    // día exista de verdad; si no, cae al camino general y termina en el respaldo, como antes.
+    if (calendario && esFechaReal(calendario)) {
+      const [, year, month, day] = calendario;
+      return `${year}/${month}/${day}`;
+    }
+  }
 
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return fallback;

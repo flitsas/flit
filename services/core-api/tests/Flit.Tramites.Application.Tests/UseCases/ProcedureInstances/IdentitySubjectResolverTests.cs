@@ -61,31 +61,38 @@ public sealed class IdentitySubjectResolverTests
     public void For_PersonaJuridicaSinDocumentoDelRL_CaeAlActor()
     {
         // RL con solo correo (Fase 1 no exige documento) → no se puede validar biométricamente al RL:
-        // se conserva el comportamiento previo (documento del actor/NIT).
+        // se conserva el comportamiento previo (documento del actor/NIT). El correo SÍ sigue siendo
+        // el del RL: nunca el de la empresa.
         var soloCorreo = "{\"representanteLegal\":{\"email\":\"rl@x.com\"}}";
-        var actor = Actor("juridical", soloCorreo, docType: "NIT", docNumber: "900123456", fullName: "ACME S.A.S.");
+        var actor = Actor(
+            "juridical", soloCorreo, docType: "NIT", docNumber: "900123456",
+            fullName: "ACME S.A.S.", email: "empresa@x.com");
 
         var subject = IdentitySubjectResolver.For(actor);
 
         subject.EsRepresentanteLegal.Should().BeFalse();
         subject.TipoDocumento.Should().Be("NIT");
         subject.NumeroDocumento.Should().Be("900123456");
+        subject.Email.Should().Be("rl@x.com");
     }
 
     [Fact]
     public void For_PersonaJuridicaMetadataVacio_CaeAlActor()
     {
-        var actor = Actor("juridical", "{}", docType: "NIT", docNumber: "900123456");
+        var actor = Actor("juridical", "{}", docType: "NIT", docNumber: "900123456", email: "empresa@x.com");
 
         var subject = IdentitySubjectResolver.For(actor);
 
         subject.EsRepresentanteLegal.Should().BeFalse();
         subject.NumeroDocumento.Should().Be("900123456");
+        subject.Email.Should().BeNull();
     }
 
     [Fact]
-    public void For_PersonaJuridicaRLSinCorreo_UsaCorreoDelActor()
+    public void For_PersonaJuridicaRLSinCorreo_NoUsaCorreoDeLaEmpresa()
     {
+        // El correo de validación en PJ es solo el del RL: sin él no se rellena con actor.Email
+        // (razón social / contacto de la empresa), para no mandar el enlace a un buzón corporativo.
         var sinCorreo = "{\"representanteLegal\":{\"tipoDocumento\":\"CC\",\"numeroDocumento\":\"555\"}}";
         var actor = Actor("juridical", sinCorreo, docType: "NIT", docNumber: "900123456", email: "empresa@x.com");
 
@@ -93,17 +100,18 @@ public sealed class IdentitySubjectResolverTests
 
         subject.EsRepresentanteLegal.Should().BeTrue();
         subject.NumeroDocumento.Should().Be("555");
-        subject.Email.Should().Be("empresa@x.com");
+        subject.Email.Should().BeNull();
     }
 
     [Fact]
     public void For_MetadataInvalido_NoLanza_CaeAlActor()
     {
-        var actor = Actor("juridical", "{not-json", docType: "NIT", docNumber: "900123456");
+        var actor = Actor("juridical", "{not-json", docType: "NIT", docNumber: "900123456", email: "empresa@x.com");
 
         var subject = IdentitySubjectResolver.For(actor);
 
         subject.EsRepresentanteLegal.Should().BeFalse();
         subject.NumeroDocumento.Should().Be("900123456");
+        subject.Email.Should().BeNull();
     }
 }

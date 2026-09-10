@@ -1,5 +1,8 @@
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Identity;
+using Flit.Tramites.Application.UseCases.Persons;
+using Flit.Tramites.Domain.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -16,10 +19,22 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class DbMandateSignerReader : IMandateSignerReader
 {
     private readonly FlitDbContext _context;
+    private readonly ITransitOfficeOperationalStatusReader _otStatus;
+    private readonly IdentityVigenciaPorDocumentoResolver _identityResolver;
 
-    public DbMandateSignerReader(FlitDbContext context)
+    public DbMandateSignerReader(
+        FlitDbContext context,
+        ITransitOfficeOperationalStatusReader? otStatus = null,
+        IdentityVigenciaPorDocumentoResolver? identityResolver = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+
+        // HU #11765 (ADR-0050) — igual patrón que DbLegalRepresentativeReader: opcionales para no romper
+        // los sitios que construyen el reader directamente (tests, ~5 archivos que ni siquiera aseveran
+        // IdentityStatus). Por DI llegan las implementaciones reales (ambas ya registradas).
+        _otStatus = otStatus ?? new DbTransitOfficeOperationalStatusReader(context);
+        _identityResolver = identityResolver
+            ?? new IdentityVigenciaPorDocumentoResolver(new ProcedureInstanceRepository(context));
     }
 
     public Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
@@ -28,25 +43,43 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         ExecuteCrossTenantReadAsync(
             async () =>
             {
-                // Activos e inactivos (baja lógica): los inactivados siguen visibles para
+                // HU #11201 — quién aplica en este organismo lo dice el puente, no la columna del
+                // mandatario. Activos e inactivos (baja lógica): los inactivados siguen visibles para
                 // poder reactivarlos. Se muestran primero los activos, luego por nombre.
-                var signers = await _context.MandateSigners
+                var idsDelOrganismo = await IdsPorOrganismoAsync(transitOfficeId, cancellationToken)
+                    .ConfigureAwait(false);
+
+                var candidatos = await _context.MandateSigners
                     .AsNoTracking()
-                    .Where(s => s.TransitOfficeId == transitOfficeId)
+                    .Where(s => idsDelOrganismo.Keys.Contains(s.Id))
                     .OrderByDescending(s => s.IsActive)
                     .ThenBy(s => s.FullName)
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
 
+                // Un vínculo inactivo puede significar dos cosas distintas: que se retiró el organismo
+                // (AC3 ⇒ ya no aplica ahí) o que se inactivó la persona (⇒ sigue visible para poder
+                // reactivarla). Se distinguen por el estado del propio mandatario.
+                var signers = candidatos
+                    .Where(s => idsDelOrganismo[s.Id] || !s.IsActive)
+                    .ToList();
+
                 var companiesBySigner = await LoadActiveCompanyIdsBySignerAsync(
                     transitOfficeId, cancellationToken).ConfigureAwait(false);
 
+                var officesBySigner = await LoadOfficeIdsBySignerAsync(
+                    [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
+
                 var vigenciaBySigner = await LoadIdentityVigenciaAsync(
+                    signers, cancellationToken).ConfigureAwait(false);
+
+                var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(
                     [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
 
                 IReadOnlyList<MandateSignerItem> items =
                 [
-                    .. signers.Select(s => Project(s, companiesBySigner, vigenciaBySigner)),
+                    .. signers.Select(s =>
+                        Project(s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner)),
                 ];
                 return items;
             },
@@ -75,13 +108,21 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
 
+                var officesBySigner = await LoadOfficeIdsBySignerAsync(
+                    [signer.Id], cancellationToken).ConfigureAwait(false);
+
                 var vigenciaBySigner = await LoadIdentityVigenciaAsync(
+                    [signer], cancellationToken).ConfigureAwait(false);
+
+                var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(
                     [signer.Id], cancellationToken).ConfigureAwait(false);
 
                 return new MandateSignerItem
                 {
                     Id = signer.Id,
                     TransitOfficeId = signer.TransitOfficeId,
+                    TransitOfficeIds = officesBySigner.GetValueOrDefault(signer.Id, []),
+                    PhysicalSignatureOfficeIds = physicalBySigner.GetValueOrDefault(signer.Id, []),
                     FullName = signer.FullName,
                     DocumentType = signer.DocumentType,
                     DocumentNumber = signer.DocumentNumber,
@@ -100,6 +141,96 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     IsActive = signer.IsActive,
                     CompanyTenantIds = companyIds,
                 };
+            },
+            cancellationToken);
+
+    public Task<IReadOnlyList<MandateSignerItem>> ListByCompanyAsync(
+        Guid companyTenantId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCrossTenantReadAsync(
+            async () =>
+            {
+                // HU #11202 — la vista inversa: los mandatarios que esta compañía registró, en todos
+                // sus organismos. Se toman los ids de las asignaciones activas; el estado de la persona
+                // se decide con su propia bandera (los inactivos siguen a la vista para reactivarlos).
+                var signerIds = await _context.MandateSignerCompanies
+                    .AsNoTracking()
+                    .Where(c => c.CompanyTenantId == companyTenantId)
+                    .Select(c => c.MandateSignerId)
+                    .Distinct()
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (signerIds.Count == 0)
+                {
+                    return [];
+                }
+
+                var signers = await _context.MandateSigners
+                    .AsNoTracking()
+                    .Where(s => signerIds.Contains(s.Id))
+                    .OrderByDescending(s => s.IsActive)
+                    .ThenBy(s => s.FullName)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var companiesBySigner = await LoadCompanyIdsBySignerAsync(signerIds, cancellationToken)
+                    .ConfigureAwait(false);
+                var officesBySigner = await LoadOfficeIdsBySignerAsync(signerIds, cancellationToken)
+                    .ConfigureAwait(false);
+                var vigenciaBySigner = await LoadIdentityVigenciaAsync(signers, cancellationToken)
+                    .ConfigureAwait(false);
+                var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(signerIds, cancellationToken)
+                    .ConfigureAwait(false);
+                var companiesByOffice = await LoadOfficeCompaniesAsync(signerIds, cancellationToken)
+                    .ConfigureAwait(false);
+
+                IReadOnlyList<MandateSignerItem> items =
+                [
+                    .. signers.Select(s => Project(
+                        s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner,
+                        companiesByOffice)),
+                ];
+                return items;
+            },
+            cancellationToken);
+
+    public Task<IReadOnlyList<CompanyTransitOfficeOption>> ListCompanyTransitOfficesAsync(
+        Guid companyTenantId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCrossTenantReadAsync(
+            async () =>
+            {
+                var officeIds = await _context.TenantTransitOfficeGrants
+                    .AsNoTracking()
+                    .Where(g => g.TenantId == companyTenantId && g.IsEnabled)
+                    .Select(g => g.TransitOfficeId)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (officeIds.Count == 0)
+                {
+                    return [];
+                }
+
+                // Solo organismos ACTIVOS del catálogo: uno desactivado no sirve para radicar, así que
+                // ofrecerlo como destino de un mandatario sería ofrecer algo inservible.
+                IReadOnlyList<CompanyTransitOfficeOption> options =
+                [
+                    .. await _context.TransitOffices
+                        .AsNoTracking()
+                        .Where(o => officeIds.Contains(o.Id) && o.IsActive)
+                        .OrderBy(o => o.Name)
+                        .Select(o => new CompanyTransitOfficeOption
+                        {
+                            TransitOfficeId = o.Id,
+                            Code = o.Code,
+                            Name = o.Name,
+                        })
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false),
+                ];
+                return options;
             },
             cancellationToken);
 
@@ -153,9 +284,18 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         ExecuteCrossTenantReadAsync(
             async () =>
             {
+                // HU #11201 — el organismo sale del puente; aquí solo cuentan los vínculos activos,
+                // porque esta lectura es "quién firma hoy por cada compañía en este organismo".
+                var idsDelOrganismo = await IdsPorOrganismoAsync(transitOfficeId, cancellationToken)
+                    .ConfigureAwait(false);
+                var activosEnElOrganismo = idsDelOrganismo
+                    .Where(p => p.Value)
+                    .Select(p => p.Key)
+                    .ToList();
+
                 var signers = await _context.MandateSigners
                     .AsNoTracking()
-                    .Where(s => s.TransitOfficeId == transitOfficeId && s.IsActive)
+                    .Where(s => activosEnElOrganismo.Contains(s.Id) && s.IsActive)
                     .Select(s => new { s.Id, s.FullName, s.IntegrityHash })
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
@@ -205,10 +345,122 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             .ToDictionary(g => g.Key, g => g.Select(r => r.CompanyTenantId).ToList());
     }
 
+    /// <summary>
+    /// HU #11201 — mandatarios vinculados a un organismo, con el estado del vínculo. Se devuelven
+    /// también los inactivos: el llamador decide si un vínculo inactivo significa "se retiró el
+    /// organismo" o "se inactivó la persona".
+    /// </summary>
+    private async Task<Dictionary<Guid, bool>> IdsPorOrganismoAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var rows = await _context.MandateSignerTransitOffices
+            .AsNoTracking()
+            .Where(o => o.TransitOfficeId == transitOfficeId)
+            .Select(o => new { o.MandateSignerId, o.IsActive })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.MandateSignerId)
+            .ToDictionary(g => g.Key, g => g.Any(r => r.IsActive));
+    }
+
+    /// <summary>Compañías activas de cada mandatario, sin acotar por organismo (vista de la empresa).</summary>
+    private async Task<Dictionary<Guid, List<Guid>>> LoadCompanyIdsBySignerAsync(
+        List<Guid> signerIds,
+        CancellationToken cancellationToken)
+    {
+        var rows = await _context.MandateSignerCompanies
+            .AsNoTracking()
+            .Where(c => signerIds.Contains(c.MandateSignerId) && c.IsActive)
+            .Select(c => new { c.MandateSignerId, c.CompanyTenantId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.MandateSignerId)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.CompanyTenantId).Distinct().ToList());
+    }
+
+    /// <summary>Organismos ACTIVOS de cada mandatario, para pintarlos en la consola de gestión.</summary>
+    /// <summary>Empresas representadas por (mandatario, organismo).</summary>
+    private async Task<Dictionary<Guid, List<MandateSignerOfficeCompanies>>> LoadOfficeCompaniesAsync(
+        List<Guid> signerIds,
+        CancellationToken cancellationToken)
+    {
+        if (signerIds.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = await _context.MandateSignerRepresentedCompanies
+            .AsNoTracking()
+            .Where(x => signerIds.Contains(x.MandateSignerId) && x.IsActive)
+            .Select(x => new { x.MandateSignerId, x.TransitOfficeId, x.RepresentedCompanyId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.MandateSignerId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(r => r.TransitOfficeId)
+                    .Select(o => new MandateSignerOfficeCompanies(
+                        o.Key, [.. o.Select(r => r.RepresentedCompanyId)]))
+                    .ToList());
+    }
+
+    /// <summary>Organismos donde el mandatario firma a mano, por mandatario.</summary>
+    private async Task<Dictionary<Guid, List<Guid>>> LoadPhysicalOfficeIdsBySignerAsync(
+        List<Guid> signerIds,
+        CancellationToken cancellationToken)
+    {
+        if (signerIds.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = await _context.MandateSignerTransitOffices
+            .AsNoTracking()
+            .Where(o => signerIds.Contains(o.MandateSignerId) && o.IsActive && o.SignsPhysically)
+            .Select(o => new { o.MandateSignerId, o.TransitOfficeId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.MandateSignerId)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.TransitOfficeId).ToList());
+    }
+
+    private async Task<Dictionary<Guid, List<Guid>>> LoadOfficeIdsBySignerAsync(
+        List<Guid> signerIds,
+        CancellationToken cancellationToken)
+    {
+        if (signerIds.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = await _context.MandateSignerTransitOffices
+            .AsNoTracking()
+            .Where(o => signerIds.Contains(o.MandateSignerId) && o.IsActive)
+            .Select(o => new { o.MandateSignerId, o.TransitOfficeId, o.SignsPhysically })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.MandateSignerId)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.TransitOfficeId).ToList());
+    }
+
     private static MandateSignerItem Project(
         Entities.Admin.MandateSigner signer,
         Dictionary<Guid, List<Guid>> companiesBySigner,
-        Dictionary<Guid, AdminIdentityVigencia.Resultado> vigenciaBySigner)
+        Dictionary<Guid, List<Guid>> officesBySigner,
+        Dictionary<Guid, AdminIdentityVigencia.Resultado> vigenciaBySigner,
+        Dictionary<Guid, List<Guid>>? physicalBySigner = null,
+        Dictionary<Guid, List<MandateSignerOfficeCompanies>>? companiesByOffice = null)
     {
         var vigencia = vigenciaBySigner.GetValueOrDefault(
             signer.Id, new AdminIdentityVigencia.Resultado(AdminIdentityVigencia.None, null));
@@ -230,40 +482,83 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             RegisteredAt = signer.RegisteredAt,
             IsActive = signer.IsActive,
             CompanyTenantIds = companiesBySigner.GetValueOrDefault(signer.Id, []),
+            TransitOfficeIds = officesBySigner.GetValueOrDefault(signer.Id, []),
+            PhysicalSignatureOfficeIds = physicalBySigner?.GetValueOrDefault(signer.Id, []) ?? [],
+            OfficeCompanies = companiesByOffice?.GetValueOrDefault(signer.Id, []) ?? [],
         };
     }
 
     /// <summary>
-    /// Vigencia de la identidad (HU #10994) por mandatario. La precedencia vive en
-    /// <see cref="AdminIdentityVigencia"/>, compartida con el representante legal (HU #11059): aquí solo
-    /// queda la consulta en lote. Desde la HU #11060 se devuelve TAMBIÉN hasta cuándo es válida, que es
-    /// lo que la consola necesita para informar la vigencia en curso en vez de ofrecer renovar.
-    /// Se lee dentro del scope cross-tenant (row_security off) que abre <c>ExecuteCrossTenantReadAsync</c>.
+    /// HU #11765 (ADR-0050) — vigencia de identidad por mandatario, leída EXCLUSIVAMENTE del módulo
+    /// Identidad (<c>tramites.procedure_instance_biometric_validations</c>) a través de
+    /// <see cref="IdentityVigenciaPorDocumentoResolver"/>. Ya NO consulta
+    /// <c>admin.admin_identity_validations</c> (tabla abandonada, ADR-0034 superada): era la otra mitad
+    /// del defecto raíz de esta HU — <c>MandateSignerDirectory</c> (HU #11752, ruta de RADICACIÓN) ya
+    /// había migrado, pero la ficha admin (esta clase) seguía leyendo la tabla vieja y su rótulo no se
+    /// movía al prevalidar desde Identidad.
+    /// <para>
+    /// <b>Tenant.</b> La identidad de un mandatario vive en el tenant PROPIO del organismo donde está
+    /// registrado (<c>signer.TransitOfficeId</c>), NO en la compañía gestora que consulta la ficha —
+    /// mismo mecanismo que <c>MandateSignerDirectory.LoadVigentIdentitiesAsync</c> (HU #11752), resuelto
+    /// con <see cref="ITransitOfficeOperationalStatusReader"/>. Se agrupa por organismo para resolver el
+    /// tenant una sola vez por OT y no repetir la consulta de perfil por cada mandatario.
+    /// </para>
+    /// <para>
+    /// <b>Lote.</b> Dentro de cada grupo por organismo, UNA sola consulta SQL para todos sus documentos
+    /// vía <see cref="IdentityVigenciaPorDocumentoResolver.ResolveManyBatchedAsync"/> (sin N+1). Un OT sin
+    /// tenant operativo (<c>HasTenant=false</c>) no tiene contra qué resolver identidad: sus mandatarios
+    /// quedan en <see cref="AdminIdentityVigencia.None"/>, igual que antes cuando no había fila admin.
+    /// </para>
+    /// <para>
+    /// El estado ADR-0050 se traduce al vocabulario histórico del contrato con
+    /// <see cref="IdentityVigenciaLegacyMapper"/> (compartido con <c>DbLegalRepresentativeReader</c>).
+    /// </para>
+    /// <para>
+    /// Se lee dentro del scope cross-tenant (row_security off) que abre <c>ExecuteCrossTenantReadAsync</c>;
+    /// la tabla de Identidad no lo necesita (aislamiento por <c>WHERE tenant_id</c> explícito, igual que
+    /// el endpoint de la HU #11751), pero tampoco estorba correr ahí dentro.
+    /// </para>
     /// </summary>
     private async Task<Dictionary<Guid, AdminIdentityVigencia.Resultado>> LoadIdentityVigenciaAsync(
-        IReadOnlyList<Guid> signerIds,
+        List<Entities.Admin.MandateSigner> signers,
         CancellationToken cancellationToken)
     {
-        if (signerIds.Count == 0)
+        var result = new Dictionary<Guid, AdminIdentityVigencia.Resultado>();
+        if (signers.Count == 0)
         {
-            return [];
+            return result;
         }
 
         var now = DateTimeOffset.UtcNow;
-        var rows = await _context.AdminIdentityValidations
-            .AsNoTracking()
-            .Where(v => v.SubjectType == AdminIdentitySubjectTypes.MandateSigner
-                && signerIds.Contains(v.SubjectRef))
-            .Select(v => new { v.SubjectRef, v.Status, v.ValidUntil })
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
 
-        return rows
-            .GroupBy(r => r.SubjectRef)
-            .ToDictionary(
-                g => g.Key,
-                g => AdminIdentityVigencia.Resumir(
-                    g.Select(r => new AdminIdentityVigencia.Entrada(r.Status, r.ValidUntil)), now));
+        foreach (var group in signers.GroupBy(s => s.TransitOfficeId))
+        {
+            var status = await _otStatus.GetByIdAsync(group.Key, cancellationToken).ConfigureAwait(false);
+            if (status is null || !status.HasTenant || status.TenantId is not { } otTenantId)
+            {
+                // Sin tenant operativo del OT no hay contra qué resolver identidad (igual que antes:
+                // sin fila ⇒ None). El resolver de Identidad NO se invoca para este grupo.
+                continue;
+            }
+
+            var documentos = group
+                .Select(s => (s.DocumentType, s.DocumentNumber))
+                .Distinct()
+                .ToList();
+
+            var resueltos = await _identityResolver
+                .ResolveManyBatchedAsync(otTenantId, documentos, now, cancellationToken)
+                .ConfigureAwait(false);
+
+            foreach (var s in group)
+            {
+                var key = DocumentCanonicalNormalization.IdentidadKey(otTenantId, s.DocumentType, s.DocumentNumber);
+                var resultado = resueltos.GetValueOrDefault(key, IdentityVigenciaResult.SinValidacion);
+                result[s.Id] = IdentityVigenciaLegacyMapper.ToLegacyResultado(resultado);
+            }
+        }
+
+        return result;
     }
 
     private async Task<T> ExecuteCrossTenantReadAsync<T>(

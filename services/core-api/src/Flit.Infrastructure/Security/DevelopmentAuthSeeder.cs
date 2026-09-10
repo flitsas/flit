@@ -23,6 +23,10 @@ public static class DevelopmentAuthSeeder
     public const string OtSabanetaEmail = "otsabaneta@flit.local";
     public const string OtSabanetaPassword = "OtSabaneta1!";
 
+    /// <summary>Admin OT Envigado (DEV) — tenant vinculado al catálogo RUNT 5266000.</summary>
+    public const string OtEnvigadoEmail = "otenvigado@flit.local";
+    public const string OtEnvigadoPassword = "OtEnvigado1!";
+
     /// <summary>Usuario fijo del tab Operación (HU #10200); el SQL seed crea la fila sin credencial.</summary>
     public const string DevOperacionEmail = "dev@flitsas.io";
     public const string DevOperacionPassword = "DevPass1!";
@@ -59,6 +63,20 @@ public static class DevelopmentAuthSeeder
     public static readonly Guid OtSabanetaProfileId =
         Guid.Parse("b9ec839d-7b78-4165-8860-cf29b104c76d");
 
+    /// <summary>Tenant OT Envigado (DEV) — perfil → catálogo <c>5266000</c>.</summary>
+    public static readonly Guid OtEnvigadoTenantId =
+        Guid.Parse("bbbbbbbb-0004-4000-8000-000000000001");
+
+    /// <summary>Oficina Envigado en <c>catalogs.transit_offices</c> (seed RUNT HU #10659).</summary>
+    public static readonly Guid OtEnvigadoCatalogOfficeId =
+        Guid.Parse("69f48545-a7cf-5201-9198-6e3b3fab9a99");
+
+    public static readonly Guid OtEnvigadoUserId =
+        Guid.Parse("ec4dddb9-ade5-43e8-b33b-c6036eba49d2");
+
+    public static readonly Guid OtEnvigadoProfileId =
+        Guid.Parse("b9ec839d-7b78-4165-8860-cf29b104c76e");
+
     public static async Task SeedAsync(
         FlitDbContext db,
         IPasswordHasher passwordHasher,
@@ -72,16 +90,26 @@ public static class DevelopmentAuthSeeder
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("15-tramites-traspaso-dev-seed.sql"), cancellationToken);
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("16-HU10133-ot-admin-dev-seed.sql"), cancellationToken);
         await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("27-HU10659-transit-offices-runt-catalog-seed.sql"), cancellationToken);
+        await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp("34-transit-offices-city-department-names.sql"), cancellationToken);
 
         await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
         await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
         await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
         await SeedSabanetaOtAdminAsync(db, passwordHasher, cancellationToken);
+        await SeedEnvigadoOtAdminAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
         await SeedReportesPermissionsAsync(db, cancellationToken);
         await SeedDetailedReportPermissionsAsync(db, cancellationToken);
         await SeedLogQxPermissionsAsync(db, cancellationToken);
         await SeedIctLogsPermissionsAsync(db, cancellationToken);
+        await SeedIctPiiRevealPermissionAsync(db, cancellationToken);
+        await SeedHistorialPlacaPermissionsAsync(db, cancellationToken);
+        await SeedIctClientsPermissionsAsync(db, cancellationToken);
+        await SeedGeneracionDocumentalPermissionsAsync(db, cancellationToken);
+        await SeedRuntConfirmationPermissionsAsync(db, cancellationToken);
+        await SeedBannersPermissionsAsync(db, cancellationToken);
+        await SeedResetPasswordPermissionsAsync(db, cancellationToken);
+        await SeedAdminTramiteAdvancedPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
 
@@ -169,32 +197,56 @@ public static class DevelopmentAuthSeeder
 
         await EnsureUserCredentialsAsync(db, user.Id, DemoRadicadorPassword, passwordHasher, cancellationToken);
 
-        // 4. Asignación de rol (respeta la constraint UNIQUE(user_id, tenant_id): reusa/realinea).
-        var existing = await db.UserRoleAssignments
-            .FirstOrDefaultAsync(a => a.UserId == user.Id && a.TenantId == empresaTenant.Id, cancellationToken);
-        if (existing is null)
+        // 4. Asignación de rol: rol único por usuario/tenant (uq_ura_active_user_tenant).
+        await EnsureSingleRoleAssignmentAsync(db, user.Id, empresaTenant.Id, role.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Deja al usuario con EXACTAMENTE una asignación activa, la del rol indicado.
+    ///
+    /// <para>Reusa la fila que ya exista en vez de crear otra, y cierra cualquier asignación
+    /// activa sobrante: la tabla guarda histórico en soft-delete, así que un usuario puede
+    /// arrastrar varias filas —incluidas las que dejó el modelo aditivo de la HU #10506— y
+    /// reabrir una a ciegas viola <c>uq_ura_active_user_tenant</c> y tumba el arranque.</para>
+    /// </summary>
+    private static async Task EnsureSingleRoleAssignmentAsync(
+        FlitDbContext db, Guid userId, Guid tenantId, Guid roleId, CancellationToken cancellationToken)
+    {
+        var assignments = await db.UserRoleAssignments
+            .Where(a => a.UserId == userId && a.TenantId == tenantId)
+            .OrderByDescending(a => a.AssignedAt)
+            .ToListAsync(cancellationToken);
+
+        var now = DateTimeOffset.UtcNow;
+
+        // Se prefiere una fila activa; si no hay, se reutiliza la más reciente del histórico.
+        var target = assignments.Find(a => a.DeletedAt is null) ?? assignments.FirstOrDefault();
+
+        if (target is null)
         {
-            var now = DateTimeOffset.UtcNow;
             db.UserRoleAssignments.Add(new UserRoleAssignment
             {
                 Id = Guid.CreateVersion7(),
-                TenantId = empresaTenant.Id,
-                UserId = user.Id,
-                RoleId = role.Id,
+                TenantId = tenantId,
+                UserId = userId,
+                RoleId = roleId,
                 AssignedAt = now,
                 CreatedAt = now,
                 RowVersion = 0,
             });
             await db.SaveChangesAsync(cancellationToken);
+            return;
         }
-        else if (existing.DeletedAt is not null || existing.RoleId != role.Id)
-        {
-            existing.DeletedAt = null;
-            existing.DeletedBy = null;
-            existing.RoleId = role.Id;
-            existing.AssignedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
-        }
+
+        foreach (var other in assignments.Where(a => a != target && a.DeletedAt is null))
+            other.DeletedAt = now;
+
+        target.DeletedAt = null;
+        target.DeletedBy = null;
+        target.RoleId = roleId;
+        target.AssignedAt = now;
+
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task SeedSuperAdminAsync(
@@ -498,6 +550,104 @@ public static class DevelopmentAuthSeeder
     }
 
     /// <summary>
+    /// Tenant OT Envigado + perfil sobre catálogo RUNT 5266000 + usuario
+    /// <see cref="OtEnvigadoEmail"/> / <see cref="OtEnvigadoPassword"/> (DEV).
+    /// Idempotente. Requiere que el seed del catálogo RUNT (HU #10659) haya corrido.
+    /// </summary>
+    private static async Task SeedEnvigadoOtAdminAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        CancellationToken cancellationToken)
+    {
+        var catalogExists = await db.TransitOffices
+            .AnyAsync(o => o.Id == OtEnvigadoCatalogOfficeId, cancellationToken);
+        if (!catalogExists)
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+
+        // 1. Tenant OT-ENVIGADO
+        var tenant = await db.Tenants
+            .FirstOrDefaultAsync(t => t.Id == OtEnvigadoTenantId || t.Code == "OT-ENVIGADO", cancellationToken);
+        if (tenant is null)
+        {
+            tenant = new Tenant
+            {
+                Id = OtEnvigadoTenantId,
+                Code = "OT-ENVIGADO",
+                LegalName = "STRIA TTEyTTO ENVIGADO (DEV)",
+                TaxId = "900000266-5",
+                TenantType = "RENTING",
+                IsActive = true,
+                CreatedAt = now,
+                RowVersion = 0,
+            };
+            db.Tenants.Add(tenant);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var tenantId = tenant.Id;
+
+        // 2. Perfil OT → catálogo Envigado (una oficina física = un solo tenant)
+        var existingProfileForOffice = await db.TransitOfficeProfiles
+            .FirstOrDefaultAsync(p => p.TransitOfficeId == OtEnvigadoCatalogOfficeId, cancellationToken);
+        if (existingProfileForOffice is null)
+        {
+            db.TransitOfficeProfiles.Add(new TransitOfficeProfile
+            {
+                Id = OtEnvigadoProfileId,
+                TenantId = tenantId,
+                TransitOfficeId = OtEnvigadoCatalogOfficeId,
+                OperationMode = "dashboard",
+                QuipuxReadOnly = false,
+                CreatedAt = now,
+                RowVersion = 0,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            tenantId = existingProfileForOffice.TenantId;
+        }
+
+        // 3. Usuario + credencial
+        var existingUser = await db.Users
+            .FirstOrDefaultAsync(u => u.Email == OtEnvigadoEmail, cancellationToken);
+        if (existingUser is not null)
+        {
+            await EnsureUserCredentialsAsync(
+                db, existingUser.Id, OtEnvigadoPassword, passwordHasher, cancellationToken);
+            await EnsureOtAdminAssignmentAsync(db, existingUser.Id, tenantId, cancellationToken);
+            return;
+        }
+
+        db.Users.Add(new User
+        {
+            Id = OtEnvigadoUserId,
+            Email = OtEnvigadoEmail,
+            DisplayName = "Administrador OT Envigado",
+            Status = "active",
+            HomeTenantId = tenantId,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.UserCredentials.Add(new UserCredential
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = OtEnvigadoUserId,
+            PasswordHash = passwordHasher.Hash(OtEnvigadoPassword),
+            MustChangePassword = false,
+            FailedLoginAttempts = 0,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        await EnsureOtAdminAssignmentAsync(db, OtEnvigadoUserId, tenantId, cancellationToken);
+    }
+
+    /// <summary>
     /// El SQL seed HU #10200 inserta <see cref="DevOperacionEmail"/> sin fila en
     /// user_credentials; sin esto el login local devuelve 401 aunque el usuario exista.
     /// </summary>
@@ -723,39 +873,7 @@ public static class DevelopmentAuthSeeder
             .FirstOrDefaultAsync(r => r.Code == "AdminCompany" && r.TargetEntityType == "COMPANY" && r.DeletedAt == null, ct);
         if (adminCompanyRole is null) return;
 
-        // La constraint uq_user_role_assignments_user_id_tenant_id es UNIQUE(user_id, tenant_id)
-        // SIN filtrar por deleted_at: solo puede existir UNA fila por (usuario, tenant). Por eso hay
-        // que buscar también las soft-deleted; si filtramos por DeletedAt == null, una fila borrada
-        // lógicamente queda invisible y el INSERT choca con la constraint (23505) en cada arranque.
-        var existing = await db.UserRoleAssignments
-            .FirstOrDefaultAsync(a => a.UserId == userId && a.TenantId == empresaTenant.Id, ct);
-
-        if (existing is not null)
-        {
-            // Reactiva/realinea la fila existente en lugar de insertar (idempotente).
-            if (existing.DeletedAt is not null || existing.RoleId != adminCompanyRole.Id)
-            {
-                existing.DeletedAt = null;
-                existing.DeletedBy = null;
-                existing.RoleId = adminCompanyRole.Id;
-                existing.AssignedAt = DateTimeOffset.UtcNow;
-                await db.SaveChangesAsync(ct);
-            }
-            return;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        db.UserRoleAssignments.Add(new UserRoleAssignment
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = empresaTenant.Id,
-            UserId = userId,
-            RoleId = adminCompanyRole.Id,
-            AssignedAt = now,
-            CreatedAt = now,
-            RowVersion = 0,
-        });
-        await db.SaveChangesAsync(ct);
+        await EnsureSingleRoleAssignmentAsync(db, userId, empresaTenant.Id, adminCompanyRole.Id, ct);
     }
 
     private static async Task SeedBaseModulesAsync(
@@ -865,6 +983,7 @@ public static class DevelopmentAuthSeeder
             ("reportes.ot.read",             "Ver pestaña Organismo de Tránsito",  "/api/v1/analytics/ot-metrics"),
             ("reportes.uso.read",            "Ver pestaña Uso del aplicativo",     "/api/v1/analytics/usage"),
             ("reportes.productividad.read",  "Ver pestaña Productividad",          "/api/v1/analytics/productivity/top"),
+            ("reportes.consultas.read",      "Ver pestaña Consultas",              "/api/v1/analytics/queries/run"),
             ("reportes.programacion.manage", "Administrar informes programados y alertas", "/api/v1/analytics/report-schedules"),
         };
 
@@ -1139,6 +1258,689 @@ public static class DevelopmentAuthSeeder
                     CreatedAt = now,
                 });
             }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Revelado de datos personales en la Trazabilidad ICT (Feature #11814, HU #11820) — permiso
+    /// <c>ict.pii.reveal</c> que protege <c>POST /api/v1/ict/trazabilidad/tramites/{numero}/datos/revelar</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Cuelga del módulo <c>ict-logs</c> que ya existe, y no de uno nuevo: es el mismo módulo que
+    /// gobierna la observabilidad ICT, así que quien administra roles encuentra «Ver logs ICT» y
+    /// «Revelar datos personales» uno al lado del otro, que es como se deciden juntos.
+    /// </para>
+    /// <para>
+    /// Es una acción DISTINTA de <c>ict.logs.read</c> a propósito: si se reutilizara aquel, cualquiera
+    /// que pudiera abrir la pantalla vería la PII en claro y el enmascarado no protegería de nada.
+    /// Al ser un permiso propio, el valor por defecto es «cerrado» —el correcto para datos
+    /// personales— y abrirlo es una decisión explícita de quien administra los roles.
+    /// </para>
+    /// <para>
+    /// Sin este seed el permiso solo existía dentro del código: ningún usuario que no fuera
+    /// SuperAdmin podía recibirlo por el flujo RBAC, ni siquiera el administrador de una empresa,
+    /// porque la acción no aparecía en el catálogo para poder concederla.
+    /// </para>
+    /// </remarks>
+    private static async Task SeedIctPiiRevealPermissionAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        // El módulo lo crea SeedIctLogsPermissionsAsync, que corre justo antes. Si no estuviera, se
+        // omite en vez de crear un módulo suelto: un permiso huérfano no se puede administrar.
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "ict-logs" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            return;
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "ict.pii.reveal", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "ict.pii.reveal",
+                Name = "Revelar datos personales de un trámite ICT",
+                HttpMethod = "POST",
+                RoutePattern = "/api/v1/ict/trazabilidad/tramites/{numero}/datos/revelar",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Solo a SuperAdmin (que además bypassa por rol). NO se concede a los roles de empresa: el
+        // acceso a datos personales lo abre quien administra los roles, caso por caso.
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Historial operativo por placa (Feature #12189, HU #12191) — módulo <c>historial-placa</c> +
+    /// permiso <c>historial-placa.read</c> que protege <c>GET /api/v1/tramites/instances/plate-history</c>.
+    /// Mismo patrón e idempotencia que <see cref="SeedIctLogsPermissionsAsync"/>: crea módulo y permiso
+    /// si faltan y concede el permiso sin duplicar si ya estaba concedido.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// El módulo se protege por PERMISO y no por nombre de rol. Los roles son DATOS gobernados por el
+    /// CRUD de SuperAdmin (<c>POST /api/v1/superadmin/roles</c>, <c>PUT /roles/{id}/permissions</c>), no
+    /// código: cada ambiente puede tener un catálogo distinto. Los nombres del borrador del PO
+    /// —Documentador, OperarioFull, Validador, Gestor— no existen como <c>role code</c> en ninguna parte
+    /// del código, así que cablearlos habría dejado el módulo abierto a roles inexistentes y cerrado a
+    /// los reales. Con un slug propio basta que SuperAdmin lo asigne al rol que exista en cada ambiente.
+    /// </para>
+    /// <para>
+    /// Se concede a <c>SuperAdmin</c>, <c>AdminCompany</c> y <c>Radicador</c> (decisión D4 del PO): los tres
+    /// sí existen en el código. SuperAdmin además bypassa por rol, pero el grant explícito hace que el
+    /// permiso aparezca marcado en la pantalla RBAC. Sin este seed la acción no figura en el catálogo y
+    /// ningún usuario no-superadmin podría recibirla por el flujo RBAC estándar.
+    /// </para>
+    /// </remarks>
+    private static async Task SeedHistorialPlacaPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "historial-placa" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "historial-placa",
+                Name = "Historial por placa",
+                SortOrder = 11,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "historial-placa.read", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "historial-placa.read",
+                Name = "Ver historial por placa",
+                HttpMethod = "GET",
+                RoutePattern = "/api/v1/tramites/instances/plate-history",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Grant a los tres roles de D4 (idempotente): solo si aún no lo tienen. Se excluyen los roles
+        // borrados lógicamente — conceder permisos a un rol eliminado no sirve a nadie.
+        string[] targetRoleCodes = ["SuperAdmin", "AdminCompany", "Radicador"];
+        var roles = await db.Roles
+            .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
+            .ToListAsync(ct);
+        foreach (var role in roles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Administración de clientes ICT (Feature #10888, ronda 2) — módulo <c>ict-clients</c> + permiso
+    /// <c>ict.clients.manage</c> que protege el CRUD de <c>ict.integration_clients</c>
+    /// (<c>/api/v1/ict/clients</c>, submódulo "Clientes ICT" dentro de Usuarios y Roles). Mismo patrón e
+    /// idempotencia que <see cref="SeedIctLogsPermissionsAsync"/>: crea módulo y permiso si faltan y concede
+    /// el permiso a SuperAdmin (que además bypassa por rol).
+    /// </summary>
+    private static async Task SeedIctClientsPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "ict-clients" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "ict-clients",
+                Name = "Clientes ICT",
+                SortOrder = 10,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "ict.clients.manage", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "ict.clients.manage",
+                Name = "Administrar clientes ICT",
+                HttpMethod = "POST",
+                RoutePattern = "/api/v1/ict/clients",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Grant a SuperAdmin (idempotente): solo si aún no lo tiene.
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Confirmación RUNT (Epic #12234, Feature #12276, HU #12313) — módulo <c>confirmacion-runt</c> con los
+    /// permisos <c>runt_confirmation.settings.manage</c> (configuración global del proceso) y
+    /// <c>runt_confirmation.history.read</c> (historial interno de intentos y corridas).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Es un submódulo de Administración → Plataforma, pero en el catálogo RBAC vive como módulo propio
+    /// (no existe un módulo «plataforma» en <c>security.modules</c>: cada pantalla de Plataforma se ha
+    /// protegido hasta hoy por <c>SuperAdminPolicy</c>). Un módulo propio es lo que permite concederle a un
+    /// rol el historial SIN darle la configuración, que es la razón de ser de tener dos slugs.
+    /// </para>
+    /// <para>
+    /// Solo se concede a SuperAdmin (que además bypassa por rol): abrir cualquiera de los dos a un rol
+    /// concreto es un acto explícito de RBAC posterior a este seed. El grant explícito hace que el permiso
+    /// aparezca marcado en la pantalla RBAC. Sin este seed la acción no figura en el catálogo y ningún
+    /// usuario no-superadmin podría recibirla por el flujo RBAC estándar — lo que faltó en Trazabilidad ICT.
+    /// </para>
+    /// <para>
+    /// Idempotente en los tres niveles (módulo por Code, acción por Slug, grant por RoleId+PermissionId),
+    /// como <see cref="SeedHistorialPlacaPermissionsAsync"/>.
+    /// </para>
+    /// </remarks>
+    private static async Task SeedRuntConfirmationPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "confirmacion-runt" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "confirmacion-runt",
+                Name = "Plataforma · Confirmación RUNT",
+                SortOrder = 12,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var definitions = new (string Slug, string Name, string Method, string Route)[]
+        {
+            ("runt_confirmation.settings.manage",
+                "Administrar la configuración de Confirmación RUNT",
+                "PUT", "/api/v1/admin/runt-confirmation/settings"),
+            ("runt_confirmation.history.read",
+                "Ver el historial de Confirmación RUNT",
+                "GET", "/api/v1/admin/runt-confirmation/history"),
+        };
+
+        var actions = new List<RbacAction>(definitions.Length);
+        foreach (var d in definitions)
+        {
+            var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == d.Slug, ct);
+            if (action is null)
+            {
+                action = new RbacAction
+                {
+                    Id = Guid.CreateVersion7(),
+                    ModuleId = module.Id,
+                    Slug = d.Slug,
+                    Name = d.Name,
+                    HttpMethod = d.Method,
+                    RoutePattern = d.Route,
+                    IsActive = true,
+                    CreatedAt = now,
+                };
+                db.RbacActions.Add(action);
+                await db.SaveChangesAsync(ct);
+            }
+            actions.Add(action);
+        }
+
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin" && r.DeletedAt == null)
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            foreach (var action in actions)
+            {
+                var alreadyGranted = await db.RoleGrants
+                    .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+                if (!alreadyGranted)
+                {
+                    db.RoleGrants.Add(new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = action.Id,
+                        CreatedAt = now,
+                    });
+                }
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Generación documental autónoma (Feature #12201, HU #12205, ADR-0056-generacion-documental-standalone)
+    /// — módulo <c>generacion-documental</c> + permisos <c>generacion-documental.read</c> y
+    /// <c>generacion-documental.generate</c>, concedidos a SuperAdmin y AdminCompany.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Método propio e idempotente, DELIBERADAMENTE separado de <see cref="SeedBaseModulesAsync"/>: ese
+    /// método hace early-return en cuanto existe el módulo <c>dashboard</c>, de modo que agregar una
+    /// entrada a su array NO crearía el módulo en ninguna base ya sembrada (DEV/QA/PDN). Mismo patrón que
+    /// <see cref="SeedLogQxPermissionsAsync"/>, <see cref="SeedIctLogsPermissionsAsync"/> y
+    /// <see cref="SeedResetPasswordPermissionsAsync"/>.
+    /// </para>
+    /// <para>
+    /// A diferencia de <c>logqx</c> / <c>ict-*</c> (herramientas de soporte FLIT), aquí el permiso SÍ se
+    /// concede a AdminCompany: la generación documental es una función de negocio del administrador de la
+    /// compañía. SuperAdmin además bypassa por rol en runtime; el grant deja el permiso visible y
+    /// administrable en RBAC.
+    /// </para>
+    /// <para>
+    /// La autorización de las rutas del módulo se resuelve por permiso
+    /// (<c>RequirePermission("generacion-documental.*")</c>) y nunca por
+    /// <c>AdminAuthorization.SuperAdminPolicy</c>: una policy de grupo dejaría a AdminCompany fuera del
+    /// módulo pese a tener el permiso concedido aquí.
+    /// </para>
+    /// <para>
+    /// Idempotencia en ambos sentidos: el módulo, cada permiso y cada grant se crean solo si faltan, de
+    /// forma que un segundo arranque sobre la misma base no duplica filas ni lanza excepción.
+    /// </para>
+    /// </remarks>
+    // internal (no private): Flit.Infrastructure.Tests (InternalsVisibleTo) verifica la idempotencia
+    // del seeder sobre una base donde SeedBaseModulesAsync ya hizo early-return, que es el escenario
+    // real de DEV/QA/PDN y no se puede reproducir llamando a SeedAsync (ejecuta DDL crudo).
+    internal static async Task SeedGeneracionDocumentalPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        const string moduleCode = "generacion-documental";
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == moduleCode && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = moduleCode,
+                Name = "Generación documental",
+                SortOrder = 10,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // (slug, nombre, método HTTP, ruta canónica que protege)
+        var permissions = new[]
+        {
+            (Slug: "generacion-documental.read",
+             Name: "Ver generación documental",
+             HttpMethod: "GET",
+             RoutePattern: "/api/v1/admin/generacion-documental"),
+            (Slug: "generacion-documental.generate",
+             Name: "Generar documentos sin trámite",
+             HttpMethod: "POST",
+             RoutePattern: "/api/v1/admin/generacion-documental/rues/generate"),
+        };
+
+        foreach (var permission in permissions)
+        {
+            var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == permission.Slug, ct);
+            if (action is null)
+            {
+                action = new RbacAction
+                {
+                    Id = Guid.CreateVersion7(),
+                    ModuleId = module.Id,
+                    Slug = permission.Slug,
+                    Name = permission.Name,
+                    HttpMethod = permission.HttpMethod,
+                    RoutePattern = permission.RoutePattern,
+                    IsActive = true,
+                    CreatedAt = now,
+                };
+                db.RbacActions.Add(action);
+                await db.SaveChangesAsync(ct);
+            }
+
+            foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+            {
+                var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+                foreach (var role in roles)
+                {
+                    var alreadyGranted = await db.RoleGrants
+                        .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+                    if (!alreadyGranted)
+                    {
+                        db.RoleGrants.Add(new RoleGrant
+                        {
+                            Id = Guid.CreateVersion7(),
+                            RoleId = role.Id,
+                            PermissionId = action.Id,
+                            CreatedAt = now,
+                        });
+                    }
+                }
+            }
+
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// HU #12239 (Feature #12236) -- banners promocionales
+    /// (ADR-0058-banners-tabla-global-sin-tenant-excepcion) -- modulo banners + permiso
+    /// banners.manage, concedido a SuperAdmin y AdminCompany. Metodo propio e idempotente,
+    /// separado de SeedBaseModulesAsync por el mismo motivo que SeedGeneracionDocumentalPermissionsAsync
+    /// (ese metodo hace early-return si el modulo dashboard ya existe).
+    /// </summary>
+    internal static async Task SeedBannersPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        const string moduleCode = "banners";
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == moduleCode && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = moduleCode,
+                Name = "Banners promocionales",
+                SortOrder = 11,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        const string slug = "banners.manage";
+        var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = slug,
+                Name = "Gestionar banners promocionales",
+                HttpMethod = "POST",
+                RoutePattern = "/api/v1/admin/banners",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        {
+            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+            foreach (var role in roles)
+            {
+                var alreadyGranted = await db.RoleGrants
+                    .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+                if (!alreadyGranted)
+                {
+                    db.RoleGrants.Add(new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = action.Id,
+                        CreatedAt = now,
+                    });
+                }
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Reset administrativo de contraseña (HU #10170 + AdminCompany auth-parity): permiso
+    /// <c>security.users.reset_password</c> en el módulo <c>usuarios</c>, concedido a
+    /// AdminCompany (mismo tenant en runtime) y SuperAdmin (catálogo / bypass por rol).
+    /// Idempotente; separado de <see cref="SeedBaseModulesAsync"/> porque ese método hace
+    /// early-return si el módulo dashboard ya existe.
+    /// </summary>
+    private static async Task SeedResetPasswordPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        const string slug = "security.users.reset_password";
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "usuarios" && m.DeletedAt == null, ct);
+        if (module is null)
+            return;
+
+        var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = slug,
+                Name = "Restablecer contraseña de usuarios del tenant",
+                HttpMethod = "POST",
+                RoutePattern = "/api/v1/auth/admin/reset-password",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        {
+            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+            foreach (var role in roles)
+            {
+                var alreadyGranted = await db.RoleGrants
+                    .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+                if (!alreadyGranted)
+                {
+                    db.RoleGrants.Add(new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = action.Id,
+                        CreatedAt = now,
+                    });
+                }
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Feature #12155 (HU #12157) — módulo <c>admin-tramites-avanzado</c> + 6 permisos granulares
+    /// para las acciones de gestión avanzada del administrador sobre trámites en el Dashboard:
+    /// cambiar estado, anular, limpiar/cargar consolidado, reenviar validación de identidad y
+    /// reasignar gestor. Mismo patrón e idempotencia que
+    /// <see cref="SeedDetailedReportPermissionsAsync"/>: crea módulo y permisos si faltan.
+    ///
+    /// Catálogo cerrado por defecto (AC3 — slugs independientes entre sí): solo se concede a
+    /// SuperAdmin (que además bypassa por rol en runtime), igual que
+    /// <see cref="SeedIctPiiRevealPermissionAsync"/>. Ningún rol de empresa recibe estos permisos
+    /// por seed; asignarlos a un rol concreto es una decisión explícita de quien administra RBAC,
+    /// que es justamente el propósito de que cada acción tenga su propio slug.
+    ///
+    /// Esta HU no implementa los endpoints de negocio (los protegen las HUs dependientes
+    /// #12158-#12162 con <c>.RequirePermission(...)</c>); el <c>RoutePattern</c> queda como
+    /// referencia del endpoint planeado para el catálogo RBAC.
+    /// </summary>
+    private static async Task SeedAdminTramiteAdvancedPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "admin-tramites-avanzado" && m.DeletedAt == null, ct);
+
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "admin-tramites-avanzado",
+                Name = "Gestión avanzada de trámites (Admin)",
+                SortOrder = 11,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var slugs = new (string Slug, string Name, string RoutePattern, string Method)[]
+        {
+            ("AdminTramiteCambiarEstado",       "Cambiar estado de un trámite",              "/api/v1/admin/tramites/{id}/estado",                 "PUT"),
+            ("AdminTramiteAnular",              "Anular un trámite",                         "/api/v1/admin/tramites/{id}/anular",                 "POST"),
+            ("AdminTramiteLimpiarConsolidado",  "Limpiar el consolidado de un trámite",      "/api/v1/admin/tramites/{id}/consolidado/limpiar",    "POST"),
+            ("AdminTramiteCargarConsolidado",   "Cargar el consolidado de un trámite",       "/api/v1/admin/tramites/{id}/consolidado/cargar",     "POST"),
+            ("AdminTramiteReenviarValidacion",  "Reenviar validación de identidad",          "/api/v1/admin/tramites/{id}/reenviar-validacion",    "POST"),
+            ("AdminTramiteReasignarGestor",     "Reasignar gestor de un trámite",            "/api/v1/admin/tramites/{id}/gestor",                 "PUT"),
+        };
+
+        var existingSlugs = await db.RbacActions
+            .Where(a => a.ModuleId == module.Id)
+            .Select(a => a.Slug)
+            .ToListAsync(ct);
+
+        var newActions = slugs
+            .Where(s => !existingSlugs.Contains(s.Slug))
+            .Select(s => new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = s.Slug,
+                Name = s.Name,
+                HttpMethod = s.Method,
+                RoutePattern = s.RoutePattern,
+                IsActive = true,
+                CreatedAt = now,
+            })
+            .ToArray();
+
+        if (newActions.Length > 0)
+        {
+            db.RbacActions.AddRange(newActions);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var allActions = await db.RbacActions
+            .Where(a => a.ModuleId == module.Id)
+            .ToListAsync(ct);
+
+        // Grant a SuperAdmin (idempotente): solo si aún no lo tiene. Sin grant a AdminCompany u
+        // otros roles de empresa — abrir cada permiso a un rol concreto es un acto explícito de
+        // RBAC posterior a este seed (AC3).
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var existingGrants = await db.RoleGrants
+                .Where(g => g.RoleId == role.Id)
+                .Select(g => g.PermissionId)
+                .ToListAsync(ct);
+
+            db.RoleGrants.AddRange(allActions
+                .Where(a => !existingGrants.Contains(a.Id))
+                .Select(a => new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = a.Id,
+                    CreatedAt = now,
+                }));
         }
 
         await db.SaveChangesAsync(ct);

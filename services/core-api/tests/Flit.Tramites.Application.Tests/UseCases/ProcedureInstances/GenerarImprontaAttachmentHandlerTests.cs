@@ -1,6 +1,7 @@
 using Flit.Modules.Improntas.Domain;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -64,13 +65,12 @@ public sealed class GenerarImprontaAttachmentHandlerTests
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string tipologia) =>
         new()
         {
+            ProcedureType = ProcedureTypeFixture.For(tipologia ?? (tipologia == TramiteTipologiaCatalog.CodigoTraspasoStandard ? "traspaso" : "matricula_inicial")),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000001",
             Status = TramiteEstado.Borrador,
-            ModalidadEntrada = tipologia == TramiteTipologiaCatalog.CodigoTraspasoStandard ? "traspaso" : "matricula_inicial",
-            TipologiaCodigo = tipologia,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -175,6 +175,7 @@ public sealed class GenerarImprontaAttachmentHandlerTests
         _client.LastRequest!.OrgNombre.Should().Be("SDM Bogotá");
         _client.LastRequest!.Operador.Should().Be("Ana Operadora");
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "impronta");
+        instance.Attachments.Single(a => a.Tipo == "impronta").Provider.Should().Be(AttachmentProviders.Kyverum);
     }
 
     [Fact]

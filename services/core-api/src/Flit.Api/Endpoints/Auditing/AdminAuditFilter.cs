@@ -91,7 +91,9 @@ internal sealed class AdminAuditFilter : IEndpointFilter
             TargetEntityType: _targetEntityType,
             TargetEntityId: ResolveTargetEntityId(httpContext),
             ClientIp: auditContext.ClientIp,
-            UserAgent: httpContext.Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? ua : null);
+            UserAgent: httpContext.Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? ua : null,
+            OldValue: AdminAuditDetailContext.GetOldValue(httpContext),
+            NewValue: AdminAuditDetailContext.GetNewValue(httpContext));
 
         await writer.WriteAsync(entry, httpContext.RequestAborted).ConfigureAwait(false);
     }

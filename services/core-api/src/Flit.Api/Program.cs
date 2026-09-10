@@ -218,27 +218,46 @@ app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>()
 // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
+app.MapUserUiPreferencesEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminOtEndpoints();
+app.MapAdminOtMetricsEndpoints();
+app.MapAdminOtQueriesEndpoints();
 app.MapAdminPlateRangesEndpoints();
 app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();
 app.MapAdminQuipuxEndpoints();
+app.MapAdminPlataformaMandatosEndpoints();
+app.MapAdminOtMandatosEndpoints();
+app.MapAdminPlataformaFurEndpoints();
+app.MapAdminPlataformaNotificacionesEndpoints();
+app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
+app.MapAdminRuntConfirmationEndpoints();
 app.MapAdminLogQxEndpoints();
 app.MapAdminTransitOfficeTenantsEndpoints();
 app.MapAdminMandateSignersEndpoints();
+app.MapAdminCompanyMandateSignersEndpoints();
 app.MapAdminMandateSignerIdentityEndpoints();
 app.MapAdminSignatureVaultEndpoints();
 app.MapAdminLegalRepresentativesEndpoints();
 app.MapAdminDeedsEndpoints();
+app.MapAdminPersonalizedDocumentsEndpoints();
+app.MapAdminCompanyNotificationDeliveryLogsEndpoints();
 app.MapAdminLegalRepresentativeIdentityEndpoints();
+app.MapAdminIdentityVigenciaEndpoints();
 app.MapAdminDocumentTypesEndpoints();
+app.MapAdminBannersEndpoints();
+app.MapAdminRejectionReasonsEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();
 app.MapAdminDocumentRequirementOverridesEndpoints();
+app.MapAdminOtPrendaDocumentPolicyEndpoints();
 app.MapAdminResolvedDocumentMatrixEndpoints();
 app.MapAdminCompanyDocumentParamsEndpoints();
 app.MapAdminImprontasEndpoints();
+// Feature #12201 (ADR-0056-generacion-documental-standalone) — generación documental SIN trámite.
+// Autorización por permiso (generacion-documental.*), no por policy de grupo.
+app.MapAdminGeneracionDocumentalEndpoints();
 app.MapTramitesEndpoints();
 app.MapTransfersEndpoints();
 
@@ -249,8 +268,12 @@ app.MapPublicProcedureTypeEndpoints();
 app.MapPublicBiometricaEndpoints();
 app.MapPublicKyverumWebhookEndpoints();
 app.MapPublicPortalEndpoints();
+// HU #12240 (Feature #12236) — banners promocionales: listado publico + imagen por streaming.
+app.MapPublicBannersEndpoints();
 app.MapTramitesInstanceEndpoints();
 app.MapTramitesActorEndpoints();
+// HU #11196 / #11197 — firma a posteriori: marcar el trámite y consultar si la opción aplica.
+app.MapTramitesFirmaPosteriorEndpoints();
 app.MapTramitesAttachmentEndpoints();
 app.MapTramitesOcrEndpoints();
 app.MapTramitesParticipantEndpoints();
@@ -258,20 +281,37 @@ app.MapTramitesBiometricaEndpoints();
 app.MapTramitesFirmaEndpoints();
 app.MapTramitesFurEndpoints();
 app.MapTramitesConsolidadoEndpoints();
+app.MapAdminTramiteConsolidadoEndpoints(); // HU #12158 — limpiar/cargar consolidado (admin)
+app.MapAdminTramiteEstadoEndpoints(); // HU #12159 — cambiar estado sin restricción de flujo (admin)
+app.MapAdminTramiteAnularEndpoints(); // HU #12160 — anular desde cualquier estado salvo Aprobado/Revocado
+app.MapAdminTramiteReenviarValidacionEndpoints(); // HU #12161 — reenviar validación de identidad (admin, correo opcional)
+app.MapAdminTramiteReasignarGestorEndpoints(); // HU #12162 — reasignar gestor (AssignedToUserId) + selector de disponibles
 app.MapConsultationEndpoints();
 app.MapTramitesCommercialEndpoints();
 app.MapTramitesPreflightEndpoints();
 app.MapTramitesRnmcEndpoints();
 app.MapTramitesWizardEndpoints();
+app.MapTramitesVehicleColorsEndpoints();
+app.MapTramitesVehicleBodyworksEndpoints();
+app.MapTramitesVehicleServiceTypesEndpoints();
 app.MapTramitesStatusHistoryEndpoints();
+app.MapTramitesNotificationDispatchesEndpoints();
 app.MapLegalRepresentativeConsumptionEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
 app.MapAnalyticsEndpoints();
+app.MapDashboardActiveModulesEndpoints(); // HU #12251 (Feature #12249) — flags de módulos activos, sin AdminCompanyPolicy
 app.MapDetailedReportEndpoints(); // Feature #10813
 app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
+app.MapSuperAdminReportSchedulesEndpoints(); // Reportes2 HU-D 2da ola — informes de consulta SuperAdmin
 app.MapAlertRulesEndpoints(); // Reportes2 HU-D
+app.MapAdminOtReportSchedulesEndpoints(); // Reportes2 HU-D 3ra ola — informes programados del OT
+app.MapAdminOtAlertRulesEndpoints(); // Reportes2 HU-D 3ra ola — alertas por umbral del OT
 app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
+app.MapCompanyQueriesEndpoints(); // Consultas propias de la empresa
+app.MapSuperAdminQueriesEndpoints(); // Consultas de SuperAdmin sobre todas las compañías
+app.MapIctQueriesEndpoints(); // Consultas propias de la empresa sobre sus pre-trámites de ICT
+app.MapIctReportsEndpoints(); // Reportes de ICT en vivo (HU #11617)
 app.MapUsageEventsEndpoints(); // Reportes2 HU-A
 
 app.Run();

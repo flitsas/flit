@@ -1,18 +1,11 @@
-// HU #10874 — panel de subsanación: motivo + checklist (AC1) y Re-radicar (AC2).
-// Feature #11066 — Re-radicar solo tras canReradicar; Cancelar sale del flag.
+// HU #10874 — panel de subsanación: motivo + checklist (AC1). El botón "Re-radicar" (AC2) se
+// movió al pie del asistente, así que aquí solo se prueba la señal del checklist y Cancelar.
+// Feature #11066 — Cancelar sale del flag.
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { StatusHistory } from '@/lib/api/types/procedure-runtime';
-
-const mocks = vi.hoisted(() => ({
-  submitInstance: vi.fn(),
-}));
-
-vi.mock('@/lib/api/tramites-client', () => ({
-  tramitesClient: mocks,
-}));
 
 import { SubsanacionPanel } from '../SubsanacionPanel';
 
@@ -65,20 +58,18 @@ const HISTORY_OPERATOR_DRIVEN: StatusHistory[] = [
   },
 ];
 
+// El panel ya no llama al cliente HTTP: el submit de Re-radicar lo dispara el pie del asistente.
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.submitInstance.mockResolvedValue({ id: 'inst-1', status: 'entregado' });
 });
 
 describe('SubsanacionPanel — estados de carga/error', () => {
   it('estado cargando: muestra indicador accesible', () => {
     render(
       <SubsanacionPanel
-        instanceId="inst-1"
         statusHistory={[]}
         loading
         error={null}
-        onReradicado={vi.fn()}
       />,
     );
     expect(screen.getByRole('status')).toHaveTextContent(/cargando/i);
@@ -87,11 +78,9 @@ describe('SubsanacionPanel — estados de carga/error', () => {
   it('estado error: muestra el mensaje de fallo del fetch', () => {
     render(
       <SubsanacionPanel
-        instanceId="inst-1"
         statusHistory={[]}
         loading={false}
         error="Error de red"
-        onReradicado={vi.fn()}
       />,
     );
     expect(screen.getByRole('alert')).toHaveTextContent(/Error de red/);
@@ -102,11 +91,9 @@ describe('SubsanacionPanel — AC1: motivo y checklist', () => {
   it('con metadata estructurada: pinta el motivo y cada ítem del checklist como checkbox editable', () => {
     render(
       <SubsanacionPanel
-        instanceId="inst-1"
         statusHistory={HISTORY_WITH_ITEMS}
         loading={false}
         error={null}
-        onReradicado={vi.fn()}
         canReradicar
       />,
     );
@@ -125,11 +112,9 @@ describe('SubsanacionPanel — AC1: motivo y checklist', () => {
   it('sin metadata estructurada (gap de backend): degrada al motivo plano (`reason`) sin checklist', () => {
     render(
       <SubsanacionPanel
-        instanceId="inst-1"
         statusHistory={HISTORY_WITHOUT_METADATA}
         loading={false}
         error={null}
-        onReradicado={vi.fn()}
       />,
     );
 
@@ -142,11 +127,9 @@ describe('SubsanacionPanel — AC1: motivo y checklist', () => {
   it('subsanación iniciada por el operador: muestra el motivo del rechazo del OT como guía', () => {
     const { container } = render(
       <SubsanacionPanel
-        instanceId="inst-1"
         statusHistory={HISTORY_OPERATOR_DRIVEN}
         loading={false}
         error={null}
-        onReradicado={vi.fn()}
       />,
     );
 
@@ -157,114 +140,102 @@ describe('SubsanacionPanel — AC1: motivo y checklist', () => {
   });
 });
 
-describe('SubsanacionPanel — AC2: Re-radicar', () => {
-  it('sin canReradicar: Re-radicar permanece deshabilitado aunque el checklist esté completo', async () => {
-    const user = userEvent.setup();
+/**
+ * AC2 — "Re-radicar" ya NO vive en el panel: es la acción terminal del asistente y está en el pie,
+ * junto a Guardar y continuar (ver `hu10874-subsanacion-wizard.test.tsx` para el flujo completo).
+ * Lo que el panel conserva es el checklist, y su única obligación hacia fuera es decir si está
+ * resuelto: ese es el gate que el pie consulta.
+ */
+describe('SubsanacionPanel — AC2: señal del checklist hacia el pie', () => {
+  it('el botón de re-radicar no está en el panel', () => {
     render(
       <SubsanacionPanel
-        instanceId="inst-1"
         statusHistory={HISTORY_WITH_ITEMS}
         loading={false}
         error={null}
-        onReradicado={vi.fn()}
-        canReradicar={false}
-      />,
-    );
-
-    const boton = screen.getByRole('button', { name: /re-radicar/i });
-    const checkboxes = screen.getAllByRole('checkbox');
-    await user.click(checkboxes[0]);
-    await user.click(checkboxes[1]);
-    expect(boton).toBeDisabled();
-  });
-
-  it('con checklist + canReradicar: Re-radicar se habilita al marcar todos y dispara submit', async () => {
-    const user = userEvent.setup();
-    const onReradicado = vi.fn();
-    render(
-      <SubsanacionPanel
-        instanceId="inst-1"
-        statusHistory={HISTORY_WITH_ITEMS}
-        loading={false}
-        error={null}
-        onReradicado={onReradicado}
         canReradicar
       />,
     );
+    expect(screen.queryByRole('button', { name: /re-radicar/i })).not.toBeInTheDocument();
+  });
 
-    const boton = screen.getByRole('button', { name: /re-radicar/i });
-    expect(boton).toBeDisabled();
+  it('con checklist: reporta `false` al montar y `true` solo al marcar todos los ítems', async () => {
+    const user = userEvent.setup();
+    const onChecklistResueltoChange = vi.fn();
+    render(
+      <SubsanacionPanel
+        statusHistory={HISTORY_WITH_ITEMS}
+        loading={false}
+        error={null}
+        onChecklistResueltoChange={onChecklistResueltoChange}
+      />,
+    );
+
+    expect(onChecklistResueltoChange).toHaveBeenLastCalledWith(false);
 
     const checkboxes = screen.getAllByRole('checkbox');
     await user.click(checkboxes[0]);
-    expect(boton).toBeDisabled();
+    expect(onChecklistResueltoChange).toHaveBeenLastCalledWith(false);
 
     await user.click(checkboxes[1]);
-    expect(boton).toBeEnabled();
+    await waitFor(() => expect(onChecklistResueltoChange).toHaveBeenLastCalledWith(true));
 
-    await user.click(boton);
-
-    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
-    await waitFor(() => expect(onReradicado).toHaveBeenCalled());
+    // Desmarcar vuelve a cerrar el gate: el pie tiene que reaccionar en los dos sentidos.
+    await user.click(checkboxes[1]);
+    await waitFor(() => expect(onChecklistResueltoChange).toHaveBeenLastCalledWith(false));
   });
 
-  it('sin checklist: Re-radicar solo se habilita con canReradicar', () => {
-    const { rerender } = render(
+  it('sin checklist: reporta `true` desde el primer render (no hay nada que marcar)', () => {
+    const onChecklistResueltoChange = vi.fn();
+    render(
       <SubsanacionPanel
-        instanceId="inst-1"
         statusHistory={HISTORY_WITHOUT_METADATA}
         loading={false}
         error={null}
-        onReradicado={vi.fn()}
-        canReradicar={false}
+        onChecklistResueltoChange={onChecklistResueltoChange}
       />,
     );
-    expect(screen.getByRole('button', { name: /re-radicar/i })).toBeDisabled();
+    expect(onChecklistResueltoChange).toHaveBeenCalledWith(true);
+  });
+
+  it('explica por qué Re-radicar aún no está disponible y dónde encontrarlo', () => {
+    const { rerender } = render(
+      <SubsanacionPanel statusHistory={HISTORY_WITHOUT_METADATA} loading={false} error={null} />,
+    );
+    expect(screen.getByText(/Re-radicar te espera en el pie del asistente/)).toBeInTheDocument();
 
     rerender(
       <SubsanacionPanel
-        instanceId="inst-1"
         statusHistory={HISTORY_WITHOUT_METADATA}
         loading={false}
         error={null}
-        onReradicado={vi.fn()}
-        canReradicar
-      />,
-    );
-    expect(screen.getByRole('button', { name: /re-radicar/i })).toBeEnabled();
-  });
-
-  it('hasUnsavedChanges: Re-radicar deshabilitado aunque canReradicar', () => {
-    render(
-      <SubsanacionPanel
-        instanceId="inst-1"
-        statusHistory={HISTORY_WITHOUT_METADATA}
-        loading={false}
-        error={null}
-        onReradicado={vi.fn()}
-        canReradicar
         hasUnsavedChanges
       />,
     );
-    expect(screen.getByRole('button', { name: /re-radicar/i })).toBeDisabled();
-  });
+    expect(screen.getByText(/Hay cambios sin guardar/)).toBeInTheDocument();
 
-  it('Cancelar: invoca onCancelSubsanacion cuando showCancel', async () => {
-    const user = userEvent.setup();
-    const onCancel = vi.fn().mockResolvedValue(undefined);
-    render(
+    rerender(
       <SubsanacionPanel
-        instanceId="inst-1"
-        statusHistory={HISTORY_OPERATOR_DRIVEN}
+        statusHistory={HISTORY_WITHOUT_METADATA}
         loading={false}
         error={null}
-        onReradicado={vi.fn()}
-        showCancel
-        onCancelSubsanacion={onCancel}
+        canReradicar
       />,
     );
+    expect(screen.getByText(/Cambios guardados/)).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole('button', { name: /^cancelar$/i }));
-    await waitFor(() => expect(onCancel).toHaveBeenCalled());
+  // Las dos salidas están fuera del panel: Re-radicar en el pie y Cancelar subsanación en el
+  // enlace de la cabecera. El panel no ofrece NINGÚN botón — solo el checklist.
+  it('no ofrece ninguna salida: ni re-radicar ni cancelar la subsanación', () => {
+    render(
+      <SubsanacionPanel statusHistory={HISTORY_OPERATOR_DRIVEN} loading={false} error={null} />,
+    );
+
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    // …pero sí dice dónde están: el gestor no puede quedarse buscándolas.
+    expect(
+      screen.getAllByText(/«Cancelar subsanación» arriba a la derecha/).length,
+    ).toBeGreaterThan(0);
   });
 });

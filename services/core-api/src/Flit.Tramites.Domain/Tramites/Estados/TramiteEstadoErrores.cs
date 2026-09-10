@@ -56,6 +56,41 @@ public static class TramiteEstadoErrores
     public const string PrendaDocumentoRequerido = "prenda_documento_requerido";
 
     /// <summary>
+    /// CF-06 (HU #10881) — el override compañía+OT exige el documento de prenda y no está adjunto
+    /// (409). Código PROPIO, distinto de <see cref="PrendaDocumentoRequerido"/>, desde 2026-08-12:
+    /// ambos caminos compartían código y el wizard pintaba el copy del gate del traspaso ("la decisión
+    /// de prenda seleccionada requiere…") para un bloqueo cuyo origen es una regla del organismo, no
+    /// la decisión del gestor. El backend ya distinguía los dos casos en el <c>detail</c>; el listado
+    /// de blockers del wizard no, porque solo transporta el código. Separarlos permite que el mensaje
+    /// diga de dónde viene, sin romper la coincidencia wizard/submit: ambos emiten ESTE código para
+    /// este camino.
+    /// </summary>
+    public const string PrendaDocumentoRequeridoOt = "prenda_documento_requerido_ot";
+
+    /// <summary>
+    /// HU #11591 — la decisión de prenda vigente CONSTITUYE gravamen (<c>solicitar</c>/<c>registrar</c>,
+    /// ver <see cref="Flit.Tramites.Domain.Tramites.ValueObjects.PrendaDecision.ImplicaGravamen"/>) y no
+    /// tiene diligenciado el acreedor (<c>AcreedorNombre</c> y/o <c>AcreedorDocumento</c>): el FUR no
+    /// puede salir con el gravamen sin beneficiario identificado (409).
+    /// </summary>
+    public const string PrendaAcreedorRequerido = "prenda_acreedor_requerido";
+
+    /// <summary>
+    /// El trámite de LEVANTAMIENTO de prenda no tiene diligenciada la entidad ante la que se levantó
+    /// el gravamen (409). Es lo que el párrafo 23 del FUR declara en este trámite: sin ella el
+    /// recuadro sale mudo mientras la casilla 12 afirma que hubo levantamiento. No aplica a traspaso
+    /// ni a matrícula, donde <c>levantar</c> es una decisión entre varias y conserva su literal.
+    /// </summary>
+    public const string PrendaEntidadLevantamientoRequerida = "prenda_entidad_levantamiento_requerida";
+
+    /// <summary>
+    /// El trámite declara un organismo de DESTINO —el traslado de cuenta— y no está diligenciado, o
+    /// el elegido no está habilitado para la compañía (409). Sin él el FUR no puede decir a dónde va
+    /// la cuenta, que es el objeto entero del trámite.
+    /// </summary>
+    public const string OrganismoDestinoRequerido = "organismo_destino_requerido";
+
+    /// <summary>
     /// HU #11051 — el gestor pidió generar o regenerar documentación de un trámite en estado final
     /// (aprobado/anulado), cuya documentación ya es definitiva (409). No aplica a la regeneración
     /// interna del sistema (aprobación del OT, asignación de placa, identidad validada).
@@ -77,4 +112,36 @@ public static class TramiteEstadoErrores
     /// false) ⇒ cero impacto en trámites de plataforma (409).
     /// </summary>
     public const string TramitePausado = "tramite_pausado";
+
+    /// <summary>
+    /// HU #12159 — cambio de estado ADMINISTRATIVO (fuera de <see cref="TramiteStateMachine"/>): la
+    /// única regla dura de este endpoint es que <c>aprobado</c> nunca participa, ni como origen ni
+    /// como destino. La aprobación exige el flujo formal (gates de entrega, resolución de mandatario,
+    /// efectos en cascada) que este endpoint deliberadamente NO reproduce (422).
+    /// </summary>
+    public const string AdminAprobadoExcluido = "admin_aprobado_excluido";
+
+    /// <summary>
+    /// HU #12160 — anulación ADMINISTRATIVA: el trámite está en <c>aprobado</c> y no puede anularse
+    /// (422). Código ESTABLE definido por el AC de la HU (formato distinto al resto de este catálogo
+    /// a propósito: es el contrato literal acordado con frontend/QA para esta acción).
+    /// </summary>
+    public const string CannotAnnulApproved = "CANNOT_ANNUL_APPROVED";
+
+    /// <summary>
+    /// HU #12160 — anulación ADMINISTRATIVA: el trámite está en <c>revocado</c> y no puede anularse
+    /// (422). El estado <c>revocado</c> TODAVÍA NO EXISTE como miembro de <see cref="TramiteEstado"/>
+    /// (lo agrega la Feature hermana #12156, HU #12165); ver <c>AdminAnularHandler</c> (capa
+    /// Application) para la comparación por string mientras tanto. Código ESTABLE definido por el AC
+    /// de la HU (mismo criterio de formato que <see cref="CannotAnnulApproved"/>).
+    /// </summary>
+    public const string CannotAnnulRevoked = "CANNOT_ANNUL_REVOKED";
+
+    /// <summary>
+    /// HU #12161 — reenvío ADMINISTRATIVO de la validación de identidad de un trámite: el trámite está en
+    /// <c>aprobado</c>, <c>anulado</c> o "revocado" (string, HU #12165 aún no existe como enum — ver
+    /// <c>AdminReenviarValidacionIdentidadHandler</c>, capa Application) y la identidad ya no es
+    /// accionable, sin importar el estado de la validación en sí (422).
+    /// </summary>
+    public const string IdentidadReenvioNoDisponible = "identidad_reenvio_no_disponible";
 }

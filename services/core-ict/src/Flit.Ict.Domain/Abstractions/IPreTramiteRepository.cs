@@ -14,9 +14,13 @@ public interface IPreTramiteRepository
     /// <summary>Carga un pre-trámite (con actores) del tenant por su id, o null.</summary>
     Task<ExternalIntegrationMaster?> GetAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
-    /// <summary>Carga un pre-trámite por su manager_id_transaction (el TransactionFlit del cliente), o null.</summary>
+    /// <summary>
+    /// Carga un pre-trámite del tenant por su referencia pública, o null. La referencia puede ser el
+    /// número secuencial que devuelve /register (<c>transaction_number</c>, paridad v1) o el
+    /// <c>manager_id_transaction</c> propio del gestor; se prioriza el número cuando es numérica.
+    /// </summary>
     Task<ExternalIntegrationMaster?> FindByManagerIdTransactionAsync(
-        string managerIdTransaction,
+        string reference,
         Guid tenantId,
         CancellationToken ct = default);
 

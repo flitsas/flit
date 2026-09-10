@@ -27,6 +27,20 @@ public sealed class SignatureVaultPolicyTests
         DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Date);
 
     [Fact]
+    public async Task VaultDisabled_Mandatario_ReturnsMatch_WhenSignatureExists()
+    {
+        await using var ctx = NewContext();
+        SeedActiveVault(ctx, vigenciaHasta: TodayColombia.AddDays(30));
+        var policy = new SignatureVaultPolicy(new FakeSettings(enabled: false), new DbSignatureVaultReader(ctx));
+
+        var match = await policy.ResolveMandatarioAsync(Tenant, DocType, DocNumber, Ct);
+
+        match.Should().NotBeNull();
+        match!.StoragePath.Should().Be("fm-file-abc");
+        (await policy.ResolveAsync(Tenant, DocType, DocNumber, Ct)).Should().BeNull();
+    }
+
+    [Fact]
     public async Task VaultDisabled_ReturnsNull_EvenWithActiveSignature()
     {
         await using var ctx = NewContext();

@@ -16,7 +16,13 @@ public sealed record LogQueryFilter(
     DateTime? From,
     DateTime? To,
     int Page,
-    int PageSize);
+    int PageSize,
+    /// <summary>
+    /// Búsqueda de texto libre sobre la RUTA del log. Pensada para rastrear un trámite por su número
+    /// (el TransactionFlit que recibe el cliente): las llamadas de estado/reproceso/cierre lo llevan en
+    /// la ruta (p.ej. /api/v1/status-process/byId/82). No es un uuid, así que no rompe con valores como "82".
+    /// </summary>
+    string? Search = null);
 
 public sealed record LogPage(IReadOnlyList<IntegrationLog> Items, int Total, int Page, int PageSize);
 

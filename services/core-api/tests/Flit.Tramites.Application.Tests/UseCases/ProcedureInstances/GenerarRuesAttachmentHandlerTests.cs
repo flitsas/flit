@@ -37,6 +37,9 @@ public sealed class GenerarRuesAttachmentHandlerTests
 
         public Task<DocumentTypeRule?> GetRuleAsync(string tipo, CancellationToken ct = default) =>
             Task.FromResult(_rules.TryGetValue(tipo, out var r) ? r : null);
+
+        public Task<IReadOnlySet<string>> ListSystemGeneratedCodesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
     }
 
     private sealed class FakeRuesExternalClient : IRuesExternalClient
@@ -80,13 +83,12 @@ public sealed class GenerarRuesAttachmentHandlerTests
         var tenantId = Guid.NewGuid();
         var instance = new ProcedureInstance
         {
+            ProcedureType = ProcedureTypeFixture.For(TramiteTipologiaCatalog.CodigoTraspasoStandard ?? "traspaso"),
             Id = id,
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000010",
             Status = status,
-            ModalidadEntrada = "traspaso",
-            TipologiaCodigo = TramiteTipologiaCatalog.CodigoTraspasoStandard,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         if (conActorNit)

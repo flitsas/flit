@@ -95,21 +95,64 @@ public sealed class ConformationProfileTests
     }
 
     [Fact]
-    public async Task Put_PublishedType_ReturnsNotEditable()
+    public async Task Put_PublishedType_SeCorrigeYSubeLaVersion()
     {
+        // ADR-0050 — el AC BE-01-AC-06 bloqueaba los publicados «para no alterar los trámites en
+        // curso». Ese motivo desapareció: cada expediente congela su conformación al crearse, así
+        // que corregir el tipo no alcanza a ninguno vivo. Sin este permiso no había forma de
+        // arreglar la parametrización del catálogo, porque los 21 tipos están publicados.
         var ct = TestContext.Current.CancellationToken;
         var type = Draft();
         type.PublicationStatus = PublicationStatus.Published;
+        var versionPrevia = type.Version;
         _repo.GetByIdWithDetailsAsync(type.Id, ct).Returns(type);
         var sut = new UpdateConformationProfileHandler(_repo);
 
         var (result, error) = await sut.HandleAsync(
             type.Id, new UpdateConformationProfileInput(new JsonObject { ["entryMode"] = "PLATE" }), ct);
 
-        // BE-01-AC-06: tipo published → 422 (not_editable). No se persiste.
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        type.Version.Should().Be(versionPrevia + 1,
+            "editar un publicado deja registro de que el tipo cambió, y los expedientes nuevos se "
+            + "conforman con la versión corregida");
+        await _repo.Received(1).UpdateAsync(Arg.Any<ProcedureType>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Put_ArchivedType_SigueSinPoderEditarse()
+    {
+        // El candado se conserva donde sí tiene sentido: un tipo archivado está retirado, y
+        // corregirlo sugeriría que se puede volver a usar.
+        var ct = TestContext.Current.CancellationToken;
+        var type = Draft();
+        type.PublicationStatus = PublicationStatus.Archived;
+        _repo.GetByIdWithDetailsAsync(type.Id, ct).Returns(type);
+        var sut = new UpdateConformationProfileHandler(_repo);
+
+        var (result, error) = await sut.HandleAsync(
+            type.Id, new UpdateConformationProfileInput(new JsonObject { ["entryMode"] = "PLATE" }), ct);
+
         error.Should().Be("not_editable");
         result.Should().BeNull();
         await _repo.DidNotReceive().UpdateAsync(Arg.Any<ProcedureType>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Put_DraftType_NoSubeLaVersion()
+    {
+        // Un borrador todavía no se ha prometido a nadie: corregirlo no es una versión nueva.
+        var ct = TestContext.Current.CancellationToken;
+        var type = Draft();
+        var versionPrevia = type.Version;
+        _repo.GetByIdWithDetailsAsync(type.Id, ct).Returns(type);
+        var sut = new UpdateConformationProfileHandler(_repo);
+
+        var (_, error) = await sut.HandleAsync(
+            type.Id, new UpdateConformationProfileInput(new JsonObject { ["entryMode"] = "PLATE" }), ct);
+
+        error.Should().BeNull();
+        type.Version.Should().Be(versionPrevia);
     }
 
     [Fact]

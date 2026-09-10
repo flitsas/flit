@@ -16,4 +16,8 @@ public sealed record OtCompanyResponse(
     string LegalName,
     bool IsActive,
     bool IsEnabled,
-    IReadOnlyList<AssignedSignerDto> AssignedSigners);
+    IReadOnlyList<AssignedSignerDto> AssignedSigners,
+    /// <summary>
+    /// NIT de la compañía. Sin él, dos empresas homónimas eran indistinguibles en pantalla.
+    /// </summary>
+    string? TaxId = null);

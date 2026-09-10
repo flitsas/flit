@@ -51,7 +51,9 @@ export function StatusBadge({
     <span
       role="status"
       aria-label={aria}
-      className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold ${className}`}
+      // 12px es el piso tipográfico del sistema; estaba en 11 y es texto que el gestor lee para
+      // saber en qué estado va cada fila.
+      className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${className}`}
       style={style}
     >
       {label}

@@ -105,49 +105,61 @@ const MATCH_MULTI: LegalRepresentativeLookupResult = {
   ],
 };
 
+const RUES_MATCH = {
+  found: true,
+  razonSocial: 'Razón social RUES SAS',
+  estado: 'ACTIVA',
+  documentNumber: '900555666',
+  matriculaMercantil: null,
+  camaraComercio: null,
+  documentType: 'NIT',
+  source: 'RUES',
+  mode: 'live',
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getActors.mockResolvedValue([]);
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getInstance.mockResolvedValue({ fieldValues: [] });
   mocks.patchFieldValues.mockResolvedValue(undefined);
+  mocks.ruesPersonLookup.mockResolvedValue(RUES_MATCH);
 });
 
 /** Prepara un comprador jurídico (persona jurídica) con el NIT escrito, listo para consultar. */
 async function renderJuridicalBuyerWithNit(nit: string) {
   const user = userEvent.setup();
   render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-  await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
+  await user.selectOptions(await screen.findByLabelText('Tipo de documento'), 'NIT');
   // El input principal de identificación (no el del representante legal) se distingue por placeholder.
   await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), nit);
   return user;
 }
 
-describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10906)', () => {
-  it('con match del tenant: precarga y NO consulta RUES/RUNT', async () => {
+describe('ActorsForm — precarga RUES + directorio RL', () => {
+  it('siempre consulta RUES y usa su razón social; el directorio precarga RL y datos básicos', async () => {
     mocks.lookupLegalRepresentativeByNit.mockResolvedValue(MATCH);
 
     const user = await renderJuridicalBuyerWithNit('900555666');
     await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
 
-    // Se consultó el directorio del tenant por NIT…
     await waitFor(() =>
-      expect(mocks.lookupLegalRepresentativeByNit).toHaveBeenCalledWith('900555666'),
+      expect(mocks.ruesPersonLookup).toHaveBeenCalledWith(INSTANCE, {
+        documentNumber: '900555666',
+      }),
     );
-    // …y NO se disparó RUES ni RUNT (cortocircuito R3).
-    expect(mocks.ruesPersonLookup).not.toHaveBeenCalled();
+    expect(mocks.lookupLegalRepresentativeByNit).toHaveBeenCalledWith('900555666');
     expect(mocks.runtPersonLookup).not.toHaveBeenCalled();
 
-    // Precarga visible: card del directorio + razón social autopoblada + representante.
-    expect(
-      await screen.findByText('Precargado desde el directorio de la compañía'),
-    ).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Comercializadora del Valle SAS')).toBeInTheDocument();
+    expect(await screen.findByText('Empresa encontrada en RUES')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Razón social RUES SAS')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Comercializadora del Valle SAS')).toBeNull();
     expect(screen.getByDisplayValue('Carlos Ramírez Núñez')).toBeInTheDocument();
     expect(screen.getByDisplayValue('carlos@valle.co')).toBeInTheDocument();
-    // Badges de firma/identidad vigentes.
-    expect(screen.getByText('Firma vigente')).toBeInTheDocument();
-    expect(screen.getByText('Sin identidad vigente')).toBeInTheDocument();
+    expect(screen.getByText('Cuenta con firma digital vigente.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Validación de identidad pendiente (Kyverum).'),
+    ).toBeInTheDocument();
   });
 
   it('con un solo representante: NO muestra selector (auto-seleccionado)', async () => {
@@ -156,9 +168,9 @@ describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10
     const user = await renderJuridicalBuyerWithNit('900555666');
     await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
 
-    expect(
-      await screen.findByText('Precargado desde el directorio de la compañía'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Empresa encontrada en RUES')).toBeInTheDocument();
+    // La tarjeta del directorio ya no se anuncia con un título propio: se reconoce por sus datos.
+    expect(await screen.findByText('Representante:')).toBeInTheDocument();
     // Con un único representante no se ofrece selección.
     expect(screen.queryByLabelText('Representante legal que firma')).toBeNull();
     // El representante único quedó precargado en la sección de representante legal.
@@ -175,8 +187,10 @@ describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10
     const select = await screen.findByLabelText('Representante legal que firma');
     expect(select).toBeInTheDocument();
     expect(screen.getByDisplayValue('Carlos Ramírez Núñez')).toBeInTheDocument();
-    expect(screen.getByText('Firma vigente')).toBeInTheDocument();
-    expect(screen.getByText('Sin identidad vigente')).toBeInTheDocument();
+    expect(screen.getByText('Cuenta con firma digital vigente.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Validación de identidad pendiente (Kyverum).'),
+    ).toBeInTheDocument();
 
     // Elegir el segundo representante (Ana): precarga sus datos y sus banderas (firma no, identidad sí).
     await user.selectOptions(select, '1');
@@ -198,7 +212,16 @@ describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10
     // Completa el correo del actor (obligatorio) — el input del actor se distingue por su id de los
     // demás campos "Correo electrónico" (el del representante legal ya viene precargado) — y guarda.
     const actorEmail = document.getElementById('comprador-email') as HTMLInputElement;
+    await user.clear(actorEmail);
     await user.type(actorEmail, 'contacto@valle.co');
+    // HU #11595 — ciudad, dirección y teléfono del actor también son obligatorios. El teléfono se
+    // distingue por id: el representante legal (precargado) también trae un input "Teléfono".
+    await user.type(
+      document.getElementById('comprador-telefono') as HTMLInputElement,
+      '3001234567',
+    );
+    await user.type(screen.getByLabelText(/^Ciudad/), 'Bogota');
+    await user.type(screen.getByLabelText(/^Dirección/), 'Calle 1 # 2-3');
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
     await waitFor(() => expect(mocks.saveActors).toHaveBeenCalled());
@@ -228,15 +251,16 @@ describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10
     await waitFor(() =>
       expect(mocks.lookupLegalRepresentativeByNit).toHaveBeenCalledWith('900999888'),
     );
-    // Sin match ⇒ SÍ consulta RUES (fallback) y no muestra la card de precarga.
+    // Sin match de RL ⇒ RUES sí, sin card de directorio. La razón social es la de RUES.
     await waitFor(() =>
       expect(mocks.ruesPersonLookup).toHaveBeenCalledWith(INSTANCE, {
         documentNumber: '900999888',
       }),
     );
     expect(await screen.findByText('Empresa encontrada en RUES')).toBeInTheDocument();
-    expect(
-      screen.queryByText('Precargado desde el directorio de la compañía'),
-    ).toBeNull();
+    expect(screen.queryByText('Representante:')).toBeNull();
+    const razon = await screen.findByLabelText(/razón social/i);
+    expect(razon).toHaveValue('Empresa Externa SAS');
+    expect(razon).toHaveAttribute('readonly');
   });
 });

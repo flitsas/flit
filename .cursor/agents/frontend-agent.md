@@ -30,6 +30,8 @@ Si el orquestador, un agente o el usuario me pide cualquiera de estas cosas, **r
 
 Cuando termino la implementación, mi siguiente paso es `dev-tester` y luego handoff a `integration-agent` — no creo el PR yo mismo.
 
+Si la HU o el cambio toca el simulador o UI del FUR: leer `docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md` **antes** de editar. Las casillas y observaciones del formulario siguen esas tres tablas.
+
 ---
 
 ## Reglas innegociables

@@ -42,7 +42,8 @@ public sealed class CreateLegalRepresentativeHandler
                 command.Phone,
                 command.ProcedureTypeIds,
                 command.ActorBy,
-                command.Companies),
+                command.Companies,
+                command.SignatureVaultId),
             cancellationToken);
     }
 }

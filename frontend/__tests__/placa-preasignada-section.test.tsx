@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   listAvailablePlatesForCompany: vi.fn(),
   getPlatePreassignStatus: vi.fn(),
   patchFieldValues: vi.fn(),
+  generarFur: vi.fn(),
 }));
 
 vi.mock('@/lib/api/admin-plate-ranges', () => ({
@@ -14,7 +15,10 @@ vi.mock('@/lib/api/admin-plate-ranges', () => ({
   getPlatePreassignStatus: mocks.getPlatePreassignStatus,
 }));
 vi.mock('@/lib/api/tramites-client', () => ({
-  tramitesClient: { patchFieldValues: mocks.patchFieldValues },
+  tramitesClient: {
+    patchFieldValues: mocks.patchFieldValues,
+    generarFur: mocks.generarFur,
+  },
 }));
 
 import { PlacaPreasignadaSection } from '@/components/operacion/FirmaFurStep';
@@ -34,6 +38,7 @@ beforeEach(() => {
   mocks.listAvailablePlatesForCompany.mockResolvedValue([plate('1', 'ABC100'), plate('2', 'ABC101')]);
   mocks.getPlatePreassignStatus.mockResolvedValue({ enabled: true });
   mocks.patchFieldValues.mockResolvedValue({});
+  mocks.generarFur.mockResolvedValue({ documents: [] });
 });
 
 describe('PlacaPreasignadaSection (HU #10799)', () => {
@@ -94,6 +99,7 @@ describe('PlacaPreasignadaSection (HU #10799)', () => {
       ]),
     );
     expect(onRefresh).toHaveBeenCalled();
+    expect(mocks.generarFur).toHaveBeenCalledWith('inst-1');
   });
 
   it('placa ya elegida (source user): la muestra con opción Cambiar', () => {
@@ -127,6 +133,7 @@ describe('PlacaPreasignadaSection (HU #10799)', () => {
       ]),
     );
     expect(onRefresh).toHaveBeenCalled();
+    expect(mocks.generarFur).toHaveBeenCalledWith('inst-x');
     // Tras el refresh, el padre re-renderiza sin placa → reaparece el selector y el dígito.
     rerender(
       <PlacaPreasignadaSection

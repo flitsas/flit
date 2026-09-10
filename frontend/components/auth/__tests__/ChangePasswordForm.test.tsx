@@ -40,4 +40,24 @@ describe("ChangePasswordForm (HU #10173 / RF24)", () => {
     fireEvent.click(screen.getByRole("button", { name: /cambiar/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/actual es incorrecta/i);
   });
+
+  // HU #11553 AC1 — el backend rechaza fijar la misma contraseña con 409 PASSWORD_REUSED.
+  it("muestra mensaje explicativo si la nueva contraseña es igual a la actual (409 PASSWORD_REUSED)", async () => {
+    changeMock.mockRejectedValue({ status: 409, body: { code: "PASSWORD_REUSED", message: "..." } });
+    render(<ChangePasswordForm />);
+    fill("DemoPass1!", "DemoPass1!", "DemoPass1!");
+    fireEvent.click(screen.getByRole("button", { name: /cambiar/i }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/diferente a la actual/i);
+  });
+
+  it("un 409 con otro código no muestra el mensaje de reutilización", async () => {
+    changeMock.mockRejectedValue({ status: 409, body: { code: "OTHER_CONFLICT" } });
+    render(<ChangePasswordForm />);
+    fill("DemoPass1!", "NewPass123", "NewPass123");
+    fireEvent.click(screen.getByRole("button", { name: /cambiar/i }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).not.toHaveTextContent(/diferente a la actual/i);
+    expect(alert).toHaveTextContent(/no se pudo cambiar/i);
+  });
 });

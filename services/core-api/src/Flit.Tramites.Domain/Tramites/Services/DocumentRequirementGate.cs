@@ -3,7 +3,15 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// <summary>
 /// Un requisito documental del tipo, en su forma mínima para evaluar el gate de documentos (CFD-06).
 /// </summary>
-public sealed record DocumentRequirementItem(string DocumentTypeCode, bool IsRequired, bool IsDummy);
+public sealed record DocumentRequirementItem(
+    string DocumentTypeCode,
+    bool IsRequired,
+    bool IsDummy,
+    /// <summary>
+    /// Lo produce FLIT (consulta, FUR, consolidado). Se asocia en Documental para el expediente,
+    /// pero no se pide carga ni bloquea radicación.
+    /// </summary>
+    bool IsSystemGenerated = false);
 
 /// <summary>
 /// Gate puro (sin IO) del paso de documentos (CFD-06): computa los códigos bloqueantes de los
@@ -31,7 +39,7 @@ public static class DocumentRequirementGate
         var blockers = new List<string>();
         foreach (var req in requirements)
         {
-            if (!req.IsRequired || req.IsDummy)
+            if (!req.IsRequired || req.IsDummy || req.IsSystemGenerated)
                 continue;
             if (!uploadedCodes.Contains(req.DocumentTypeCode))
                 blockers.Add(BlockerFor(req.DocumentTypeCode));

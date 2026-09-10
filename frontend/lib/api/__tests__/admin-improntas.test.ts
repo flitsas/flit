@@ -5,7 +5,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ApiError } from "../types";
 
 const mocks = vi.hoisted(() => ({ getToken: vi.fn(() => "jwt-token") }));
-vi.mock("../client", () => ({ API_BASE_URL: "https://api.test", getToken: mocks.getToken }));
+vi.mock("../client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../client")>();
+  return { API_BASE_URL: "https://api.test", getToken: mocks.getToken, friendlyErrorMessage: actual.friendlyErrorMessage };
+});
 
 import { describeImprontaError, generarImpronta } from "../admin-improntas";
 

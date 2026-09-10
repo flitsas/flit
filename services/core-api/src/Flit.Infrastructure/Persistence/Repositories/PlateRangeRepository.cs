@@ -491,45 +491,120 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
                         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                         return PlateOpResult.Ok;
                     }
-                    // Cualquier otro estado (preasignada por otro, utilizada, bloqueada, revocada) → duplicado.
-                    return PlateOpResult.Fail($"La placa {normalized} ya está registrada para este organismo de tránsito.");
+                    if (existing.ProcedureInstanceId is not null)
+                    {
+                        return PlateOpResult.Fail(
+                            $"La placa {normalized} ya está asignada a otro trámite de este organismo de tránsito. Elija una placa diferente.");
+                    }
+                    // Utilizada / bloqueada / revocada sin trámite asociado.
+                    return PlateOpResult.Fail(
+                        $"La placa {normalized} ya está registrada para este organismo de tránsito y no está disponible. Elija una placa diferente.");
+                }
+
+                // La unicidad del inventario es (transit_office_id, plate), SIN tenant, mientras que la
+                // consulta anterior corre bajo RLS: una placa registrada por otra compañía del mismo OT
+                // es invisible y el INSERT moría contra uq_plate_range_details_office_plate (500 sin
+                // motivo para el operador). Se verifica cross-tenant antes de insertar.
+                if (await PlateExistsInOfficeAsync(transitOfficeId, normalized, cancellationToken).ConfigureAwait(false))
+                {
+                    return PlateOpResult.Fail(
+                        $"La placa {normalized} ya está asignada en este organismo de tránsito (registrada por otra compañía). Elija una placa diferente.");
                 }
 
                 var (prefix, number) = parsed.Value;
 
                 // Rango ad-hoc de 1 placa (contenedor para satisfacer la FK plate_range_id NOT NULL).
-                var range = new PlateRangeEntity
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = companyTenantId,
-                    TransitOfficeId = transitOfficeId,
-                    Prefix = prefix,
-                    RangeFrom = number,
-                    RangeTo = number,
-                    EditableUntil = now, // ad-hoc: sin ventana de edición útil
-                    CreatedAt = now,
-                };
-                _context.PlateRanges.Add(range);
-                // FK: el padre primero (mismo criterio que CreateRangeAsync, HU #10797).
-                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                // uq_plate_ranges_office_prefix_bounds es por (OT, prefijo, desde, hasta): si el rango
+                // ad-hoc ya existe se reutiliza en vez de insertar un duplicado que rompería la carga.
+                var range = await _context.PlateRanges
+                    .FirstOrDefaultAsync(
+                        r => r.TransitOfficeId == transitOfficeId
+                            && r.Prefix == prefix
+                            && r.RangeFrom == number
+                            && r.RangeTo == number,
+                        cancellationToken)
+                    .ConfigureAwait(false);
 
-                _context.PlateRangeDetails.Add(new PlateRangeDetailEntity
+                try
                 {
-                    Id = Guid.NewGuid(),
-                    PlateRangeId = range.Id,
-                    TenantId = companyTenantId,
-                    TransitOfficeId = transitOfficeId,
-                    Plate = normalized,
-                    State = PlateState.Preasignada,
-                    ProcedureInstanceId = procedureInstanceId,
-                    ReservedAt = now,
-                    CreatedAt = now,
-                    UpdatedAt = now,
-                });
-                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    if (range is null)
+                    {
+                        range = new PlateRangeEntity
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = companyTenantId,
+                            TransitOfficeId = transitOfficeId,
+                            Prefix = prefix,
+                            RangeFrom = number,
+                            RangeTo = number,
+                            EditableUntil = now, // ad-hoc: sin ventana de edición útil
+                            CreatedAt = now,
+                        };
+                        _context.PlateRanges.Add(range);
+                        // FK: el padre primero (mismo criterio que CreateRangeAsync, HU #10797).
+                        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    }
+
+                    _context.PlateRangeDetails.Add(new PlateRangeDetailEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        PlateRangeId = range.Id,
+                        TenantId = companyTenantId,
+                        TransitOfficeId = transitOfficeId,
+                        Plate = normalized,
+                        State = PlateState.Preasignada,
+                        ProcedureInstanceId = procedureInstanceId,
+                        ReservedAt = now,
+                        CreatedAt = now,
+                        UpdatedAt = now,
+                    });
+                    await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (DbUpdateException)
+                {
+                    // Última defensa ante una carrera por la misma placa: los índices únicos del OT no
+                    // pueden escapar como 500 al operador, que necesita saber qué corregir.
+                    return PlateOpResult.Fail(
+                        $"La placa {normalized} ya está asignada en este organismo de tránsito. Elija una placa diferente.");
+                }
+
                 return PlateOpResult.Ok;
             },
             cancellationToken);
+
+    // ¿La placa ya está en el inventario del OT, sin importar la compañía dueña? Es la pregunta que
+    // responde el índice uq_plate_range_details_office_plate, así que debe evaluarse igual que él:
+    // sin RLS. Se reactiva row_security al terminar para que el INSERT posterior siga acotado al tenant.
+    private async Task<bool> PlateExistsInOfficeAsync(
+        Guid transitOfficeId,
+        string plate,
+        CancellationToken cancellationToken)
+    {
+        if (!_context.Database.IsRelational())
+        {
+            return await _context.PlateRangeDetails
+                .AsNoTracking()
+                .AnyAsync(d => d.TransitOfficeId == transitOfficeId && d.Plate == plate, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await _context.Database
+            .ExecuteSqlRawAsync("SET LOCAL row_security = off", cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            return await _context.PlateRangeDetails
+                .AsNoTracking()
+                .AnyAsync(d => d.TransitOfficeId == transitOfficeId && d.Plate == plate, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            await _context.Database
+                .ExecuteSqlRawAsync("SET LOCAL row_security = on", cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
 
     private async Task<T> ExecuteInTenantScopeAsync<T>(
         Guid tenantId,

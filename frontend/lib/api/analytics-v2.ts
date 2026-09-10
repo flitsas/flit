@@ -129,15 +129,46 @@ export interface StuckMetrics {
   items: StuckItem[];
 }
 
+/**
+ * Causal TIPIFICADA del catálogo global.
+ *
+ * `pct` es el porcentaje de RECHAZOS que incluyen la causal, no el reparto de un total: un rechazo
+ * puede llevar varias causales, así que la suma puede pasar del 100 %. Hay que rotularlo así al
+ * pintarlo, porque leído como reparto el número engaña.
+ */
+export interface RejectionByReasonCatalog {
+  reasonId: string;
+  code: string;
+  description: string;
+  rechazos: number;
+  pct: number;
+}
+
+/** Tramo PROPIO del ciclo: horas desde que se crea el trámite hasta que se entrega. */
+export interface InternalCycle {
+  avgHours: number | null;
+  p50Hours: number | null;
+  p90Hours: number | null;
+}
+
 export interface OtMetricsData {
   summary: OtMetricsSummary;
   rejectionByOffice: RejectionByOffice[];
+  /** Motivos escritos a mano. Se conserva por los rechazos anteriores al catálogo; no es agregable. */
   rejectionByReason: RejectionByReason[];
   rejectionByType: RejectionByType[];
   approvalTimesByOffice: ApprovalTimesByOffice[];
   officeRanking: OfficeRankingItem[];
   reincidence: ReincidenceMetrics;
   stuck: StuckMetrics;
+  /** Motivos del catálogo. Vacío mientras no haya rechazos tipificados en el rango. */
+  rejectionByReasonCatalog: RejectionByReasonCatalog[];
+  /**
+   * Causales marcadas por rechazo (promedio). Indicador de salud: si se acerca al tamaño del
+   * catálogo, alguien está marcando todo y la distribución deja de discriminar.
+   */
+  avgReasonsPerRejection: number;
+  internalCycle: InternalCycle;
 }
 
 export type OtMetricsResponse = Compared<OtMetricsData>;

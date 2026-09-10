@@ -37,6 +37,9 @@ public sealed class VerifikConductorResultMapperTests
     private static ConsultationCheck Check(ConsultationResult r, string key) =>
         r.Checks.Single(c => c.Key == key);
 
+    private static string? Field(ConsultationResult r, string key) =>
+        r.HydratedFields.FirstOrDefault(f => f.FieldKey == key)?.ValueText;
+
     [Fact]
     public void PersonaHallada_ProduceOkGreen_YHidrataNombre()
     {
@@ -55,6 +58,68 @@ public sealed class VerifikConductorResultMapperTests
         result.HydratedFields.Should().Contain(f => f.FieldKey == "person_full_name" && f.ValueText == "MATEO VERIFIK");
         result.HydratedFields.Should().Contain(f => f.FieldKey == "person_first_name" && f.ValueText == "MATEO");
         result.HydratedFields.Should().Contain(f => f.FieldKey == "person_last_name" && f.ValueText == "VERIFIK");
+    }
+
+    // Verifik entrega los nombres de pila juntos en firstName; el desglose lo hace el mapper.
+    [Fact]
+    public void VariosNombresDePila_SeDesglosanEnPrimeroYSegundo()
+    {
+        var result = VerifikConductorResultMapper.Map(
+            Response(
+                fullName: "JOSE GABRIEL JAIME ACOSTA MADRID",
+                firstName: "JOSE GABRIEL JAIME",
+                lastName: "ACOSTA MADRID"));
+
+        Field(result, "person_first_name").Should().Be("JOSE");
+        Field(result, "person_second_name").Should().Be("GABRIEL JAIME");
+        Field(result, "person_first_last_name").Should().Be("ACOSTA");
+        Field(result, "person_second_last_name").Should().Be("MADRID");
+        Field(result, "person_last_name").Should().Be("ACOSTA MADRID");
+    }
+
+    // Los dos proveedores tienen que hidratar exactamente lo mismo para la misma persona: si
+    // divergen, el nombre del actor cambia según qué proveedor tenga configurado el tenant.
+    [Fact]
+    public void MismaPersona_ConvergeConElMapperDeKyverum()
+    {
+        var verifik = VerifikConductorResultMapper.Map(
+            Response(
+                fullName: "SAMUEL CARDENAS GUTIERREZ",
+                firstName: "SAMUEL",
+                lastName: "CARDENAS GUTIERREZ",
+                driverStatus: "ACTIVO",
+                citizenStatus: "ACTIVA"));
+
+        var kyverum = KyverumRuntConductorResultMapper.Map(new KyverumRuntPersonaResponse
+        {
+            Ok = true,
+            Identidad = new KyverumRuntIdentidad
+            {
+                PrimerNombre = "SAMUEL",
+                SegundoNombre = "",
+                PrimerApellido = "CARDENAS",
+                SegundoApellido = "GUTIERREZ",
+                NombreCompleto = "SAMUEL CARDENAS GUTIERREZ",
+            },
+            Persona = new KyverumRuntPersona
+            {
+                Nombres = "S****L",
+                Apellidos = "C****S G****Z",
+                EstadoPersona = "ACTIVA",
+                EstadoConductor = "ACTIVO",
+            },
+        });
+
+        string?[] nameKeys =
+        [
+            "person_full_name", "person_first_name", "person_second_name",
+            "person_first_last_name", "person_second_last_name", "person_last_name",
+        ];
+
+        foreach (var key in nameKeys)
+            Field(verifik, key!).Should().Be(Field(kyverum, key!), "el campo {0} debe coincidir entre proveedores", key);
+
+        Field(verifik, "person_full_name").Should().Be("SAMUEL CARDENAS GUTIERREZ");
     }
 
     [Fact]

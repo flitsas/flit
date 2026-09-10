@@ -28,6 +28,8 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         Guid? createdBy,
         IReadOnlyList<string>? mimeTypesAllowed = null,
         long? maxSizeBytes = null,
+        bool isSystemGenerated = false,
+        string? uploadInstructions = null,
         CancellationToken cancellationToken = default)
     {
         var entity = new DocumentType
@@ -36,12 +38,15 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
             Code = code,
             Name = name,
             Description = description,
+            UploadInstructions = uploadInstructions,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             CreatedBy = createdBy,
             // RF08/09: null ⇒ vacío/0 ⇒ el AttachmentValidator cae a los límites globales.
             MimeTypesAllowed = mimeTypesAllowed?.ToList() ?? [],
             MaxSizeBytes = maxSizeBytes ?? 0,
+            IsSystemGenerated = isSystemGenerated,
+            GeneratedSortOrder = isSystemGenerated ? (short)99 : null,
         };
 
         _context.DocumentTypes.Add(entity);
@@ -63,6 +68,23 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
             query = query.Where(d => d.IsActive);
         }
 
+        if (filter.IsActive is { } isActive)
+        {
+            query = query.Where(d => d.IsActive == isActive);
+        }
+
+        if (filter.IsSystemGenerated is { } generated)
+        {
+            query = query.Where(d => d.IsSystemGenerated == generated);
+        }
+
+        if (!string.IsNullOrEmpty(filter.Search))
+        {
+            var term = filter.Search.ToUpperInvariant();
+            query = query.Where(d =>
+                d.Code.ToUpper().Contains(term) || d.Name.ToUpper().Contains(term));
+        }
+
         var totalCount = await query.LongCountAsync(cancellationToken).ConfigureAwait(false);
 
         if (totalCount == 0)
@@ -81,10 +103,12 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
                 Code = d.Code,
                 Name = d.Name,
                 Description = d.Description,
+                UploadInstructions = d.UploadInstructions,
                 IsActive = d.IsActive,
                 CreatedAt = d.CreatedAt,
                 MimeTypesAllowed = d.MimeTypesAllowed,
                 MaxSizeBytes = d.MaxSizeBytes,
+                IsSystemGenerated = d.IsSystemGenerated,
             })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -112,6 +136,8 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         Guid? updatedBy,
         IReadOnlyList<string>? mimeTypesAllowed = null,
         long? maxSizeBytes = null,
+        bool? isSystemGenerated = null,
+        string? uploadInstructions = null,
         CancellationToken cancellationToken = default)
     {
         var entity = await _context.DocumentTypes
@@ -126,6 +152,7 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         entity.Code = code;
         entity.Name = name;
         entity.Description = description;
+        entity.UploadInstructions = uploadInstructions;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.UpdatedBy = updatedBy;
         // RF08/09: solo se tocan los límites si el request los envía (null ⇒ conserva lo existente).
@@ -133,6 +160,12 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
             entity.MimeTypesAllowed = mimeTypesAllowed.ToList();
         if (maxSizeBytes is not null)
             entity.MaxSizeBytes = maxSizeBytes.Value;
+        if (isSystemGenerated is not null)
+        {
+            entity.IsSystemGenerated = isSystemGenerated.Value;
+            if (isSystemGenerated.Value && entity.GeneratedSortOrder is null)
+                entity.GeneratedSortOrder = 99;
+        }
 
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -159,6 +192,46 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
 
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        return true;
+    }
+
+    public async Task<bool> PurgeAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.DocumentTypes
+            .FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entity is null)
+        {
+            return false;
+        }
+
+        var requirements = await _context.ProcedureDocumentRequirements
+            .Where(r => r.DocumentTypeId == id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var orderOverrides = await _context.DocumentOrderOverrides
+            .Where(r => r.DocumentTypeId == id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var requirementOverrides = await _context.DocumentRequirementOverrides
+            .Where(r => r.DocumentTypeId == id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var precedences = await _context.OtDocumentPrecedences
+            .Where(r => r.DocumentTypeId == id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        _context.OtDocumentPrecedences.RemoveRange(precedences);
+        _context.DocumentOrderOverrides.RemoveRange(orderOverrides);
+        _context.DocumentRequirementOverrides.RemoveRange(requirementOverrides);
+        _context.ProcedureDocumentRequirements.RemoveRange(requirements);
+        _context.DocumentTypes.Remove(entity);
+
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -220,9 +293,11 @@ internal sealed class DocumentTypeRepository : IDocumentTypeRepository
         Code = entity.Code,
         Name = entity.Name,
         Description = entity.Description,
+        UploadInstructions = entity.UploadInstructions,
         IsActive = entity.IsActive,
         CreatedAt = entity.CreatedAt,
         MimeTypesAllowed = entity.MimeTypesAllowed,
         MaxSizeBytes = entity.MaxSizeBytes,
+        IsSystemGenerated = entity.IsSystemGenerated,
     };
 }

@@ -5,11 +5,13 @@ using Flit.Admin.Application.Companies.LegalRepresentatives.GetLegalRepresentati
 using Flit.Admin.Application.Companies.LegalRepresentatives.ListLegalRepresentatives;
 using Flit.Admin.Application.Companies.LegalRepresentatives.UpdateLegalRepresentative;
 using Flit.Admin.Domain.DocumentRequirements;
+using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using SignatureVaultAggregate = Flit.Admin.Domain.Companies.SignatureVault.SignatureVault;
 
 namespace Flit.Admin.Tests.Companies.LegalRepresentatives;
 
@@ -91,8 +93,11 @@ public sealed class LegalRepresentativeCrudHandlerTests
         }, Ct);
 
         result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.Field == "companyNit" && e.Code == "requerido");
+        // Compañía/NIT es opcional en el alta (persona sola). Siguen siendo obligatorios los datos de la persona.
+        result.Errors.Should().NotContain(e => e.Field == "companyNit" && e.Code == "requerido");
+        result.Errors.Should().Contain(e => e.Field == "documentType" && e.Code == "requerido");
         result.Errors.Should().Contain(e => e.Field == "documentNumber" && e.Code == "requerido");
+        result.Errors.Should().Contain(e => e.Field == "firstLastName" && e.Code == "requerido");
         result.Errors.Should().Contain(e => e.Field == "name" && e.Code == "requerido");
     }
 
@@ -238,6 +243,14 @@ public sealed class LegalRepresentativeCrudHandlerTests
             new GetLegalRepresentativeByIdQuery { TenantId = Tenant, Id = id }, Ct);
         item!.IsActive.Should().BeFalse();
 
+        var listed = await h.List.HandleAsync(
+            new ListLegalRepresentativesQuery { TenantId = Tenant, Page = 1, PageSize = 20 }, Ct);
+        listed.Data.Should().NotContain(r => r.Id == id);
+
+        var lookup = await new DbLegalRepresentativeReader(ctx)
+            .FindActiveByCompanyNitAsync(Tenant, Nit, Ct);
+        lookup.Should().BeNull();
+
         var unknown = await h.Delete.HandleAsync(
             new DeleteLegalRepresentativeCommand { TenantId = Tenant, Id = Guid.NewGuid() }, Ct);
         unknown.Should().Be(DeleteLegalRepresentativeOutcome.NotFound);
@@ -253,6 +266,7 @@ public sealed class LegalRepresentativeCrudHandlerTests
         var writer = new LegalRepresentativeWriter(
             new FakeProcedureTypeCatalog([procType]),
             new FakeSignatureResolver(Resolution.None),
+            new FakeSignatureVaultReader(),
             repo, reader,
             new StubTimeProvider(new DateTimeOffset(2026, 7, 23, 12, 0, 0, TimeSpan.Zero)));
         var create = new CreateLegalRepresentativeHandler(writer);
@@ -296,6 +310,7 @@ public sealed class LegalRepresentativeCrudHandlerTests
         var create = new CreateLegalRepresentativeHandler(new LegalRepresentativeWriter(
             new FakeProcedureTypeCatalog([]),
             new FakeSignatureResolver(Resolution.None),
+            new FakeSignatureVaultReader(),
             repo, reader,
             new StubTimeProvider(new DateTimeOffset(2026, 7, 23, 12, 0, 0, TimeSpan.Zero))));
 
@@ -331,6 +346,52 @@ public sealed class LegalRepresentativeCrudHandlerTests
         item!.Companies.Select(c => c.Nit).Should().BeEquivalentTo([nitA, nitB]);
     }
 
+    [Fact]
+    public async Task Create_TwoRepresentativesSameNit_KeepIndependentNames()
+    {
+        await using var ctx = NewContext();
+        var create = new CreateLegalRepresentativeHandler(new LegalRepresentativeWriter(
+            new FakeProcedureTypeCatalog([]),
+            new FakeSignatureResolver(Resolution.None),
+            new FakeSignatureVaultReader(),
+            new LegalRepresentativeRepository(ctx),
+            new DbLegalRepresentativeReader(ctx),
+            new StubTimeProvider(new DateTimeOffset(2026, 7, 23, 12, 0, 0, TimeSpan.Zero))));
+
+        var first = await create.HandleAsync(new CreateLegalRepresentativeCommand
+        {
+            TenantId = Tenant,
+            DocumentType = "CC",
+            DocumentNumber = "111111111",
+            FirstLastName = "Uno",
+            Name = "Ana",
+            Companies = [new LegalRepresentativeCompanyInput(Nit, "Nombre de Ana", null, null, null, null)],
+        }, Ct);
+        var second = await create.HandleAsync(new CreateLegalRepresentativeCommand
+        {
+            TenantId = Tenant,
+            DocumentType = "CC",
+            DocumentNumber = "222222222",
+            FirstLastName = "Dos",
+            Name = "Pedro",
+            Companies = [new LegalRepresentativeCompanyInput(Nit, "Nombre de Pedro", null, null, null, null)],
+        }, Ct);
+
+        first.IsValid.Should().BeTrue();
+        second.IsValid.Should().BeTrue();
+        first.Id!.Value.Should().NotBe(second.Id!.Value);
+
+        var reader = new DbLegalRepresentativeReader(ctx);
+        var ana = await reader.GetByIdAsync(Tenant, first.Id!.Value, Ct);
+        var pedro = await reader.GetByIdAsync(Tenant, second.Id!.Value, Ct);
+        ana!.Companies.Should().ContainSingle(c => c.Name == "Nombre de Ana");
+        pedro!.Companies.Should().ContainSingle(c => c.Name == "Nombre de Pedro");
+        ana.Companies[0].Id.Should().NotBe(pedro.Companies[0].Id);
+
+        var listed = await reader.ListActiveByCompanyNitAsync(Tenant, Nit, Ct);
+        listed.Should().HaveCount(2);
+    }
+
     // ---------- Helpers ----------
 
     private static CreateLegalRepresentativeCommand NewCreate(IReadOnlyList<Guid> procedureTypeIds) =>
@@ -358,9 +419,10 @@ public sealed class LegalRepresentativeCrudHandlerTests
         var repo = new LegalRepresentativeRepository(ctx);
         var catalog = new FakeProcedureTypeCatalog(procedureTypes);
         var resolver = new FakeSignatureResolver(resolution);
+        var vaultReader = new FakeSignatureVaultReader();
         // El "hoy" no altera el resultado: el resolutor está fakeado y devuelve una resolución fija.
         var clock = new StubTimeProvider(new DateTimeOffset(2026, 7, 23, 12, 0, 0, TimeSpan.Zero));
-        var writer = new LegalRepresentativeWriter(catalog, resolver, repo, reader, clock);
+        var writer = new LegalRepresentativeWriter(catalog, resolver, vaultReader, repo, reader, clock);
 
         return new CrudHandlers(
             new CreateLegalRepresentativeHandler(writer),
@@ -434,5 +496,25 @@ public sealed class LegalRepresentativeCrudHandlerTests
 
         public static LegalRepresentativeSignatureResolution Identity(Guid id) =>
             LegalRepresentativeSignatureResolution.FromIdentity(id);
+    }
+
+    /// <summary>Lector del baúl en memoria: devuelve null para cualquier consulta (sin firmas precargadas).</summary>
+    private sealed class FakeSignatureVaultReader : ISignatureVaultReader
+    {
+        public Task<SignatureVaultAggregate?> FindActiveByNitAsync(Guid tenantId, string nitEmpresa, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultAggregate?>(null);
+
+        public Task<SignatureVaultAggregate?> FindActiveByDocumentAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultAggregate?>(null);
+
+        public Task<SignatureVaultAggregate?> FindActiveByNumberAsync(
+            Guid tenantId, string documentNumber, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultAggregate?>(null);
+
+        public Task<IReadOnlyList<SignatureVaultItem>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<SignatureVaultItem>>([]);
+
+        public Task<SignatureVaultItem?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultItem?>(null);
     }
 }
