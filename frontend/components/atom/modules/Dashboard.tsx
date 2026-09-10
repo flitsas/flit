@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   FileText,
   CheckCircle,
   Car,
@@ -27,6 +28,7 @@ import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
 import { useActiveBanners } from "@/hooks/useActiveBanners";
+import { bannerAmbientGradient, useDominantColor } from "@/hooks/useDominantColor";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
 import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
@@ -118,11 +120,13 @@ function describeError(error: unknown): string {
 // y no puede faltar. Detrás de él van los banners Activos del Administrador (AC1); sin banners
 // activos el carrusel solo muestra el slide fijo (AC3).
 
+/** Fondo del carrusel, IGUAL en todos los slides (welcome y banner) — ver render de `Dashboard`. */
+const BRAND_GRADIENT = "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)";
+
 type WelcomeSlide = {
   type: "welcome";
   title: string;
   body: string;
-  bg: string;
 };
 
 type BannerSlide = {
@@ -140,7 +144,6 @@ function buildSlides(displayName: string, banners: ActiveBanner[]): Slide[] {
     type: "welcome",
     title: `Hola, ${displayName} 👋`,
     body: "Tus procesos y validaciones se encuentran sincronizados. Continúa gestionando tu operación de manera segura y eficiente.",
-    bg: "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)",
   };
 
   const bannerSlides: BannerSlide[] = banners.map((banner) => ({
@@ -349,6 +352,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   // Defensivo: si un banner falla después de posicionar el índice en él (p. ej. `onError` de la
   // última imagen visible), `slides` puede encoger antes de que el índice se reacomode.
   const s = slides[slide] ?? slides[0];
+  const bannerColor = useDominantColor(s.type === "banner" ? s.imageUrl : undefined);
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
@@ -359,16 +363,27 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           className="relative md:col-span-2 rounded-2xl text-white overflow-hidden flex flex-col justify-between"
           style={{ minHeight: "220px" }}
         >
-          {/* Capa de fondo: gradiente fijo para el slide de bienvenida, imagen del banner (por
-              streaming, endpoint público sin auth) para los demás — AC1/AC2. */}
-          {s.type === "welcome" ? (
-            <div className="absolute inset-0" style={{ background: s.bg }} />
-          ) : (
+          {/* Capa de fondo: gradiente de marca fijo en el slide de bienvenida; en un banner, el
+              color PROMEDIO de esa misma imagen (así combina con cualquier banner, no solo con
+              el azul/turquesa de marca) — es el respaldo que se ve cuando `object-contain` deja
+              margen (abajo de `md`, ver siguiente bloque); en `md+` es invisible, cubierto por el
+              banner a pantalla completa. */}
+          <div
+            className="absolute inset-0"
+            style={{ background: s.type === "welcome" ? BRAND_GRADIENT : bannerAmbientGradient(bannerColor) }}
+          />
+          {s.type !== "welcome" && (
+            // AC1/AC2 — ajuste adaptable, mismo criterio que Spotify/YouTube/Amazon: con espacio
+            // de sobra (`md:` en adelante, banner a 2/3 de ancho junto a los KPIs) se ajusta
+            // completo al contenedor (object-cover, sesgado a la derecha para no cortar el
+            // texto); en pantallas angostas (abajo de `md`, el banner pasa a ancho completo y el
+            // recorte horizontal sería mucho más agresivo) se ve la imagen COMPLETA sin recortar
+            // (object-contain) sobre el gradiente de fondo.
             <img
               src={s.imageUrl}
               alt={s.name}
               onError={() => markBannerFailed(s.id)}
-              className="absolute inset-0 h-full w-full object-cover"
+              className="absolute inset-0 h-full w-full object-contain object-center md:object-cover md:object-[80%_center]"
             />
           )}
           {/* Velo para que los controles (puntos/flechas) mantengan contraste sobre cualquier
@@ -394,16 +409,23 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               <p className="text-sm md:text-base opacity-95 leading-snug line-clamp-3">{s.body}</p>
             </div>
           ) : s.linkUrl ? (
-            <div className="relative px-6 pt-5">
-              <a
-                href={s.linkUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold bg-white/15 hover:bg-white/25"
-              >
-                {s.name}
-              </a>
-            </div>
+            // Sin título visible (solo el banner): el enlace cubre toda la imagen — al acercarse,
+            // se opaca un poco y aparece el ícono de enlace; clic en cualquier punto abre el
+            // enlace. El nombre sigue siendo el nombre accesible (aria-label), no texto en pantalla.
+            <a
+              href={s.linkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={s.name}
+              className="group absolute inset-0"
+            >
+              <span className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/25" />
+              <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-[#162744] shadow-lg">
+                  <ExternalLink className="h-5 w-5" aria-hidden="true" />
+                </span>
+              </span>
+            </a>
           ) : (
             <span className="sr-only">{s.name}</span>
           )}

@@ -240,6 +240,42 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     expect(
       screen.getByText(/SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA \(11001000\)/),
     ).toBeInTheDocument();
+    // Sin enlace: sin título visible del banner ni <a> envolviéndolo (solo sr-only para lectores
+    // de pantalla).
+    expect(screen.getByText("Banner del organismo")).toHaveClass("sr-only");
+    expect(screen.queryByRole("link", { name: "Banner del organismo" })).not.toBeInTheDocument();
+  });
+
+  it("AC2 — un banner con enlace se cubre completo con un <a>, sin título visible", async () => {
+    getActiveBanners.mockResolvedValue([
+      { id: "b2", name: "Promo con enlace", linkUrl: "https://flit.example/promo" },
+    ]);
+    render(<OtDashboard />);
+
+    expect(await screen.findByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /^Mensaje \d/ })).toHaveLength(2),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Mensaje siguiente" }));
+    expect(await screen.findByRole("img", { name: "Promo con enlace" })).toBeInTheDocument();
+
+    const enlace = screen.getByRole("link", { name: "Promo con enlace" });
+    expect(enlace).toHaveAttribute("href", "https://flit.example/promo");
+    expect(enlace).toHaveAttribute("target", "_blank");
+    expect(enlace).toHaveAttribute("rel", "noopener noreferrer");
+    expect(enlace.textContent).toBe("");
+
+    // Regresión: la caja de contenido (etiqueta del organismo + controles) ocupa el alto
+    // completo del header (`flex-1`) aunque solo tenga texto arriba y abajo — sin
+    // `pointer-events-none` ahí (y `pointer-events-auto` solo en la franja de controles), esa
+    // caja tapaba el <a> de abajo y el enlace nunca recibía hover ni clic.
+    const cajaDeContenido = enlace.nextElementSibling as HTMLElement;
+    expect(cajaDeContenido).toHaveClass("pointer-events-none");
+    const franjaDeControles = screen.getByRole("button", { name: "Mensaje siguiente" }).closest(
+      "div.mt-4",
+    );
+    expect(franjaDeControles).toHaveClass("pointer-events-auto");
   });
 
   it("AC3 — un fallo al consultar banners degrada al slide fijo, sin romper la pantalla", async () => {

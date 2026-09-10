@@ -73,20 +73,28 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
       expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(3),
     );
 
-    // Avanza al primer banner (slide 2 de 3).
+    // Avanza al primer banner (slide 2 de 3): sin enlace, no hay ningún <a> envolviendo el banner
+    // ni título visible — el nombre solo viaja como texto accesible de la imagen (alt).
     await userEvent.click(screen.getByRole("button", { name: "Siguiente" }));
     const primerBannerImg = await screen.findByRole("img", { name: "Banner uno" });
     expect(primerBannerImg).toHaveAttribute(
       "src",
       "http://api.test/api/v1/public/banners/b1/image",
     );
+    expect(screen.queryByRole("link", { name: "Banner uno" })).not.toBeInTheDocument();
+    // El nombre sigue presente para lectores de pantalla (sr-only), pero no como texto visible.
+    expect(screen.getByText("Banner uno")).toHaveClass("sr-only");
 
-    // Avanza al segundo banner, que sí tiene enlace clicable con el nombre visible.
+    // Avanza al segundo banner, que sí tiene enlace: el enlace cubre todo el banner (clic en
+    // cualquier punto navega), sin ningún título visible — el nombre es el nombre accesible
+    // (aria-label) del propio <a>, no texto en pantalla.
     await userEvent.click(screen.getByRole("button", { name: "Siguiente" }));
     expect(await screen.findByRole("img", { name: "Banner dos" })).toBeInTheDocument();
     const enlace = screen.getByRole("link", { name: "Banner dos" });
     expect(enlace).toHaveAttribute("href", "https://flit.example/novedad");
     expect(enlace).toHaveAttribute("target", "_blank");
+    expect(enlace).toHaveAttribute("rel", "noopener noreferrer");
+    expect(enlace.textContent).toBe("");
   });
 
   it("AC3 — un fallo al consultar banners degrada al slide fijo, sin romper el dashboard", async () => {
