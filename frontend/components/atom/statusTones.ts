@@ -25,3 +25,24 @@ export function procedureTypeTone(status: "draft" | "published" | "archived"): S
       return "neutral";
   }
 }
+
+/**
+ * Estado de un banner promocional (HU #12241, `BannerEstadoCalculator`): activo = success,
+ * inactivo = danger, expirado = warning, programado = info (color propio, distinto de los otros
+ * tres, consistente con la escala unificada de `StatusBadge`).
+ */
+export function bannerEstadoTone(
+  estado: "programado" | "activo" | "inactivo" | "expirado",
+): StatusTone {
+  switch (estado) {
+    case "activo":
+      return "success";
+    case "inactivo":
+      return "danger";
+    case "expirado":
+      return "warning";
+    case "programado":
+    default:
+      return "info";
+  }
+}
