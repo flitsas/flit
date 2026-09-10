@@ -1,8 +1,18 @@
 // Lógica pura del gate de acceso a /admin/* y /empresa/* (HU #10194, AC6; HU #10218 OT admin).
 // Extraída del middleware para poder probarla sin el runtime de Next.js.
-import { canReadGeneracionDocumental, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin } from "./jwt";
+import {
+  canAccessRuntConfirmation,
+  canReadGeneracionDocumental,
+  decodeJwtPayload,
+  isAdminCompany,
+  isOtAdmin,
+  isSuperAdmin,
+} from "./jwt";
 
 export const FORBIDDEN_PATH = "/403";
+
+/** Raíz de Administración → Plataforma → Confirmación RUNT (Feature #12276). */
+export const RUNT_CONFIRMATION_BASE_PATH = "/admin/plataforma/confirmacion-runt";
 
 export type UserRole = "superadmin" | "admincompany" | "ot_admin" | "user";
 
@@ -22,6 +32,8 @@ export interface AdminAccessDecision {
  * - ot_admin → permitido solo en /admin/transit-offices/* (HU #10218).
  * - AdminCompany → permitido en /admin/companies/* (HU #11228; la página redirige a su tenant).
  * - Cualquier rol con `generacion-documental.read` → permitido en /admin/generacion-documental/* (Feature #12201).
+ * - Cualquier rol con `runt_confirmation.settings.manage` o `runt_confirmation.history.read` →
+ *   permitido en /admin/plataforma/confirmacion-runt/* (Feature #12276).
  * - Otros roles → redirigir a /403.
  */
 export function evaluateAdminAccess(
@@ -61,6 +73,16 @@ export function evaluateAdminAccess(
   if (
     pathname?.startsWith("/admin/generacion-documental") &&
     canReadGeneracionDocumental(payload)
+  ) {
+    return { allowed: true };
+  }
+
+  // Confirmación RUNT (Feature #12276): único submódulo de Plataforma que NO es exclusivo de
+  // SuperAdmin. Se abre con cualquiera de sus dos permisos; qué pestaña ve cada uno lo decide la
+  // propia página. El resto de /admin/plataforma/* sigue siendo SuperAdmin.
+  if (
+    pathname?.startsWith(RUNT_CONFIRMATION_BASE_PATH) &&
+    canAccessRuntConfirmation(payload)
   ) {
     return { allowed: true };
   }

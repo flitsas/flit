@@ -106,6 +106,7 @@ public static class DevelopmentAuthSeeder
         await SeedHistorialPlacaPermissionsAsync(db, cancellationToken);
         await SeedIctClientsPermissionsAsync(db, cancellationToken);
         await SeedGeneracionDocumentalPermissionsAsync(db, cancellationToken);
+        await SeedRuntConfirmationPermissionsAsync(db, cancellationToken);
         await SeedResetPasswordPermissionsAsync(db, cancellationToken);
         await SeedAdminTramiteAdvancedPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
@@ -1490,6 +1491,108 @@ public static class DevelopmentAuthSeeder
                     PermissionId = action.Id,
                     CreatedAt = now,
                 });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Confirmación RUNT (Epic #12234, Feature #12276, HU #12313) — módulo <c>confirmacion-runt</c> con los
+    /// permisos <c>runt_confirmation.settings.manage</c> (configuración global del proceso) y
+    /// <c>runt_confirmation.history.read</c> (historial interno de intentos y corridas).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Es un submódulo de Administración → Plataforma, pero en el catálogo RBAC vive como módulo propio
+    /// (no existe un módulo «plataforma» en <c>security.modules</c>: cada pantalla de Plataforma se ha
+    /// protegido hasta hoy por <c>SuperAdminPolicy</c>). Un módulo propio es lo que permite concederle a un
+    /// rol el historial SIN darle la configuración, que es la razón de ser de tener dos slugs.
+    /// </para>
+    /// <para>
+    /// Solo se concede a SuperAdmin (que además bypassa por rol): abrir cualquiera de los dos a un rol
+    /// concreto es un acto explícito de RBAC posterior a este seed. El grant explícito hace que el permiso
+    /// aparezca marcado en la pantalla RBAC. Sin este seed la acción no figura en el catálogo y ningún
+    /// usuario no-superadmin podría recibirla por el flujo RBAC estándar — lo que faltó en Trazabilidad ICT.
+    /// </para>
+    /// <para>
+    /// Idempotente en los tres niveles (módulo por Code, acción por Slug, grant por RoleId+PermissionId),
+    /// como <see cref="SeedHistorialPlacaPermissionsAsync"/>.
+    /// </para>
+    /// </remarks>
+    private static async Task SeedRuntConfirmationPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "confirmacion-runt" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "confirmacion-runt",
+                Name = "Plataforma · Confirmación RUNT",
+                SortOrder = 12,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var definitions = new (string Slug, string Name, string Method, string Route)[]
+        {
+            ("runt_confirmation.settings.manage",
+                "Administrar la configuración de Confirmación RUNT",
+                "PUT", "/api/v1/admin/runt-confirmation/settings"),
+            ("runt_confirmation.history.read",
+                "Ver el historial de Confirmación RUNT",
+                "GET", "/api/v1/admin/runt-confirmation/history"),
+        };
+
+        var actions = new List<RbacAction>(definitions.Length);
+        foreach (var d in definitions)
+        {
+            var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == d.Slug, ct);
+            if (action is null)
+            {
+                action = new RbacAction
+                {
+                    Id = Guid.CreateVersion7(),
+                    ModuleId = module.Id,
+                    Slug = d.Slug,
+                    Name = d.Name,
+                    HttpMethod = d.Method,
+                    RoutePattern = d.Route,
+                    IsActive = true,
+                    CreatedAt = now,
+                };
+                db.RbacActions.Add(action);
+                await db.SaveChangesAsync(ct);
+            }
+            actions.Add(action);
+        }
+
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin" && r.DeletedAt == null)
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            foreach (var action in actions)
+            {
+                var alreadyGranted = await db.RoleGrants
+                    .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+                if (!alreadyGranted)
+                {
+                    db.RoleGrants.Add(new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = action.Id,
+                        CreatedAt = now,
+                    });
+                }
             }
         }
 

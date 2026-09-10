@@ -2,7 +2,17 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { canReadIctLogs, canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import {
+  canAccessRuntConfirmation,
+  canReadIctLogs,
+  canReadLogQx,
+  decodeJwtPayload,
+  isAdminCompany,
+  isOtAdmin,
+  isSuperAdmin,
+  TOKEN_STORAGE_KEY,
+} from "@/lib/auth/jwt";
+import { CONFIRMACION_RUNT_BASE_PATH } from "@/components/admin/plataforma/confirmacion-runt/confirmacion-runt-nav";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import {
   isOtHubSegmentActive,
@@ -57,6 +67,7 @@ import {
   Monitor,
   FileSignature,
   History,
+  BadgeCheck,
 } from "lucide-react";
 
 export type ModuleId =
@@ -152,6 +163,7 @@ function useCurrentUser() {
       isOtAdmin: isOtAdmin(payload),
       canReadLogQx: canReadLogQx(payload),
       canReadIctLogs: canReadIctLogs(payload),
+      canAccessRuntConfirmation: canAccessRuntConfirmation(payload),
     };
   });
   return user;
@@ -238,6 +250,18 @@ export function Shell({
     onClick: () => onNav(it.id),
   }));
 
+  // Confirmación RUNT (Feature #12276, HU #12313) — submódulo de Plataforma gateado por PERMISO
+  // (`runt_confirmation.settings.manage` o `.history.read`), no por rol. SuperAdmin lo ve dentro del
+  // submenú Plataforma completo; un rol con solo el permiso ve un submenú Plataforma con esta única
+  // entrada, porque el resto de Plataforma sigue siendo exclusivo de SuperAdmin.
+  const confirmacionRuntEntry: DockEntry = {
+    key: "admin-confirmacion-runt",
+    label: "Confirmación RUNT",
+    icon: BadgeCheck,
+    active: pathname.startsWith(CONFIRMACION_RUNT_BASE_PATH),
+    onClick: () => window.location.assign(CONFIRMACION_RUNT_BASE_PATH),
+  };
+
   if (currentUser?.isSuperAdmin) {
     entries.push(
       {
@@ -323,6 +347,7 @@ export function Shell({
             active: pathname.startsWith("/admin/plataforma/tipos-tramite"),
             onClick: () => window.location.assign("/admin/plataforma/tipos-tramite"),
           },
+          confirmacionRuntEntry,
           {
             key: "admin-mandatos",
             label: "Mandatos",
@@ -347,6 +372,17 @@ export function Shell({
         ],
       },
     );
+  }
+
+  if (!currentUser?.isSuperAdmin && currentUser?.canAccessRuntConfirmation) {
+    entries.push({
+      key: "admin-plataforma",
+      label: "Plataforma",
+      icon: Monitor,
+      active: pathname.startsWith("/admin/plataforma"),
+      onClick: () => undefined,
+      children: [confirmacionRuntEntry],
+    });
   }
 
   // Generación documental (HU-01, Feature #12201) — R12: esta entrada NO cuelga de

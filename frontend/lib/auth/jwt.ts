@@ -160,6 +160,37 @@ export function canReadGeneracionDocumental(payload: JwtPayload | null): boolean
   return isSuperAdmin(payload) || hasPermission(payload, GENERACION_DOCUMENTAL_READ_PERMISSION);
 }
 
+/** Permiso para administrar la configuración global de Confirmación RUNT (Feature #12276, HU #12313). */
+export const RUNT_CONFIRMATION_SETTINGS_MANAGE_PERMISSION = "runt_confirmation.settings.manage";
+
+/** Permiso para leer el historial interno de Confirmación RUNT (Feature #12276, HU #12313). */
+export const RUNT_CONFIRMATION_HISTORY_READ_PERMISSION = "runt_confirmation.history.read";
+
+/**
+ * Puede administrar la configuración de Confirmación RUNT (pestaña Configuración): permiso
+ * `runt_confirmation.settings.manage` o SuperAdmin (bypass total, igual que el backend).
+ */
+export function canManageRuntConfirmation(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, RUNT_CONFIRMATION_SETTINGS_MANAGE_PERMISSION);
+}
+
+/**
+ * Puede ver el historial de Confirmación RUNT (pestaña Historial): permiso
+ * `runt_confirmation.history.read` o SuperAdmin.
+ */
+export function canReadRuntConfirmationHistory(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, RUNT_CONFIRMATION_HISTORY_READ_PERMISSION);
+}
+
+/**
+ * Puede entrar al submódulo Plataforma → Confirmación RUNT: basta UNO de los dos permisos. Los dos
+ * slugs son independientes a propósito (un rol puede recibir el historial sin la configuración), así
+ * que la entrada de menú y el gate de borde se abren con cualquiera y cada pestaña se gatea aparte.
+ */
+export function canAccessRuntConfirmation(payload: JwtPayload | null): boolean {
+  return canManageRuntConfirmation(payload) || canReadRuntConfirmationHistory(payload);
+}
+
 /** Permiso de reset administrativo de contraseña en el propio tenant (HU #10170). */
 export const RESET_PASSWORD_PERMISSION = "security.users.reset_password";
 
