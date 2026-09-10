@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS tramites.runt_confirmation_attempts (
     queried_at                  timestamptz  NOT NULL DEFAULT now(),
     provider_key                varchar(40)  NOT NULL,
     query_kind                  varchar(20)  NOT NULL
-        CONSTRAINT ck_runt_confirmation_attempts_query_kind CHECK (query_kind IN ('vin', 'plate', 'plate_pair', 'reevaluation')),
+        CONSTRAINT ck_runt_confirmation_attempts_query_kind CHECK (query_kind IN ('vin', 'plate', 'plate_pair', 'vin_plate', 'reevaluation')),
 
     verdict                     varchar(20)  NOT NULL
         CONSTRAINT ck_runt_confirmation_attempts_verdict CHECK (verdict IN ('confirmed', 'pending', 'discrepancy', 'unverifiable', 'error')),
