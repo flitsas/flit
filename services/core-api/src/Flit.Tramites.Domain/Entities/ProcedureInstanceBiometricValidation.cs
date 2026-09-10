@@ -30,6 +30,17 @@ public sealed class ProcedureInstanceBiometricValidation
     public string DocumentNumber { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Bug #12376, defecto 3 — correo CON EL QUE SE CREÓ esta validación (registro), estampado UNA vez y
+    /// jamás actualizado después. <see cref="Email"/> sigue siendo el campo OPERATIVO (a donde
+    /// efectivamente se envía el link/OTP: lo actualiza el reenvío administrativo,
+    /// <c>AdminReenviarValidacionIdentidadHandler</c>); este campo es solo para que el tracking del
+    /// trámite pueda seguir mostrando el correo original del registro aunque se haya reenviado a otro
+    /// destino. Vacío en filas anteriores a esta migración (backfill = <see cref="Email"/> al momento de
+    /// migrar, mejor esfuerzo).
+    /// </summary>
+    public string RegisteredEmail { get; set; } = string.Empty;
+
     /// <summary>enviado | en_proceso | aprobado | rechazado | expirado.</summary>
     public string Status { get; set; } = BiometricEstados.Enviado;
 

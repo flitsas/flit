@@ -190,4 +190,157 @@ public sealed class GetProcedureInstanceTests
         var entry = result!.StatusHistory.Should().ContainSingle(h => h.ToStatus == TramiteEstado.Aprobado).Subject;
         entry.Metadata.Should().BeNull();
     }
+
+    // ── Bug #12376, defectos 3/4 — eventos administrativos en el tracking ──────────────────────────
+
+    [Fact]
+    public async Task HandleAsync_ReasignarGestorEvent_ExponeNombresResueltos()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var ejecutor = Guid.NewGuid();
+        var gestorAnterior = Guid.NewGuid();
+        var gestorNuevo = Guid.NewGuid();
+        var cuando = DateTimeOffset.UtcNow;
+
+        var instance = new ProcedureInstance
+        {
+            ProcedureType = ProcedureTypeFixture.Matricula,
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000004",
+            Status = TramiteEstado.Entregado,
+            CreatedAt = DateTimeOffset.UtcNow,
+            Events =
+            {
+                new ProcedureInstanceEvent
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    Tipo = "reasignar_gestor_admin",
+                    Payload = JsonSerializer.Serialize(new
+                    {
+                        previous_assigned_to_user_id = gestorAnterior,
+                        new_assigned_to_user_id = gestorNuevo,
+                    }),
+                    CreatedAt = cuando,
+                    CreatedBy = ejecutor,
+                },
+            },
+        };
+
+        _repo.GetByIdWithDetailsAsync(instance.Id, tenantId, ct).Returns(instance);
+        _repo.GetUserDisplayNamesAsync(
+                Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                    ids.Contains(ejecutor) && ids.Contains(gestorAnterior) && ids.Contains(gestorNuevo)),
+                ct)
+            .Returns(new Dictionary<Guid, string>
+            {
+                [ejecutor] = "Ana Ejecutora",
+                [gestorAnterior] = "Carlos Anterior",
+                [gestorNuevo] = "Diana Nueva",
+            });
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
+
+        error.Should().BeNull();
+        var evento = result!.Events.Should().ContainSingle().Subject;
+        evento.Tipo.Should().Be("reasignar_gestor_admin");
+        evento.CreatedByName.Should().Be("Ana Ejecutora");
+        evento.PreviousAssignedToName.Should().Be("Carlos Anterior");
+        evento.NewAssignedToName.Should().Be("Diana Nueva");
+        evento.CreatedAt.Should().Be(cuando);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ReenvioValidacionEvent_ExponeDetalleSinCorreoEnClaro()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var ejecutor = Guid.NewGuid();
+
+        var instance = new ProcedureInstance
+        {
+            ProcedureType = ProcedureTypeFixture.Matricula,
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000005",
+            Status = TramiteEstado.Entregado,
+            CreatedAt = DateTimeOffset.UtcNow,
+            Events =
+            {
+                new ProcedureInstanceEvent
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    Tipo = "reenvio_validacion_admin",
+                    Payload = JsonSerializer.Serialize(new
+                    {
+                        validation_id = Guid.NewGuid(),
+                        party_role = "comprador",
+                        email_actualizado = true,
+                        correo_destino = "n***@dominio.com",
+                        encolado = false,
+                    }),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    CreatedBy = ejecutor,
+                },
+            },
+        };
+
+        _repo.GetByIdWithDetailsAsync(instance.Id, tenantId, ct).Returns(instance);
+        _repo.GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [ejecutor] = "Ana Ejecutora" });
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
+
+        error.Should().BeNull();
+        var evento = result!.Events.Should().ContainSingle().Subject;
+        evento.Tipo.Should().Be("reenvio_validacion_admin");
+        evento.CreatedByName.Should().Be("Ana Ejecutora");
+        evento.PartyRole.Should().Be("comprador");
+        evento.EmailActualizado.Should().BeTrue();
+        evento.CorreoDestinoEnmascarado.Should().Be("n***@dominio.com");
+    }
+
+    // Bug #12376 — solo reenvío/reasignación se exponen en Events; el resto de tipos (p.ej.
+    // anular_admin) ya está cubierto por StatusHistory y NO debe duplicarse en el timeline.
+    [Fact]
+    public async Task HandleAsync_EventoNoRelevante_NoApareceEnEvents()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+
+        var instance = new ProcedureInstance
+        {
+            ProcedureType = ProcedureTypeFixture.Matricula,
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000006",
+            Status = TramiteEstado.Anulado,
+            CreatedAt = DateTimeOffset.UtcNow,
+            Events =
+            {
+                new ProcedureInstanceEvent
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    Tipo = "anular_admin",
+                    Payload = "{}",
+                    CreatedAt = DateTimeOffset.UtcNow,
+                },
+            },
+        };
+
+        _repo.GetByIdWithDetailsAsync(instance.Id, tenantId, ct).Returns(instance);
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
+
+        error.Should().BeNull();
+        result!.Events.Should().BeEmpty();
+        await _repo.DidNotReceive().GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+    }
 }

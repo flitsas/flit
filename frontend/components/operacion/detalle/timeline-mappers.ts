@@ -2,6 +2,7 @@ import type {
   BiometricEstado,
   BiometricParte,
   BiometricValidation,
+  ProcedureInstanceEvent,
   StatusHistory,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
@@ -96,7 +97,9 @@ export function mapIdentidadToTimelineNodes(
         color: ESTADO_COLOR[ultima.status] ?? GREY,
         info: {
           gestor: ultima.name || '—',
-          correo: ultima.email || '—',
+          // Bug #12376, defecto 3 — correo del REGISTRO (inmutable), no el operativo: un reenvío
+          // administrativo a otro correo no debe hacer que el tracking "olvide" el correo original.
+          correo: ultima.registeredEmail || ultima.email || '—',
           empresa: ultima.provider || 'Kyverum',
           rol: label,
           fecha: ultima.validatedAt
@@ -139,4 +142,55 @@ export function mapIdentidadToTimelineNodes(
   });
 
   return nodes;
+}
+
+const PARTY_LABEL: Record<string, string> = {
+  vendedor: 'Vendedor',
+  comprador: 'Comprador',
+};
+
+/**
+ * Bug #12376, defectos 3/4 — pinta los eventos administrativos (reenvío de validación, reasignación de
+ * gestor) como nodos ADICIONALES del timeline: nunca reemplazan el nodo de identidad ni el de estado,
+ * solo se agregan (mismo criterio que pide el bug: "queda como evento adicional, sin reemplazar el
+ * histórico").
+ */
+export function mapEventsToTimelineNodes(events: ProcedureInstanceEvent[]): TimelineTrackNode[] {
+  const sorted = [...events].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+
+  return sorted.map((e) => {
+    if (e.tipo === 'reasignar_gestor_admin') {
+      return {
+        label: 'Reasignación de gestor',
+        color: BLUE,
+        info: {
+          gestor: e.newAssignedToName || '—',
+          correo: '—',
+          empresa: '—',
+          rol: e.createdByName ? `Ejecutado por ${e.createdByName}` : 'Ejecutado por admin',
+          fecha: formatFecha(e.createdAt),
+          extra: `De ${e.previousAssignedToName || 'sin gestor asignado'} a ${e.newAssignedToName || '—'}`,
+        },
+      };
+    }
+
+    // reenvio_validacion_admin
+    const parte = e.partyRole ? PARTY_LABEL[e.partyRole] ?? e.partyRole : null;
+    return {
+      label: `Reenvío de validación${parte ? ` · ${parte}` : ''}`,
+      color: BLUE,
+      info: {
+        gestor: '—',
+        correo: e.correoDestinoEnmascarado || '—',
+        empresa: '—',
+        rol: e.createdByName ? `Ejecutado por ${e.createdByName}` : 'Ejecutado por admin',
+        fecha: formatFecha(e.createdAt),
+        extra: e.emailActualizado
+          ? 'Reenviado a un correo distinto del registrado'
+          : 'Reenviado al correo actual',
+      },
+    };
+  });
 }

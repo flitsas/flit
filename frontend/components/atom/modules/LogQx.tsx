@@ -428,7 +428,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
           <input
             id="lq-ref"
             type="text"
-            placeholder="4571"
+            placeholder="FT1-0000012"
             value={filtros.referencia}
             onChange={(e) => setFiltros({ ...filtros, referencia: e.target.value })}
             className={`${inputCls} w-[150px]`}

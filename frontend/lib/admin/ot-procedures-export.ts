@@ -45,6 +45,8 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
     {
       id: 'radicado',
       label: 'Radicado',
+      // TEXTO, no número: FT1-0000012 (HU #12371) es un identificador con prefijo. Misma regla y
+      // mismo ancho que el export del gestor, para que los dos archivos se lean igual.
       value: (r) => texto(r.referenceNumber),
       raw: (r) => texto(r.referenceNumber) || null,
       width: 14,

@@ -1655,9 +1655,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             var termino = filter.Busqueda.Trim();
             var enMinusculas = termino.ToLowerInvariant();
             var enMayusculas = termino.ToUpperInvariant();
+            // HU #12371 — el término se LEE como radicado (12, 0000012, FT1-0000012, ft1 12), con la
+            // misma lectura que el listado del gestor: sin prefijo casa el consecutivo, con prefijo
+            // el texto canónico. Si no es un radicado, ese OR se apaga.
+            var (consecutivoBuscado, radicadoCanonico) = ProcedureInstanceFiltroSql.LeerBusquedaRadicado(termino);
 
             query = query.Where(p =>
-                p.ReferenceNumber == termino
+                (consecutivoBuscado != null && p.Consecutivo == consecutivoBuscado)
+                || (radicadoCanonico != null && p.ReferenceNumber.ToUpper().Replace("-", "") == radicadoCanonico)
                 || (p.Plate != null && p.Plate.ToUpper().Contains(enMayusculas))
                 || (p.Vin != null && p.Vin.ToUpper().Contains(enMayusculas))
                 || (p.CompradorNombre != null && p.CompradorNombre.ToLower().Contains(enMinusculas))
@@ -1877,10 +1882,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     .Select(u => u.DisplayName)
                     .FirstOrDefault())
                 .ThenByDescending(p => p.Id),
+            // HU #12371 — por la parte numérica, no por el texto: ordenar FT1-…/FT2-… como texto
+            // agruparía por familia. Misma regla que el listado del gestor.
             ("referencenumber", true) or ("radicado", true) =>
-                ordered.ThenBy(p => p.ReferenceNumber).ThenByDescending(p => p.Id),
+                ordered.ThenBy(p => p.Consecutivo).ThenByDescending(p => p.Id),
             ("referencenumber", false) or ("radicado", false) =>
-                ordered.ThenByDescending(p => p.ReferenceNumber).ThenByDescending(p => p.Id),
+                ordered.ThenByDescending(p => p.Consecutivo).ThenByDescending(p => p.Id),
             ("status", true) or ("estado", true) =>
                 ordered.ThenBy(p => p.Status).ThenByDescending(p => p.Id),
             ("status", false) or ("estado", false) =>

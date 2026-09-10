@@ -664,6 +664,20 @@ export function useAdminTramiteAcciones({
   const tenantId = isAdmin ? item.tenantId : undefined;
   const puede = (slug: string) => isSuperAdmin || permissions.includes(slug);
   const esAprobado = item.estado === 'aprobado';
+  // Bug #12376, defecto 2 — un trámite ya Anulado no puede volver a seleccionarse para anular
+  // (el backend lo rechaza con CANNOT_ANNUL_ALREADY; esto solo evita el viaje redondo innecesario).
+  const esAnulado = item.estado === 'anulado';
+  // HU #12161, AC3 — el reenvío de validación exige que la identidad siga siendo ACCIONABLE:
+  // ni el trámite puede estar Aprobado/Anulado ("revocado" aún no existe como enum — HU #12165),
+  // ni la identidad agregada de la fila puede estar ya `aprobado` (nada que reenviar). Antes esta
+  // acción no tenía NINGÚN guard en el frontend: se ofrecía siempre y el backend rechazaba con
+  // IdentidadAprobada o, peor, con NoEncontrado cuando la identidad era REUSADA de otro trámite
+  // (HU #10350) — un error confuso para el admin. Verificado en vivo (Bug #12376): al reenviar
+  // sobre un trámite con identidad ya `aprobado` (derivado con identidad reusada), el backend
+  // respondía "Trámite o validación de identidad no encontrada" en vez de explicar que no hacía
+  // falta reenviar nada.
+  const identidadNoAccionable =
+    esAprobado || esAnulado || item.identityValidationStatus === 'aprobado';
 
   const [estadoOpen, setEstadoOpen] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
@@ -697,8 +711,10 @@ export function useAdminTramiteAcciones({
       key: 'admin-anular',
       label: 'Anular',
       icon: Ban,
-      disabled: esAprobado,
-      disabledReason: 'Un trámite Aprobado no se puede anular.',
+      disabled: esAprobado || esAnulado,
+      disabledReason: esAnulado
+        ? 'Este trámite ya está Anulado.'
+        : 'Un trámite Aprobado no se puede anular.',
       onSelect: () => setAnularOpen(true),
     });
   }
@@ -717,6 +733,11 @@ export function useAdminTramiteAcciones({
       key: 'admin-reenviar-validacion',
       label: 'Reenviar validación',
       icon: Send,
+      disabled: identidadNoAccionable,
+      disabledReason:
+        esAprobado || esAnulado
+          ? 'La identidad ya no es accionable en este estado del trámite.'
+          : 'La identidad de este trámite ya está aprobada: no hay nada que reenviar.',
       onSelect: () => setReenviarOpen(true),
     });
   }

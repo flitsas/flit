@@ -140,3 +140,81 @@ Todo lo anterior se apoya en pruebas ejecutadas antes del despliegue, no en supo
 - Barrido en dev con la aplicación corriendo: **dos trámites creados por la interfaz recibieron el
   `18` y el `19`**, asignados por la base.
 - Suite backend: 0 fallos nuevos. Vitest: 75 fallos heredados antes y después, medido con `git stash`.
+
+---
+
+## 7. Ajuste HU #12371 — radicado con prefijo de familia (`FT1-0000012`)
+
+> Aplica al despliegue de las HUs **#12371 y #12372** (un solo PR). Migración
+> `20260910160000_HU12371_RadicadoPrefijoFamilia`, DDL `108-HU12371-radicado-prefijo-familia.sql`.
+> Todo lo anterior sigue vigente; esta sección añade lo que cambia.
+
+### 7.1 Qué cambia en la base
+
+- Columna nueva `consecutivo bigint NOT NULL`, única (`uq_procedure_instances_consecutivo`). La
+  secuencia `procedure_instance_reference_seq` pasa a ser **suya** (`OWNED BY`).
+- `reference_number` conserva nombre y tipo, pero deja de tener `DEFAULT` y guarda el texto
+  compuesto. Lo escribe el trigger `tr_procedure_instances_radicado` (`BEFORE INSERT`).
+- `ck_procedure_instances_reference_numerico` (`^[1-9][0-9]*$`) se reemplaza por
+  `ck_procedure_instances_reference_formato` (`^FT[1-9]-[0-9]{7,}$`).
+- Trigger `tr_procedure_instances_radicado_inmutable` (`BEFORE UPDATE OF reference_number,
+  consecutivo`): cualquier intento de cambiar el radicado **falla ruidoso**.
+- Se retira `ix_procedure_instances_reference_orden`: el orden va por `consecutivo`.
+
+### 7.2 La misma trampa, con otro CHECK
+
+> Revertir el código **sin** revertir la migración deja de poder crearse trámites: el modelo de EF
+> viejo declara `HasDefaultValueSql` sobre `reference_number` y espera leer un número pelado, y el
+> CHECK nuevo exige `FT…`. Y al revés —migración revertida con código nuevo— EF intentaría leer
+> la columna `consecutivo`, que ya no existe: **ningún listado abre**.
+
+**Código y migración se revierten juntos.** Sigue sin bastar el respaldo por sí solo.
+
+### 7.3 Verificación posterior
+
+```sql
+-- Integridad: todo compuesto, sin duplicados, y el número del texto ES el consecutivo.
+SELECT count(*) FILTER (WHERE reference_number !~ '^FT[1-9]-[0-9]{7,}$')                       AS invalidos,
+       count(*) - count(DISTINCT reference_number)                                             AS duplicados_texto,
+       count(*) - count(DISTINCT consecutivo)                                                  AS duplicados_numero,
+       count(*) FILTER (WHERE split_part(reference_number, '-', 2)::bigint <> consecutivo)     AS descuadrados
+  FROM tramites.procedure_instances;
+-- esperado: 0, 0, 0, 0
+
+-- Objetos: triggers, CHECK nuevo y dueño de la secuencia.
+SELECT (SELECT count(*) FROM pg_trigger    WHERE tgname  = 'tr_procedure_instances_radicado')            AS trigger_compone,
+       (SELECT count(*) FROM pg_trigger    WHERE tgname  = 'tr_procedure_instances_radicado_inmutable')  AS trigger_inmutable,
+       (SELECT count(*) FROM pg_constraint WHERE conname = 'ck_procedure_instances_reference_formato')   AS check_nuevo,
+       (SELECT count(*) FROM pg_constraint WHERE conname = 'ck_procedure_instances_reference_numerico')  AS check_viejo,
+       pg_get_serial_sequence('tramites.procedure_instances', 'consecutivo')                            AS secuencia_de;
+-- esperado: 1, 1, 1, 0, tramites.procedure_instance_reference_seq
+```
+
+**Prueba de humo:** crear una matrícula y un traspaso desde la aplicación y comprobar que reciben
+`FT1-…` y `FT2-…` con **números consecutivos entre sí** (contador global, no por familia). Luego
+buscar uno de ellos tecleando solo el número (`23`) y el otro con prefijo (`FT2-0000024`).
+
+### 7.4 Si hay que revertir
+
+| Situación | Acción |
+|---|---|
+| Migración fallida, no aplicada | Nada en datos. Volver el código al commit previo al PR. |
+| Migración aplicada y el sistema falla | Revertir **las dos cosas**: `dotnet ef database update 20260910120000_HU12250_DashboardModuleFlags` y el código. |
+
+**Este `Down()` sí devuelve el radicado anterior** (a diferencia del de la #12151): el número no
+se pierde porque está en `consecutivo`, y el `Down()` lo vuelve a escribir pelado en
+`reference_number`, repone el `DEFAULT`, el CHECK numérico y el índice de orden, y borra la
+columna y los triggers. Verificado sobre copia de dev: `Down` → `1 2 3 … 17`, `Up` de nuevo →
+`FT2-0000001 … FT1-0000017`, sin diferencia entre el número del texto y el consecutivo en ninguna
+fila.
+
+### 7.5 Riesgos y decisiones
+
+| Punto | Estado |
+|---|---|
+| **`lpad` trunca** | `lpad('12345678', 7, '0')` da `1234567`. El trigger usa `greatest(7, length(...))`: pasado el 9.999.999 el número **gana** un dígito. Lo atrapó el ensayo contra Postgres real (recortaba los rangos sintéticos de los seeds a `FT1-9100000`); una prueba fija la forma exacta del `lpad`. |
+| **Seeds de desarrollo** | Siguen trayendo su número sintético (`91…`, `92…`, `93…`); el trigger lo respeta y compone `FTn-9100000001` en vez de gastar uno real. Reejecutados dos veces sobre base migrada: 0 duplicados. |
+| **Documentos ya generados** | Conservan el nombre con número pelado (`consolidado_12.pdf`). Los nuevos salen `consolidado_FT1-0000012.pdf`, y **todos los generadores igual**: `mandato_` y `solicitud_tramite_virtual_` convertían el guion en `_` y se alinearon. |
+| **Familia desconocida** | Cae en `FT3`, igual que `FromCodeOrOtros` degrada a `Otros`. Una cuarta familia (`FT4`) se añade en `Radicado.Prefijo`, en el `CASE` del trigger y en la prueba que los compara. |
+| **Búsqueda por número** | `12` casa el consecutivo 12; `FT1-0000012` el texto canónico; `FT2-0000012` **no** casa la matrícula 12 (el prefijo escrito se respeta). «Contiene» sigue siendo subcadena sobre el texto sin guion. |
+| **Deriva previa del snapshot de EF** | `has-pending-model-changes` ya devolvía cambios en `develop` antes de esta HU (`signature_image_path` / `signature_image_sha256` en `procedure_instance_biometric_validations`, sin migración). No es de este PR; se anota para que no se le atribuya. |

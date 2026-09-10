@@ -124,7 +124,7 @@ public sealed class OtBandejaQueryFieldCatalog : IQueryFieldCatalog
         new(Vin, "VIN", QueryFieldKind.Texto, GrupoVehiculo, TextoOperators, [],
             "Se puede pegar una lista completa desde Excel.", AdmiteLista: true),
         new(Radicado, "Radicado", QueryFieldKind.Texto, GrupoTramite, TextoOperators, [],
-            "Número de radicado del trámite. Se puede pegar una lista.", AdmiteLista: true),
+            "Radicado del trámite (FT1-0000012). Vale también el número solo. Se puede pegar una lista.", AdmiteLista: true),
 
         new(Comprador, "Comprador", QueryFieldKind.Texto, GrupoPersonas, TextoOperators, [],
             "Busca por nombre y también por número de documento.", AdmiteLista: true),

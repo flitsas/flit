@@ -23,9 +23,9 @@ SET LOCAL row_security = off;
 -- 1. Trámites QXSEED (5) — uno por familia. ON CONFLICT: no se pisan si ya existen.
 --    WHERE EXISTS: si el seed del usuario/tenant no corrió, se omite en vez de fallar la migración.
 -- ============================================================================
--- HU #12151 — fuera reference_number: lo asigna el DEFAULT (secuencia global) y un valor con
--- prefijo violaría ck_procedure_instances_reference_numerico. La idempotencia se apoya en el id,
--- que ya era un GUID fijo.
+-- HU #12151 — fuera el prefijo QXSEED-: violaría el CHECK de la columna. Se trae un rango
+-- sintético numérico y, sobre una base con la HU #12371 aplicada, el trigger BEFORE INSERT lo
+-- compone como FTn-93xxxxxxxx. La idempotencia se apoya en el id, que ya era un GUID fijo.
 -- Fuera también modalidad_entrada: ADR-0050 eliminó esa columna y nadie actualizó este seed, que
 -- llevaba roto en develop desde entonces. Va en el MISMO INSERT, así que no se podía verificar el
 -- cambio del radicado sin corregirlo.

@@ -128,7 +128,7 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
         // Excel trae «ABC-123» tan a menudo como «ABC123»— y `contiene` cubre la búsqueda parcial:
         // por eso el criterio «exacta o parcial» no obliga a elegir, lo decide el operador.
         new(Radicado, "ID Trámite", QueryFieldKind.Texto, GrupoTramite, TextoOperators, [],
-            "Número de radicado que emite FLIT (TD-AAAA-NNNNN). Se puede pegar una lista.",
+            "Radicado que emite FLIT (FT1-0000012). Vale también el número solo. Se puede pegar una lista.",
             AdmiteLista: true),
         new(Placa, "Placa", QueryFieldKind.Texto, GrupoVehiculo, TextoOperators, [],
             "Se puede pegar una lista completa desde Excel.", AdmiteLista: true),

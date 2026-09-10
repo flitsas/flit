@@ -176,7 +176,7 @@ export function OtDashboard() {
       <div className="grid grid-cols-1 gap-3 shrink-0 md:grid-cols-3">
         <Bienvenida
           organismo={organismo}
-          porRevisar={estado === "listo" ? (panel?.cola.porRevisar ?? null) : null}
+          panel={estado === "listo" ? panel : null}
           banners={activeBanners}
           className={estado === "error" ? "md:col-span-3" : "md:col-span-2"}
         />
@@ -236,21 +236,36 @@ type OrganismoSlide = MensajeSlide | BannerSlide;
  */
 function mensajesDelOrganismo(
   organismo: string | null,
-  porRevisar: number | null,
+  panel: OtOperationalPanel | null,
   banners: ActiveBanner[],
 ): OrganismoSlide[] {
+  const porRevisar = panel?.cola.porRevisar ?? null;
+  // Opción A (dato ya cargado en el mismo panel operativo, sin llamada nueva): la cola no solo
+  // dice cuántos esperan, sino cuántos ya llevan estancados y cuál es la mediana de decisión hoy.
+  const estancados = panel?.antiguedad.masDe7Dias ?? 0;
+  const mediana = panel?.movimiento.tiempoMedianoDecisionHoras ?? null;
+
   const cola =
     porRevisar === null
       ? "Aquí ves el estado de tu cola en este momento y el movimiento del día."
       : porRevisar === 0
         ? "No tienes trámites esperando decisión en este momento."
-        : `Tienes ${porRevisar} ${porRevisar === 1 ? "trámite" : "trámites"} esperando tu decisión.`;
+        : `Tienes ${porRevisar} ${porRevisar === 1 ? "trámite" : "trámites"} esperando tu decisión` +
+          (estancados > 0
+            ? `, ${estancados} ${estancados === 1 ? "lleva" : "llevan"} más de 7 días esperando`
+            : "") +
+          ".";
+
+  const medianaTexto =
+    porRevisar !== null && mediana !== null
+      ? ` Tu mediana de decisión hoy es de ${formatHours(mediana)}.`
+      : "";
 
   const fijo: MensajeSlide = {
     kind: "mensaje",
     id: "bienvenida",
     title: "Tu cola de trabajo",
-    body: `${cola} Los datos son del día calendario de Bogotá.`,
+    body: `${cola}${medianaTexto} Los datos son del día calendario de Bogotá.`,
   };
 
   const bannerSlides: BannerSlide[] = banners.map((banner) => ({
@@ -272,12 +287,12 @@ function mensajesDelOrganismo(
  */
 function Bienvenida({
   organismo,
-  porRevisar,
+  panel,
   banners,
   className = "",
 }: {
   organismo: string | null;
-  porRevisar: number | null;
+  panel: OtOperationalPanel | null;
   banners: ActiveBanner[];
   className?: string;
 }) {
@@ -289,8 +304,8 @@ function Bienvenida({
     [banners, failedBannerIds],
   );
   const mensajes = useMemo(
-    () => mensajesDelOrganismo(organismo, porRevisar, bannersVisibles),
-    [organismo, porRevisar, bannersVisibles],
+    () => mensajesDelOrganismo(organismo, panel, bannersVisibles),
+    [organismo, panel, bannersVisibles],
   );
   const [actual, setActual] = useState(0);
 
