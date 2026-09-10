@@ -29,6 +29,7 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Infrastructure.Tramites;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -60,6 +61,10 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
         services.AddScoped<ITenantSettingsRepository, TenantSettingsRepository>();
+
+        // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
+        // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
+        services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();
 
         // HU #10191 — lista blanca + checker de propiedad vehicular (stub transitorio).
         services.AddScoped<IWhitelistRepository, WhitelistRepository>();

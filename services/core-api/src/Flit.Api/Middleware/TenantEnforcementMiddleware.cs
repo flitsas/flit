@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Flit.Api.Authorization;
+using Flit.Queries.Domain.Tenancy;
 
 namespace Flit.Api.Middleware;
 
@@ -30,6 +31,13 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
     /// <summary>Clave en <see cref="HttpContext.Items"/> de si el caller es SuperAdmin (bool).</summary>
     public const string SuperAdminItemKey = "tramites.isSuperAdmin";
 
+    /// <summary>
+    /// Clave en <see cref="HttpContext.Items"/> del <see cref="TenantScope"/> de la petición (HU #12321).
+    /// Canal NUEVO y paralelo: <see cref="TenantItemKey"/> y <see cref="SuperAdminItemKey"/> conservan
+    /// exactamente el mismo valor que antes; un endpoint que ignore el scope devuelve lo mismo.
+    /// </summary>
+    public const string TenantScopeItemKey = "tramites.tenantScope";
+
     private const string TenantHeader = "X-Tenant-Id";
 
     public async Task InvokeAsync(HttpContext context)
@@ -56,6 +64,8 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
             // SuperAdmin: respeta el tenant del header si lo manda (acota a una empresa); si no, null = todos.
             context.Items[SuperAdminItemKey] = true;
             context.Items[TenantItemKey] = TryReadHeaderTenant(context, out var selected) ? selected : (Guid?)null;
+            // HU #12321 — All() solo aquí (fábrica internal): ningún resolver puede fabricarlo.
+            context.Items[TenantScopeItemKey] = TenantScope.All();
             await next(context);
             return;
         }
@@ -71,7 +81,36 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         context.Request.Headers[TenantHeader] = tenantId.ToString();
         context.Items[SuperAdminItemKey] = false;
         context.Items[TenantItemKey] = tenantId;
+        // HU #12321 — alcance tipado calculado SOLO desde la BD (nunca de headers/body/token).
+        context.Items[TenantScopeItemKey] = await ResolveScopeFailClosedAsync(context, tenantId);
         await next(context);
+    }
+
+    /// <summary>
+    /// Resuelve el <see cref="TenantScope"/> del company-user vía <see cref="ITenantScopeResolver"/>
+    /// (scoped, desde <see cref="HttpContext.RequestServices"/>). Cerrado por defecto: sin resolver
+    /// registrado, con excepción o con resultado nulo ⇒ <see cref="TenantScope.Single"/> del propio
+    /// tenant. Jamás <c>All</c>.
+    /// </summary>
+    private static async Task<TenantScope> ResolveScopeFailClosedAsync(HttpContext context, Guid tenantId)
+    {
+        try
+        {
+            var resolver = context.RequestServices?.GetService<ITenantScopeResolver>();
+            if (resolver is null)
+                return TenantScope.Single(tenantId);
+
+            var scope = await resolver.ResolveAsync(tenantId, context.RequestAborted);
+            return scope is null || scope.IsAll ? TenantScope.Single(tenantId) : scope;
+        }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return TenantScope.Single(tenantId);
+        }
     }
 
     /// <summary>Cómo se compara la ruta de la petición con el patrón declarado.</summary>

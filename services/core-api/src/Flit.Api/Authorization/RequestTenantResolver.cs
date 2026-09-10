@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Flit.Api.Middleware;
+using Flit.Queries.Domain.Tenancy;
 
 namespace Flit.Api.Authorization;
 
@@ -68,5 +69,19 @@ public static class RequestTenantResolver
             ? g
             : null;
         return (tenantId, isSuperAdmin);
+    }
+
+    /// <summary>
+    /// <see cref="TenantScope"/> que dejó el <see cref="TenantEnforcementMiddleware"/> en
+    /// <see cref="HttpContext.Items"/> (HU #12321; solo rutas <see cref="TenantEnforcementMiddleware.RuntimeScopedRoutes"/>).
+    /// <c>null</c> = ruta no scopeada o petición rechazada antes de resolver; el consumidor NO debe
+    /// interpretarlo como "todos" — es ausencia de alcance, no alcance total.
+    /// </summary>
+    public static TenantScope? ScopeFromItems(HttpContext http)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        return http.Items.TryGetValue(TenantEnforcementMiddleware.TenantScopeItemKey, out var s) && s is TenantScope scope
+            ? scope
+            : null;
     }
 }
