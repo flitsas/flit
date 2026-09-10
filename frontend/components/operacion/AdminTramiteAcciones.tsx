@@ -597,6 +597,9 @@ export function useAdminTramiteAcciones({
   const tenantId = isAdmin ? item.tenantId : undefined;
   const puede = (slug: string) => isSuperAdmin || permissions.includes(slug);
   const esAprobado = item.estado === 'aprobado';
+  // Bug #12376, defecto 2 — un trámite ya Anulado no puede volver a seleccionarse para anular
+  // (el backend lo rechaza con CANNOT_ANNUL_ALREADY; esto solo evita el viaje redondo innecesario).
+  const esAnulado = item.estado === 'anulado';
 
   const [estadoOpen, setEstadoOpen] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
@@ -629,8 +632,10 @@ export function useAdminTramiteAcciones({
       key: 'admin-anular',
       label: 'Anular',
       icon: Ban,
-      disabled: esAprobado,
-      disabledReason: 'Un trámite Aprobado no se puede anular.',
+      disabled: esAprobado || esAnulado,
+      disabledReason: esAnulado
+        ? 'Este trámite ya está Anulado.'
+        : 'Un trámite Aprobado no se puede anular.',
       onSelect: () => setAnularOpen(true),
     });
   }

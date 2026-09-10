@@ -259,6 +259,25 @@ describe('HU #12163 — AC2: Aprobado deshabilita Cambiar estado y Anular', () =
   });
 });
 
+// Bug #12376, defecto 2 — un trámite ya Anulado no debe poder seleccionarse de nuevo para anular
+// (el backend ahora lo rechaza con CANNOT_ANNUL_ALREADY; el frontend evita el viaje redondo).
+describe('HU #12163 / Bug #12376 — Anulado deshabilita "Anular"', () => {
+  it('en un trámite ya Anulado, "Anular" está deshabilitada con motivo', async () => {
+    setToken(['AdminTramiteAnular']);
+    mocks.listInstances.mockResolvedValue([makeInstance({ estado: 'anulado' })]);
+    renderTable();
+    await screen.findByText('P0001');
+    await abrirAcciones();
+
+    const anular = screen.getByRole('menuitem', { name: 'Anular' });
+    expect(anular).toBeDisabled();
+    expect(anular).toHaveAttribute('title', 'Este trámite ya está Anulado.');
+
+    await userEvent.click(anular);
+    expect(mocks.adminAnular).not.toHaveBeenCalled();
+  });
+});
+
 describe('HU #12163 — AC3: Cambiar estado (confirmación + feedback)', () => {
   beforeEach(() => {
     setToken(['AdminTramiteCambiarEstado']);

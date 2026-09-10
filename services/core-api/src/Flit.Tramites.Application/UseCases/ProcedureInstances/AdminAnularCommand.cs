@@ -97,6 +97,12 @@ public sealed class AdminAnularHandler(
                 "El trámite está en estado 'revocado': la anulación administrativa no puede invadir " +
                 "una decisión del organismo de tránsito.");
 
+        // Bug #12376, defecto 2 — Anulado como ORIGEN: rechazado siempre. Sin este guard, "Anular" era
+        // idempotente por accidente y el listado permitía re-seleccionar un trámite ya anulado.
+        if (string.Equals(from, TramiteEstado.Anulado, StringComparison.Ordinal))
+            return (null, TramiteEstadoErrores.CannotAnnulAlready,
+                "El trámite ya está en estado 'anulado': no puede anularse nuevamente.");
+
         var now = DateTimeOffset.UtcNow;
 
         // AC1 — cambio DIRECTO a 'anulado', sin pasar por TramiteStateMachine.IsValidTransition ni por

@@ -138,6 +138,14 @@ public static class TramiteEstadoErrores
     public const string CannotAnnulRevoked = "CANNOT_ANNUL_REVOKED";
 
     /// <summary>
+    /// Bug #12376, defecto 2 — anulación ADMINISTRATIVA: el trámite YA está en <c>anulado</c> y no puede
+    /// volver a anularse (422). Sin este guard, "Anular" era idempotente por accidente y permitía
+    /// re-seleccionar un trámite ya anulado desde el listado (mismo criterio de formato que
+    /// <see cref="CannotAnnulApproved"/>/<see cref="CannotAnnulRevoked"/>).
+    /// </summary>
+    public const string CannotAnnulAlready = "CANNOT_ANNUL_ALREADY";
+
+    /// <summary>
     /// HU #12161 — reenvío ADMINISTRATIVO de la validación de identidad de un trámite: el trámite está en
     /// <c>aprobado</c>, <c>anulado</c> o "revocado" (string, HU #12165 aún no existe como enum — ver
     /// <c>AdminReenviarValidacionIdentidadHandler</c>, capa Application) y la identidad ya no es
