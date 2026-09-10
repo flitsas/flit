@@ -25,10 +25,10 @@ function item(overrides: Partial<QuipuxColaItem>): QuipuxColaItem {
   return {
     id: "s-1",
     procedureInstanceId: "p-1",
-    referenceNumber: "TRM-001",
+    referenceNumber: "FT2-0000001",
     procedureTypeName: "Traspaso",
     clientTenantName: "Renting S.A.S.",
-    documentName: "FLIT_TRM-001",
+    documentName: "FLIT_FT2-0000001",
     status: "pendiente",
     attempts: 0,
     pollCount: 0,
@@ -65,11 +65,11 @@ describe("QuipuxQueueList — HU #10774", () => {
 
   it("lista las radicaciones con su referencia y estado", async () => {
     vi.mocked(fetchQuipuxCola).mockResolvedValue(
-      page([item({ id: "s-1", referenceNumber: "TRM-001", status: "registrado" })]),
+      page([item({ id: "s-1", referenceNumber: "FT2-0000001", status: "registrado" })]),
     );
     renderList();
 
-    expect(await screen.findByText("TRM-001")).toBeInTheDocument();
+    expect(await screen.findByText("FT2-0000001")).toBeInTheDocument();
     expect(screen.getByText("Registrado")).toBeInTheDocument();
     expect(fetchQuipuxCola).toHaveBeenCalledWith(OT_ID, { page: 1, pageSize: 20 }, expect.anything());
   });
@@ -84,11 +84,11 @@ describe("QuipuxQueueList — HU #10774", () => {
   it("solo un `fallido` ofrece Re-encolar; confirmar llama retry y refresca", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchQuipuxCola).mockResolvedValue(
-      page([item({ id: "s-fail", status: "fallido", attempts: 5, referenceNumber: "TRM-FAIL" })]),
+      page([item({ id: "s-fail", status: "fallido", attempts: 5, referenceNumber: "FT1-0000404" })]),
     );
     renderList();
 
-    await screen.findByText("TRM-FAIL");
+    await screen.findByText("FT1-0000404");
     expect(screen.queryByRole("button", { name: /Cancelar/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Re-encolar/i }));
 
@@ -105,11 +105,11 @@ describe("QuipuxQueueList — HU #10774", () => {
   it("solo un `pendiente` ofrece Cancelar; confirmar llama cancel", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchQuipuxCola).mockResolvedValue(
-      page([item({ id: "s-pend", status: "pendiente", referenceNumber: "TRM-PEND" })]),
+      page([item({ id: "s-pend", status: "pendiente", referenceNumber: "FT1-0000500" })]),
     );
     renderList();
 
-    await screen.findByText("TRM-PEND");
+    await screen.findByText("FT1-0000500");
     expect(screen.queryByRole("button", { name: /Re-encolar/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Cancelar/i }));
 
@@ -123,11 +123,11 @@ describe("QuipuxQueueList — HU #10774", () => {
 
   it("un desenlace (aprobado) no ofrece acciones", async () => {
     vi.mocked(fetchQuipuxCola).mockResolvedValue(
-      page([item({ id: "s-ok", status: "aprobado", referenceNumber: "TRM-OK" })]),
+      page([item({ id: "s-ok", status: "aprobado", referenceNumber: "FT2-0000200" })]),
     );
     renderList();
 
-    await screen.findByText("TRM-OK");
+    await screen.findByText("FT2-0000200");
     expect(screen.queryByRole("button", { name: /Re-encolar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Cancelar/i })).not.toBeInTheDocument();
   });

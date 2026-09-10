@@ -23,7 +23,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
 function fila(parcial: Partial<InstanceSummary> = {}): InstanceSummary {
   return {
     id: 'inst-1',
-    referenceNumber: '18',
+    referenceNumber: 'FT1-0000018',
     modalidad: 'TRASPASO',
     estado: 'entregado',
     placa: 'KYU631',
