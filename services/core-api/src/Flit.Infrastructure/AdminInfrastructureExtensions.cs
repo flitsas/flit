@@ -66,6 +66,11 @@ public static class AdminInfrastructureExtensions
         // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
         services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();
 
+        // HU #12323 (Feature #12254) — interruptores globales de la jerarquía leídos por petición,
+        // sin caché y fail-closed (fila ausente/error ⇒ apagado). El resolver los consulta antes que
+        // la jerarquía: apagar group_read_scope degrada a Single sin desplegar ni tocar tenants.
+        services.AddScoped<IHierarchySwitches, DbHierarchySwitches>();
+
         // HU #10191 — lista blanca + checker de propiedad vehicular (stub transitorio).
         services.AddScoped<IWhitelistRepository, WhitelistRepository>();
         services.AddScoped<IVehicleTenantOwnershipChecker, StubVehicleTenantOwnershipChecker>();

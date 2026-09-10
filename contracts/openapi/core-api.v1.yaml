@@ -8400,6 +8400,74 @@ paths:
         "401":
           description: No autenticado.
 
+  # ── Admin · Plataforma · Jerarquía de clientes (HU #12323, Feature #12254, ADR-0057) ──
+  /api/v1/admin/platform/hierarchy-switches:
+    get:
+      operationId: adminHierarchySwitchesList
+      tags: ["Admin · Plataforma · Jerarquía de clientes"]
+      security:
+        - bearerAuth: []
+      summary: "Lista los interruptores globales de la jerarquía de clientes"
+      description: >
+        Devuelve el estado de `group_read_scope` (cabeza de grupo lee a sus hijos) e
+        `inherited_configuration` (hijos heredan configuración del padre). Se leen por petición y sin
+        caché: conmutar uno surte efecto en la siguiente petición sin despliegue ni nuevo token.
+        Ninguno reutiliza `is_group_parent`. Solo rol SuperAdmin.
+      responses:
+        "200":
+          description: "Interruptores ordenados por clave."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HierarchySwitchesListResponse"
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+
+  /api/v1/admin/platform/hierarchy-switches/{key}:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [group_read_scope, inherited_configuration]
+        description: "Clave del interruptor. Cualquier otra clave responde 404."
+    put:
+      operationId: adminHierarchySwitchesSet
+      tags: ["Admin · Plataforma · Jerarquía de clientes"]
+      security:
+        - bearerAuth: []
+      summary: "Enciende o apaga un interruptor de la jerarquía sin despliegue"
+      description: >
+        Apagar `group_read_scope` hace que toda cabeza de grupo resuelva alcance propio (`Single`) en la
+        siguiente petición, dejando intactos `is_group_parent` y `parent_tenant_id`; reencenderlo devuelve
+        `Group` sin nuevo token. Los interruptores son independientes entre sí. La operación queda en el
+        rastro de auditoría administrativo (`module=config`, `operation=update`, `entity=hierarchy_switch`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetHierarchySwitchRequest"
+      responses:
+        "200":
+          description: "Estado resultante del interruptor."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HierarchySwitchResponse"
+        "400": { description: "Body inválido (falta `isEnabled` o no es booleano)." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+        "404":
+          description: "Clave de interruptor desconocida (`HIERARCHY_SWITCH_NOT_FOUND`)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: HIERARCHY_SWITCH_NOT_FOUND }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -12793,3 +12861,37 @@ components:
             $ref: "#/components/schemas/AlertEventDto"
         totalCount: { type: integer }
       required: [items, totalCount]
+
+    # ── Admin · Plataforma · Jerarquía de clientes (HU #12323) ──────────────────
+    HierarchySwitchResponse:
+      type: object
+      description: Estado de un interruptor global de la jerarquía de clientes (`identity.hierarchy_switches`).
+      properties:
+        key:
+          type: string
+          enum: [group_read_scope, inherited_configuration]
+        isEnabled: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+        updatedBy:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario (claim sub) que conmutó el interruptor por última vez; null = seed de la migración.
+      required: [key, isEnabled, updatedAt, updatedBy]
+
+    HierarchySwitchesListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/HierarchySwitchResponse"
+      required: [items]
+
+    SetHierarchySwitchRequest:
+      type: object
+      properties:
+        isEnabled:
+          type: boolean
+          description: true = encendido; false = apagado (degradación segura, sin tocar la jerarquía).
+      required: [isEnabled]

@@ -230,6 +230,7 @@ app.MapAdminQuipuxEndpoints();
 app.MapAdminPlataformaMandatosEndpoints();
 app.MapAdminOtMandatosEndpoints();
 app.MapAdminPlataformaFurEndpoints();
+app.MapAdminHierarchySwitchesEndpoints(); // HU #12323 — interruptores globales de jerarquía (SuperAdmin)
 app.MapAdminPlataformaNotificacionesEndpoints();
 app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
 app.MapAdminLogQxEndpoints();

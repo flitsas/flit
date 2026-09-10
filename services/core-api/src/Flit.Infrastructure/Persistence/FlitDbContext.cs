@@ -18,6 +18,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
+    // HU #12323 (ADR-0057) — interruptores globales de la jerarquía y bitácora append-only del
+    // vínculo padre-hija. La bitácora la escribe solo el trigger tr_tenants_hierarchy_audit.
+    public DbSet<HierarchySwitch> HierarchySwitches => Set<HierarchySwitch>();
+
+    public DbSet<TenantHierarchyAuditEntry> TenantHierarchyAuditEntries => Set<TenantHierarchyAuditEntry>();
+
     // Keyring de ASP.NET Data Protection persistido en Postgres (HU #10233): compartido entre
     // réplicas y estable entre reinicios, para poder descifrar el secreto HMAC del webhook Kyverum.
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();

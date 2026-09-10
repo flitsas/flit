@@ -13,9 +13,12 @@ namespace Flit.Infrastructure.Tests.Persistence;
 /// HU #12321 (Feature #12254) — <see cref="DbTenantScopeResolver"/> sobre <c>identity.tenants</c>
 /// (InMemory). Uso de ejemplo:
 /// <code>
-/// var resolver = new DbTenantScopeResolver(db, NullLogger&lt;DbTenantScopeResolver&gt;.Instance);
+/// var resolver = new DbTenantScopeResolver(db, switches, NullLogger&lt;DbTenantScopeResolver&gt;.Instance);
 /// var scope = await resolver.ResolveAsync(tenantId, ct); // Single o Group, nunca All
 /// </code>
+/// HU #12323: el resolver consulta primero <see cref="IHierarchySwitches"/> (fake aquí, encendido por
+/// defecto); apagado ⇒ <c>Single</c> sin tocar la jerarquía y reencendido ⇒ <c>Group</c> en la siguiente
+/// llamada, sin recrear nada (lectura por petición, sin caché).
 /// </summary>
 public sealed class DbTenantScopeResolverTests
 {
@@ -40,8 +43,33 @@ public sealed class DbTenantScopeResolverTests
         CreatedAt = DateTimeOffset.UtcNow,
     };
 
-    private static DbTenantScopeResolver Sut(FlitDbContext db) =>
-        new(db, NullLogger<DbTenantScopeResolver>.Instance);
+    private static DbTenantScopeResolver Sut(FlitDbContext db, FakeHierarchySwitches? switches = null) =>
+        new(db, switches ?? new FakeHierarchySwitches(), NullLogger<DbTenantScopeResolver>.Instance);
+
+    /// <summary>Doble de <see cref="IHierarchySwitches"/>: encendido por defecto, conmutable entre llamadas.</summary>
+    private sealed class FakeHierarchySwitches : IHierarchySwitches
+    {
+        public bool GroupReadScope { get; set; } = true;
+
+        public bool InheritedConfiguration { get; set; } = true;
+
+        public int GroupReadScopeReads { get; private set; }
+
+        public Task<bool> IsGroupReadScopeEnabledAsync(CancellationToken cancellationToken = default)
+        {
+            GroupReadScopeReads++;
+            return Task.FromResult(GroupReadScope);
+        }
+
+        public Task<bool> IsInheritedConfigurationEnabledAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(InheritedConfiguration);
+
+        public Task<IReadOnlyList<HierarchySwitchState>> ListAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<HierarchySwitchState>>([]);
+
+        public Task<HierarchySwitchState?> SetAsync(string key, bool isEnabled, Guid? actorUserId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<HierarchySwitchState?>(null);
+    }
 
     // ── AC1 — cliente sin jerarquía ────────────────────────────────────────────
 
@@ -168,6 +196,99 @@ public sealed class DbTenantScopeResolverTests
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    // ── HU #12323 AC1 — interruptor group_read_scope apagado ⇒ Single sin tocar datos ─
+
+    [Fact]
+    public async Task ResolveAsync_InterruptorApagado_CabezaConHijos_DevuelveSingle()
+    {
+        await using var db = NewDb(nameof(ResolveAsync_InterruptorApagado_CabezaConHijos_DevuelveSingle));
+        db.Tenants.AddRange(
+            Row(Parent, isGroupParent: true),
+            Row(Child1, parent: Parent),
+            Row(Child2, parent: Parent));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var switches = new FakeHierarchySwitches { GroupReadScope = false };
+
+        var scope = await Sut(db, switches).ResolveAsync(Parent, TestContext.Current.CancellationToken);
+
+        scope.IsGroup.Should().BeFalse("con el interruptor apagado la cabeza resuelve alcance propio");
+        scope.IsAll.Should().BeFalse();
+        scope.WriteTenantId.Should().Be(Parent);
+        scope.ReadTenantIds.Should().BeEquivalentTo([Parent]);
+        scope.CanRead(Child1).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_InterruptorApagado_DejaLaJerarquiaIntacta()
+    {
+        await using var db = NewDb(nameof(ResolveAsync_InterruptorApagado_DejaLaJerarquiaIntacta));
+        db.Tenants.AddRange(Row(Parent, isGroupParent: true), Row(Child1, parent: Parent));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await Sut(db, new FakeHierarchySwitches { GroupReadScope = false })
+            .ResolveAsync(Parent, TestContext.Current.CancellationToken);
+
+        var parent = await db.Tenants.AsNoTracking().SingleAsync(t => t.Id == Parent, TestContext.Current.CancellationToken);
+        var child = await db.Tenants.AsNoTracking().SingleAsync(t => t.Id == Child1, TestContext.Current.CancellationToken);
+        parent.IsGroupParent.Should().BeTrue("apagar el interruptor no toca is_group_parent");
+        child.ParentTenantId.Should().Be(Parent, "apagar el interruptor no toca parent_tenant_id");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_InterruptorApagado_NoConsultaLaJerarquia_NiFallaSinContexto()
+    {
+        // Con el interruptor apagado el resolver no toca la BD: incluso con el contexto liberado
+        // devuelve Single sin pasar por el catch (fail-closed por diseño, no por excepción).
+        var db = NewDb(nameof(ResolveAsync_InterruptorApagado_NoConsultaLaJerarquia_NiFallaSinContexto));
+        var sut = Sut(db, new FakeHierarchySwitches { GroupReadScope = false });
+        await db.DisposeAsync();
+
+        var scope = await sut.ResolveAsync(Parent, TestContext.Current.CancellationToken);
+
+        scope.IsGroup.Should().BeFalse();
+        scope.ReadTenantIds.Should().BeEquivalentTo([Parent]);
+    }
+
+    // ── HU #12323 AC2 — apagar inherited_configuration no cambia el alcance ────
+
+    [Fact]
+    public async Task ResolveAsync_SoloInheritedConfigurationApagado_SigueDevolviendoGroup()
+    {
+        await using var db = NewDb(nameof(ResolveAsync_SoloInheritedConfigurationApagado_SigueDevolviendoGroup));
+        db.Tenants.AddRange(Row(Parent, isGroupParent: true), Row(Child1, parent: Parent));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var switches = new FakeHierarchySwitches { GroupReadScope = true, InheritedConfiguration = false };
+
+        var scope = await Sut(db, switches).ResolveAsync(Parent, TestContext.Current.CancellationToken);
+
+        scope.IsGroup.Should().BeTrue("los interruptores son independientes: inherited_configuration no gobierna el alcance");
+        scope.ReadTenantIds.Should().BeEquivalentTo([Parent, Child1]);
+    }
+
+    // ── HU #12323 AC4 — reactivación ⇒ Group en la siguiente petición, sin caché ─
+
+    [Fact]
+    public async Task ResolveAsync_ApagarYReencender_VuelveAGroupEnLaSiguienteLlamada_SinCache()
+    {
+        await using var db = NewDb(nameof(ResolveAsync_ApagarYReencender_VuelveAGroupEnLaSiguienteLlamada_SinCache));
+        db.Tenants.AddRange(Row(Parent, isGroupParent: true), Row(Child1, parent: Parent));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var switches = new FakeHierarchySwitches { GroupReadScope = true };
+        var sut = Sut(db, switches);
+
+        (await sut.ResolveAsync(Parent, TestContext.Current.CancellationToken)).IsGroup.Should().BeTrue();
+
+        switches.GroupReadScope = false;
+        (await sut.ResolveAsync(Parent, TestContext.Current.CancellationToken)).IsGroup.Should().BeFalse();
+
+        switches.GroupReadScope = true;
+        var reactivated = await sut.ResolveAsync(Parent, TestContext.Current.CancellationToken);
+
+        reactivated.IsGroup.Should().BeTrue("la siguiente petición vuelve a Group sin recrear el resolver ni el token");
+        reactivated.ReadTenantIds.Should().BeEquivalentTo([Parent, Child1]);
+        switches.GroupReadScopeReads.Should().Be(3, "el interruptor se lee en CADA petición: no hay caché");
+    }
+
     // ── Contrato ───────────────────────────────────────────────────────────────
 
     [Fact]
@@ -185,10 +306,12 @@ public sealed class DbTenantScopeResolverTests
     {
         using var db = NewDb(nameof(Ctor_DependenciasNulas_Lanzan));
 
-        var sinDb = () => new DbTenantScopeResolver(null!, NullLogger<DbTenantScopeResolver>.Instance);
-        var sinLogger = () => new DbTenantScopeResolver(db, null!);
+        var sinDb = () => new DbTenantScopeResolver(null!, new FakeHierarchySwitches(), NullLogger<DbTenantScopeResolver>.Instance);
+        var sinSwitches = () => new DbTenantScopeResolver(db, null!, NullLogger<DbTenantScopeResolver>.Instance);
+        var sinLogger = () => new DbTenantScopeResolver(db, new FakeHierarchySwitches(), null!);
 
         sinDb.Should().Throw<ArgumentNullException>();
+        sinSwitches.Should().Throw<ArgumentNullException>();
         sinLogger.Should().Throw<ArgumentNullException>();
     }
 }

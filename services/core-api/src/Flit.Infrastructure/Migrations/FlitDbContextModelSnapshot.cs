@@ -3797,6 +3797,63 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("vehicle_service_types", "catalogs");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Identity.HierarchySwitch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_enabled");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<string>("SwitchKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("switch_key");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_hierarchy_switches");
+
+                    b.HasIndex("SwitchKey")
+                        .IsUnique()
+                        .HasDatabaseName("uq_hierarchy_switches_switch_key");
+
+                    b.ToTable("hierarchy_switches", "identity", t =>
+                        {
+                            t.HasTrigger("tr_hierarchy_switches_audit");
+
+                            t.HasTrigger("tr_hierarchy_switches_row_version");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Identity.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3880,6 +3937,54 @@ namespace Flit.Infrastructure.Migrations
                         .HasFilter("parent_tenant_id IS NOT NULL");
 
                     b.ToTable("tenants", "identity");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Identity.TenantHierarchyAuditEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("action");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<Guid>("ChildTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("child_tenant_id");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("ParentTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tenant_hierarchy_audit");
+
+                    b.HasIndex("ChildTenantId", "OccurredAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_tenant_hierarchy_audit_child_occurred_at");
+
+                    b.HasIndex("ParentTenantId", "OccurredAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_tenant_hierarchy_audit_parent_occurred_at");
+
+                    b.ToTable("tenant_hierarchy_audit", "identity", t =>
+                        {
+                            t.HasTrigger("tr_tenant_hierarchy_audit_immutable");
+                        });
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Identity.User", b =>
