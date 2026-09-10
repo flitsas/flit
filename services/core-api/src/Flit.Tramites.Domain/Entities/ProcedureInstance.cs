@@ -5,7 +5,18 @@ public sealed class ProcedureInstance
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
     public Guid ProcedureTypeId { get; set; }
+    /// <summary>
+    /// Radicado compuesto: <c>FT1-0000012</c> (HU #12371). Lo escribe la base al insertar y no
+    /// cambia nunca; ver <see cref="Tramites.ValueObjects.Radicado"/>.
+    /// </summary>
     public string ReferenceNumber { get; set; } = string.Empty;
+
+    /// <summary>
+    /// La parte numérica del radicado, pelada: el 12 de <c>FT1-0000012</c>. Contador global que da
+    /// la secuencia. Por él se ordena y se busca; ordenar por <see cref="ReferenceNumber"/>
+    /// agruparía por familia.
+    /// </summary>
+    public long Consecutivo { get; set; }
     public string Status { get; set; } = Tramites.Estados.TramiteEstado.Borrador;
 
     // Rework trámites (Slice 1) — checklist explícito.

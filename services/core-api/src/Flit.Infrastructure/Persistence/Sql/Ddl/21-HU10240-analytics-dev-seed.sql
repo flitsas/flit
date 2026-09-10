@@ -64,8 +64,9 @@ combos AS (
     CROSS JOIN variants v
     CROSS JOIN LATERAL generate_series(1, v.n_copies) AS c(copy)
 )
--- HU #12151 — el radicado ya no lo escribe el seed: lo asigna el DEFAULT de la columna
--- (secuencia global), y un valor con prefijo violaría ck_procedure_instances_reference_numerico.
+-- HU #12151 — el radicado ya no lo escribe el seed con prefijo propio: un valor con prefijo
+-- violaría el CHECK de la columna. Trae un rango sintético numérico (ver abajo) y, sobre una base
+-- con la HU #12371 aplicada, el trigger BEFORE INSERT lo compone como FTn-92xxxxxxxx.
 -- Eso deja al seed sin sus dos apoyos, y los dos los recupera el ID, que pasa a ser DETERMINISTA
 -- y AUTOIDENTIFICABLE — se construye con el prefijo fijo 5eeda01c-:
 --   · idempotencia      → ON CONFLICT (id) DO NOTHING.

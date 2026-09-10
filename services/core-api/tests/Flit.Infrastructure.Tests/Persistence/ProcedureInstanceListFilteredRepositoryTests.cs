@@ -39,6 +39,7 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
         TenantId = tenantId,
         ProcedureTypeId = Guid.NewGuid(),
         ReferenceNumber = reference,
+        Consecutivo = RadicadoFixture.ConsecutivoDe(reference),
         Vin = vin,
         Plate = plate,
         VendedorNombre = vendedor,
@@ -321,22 +322,23 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
     }
 
     [Theory]
-    [InlineData(SortDirection.Ascending, new[] { "2", "9", "10", "100", "1467" })]
-    [InlineData(SortDirection.Descending, new[] { "1467", "100", "10", "9", "2" })]
+    [InlineData(SortDirection.Ascending, new[] { "FT2-0000002", "FT1-0000009", "FT1-0000010", "FT2-0000100", "FT1-0001467" })]
+    [InlineData(SortDirection.Descending, new[] { "FT1-0001467", "FT2-0000100", "FT1-0000010", "FT1-0000009", "FT2-0000002" })]
     public async Task OrdenaPorRadicadoDeFormaNumerica_NoAlfabetica(
         SortDirection direction, string[] ordenEsperado)
     {
-        // HU #12153 — el radicado es un número guardado como texto. Ordenado como texto daría
-        // 10, 100, 1467, 2, 9: el trámite más reciente aparecería en mitad de la lista. Antes
-        // coincidía con el orden correcto por accidente, porque TRM-2026-000123 tenía ancho fijo.
+        // HU #12153 / HU #12371 — el orden va por el consecutivo, no por el texto. Ordenado como
+        // texto, todos los FT1-… irían antes que cualquier FT2-…: el listado se agruparía por
+        // familia y el trámite más reciente aparecería en mitad de la lista. Aquí las familias
+        // van mezcladas a propósito para que un orden por texto no pueda pasar por accidente.
         var ct = TestContext.Current.CancellationToken;
         await using var db = NewContext($"radicado-num-{direction}");
         db.ProcedureInstances.AddRange(
-            Instancia(TenantId, "100"),
-            Instancia(TenantId, "9"),
-            Instancia(TenantId, "1467"),
-            Instancia(TenantId, "2"),
-            Instancia(TenantId, "10"));
+            Instancia(TenantId, "FT2-0000100"),
+            Instancia(TenantId, "FT1-0000009"),
+            Instancia(TenantId, "FT1-0001467"),
+            Instancia(TenantId, "FT2-0000002"),
+            Instancia(TenantId, "FT1-0000010"));
         await db.SaveChangesAsync(ct);
         var repo = new ProcedureInstanceRepository(db);
 

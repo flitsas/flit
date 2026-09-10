@@ -286,7 +286,10 @@ function SortableTh({
  * añadir una columna sea una entrada en dos mapas y no un `if` en medio del JSX.
  */
 const CELDA_CLS: Record<string, string> = {
-  radicado: "font-semibold",
+  // HU #12372 — sin partir: FT2-0000010 tiene un guion y el navegador lo usaba para envolver en
+  // dos líneas («FT2-» / «0000010») cuando la fila iba justa. Un identificador partido se lee mal
+  // y, peor, se copia mal. Con el número pelado no había por dónde partir.
+  radicado: "font-semibold whitespace-nowrap",
   vin: "font-mono text-[11px]",
   placa: "font-semibold",
   fechaRadicacion: "opacity-70",

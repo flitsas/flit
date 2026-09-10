@@ -239,7 +239,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     && a.DocumentType == tipoDoc
                     && a.DocumentNumber == documento))
             .OrderBy(i => i.DraftFinalizedAt)
-            .ThenBy(i => i.ReferenceNumber)
+            .ThenBy(i => i.Consecutivo)
             .ToListAsync(ct);
     }
 
@@ -508,6 +508,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 v.DocumentNumber,
                 InstanceId = v.ProcedureInstanceId!.Value,
                 v.ProcedureInstance!.ReferenceNumber,
+                v.ProcedureInstance.Consecutivo,
                 v.ProcedureInstance.Status,
                 // La familia se lee del TIPO dentro de la propia proyección, no vía instance.FamilyCode:
                 // esa propiedad es calculada y exige la navegación cargada, así que EF no la traduce, la
@@ -534,6 +535,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 a.DocumentNumber,
                 InstanceId = a.ProcedureInstanceId,
                 a.ProcedureInstance!.ReferenceNumber,
+                a.ProcedureInstance.Consecutivo,
                 a.ProcedureInstance.Status,
                 // Misma razón que arriba: por el tipo, para que lo traduzca EF y no el cliente.
                 Modalidad = a.ProcedureInstance!.ProcedureType!.Family,
@@ -547,7 +549,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 g => g.Key,
                 g => (IReadOnlyList<LinkedProcedureSummary>)g
                     .DistinctBy(r => r.InstanceId)
-                    .OrderBy(r => r.ReferenceNumber, StringComparer.OrdinalIgnoreCase)
+                    // HU #12371 — por el número: el texto FT1-…/FT2-… agruparía por familia.
+                    .OrderBy(r => r.Consecutivo)
                     .Select(r => new LinkedProcedureSummary(r.InstanceId, r.ReferenceNumber, r.Status, r.Modalidad))
                     .ToList());
     }
@@ -2075,17 +2078,22 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             // más el documento de las partes: radicado, placa, VIN, nombre y documento de comprador y
             // vendedor, organismo de tránsito y razón social de la compañía.
             //
-            // El RADICADO casa exacto y no por subcadena: es un consecutivo numérico corto desde el
-            // Feature #12150, así que buscar «1» por subcadena traería el 1, el 10, el 11 y el 100.
+            // El RADICADO casa exacto y no por subcadena: buscar «1» por subcadena traería el 1, el
+            // 10, el 11 y el 100. Desde la HU #12371 el radicado es FT1-0000012 y el término se LEE
+            // como radicado (12, 0000012, FT1-0000012, ft1 12): sin prefijo casa el consecutivo, con
+            // prefijo el texto canónico. Si no es un radicado, las dos variables salen nulas y ese
+            // OR se apaga. La lectura es compartida con la bandeja del organismo.
             //
             // Nombre y organismo van en minúsculas y placa/VIN en mayúsculas porque así se comparan
             // ya en el resto de este método; el criterio no cambia por venir de la barra de búsqueda.
             var termino = filter.Busqueda.Trim();
             var enMinusculas = termino.ToLowerInvariant();
             var enMayusculas = termino.ToUpperInvariant();
+            var (consecutivoBuscado, radicadoCanonico) = ProcedureInstanceFiltroSql.LeerBusquedaRadicado(termino);
 
             query = query.Where(x =>
-                x.ReferenceNumber == termino
+                (consecutivoBuscado != null && x.Consecutivo == consecutivoBuscado)
+                || (radicadoCanonico != null && x.ReferenceNumber.ToUpper().Replace("-", "") == radicadoCanonico)
                 || (x.Plate != null && x.Plate.ToUpper().Contains(enMayusculas))
                 || (x.Vin != null && x.Vin.ToUpper().Contains(enMayusculas))
                 || (x.CompradorNombre != null && x.CompradorNombre.ToLower().Contains(enMinusculas))
@@ -2415,22 +2423,15 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                         .Where(u => u.Id == (x.AssignedToUserId ?? x.CreatedByUserId))
                         .Select(u => u.DisplayName).FirstOrDefault())
                     .ThenBy(x => x.Id),
-            // HU #12153 — el radicado es un número guardado como texto, así que ordenarlo como
-            // texto da 1, 10, 100, 2. Antes coincidía con el orden correcto por accidente, porque
-            // TRM-2026-000123 era de ancho fijo con ceros a la izquierda.
-            //
-            // Se ordena por (longitud, texto) y NO con un cast a bigint: sobre enteros sin ceros a
-            // la izquierda las dos ordenaciones son idénticas —verificado fila a fila sobre 967
-            // trámites reales, cero discrepancias— y esta no puede fallar en ejecución ni obliga a
-            // un índice de expresión con cast, que no se puede crear en la misma transacción que
-            // la renumeración. El invariante lo garantiza ck_procedure_instances_reference_numerico
-            // ('^[1-9][0-9]*$'), y lo apoya ix_procedure_instances_reference_orden.
+            // HU #12153 / HU #12371 — el radicado se ordena por su parte NUMÉRICA (consecutivo), no
+            // por el texto: FT1-0000005 va antes que FT2-0000010 porque 5 < 10, y ordenar el texto
+            // agruparía por familia (todos los FT1 antes que cualquier FT2), que no es lo pedido.
+            // El consecutivo es un contador global, así que el orden por antigüedad de radicación
+            // es exactamente el orden numérico. Lo apoya uq_procedure_instances_consecutivo.
             ProcedureInstanceSortBy.Radicado => descending
-                ? query.OrderByDescending(x => x.ReferenceNumber.Length)
-                       .ThenByDescending(x => x.ReferenceNumber)
+                ? query.OrderByDescending(x => x.Consecutivo)
                        .ThenByDescending(x => x.Id)
-                : query.OrderBy(x => x.ReferenceNumber.Length)
-                       .ThenBy(x => x.ReferenceNumber)
+                : query.OrderBy(x => x.Consecutivo)
                        .ThenBy(x => x.Id),
             ProcedureInstanceSortBy.Estado => descending
                 ? query.OrderByDescending(x => x.Status).ThenByDescending(x => x.Id)

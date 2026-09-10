@@ -7342,6 +7342,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("comprador_nombre");
 
+                    b.Property<long>("Consecutivo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("consecutivo")
+                        .HasDefaultValueSql("nextval('tramites.procedure_instance_reference_seq')");
+
                     b.Property<bool>("ConsolidadoMaestroVigente")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -7462,8 +7468,7 @@ namespace Flit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
-                        .HasColumnName("reference_number")
-                        .HasDefaultValueSql("nextval('tramites.procedure_instance_reference_seq')::text");
+                        .HasColumnName("reference_number");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
@@ -7569,6 +7574,14 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("TenantId", "Plate")
                         .HasDatabaseName("ix_procedure_instances_tenant_id_plate");
 
+                    b.HasIndex("Consecutivo")
+                        .IsUnique()
+                        .HasDatabaseName("uq_procedure_instances_consecutivo");
+
+                    b.HasIndex("ReferenceNumber")
+                        .IsUnique()
+                        .HasDatabaseName("uq_procedure_instances_reference");
+
                     b.HasIndex("TenantId", "UpdatedAt")
                         .HasDatabaseName("ix_procedure_instances_tenant_id_updated_at");
 
@@ -7589,6 +7602,10 @@ namespace Flit.Infrastructure.Migrations
                             t.ExcludeFromMigrations();
 
                             t.HasTrigger("tr_procedure_instances_audit");
+
+                            t.HasTrigger("tr_procedure_instances_radicado");
+
+                            t.HasTrigger("tr_procedure_instances_radicado_inmutable");
 
                             t.HasTrigger("tr_procedure_instances_row_version");
                         });

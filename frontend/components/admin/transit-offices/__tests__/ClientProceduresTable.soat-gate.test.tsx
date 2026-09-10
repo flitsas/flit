@@ -12,7 +12,7 @@ function row(over: Partial<OtClientProcedure>): OtClientProcedure {
     id: "id-1",
     clientTenantId: "c1",
     procedureTypeId: "t1",
-    referenceNumber: "TRM-1",
+    referenceNumber: "FT1-0000001",
     status: "entregado",
     createdAt: "2026-07-17T00:00:00Z",
     ...over,

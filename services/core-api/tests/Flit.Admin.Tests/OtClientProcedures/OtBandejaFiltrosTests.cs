@@ -155,7 +155,7 @@ public sealed class OtBandejaFiltrosTests
         var bandeja = await BuscarAsync(db,
             [new QueryCondition(OtBandejaQueryFieldCatalog.Placa, QueryOperator.Contiene, ["ABC"])]);
 
-        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-1"]);
+        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000001"]);
         // El total describe el universo filtrado, no la página: de él vive el pie y el export.
         bandeja.TotalCount.Should().Be(1);
     }
@@ -176,7 +176,7 @@ public sealed class OtBandejaFiltrosTests
         var bandeja = await BuscarAsync(db,
             [new QueryCondition(OtBandejaQueryFieldCatalog.Placa, QueryOperator.EsAlguno, [escrita])]);
 
-        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-1"]);
+        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000001"]);
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public sealed class OtBandejaFiltrosTests
                 OtBandejaQueryFieldCatalog.Empresa, QueryOperator.EsAlguno, [OtraEmpresa.ToString()]),
         ]);
 
-        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-3"]);
+        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000003"]);
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public sealed class OtBandejaFiltrosTests
                 [TipoTraspaso.ToString()]),
         ]);
 
-        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-2"]);
+        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT2-0000002"]);
     }
 
     [Fact]
@@ -220,7 +220,7 @@ public sealed class OtBandejaFiltrosTests
                 OtBandejaQueryFieldCatalog.Estado, QueryOperator.EsAlguno, [TramiteEstado.Aprobado]),
         ]);
 
-        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-3"]);
+        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000003"]);
     }
 
     /// <summary>
@@ -237,7 +237,7 @@ public sealed class OtBandejaFiltrosTests
             new QueryCondition(
                 OtBandejaQueryFieldCatalog.SubEstadoPlaca, QueryOperator.EsAlguno, ["sin_ruta"]),
         ]);
-        soloSinRuta.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-1", "REF-3"]);
+        soloSinRuta.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000001", "FT1-0000003"]);
 
         var mezcla = await BuscarAsync(db,
         [
@@ -247,7 +247,7 @@ public sealed class OtBandejaFiltrosTests
                 ["sin_ruta", PlateFlowStatus.Preasignado]),
         ]);
         mezcla.Data.Select(p => p.ReferenceNumber)
-            .Should().BeEquivalentTo(["REF-1", "REF-2", "REF-3"]);
+            .Should().BeEquivalentTo(["FT1-0000001", "FT2-0000002", "FT1-0000003"]);
     }
 
     /// <summary>
@@ -290,7 +290,7 @@ public sealed class OtBandejaFiltrosTests
                 OtBandejaQueryFieldCatalog.Prioritario, QueryOperator.EsAlguno, ["true"]),
         ]);
 
-        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-2"]);
+        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT2-0000002"]);
     }
 
     [Fact]
@@ -306,7 +306,7 @@ public sealed class OtBandejaFiltrosTests
                 OtBandejaQueryFieldCatalog.Prioritario, QueryOperator.EsAlguno, ["true"]),
         ]);
 
-        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-2"]);
+        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT2-0000002"]);
     }
 
     /// <summary>Filtrar por «nada» no debe vaciar la bandeja: una condición sin valores no acota.</summary>
@@ -324,28 +324,52 @@ public sealed class OtBandejaFiltrosTests
     // ── La búsqueda libre (HU #12218 AC1) ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// El radicado casa EXACTO y el resto por subcadena. Es la diferencia que importa: desde el
-    /// Feature #12150 el radicado es un consecutivo numérico corto, y por subcadena «1» traería
-    /// también el 10, el 11 y el 100.
+    /// El radicado casa EXACTO y el resto por subcadena. Es la diferencia que importa: por
+    /// subcadena «1» traería también el 10, el 11 y el 100. Desde la HU #12371 el término se LEE
+    /// como radicado, con la misma lectura que el listado del gestor: <c>1</c>, <c>0000001</c> y
+    /// <c>FT1-0000001</c> son el mismo trámite; <c>FT2-0000001</c> no, porque el prefijo se respeta.
     /// </summary>
-    [Fact]
-    public async Task LaBusquedaLibre_CasaElRadicadoExactoYElRestoPorSubcadena()
+    [Theory]
+    [InlineData("1")]
+    [InlineData("0000001")]
+    [InlineData("FT1-0000001")]
+    [InlineData("ft1 1")]
+    public async Task LaBusquedaLibre_LeeElRadicadoComoLoEscribeElUsuario(string termino)
     {
         var db = await SembrarEscenarioAsync();
 
         var porRadicado = await ListarAsync(db, new ListOtClientProceduresQuery
         {
             OtTenantId = OtTenant,
-            Busqueda = "REF-1",
+            Busqueda = termino,
         });
-        porRadicado.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-1"]);
+        porRadicado.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000001"]);
+    }
+
+    [Fact]
+    public async Task LaBusquedaLibre_ConPrefijoDeOtraFamilia_NoCasaElRadicado()
+    {
+        var db = await SembrarEscenarioAsync();
+
+        var bandeja = await ListarAsync(db, new ListOtClientProceduresQuery
+        {
+            OtTenantId = OtTenant,
+            Busqueda = "FT2-0000001",
+        });
+        bandeja.Data.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task LaBusquedaLibre_CasaElRadicadoExactoYElRestoPorSubcadena()
+    {
+        var db = await SembrarEscenarioAsync();
 
         var porPlacaParcial = await ListarAsync(db, new ListOtClientProceduresQuery
         {
             OtTenantId = OtTenant,
             Busqueda = "abc",
         });
-        porPlacaParcial.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-1"]);
+        porPlacaParcial.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000001"]);
     }
 
     /// <summary>Busca también por la empresa cliente: es la columna que la bandeja muestra.</summary>
@@ -360,7 +384,7 @@ public sealed class OtBandejaFiltrosTests
             Busqueda = "Zulia",
         });
 
-        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-3"]);
+        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000003"]);
     }
 
     // ── El rango de fechas (AC6) ──────────────────────────────────────────────────────────────
@@ -377,7 +401,7 @@ public sealed class OtBandejaFiltrosTests
             CreatedTo = new DateTimeOffset(2026, 3, 31, 23, 59, 59, TimeSpan.Zero),
         });
 
-        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["REF-2"]);
+        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT2-0000002"]);
         bandeja.TotalCount.Should().Be(1);
     }
 
@@ -405,6 +429,35 @@ public sealed class OtBandejaFiltrosTests
     }
 
     [Fact]
+    public async Task ElOrdenPorRadicado_VaPorElNumeroYNoPorElPrefijo()
+    {
+        // HU #12371 — FT2-0000002 va entre FT1-0000001 y FT1-0000003 porque 1 < 2 < 3; ordenar el
+        // texto pondría los dos FT1 juntos. Se pide sin filtro de estado para ver los tres; el
+        // prioritario (FT2-0000002) sigue yendo primero, que es la regla de la bandeja.
+        var db = await SembrarEscenarioAsync();
+
+        var asc = await ListarAsync(db, new ListOtClientProceduresQuery
+        {
+            OtTenantId = OtTenant,
+            Status = "",
+            SortBy = "radicado",
+            SortDir = "asc",
+        });
+        asc.Data.Select(p => p.ReferenceNumber).Should()
+            .Equal("FT2-0000002", "FT1-0000001", "FT1-0000003");
+
+        var desc = await ListarAsync(db, new ListOtClientProceduresQuery
+        {
+            OtTenantId = OtTenant,
+            Status = "",
+            SortBy = "radicado",
+            SortDir = "desc",
+        });
+        desc.Data.Select(p => p.ReferenceNumber).Should()
+            .Equal("FT2-0000002", "FT1-0000003", "FT1-0000001");
+    }
+
+    [Fact]
     public async Task AC7_OrdenPorTipoDeTramite_NoRompeLaPrimaciaDeLosPrioritarios()
     {
         var db = await SembrarEscenarioAsync();
@@ -416,8 +469,8 @@ public sealed class OtBandejaFiltrosTests
             SortDir = "asc",
         });
 
-        // REF-2 es el único prioritario: pase lo que pase con el orden pedido, va primero.
-        ordenada.Data[0].ReferenceNumber.Should().Be("REF-2");
+        // FT2-0000002 es el único prioritario: pase lo que pase con el orden pedido, va primero.
+        ordenada.Data[0].ReferenceNumber.Should().Be("FT2-0000002");
     }
 
     // ── El catálogo servido (AC1) ─────────────────────────────────────────────────────────────
@@ -454,9 +507,9 @@ public sealed class OtBandejaFiltrosTests
     /// uno y comprobar que los otros dos se quedan fuera.
     ///
     /// <list type="bullet">
-    /// <item><description>REF-1 — Flota Andina, matrícula, entregado, placa ABC123, sin ruta.</description></item>
-    /// <item><description>REF-2 — Flota Andina, traspaso, entregado, PRIORITARIO, preasignado, marzo.</description></item>
-    /// <item><description>REF-3 — Transportes Zulia, matrícula, aprobado, sin ruta.</description></item>
+    /// <item><description>FT1-0000001 — Flota Andina, matrícula, entregado, placa ABC123, sin ruta.</description></item>
+    /// <item><description>FT2-0000002 — Flota Andina, traspaso, entregado, PRIORITARIO, preasignado, marzo.</description></item>
+    /// <item><description>FT1-0000003 — Transportes Zulia, matrícula, aprobado, sin ruta.</description></item>
     /// </list>
     /// </summary>
     private static async Task<string> SembrarEscenarioAsync()
@@ -525,7 +578,8 @@ public sealed class OtBandejaFiltrosTests
                 Id = Guid.NewGuid(),
                 TenantId = ClientTenant,
                 ProcedureTypeId = TipoMatricula,
-                ReferenceNumber = "REF-1",
+                ReferenceNumber = "FT1-0000001",
+                Consecutivo = 1,
                 Status = TramiteEstado.Entregado,
                 TransitOfficeId = TransitOffice,
                 Plate = "ABC123",
@@ -538,7 +592,8 @@ public sealed class OtBandejaFiltrosTests
                 Id = Guid.NewGuid(),
                 TenantId = ClientTenant,
                 ProcedureTypeId = TipoTraspaso,
-                ReferenceNumber = "REF-2",
+                ReferenceNumber = "FT2-0000002",
+                Consecutivo = 2,
                 Status = TramiteEstado.Entregado,
                 TransitOfficeId = TransitOffice,
                 PlateFlowStatus = PlateFlowStatus.Preasignado,
@@ -552,7 +607,8 @@ public sealed class OtBandejaFiltrosTests
                 Id = Guid.NewGuid(),
                 TenantId = OtraEmpresa,
                 ProcedureTypeId = TipoMatricula,
-                ReferenceNumber = "REF-3",
+                ReferenceNumber = "FT1-0000003",
+                Consecutivo = 3,
                 Status = TramiteEstado.Aprobado,
                 TransitOfficeId = TransitOffice,
                 CreatedByUserId = Guid.NewGuid(),

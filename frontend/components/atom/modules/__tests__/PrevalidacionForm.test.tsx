@@ -118,7 +118,7 @@ const RESULT_STANDALONE: TenantBiometricValidation = {
 const RESULT_TRAMITE: TenantBiometricValidation = {
   id: 'val-1',
   instanceId: 'inst-99',
-  referenceNumber: 'TRM-2026-000099',
+  referenceNumber: 'FT1-0000099',
   modalidad: 'traspaso',
   partyRole: 'comprador',
   name: 'Ana Compradora',
@@ -523,7 +523,7 @@ describe('Validaciones null-safety (HU #10869)', () => {
     });
 
     // La fila debe mostrar el referenceNumber real
-    expect(screen.getByText('TRM-2026-000099')).toBeInTheDocument();
+    expect(screen.getByText('FT1-0000099')).toBeInTheDocument();
   });
 
   it('la lista mezcla prevalidaciones standalone y validaciones de trámite en una sola grilla', async () => {
@@ -540,7 +540,7 @@ describe('Validaciones null-safety (HU #10869)', () => {
 
     // Standalone muestra badge "Prevalidación"; trámite muestra referenceNumber
     expect(screen.getByText('Prevalidación')).toBeInTheDocument();
-    expect(screen.getByText('TRM-2026-000099')).toBeInTheDocument();
+    expect(screen.getByText('FT1-0000099')).toBeInTheDocument();
   });
 
   it('el botón "Nueva prevalidación" vive en la pantalla principal de Identidad', async () => {

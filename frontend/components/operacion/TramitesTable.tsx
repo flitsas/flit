@@ -1492,8 +1492,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 const SENTIDO_ETIQUETA: Record<'texto' | 'fecha' | 'numero', { asc: string; desc: string }> = {
   texto: { asc: 'A-Z', desc: 'Z-A' },
   fecha: { asc: 'Más antigua', desc: 'Más reciente' },
-  // HU #12154 — el radicado dejó de ser TRM-2026-000123 para ser un número. «A-Z» sobre un número
-  // no dice nada: el usuario no sabe si el 10 va antes o después del 9.
+  // HU #12154 / HU #12371 — el radicado (FT1-0000012) se ordena por su consecutivo, no por el
+  // texto: «A-Z» diría que todos los FT1 van antes que los FT2, y no es así. «Menor a mayor» es
+  // lo que de verdad hace el servidor.
   numero: { asc: 'Menor a mayor', desc: 'Mayor a menor' },
 };
 
