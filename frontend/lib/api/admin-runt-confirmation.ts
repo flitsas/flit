@@ -83,7 +83,7 @@ export const RUNT_VERDICT_LABEL: Record<RuntConfirmationVerdict, string> = {
   error: "Error de proveedor",
 };
 
-export type RuntConfirmationQueryKind = "vin" | "plate" | "plate_pair" | "reevaluation";
+export type RuntConfirmationQueryKind = "vin" | "plate" | "plate_pair" | "vin_plate" | "reevaluation";
 
 export interface RuntConfirmationAttemptRow {
   id: string;
@@ -183,7 +183,7 @@ export async function getRuntConfirmationAttempt(id: string, signal?: AbortSigna
   return apiFetch<RuntConfirmationAttemptDetail>(`${base}/attempts/${encodeURIComponent(id)}`, { signal });
 }
 
-/** JSON crudo tal como se guardó: `{ primary, seller? }` (el vendedor solo en traspaso). */
+/** JSON crudo tal como se guardó: `{ primary, seller? }` (la segunda: el vendedor en traspaso, el desempate por placa en matrícula). */
 export async function getRuntConfirmationAttemptRaw(
   id: string,
   signal?: AbortSignal,

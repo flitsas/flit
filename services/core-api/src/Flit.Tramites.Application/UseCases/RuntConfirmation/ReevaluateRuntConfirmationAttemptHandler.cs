@@ -44,7 +44,11 @@ public sealed class ReevaluateRuntConfirmationAttemptHandler(IRuntConfirmationSt
         var seller = original.SellerRawPayloadId is Guid s ? await store.GetPayloadJsonAsync(s, ct).ConfigureAwait(false) : null;
         var baseline = await store.GetBaselinePayloadJsonAsync(candidate.InstanceId, candidate.CutoffAt, ct).ConfigureAwait(false);
 
-        var decision = RuntConfirmationEvaluator.Evaluate(candidate, primary, seller, baseline);
+        // En un intento vin_plate el segundo crudo es el desempate por placa, no un vendedor.
+        var esDesempate = string.Equals(original.QueryKind, RuntConfirmationQueryKinds.VinPlate, StringComparison.Ordinal);
+        var decision = esDesempate
+            ? RuntConfirmationEvaluator.Evaluate(candidate, primary, null, baseline, seller)
+            : RuntConfirmationEvaluator.Evaluate(candidate, primary, seller, baseline);
         var now = DateTimeOffset.UtcNow;
 
         // Sin consulta no hay intento nuevo que contar: solo se propaga un Confirmado o una marca.

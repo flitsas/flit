@@ -25,8 +25,9 @@ public sealed class RuntConfirmationRulesTests
         RuntVehicleSnapshot? seller = null,
         RuntVehicleSnapshot? baseline = null,
         string? expectedPlate = null,
-        string? ot = null) =>
-        new(type, family, cutoff, primary, seller, baseline, expectedPlate, ot);
+        string? ot = null,
+        RuntVehicleSnapshot? tiebreak = null) =>
+        new(type, family, cutoff, primary, seller, baseline, expectedPlate, ot, tiebreak);
 
     // ── AC1: solicitud autorizada posterior a la radicación confirma ──────────────────
 
@@ -38,18 +39,19 @@ public sealed class RuntConfirmationRulesTests
 
         d.Verdict.Should().Be(RuntConfirmationVerdict.Confirmed);
         d.Reason.Should().Contain("302345557").And.Contain("2026-09-08").And.Contain("AUTORIZADA").And.Contain("STRIA TTEyTTO BELLO");
-        d.RuleVersion.Should().Be("confirmacion-v1");
+        d.RuleVersion.Should().Be("confirmacion-v2");
     }
 
     // ── AC2: el historial viejo no confirma ────────────────────────────────────────────
 
     [Fact]
-    public void AC2_Traspaso_ConSoloTraspasosAnterioresALaRadicacion_QuedaPendiente()
+    public void AC2_Traspaso_ConSoloTraspasosAnterioresALaRadicacion_ElHistorialNoConfirma()
     {
         // PUO271 tiene TRASPASO AUTORIZADA el 11/06/2026: un traspaso radicado el 01/08 no puede apoyarse en él.
+        // Con los dos documentos respondiendo tampoco hay desempate por propiedad: queda Pendiente.
         var comprador = Snap("verifik-cambio-carroceria-PUO271.json");
         var d = RuntConfirmationRules.Evaluate(Input(
-            "TRASPASO_STANDARD", ProcedureFamily.Traspaso, new DateOnly(2026, 8, 1), comprador, seller: RuntVehicleSnapshot.NotFound("verifik")));
+            "TRASPASO_STANDARD", ProcedureFamily.Traspaso, new DateOnly(2026, 8, 1), comprador, seller: comprador));
 
         d.Verdict.Should().Be(RuntConfirmationVerdict.Pending);
         d.Reason.Should().Contain("No hay solicitud de TRASPASO posterior a la radicación").And.Contain("anteriores a la radicación");
@@ -192,7 +194,100 @@ public sealed class RuntConfirmationRulesTests
         d.Verdict.Should().Be(RuntConfirmationVerdict.Pending);
     }
 
+    // ── AC8b: desempate por propiedad en matrícula (segunda línea, una llamada más) ──
+
+    [Fact]
+    public void AC8b_Matricula_HistorialOculto_ConPlaca_PideElDesempate_YSinPlacaNo()
+    {
+        var oculto = Snap("kyverum-cambio-color-QZU024.json") with { MostrarSolicitudes = "NO" };
+
+        var pide = RuntConfirmationRules.Evaluate(Input("MATRICULA_NUEVA", ProcedureFamily.Matriculas, new DateOnly(2026, 8, 28), oculto));
+        pide.TiebreakPlate.Should().Be("QZU024");
+        pide.Verdict.Should().Be(RuntConfirmationVerdict.Unverifiable, "sin desempate el veredicto por historial vale tal cual");
+
+        var sinPlaca = RuntConfirmationRules.Evaluate(Input("MATRICULA_NUEVA", ProcedureFamily.Matriculas, new DateOnly(2026, 8, 28), oculto with { Placa = null }));
+        sinPlaca.TiebreakPlate.Should().BeNull();
+        sinPlaca.Verdict.Should().Be(RuntConfirmationVerdict.Unverifiable);
+    }
+
+    [Fact]
+    public void AC8b_Matricula_SinSolicitudPosterior_PideElDesempate()
+    {
+        // La MATRÍCULA INICIAL de QZU024 es del 31/08: con corte el 05/09 no cuenta.
+        var d = RuntConfirmationRules.Evaluate(Input("MATRICULA_NUEVA", ProcedureFamily.Matriculas, new DateOnly(2026, 9, 5), Snap("kyverum-cambio-color-QZU024.json")));
+
+        d.Verdict.Should().Be(RuntConfirmationVerdict.Pending);
+        d.TiebreakPlate.Should().Be("QZU024");
+    }
+
+    [Fact]
+    public void AC8b_Matricula_ElPropietarioRespondePorPlaca_Confirma()
+    {
+        var oculto = Snap("kyverum-cambio-color-QZU024.json") with { MostrarSolicitudes = "NO" };
+        var d = RuntConfirmationRules.Evaluate(Input(
+            "MATRICULA_NUEVA", ProcedureFamily.Matriculas, new DateOnly(2026, 8, 28), oculto, expectedPlate: "QZU024", tiebreak: oculto));
+
+        d.Verdict.Should().Be(RuntConfirmationVerdict.Confirmed);
+        d.TiebreakPlate.Should().BeNull("ya no hay nada más que consultar");
+        d.Reason.Should().StartWith("Desempate por propiedad").And.Contain("QZU024").And.Contain("no expone el historial").And.Contain("placa asignada QZU024");
+    }
+
+    [Fact]
+    public void AC8b_Matricula_ElPropietarioNoResponde_QuedaPendiente_NoNoVerificable()
+    {
+        var oculto = Snap("kyverum-cambio-color-QZU024.json") with { MostrarSolicitudes = "NO" };
+        var d = RuntConfirmationRules.Evaluate(Input(
+            "MATRICULA_NUEVA", ProcedureFamily.Matriculas, new DateOnly(2026, 8, 28), oculto, tiebreak: RuntVehicleSnapshot.NotFound("kyverum")));
+
+        d.Verdict.Should().Be(RuntConfirmationVerdict.Pending, "la placa ya existe: el dueño puede aparecer en la siguiente corrida");
+        d.Reason.Should().Contain("aún no responde como dueño de la placa QZU024");
+        d.Reason.Should().ContainEquivalentOf("Refuerzo:", "el refuerzo va una sola vez").And.NotContain("Refuerzo:.*Refuerzo:");
+    }
+
+    [Fact]
+    public void AC8b_Matricula_ConHistorialQueSirve_NoPideDesempate()
+    {
+        var d = RuntConfirmationRules.Evaluate(Input(
+            "MATRICULA_NUEVA", ProcedureFamily.Matriculas, new DateOnly(2026, 8, 28), Snap("kyverum-cambio-color-QZU024.json")));
+
+        d.Verdict.Should().Be(RuntConfirmationVerdict.Confirmed);
+        d.TiebreakPlate.Should().BeNull();
+    }
+
     // ── AC9: traspaso con dos consultas ───────────────────────────────────────────────
+
+    [Fact]
+    public void AC9b_Traspaso_SinSolicitudPosterior_CompradorSiVendedorNo_ConfirmaPorPropiedad()
+    {
+        // PUO271 tiene TRASPASO AUTORIZADA el 11/06/2026: con corte el 01/07 el historial no sirve.
+        var d = RuntConfirmationRules.Evaluate(Input(
+            "TRASPASO_STANDARD", ProcedureFamily.Traspaso, new DateOnly(2026, 7, 1),
+            Snap("verifik-cambio-carroceria-PUO271.json"), seller: RuntVehicleSnapshot.NotFound("verifik")));
+
+        d.Verdict.Should().Be(RuntConfirmationVerdict.Confirmed);
+        d.Reason.Should().StartWith("Desempate por propiedad").And.Contain("No hay solicitud de TRASPASO posterior");
+    }
+
+    [Fact]
+    public void AC9b_Traspaso_SinSolicitudPosterior_AmbosResponden_SigueSinConfirmar()
+    {
+        var snap = Snap("verifik-cambio-carroceria-PUO271.json");
+        var d = RuntConfirmationRules.Evaluate(Input(
+            "TRASPASO_STANDARD", ProcedureFamily.Traspaso, new DateOnly(2026, 7, 1), snap, seller: snap));
+
+        d.Verdict.Should().Be(RuntConfirmationVerdict.Pending);
+        d.Reason.Should().Contain("copropiedad");
+    }
+
+    [Fact]
+    public void AC9b_Traspaso_HistorialRechazado_NoLoSalvaLaPropiedad()
+    {
+        var snap = Sintetico(("TRÁMITE TRASPASO, ", "RECHAZADA", "2026-09-05"));
+        var d = RuntConfirmationRules.Evaluate(Input(
+            "TRASPASO_STANDARD", ProcedureFamily.Traspaso, new DateOnly(2026, 9, 1), snap, seller: RuntVehicleSnapshot.NotFound("kyverum")));
+
+        d.Verdict.Should().Be(RuntConfirmationVerdict.Discrepancy);
+    }
 
     [Fact]
     public void AC9_AmbasResponden_RegistraLaAnomalia_YElHistorialDecide()

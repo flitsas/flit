@@ -12,6 +12,10 @@ namespace Flit.Tramites.Domain.RuntConfirmation;
 /// <param name="Baseline">Respuesta del RUNT guardada al radicar (snapshot). NULL si no hay.</param>
 /// <param name="ExpectedPlate">Placa del expediente (preasignada o capturada), si la hay.</param>
 /// <param name="TransitOfficeName">Nombre del organismo de tránsito del trámite, para el refuerzo por entidad.</param>
+/// <param name="Tiebreak">
+/// Matrícula: la consulta de desempate por placa + documento del propietario del expediente, si ya se
+/// hizo. NULL en la primera pasada; el motor la pide con <see cref="RuntConfirmationDecision.TiebreakPlate"/>.
+/// </param>
 public sealed record RuntConfirmationInput(
     string ProcedureTypeCode,
     ProcedureFamily Family,
@@ -20,10 +24,18 @@ public sealed record RuntConfirmationInput(
     RuntVehicleSnapshot? Seller,
     RuntVehicleSnapshot? Baseline,
     string? ExpectedPlate,
-    string? TransitOfficeName);
+    string? TransitOfficeName,
+    RuntVehicleSnapshot? Tiebreak = null);
 
 public sealed record RuntConfirmationDecision(RuntConfirmationVerdict Verdict, string Reason, string RuleVersion)
 {
+    /// <summary>
+    /// Si no es nulo, el veredicto es provisional: el historial de solicitudes no sirvió y el RUNT ya
+    /// reporta esta placa, así que vale una segunda consulta placa + documento del propietario (la
+    /// segunda línea acordada para matrícula). Quien llama decide si puede pagarla; si no, el veredicto vale tal cual.
+    /// </summary>
+    public string? TiebreakPlate { get; init; }
+
     public bool DejaFlag(out string? flag)
     {
         flag = Verdict switch
@@ -46,12 +58,14 @@ public interface IRuntConfirmationRule
 /// Motor de confirmación (HU #12308). Una regla canónica para las tres familias: de
 /// <c>solicitudes[]</c>, las que contengan el trámite RUNT esperado con fecha ≥ radicación; la más
 /// reciente decide (AUTORIZADA/APROBADA → Confirmado, REGISTRADA → Pendiente, RECHAZADA → Discrepancia,
-/// ninguna → Pendiente). Lo que cambia por tipo es el trámite esperado y el refuerzo.
+/// ninguna → Pendiente). Lo que cambia por tipo es el trámite esperado y el refuerzo. Cuando el
+/// historial no sirve (oculto o sin solicitud posterior), matrícula y traspaso tienen un desempate
+/// por propiedad: si el propietario que FLIT espera responde como dueño de la placa, se confirma.
 /// </summary>
 public static class RuntConfirmationRules
 {
     /// <summary>Versión de la regla. Cambia cuando cambia el criterio o una equivalencia; los intentos la guardan para poder re-evaluar.</summary>
-    public const string Version = "confirmacion-v1";
+    public const string Version = "confirmacion-v2";
 
     public static RuntConfirmationDecision Evaluate(RuntConfirmationInput input)
     {
@@ -113,6 +127,17 @@ internal class SolicitudRule(RuntProcedureEquivalence eq) : IRuntConfirmationRul
         return EvaluarHistorial(input, snapshot, refuerzo: Refuerzo(input, snapshot));
     }
 
+    /// <summary>Solicitudes del trámite esperado con fecha ≥ radicación, la más reciente primero.</summary>
+    protected List<RuntSolicitud> Candidatas(RuntConfirmationInput input, RuntVehicleSnapshot snapshot) =>
+        snapshot.Solicitudes
+            .Where(s => s.Contiene(Equivalence.RuntTramite) && s.Fecha is not null && s.Fecha >= input.CutoffDate)
+            .OrderByDescending(s => s.Fecha)
+            .ToList();
+
+    /// <summary>El historial decide algo: está expuesto y tiene al menos una solicitud posterior a la radicación.</summary>
+    protected bool HistorialSirve(RuntConfirmationInput input, RuntVehicleSnapshot snapshot) =>
+        snapshot.ExponeSolicitudes && Candidatas(input, snapshot).Count > 0;
+
     /// <summary>Aplica la regla canónica sobre <paramref name="snapshot"/> y compone el motivo con el refuerzo.</summary>
     protected RuntConfirmationDecision EvaluarHistorial(RuntConfirmationInput input, RuntVehicleSnapshot snapshot, Refuerzo refuerzo)
     {
@@ -121,10 +146,7 @@ internal class SolicitudRule(RuntProcedureEquivalence eq) : IRuntConfirmationRul
                 RuntConfirmationVerdict.Unverifiable,
                 $"El RUNT no expone el historial de solicitudes de este vehículo (mostrarSolicitudes={snapshot.MostrarSolicitudes ?? "vacío"}): no verificable.{refuerzo.Sufijo}");
 
-        var candidatas = snapshot.Solicitudes
-            .Where(s => s.Contiene(Equivalence.RuntTramite) && s.Fecha is not null && s.Fecha >= input.CutoffDate)
-            .OrderByDescending(s => s.Fecha)
-            .ToList();
+        var candidatas = Candidatas(input, snapshot);
 
         if (candidatas.Count == 0)
         {
@@ -203,7 +225,13 @@ internal class SolicitudRule(RuntProcedureEquivalence eq) : IRuntConfirmationRul
     }
 }
 
-/// <summary>MATRÍCULA: consulta por VIN. El «vehículo no encontrado» es Pendiente: puede que aún no exista en el RUNT.</summary>
+/// <summary>
+/// MATRÍCULA: consulta por VIN. El «vehículo no encontrado» es Pendiente: puede que aún no exista en el
+/// RUNT. Si el vehículo existe pero el historial no sirve y ya tiene placa, la segunda línea es la
+/// consulta placa + documento del propietario del expediente: si responde, el propietario que FLIT
+/// matriculó figura como dueño y se confirma; si no, queda Pendiente (la placa ya existe, el dueño puede
+/// aparecer en la siguiente corrida) en vez de No verificable.
+/// </summary>
 internal sealed class MatriculaRule(RuntProcedureEquivalence eq) : SolicitudRule(eq)
 {
     public override RuntConfirmationDecision Evaluate(RuntConfirmationInput input)
@@ -217,7 +245,35 @@ internal sealed class MatriculaRule(RuntProcedureEquivalence eq) : SolicitudRule
         if (snapshot.Outcome == RuntVehicleOutcome.NotFound)
             return RuntConfirmationRules.Decision(RuntConfirmationVerdict.Pending, "El RUNT aún no tiene el vehículo por VIN; se reintenta en la siguiente corrida.");
 
-        return EvaluarHistorial(input, snapshot, Refuerzo(input, snapshot));
+        var refuerzo = Refuerzo(input, snapshot);
+        var porHistorial = EvaluarHistorial(input, snapshot, refuerzo);
+        if (HistorialSirve(input, snapshot) || snapshot.Placa is null)
+            return porHistorial;
+
+        var placa = snapshot.Placa;
+        var desempate = input.Tiebreak;
+        if (desempate is null)
+            return porHistorial with { TiebreakPlate = placa };
+
+        return desempate.Outcome switch
+        {
+            RuntVehicleOutcome.Found => RuntConfirmationRules.Decision(
+                RuntConfirmationVerdict.Confirmed,
+                $"Desempate por propiedad: el propietario del expediente responde como dueño de la placa {placa}. {Recorte(porHistorial.Reason)}{refuerzo.Sufijo}"),
+            RuntVehicleOutcome.NotFound => RuntConfirmationRules.Decision(
+                RuntConfirmationVerdict.Pending,
+                $"{Recorte(porHistorial.Reason)} Desempate por propiedad: el propietario del expediente aún no responde como dueño de la placa {placa}; se reintenta en la siguiente corrida.{refuerzo.Sufijo}"),
+            _ => RuntConfirmationRules.Decision(
+                porHistorial.Verdict,
+                $"{porHistorial.Reason} La consulta de desempate por placa no se pudo interpretar."),
+        };
+    }
+
+    /// <summary>El motivo por historial sin el refuerzo, que se vuelve a poner al final una sola vez.</summary>
+    private static string Recorte(string reason)
+    {
+        var i = reason.IndexOf(" Refuerzo:", StringComparison.Ordinal);
+        return i < 0 ? reason : reason[..i];
     }
 
     protected override Refuerzo Refuerzo(RuntConfirmationInput input, RuntVehicleSnapshot actual)
@@ -267,7 +323,17 @@ internal sealed class TraspasoRule(RuntProcedureEquivalence eq) : SolicitudRule(
         if (fuente is null)
             return RuntConfirmationRules.Decision(RuntConfirmationVerdict.Pending, $"Sin historial de solicitudes que leer.{refuerzo.Sufijo}");
 
-        return EvaluarHistorial(input, fuente, refuerzo);
+        var porHistorial = EvaluarHistorial(input, fuente, refuerzo);
+        if (HistorialSirve(input, fuente))
+            return porHistorial;
+
+        // Segunda línea: el par de consultas ya prueba propiedad sin gastar otra llamada. Solo la
+        // combinación limpia (comprador sí, vendedor no) confirma; las anomalías siguen Pendientes.
+        return compradorOk && !vendedorOk
+            ? RuntConfirmationRules.Decision(
+                RuntConfirmationVerdict.Confirmed,
+                $"Desempate por propiedad: el comprador responde como propietario de la placa y el vendedor ya no. {porHistorial.Reason}")
+            : porHistorial;
     }
 
     private static bool EsIlegible(RuntVehicleSnapshot? s) => s is null || s.Outcome == RuntVehicleOutcome.Unreadable;

@@ -18,7 +18,8 @@ public static class RuntConfirmationEvaluator
         RuntConfirmationCandidate candidate,
         string? primaryRawJson,
         string? sellerRawJson,
-        string? baselineRawJson)
+        string? baselineRawJson,
+        string? tiebreakRawJson = null)
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
@@ -30,7 +31,8 @@ public static class RuntConfirmationEvaluator
             Seller: sellerRawJson is null ? null : RuntVehicleSnapshotParser.Parse(sellerRawJson),
             Baseline: baselineRawJson is null ? null : RuntVehicleSnapshotParser.Parse(baselineRawJson),
             ExpectedPlate: candidate.Plate,
-            TransitOfficeName: candidate.TransitOfficeName);
+            TransitOfficeName: candidate.TransitOfficeName,
+            Tiebreak: tiebreakRawJson is null ? null : RuntVehicleSnapshotParser.Parse(tiebreakRawJson));
 
         return RuntConfirmationRules.Evaluate(input);
     }

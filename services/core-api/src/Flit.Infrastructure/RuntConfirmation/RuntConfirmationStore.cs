@@ -240,7 +240,9 @@ internal sealed class RuntConfirmationStore(IServiceScopeFactory scopeFactory) :
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
         return await db.RuntConfirmationRuns.AsNoTracking()
-            .Where(r => r.Trigger == RuntConfirmationRunTriggers.Scheduled)
+            // Una corrida saltada (interruptor apagado) no cuenta: si se enciende a media mañana con la
+            // hora ya pasada, la de hoy se ejecuta en el siguiente tick.
+            .Where(r => r.Trigger == RuntConfirmationRunTriggers.Scheduled && r.SkippedReason == null)
             .MaxAsync(r => (DateTimeOffset?)r.StartedAt, ct)
             .ConfigureAwait(false);
     }

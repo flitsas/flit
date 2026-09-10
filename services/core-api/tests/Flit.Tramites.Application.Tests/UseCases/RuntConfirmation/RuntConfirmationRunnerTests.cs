@@ -150,6 +150,70 @@ public sealed class RuntConfirmationRunnerTests
         store.Candidates.Single().RuntFlag.Should().Be("no_verificable");
     }
 
+    // ── AC3b: desempate de matrícula — una segunda llamada solo cuando el historial no sirve ──
+
+    private const string MatriculaHistorialOculto = """
+        {"ok":true,"data":{"vehiculo":{"placa":"QZU024","estadoAutomotor":"ACTIVO","mostrarSolicitudes":"NO"},"solicitudes":[]}}
+        """;
+
+    [Fact]
+    public async Task AC3b_Matricula_HistorialOculto_ConsultaPlacaConElPropietario_YConfirmaSiResponde()
+    {
+        var (runner, store, client) = Build(new RuntConfirmationSettings { Enabled = true });
+        store.Candidates.Add(Matricula());
+        client.Respond(q => q.Vin is not null
+            ? new(RuntRawOutcome.Found, MatriculaHistorialOculto, null)
+            : new(RuntRawOutcome.Found, MatriculaHistorialOculto, null));
+
+        var run = await runner.RunAsync(new(RuntConfirmationRunTriggers.Scheduled), TestContext.Current.CancellationToken);
+
+        run.ProviderCalls.Should().Be(2);
+        client.Calls.Should().ContainSingle(q => q.Plate == "QZU024" && q.Document!.Number == "890903938", "la placa la reporta el RUNT y el documento es el del propietario del expediente");
+        var a = store.Attempts.Single();
+        a.QueryKind.Should().Be("vin_plate");
+        a.Verdict.Should().Be("confirmed");
+        a.ReasonText.Should().StartWith("Desempate por propiedad");
+        a.RawPayloadId.Should().NotBeNull();
+        a.SellerRawPayloadId.Should().NotBeNull("el crudo del desempate se guarda en la segunda columna");
+        run.Confirmed.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AC3b_Matricula_ElPropietarioNoResponde_QuedaPendiente_YSiElProveedorFalla_EsError()
+    {
+        var (runner, store, client) = Build(new RuntConfirmationSettings { Enabled = true });
+        var pendiente = Matricula();
+        var error = Matricula() with { Vin = "OTRO" };
+        store.Candidates.Add(pendiente);
+        store.Candidates.Add(error);
+        client.Respond(q => q.Vin is not null
+            ? new(RuntRawOutcome.Found, q.Vin == "OTRO" ? MatriculaHistorialOculto.Replace("QZU024", "ZZZ999", StringComparison.Ordinal) : MatriculaHistorialOculto, null)
+            : q.Plate == "QZU024"
+                ? new(RuntRawOutcome.NotFound, null, "no es propietario")
+                : new(RuntRawOutcome.Error, null, "timeout"));
+
+        var run = await runner.RunAsync(new(RuntConfirmationRunTriggers.Scheduled), TestContext.Current.CancellationToken);
+
+        run.ProviderCalls.Should().Be(4);
+        store.Attempts.Should().HaveCount(2).And.OnlyContain(a => a.QueryKind == "vin_plate");
+        store.Attempts.Select(a => a.Verdict).Should().BeEquivalentTo(["pending", "error"]);
+        store.Attempts.Single(a => a.Verdict == "pending").ReasonText.Should().Contain("aún no responde como dueño de la placa QZU024");
+        store.Attempts.Single(a => a.Verdict == "error").ReasonText.Should().Contain("desempate");
+    }
+
+    [Fact]
+    public async Task AC3b_Matricula_ConHistorialQueSirve_NoGastaLaSegundaLlamada()
+    {
+        var (runner, store, client) = Build(new RuntConfirmationSettings { Enabled = true });
+        store.Candidates.Add(Matricula());
+        client.Respond(_ => new(RuntRawOutcome.Found, MatriculaOk, null));
+
+        var run = await runner.RunAsync(new(RuntConfirmationRunTriggers.Scheduled), TestContext.Current.CancellationToken);
+
+        run.ProviderCalls.Should().Be(1);
+        store.Attempts.Single().QueryKind.Should().Be("vin");
+    }
+
     // ── AC4: crudo antes de evaluar y campos del intento ─────────────────────────────
 
     [Fact]

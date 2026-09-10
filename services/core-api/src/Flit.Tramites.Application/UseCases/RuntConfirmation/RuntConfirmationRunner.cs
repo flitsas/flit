@@ -185,6 +185,34 @@ public sealed class RuntConfirmationRunner(
 
             var baseline = await store.GetBaselinePayloadJsonAsync(candidate.InstanceId, candidate.CutoffAt, ct).ConfigureAwait(false);
             var decision = RuntConfirmationEvaluator.Evaluate(candidate, primary.RawJson, seller?.RawJson, baseline);
+
+            // Segunda línea de matrícula: el historial no sirvió pero el RUNT ya reporta placa. Una llamada
+            // más, solo aquí, con el documento del propietario del expediente. Su crudo va en el hueco del
+            // vendedor (misma columna, otro significado: lo dice query_kind).
+            if (decision.TiebreakPlate is { } placa && (candidate.Buyer ?? candidate.Owner) is { } propietario)
+            {
+                var tiebreakQuery = RuntRawQuery.ByPlate(placa, propietario);
+                var tiebreak = await client.ConsultAsync(settings.ProviderKey, tiebreakQuery, ct).ConfigureAwait(false);
+                counters.ProviderCalls(1);
+                sellerId = await SaveAsync(candidate, settings.ProviderKey, tiebreakQuery, tiebreak, queriedAt, ct).ConfigureAwait(false);
+
+                if (tiebreak.Outcome == RuntRawOutcome.Error)
+                {
+                    var d = new RuntConfirmationDecision(
+                        RuntConfirmationVerdict.Error,
+                        $"El proveedor no respondió la consulta de desempate por placa ({tiebreak.Message ?? "error"}); no cuenta como intento y se reintenta en la siguiente corrida.",
+                        RuntConfirmationRules.Version);
+                    await RecordAsync(run, settings, candidate, attemptNo, queriedAt, RuntConfirmationQueryKinds.VinPlate, d, primaryId, sellerId, requestedBy, counters, ct).ConfigureAwait(false);
+                    return;
+                }
+
+                // Un «no encontrado» es un dato para el motor (el propietario no responde), no una ausencia.
+                var tiebreakJson = tiebreak.RawJson ?? RuntVehicleSnapshotParser.NotFoundPayload(settings.ProviderKey, null, tiebreak.Message);
+                decision = RuntConfirmationEvaluator.Evaluate(candidate, primary.RawJson, null, baseline, tiebreakJson);
+                await RecordAsync(run, settings, candidate, attemptNo, queriedAt, RuntConfirmationQueryKinds.VinPlate, decision, primaryId, sellerId, requestedBy, counters, ct).ConfigureAwait(false);
+                return;
+            }
+
             await RecordAsync(run, settings, candidate, attemptNo, queriedAt, plan.Kind, decision, primaryId, sellerId, requestedBy, counters, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

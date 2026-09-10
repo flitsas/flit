@@ -22,6 +22,7 @@ export const QUERY_KIND_LABEL: Record<string, string> = {
   vin: "Por VIN",
   plate: "Por placa + propietario",
   plate_pair: "Por placa: vendedor y comprador",
+  vin_plate: "Por VIN + desempate por placa y propietario",
   reevaluation: "Re-evaluación desde el crudo",
 };
 

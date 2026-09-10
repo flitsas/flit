@@ -17,7 +17,8 @@ namespace Flit.Infrastructure.RuntConfirmation;
 /// local ya pasó <c>run_at_local</c> y la última corrida programada no es de hoy. Que «ya pasó» y
 /// no «es exactamente» hace que una caída del proceso a las 02:00 no pierda el día: corre al volver.
 /// Con el interruptor apagado la corrida deja igualmente su fila con <c>skipped_reason=disabled</c>,
-/// que es la evidencia de que el cron sí miró.
+/// que es la evidencia de que el cron sí miró; esa fila no cuenta como «la de hoy»: al encender con la
+/// hora ya pasada, la corrida real sale en el siguiente tick.
 /// </summary>
 internal sealed class RuntConfirmationSchedulerProcessor(
     IServiceScopeFactory scopeFactory,

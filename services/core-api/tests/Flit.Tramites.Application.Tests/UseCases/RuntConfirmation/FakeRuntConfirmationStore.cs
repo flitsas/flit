@@ -57,7 +57,7 @@ internal sealed class FakeRuntConfirmationStore : IRuntConfirmationStore
     public Task<bool> IsRunInProgressAsync(TimeSpan staleAfter, CancellationToken ct = default) => Task.FromResult(RunInProgress);
 
     public Task<DateTimeOffset?> GetLastScheduledRunStartedAtAsync(CancellationToken ct = default) =>
-        Task.FromResult(Runs.Where(r => r.Trigger == RuntConfirmationRunTriggers.Scheduled).Select(r => (DateTimeOffset?)r.StartedAt).Max());
+        Task.FromResult(Runs.Where(r => r.Trigger == RuntConfirmationRunTriggers.Scheduled && r.SkippedReason == null).Select(r => (DateTimeOffset?)r.StartedAt).Max());
 
     private readonly Lock _gate = new();
 

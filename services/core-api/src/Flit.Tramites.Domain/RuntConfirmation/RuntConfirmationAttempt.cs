@@ -33,7 +33,7 @@ public sealed class RuntConfirmationAttempt
     /// <summary>Respuesta cruda principal en <c>tramites.external_query_payloads</c> (VIN, o placa + documento del comprador/propietario).</summary>
     public Guid? RawPayloadId { get; set; }
 
-    /// <summary>Traspaso: respuesta cruda de la consulta con el documento del vendedor.</summary>
+    /// <summary>Segunda respuesta cruda: en traspaso la del vendedor; en <c>vin_plate</c> la del desempate placa + propietario.</summary>
     public Guid? SellerRawPayloadId { get; set; }
 
     /// <summary>Usuario que pidió un «Consultar ahora»; NULL en la corrida programada.</summary>
@@ -53,8 +53,10 @@ public static class RuntConfirmationQueryKinds
     public const string Vin = "vin";
     public const string Plate = "plate";
     public const string PlatePair = "plate_pair";
+    /// <summary>Matrícula: VIN y, como desempate, placa + documento del propietario (dos llamadas).</summary>
+    public const string VinPlate = "vin_plate";
     /// <summary>Re-evaluación desde el crudo guardado: no hubo llamada al proveedor.</summary>
     public const string Reevaluation = "reevaluation";
 
-    public static readonly IReadOnlyList<string> All = [Vin, Plate, PlatePair, Reevaluation];
+    public static readonly IReadOnlyList<string> All = [Vin, Plate, PlatePair, VinPlate, Reevaluation];
 }

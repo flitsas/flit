@@ -281,8 +281,8 @@ export function IntentoDetalle({
           >
             {raw ? (
               <div className="flex flex-col gap-3">
-                <JsonCrudo titulo={raw.seller !== undefined ? "Consulta con el documento del comprador" : "Respuesta del proveedor"} valor={raw.primary} />
-                {raw.seller !== undefined ? <JsonCrudo titulo="Consulta con el documento del vendedor" valor={raw.seller} /> : null}
+                <JsonCrudo titulo={titulosDeConsulta(row.queryKind).primary} valor={raw.primary} />
+                {raw.seller !== undefined ? <JsonCrudo titulo={titulosDeConsulta(row.queryKind).seller} valor={raw.seller} /> : null}
                 <p className="text-[10px] opacity-55">Tal como lo entregó el proveedor, sin credenciales ni adjuntos binarios.</p>
               </div>
             ) : null}
@@ -318,13 +318,19 @@ function JsonCrudo({ titulo, valor }: { titulo: string; valor: unknown }) {
   );
 }
 
-/** La respuesta del RUNT en secciones de negocio; en traspaso, un bloque por consulta. */
+/** Qué fue cada consulta según cómo se consultó: la segunda es el vendedor en traspaso y el desempate en matrícula. */
+function titulosDeConsulta(queryKind: string): { primary: string; seller: string } {
+  if (queryKind === "plate_pair") return { primary: "Con el documento del comprador", seller: "Con el documento del vendedor" };
+  if (queryKind === "vin_plate") return { primary: "Por VIN", seller: "Desempate: por placa con el documento del propietario" };
+  return { primary: "Respuesta del proveedor", seller: "Segunda consulta" };
+}
+
+/** La respuesta del RUNT en secciones de negocio; con dos consultas, un bloque por cada una. */
 function RespuestaRunt({ raw, queryKind }: { raw: { primary: unknown; seller?: unknown }; queryKind: string }) {
   const bloques = useMemo(() => {
-    const out: Array<{ titulo: string; vista: RuntRespuestaVista }> = [
-      { titulo: queryKind === "plate_pair" ? "Con el documento del comprador" : "Respuesta del proveedor", vista: leerRespuestaRunt(raw.primary) },
-    ];
-    if (raw.seller !== undefined) out.push({ titulo: "Con el documento del vendedor", vista: leerRespuestaRunt(raw.seller) });
+    const titulos = titulosDeConsulta(queryKind);
+    const out: Array<{ titulo: string; vista: RuntRespuestaVista }> = [{ titulo: titulos.primary, vista: leerRespuestaRunt(raw.primary) }];
+    if (raw.seller !== undefined) out.push({ titulo: titulos.seller, vista: leerRespuestaRunt(raw.seller) });
     return out;
   }, [raw, queryKind]);
 
