@@ -4,7 +4,7 @@
 //
 // No confundir con `admin-banners.ts` (HU #12241, CRUD administrable) — ese vive en otro
 // worktree en paralelo y este archivo no lo toca.
-import { apiFetch, API_BASE_URL } from "./client";
+import { apiFetch, resolveApiUrl } from "./client";
 
 /** Item del listado público. El backend nunca expone `imageStoragePath` ni una URL firmada. */
 export interface ActiveBanner {
@@ -34,5 +34,5 @@ export function getActiveBanners(signal?: AbortSignal): Promise<ActiveBanner[]> 
  * tokens a esa petición, así que no hay nada especial que hacer para mantenerla anónima (AC3).
  */
 export function bannerImageUrl(bannerId: string): string {
-  return `${API_BASE_URL}${base}/${bannerId}/image`;
+  return resolveApiUrl(`${base}/${bannerId}/image`);
 }
