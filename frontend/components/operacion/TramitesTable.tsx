@@ -2573,6 +2573,27 @@ function TramiteRow({
     //
     // Cada ícono lleva su rótulo en `alt` y en `title`: el color es lo único que los distingue a
     // simple vista, y el color no puede ser el único portador del significado.
+    // Feature #12276 (HU #12312) — «Confirmado en RUNT»: SÍ, NO o «—». Sin tooltip, sin contador,
+    // sin marca: al cliente no se le explica el porqué (decisión de producto); eso vive en el
+    // Historial de plataforma. El guion cubre el «no consultado» y los trámites no aprobados.
+    confirmadoRunt: (
+      <span className="flex items-center">
+        {item.runtConfirmed === 'yes' || item.runtConfirmed === 'no' ? (
+          <span
+            data-testid="tramite-confirmado-runt"
+            className={`inline-flex min-w-[36px] items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${
+              item.runtConfirmed === 'yes'
+                ? 'bg-[#00DBD5]/20 text-[#0B6F6C] dark:text-[#00DBD5]'
+                : 'bg-[#FF4E00]/10 text-[#B33600] dark:text-[#FF8A5B]'
+            }`}
+          >
+            {item.runtConfirmed === 'yes' ? 'SÍ' : 'NO'}
+          </span>
+        ) : (
+          <span className="text-xs text-[#162744]/45 dark:text-white/40">—</span>
+        )}
+      </span>
+    ),
     marcas: (
       <span className="flex items-center gap-1.5">
         {marcasDe(item).length === 0 ? (

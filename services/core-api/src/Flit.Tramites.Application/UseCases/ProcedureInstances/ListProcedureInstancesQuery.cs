@@ -90,7 +90,11 @@ public sealed record InstanceSummaryDto(
                                               // field_values que el grafo del listado YA carga, así que no cuesta nada.
                                               // Las dos las decide `TramiteMarcas`, no este mapeo.
     bool TienePrenda = false,
-    bool TieneTransformacion = false);
+    bool TieneTransformacion = false,
+                                              // Feature #12276 (HU #12312) — «Confirmado en RUNT»: "yes" | "no" | "not_consulted",
+                                              // o null cuando el trámite no está aprobado. SOLO eso: ni intentos, ni marca, ni
+                                              // motivo (son del Historial interno, no del cliente). Lo decide RuntConfirmedColumn.
+    string? RuntConfirmed = null);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -265,7 +269,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
                 ? state.Steps[pasoActual - 1].Label
                 : null,
             TramiteMarcas.TienePrenda(prendaVigente, e.TypeCode),
-            TramiteMarcas.TieneTransformacion(fv, e.TypeCode));
+            TramiteMarcas.TieneTransformacion(fv, e.TypeCode),
+            Flit.Tramites.Domain.RuntConfirmation.RuntConfirmedColumn.Derive(e.Status, e.RuntConfirmedAt, e.RuntAttempts, e.RuntFlag));
     }
 
     /// <summary>

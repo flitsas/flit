@@ -56,6 +56,37 @@ public sealed class KyverumRuntVehicleData
     /// </summary>
     [JsonPropertyName("garantiasPrendas")]
     public List<KyverumRuntGarantia>? GarantiasPrendas { get; set; }
+
+    /// <summary>
+    /// Historial de solicitudes del vehículo ante el RUNT (Feature #12276). Es la señal con la que
+    /// la Confirmación RUNT decide SÍ/NO; el wizard no la lee. Solo viene cuando
+    /// <c>vehiculo.mostrarSolicitudes</c> es <c>SI</c>. El motor la lee del JSON crudo
+    /// (<c>RuntVehicleSnapshotParser</c>), pero se declara aquí para que el DTO no oculte que existe.
+    /// </summary>
+    [JsonPropertyName("solicitudes")]
+    public List<KyverumRuntSolicitud>? Solicitudes { get; set; }
+}
+
+/// <summary>Una solicitud del historial del RUNT. El RUNT no actualiza una fila: crea otra.</summary>
+public sealed class KyverumRuntSolicitud
+{
+    [JsonPropertyName("noSolicitud")]
+    public string? NoSolicitud { get; set; }
+
+    /// <summary>ISO con hora y offset (<c>2026-09-08T15:49:49.000-05:00</c>).</summary>
+    [JsonPropertyName("fechaSolicitud")]
+    public string? FechaSolicitud { get; set; }
+
+    /// <summary>AUTORIZADA | APROBADA | REGISTRADA | RECHAZADA.</summary>
+    [JsonPropertyName("estado")]
+    public string? Estado { get; set; }
+
+    /// <summary>Uno o varios trámites separados por coma y con coma final: «TRÁMITE CAMBIO COLOR, TRÁMITE TRANSFORMACIÓN, ».</summary>
+    [JsonPropertyName("tramitesRealizados")]
+    public string? TramitesRealizados { get; set; }
+
+    [JsonPropertyName("entidad")]
+    public string? Entidad { get; set; }
 }
 
 /// <summary>

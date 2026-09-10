@@ -1,0 +1,277 @@
+{
+  "ok": true,
+  "data": {
+    "vehiculo": {
+      "placa": "LKO462",
+      "nombrePais": null,
+      "numLicencia": "10039850727",
+      "estadoAutomotor": "ACTIVO",
+      "tipoServicio": "Público",
+      "clase": "CAMIONETA",
+      "marca": "CHEVROLET",
+      "linea": "NHR",
+      "modelo": "2023",
+      "color": "BLANCO NIEBLA",
+      "numSerie": "9GDNLR776PB505122",
+      "numMotor": "199J18",
+      "numChasis": "9GDNLR776PB505122",
+      "vin": "9GDNLR776PB505122",
+      "cilindraje": "2999",
+      "tipoCarroceria": "REPARTO ó PALET",
+      "fechaRegistro": "2023-06-05T14:35:36.000-05:00",
+      "gravamenes": "NO",
+      "organismoTransito": "STRIA TTEyTTO ENVIGADO",
+      "capacidadCarga": "1480",
+      "codigoMedidaCarga": null,
+      "pesoBruto": "4100",
+      "numeroEjes": "2",
+      "idAutomotor": 510487912,
+      "repotenciado": "NO",
+      "idTipoServicio": 2,
+      "idClaseVehiculo": 5,
+      "diasMatriculado": "1192",
+      "prendas": "NO",
+      "clasificacion": "AUTOMOVIL",
+      "esRegrabadoMotor": "NO",
+      "esRegrabadoChasis": "NO",
+      "esRegrabadoSerie": "NO",
+      "esRegrabadoVin": "NO",
+      "numRegraChasis": null,
+      "numRegraMotor": null,
+      "numRegraSerie": null,
+      "numRegraVin": null,
+      "antiguoClasico": "NO",
+      "tipoCombustible": "DIESEL",
+      "pasajerosTotal": null,
+      "pasajerosSentados": "3",
+      "vehiculoEnsenanza": "NO",
+      "puertas": "2",
+      "importacion": 0,
+      "fechaExpedLTImportacion": null,
+      "fechaVenciLTImportacion": null,
+      "seguridadEstado": "NO",
+      "verValidaDIAN": false,
+      "validacionDIAN": null,
+      "mostrarSolicitudes": "SI",
+      "tipoMaquinaria": null,
+      "subpartida": null,
+      "fechaMatricula": null,
+      "tarjetaRegistro": null,
+      "noIdentificacion": null
+    },
+    "tipoDocPropietario": "N",
+    "rtm": [
+      {
+        "fechaExpedicionRvt": "2026-06-30T00:00:00.000-05:00",
+        "fechaVencimientoRvt": "2027-06-30T00:00:00.000-05:00",
+        "nombreCda": "IVESUR COLOMBIA - MEDELLIN",
+        "estadoRvt": "APROBADA",
+        "tipoRevision": "REVISION TECNICO-MECANICO",
+        "vigente": "SI",
+        "numeCerti": "190500840",
+        "numeroPlaca": "LKO462",
+        "informacionConsistente": "SI",
+        "url": "a783eeaa-a9b3-4ccb-a8ed-2e96538245a8"
+      },
+      {
+        "fechaExpedicionRvt": "2025-07-02T00:00:00.000-05:00",
+        "fechaVencimientoRvt": "2026-07-02T00:00:00.000-05:00",
+        "nombreCda": "IVESUR COLOMBIA - MEDELLIN",
+        "estadoRvt": "APROBADA",
+        "tipoRevision": "REVISION TECNICO-MECANICO",
+        "vigente": "NO",
+        "numeCerti": "182177749",
+        "numeroPlaca": "LKO462",
+        "informacionConsistente": "SI",
+        "url": null
+      }
+    ],
+    "datosTecnicos": {
+      "capacidadCarga": "1480 Kgs",
+      "pesoBrutoVehicular": "4100 Kgs",
+      "noEjes": "2",
+      "noLlantas": null,
+      "alto": null,
+      "ancho": null,
+      "largo": null,
+      "pasajerosTotal": null,
+      "pasajerosSentados": "3",
+      "rodaje": null,
+      "peso": null
+    },
+    "soat": [
+      {
+        "origen": "NACIONAL",
+        "tipoTarifa": "331",
+        "numSoat": "3556335400",
+        "fechaExpedicion": "2026-04-30T00:00:00.000-05:00",
+        "fechaExpediSoat": "2026-04-30T00:00:00.000-05:00",
+        "fechaInicioPoliza": "2026-05-26T00:00:00.000-05:00",
+        "fechaVencimSoat": "2027-05-25T00:00:00.000-05:00",
+        "razonSocialAsegur": "AXA COLPATRIA SEGUROS SA",
+        "estado": "VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "placa": null,
+        "nombrePais": null
+      },
+      {
+        "origen": "NACIONAL",
+        "tipoTarifa": "331",
+        "numSoat": "3395009900",
+        "fechaExpedicion": "2025-05-07T00:00:00.000-05:00",
+        "fechaExpediSoat": "2025-05-07T00:00:00.000-05:00",
+        "fechaInicioPoliza": "2025-05-26T00:00:00.000-05:00",
+        "fechaVencimSoat": "2026-05-25T00:00:00.000-05:00",
+        "razonSocialAsegur": "AXA COLPATRIA SEGUROS SA",
+        "estado": "NO VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "placa": null,
+        "nombrePais": null
+      },
+      {
+        "origen": "NACIONAL",
+        "tipoTarifa": "310",
+        "numSoat": "39140411",
+        "fechaExpedicion": "2024-05-03T00:00:00.000-05:00",
+        "fechaExpediSoat": "2024-05-03T00:00:00.000-05:00",
+        "fechaInicioPoliza": "2024-05-26T00:00:00.000-05:00",
+        "fechaVencimSoat": "2025-05-25T00:00:00.000-05:00",
+        "razonSocialAsegur": "SEGUROS GENERALES SURAMERICANA S.A.",
+        "estado": "NO VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "placa": null,
+        "nombrePais": null
+      },
+      {
+        "origen": "NACIONAL",
+        "tipoTarifa": "231",
+        "numSoat": "33894754",
+        "fechaExpedicion": "2023-05-25T00:00:00.000-05:00",
+        "fechaExpediSoat": "2023-05-25T00:00:00.000-05:00",
+        "fechaInicioPoliza": "2023-05-26T00:00:00.000-05:00",
+        "fechaVencimSoat": "2024-05-25T00:00:00.000-05:00",
+        "razonSocialAsegur": "SEGUROS GENERALES SURAMERICANA S.A.",
+        "estado": "NO VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "placa": null,
+        "nombrePais": null
+      }
+    ],
+    "solicitudes": [
+      {
+        "noSolicitud": "300426411",
+        "fechaSolicitud": "2026-08-14T09:47:49.000-05:00",
+        "estado": "AUTORIZADA",
+        "tramitesRealizados": "TRÁMITE TRANSFORMACIÓN, ",
+        "entidad": "STRIA TTEyTTO ENVIGADO"
+      },
+      {
+        "noSolicitud": "297116089",
+        "fechaSolicitud": "2026-06-30T17:00:54.000-05:00",
+        "estado": "APROBADA",
+        "tramitesRealizados": "Tramite revision tecnico mecanica, ",
+        "entidad": "IVESUR COLOMBIA - MEDELLIN"
+      },
+      {
+        "noSolicitud": "270828380",
+        "fechaSolicitud": "2025-07-02T08:52:01.000-05:00",
+        "estado": "APROBADA",
+        "tramitesRealizados": "Tramite revision tecnico mecanica, ",
+        "entidad": "IVESUR COLOMBIA - MEDELLIN"
+      },
+      {
+        "noSolicitud": "210667030",
+        "fechaSolicitud": "2023-06-05T11:26:16.000-05:00",
+        "estado": "AUTORIZADA",
+        "tramitesRealizados": "TRÁMITE MATRÍCULA INICIAL, ",
+        "entidad": "STRIA TTEyTTO ENVIGADO"
+      }
+    ],
+    "garantias": [],
+    "garantiasPrendas": [],
+    "limitacionesPropiedad": [],
+    "polizaCaucion": {
+      "noPoliza": null,
+      "estadoPoliza": null,
+      "fechaExpedicion": null,
+      "fechaVigenciaPoliza": null,
+      "noCertificacion": null,
+      "estadoCertificado": null
+    },
+    "responsabilidadCivil": [],
+    "responsabilidadCivilHabilitar": true,
+    "tarjetaOperacion": {
+      "empresaAfiliadora": null,
+      "modalidadTransporte": null,
+      "modalidadServicio": null,
+      "radioAccion": null,
+      "fechaExpedicion": null,
+      "fechaInicio": null,
+      "fechaFin": null,
+      "estado": null,
+      "nroTarjetaOperacion": null
+    },
+    "permisosPcr": [],
+    "datosBlindaje": {
+      "blindado": null,
+      "nivelBlindaje": null,
+      "nivelBlindajeNumero": null,
+      "fechaBlindaje": null,
+      "fechaDesblindaje": null,
+      "numeroResolucion": null,
+      "tipoBlindajeNombre": null,
+      "fechaExpedicionCertificado": null,
+      "fechaExpedicionCertificadoFormatoWS": null,
+      "idDocumentoCertificadoBlindaje": null,
+      "autorizacion": null
+    },
+    "informacionGps": {
+      "noIdentificacionSerie": null,
+      "empresaHabilitacion": null
+    },
+    "informacionRepotenciado": {
+      "repotenciado": null,
+      "fechaRepotenciacion": null,
+      "modeloRepotenciado": null
+    },
+    "desintegracion": {
+      "placa": null,
+      "desintegrar": null
+    },
+    "certificadoDesintegracion": {
+      "noCertificado": null,
+      "estadoCertificado": null,
+      "fechaExpedicion": null,
+      "entidadDesintegradora": null
+    },
+    "normalizacion": [
+      {
+        "deficienciaMatriculaInicial": "NO",
+        "vehiculoNormalizado": "NO DISPONIBLE",
+        "fecha": null,
+        "numeroActoAdministrativo": null,
+        "descargaCertificado": null,
+        "solicitudNormalizacion": null
+      }
+    ],
+    "certificadoDijin": {
+      "noCertificado": null,
+      "fechaExpedicion": null,
+      "entidadCertificado": null,
+      "estadoCertificado": null
+    },
+    "registroInicial": {
+      "noCertificado": null,
+      "fechaExpedicion": null,
+      "estadoCertificado": null,
+      "placaReposicion": null
+    },
+    "registroInicialInvc": {
+      "noCertificado": null,
+      "fechaExpedicion": null,
+      "estadoCertificado": null,
+      "placaReposicion": null
+    }
+  },
+  "fromCache": false
+}

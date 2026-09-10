@@ -10,6 +10,9 @@ import type {
 
 // N 03 (ADR-0022) — estados de NEGOCIO del trámite, vocabulario único de la API.
 // Fuente de verdad de labels/estilos: lib/tramites/estados.ts.
+/** Valor de la columna «Confirmado en RUNT» (Feature #12276): mismo vocabulario que `RuntConfirmedColumn` del backend. */
+export type RuntConfirmedValue = 'yes' | 'no' | 'not_consulted';
+
 export type InstanceStatus =
   | 'borrador'
   | 'anulado'
@@ -157,6 +160,12 @@ export interface InstanceSummary {
    */
   tienePrenda?: boolean;
   tieneTransformacion?: boolean;
+  /**
+   * Feature #12276 (HU #12312) — «Confirmado en RUNT». Exactamente uno de tres valores en trámites
+   * aprobados; `null`/ausente cuando no aplica. La celda pinta SÍ / NO / — y NADA más: intentos,
+   * marcas y motivos son del Historial interno de plataforma, no del gestor.
+   */
+  runtConfirmed?: RuntConfirmedValue | null;
   estado: InstanceStatus;
   /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
   plateFlowStatus?: PlateFlowStatus | null;

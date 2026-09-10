@@ -3,6 +3,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.RuntConfirmation;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Flit.Tramites.Domain.Tramites.Enums;
@@ -2224,6 +2225,12 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
             TramitesQueryFieldCatalog.Fuente => ApplyFuente(query, op, valores),
 
+            // Feature #12276 (HU #12312) — resuelve en SQL sobre el universo completo, no sobre la
+            // página, y solo con las columnas runt_* del trámite (sin join a los intentos).
+            TramitesQueryFieldCatalog.ConfirmadoRunt => op == QueryOperator.EsAlguno
+                ? ApplyConfirmadoRunt(query, valores)
+                : query,
+
             // Firma ELECTRÓNICA de la compraventa completa. Mismo cálculo que el filtro suelto
             // `Firmado`, del que este campo es el sucesor con nombre honesto.
             TramitesQueryFieldCatalog.FirmaCompraventa => op == QueryOperator.EsAlguno
@@ -2282,6 +2289,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     /// precedencia que <c>TramiteFuente.Desde</c> —la migración gana sobre el origen operativo—. Si
     /// esa precedencia cambia allí, esta traducción deja de coincidir con lo que muestra la columna.
     /// </summary>
+    /// <summary>
+    /// Espejo en SQL de <c>RuntConfirmedColumn.Derive</c>: SÍ = aprobado con <c>runt_confirmed_at</c>;
+    /// NO = aprobado sin confirmar y con intentos o marca; No consultado = aprobado sin nada. Con las
+    /// tres opciones marcadas equivale a «aprobados», que es el universo donde la columna existe.
+    /// </summary>
+    private static IQueryable<ProcedureInstance> ApplyConfirmadoRunt(
+        IQueryable<ProcedureInstance> query, List<string> valores)
+    {
+        var yes = valores.Contains(RuntConfirmedColumn.Yes.ToUpperInvariant());
+        var no = valores.Contains(RuntConfirmedColumn.No.ToUpperInvariant());
+        var notConsulted = valores.Contains(RuntConfirmedColumn.NotConsulted.ToUpperInvariant());
+        if (!yes && !no && !notConsulted)
+            return query;
+
+        return query.Where(x => x.Status == TramiteEstado.Aprobado && (
+            (yes && x.RuntConfirmedAt != null)
+            || (no && x.RuntConfirmedAt == null && (x.RuntAttempts > 0 || x.RuntFlag != null))
+            || (notConsulted && x.RuntConfirmedAt == null && x.RuntAttempts == 0 && x.RuntFlag == null)));
+    }
+
     private static IQueryable<ProcedureInstance> ApplyFuente(
         IQueryable<ProcedureInstance> query, string op, List<string> valores)
     {

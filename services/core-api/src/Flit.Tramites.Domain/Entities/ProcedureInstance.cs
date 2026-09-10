@@ -86,6 +86,19 @@ public sealed class ProcedureInstance
     public DateTimeOffset? PlateUpdatedAt { get; set; }
 
     /// <summary>
+    /// Feature #12276 — momento en que la Confirmación RUNT dio Confirmado. NULL = no confirmado: la
+    /// columna del gestor muestra NO si ya hubo intentos y — si nunca se consultó. Ortogonal al
+    /// <see cref="Status"/>: la corrida jamás lo cambia.
+    /// </summary>
+    public DateTimeOffset? RuntConfirmedAt { get; set; }
+
+    /// <summary>Intentos con veredicto de negocio (Pendiente/Discrepancia). Un error del proveedor no cuenta.</summary>
+    public int RuntAttempts { get; set; }
+
+    /// <summary>Marca interna (<c>Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationFlags</c>): discrepancia | no_verificable | tope. Solo la ve el Historial.</summary>
+    public string? RuntFlag { get; set; }
+
+    /// <summary>
     /// Marca de "borrador finalizado" (HU #10349, fase 2). El gestor finaliza la captura de datos
     /// (actores, documentos, organismo) y el trámite queda en <c>draft</c> a la espera de la validación
     /// de identidad async del cliente. Cuando llega <c>IdentityValidationCompleted</c> (aprobado), el
