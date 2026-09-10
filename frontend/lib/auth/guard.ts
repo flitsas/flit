@@ -2,6 +2,7 @@
 // Extraída del middleware para poder probarla sin el runtime de Next.js.
 import {
   canAccessRuntConfirmation,
+  canManageBanners,
   canReadGeneracionDocumental,
   decodeJwtPayload,
   isAdminCompany,
@@ -34,6 +35,7 @@ export interface AdminAccessDecision {
  * - Cualquier rol con `generacion-documental.read` → permitido en /admin/generacion-documental/* (Feature #12201).
  * - Cualquier rol con `runt_confirmation.settings.manage` o `runt_confirmation.history.read` →
  *   permitido en /admin/plataforma/confirmacion-runt/* (Feature #12276).
+ * - Cualquier rol con `banners.manage` → permitido en /admin/banners/* (Feature #12236, HU #12241).
  * - Otros roles → redirigir a /403.
  */
 export function evaluateAdminAccess(
@@ -83,6 +85,15 @@ export function evaluateAdminAccess(
   if (
     pathname?.startsWith(RUNT_CONFIRMATION_BASE_PATH) &&
     canAccessRuntConfirmation(payload)
+  ) {
+    return { allowed: true };
+  }
+
+  // Banners promocionales (Feature #12236, HU #12241): tampoco es exclusivo de SuperAdmin —
+  // se gobierna por el permiso `banners.manage` del JWT, mismo patrón que generación documental.
+  if (
+    pathname?.startsWith("/admin/banners") &&
+    canManageBanners(payload)
   ) {
     return { allowed: true };
   }

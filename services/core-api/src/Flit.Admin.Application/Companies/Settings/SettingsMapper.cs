@@ -39,7 +39,10 @@ internal static class SettingsMapper
             settings.StateEmailRecipients.Comprador,
             settings.StateEmailRecipients.VendedorOPropietario,
             settings.StateEmailRecipients.Radicador,
-            settings.StateEmailRecipients.ExtraEmail));
+            settings.StateEmailRecipients.ExtraEmail),
+        settings.TramitesModuleEnabled,
+        settings.ComparendosModuleEnabled,
+        settings.ResolucionesModuleEnabled);
 
     private static Dictionary<string, ConsultationProviderChoice> ToChoices(
         ConsultationProviderConfig config)

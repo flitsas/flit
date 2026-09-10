@@ -28,7 +28,11 @@ public sealed record TenantSettingsResponse(
     bool DocumentosPersonalizadosActivo,
     bool AvisosAprobacionActivos,
     bool AvisosRechazoActivos,
-    DestinatariosNotificacionDto DestinatariosNotificacion);
+    DestinatariosNotificacionDto DestinatariosNotificacion,
+    // HU #12250 (Feature #12249) — flags de módulos del dashboard.
+    bool TramitesModuleEnabled,
+    bool ComparendosModuleEnabled,
+    bool ResolucionesModuleEnabled);
 
 /// <summary>Checkboxes + correo extra de avisos de estado.</summary>
 public sealed record DestinatariosNotificacionDto(

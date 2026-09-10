@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   canAccessRuntConfirmation,
+  canManageBanners,
   canReadIctLogs,
   canReadLogQx,
   decodeJwtPayload,
@@ -67,6 +68,7 @@ import {
   Monitor,
   FileSignature,
   History,
+  Image as ImageIcon,
   BadgeCheck,
 } from "lucide-react";
 
@@ -163,6 +165,7 @@ function useCurrentUser() {
       isOtAdmin: isOtAdmin(payload),
       canReadLogQx: canReadLogQx(payload),
       canReadIctLogs: canReadIctLogs(payload),
+      canManageBanners: canManageBanners(payload),
       canAccessRuntConfirmation: canAccessRuntConfirmation(payload),
     };
   });
@@ -250,18 +253,6 @@ export function Shell({
     onClick: () => onNav(it.id),
   }));
 
-  // Confirmación RUNT (Feature #12276, HU #12313) — submódulo de Plataforma gateado por PERMISO
-  // (`runt_confirmation.settings.manage` o `.history.read`), no por rol. SuperAdmin lo ve dentro del
-  // submenú Plataforma completo; un rol con solo el permiso ve un submenú Plataforma con esta única
-  // entrada, porque el resto de Plataforma sigue siendo exclusivo de SuperAdmin.
-  const confirmacionRuntEntry: DockEntry = {
-    key: "admin-confirmacion-runt",
-    label: "Confirmación RUNT",
-    icon: BadgeCheck,
-    active: pathname.startsWith(CONFIRMACION_RUNT_BASE_PATH),
-    onClick: () => window.location.assign(CONFIRMACION_RUNT_BASE_PATH),
-  };
-
   if (currentUser?.isSuperAdmin) {
     entries.push(
       {
@@ -333,55 +324,80 @@ export function Shell({
         active: !onAdminRoute && active === "auditoria",
         onClick: () => onNav("auditoria"),
       },
-      {
-        key: "admin-plataforma",
-        label: "Plataforma",
-        icon: Monitor,
-        active: pathname.startsWith("/admin/plataforma"),
-        onClick: () => undefined,
-        children: [
-          {
-            key: "admin-tipos-tramite",
-            label: "Tipos de trámites",
-            icon: ListChecks,
-            active: pathname.startsWith("/admin/plataforma/tipos-tramite"),
-            onClick: () => window.location.assign("/admin/plataforma/tipos-tramite"),
-          },
-          confirmacionRuntEntry,
-          {
-            key: "admin-mandatos",
-            label: "Mandatos",
-            icon: FileSignature,
-            active: pathname.startsWith("/admin/plataforma/mandatos"),
-            onClick: () => window.location.assign("/admin/plataforma/mandatos"),
-          },
-          {
-            key: "admin-fur",
-            label: "FUR",
-            icon: FileText,
-            active: pathname.startsWith("/admin/plataforma/fur"),
-            onClick: () => window.location.assign("/admin/plataforma/fur"),
-          },
-          {
-            key: "admin-notificaciones",
-            label: "Notificaciones",
-            icon: Bell,
-            active: pathname.startsWith("/admin/plataforma/notificaciones"),
-            onClick: () => window.location.assign("/admin/plataforma/notificaciones"),
-          },
-        ],
-      },
     );
   }
 
-  if (!currentUser?.isSuperAdmin && currentUser?.canAccessRuntConfirmation) {
+  // Plataforma es contenedor (mismo patrón que Tránsito): cuelga los sub-módulos de
+  // configuración de plataforma. Sus hijos "core" (tipos de trámite, mandatos, FUR,
+  // notificaciones) siguen exclusivos de SuperAdmin; Banners (HU #12241, Feature #12236)
+  // cuelga aparte del permiso `banners.manage` del JWT (bypass SuperAdmin incluido en
+  // `canManageBanners`), para que un AdminCompany con el módulo concedido también lo vea —
+  // por eso el contenedor se construye con una lista de hijos armada dinámicamente en vez
+  // de vivir dentro del bloque `if (currentUser?.isSuperAdmin)` de arriba.
+  const platformaChildren: DockEntry[] = [];
+  if (currentUser?.isSuperAdmin) {
+    platformaChildren.push(
+      {
+        key: "admin-tipos-tramite",
+        label: "Tipos de trámites",
+        icon: ListChecks,
+        active: pathname.startsWith("/admin/plataforma/tipos-tramite"),
+        onClick: () => window.location.assign("/admin/plataforma/tipos-tramite"),
+      },
+      {
+        key: "admin-mandatos",
+        label: "Mandatos",
+        icon: FileSignature,
+        active: pathname.startsWith("/admin/plataforma/mandatos"),
+        onClick: () => window.location.assign("/admin/plataforma/mandatos"),
+      },
+      {
+        key: "admin-fur",
+        label: "FUR",
+        icon: FileText,
+        active: pathname.startsWith("/admin/plataforma/fur"),
+        onClick: () => window.location.assign("/admin/plataforma/fur"),
+      },
+      {
+        key: "admin-notificaciones",
+        label: "Notificaciones",
+        icon: Bell,
+        active: pathname.startsWith("/admin/plataforma/notificaciones"),
+        onClick: () => window.location.assign("/admin/plataforma/notificaciones"),
+      },
+    );
+  }
+  // Confirmación RUNT (Feature #12276, HU #12313): gateado por PERMISO (`runt_confirmation.settings.manage`
+  // o `.history.read`), no por rol; SuperAdmin lo ve por el bypass de `canAccessRuntConfirmation`.
+  // Va justo después de «Tipos de trámites» (AC4 de la HU); para un rol sin lo demás, es la única entrada.
+  if (currentUser?.canAccessRuntConfirmation) {
+    const posicion = platformaChildren.findIndex((c) => c.key === "admin-tipos-tramite") + 1;
+    platformaChildren.splice(posicion, 0, {
+      key: "admin-confirmacion-runt",
+      label: "Confirmación RUNT",
+      icon: BadgeCheck,
+      active: pathname.startsWith(CONFIRMACION_RUNT_BASE_PATH),
+      onClick: () => window.location.assign(CONFIRMACION_RUNT_BASE_PATH),
+    });
+  }
+  if (currentUser?.canManageBanners) {
+    platformaChildren.push({
+      key: "admin-banners",
+      label: "Banners",
+      icon: ImageIcon,
+      active: pathname.startsWith("/admin/banners"),
+      onClick: () => window.location.assign("/admin/banners"),
+    });
+  }
+  if (platformaChildren.length > 0) {
     entries.push({
       key: "admin-plataforma",
       label: "Plataforma",
       icon: Monitor,
-      active: pathname.startsWith("/admin/plataforma"),
+      active:
+        pathname.startsWith("/admin/plataforma") || pathname.startsWith("/admin/banners"),
       onClick: () => undefined,
-      children: [confirmacionRuntEntry],
+      children: platformaChildren,
     });
   }
 

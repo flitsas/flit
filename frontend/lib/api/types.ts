@@ -188,6 +188,11 @@ export interface TenantSettings {
   finesQuerySource?: FinesQuerySource;
   /** HU #11469 legado. */
   avisosCambioEstadoActivos?: boolean;
+  // HU #12250 (Feature #12249) — flags de módulos del dashboard. Opcionales por
+  // compatibilidad; el backend siempre los devuelve.
+  tramitesModuleEnabled?: boolean;
+  comparendosModuleEnabled?: boolean;
+  resolucionesModuleEnabled?: boolean;
 }
 
 /** Payload del PUT settings — los mismos campos editables (sin tenantId). */
@@ -218,6 +223,11 @@ export interface TenantSettingsUpdate {
   finesQuerySource?: FinesQuerySource;
   /** HU #11469 legado. */
   avisosCambioEstadoActivos?: boolean;
+  // HU #12252 (Feature #12249) — flags de módulos del dashboard. Si se omiten el
+  // backend conserva el valor previo (mismo mecanismo que avisosAprobacionActivos).
+  tramitesModuleEnabled?: boolean;
+  comparendosModuleEnabled?: boolean;
+  resolucionesModuleEnabled?: boolean;
 }
 
 // ── Errores de validación 422 ───────────────────────────────────────────────
@@ -431,6 +441,17 @@ export interface AnalyticsOverviewParams {
   from: string;
   to: string;
   tenantId?: string;
+}
+
+/**
+ * Respuesta de GET /api/v1/analytics/active-modules (HU #12251 backend / #12253 frontend,
+ * Feature #12249). Los 3 flags de módulos activos del dashboard para el tenant del usuario
+ * autenticado (o el `tenantId` indicado por un SuperAdmin).
+ */
+export interface ActiveModulesResponse {
+  tramitesModuleEnabled: boolean;
+  comparendosModuleEnabled: boolean;
+  resolucionesModuleEnabled: boolean;
 }
 
 /** Productividad de un radicador en el periodo (RF07). */
