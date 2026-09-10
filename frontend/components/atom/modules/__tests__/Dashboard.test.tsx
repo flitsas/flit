@@ -2,6 +2,11 @@
 // Cubre AC1-AC5: visibilidad condicional de la sección de Trámites y tarjetas
 // "Próximamente" para Comparendos/Resoluciones, según los flags que expone
 // GET /api/v1/analytics/active-modules.
+//
+// Redefinición post-validación en vivo con el usuario (2026-09-10): la tarjeta "Próximamente"
+// avisa de un módulo que la compañía SÍ activó (`...ModuleEnabled = true`) pero que todavía no
+// tiene contenido real construido — NO al revés. Si el flag está apagado, la compañía no lo
+// contrató y no se le menciona. Los AC de ADO se actualizaron para reflejar esto.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 
@@ -49,6 +54,13 @@ const FULL_OVERVIEW: AnalyticsOverviewResponse = {
 
 const TREND = { items: [{ year: 2026, month: 8, category: "matriculas" as const, total: 5 }] };
 
+/** Estado por defecto real de una compañía nueva (TenantSettings.Default, HU #12250). */
+const NONE_ADDITIONAL: ActiveModulesResponse = {
+  tramitesModuleEnabled: true,
+  comparendosModuleEnabled: false,
+  resolucionesModuleEnabled: false,
+};
+
 const ALL_ENABLED: ActiveModulesResponse = {
   tramitesModuleEnabled: true,
   comparendosModuleEnabled: true,
@@ -73,7 +85,7 @@ beforeEach(() => {
   mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
   mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
   mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
-  mocks.fetchActiveModules.mockResolvedValue(ALL_ENABLED);
+  mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
 });
 
 describe("Dashboard — HU #12253 módulos activos por tenant", () => {
@@ -89,15 +101,17 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
     expect(await screen.findByText("Seguimiento operativo")).toBeInTheDocument();
 
-    // Sin flags apagados, no debe verse ninguna tarjeta "Próximamente".
+    // Sin ningún módulo adicional activado (estado por defecto), no debe verse ninguna
+    // tarjeta "Próximamente" — la compañía no contrató Comparendos ni Resoluciones.
     expect(screen.queryByText("Próximamente")).not.toBeInTheDocument();
+    expect(await screen.findByText("Tu compañía no tiene módulos adicionales activados.")).toBeInTheDocument();
   });
 
-  it("AC2: ComparendosModuleEnabled=false muestra la tarjeta Próximamente con el estilo de las tarjetas KPI existentes", async () => {
+  it("AC2: ComparendosModuleEnabled=true muestra la tarjeta Próximamente con el estilo de las tarjetas KPI existentes", async () => {
     mocks.fetchActiveModules.mockResolvedValue({
       tramitesModuleEnabled: true,
-      comparendosModuleEnabled: false,
-      resolucionesModuleEnabled: true,
+      comparendosModuleEnabled: true,
+      resolucionesModuleEnabled: false,
     });
 
     render(<Dashboard onNewTramite={noop} />);
@@ -111,15 +125,15 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(card?.className).toContain("dark:bg-[#0B0F14]");
     expect(card?.className).toContain("border");
 
-    // Resoluciones sigue habilitado: no debe verse su placeholder.
+    // Resoluciones sigue apagado (la compañía no lo activó): no debe verse su placeholder.
     expect(screen.queryByText("Resoluciones")).not.toBeInTheDocument();
   });
 
-  it("AC3: ResolucionesModuleEnabled=false muestra su propia tarjeta Próximamente, independiente de Comparendos", async () => {
+  it("AC3: ResolucionesModuleEnabled=true muestra su propia tarjeta Próximamente, independiente de Comparendos", async () => {
     mocks.fetchActiveModules.mockResolvedValue({
       tramitesModuleEnabled: true,
-      comparendosModuleEnabled: true,
-      resolucionesModuleEnabled: false,
+      comparendosModuleEnabled: false,
+      resolucionesModuleEnabled: true,
     });
 
     render(<Dashboard onNewTramite={noop} />);
@@ -129,26 +143,34 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(screen.queryByText("Comparendos")).not.toBeInTheDocument();
   });
 
-  it("AC4: al recargar el Dashboard con el flag ya activo, el placeholder de Comparendos desaparece sin reemplazarse por contenido real", async () => {
-    mocks.fetchActiveModules.mockResolvedValueOnce({
-      tramitesModuleEnabled: true,
-      comparendosModuleEnabled: false,
-      resolucionesModuleEnabled: true,
-    });
-    const { unmount } = render(<Dashboard onNewTramite={noop} />);
+  it("Comparendos y Resoluciones activos a la vez muestran las DOS tarjetas, cada una independiente", async () => {
+    mocks.fetchActiveModules.mockResolvedValue(ALL_ENABLED);
+
+    render(<Dashboard onNewTramite={noop} />);
+
     expect(await screen.findByText("Comparendos")).toBeInTheDocument();
+    expect(await screen.findByText("Resoluciones")).toBeInTheDocument();
+    expect(screen.getAllByText("Próximamente")).toHaveLength(2);
+  });
+
+  it("AC4: al recargar el Dashboard con el flag recién activado, aparece la tarjeta Próximamente de Comparendos (no había nada antes)", async () => {
+    mocks.fetchActiveModules.mockResolvedValueOnce(NONE_ADDITIONAL);
+    const { unmount } = render(<Dashboard onNewTramite={noop} />);
+    await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Comparendos")).not.toBeInTheDocument();
     unmount();
 
     // Simula la "recarga" del Dashboard (nuevo montaje) tras activar el flag desde Admin.
     mocks.fetchActiveModules.mockResolvedValueOnce({
       tramitesModuleEnabled: true,
       comparendosModuleEnabled: true,
-      resolucionesModuleEnabled: true,
+      resolucionesModuleEnabled: false,
     });
     render(<Dashboard onNewTramite={noop} />);
 
     await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.queryByText("Comparendos")).not.toBeInTheDocument());
+    expect(await screen.findByText("Comparendos")).toBeInTheDocument();
+    expect(screen.getByText("Próximamente")).toBeInTheDocument();
     // Explícitamente fuera de alcance: no se construye contenido real del módulo.
     expect(screen.queryByTestId("comparendos-module-content")).not.toBeInTheDocument();
   });

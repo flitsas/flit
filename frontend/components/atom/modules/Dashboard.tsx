@@ -359,29 +359,35 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const chartHasData = chartData.length > 0;
   const chartStatus: UiStatus = status === "ready" ? (chartHasData ? "ready" : "empty") : status;
 
-  // Flags de módulos del tenant (AC1, AC2, AC3, AC4). Mientras carga o si la consulta falla
-  // (AC5), se asume `true` (habilitado): la sección de Trámites no parpadea y las tarjetas
-  // "Próximamente" solo aparecen cuando el backend confirma explícitamente el flag en `false`.
+  // Flags de módulos del tenant (AC1, AC2, AC3, AC4 — redefinidos tras validar en vivo con el
+  // usuario: la tarjeta "Próximamente" avisa de un módulo que la compañía SÍ activó pero que
+  // todavía no tiene contenido real construido, no al revés. Si el flag está apagado, la
+  // compañía no lo contrató: no tiene sentido mencionárselo.
+  //
+  // Trámites (AC1) mantiene su semántica original — mientras carga o si falla, se asume
+  // habilitado (`true`) para no parpadear, ya con contenido real. Comparendos/Resoluciones
+  // (AC2-AC4) mientras carga o si falla se asumen APAGADOS (`false`): más seguro no anunciar
+  // un módulo de más que anunciar uno que la compañía no activó.
   const tramitesModuleEnabled = activeModules?.tramitesModuleEnabled ?? true;
-  const comparendosModuleEnabled = activeModules?.comparendosModuleEnabled ?? true;
-  const resolucionesModuleEnabled = activeModules?.resolucionesModuleEnabled ?? true;
+  const comparendosModuleEnabled = activeModules?.comparendosModuleEnabled ?? false;
+  const resolucionesModuleEnabled = activeModules?.resolucionesModuleEnabled ?? false;
   const comingSoonModules = [
     { key: "comparendos", label: "Comparendos", enabled: comparendosModuleEnabled },
     { key: "resoluciones", label: "Resoluciones", enabled: resolucionesModuleEnabled },
-  ].filter((m) => m.enabled === false);
+  ].filter((m) => m.enabled === true);
 
   // Estado compuesto de la fila "Próximamente" (AC5): mientras carga o si falla, el
   // UiStateBoundary aislado lo refleja SIN afectar el resto del dashboard (overview,
   // biometricStats, etc. tienen su propio status independiente).
   const comingSoonStatus: UiStatus =
     activeModulesStatus === "ready" ? (comingSoonModules.length > 0 ? "ready" : "empty") : activeModulesStatus;
-  // "Empty" cubre dos causas distintas: sin compañía elegida (SuperAdmin) vs. los 3 módulos ya
-  // habilitados para la compañía concreta — cada una con su propio mensaje, mismo patrón que
-  // `emptyMessage` de biometricStatus arriba.
+  // "Empty" cubre dos causas distintas: sin compañía elegida (SuperAdmin) vs. ningún módulo
+  // adicional activado para la compañía concreta — cada una con su propio mensaje, mismo patrón
+  // que `emptyMessage` de biometricStatus arriba.
   const comingSoonEmptyMessage =
     isSuper && !tenantId
       ? "Selecciona una compañía para ver sus módulos activos."
-      : "Todos los módulos del dashboard están habilitados para tu compañía.";
+      : "Tu compañía no tiene módulos adicionales activados.";
 
   const s = slides[slide];
 
