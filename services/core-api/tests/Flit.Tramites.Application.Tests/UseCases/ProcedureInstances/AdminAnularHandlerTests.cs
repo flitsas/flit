@@ -39,7 +39,6 @@ public sealed class AdminAnularHandlerTests
     [InlineData(TramiteEstado.Preparado)]
     [InlineData(TramiteEstado.Entregado)]
     [InlineData(TramiteEstado.Rechazado)]
-    [InlineData(TramiteEstado.Anulado)]
     public async Task AC1_DesdeCualquierEstadoNoProtegido_QuedaEnAnulado(string origen)
     {
         var id = Guid.NewGuid();
@@ -168,6 +167,28 @@ public sealed class AdminAnularHandlerTests
         errorDetail.Should().NotBeNullOrWhiteSpace();
         result.Should().BeNull();
         instance.Status.Should().Be(TramiteEstado.Revocado, "el rechazo no debe aplicar ningún cambio");
+        _recorder.Records.Should().BeEmpty();
+        await _repo.DidNotReceive().SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── Bug #12376, defecto 2 — Anulado como origen: rechazado siempre (422) ───────────────────────
+
+    [Fact]
+    public async Task Bug12376_YaAnulado_SeRechazaSinAplicarNingunCambio()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, TramiteEstado.Anulado);
+        _repo.GetByIdAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var command = new AdminAnularCommand(id, tenantId, null, null);
+        var (result, error, errorDetail) = await Handler().HandleAsync(command, CancellationToken.None);
+
+        error.Should().Be(TramiteEstadoErrores.CannotAnnulAlready);
+        errorDetail.Should().NotBeNullOrWhiteSpace();
+        result.Should().BeNull();
+        instance.Status.Should().Be(TramiteEstado.Anulado, "el rechazo no debe aplicar ningún cambio");
         _recorder.Records.Should().BeEmpty();
         await _repo.DidNotReceive().SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>());
         await _repo.DidNotReceive().AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>());

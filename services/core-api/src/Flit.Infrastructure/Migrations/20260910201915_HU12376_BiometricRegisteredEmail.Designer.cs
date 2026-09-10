@@ -3,6 +3,7 @@ using System;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    partial class FlitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260910201915_HU12376_BiometricRegisteredEmail")]
+    partial class HU12376_BiometricRegisteredEmail
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2638,12 +2641,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("block_procedure_family_traspaso");
 
-                    b.Property<bool>("ComparendosModuleEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("comparendos_module_enabled");
-
                     b.Property<string>("ConsultationProviderConfig")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2725,12 +2722,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("plate_preassign_enabled");
 
-                    b.Property<bool>("ResolucionesModuleEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("resoluciones_module_enabled");
-
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
@@ -2780,12 +2771,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("tramite_state_email_recipients")
                         .HasDefaultValueSql("'{\"comprador\":true,\"vendedorOPropietario\":true,\"radicador\":true,\"extraEmail\":null}'");
-
-                    b.Property<bool>("TramitesModuleEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("tramites_module_enabled");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -7342,12 +7327,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("comprador_nombre");
 
-                    b.Property<long>("Consecutivo")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("consecutivo")
-                        .HasDefaultValueSql("nextval('tramites.procedure_instance_reference_seq')");
-
                     b.Property<bool>("ConsolidadoMaestroVigente")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -7444,21 +7423,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("prioritario");
 
-                    b.Property<int>("RuntAttempts")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("runt_attempts");
-
-                    b.Property<DateTimeOffset?>("RuntConfirmedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("runt_confirmed_at");
-
-                    b.Property<string>("RuntFlag")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("runt_flag");
-
                     b.Property<Guid>("ProcedureTypeId")
                         .HasColumnType("uuid")
                         .HasColumnName("procedure_type_id");
@@ -7468,7 +7432,8 @@ namespace Flit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
-                        .HasColumnName("reference_number");
+                        .HasColumnName("reference_number")
+                        .HasDefaultValueSql("nextval('tramites.procedure_instance_reference_seq')::text");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
@@ -7574,14 +7539,6 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("TenantId", "Plate")
                         .HasDatabaseName("ix_procedure_instances_tenant_id_plate");
 
-                    b.HasIndex("Consecutivo")
-                        .IsUnique()
-                        .HasDatabaseName("uq_procedure_instances_consecutivo");
-
-                    b.HasIndex("ReferenceNumber")
-                        .IsUnique()
-                        .HasDatabaseName("uq_procedure_instances_reference");
-
                     b.HasIndex("TenantId", "UpdatedAt")
                         .HasDatabaseName("ix_procedure_instances_tenant_id_updated_at");
 
@@ -7602,10 +7559,6 @@ namespace Flit.Infrastructure.Migrations
                             t.ExcludeFromMigrations();
 
                             t.HasTrigger("tr_procedure_instances_audit");
-
-                            t.HasTrigger("tr_procedure_instances_radicado");
-
-                            t.HasTrigger("tr_procedure_instances_radicado_inmutable");
 
                             t.HasTrigger("tr_procedure_instances_row_version");
                         });

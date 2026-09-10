@@ -19,29 +19,53 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             t.ExcludeFromMigrations();
             t.HasTrigger("tr_procedure_instances_audit");
             t.HasTrigger("tr_procedure_instances_row_version");
+            t.HasTrigger("tr_procedure_instances_radicado");
+            t.HasTrigger("tr_procedure_instances_radicado_inmutable");
         });
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
-        // HU #12151 — el radicado es un consecutivo GLOBAL que asigna Postgres
-        // (tramites.procedure_instance_reference_seq, ver DDL 103). Tres piezas, y las tres hacen falta:
+        // HU #12151 + HU #12371 — el radicado lo asigna Postgres, no la aplicación:
+        //   · consecutivo       → bigint, contador GLOBAL de tramites.procedure_instance_reference_seq.
+        //   · reference_number  → 'FT1-0000012', compuesto por el trigger BEFORE INSERT
+        //                          tr_procedure_instances_radicado a partir de la familia del tipo
+        //                          (DDL 108). Ver Radicado en Flit.Tramites.Domain.
         //
-        //  · HasDefaultValueSql   → declara de dónde sale el valor.
-        //  · ValueGeneratedOnAdd  → hace que EF lo LEA de vuelta tras el INSERT (RETURNING).
-        //  · BeforeSaveBehavior=Ignore → hace que EF NUNCA mande la columna en el INSERT.
+        // Para cada una, tres piezas, y las tres hacen falta:
+        //  · ValueGeneratedOnAdd        → EF las LEE de vuelta tras el INSERT (RETURNING).
+        //  · BeforeSaveBehavior=Ignore  → EF NUNCA las manda en el INSERT. `CreateProcedureInstanceCommand`
+        //                                 construye la entidad con ReferenceNumber = string.Empty, y una
+        //                                 cadena vacía NO es ausencia de valor para Postgres: sin esto el
+        //                                 trigger recibiría '' y el CHECK de formato reventaría.
+        //  · AfterSaveBehavior=Ignore   → EF tampoco las manda en el UPDATE: el radicado es inmutable
+        //                                 (AC4) y el trigger tr_procedure_instances_radicado_inmutable
+        //                                 falla ruidoso ante cualquier intento. Un cambio en memoria se
+        //                                 descarta en vez de tumbar el SaveChanges entero.
         //
-        // El tercero es el que no es opcional y el que no se ve venir: `CreateProcedureInstanceCommand`
-        // construye la entidad con `ReferenceNumber = string.Empty`, y una cadena vacía NO es ausencia
-        // de valor para Postgres. Sin `Ignore`, EF enviaría '' , el DEFAULT no se dispararía, y el
-        // segundo trámite reventaría contra el índice único (además de violar el CHECK numérico).
-        // Verificado contra una copia de la base de dev antes de escribir esto.
+        // HasDefaultValueSql se declara solo por documentación del modelo: la tabla está
+        // ExcludeFromMigrations y el DEFAULT real ya no existe (lo asigna el trigger, que así puede
+        // respetar un número explícito de los seeds). Verificado contra una copia de dev.
         builder.Property(x => x.ReferenceNumber)
             .HasMaxLength(30)
             .IsRequired()
-            .HasDefaultValueSql("nextval('tramites.procedure_instance_reference_seq')::text")
-            .ValueGeneratedOnAdd()
-            .Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+            .ValueGeneratedOnAdd();
+        builder.Property(x => x.ReferenceNumber).Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+        builder.Property(x => x.ReferenceNumber).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+
+        builder.Property(x => x.Consecutivo)
+            .HasColumnName("consecutivo")
+            .IsRequired()
+            .HasDefaultValueSql("nextval('tramites.procedure_instance_reference_seq')")
+            .ValueGeneratedOnAdd();
+        builder.Property(x => x.Consecutivo).Metadata.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+        builder.Property(x => x.Consecutivo).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+
+        // HU #12371 — el contador es global: el número no se repite entre familias.
+        builder.HasIndex(x => x.Consecutivo)
+            .IsUnique()
+            .HasDatabaseName("uq_procedure_instances_consecutivo");
+
         // N 03 (ADR-0022): estados de negocio en español (TramiteEstado); default = borrador.
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("borrador");
 

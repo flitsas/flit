@@ -67,23 +67,91 @@ internal static class ProcedureInstanceFiltroSql
     // ── Identificadores ───────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// El radicado que emite FLIT. Nunca es nulo, así que «está vacío» se compara contra la cadena
-    /// vacía y no contra <c>null</c>.
+    /// El radicado que emite FLIT: <c>FT1-0000012</c> (HU #12371). Nunca es nulo, así que «está
+    /// vacío» se compara contra la cadena vacía y no contra <c>null</c>.
+    ///
+    /// <para><b>«Es alguno» lee lo que el usuario escribió como radicado</b> (<see cref="Radicado.TryLeer"/>):
+    /// <c>12</c>, <c>0000012</c> y <c>FT1-0000012</c> encuentran el mismo trámite. Sin prefijo se
+    /// compara el <see cref="ProcedureInstance.Consecutivo"/>, que es por lo que de verdad se
+    /// pregunta; con prefijo se compara el texto canónico, así que <c>FT2-0000012</c> NO encuentra
+    /// una matrícula: el usuario fue explícito. Lo que no se puede leer como radicado se compara
+    /// como texto normalizado, igual que antes.</para>
+    ///
+    /// <para><b>«Contiene» sigue siendo contiene</b>, sobre el texto sin guion: <c>12</c> trae
+    /// <c>FT1-0000012</c> y también <c>FT1-0000120</c>. Se deja así a propósito; el operador exacto
+    /// es «es alguno».</para>
     /// </summary>
     public static IQueryable<ProcedureInstance> PorRadicado(
-        IQueryable<ProcedureInstance> query, string op, List<string> valores) => op switch
+        IQueryable<ProcedureInstance> query, string op, List<string> valores)
     {
-        QueryOperator.EsAlguno => query.Where(x => valores.Contains(
-            x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-        QueryOperator.NoEsNinguno => query.Where(x => !valores.Contains(
-            x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-        QueryOperator.Contiene => query.Where(x => x.ReferenceNumber
-            .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-            .Contains(valores[0])),
-        QueryOperator.EstaVacio => query.Where(x => x.ReferenceNumber == ""),
-        QueryOperator.NoEstaVacio => query.Where(x => x.ReferenceNumber != ""),
-        _ => query,
-    };
+        switch (op)
+        {
+            case QueryOperator.EsAlguno:
+            {
+                var (consecutivos, textos) = LeerRadicados(valores);
+                return query.Where(x => consecutivos.Contains(x.Consecutivo)
+                    || textos.Contains(x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")));
+            }
+            case QueryOperator.NoEsNinguno:
+            {
+                var (consecutivos, textos) = LeerRadicados(valores);
+                return query.Where(x => !consecutivos.Contains(x.Consecutivo)
+                    && !textos.Contains(x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")));
+            }
+            case QueryOperator.Contiene:
+                return query.Where(x => x.ReferenceNumber
+                    .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
+                    .Contains(valores[0]));
+            case QueryOperator.EstaVacio:
+                return query.Where(x => x.ReferenceNumber == "");
+            case QueryOperator.NoEstaVacio:
+                return query.Where(x => x.ReferenceNumber != "");
+            default:
+                return query;
+        }
+    }
+
+    /// <summary>
+    /// Reparte los valores ya normalizados en lo que se compara por número (sin prefijo) y lo que se
+    /// compara por texto (con prefijo, en forma canónica; o ilegible como radicado, tal cual).
+    /// </summary>
+    private static (List<long> Consecutivos, List<string> Textos) LeerRadicados(IEnumerable<string> valores)
+    {
+        var consecutivos = new List<long>();
+        var textos = new List<string>();
+        foreach (var valor in valores)
+        {
+            if (!Radicado.TryLeer(valor, out var lectura))
+                textos.Add(valor);
+            else if (lectura.Value.CanonicoSinGuion is { } canonico)
+                textos.Add(canonico);
+            else
+                consecutivos.Add(lectura.Value.Consecutivo);
+        }
+        return (consecutivos, textos);
+    }
+
+    /// <summary>
+    /// El término de la barra de búsqueda leído como radicado (HU #12371 AC7), en la forma en que
+    /// las dos búsquedas libres lo meten en su <c>Where</c>:
+    /// <code>
+    /// (consecutivo != null &amp;&amp; x.Consecutivo == consecutivo)
+    /// || (canonico != null &amp;&amp; x.ReferenceNumber.ToUpper().Replace("-", "") == canonico)
+    /// </code>
+    /// Sin prefijo (<c>12</c>, <c>0000012</c>) se busca por número; con prefijo (<c>FT1-0000012</c>,
+    /// <c>ft1 12</c>) por el texto canónico. Si el término no es un radicado, las dos salen nulas y
+    /// el OR se apaga: el término se busca en los demás campos. Va aquí y no inline en cada
+    /// repositorio para que el gestor y el organismo lean el mismo término igual.
+    /// </summary>
+    public static (long? Consecutivo, string? Canonico) LeerBusquedaRadicado(string termino)
+    {
+        if (!Radicado.TryLeer(termino, out var lectura))
+            return (null, null);
+
+        return lectura.Value.CanonicoSinGuion is { } canonico
+            ? (null, canonico)
+            : (lectura.Value.Consecutivo, null);
+    }
 
     public static IQueryable<ProcedureInstance> PorPlaca(
         IQueryable<ProcedureInstance> query, string op, List<string> valores) => op switch

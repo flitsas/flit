@@ -1357,7 +1357,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             }
             search={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Buscar radicado, placa, VIN..."
+            searchPlaceholder="Buscar radicado (FT1-0000012), placa, VIN..."
             searchAriaLabel="Buscar en la bandeja de trámites"
             onAplicar={applyFilters}
             onEmpezarDeCero={clearFilters}

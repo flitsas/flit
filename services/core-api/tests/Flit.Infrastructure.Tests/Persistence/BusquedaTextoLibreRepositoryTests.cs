@@ -48,6 +48,7 @@ public sealed class BusquedaTextoLibreRepositoryTests
             TenantId = tenantId ?? TenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = referenceNumber,
+            Consecutivo = RadicadoFixture.ConsecutivoDe(referenceNumber),
             Status = TramiteEstado.Borrador,
             Plate = placa,
             Vin = vin,
@@ -94,30 +95,51 @@ public sealed class BusquedaTextoLibreRepositoryTests
         return items.Select(i => i.ReferenceNumber).ToList();
     }
 
-    // ── El radicado casa EXACTO ───────────────────────────────────────────────────────────────
+    // ── El radicado casa EXACTO, leído como radicado (HU #12371 AC7) ─────────────────────────
 
     [Fact]
     public async Task Radicado_CasaExacto_YNoPorSubcadena()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var db = NewContext(nameof(Radicado_CasaExacto_YNoPorSubcadena));
-        db.ProcedureInstances.AddRange(Tramite("1"), Tramite("10"), Tramite("11"), Tramite("100"));
+        db.ProcedureInstances.AddRange(
+            Tramite("FT1-0000001"), Tramite("FT1-0000010"), Tramite("FT2-0000011"), Tramite("FT1-0000100"));
         await db.SaveChangesAsync(ct);
 
         // Con subcadena, buscar «1» devolvería los cuatro: un resultado inútil con apariencia de
         // filtro. Quien teclea un radicado quiere ESE trámite.
-        (await BuscarAsync(db, "1")).Should().BeEquivalentTo(["1"]);
+        (await BuscarAsync(db, "1")).Should().BeEquivalentTo(["FT1-0000001"]);
+    }
+
+    [Theory]
+    [InlineData("12")]
+    [InlineData("0000012")]
+    [InlineData("FT1-0000012")]
+    [InlineData("ft1-0000012")]
+    [InlineData("ft1 12")]
+    [InlineData("  FT1-0000012 ")]
+    public async Task Radicado_SeLeeComoLoEscribeElUsuario(string termino)
+    {
+        // El usuario lo copia de un correo (FT1-0000012), lo dicta por teléfono (12) o lo teclea a
+        // medias (ft1 12): todos son el mismo trámite.
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext($"{nameof(Radicado_SeLeeComoLoEscribeElUsuario)}-{termino}");
+        db.ProcedureInstances.AddRange(Tramite("FT1-0000012"), Tramite("FT1-0000120"));
+        await db.SaveChangesAsync(ct);
+
+        (await BuscarAsync(db, termino)).Should().BeEquivalentTo(["FT1-0000012"]);
     }
 
     [Fact]
-    public async Task Radicado_ConEspaciosAlrededor_SigueCasando()
+    public async Task Radicado_ConPrefijoDeOtraFamilia_NoCasa()
     {
+        // El prefijo, cuando el usuario lo escribe, se respeta: FT2-0000012 no es la matrícula 12.
         var ct = TestContext.Current.CancellationToken;
-        await using var db = NewContext(nameof(Radicado_ConEspaciosAlrededor_SigueCasando));
-        db.ProcedureInstances.Add(Tramite("4571"));
+        await using var db = NewContext(nameof(Radicado_ConPrefijoDeOtraFamilia_NoCasa));
+        db.ProcedureInstances.Add(Tramite("FT1-0000012"));
         await db.SaveChangesAsync(ct);
 
-        (await BuscarAsync(db, "  4571 ")).Should().BeEquivalentTo(["4571"]);
+        (await BuscarAsync(db, "FT2-0000012")).Should().BeEmpty();
     }
 
     // ── Alcance de la coincidencia ────────────────────────────────────────────────────────────

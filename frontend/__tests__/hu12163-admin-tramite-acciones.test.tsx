@@ -259,6 +259,25 @@ describe('HU #12163 — AC2: Aprobado deshabilita Cambiar estado y Anular', () =
   });
 });
 
+// Bug #12376, defecto 2 — un trámite ya Anulado no debe poder seleccionarse de nuevo para anular
+// (el backend ahora lo rechaza con CANNOT_ANNUL_ALREADY; el frontend evita el viaje redondo).
+describe('HU #12163 / Bug #12376 — Anulado deshabilita "Anular"', () => {
+  it('en un trámite ya Anulado, "Anular" está deshabilitada con motivo', async () => {
+    setToken(['AdminTramiteAnular']);
+    mocks.listInstances.mockResolvedValue([makeInstance({ estado: 'anulado' })]);
+    renderTable();
+    await screen.findByText('P0001');
+    await abrirAcciones();
+
+    const anular = screen.getByRole('menuitem', { name: 'Anular' });
+    expect(anular).toBeDisabled();
+    expect(anular).toHaveAttribute('title', 'Este trámite ya está Anulado.');
+
+    await userEvent.click(anular);
+    expect(mocks.adminAnular).not.toHaveBeenCalled();
+  });
+});
+
 describe('HU #12163 — AC3: Cambiar estado (confirmación + feedback)', () => {
   beforeEach(() => {
     setToken(['AdminTramiteCambiarEstado']);
@@ -531,6 +550,42 @@ describe('HU #12163 — Reenviar validación de identidad', () => {
     expect(within(select).getByRole('option', { name: 'Vendedor · Ana Gómez' })).toBeInTheDocument();
     expect(within(select).getByRole('option', { name: 'Comprador · Juan Pérez' })).toBeInTheDocument();
     expect(within(dialog).getByText(/Correo registrado:/)).toBeInTheDocument();
+  });
+
+  // Verificación en vivo del Bug #12376 destapó este gap: un trámite con identidad ya `aprobado`
+  // (incluida la reusada de otro trámite, HU #10350) ofrecía "Reenviar validación" igual, y el
+  // backend respondía con un error confuso (IdentidadAprobada o incluso NoEncontrado cuando la
+  // validación pertenece a OTRO trámite). El frontend ahora lo deshabilita antes de intentarlo.
+  it('con identidad ya aprobada, "Reenviar validación" está deshabilitada', async () => {
+    mocks.listInstances.mockResolvedValue([
+      makeInstance({ identityValidationStatus: 'aprobado' }),
+    ]);
+    renderTable();
+    await screen.findByText('P0001');
+    await abrirAcciones();
+
+    const item = screen.getByRole('menuitem', { name: 'Reenviar validación' });
+    expect(item).toBeDisabled();
+    expect(item).toHaveAttribute(
+      'title',
+      'La identidad de este trámite ya está aprobada: no hay nada que reenviar.',
+    );
+    await userEvent.click(item);
+    expect(mocks.listBiometricExpediente).not.toHaveBeenCalled();
+  });
+
+  it('sobre un trámite Anulado, "Reenviar validación" está deshabilitada', async () => {
+    mocks.listInstances.mockResolvedValue([makeInstance({ estado: 'anulado' })]);
+    renderTable();
+    await screen.findByText('P0001');
+    await abrirAcciones();
+
+    const item = screen.getByRole('menuitem', { name: 'Reenviar validación' });
+    expect(item).toBeDisabled();
+    expect(item).toHaveAttribute(
+      'title',
+      'La identidad ya no es accionable en este estado del trámite.',
+    );
   });
 });
 

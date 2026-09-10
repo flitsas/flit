@@ -206,8 +206,14 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     render(<OtDashboard />);
 
     expect(await screen.findByRole("heading", { name: "Tu cola de trabajo" })).toBeInTheDocument();
-    // El primer mensaje cuenta el estado real de la cola, no un texto fijo.
-    expect(screen.getByText(/Tienes 3 trámites esperando tu decisión/)).toBeInTheDocument();
+    // El primer mensaje cuenta el estado real de la cola, no un texto fijo. Con `masDe7Dias: 0`
+    // (fixture PANEL) no menciona estancados, pero sí la mediana de decisión de hoy — ambos datos
+    // ya vienen en el mismo panel operativo, sin llamada nueva (Opción A).
+    expect(
+      screen.getByText(
+        "Tienes 3 trámites esperando tu decisión. Tu mediana de decisión hoy es de 6 h. Los datos son del día calendario de Bogotá.",
+      ),
+    ).toBeInTheDocument();
     // Los mensajes de relleno que existían antes de la HU #12242 ya no se muestran.
     expect(screen.queryByText(/Lo que se envejece, primero/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Reportes del organismo/)).not.toBeInTheDocument();
@@ -219,6 +225,20 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     // El nombre del organismo NO rota: identifica de quién es la pantalla.
     expect(
       await screen.findByText(/SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA \(11001000\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("con trámites estancados (masDe7Dias > 0), lo menciona dentro de la misma frase de la cola", async () => {
+    fetchOtOperationalPanel.mockResolvedValue({
+      ...PANEL,
+      antiguedad: { ...PANEL.antiguedad, masDe7Dias: 2 },
+    });
+    render(<OtDashboard />);
+
+    expect(
+      await screen.findByText(
+        "Tienes 3 trámites esperando tu decisión, 2 llevan más de 7 días esperando. Tu mediana de decisión hoy es de 6 h. Los datos son del día calendario de Bogotá.",
+      ),
     ).toBeInTheDocument();
   });
 

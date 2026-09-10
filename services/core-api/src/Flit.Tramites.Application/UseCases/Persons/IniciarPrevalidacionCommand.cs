@@ -327,6 +327,7 @@ public sealed class IniciarPrevalidacionHandler(
             DocumentType = subject.TipoDocumento,
             DocumentNumber = subject.NumeroDocumento,
             Email = subject.Email,
+            RegisteredEmail = subject.Email,
             Status = status,
             TokenHash = tokenHash ?? BiometricToken.Hash(BiometricToken.Generate()),
             ExpiresAt = expiresAt ?? now.AddHours(BiometricRules.TokenTtlHoras),

@@ -537,7 +537,9 @@ export function TramitesFiltrosBar({
   fieldsError,
   search,
   onSearchChange,
-  searchPlaceholder = 'Buscar radicado, placa, VIN...',
+  // HU #12372 — el ejemplo enseña el formato del radicado (FT1-0000012) sin decir que sea lo
+  // único que acepta: el número solo (12) y el prefijo a medias (ft1 12) también encuentran.
+  searchPlaceholder = 'Buscar radicado (FT1-0000012), placa, VIN...',
   searchAriaLabel = 'Buscar trámites',
   onAplicar,
   onEmpezarDeCero,
