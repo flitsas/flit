@@ -135,6 +135,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.FieldValues)
             .Include(x => x.StatusHistory)
             .Include(x => x.Actors)
+            // Bug #12376, defectos 3/4 — el detalle exponía StatusHistory/Actors pero nunca la bitácora
+            // append-only (reenvío/reasignación admin escribían el evento, pero ningún endpoint lo leía).
+            .Include(x => x.Events)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
     public Task<ProcedureInstance?> GetByIdWithActorsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
