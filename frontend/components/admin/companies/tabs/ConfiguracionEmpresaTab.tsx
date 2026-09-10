@@ -251,6 +251,35 @@ export function ConfiguracionEmpresaTab({
         )}
       </fieldset>
 
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-xs font-semibold">Módulos activos del dashboard</legend>
+        <p className="mb-2 mt-0.5 max-w-md text-[11px] opacity-60">
+          Decide qué servicios ve esta compañía en su dashboard. No hay regla de &ldquo;al menos
+          uno activo&rdquo;: se pueden apagar los 3 sin bloquear el guardado.
+        </p>
+        <ToggleSwitch
+          id="tramitesModuleEnabled"
+          label="Módulo de Trámites"
+          description="Habilita el módulo de Trámites en el dashboard de la compañía."
+          checked={form.tramitesModuleEnabled}
+          onChange={(v) => onChange({ tramitesModuleEnabled: v })}
+        />
+        <ToggleSwitch
+          id="comparendosModuleEnabled"
+          label="Módulo de Comparendos"
+          description="Habilita el módulo de Comparendos en el dashboard de la compañía."
+          checked={form.comparendosModuleEnabled}
+          onChange={(v) => onChange({ comparendosModuleEnabled: v })}
+        />
+        <ToggleSwitch
+          id="resolucionesModuleEnabled"
+          label="Módulo de Resoluciones"
+          description="Habilita el módulo de Resoluciones en el dashboard de la compañía."
+          checked={form.resolucionesModuleEnabled}
+          onChange={(v) => onChange({ resolucionesModuleEnabled: v })}
+        />
+      </fieldset>
+
       <ConsultaProvidersSection form={form} onChange={onChange} fieldErrors={fieldErrors} />
 
       <AvaluoProvidersSection form={form} onChange={onChange} fieldErrors={fieldErrors} />

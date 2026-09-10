@@ -168,6 +168,9 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.ConsultationProviderConfig = SerializeConsultationConfig(settings.ConsultationProviderConfig);
         policy.AvaluoProviderConfig = SerializeAvaluoConfig(settings.AvaluoProviderConfig);
         policy.FinesQuerySource = settings.FinesQuerySource;
+        policy.TramitesModuleEnabled = settings.TramitesModuleEnabled;
+        policy.ComparendosModuleEnabled = settings.ComparendosModuleEnabled;
+        policy.ResolucionesModuleEnabled = settings.ResolucionesModuleEnabled;
     }
 
     private static TenantSettings Map(TenantOperationalPolicy entity) => new()
@@ -195,6 +198,9 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         ConsultationProviderConfig = DeserializeConsultationConfig(entity.ConsultationProviderConfig),
         AvaluoProviderConfig = DeserializeAvaluoConfig(entity.AvaluoProviderConfig),
         FinesQuerySource = TenantSettingsCodes.ParseFinesSource(entity.FinesQuerySource) ?? TenantSettingsCodes.FinesSourceExternal,
+        TramitesModuleEnabled = entity.TramitesModuleEnabled,
+        ComparendosModuleEnabled = entity.ComparendosModuleEnabled,
+        ResolucionesModuleEnabled = entity.ResolucionesModuleEnabled,
     };
 
     private static List<string> DeserializePaymentMethods(string json)

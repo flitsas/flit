@@ -15,13 +15,14 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Clock,
   ExternalLink,
   FileText,
   CheckCircle,
   Car,
 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { fetchAnalyticsOverview, fetchMonthlyTrend } from "@/lib/api/analytics";
+import { fetchActiveModules, fetchAnalyticsOverview, fetchMonthlyTrend } from "@/lib/api/analytics";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import { tramitesClient } from "@/lib/api/tramites-client";
 import { getToken } from "@/lib/api/client";
@@ -34,6 +35,7 @@ import { DateRangeFilter } from "./_reportes/DateRangeFilter";
 import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
 import { ApiError } from "@/lib/api/types";
 import type {
+  ActiveModulesResponse,
   AnalyticsOverviewResponse,
   CategoryMetrics,
   CompanyListItem,
@@ -188,6 +190,14 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const [biometricStatus, setBiometricStatus] = useState<UiStatus>("loading");
   const [biometricErrorMessage, setBiometricErrorMessage] = useState<string>();
 
+  // Módulos activos del tenant (HU #12253, Feature #12249) — Trámites/Comparendos/
+  // Resoluciones, fuente y ciclo de vida independientes del overview. `null` mientras
+  // carga o si la consulta falla; los flags derivados asumen `true` por defecto (AC1, AC5)
+  // para no ocultar Trámites ni mostrar prematuramente las tarjetas "Próximamente".
+  const [activeModules, setActiveModules] = useState<ActiveModulesResponse | null>(null);
+  const [activeModulesStatus, setActiveModulesStatus] = useState<UiStatus>("loading");
+  const [activeModulesErrorMessage, setActiveModulesErrorMessage] = useState<string>();
+
   // Banner carousel
   const [slide, setSlide] = useState(0);
 
@@ -315,6 +325,39 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
     return () => controller.abort();
   }, [range, tenantId, isSuper, reloadKey]);
 
+  // Cargar flags de módulos activos (Trámites/Comparendos/Resoluciones), independiente del
+  // rango de fechas — no depende de `range` (AC5: un fallo aquí no debe tumbar ni bloquear
+  // el resto de secciones del dashboard, cada una con su propio status aislado).
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadActiveModules() {
+      // El endpoint NO tiene vista global (son los flags de UN tenant): un SuperAdmin en
+      // "Todas las compañías" recibiría 400 en cada intento, y sin este atajo la sección quedaba
+      // en error permanente sin importar qué se cambiara en configuración — el toggle nunca
+      // llegaba a verse reflejado porque la llamada ni siquiera se hacía contra un tenant
+      // concreto. Mismo patrón que `loadBiometrics` (líneas arriba) para el mismo caso.
+      if (isSuper && !tenantId) {
+        setActiveModulesStatus("empty");
+        return;
+      }
+      setActiveModulesStatus("loading");
+      try {
+        const res = await fetchActiveModules(tenantId || undefined, controller.signal);
+        if (controller.signal.aborted) return;
+        setActiveModules(res);
+        setActiveModulesStatus("ready");
+      } catch (err) {
+        if (controller.signal.aborted || (err as Error).name === "AbortError") return;
+        setActiveModulesErrorMessage(describeError(err));
+        setActiveModulesStatus("error");
+      }
+    }
+
+    void loadActiveModules();
+    return () => controller.abort();
+  }, [tenantId, isSuper, reloadKey]);
+
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
   // Derivar métricas del overview
@@ -348,6 +391,36 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const overviewStatus: UiStatus = status === "ready" ? (overviewHasData ? "ready" : "empty") : status;
   const chartHasData = chartData.length > 0;
   const chartStatus: UiStatus = status === "ready" ? (chartHasData ? "ready" : "empty") : status;
+
+  // Flags de módulos del tenant (AC1, AC2, AC3, AC4 — redefinidos tras validar en vivo con el
+  // usuario: la tarjeta "Próximamente" avisa de un módulo que la compañía SÍ activó pero que
+  // todavía no tiene contenido real construido, no al revés. Si el flag está apagado, la
+  // compañía no lo contrató: no tiene sentido mencionárselo.
+  //
+  // Trámites (AC1) mantiene su semántica original — mientras carga o si falla, se asume
+  // habilitado (`true`) para no parpadear, ya con contenido real. Comparendos/Resoluciones
+  // (AC2-AC4) mientras carga o si falla se asumen APAGADOS (`false`): más seguro no anunciar
+  // un módulo de más que anunciar uno que la compañía no activó.
+  const tramitesModuleEnabled = activeModules?.tramitesModuleEnabled ?? true;
+  const comparendosModuleEnabled = activeModules?.comparendosModuleEnabled ?? false;
+  const resolucionesModuleEnabled = activeModules?.resolucionesModuleEnabled ?? false;
+  const comingSoonModules = [
+    { key: "comparendos", label: "Comparendos", enabled: comparendosModuleEnabled },
+    { key: "resoluciones", label: "Resoluciones", enabled: resolucionesModuleEnabled },
+  ].filter((m) => m.enabled === true);
+
+  // Estado compuesto de la fila "Próximamente" (AC5): mientras carga o si falla, el
+  // UiStateBoundary aislado lo refleja SIN afectar el resto del dashboard (overview,
+  // biometricStats, etc. tienen su propio status independiente).
+  const comingSoonStatus: UiStatus =
+    activeModulesStatus === "ready" ? (comingSoonModules.length > 0 ? "ready" : "empty") : activeModulesStatus;
+  // "Empty" cubre dos causas distintas: sin compañía elegida (SuperAdmin) vs. ningún módulo
+  // adicional activado para la compañía concreta — cada una con su propio mensaje, mismo patrón
+  // que `emptyMessage` de biometricStatus arriba.
+  const comingSoonEmptyMessage =
+    isSuper && !tenantId
+      ? "Selecciona una compañía para ver sus módulos activos."
+      : "Tu compañía no tiene módulos adicionales activados.";
 
   // Defensivo: si un banner falla después de posicionar el índice en él (p. ej. `onError` de la
   // última imagen visible), `slides` puede encoger antes de que el índice se reacomode.
@@ -477,94 +550,134 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               />
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3 flex-1">
-            {[
-              { label: "Total Trámites", value: totalTramites, icon: FileText, color: "#557EFF" },
-              { label: "Matrículas", value: matriculas, icon: Car, color: "#00DBD5" },
-              { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00" },
-              { label: "Completados", value: completados, icon: CheckCircle, color: "#8CC63F" },
-            ].map((k) => {
-              const Icon = k.icon;
-              const isError = status === "error";
-              return (
-                <div
-                  key={k.label}
-                  className="rounded-2xl p-4 flex items-center justify-between bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
-                >
-                  <div>
-                    <p className="text-[11px] opacity-70 font-medium">{k.label}</p>
-                    {isError ? (
-                      <p
-                        className="text-xl font-bold mt-1 flex items-center gap-1.5"
-                        style={{ color: "#FF4E00" }}
-                        title={errorMessage ?? "No se pudo cargar este indicador."}
-                      >
-                        <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                        <span>—</span>
-                        <span className="sr-only">Error al cargar {k.label.toLowerCase()}</span>
-                      </p>
-                    ) : (
-                      <p className="text-3xl font-bold mt-1" style={{ color: k.color }}>
-                        {status === "loading" ? "—" : k.value}
-                      </p>
-                    )}
-                  </div>
+          {/* KPIs de Trámites — solo visibles si el módulo está habilitado para el tenant
+              (AC1: `true` por defecto mientras carga, evita ocultar la sección con parpadeo). */}
+          {tramitesModuleEnabled !== false && (
+            <div className="grid grid-cols-2 gap-3 flex-1">
+              {[
+                { label: "Total Trámites", value: totalTramites, icon: FileText, color: "#557EFF" },
+                { label: "Matrículas", value: matriculas, icon: Car, color: "#00DBD5" },
+                { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00" },
+                { label: "Completados", value: completados, icon: CheckCircle, color: "#8CC63F" },
+              ].map((k) => {
+                const Icon = k.icon;
+                const isError = status === "error";
+                return (
                   <div
-                    className="h-11 w-11 rounded-xl grid place-items-center"
-                    style={{ background: isError ? "#FF4E001A" : `${k.color}1A` }}
+                    key={k.label}
+                    className="rounded-2xl p-4 flex items-center justify-between bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
                   >
-                    <Icon className="h-5 w-5" style={{ color: isError ? "#FF4E00" : k.color }} />
+                    <div>
+                      <p className="text-[11px] opacity-70 font-medium">{k.label}</p>
+                      {isError ? (
+                        <p
+                          className="text-xl font-bold mt-1 flex items-center gap-1.5"
+                          style={{ color: "#FF4E00" }}
+                          title={errorMessage ?? "No se pudo cargar este indicador."}
+                        >
+                          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          <span>—</span>
+                          <span className="sr-only">Error al cargar {k.label.toLowerCase()}</span>
+                        </p>
+                      ) : (
+                        <p className="text-3xl font-bold mt-1" style={{ color: k.color }}>
+                          {status === "loading" ? "—" : k.value}
+                        </p>
+                      )}
+                    </div>
+                    <div
+                      className="h-11 w-11 rounded-xl grid place-items-center"
+                      style={{ background: isError ? "#FF4E001A" : `${k.color}1A` }}
+                    >
+                      <Icon className="h-5 w-5" style={{ color: isError ? "#FF4E00" : k.color }} />
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Módulos aún no habilitados para el tenant ("Próximamente") — HU #12253. Estado
+          aislado (comingSoonStatus): un fallo al consultar los flags no bloquea el resto
+          del dashboard (AC5). */}
+      <UiStateBoundary
+        status={comingSoonStatus}
+        errorMessage={activeModulesErrorMessage}
+        onRetry={retry}
+        emptyMessage={comingSoonEmptyMessage}
+        skeletonRows={1}
+        className="shrink-0"
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
+          {comingSoonModules.map((m) => (
+            <div
+              key={m.key}
+              className="rounded-2xl p-4 flex items-center gap-3 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
+            >
+              <div
+                className="h-11 w-11 rounded-xl grid place-items-center shrink-0"
+                style={{ background: "#7D87981A" }}
+              >
+                <Clock className="h-5 w-5" style={{ color: "#7D8798" }} aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-sm font-bold">{m.label}</p>
+                <p className="text-[11px] opacity-70 font-medium">Próximamente</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </UiStateBoundary>
 
       {/* Fila inferior: Distribución general + Validaciones Biométricas (cada una con su propio estado) + gráfica mensual (chartStatus) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <UiStateBoundary
-            status={overviewStatus}
-            errorMessage={errorMessage}
-            onRetry={retry}
-            emptyMessage="No hay trámites para el rango seleccionado."
-            skeletonRows={3}
-          >
-            {/* Distribución general de trámites por estado (las 4 categorías, no solo traspasos) */}
-            <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
-              <h2 className="text-sm font-bold mb-3">Distribución General de Trámites</h2>
-              {globalFunnel.length === 0 ? (
-                <p className="text-xs opacity-50 mt-2">Sin trámites en el rango seleccionado.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {globalFunnel.map((f, i) => {
-                    const color = STATUS_COLORS[f.status] ?? "#557EFF";
-                    return (
-                      <li
-                        key={f.status}
-                        className="flex items-center gap-3 p-2 rounded-xl bg-[rgba(85,126,255,0.06)] dark:bg-white/5"
-                      >
-                        <span
-                          className="h-7 w-7 rounded-full grid place-items-center text-[11px] font-bold text-white shrink-0"
-                          style={{ background: color }}
+          {/* Distribución general de trámites — solo visible si el módulo Trámites está
+              habilitado (AC1), mismo default `true` que el bloque de KPIs. */}
+          {tramitesModuleEnabled !== false && (
+            <UiStateBoundary
+              status={overviewStatus}
+              errorMessage={errorMessage}
+              onRetry={retry}
+              emptyMessage="No hay trámites para el rango seleccionado."
+              skeletonRows={3}
+            >
+              {/* Distribución general de trámites por estado (las 4 categorías, no solo traspasos) */}
+              <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
+                <h2 className="text-sm font-bold mb-3">Distribución General de Trámites</h2>
+                {globalFunnel.length === 0 ? (
+                  <p className="text-xs opacity-50 mt-2">Sin trámites en el rango seleccionado.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {globalFunnel.map((f, i) => {
+                      const color = STATUS_COLORS[f.status] ?? "#557EFF";
+                      return (
+                        <li
+                          key={f.status}
+                          className="flex items-center gap-3 p-2 rounded-xl bg-[rgba(85,126,255,0.06)] dark:bg-white/5"
                         >
-                          {i + 1}
-                        </span>
-                        <span className="flex-1 text-xs font-medium">
-                          {STATUS_LABELS[f.status] ?? f.status}
-                        </span>
-                        <span className="text-base font-bold" style={{ color }}>
-                          {f.count}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-          </UiStateBoundary>
+                          <span
+                            className="h-7 w-7 rounded-full grid place-items-center text-[11px] font-bold text-white shrink-0"
+                            style={{ background: color }}
+                          >
+                            {i + 1}
+                          </span>
+                          <span className="flex-1 text-xs font-medium">
+                            {STATUS_LABELS[f.status] ?? f.status}
+                          </span>
+                          <span className="text-base font-bold" style={{ color }}>
+                            {f.count}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            </UiStateBoundary>
+          )}
 
           <UiStateBoundary
             status={biometricStatus}
@@ -605,68 +718,71 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           </UiStateBoundary>
         </div>
 
-        {/* Gráfico mensual por categoría — tendencia de 6 meses, independiente del rango filtrado */}
-        <UiStateBoundary
-          status={chartStatus}
-          errorMessage={errorMessage}
-          onRetry={retry}
-          emptyMessage="No hay datos de tendencia en los últimos 6 meses."
-          skeletonRows={3}
-        >
-          <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
-            <h2 className="text-sm font-bold mb-3">Seguimiento operativo</h2>
-            <div className="h-[280px] -mx-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="rgba(127,127,127,0.18)"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="m"
-                    tick={{ fontSize: 10, fill: "currentColor" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: "currentColor" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "rgba(85,126,255,0.08)" }}
-                    contentStyle={{
-                      background: "rgba(22,39,68,0.95)",
-                      border: "none",
-                      borderRadius: 10,
-                      color: "#fff",
-                      fontSize: 11,
-                    }}
-                    labelStyle={{ color: "#00DBD5", fontWeight: 600 }}
-                  />
-                  <Bar dataKey="Matrículas" fill="#557EFF" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Traspasos" fill="#00DBD5" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Otros" fill="#F9AC00" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex items-center justify-center gap-3 mt-1 text-[9px]">
-              {(
-                [
-                  { color: "#557EFF", label: "Matrículas" },
-                  { color: "#00DBD5", label: "Traspasos" },
-                  { color: "#F9AC00", label: "Otros" },
-                ] as const
-              ).map(({ color, label }) => (
-                <span key={label} className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full" style={{ background: color }} />
-                  {label}
-                </span>
-              ))}
-            </div>
-          </section>
-        </UiStateBoundary>
+        {/* Gráfico mensual por categoría — tendencia de 6 meses, independiente del rango
+            filtrado. Solo visible si el módulo Trámites está habilitado (AC1). */}
+        {tramitesModuleEnabled !== false && (
+          <UiStateBoundary
+            status={chartStatus}
+            errorMessage={errorMessage}
+            onRetry={retry}
+            emptyMessage="No hay datos de tendencia en los últimos 6 meses."
+            skeletonRows={3}
+          >
+            <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
+              <h2 className="text-sm font-bold mb-3">Seguimiento operativo</h2>
+              <div className="h-[280px] -mx-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="rgba(127,127,127,0.18)"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="m"
+                      tick={{ fontSize: 10, fill: "currentColor" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: "currentColor" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "rgba(85,126,255,0.08)" }}
+                      contentStyle={{
+                        background: "rgba(22,39,68,0.95)",
+                        border: "none",
+                        borderRadius: 10,
+                        color: "#fff",
+                        fontSize: 11,
+                      }}
+                      labelStyle={{ color: "#00DBD5", fontWeight: 600 }}
+                    />
+                    <Bar dataKey="Matrículas" fill="#557EFF" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Traspasos" fill="#00DBD5" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Otros" fill="#F9AC00" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center justify-center gap-3 mt-1 text-[9px]">
+                {(
+                  [
+                    { color: "#557EFF", label: "Matrículas" },
+                    { color: "#00DBD5", label: "Traspasos" },
+                    { color: "#F9AC00", label: "Otros" },
+                  ] as const
+                ).map(({ color, label }) => (
+                  <span key={label} className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </section>
+          </UiStateBoundary>
+        )}
       </div>
     </div>
   );

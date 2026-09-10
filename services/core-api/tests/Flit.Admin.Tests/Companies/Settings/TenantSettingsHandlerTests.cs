@@ -2,6 +2,7 @@ using Flit.Admin.Application.Auditing;
 using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -226,6 +227,172 @@ public sealed class TenantSettingsHandlerTests
         await using var verify = NewContext(db);
         var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
         policy.PlatePreassignEnabled.Should().BeFalse();
+    }
+
+    // ---------- HU #12250 (Feature #12249): flags de módulos del dashboard ----------
+
+    [Fact]
+    public void HU12250_AC1_Default_ResolvesTramitesOnAndComparendosResolucionesOff()
+    {
+        var tenantId = Guid.NewGuid();
+
+        var settings = TenantSettings.Default(tenantId);
+
+        settings.TramitesModuleEnabled.Should().BeTrue();
+        settings.ComparendosModuleEnabled.Should().BeFalse();
+        settings.ResolucionesModuleEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HU12250_AC1_CreatesRow_WithModuleFlagDefaults_WhenNoConfigurationExists()
+    {
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
+            {
+                TenantId = tenantId,
+                Request = new UpdateTenantSettingsRequest(
+                    new SwitchesMatricula(false, true, false),
+                    BaulFirmasActivo: false,
+                    EnrutamientoSMTP: "FLIT_SMTP",
+                    NotificationTarget: "RADICADOR",
+                    MetodosRecaudo: []),
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeTrue();
+            result.Settings!.TramitesModuleEnabled.Should().BeTrue();
+            result.Settings.ComparendosModuleEnabled.Should().BeFalse();
+            result.Settings.ResolucionesModuleEnabled.Should().BeFalse();
+        }
+
+        await using var verify = NewContext(db);
+        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
+        policy.TramitesModuleEnabled.Should().BeTrue();
+        policy.ComparendosModuleEnabled.Should().BeFalse();
+        policy.ResolucionesModuleEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HU12250_AC3_PersistsModuleFlags_AndAuditsOnlyChangedFields()
+    {
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedPolicy(seed, tenantId,
+                allowInit: true, allowMisc: true, onlyOwn: false, vault: false,
+                channel: "flit_smtp", target: "RADICADOR", payments: "[]");
+        }
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            // Resto idéntico a lo sembrado: solo cambian los 3 flags de módulos.
+            var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
+            {
+                TenantId = tenantId,
+                ChangedBy = ChangedBy,
+                Request = new UpdateTenantSettingsRequest(
+                    new SwitchesMatricula(true, true, false),
+                    BaulFirmasActivo: false,
+                    EnrutamientoSMTP: "FLIT_SMTP",
+                    NotificationTarget: "RADICADOR",
+                    MetodosRecaudo: [],
+                    TramitesModuleEnabled: false,
+                    ComparendosModuleEnabled: true,
+                    ResolucionesModuleEnabled: true),
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeTrue();
+            result.Settings!.TramitesModuleEnabled.Should().BeFalse();
+            result.Settings.ComparendosModuleEnabled.Should().BeTrue();
+            result.Settings.ResolucionesModuleEnabled.Should().BeTrue();
+        }
+
+        await using var verify = NewContext(db);
+        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
+        policy.TramitesModuleEnabled.Should().BeFalse();
+        policy.ComparendosModuleEnabled.Should().BeTrue();
+        policy.ResolucionesModuleEnabled.Should().BeTrue();
+
+        var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
+        audits.Should().HaveCount(3);
+        audits.Should().Contain(a =>
+            a.FieldName == "tramites_module_enabled" && a.OldValue == "true" && a.NewValue == "false");
+        audits.Should().Contain(a =>
+            a.FieldName == "comparendos_module_enabled" && a.OldValue == "false" && a.NewValue == "true");
+        audits.Should().Contain(a =>
+            a.FieldName == "resoluciones_module_enabled" && a.OldValue == "false" && a.NewValue == "true");
+    }
+
+    [Fact]
+    public async Task HU12250_AC4_OmittedModuleFlags_PreservePreviousValues_AndDoNotAudit()
+    {
+        // Cliente viejo: el PUT no incluye los 3 flags nuevos. No deben sobreescribirse a false ni
+        // generar entradas de auditoría — mismo comportamiento que documentosPersonalizadosActivo.
+        var db = NewDbName();
+        var tenantId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                AllowInitialRegistration = true,
+                AllowMiscNewVehicles = true,
+                OnlyOwnVehicles = false,
+                SignatureVaultEnabled = false,
+                NotificationChannel = "flit_smtp",
+                NotificationTarget = "RADICADOR",
+                PaymentMethods = "[]",
+                RuntProviderStrategy = "verifik",
+                RuntFailoverTimeoutMs = 4000,
+                TramitesModuleEnabled = false,
+                ComparendosModuleEnabled = true,
+                ResolucionesModuleEnabled = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            // Payload sin tramitesModuleEnabled/comparendosModuleEnabled/resolucionesModuleEnabled
+            // (cambia solo el baúl de firmas, campo no relacionado).
+            var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
+            {
+                TenantId = tenantId,
+                ChangedBy = ChangedBy,
+                Request = new UpdateTenantSettingsRequest(
+                    new SwitchesMatricula(true, true, false),
+                    BaulFirmasActivo: true,
+                    EnrutamientoSMTP: "FLIT_SMTP",
+                    NotificationTarget: "RADICADOR",
+                    MetodosRecaudo: []),
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeTrue();
+            result.Settings!.TramitesModuleEnabled.Should().BeFalse();
+            result.Settings.ComparendosModuleEnabled.Should().BeTrue();
+            result.Settings.ResolucionesModuleEnabled.Should().BeTrue();
+        }
+
+        await using var verify = NewContext(db);
+        var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
+        policy.TramitesModuleEnabled.Should().BeFalse();
+        policy.ComparendosModuleEnabled.Should().BeTrue();
+        policy.ResolucionesModuleEnabled.Should().BeTrue();
+
+        var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
+        audits.Should().ContainSingle()
+            .Which.FieldName.Should().Be("signature_vault_enabled");
     }
 
     // ---------- AC2: validación 422 sin persistir ni auditar ----------

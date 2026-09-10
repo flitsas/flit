@@ -3,6 +3,7 @@ using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.SetCompanyStatus;
 using Flit.Admin.Application.Companies.UpdateCompany;
+using Flit.Admin.Application.Companies.Settings.GetActiveModules;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
@@ -123,6 +124,9 @@ public static class DependencyInjection
         services.AddScoped<GetTenantSettingsHandler>();
         services.AddScoped<UpdateTenantSettingsHandler>();
         services.AddSingleton<ITenantPolicyResolver, SnapshotTenantPolicyResolver>();
+
+        // HU #12251 (Feature #12249) — flags de módulos activos del dashboard, sin AdminCompanyPolicy.
+        services.AddScoped<GetActiveModulesHandler>();
 
         // HU #10191 — interceptor propiedad vehicular + API whitelist.
         services.AddScoped<IVehicleOwnershipGuard, VehicleOwnershipGuard>();
