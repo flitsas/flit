@@ -55,8 +55,7 @@ public static class UsageEventsEndpoints
 
             // Tenant y userId SIEMPRE del JWT — el body no puede suplantarlos (§4.6).
             var user = httpContext.User;
-            if (!Guid.TryParse(user.FindFirstValue(AdminAuthorization.TenantIdClaimType), out var tenantId)
-                || tenantId == Guid.Empty)
+            if (!RequestTenantResolver.TryResolveNonEmptyTenantId(user, out var tenantId))
             {
                 // Sin tenant no hay a quién atribuir la telemetría: se descarta sin error (best-effort).
                 return Results.Accepted(value: new { accepted = 0 });

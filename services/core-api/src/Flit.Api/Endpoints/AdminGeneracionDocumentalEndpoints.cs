@@ -514,7 +514,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] PreviewRuesCompanyHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token inválido: falta claim tenant_id");
         }
@@ -538,7 +538,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] GenerateRuesDocumentHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token inválido: falta claim tenant_id");
         }
@@ -594,7 +594,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] GenerateTransferenciaHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token invalido: falta claim tenant_id");
         }
@@ -706,7 +706,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] PrefillVehiculoHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token invalido: falta claim tenant_id");
         }
@@ -730,7 +730,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] PrefillPersonaJuridicaHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token invalido: falta claim tenant_id");
         }
@@ -748,7 +748,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] PrefillPersonaNaturalHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token invalido: falta claim tenant_id");
         }
@@ -803,7 +803,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] CreateBatchHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token invalido: falta claim tenant_id");
         }
@@ -877,7 +877,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] GetBatchStatusHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token invalido: falta claim tenant_id");
         }
@@ -906,7 +906,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] ListBatchItemsHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token invalido: falta claim tenant_id");
         }
@@ -952,7 +952,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] DownloadBatchZipHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token invalido: falta claim tenant_id");
         }
@@ -1055,7 +1055,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] ListStandaloneDocumentsHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token invalido: falta claim tenant_id");
         }
@@ -1119,7 +1119,7 @@ public static class AdminGeneracionDocumentalEndpoints
         [FromServices] GetStandaloneDocumentDownloadHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Unauthorized("Token invalido: falta claim tenant_id");
         }
@@ -1191,11 +1191,6 @@ public static class AdminGeneracionDocumentalEndpoints
     private static IResult Unauthorized(string message) =>
         Results.Json(new { error = message }, statusCode: StatusCodes.Status401Unauthorized);
 
-    private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId)
-    {
-        var claim = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        return Guid.TryParse(claim, out tenantId);
-    }
 
     private static Guid? ResolveUserId(ClaimsPrincipal user)
     {

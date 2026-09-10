@@ -57,8 +57,7 @@ public static class AdminPlateRangesEndpoints
         Guid instanceId, RevokePlateRequest request, HttpContext http,
         IOtClientProcedureRepository otRepo, CancellationToken ct)
     {
-        var tenantClaim = http.User.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        if (!Guid.TryParse(tenantClaim, out var otTenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(http.User, out var otTenantId))
         {
             return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "No se pudo resolver el OT.");
         }
@@ -79,8 +78,7 @@ public static class AdminPlateRangesEndpoints
         IPlateAssignmentEmailEnqueuer plateAssignmentEmailEnqueuer,
         ILoggerFactory loggerFactory, CancellationToken ct)
     {
-        var tenantClaim = http.User.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        if (!Guid.TryParse(tenantClaim, out var otTenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(http.User, out var otTenantId))
         {
             return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "No se pudo resolver el OT.");
         }
@@ -233,8 +231,7 @@ public static class AdminPlateRangesEndpoints
         Guid instanceId, UpdatePlateRequest request, HttpContext http,
         IOtClientProcedureRepository otRepo, ILoggerFactory loggerFactory, CancellationToken ct)
     {
-        var tenantClaim = http.User.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        if (!Guid.TryParse(tenantClaim, out var otTenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(http.User, out var otTenantId))
         {
             return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "No se pudo resolver el OT.");
         }
@@ -420,8 +417,7 @@ public static class AdminPlateRangesEndpoints
             return explicitId;
         }
 
-        var tenantClaim = http.User.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        return Guid.TryParse(tenantClaim, out var otTenantId)
+        return RequestTenantResolver.TryResolveTenantId(http.User, out var otTenantId)
             ? await repo.ResolveOfficeIdAsync(otTenantId, ct).ConfigureAwait(false)
             : null;
     }

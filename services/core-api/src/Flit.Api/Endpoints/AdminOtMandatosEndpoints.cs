@@ -198,7 +198,7 @@ public static class AdminOtMandatosEndpoints
         if (user.IsInRole(AdminAuthorization.SuperAdminRole))
             return null;
 
-        if (Guid.TryParse(user.FindFirstValue(AdminAuthorization.TenantIdClaimType), out var tenantId))
+        if (RequestTenantResolver.TryResolveTenantId(user, out var tenantId))
         {
             var profile = await profileRepository
                 .GetByTenantAsync(tenantId, cancellationToken)
