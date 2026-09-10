@@ -39,11 +39,16 @@ function renderPanel(overrides: Partial<React.ComponentProps<typeof BannerFormPa
 }
 
 beforeEach(() => {
-  vi.stubGlobal("URL", {
-    ...URL,
-    createObjectURL: vi.fn(() => "blob:mock-preview"),
-    revokeObjectURL: vi.fn(),
-  });
+  // Extiende la clase real (no un objeto plano): `bannerImageUrl` (vista previa en edición) usa
+  // `new URL(...)` vía `resolveApiUrl`, y un `{ ...URL, ... }` pierde la constructibilidad nativa.
+  const RealURL = URL;
+  vi.stubGlobal(
+    "URL",
+    Object.assign(class extends RealURL {}, {
+      createObjectURL: vi.fn(() => "blob:mock-preview"),
+      revokeObjectURL: vi.fn(),
+    }),
+  );
 });
 
 afterEach(() => {

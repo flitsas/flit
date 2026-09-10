@@ -56,7 +56,11 @@ afterEach(() => {
 
 describe("bannerImageUrl", () => {
   it("arma la ruta pública SIEMPRE a partir del id, nunca del campo imageUrl crudo", () => {
-    expect(bannerImageUrl("b1")).toBe("/api/v1/public/banners/b1/image");
+    // Absoluta (resolveApiUrl/new URL sobre el origin de jsdom, http://localhost:3000 por defecto)
+    // en vez de relativa: concatenar strings duplicaba /api/v1 cuando NEXT_PUBLIC_API_BASE_URL ya
+    // trae el sufijo /api/v1 (DEV/QA/PDN), porque un path absoluto ("/...") ignora el path del
+    // origin al usar new URL(path, origin) en lugar de un template literal.
+    expect(bannerImageUrl("b1")).toBe("http://localhost:3000/api/v1/public/banners/b1/image");
   });
 });
 
