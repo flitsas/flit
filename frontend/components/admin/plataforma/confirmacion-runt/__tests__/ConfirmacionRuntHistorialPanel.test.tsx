@@ -95,6 +95,7 @@ function renderPanel() {
 describe("ConfirmacionRuntHistorialPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     search = "";
     listRuntConfirmationAttempts.mockResolvedValue({ items: [fila, pendiente], total: 2, page: 1, pageSize: 25 });
     listRuntConfirmationRuns.mockResolvedValue({ items: [run], total: 1, page: 1, pageSize: 30 });
@@ -130,7 +131,22 @@ describe("ConfirmacionRuntHistorialPanel", () => {
     expect(within(tabla).getByText("Confirmado")).toBeInTheDocument();
     expect(within(tabla).getByText("Pendiente")).toBeInTheDocument();
     expect(within(tabla).getAllByRole("button", { name: "Ver" })).toHaveLength(2);
-    expect(listRuntConfirmationAttempts).toHaveBeenCalledWith(expect.objectContaining({}), 1, 25, expect.anything());
+    expect(listRuntConfirmationAttempts).toHaveBeenCalledWith(expect.objectContaining({}), 1, 10, expect.anything());
+  });
+
+  it("AC1b — «Filas por página» ofrece 10/25/50/100, pide esa cantidad al servidor y la recuerda en la sesión", async () => {
+    listRuntConfirmationAttempts.mockResolvedValue({ items: [fila, pendiente], total: 120, page: 1, pageSize: 10 });
+    const user = userEvent.setup();
+    renderPanel();
+    await screen.findByRole("table", { name: "Historial de intentos de confirmación RUNT" });
+    await waitFor(() => expect(listRuntConfirmationAttempts).toHaveBeenLastCalledWith(expect.anything(), 1, 10, expect.anything()));
+
+    const selector = screen.getByRole("combobox", { name: "Filas por página" });
+    expect(within(selector).getAllByRole("option").map((o) => o.textContent)).toEqual(["10", "25", "50", "100"]);
+
+    await user.selectOptions(selector, "50");
+    await waitFor(() => expect(listRuntConfirmationAttempts).toHaveBeenLastCalledWith(expect.anything(), 1, 50, expect.anything()));
+    expect(sessionStorage.getItem("confirmacion-runt.historial.pageSize")).toBe("50");
   });
 
   it("AC2 — cambiar un filtro lo lleva a la URL; filtrar por corrida muestra su resumen", async () => {
@@ -141,7 +157,7 @@ describe("ConfirmacionRuntHistorialPanel", () => {
     const resumen = await screen.findByTestId("confirmacion-runt-ultima-corrida");
     expect(within(resumen).getByText("Resumen de la corrida")).toBeInTheDocument();
     expect(within(resumen).getByText(/6 llamadas al proveedor/)).toBeInTheDocument();
-    expect(listRuntConfirmationAttempts).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1" }), 1, 25, expect.anything());
+    expect(listRuntConfirmationAttempts).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1" }), 1, 10, expect.anything());
 
     await user.selectOptions(screen.getByLabelText("Resultado"), "pending");
     expect(replace).toHaveBeenCalledWith("/admin/plataforma/confirmacion-runt/historial?runId=run-1&verdict=pending");

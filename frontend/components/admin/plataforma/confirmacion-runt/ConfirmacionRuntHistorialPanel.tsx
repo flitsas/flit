@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Download, RefreshCw } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -26,7 +26,23 @@ import { HISTORIAL_EXPORT_COLUMNS, HISTORIAL_EXPORT_IDS, proveedorLabel, VERDICT
 import { IntentoDetalle } from "./IntentoDetalle";
 import { UltimaCorridaResumen } from "./UltimaCorridaResumen";
 
-const PAGE_SIZE = 25;
+/** Mismos tamaños que /tramites; el elegido se recuerda durante la sesión (sessionStorage, con guarda). */
+const TAMANOS_DE_PAGINA = [10, 25, 50, 100] as const;
+const PAGE_SIZE_POR_DEFECTO = 10;
+const CLAVE_PAGE_SIZE = "confirmacion-runt.historial.pageSize";
+
+function suscripcionInerte(): () => void {
+  return () => {};
+}
+
+function leerPageSizeGuardado(): number {
+  try {
+    const guardado = Number(sessionStorage.getItem(CLAVE_PAGE_SIZE));
+    return TAMANOS_DE_PAGINA.includes(guardado as (typeof TAMANOS_DE_PAGINA)[number]) ? guardado : PAGE_SIZE_POR_DEFECTO;
+  } catch {
+    return PAGE_SIZE_POR_DEFECTO;
+  }
+}
 const VERDICTS: RuntConfirmationVerdict[] = ["confirmed", "pending", "discrepancy", "unverifiable", "error"];
 
 type Estado = "loading" | "error" | "ready";
@@ -95,6 +111,12 @@ export function ConfirmacionRuntHistorialPanel() {
   const [exportando, setExportando] = useState(false);
   const [exportAviso, setExportAviso] = useState<string | null>(null);
 
+  // Tamaño de página como en /tramites: se lee con useSyncExternalStore porque sessionStorage no
+  // existe en el render del servidor.
+  const pageSizeGuardado = useSyncExternalStore(suscripcionInerte, leerPageSizeGuardado, () => PAGE_SIZE_POR_DEFECTO);
+  const [pageSizeElegido, setPageSizeElegido] = useState<number | null>(null);
+  const pageSize = pageSizeElegido ?? pageSizeGuardado;
+
   const aplicar = useCallback(
     (cambios: Partial<FiltrosUrl>) => {
       const siguiente: FiltrosUrl = { ...filtros, ...cambios };
@@ -121,7 +143,7 @@ export function ConfirmacionRuntHistorialPanel() {
     const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga vía API (patrón NotificacionesBankPanel)
     setEstado("loading");
-    listRuntConfirmationAttempts(filtroApi, filtros.page, PAGE_SIZE, controller.signal)
+    listRuntConfirmationAttempts(filtroApi, filtros.page, pageSize, controller.signal)
       .then((page) => {
         if (controller.signal.aborted) return;
         setRows(page.items);
@@ -133,7 +155,7 @@ export function ConfirmacionRuntHistorialPanel() {
         setEstado("error");
       });
     return () => controller.abort();
-  }, [filtroApi, filtros.page, recarga]);
+  }, [filtroApi, filtros.page, pageSize, recarga]);
 
   // Catálogos de los filtros: últimas corridas y tipos de trámite. Fallar aquí no tumba la tabla.
   useEffect(() => {
@@ -371,9 +393,19 @@ export function ConfirmacionRuntHistorialPanel() {
         minWidth={960}
         pagination={{
           page: filtros.page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           totalCount: total,
           onPageChange: (page) => aplicar({ page }),
+          pageSizeOptions: TAMANOS_DE_PAGINA,
+          onPageSizeChange: (n) => {
+            setPageSizeElegido(n);
+            try {
+              sessionStorage.setItem(CLAVE_PAGE_SIZE, String(n));
+            } catch {
+              // ventana privada: se queda en memoria y ya
+            }
+            if (filtros.page !== 1) aplicar({ page: 1 });
+          },
         }}
         renderExpanded={(r) =>
           expandido === r.id ? (
