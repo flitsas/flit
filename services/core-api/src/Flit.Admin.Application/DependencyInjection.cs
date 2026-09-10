@@ -125,6 +125,10 @@ public static class DependencyInjection
         services.AddScoped<Companies.Children.UpdateChildCompany.UpdateChildCompanyHandler>();
         services.AddScoped<Companies.Children.SetChildCompanyStatus.SetChildCompanyStatusHandler>();
 
+        // HU #12355 — vínculo/desvínculo SuperAdmin.
+        services.AddScoped<Companies.Hierarchy.LinkTenantParent.LinkTenantParentHandler>();
+        services.AddScoped<Companies.Hierarchy.UnlinkTenantParent.UnlinkTenantParentHandler>();
+
         // HU #10190 — configuración operativa + audit log.
         services.AddScoped<GetTenantSettingsHandler>();
         services.AddScoped<UpdateTenantSettingsHandler>();

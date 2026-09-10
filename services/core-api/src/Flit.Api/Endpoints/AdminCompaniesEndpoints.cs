@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.CreateCompany;
+using Flit.Admin.Application.Companies.Hierarchy.LinkTenantParent;
+using Flit.Admin.Application.Companies.Hierarchy.UnlinkTenantParent;
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.SetCompanyStatus;
 using Flit.Admin.Application.Companies.UpdateCompany;
@@ -104,6 +106,23 @@ public static class AdminCompaniesEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
+
+        // HU #12355 — vincular/desvincular clientes existentes (exclusivo SuperAdmin).
+        group.MapPut("/{tenantId:guid}/parent", LinkParentAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithName("AdminCompanyLinkParent")
+            .WithSummary("Vincula un cliente existente como hijo de una cabeza de grupo")
+            .Produces<CompanyListItem>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        group.MapDelete("/{tenantId:guid}/parent", UnlinkParentAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithName("AdminCompanyUnlinkParent")
+            .WithSummary("Desvincula un cliente hijo de su cabeza de grupo")
+            .Produces<CompanyListItem>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // GET /api/v1/admin/companies/{tenantId}/settings — configuración actual (#10190 AC3).
         group.MapGet("/{tenantId:guid}/settings", GetSettingsAsync)
@@ -402,6 +421,50 @@ public static class AdminCompaniesEndpoints
             ? Results.NotFound(new { error = $"No existe la compañía {tenantId}." })
             : Results.Ok(company);
     }
+
+    private static async Task<IResult> LinkParentAsync(
+        Guid tenantId,
+        LinkParentRequest request,
+        HttpContext httpContext,
+        [FromServices] LinkTenantParentHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(
+            new LinkTenantParentCommand(tenantId, request.ParentTenantId, ResolveUserId(httpContext.User)),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            LinkTenantParentOutcome.Linked => Results.Ok(result.Company),
+            LinkTenantParentOutcome.NotFound => Results.NotFound(new { error = $"No existe la compañía {tenantId}." }),
+            _ => Results.Json(
+                new { errors = new[] { new { field = result.Field, message = result.Message } } },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+        };
+    }
+
+    private static async Task<IResult> UnlinkParentAsync(
+        Guid tenantId,
+        HttpContext httpContext,
+        [FromServices] UnlinkTenantParentHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(
+            new UnlinkTenantParentCommand(tenantId, ResolveUserId(httpContext.User)),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            UnlinkTenantParentOutcome.Unlinked => Results.Ok(result.Company),
+            UnlinkTenantParentOutcome.NotFound => Results.NotFound(new { error = $"No existe la compañía {tenantId}." }),
+            _ => Results.Json(
+                new { error = result.Message },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+        };
+    }
+
+    /// <summary>HU #12355 — cuerpo del vínculo padre-hija.</summary>
+    public sealed record LinkParentRequest(Guid ParentTenantId);
 
     private static async Task<IResult> SetStatusAsync(
         Guid tenantId,
