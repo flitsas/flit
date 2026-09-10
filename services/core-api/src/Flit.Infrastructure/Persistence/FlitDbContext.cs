@@ -303,6 +303,15 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Quipux — bitácora por ejecución del worker (¿corrió el cron? ¿cuántos falló?).
     public DbSet<QuipuxJobRun> QuipuxJobRuns => Set<QuipuxJobRun>();
 
+    // Confirmación RUNT (Feature #12276) — configuración global de fila única, bitácora por corrida
+    // e intentos por trámite. La marca del trámite vive en ProcedureInstance (runt_*).
+    public DbSet<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationSettings> RuntConfirmationSettings =>
+        Set<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationSettings>();
+    public DbSet<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationRun> RuntConfirmationRuns =>
+        Set<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationRun>();
+    public DbSet<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationAttempt> RuntConfirmationAttempts =>
+        Set<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationAttempt>();
+
     // Quipux — configuración operativa (fila única, secretos cifrados). Entidad de persistencia:
     // el dominio los ve en claro, la BD solo cifrados.
     internal DbSet<QuipuxSettingsRow> QuipuxSettings => Set<QuipuxSettingsRow>();

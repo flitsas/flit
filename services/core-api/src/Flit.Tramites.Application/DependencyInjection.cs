@@ -272,6 +272,10 @@ public static class DependencyInjection
         // consultas externas, consumido por los 3 handlers de consulta de abajo.
         services.AddScoped<UseCases.Consultations.ExternalQueryCacheService>();
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
+
+        // Confirmación RUNT (Epic #12234, Feature #12276): configuración global (HU #12277).
+        services.AddScoped<UseCases.RuntConfirmation.GetRuntConfirmationSettingsHandler>();
+        services.AddScoped<UseCases.RuntConfirmation.UpdateRuntConfirmationSettingsHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
         services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();
         // Lookup jurídico RUES (bifurcación del "Consultar RUNT" para persona jurídica / NIT).

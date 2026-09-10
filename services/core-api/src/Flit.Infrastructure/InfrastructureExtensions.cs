@@ -121,6 +121,12 @@ public static class InfrastructureExtensions
         // (SOAT, RTM y registro mercantil) en modelo canónico, con payload crudo para reprocesar.
         services.AddScoped<Flit.Tramites.Application.UseCases.Certifications.ICertificationRepository,
             CertificationRepository>();
+        // Feature #12276 — Confirmación RUNT: configuración global (HU #12277) y su auditoría sobre el
+        // rastro administrativo unificado (IAdminAuditWriter), sin tabla de auditoría nueva.
+        services.AddScoped<Flit.Tramites.Application.UseCases.RuntConfirmation.IRuntConfirmationSettingsRepository,
+            RuntConfirmation.RuntConfirmationSettingsRepository>();
+        services.AddScoped<Flit.Tramites.Application.UseCases.RuntConfirmation.IRuntConfirmationAuditWriter,
+            RuntConfirmation.RuntConfirmationAuditWriter>();
         // HU #10865 — entidad persona/sujeto a nivel tenant (Feature #10864, CF-00, ADR-0030).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonRepository, PersonRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).

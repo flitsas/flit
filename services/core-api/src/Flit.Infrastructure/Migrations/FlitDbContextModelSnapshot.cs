@@ -6968,6 +6968,21 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("prioritario");
 
+                    b.Property<int>("RuntAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("runt_attempts");
+
+                    b.Property<DateTimeOffset?>("RuntConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("runt_confirmed_at");
+
+                    b.Property<string>("RuntFlag")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("runt_flag");
+
                     b.Property<Guid>("ProcedureTypeId")
                         .HasColumnType("uuid")
                         .HasColumnName("procedure_type_id");

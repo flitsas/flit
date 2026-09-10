@@ -133,6 +133,21 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.PlateUpdatedAt)
             .HasColumnName("plate_updated_at");
 
+        // Feature #12276 — marca «Confirmado en RUNT» (HU #12312). Columnas agregadas por migración SQL
+        // cruda (107-F12276-confirmacion-runt.sql; la tabla está ExcludeFromMigrations); aquí solo se
+        // mapean. Es una marca ortogonal al status: la corrida de confirmación nunca lo toca.
+        builder.Property(x => x.RuntConfirmedAt)
+            .HasColumnName("runt_confirmed_at");
+
+        builder.Property(x => x.RuntAttempts)
+            .HasColumnName("runt_attempts")
+            .IsRequired()
+            .HasDefaultValue(0);
+
+        builder.Property(x => x.RuntFlag)
+            .HasColumnName("runt_flag")
+            .HasMaxLength(20);
+
         // Migración V1→V2 — marca de trámite histórico importado (foto de solo lectura). Columna
         // agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea
         // para el modelo EF. Default false = trámite nativo de V2.

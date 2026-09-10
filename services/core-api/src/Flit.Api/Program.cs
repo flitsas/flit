@@ -232,6 +232,7 @@ app.MapAdminOtMandatosEndpoints();
 app.MapAdminPlataformaFurEndpoints();
 app.MapAdminPlataformaNotificacionesEndpoints();
 app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
+app.MapAdminRuntConfirmationEndpoints();
 app.MapAdminLogQxEndpoints();
 app.MapAdminTransitOfficeTenantsEndpoints();
 app.MapAdminMandateSignersEndpoints();
