@@ -48,6 +48,11 @@ public interface ICompanyWriteRepository
     /// sobre <c>identity.tenants</c> y devuelve su proyección de listado actualizada, o
     /// <c>null</c> si el tenant no existe. El <c>code</c> es inmutable (no se toca).
     /// Idempotente: solo persiste si hay cambios reales. El llamador (handler) ya validó.
+    /// HU #12406: al escribir un tipo de cabeza (<see cref="Create.HeadTenantTypes"/>) fija
+    /// <c>is_group_parent = true</c> en la misma operación, y <c>false</c> al salir de él; el cambio
+    /// de tipo queda auditado en <c>admin.tenant_config_audit_logs</c> (valor anterior y nuevo) en la
+    /// misma transacción. Si la base lo rechaza por la jerarquía (cabeza con hijos vigentes) lanza
+    /// <see cref="CompanyHierarchyRejectedException"/>.
     /// </summary>
     Task<CompanyListItem?> UpdateAsync(
         Guid tenantId,

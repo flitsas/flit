@@ -7066,6 +7066,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("origin");
 
+                    b.Property<Guid?>("ParentTenantIdAtCreation")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_tenant_id_at_creation");
+
                     b.Property<string>("PausedObservation")
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)")

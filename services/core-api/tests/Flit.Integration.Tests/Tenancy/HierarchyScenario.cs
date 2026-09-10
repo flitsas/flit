@@ -14,8 +14,9 @@ namespace Flit.Integration.Tests.Tenancy;
 /// HU #12322 (Feature #12254, Épica #12235) — escenario canónico de la jerarquía de clientes para
 /// las suites de paridad y de fuga:
 /// <list type="bullet">
-///   <item><b>P</b> cabeza de grupo (<c>is_group_parent = true</c>) con dos hijos <b>C1</b> y <b>C2</b>
-///   (<c>parent_tenant_id = P</c>).</item>
+///   <item><b>P</b> cabeza de grupo (<c>is_group_parent = true</c> y <c>tenant_type = CONCESION</c>:
+///   desde HU #12406 la clase de la cabeza es su tipo y <c>ck_tenants_group_parent_by_type</c> los
+///   acopla) con dos hijos <b>C1</b> y <b>C2</b> (<c>parent_tenant_id = P</c>).</item>
 ///   <item><b>X</b> cliente ajeno a la red (sin padre ni hijos).</item>
 ///   <item><b>S</b> cliente aislado, sin jerarquía: el «cliente de antes del Feature» (AC1).</item>
 ///   <item><b>O</b> tenant de un organismo de tránsito con perfil sobre la OT <c>Ot1</c>, que solo

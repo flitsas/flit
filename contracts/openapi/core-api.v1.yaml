@@ -9619,11 +9619,13 @@ components:
         code: { type: string, description: Código único del tenant (inmutable). }
         tenantType:
           type: string
-          enum: [RENTING, CONCESIONARIO, FLIT]
+          enum: [RENTING, CONCESIONARIO, FLIT, CONCESION, MARCA_BLANCA]
           description: >-
             Tipo de compañía del catálogo B2B. La migración RestrictTenantTypeCatalog
             normalizó los tipos heredados (p.ej. standard, transit_office) a RENTING y
-            agregó el CHECK ck_tenants_tenant_type, por lo que la BD solo admite estos tres.
+            agregó el CHECK ck_tenants_tenant_type. HU #12406 amplía el catálogo con los
+            dos tipos de CABEZA de grupo (CONCESION | MARCA_BLANCA): la clase de la cabeza
+            es su tipo de compañía y la BD acopla is_group_parent a él.
         isTransitOffice:
           type: boolean
           description: >-
@@ -9674,7 +9676,10 @@ components:
           description: Código único del tenant. Alfanumérico con guion y guion bajo.
         tenantType:
           type: string
-          enum: [RENTING, CONCESIONARIO, FLIT]
+          enum: [RENTING, CONCESIONARIO, FLIT, CONCESION, MARCA_BLANCA]
+          description: >-
+            CONCESION y MARCA_BLANCA (HU #12406) crean una cabeza de grupo: la fila nace con
+            is_group_parent = true en la misma operación.
         estadoActivo: { type: boolean, default: true, description: Estado activo inicial. }
       required: [razonSocial, nit, code, tenantType]
 
@@ -9698,9 +9703,14 @@ components:
           type: string
           description: >-
             Tipo de compañía. Para cambiarlo debe ser del catálogo B2B (RENTING,
-            CONCESIONARIO, FLIT). Si coincide (ignorando mayúsculas) con el tipo actual
-            del tenant se preserva tal cual, lo que permite editar tenants con tipos
-            heredados (p.ej. standard, transit_office) sin alterar su tipo.
+            CONCESIONARIO, FLIT, CONCESION, MARCA_BLANCA). Si coincide (ignorando mayúsculas)
+            con el tipo actual del tenant se preserva tal cual, lo que permite editar tenants
+            con tipos heredados (p.ej. standard, transit_office) sin alterar su tipo.
+            HU #12406: entrar en CONCESION | MARCA_BLANCA marca la cabeza (is_group_parent)
+            y salir de ellos la desmarca, en la misma operación; el cambio de tipo queda
+            auditado (admin.tenant_config_audit_logs, valor anterior y nuevo). Si la cabeza
+            tiene compañías hijas vinculadas, cambiar su tipo devuelve 422 con error en
+            tenantType (la clase es inmutable mientras tenga hijos).
         estadoActivo: { type: boolean, default: true, description: Estado activo. }
         rowVersion:
           type: integer

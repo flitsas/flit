@@ -156,3 +156,16 @@ reflexión las propiedades públicas de 18 DTOs de respuesta de las consultas cu
 | `OtQueryRepository.*`, `OtClientProcedureRepository.GetByIdAsync` y acciones | Mismo `ExecuteOtScopedAsync` + `BuildAccessibleQuery` que Q24. |
 | `MandateConfigAdminService`, `OtProfileRepository.GetByTenantAsync`, `OtRequirementsRepository.GetByTenantAsync` | Configuración por tenant con `FirstOrDefault(t.TenantId == tenantId)`: sin listado que pueda fugar; se cubren por `Flit.Infrastructure.Tests` (InMemory). |
 | Filtros HTTP (`CompanyOwnTenantFilter`, `TenantEnforcementMiddleware`) | Capa Flit.Api: cubiertos por `Flit.Admin.Tests` (`TenantEnforcementMiddlewareScopeTests`, `RequestTenantResolverTests`). |
+
+## Cobertura #12406 — clase de la cabeza como tipo de compañía y padre conservado en el trámite
+
+Suites en `Hierarchy/` (todas heredan de `PostgresTestBase`; el escenario `P` de `HierarchyScenario` nace
+con `tenant_type = CONCESION`, porque desde el DDL 109 `ck_tenants_group_parent_by_type` acopla
+`is_group_parent` al tipo y `TenantSeed.New` lo respeta por defecto):
+
+| Suite | Qué fuerza el motor / el producto |
+|-------|-----------------------------------|
+| `HeadTenantTypeConstraintsTests` | Catálogo de cinco tipos (`ck_tenants_tenant_type`), acoplamiento `is_group_parent = tipo es de cabeza` sin corrección silenciosa, rama (d) del trigger (clase inmutable con hijos vigentes) y vigencia de (a)(b)(c). |
+| `HeadTenantTypeCompanyHandlersTests` | `CreateCompanyHandler` / `UpdateCompanyHandler` reales: alta con `CONCESION` / `MARCA_BLANCA` nace marcada cabeza; cambio de tipo sin hijos aceptado y auditado (`admin.tenant_config_audit_logs`, old/new); con hijos → 422 explícito y nada escrito; paridad de un cliente `RENTING`; el alcance de la cabeza expone su clase. |
+| `ParentSnapshotTests` | `parent_tenant_id_at_creation` escrito por los dos puntos de creación (handler de trámites y repositorio administrativo), inmutable por EF (`AfterSaveBehavior.Throw`), por `db.Update` y por SQL directo (trigger); el desvínculo o cambio de cabeza no lo altera; paridad del cliente aislado; barrido estático de asignaciones. |
+| `HeadTenantTypeMigrationTests` | Migración `20260910140000_HU12406_HeadTenantTypesAndParentSnapshot`: Down/Up sin poblado, DDL idempotente, precondición (cabeza marcada sin tipo de cabeza) y Down con cabeza declarada fallan completos sin dejar nada a medias. |

@@ -104,7 +104,7 @@ public sealed class TenantEnforcementMiddlewareScopeTests
     [Fact]
     public async Task CompanyUser_CabezaDeGrupo_DejaGroup_YTenantIdSigueSiendoElPadre()
     {
-        var resolver = new FakeResolver(id => TenantScope.Group(id, [Child1, Child2]));
+        var resolver = new FakeResolver(id => TenantScope.Group(id, [Child1, Child2], GroupKind.Concesion));
         var ctx = Context("/api/v1/tramites/instances", User("AdminCompany", CompanyTenant), resolver);
 
         var next = await InvokeAsync(ctx);

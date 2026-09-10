@@ -154,7 +154,7 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
     {
         await HierarchyScenario.SeedAsync(Fixture);
         await using var ctx = NewContext();
-        var scope = TenantScope.Group(HierarchyScenario.P, [HierarchyScenario.C1, HierarchyScenario.C2]);
+        var scope = TenantScope.Group(HierarchyScenario.P, [HierarchyScenario.C1, HierarchyScenario.C2], GroupKind.Concesion);
 
         var rows = await ctx.ProcedureInstances.AsNoTracking()
             .WhereTenantInScope(scope, p => p.TenantId)

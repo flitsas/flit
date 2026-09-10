@@ -8,7 +8,8 @@ namespace Flit.Queries.Domain.Tenancy;
 /// fábrica <see cref="All"/>, que es <c>internal</c> y solo la usa el middleware para SuperAdmin.
 /// <list type="bullet">
 ///   <item><see cref="Single"/>: cliente sin jerarquía — lee y escribe sobre sí mismo.</item>
-///   <item><see cref="Group"/>: cabeza de grupo — lee {padre} ∪ hijos, escribe SOLO sobre el padre.</item>
+///   <item><see cref="Group"/>: cabeza de grupo — lee {padre} ∪ hijos, escribe SOLO sobre el padre y
+///   expone la clase de la cabeza (<see cref="GroupKind"/>, HU #12406) leída de la base de datos.</item>
 ///   <item><see cref="All"/>: SuperAdmin — sin filtro (<see cref="ReadTenantIds"/> vacío y
 ///   <see cref="WriteTenantId"/> <c>null</c> únicamente aquí).</item>
 /// </list>
@@ -19,12 +20,13 @@ public sealed class TenantScope
 {
     private static readonly IReadOnlySet<Guid> EmptySet = new HashSet<Guid>();
 
-    private TenantScope(Guid? writeTenantId, IReadOnlySet<Guid> readTenantIds, bool isAll, bool isGroup)
+    private TenantScope(Guid? writeTenantId, IReadOnlySet<Guid> readTenantIds, bool isAll, bool isGroup, GroupKind? groupKind)
     {
         WriteTenantId = writeTenantId;
         ReadTenantIds = readTenantIds;
         IsAll = isAll;
         IsGroup = isGroup;
+        GroupKind = groupKind;
     }
 
     /// <summary>Tenant sobre el que se puede escribir. <c>null</c> SOLO en <see cref="All"/>.</summary>
@@ -40,10 +42,18 @@ public sealed class TenantScope
     public bool IsGroup { get; }
 
     /// <summary>
+    /// Clase de la cabeza de grupo (HU #12406): Concesión o Marca Blanca. Con valor SOLO cuando
+    /// <see cref="IsGroup"/>; <c>null</c> en <see cref="Single"/> y <see cref="All"/>. Sale de
+    /// <c>identity.tenants.tenant_type</c> (CONCESION | MARCA_BLANCA) vía <see cref="ITenantScopeResolver"/>,
+    /// nunca de la petición.
+    /// </summary>
+    public GroupKind? GroupKind { get; }
+
+    /// <summary>
     /// Alcance total (SuperAdmin). <c>internal</c> a propósito: ningún resolver ni capa de aplicación
     /// puede fabricarlo; solo el middleware (<c>InternalsVisibleTo Flit.Api</c>).
     /// </summary>
-    internal static TenantScope All() => new(writeTenantId: null, EmptySet, isAll: true, isGroup: false);
+    internal static TenantScope All() => new(writeTenantId: null, EmptySet, isAll: true, isGroup: false, groupKind: null);
 
     /// <summary>Cliente sin jerarquía: lee y escribe únicamente sobre <paramref name="tenantId"/>.</summary>
     [SuppressMessage("Naming", "CA1720:Identifier contains type name",
@@ -51,18 +61,21 @@ public sealed class TenantScope
     public static TenantScope Single(Guid tenantId)
     {
         RejectEmpty(tenantId, nameof(tenantId));
-        return new TenantScope(tenantId, new HashSet<Guid> { tenantId }, isAll: false, isGroup: false);
+        return new TenantScope(tenantId, new HashSet<Guid> { tenantId }, isAll: false, isGroup: false, groupKind: null);
     }
 
     /// <summary>
     /// Cabeza de grupo: lee {<paramref name="parentTenantId"/>} ∪ <paramref name="childTenantIds"/>,
-    /// escribe solo sobre el padre. Si la colección de hijos está vacía, degrada a
-    /// <see cref="Single"/> (una cabeza sin hijos no es un grupo).
+    /// escribe solo sobre el padre y expone la clase <paramref name="kind"/> de la cabeza (HU #12406).
+    /// Si la colección de hijos está vacía, degrada a <see cref="Single"/> (una cabeza sin hijos no
+    /// es un grupo) y la clase no se expone.
     /// </summary>
-    public static TenantScope Group(Guid parentTenantId, IReadOnlyCollection<Guid> childTenantIds)
+    public static TenantScope Group(Guid parentTenantId, IReadOnlyCollection<Guid> childTenantIds, GroupKind kind)
     {
         RejectEmpty(parentTenantId, nameof(parentTenantId));
         ArgumentNullException.ThrowIfNull(childTenantIds);
+        if (!Enum.IsDefined(kind))
+            throw new ArgumentOutOfRangeException(nameof(kind), kind, "Clase de cabeza de grupo desconocida.");
 
         var read = new HashSet<Guid> { parentTenantId };
         foreach (var child in childTenantIds)
@@ -73,7 +86,7 @@ public sealed class TenantScope
 
         return read.Count == 1
             ? Single(parentTenantId)
-            : new TenantScope(parentTenantId, read, isAll: false, isGroup: true);
+            : new TenantScope(parentTenantId, read, isAll: false, isGroup: true, kind);
     }
 
     /// <summary><c>true</c> si el alcance permite leer datos de <paramref name="tenantId"/>.</summary>
@@ -94,6 +107,6 @@ public sealed class TenantScope
     public override string ToString() => IsAll
         ? "TenantScope.All"
         : IsGroup
-            ? $"TenantScope.Group(write={WriteTenantId}, read={ReadTenantIds.Count})"
+            ? $"TenantScope.Group(write={WriteTenantId}, read={ReadTenantIds.Count}, kind={GroupKind})"
             : $"TenantScope.Single({WriteTenantId})";
 }

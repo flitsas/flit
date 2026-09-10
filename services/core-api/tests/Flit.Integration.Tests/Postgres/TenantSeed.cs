@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Persistence.Entities.Identity;
+using Flit.Queries.Domain.Tenancy;
 
 namespace Flit.Integration.Tests.Postgres;
 
@@ -23,13 +24,19 @@ internal static class TenantSeed
     public static Tenant Lone(Guid? id = null, string code = "IT-LONE") =>
         New(id ?? LoneId, code, isGroupParent: false, parentId: null);
 
-    public static Tenant New(Guid id, string code, bool isGroupParent, Guid? parentId) => new()
+    /// <summary>
+    /// HU #12406: la clase de la cabeza es su <c>tenant_type</c> y <c>is_group_parent</c> va acoplado a
+    /// él (<c>ck_tenants_group_parent_by_type</c>). Por defecto una cabeza nace <c>CONCESION</c> y quien
+    /// no lo es, <c>CONCESIONARIO</c>; pasar <paramref name="tenantType"/> explícito para probar el
+    /// CHECK (cabeza con tipo que no es de cabeza, tipo de cabeza sin marcar, MARCA_BLANCA…).
+    /// </summary>
+    public static Tenant New(Guid id, string code, bool isGroupParent, Guid? parentId, string? tenantType = null) => new()
     {
         Id = id,
         Code = code,
         LegalName = $"Cliente de integración {code}",
         TaxId = ("9" + id.ToString("N"))[..15], // uq_tenants_tax_id (DDL 53): único por id, determinista
-        TenantType = "CONCESIONARIO",
+        TenantType = tenantType ?? (isGroupParent ? GroupKindCodes.Concesion : "CONCESIONARIO"),
         IsActive = true,
         IsGroupParent = isGroupParent,
         ParentTenantId = parentId,

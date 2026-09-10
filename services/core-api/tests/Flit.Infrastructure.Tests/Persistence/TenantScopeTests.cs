@@ -9,7 +9,7 @@ namespace Flit.Infrastructure.Tests.Persistence;
 /// <see cref="TenantScopeQueryableExtensions.WhereTenantInScope{T}"/>.
 /// Uso de ejemplo:
 /// <code>
-/// var scope = TenantScope.Group(padre, [hijo1, hijo2]);
+/// var scope = TenantScope.Group(padre, [hijo1, hijo2], GroupKind.Concesion);
 /// scope.CanRead(hijo1);   // true
 /// scope.CanWrite(hijo1);  // false — solo el padre escribe
 /// db.Instances.WhereTenantInScope(scope, i => i.TenantId);
@@ -69,7 +69,7 @@ public sealed class TenantScopeTests
     [Fact]
     public void Group_LeePadreEHijos_EscribeSoloPadre()
     {
-        var scope = TenantScope.Group(Parent, [Child1, Child2]);
+        var scope = TenantScope.Group(Parent, [Child1, Child2], GroupKind.Concesion);
 
         scope.IsGroup.Should().BeTrue();
         scope.IsAll.Should().BeFalse();
@@ -80,7 +80,7 @@ public sealed class TenantScopeTests
     [Fact]
     public void Group_HijosDuplicadosOPadreEntreHijos_NoDuplicaLectura()
     {
-        var scope = TenantScope.Group(Parent, [Child1, Child1, Parent]);
+        var scope = TenantScope.Group(Parent, [Child1, Child1, Parent], GroupKind.Concesion);
 
         scope.ReadTenantIds.Should().BeEquivalentTo([Parent, Child1]);
         scope.IsGroup.Should().BeTrue();
@@ -89,7 +89,7 @@ public sealed class TenantScopeTests
     [Fact]
     public void Group_SinHijos_DegradaASingle()
     {
-        var scope = TenantScope.Group(Parent, []);
+        var scope = TenantScope.Group(Parent, [], GroupKind.Concesion);
 
         scope.IsGroup.Should().BeFalse();
         scope.ReadTenantIds.Should().BeEquivalentTo([Parent]);
@@ -99,9 +99,9 @@ public sealed class TenantScopeTests
     [Fact]
     public void Group_GuidEmpty_LanzaArgumentException()
     {
-        var padreVacio = () => TenantScope.Group(Guid.Empty, [Child1]);
-        var hijoVacio = () => TenantScope.Group(Parent, [Guid.Empty]);
-        var hijosNull = () => TenantScope.Group(Parent, null!);
+        var padreVacio = () => TenantScope.Group(Guid.Empty, [Child1], GroupKind.Concesion);
+        var hijoVacio = () => TenantScope.Group(Parent, [Guid.Empty], GroupKind.Concesion);
+        var hijosNull = () => TenantScope.Group(Parent, null!, GroupKind.Concesion);
 
         padreVacio.Should().Throw<ArgumentException>().WithParameterName("parentTenantId");
         hijoVacio.Should().Throw<ArgumentException>().WithParameterName("childTenantIds");
@@ -111,7 +111,7 @@ public sealed class TenantScopeTests
     [Fact]
     public void Group_WhereTenantInScope_DevuelvePadreEHijos_NoExtranos()
     {
-        var scope = TenantScope.Group(Parent, [Child1, Child2]);
+        var scope = TenantScope.Group(Parent, [Child1, Child2], GroupKind.Concesion);
 
         var result = Rows().WhereTenantInScope(scope, r => r.TenantId).Select(r => r.TenantId).ToList();
 
@@ -138,8 +138,8 @@ public sealed class TenantScopeTests
     public void ScopesPublicos_NuncaTienenReadVacio()
     {
         TenantScope.Single(Parent).ReadTenantIds.Should().NotBeEmpty();
-        TenantScope.Group(Parent, [Child1]).ReadTenantIds.Should().NotBeEmpty();
-        TenantScope.Group(Parent, []).ReadTenantIds.Should().NotBeEmpty();
+        TenantScope.Group(Parent, [Child1], GroupKind.Concesion).ReadTenantIds.Should().NotBeEmpty();
+        TenantScope.Group(Parent, [], GroupKind.Concesion).ReadTenantIds.Should().NotBeEmpty();
     }
 
     // ── AC6 — escritura sobre un hijo desde un Group ───────────────────────────
@@ -147,7 +147,7 @@ public sealed class TenantScopeTests
     [Fact]
     public void Group_CanWriteHijo_EsFalse_AunqueCanReadHijoSeaTrue()
     {
-        var scope = TenantScope.Group(Parent, [Child1, Child2]);
+        var scope = TenantScope.Group(Parent, [Child1, Child2], GroupKind.Concesion);
 
         scope.CanRead(Child1).Should().BeTrue();
         scope.CanRead(Child2).Should().BeTrue();
@@ -216,6 +216,6 @@ public sealed class TenantScopeTests
     {
         TenantScope.All().ToString().Should().Be("TenantScope.All");
         TenantScope.Single(Parent).ToString().Should().Contain("Single");
-        TenantScope.Group(Parent, [Child1]).ToString().Should().Contain("Group");
+        TenantScope.Group(Parent, [Child1], GroupKind.Concesion).ToString().Should().Contain("Group");
     }
 }

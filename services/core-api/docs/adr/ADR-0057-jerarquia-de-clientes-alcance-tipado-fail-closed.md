@@ -9,6 +9,37 @@
 > números duplicados (0030, 0033, 0036, 0050, 0053 y otros). El slug
 > `ADR-0057-jerarquia-de-clientes-alcance-tipado-fail-closed` es la referencia estable.
 
+## Revisión 2026-09-10 (tarde) — la clase de la cabeza es un valor de `tenant_type`
+
+Decisión del usuario/PO del 2026-09-10 (segunda charla, tras el requerimiento escrito
+`docs/Requerimiento_Concesion_Marca_Blanca.md`), que **revoca D10** y adopta parcialmente la
+Opción 3 de este ADR:
+
+- `identity.tenants.tenant_type` amplía su catálogo de 3 a 5 valores:
+  `RENTING | CONCESIONARIO | FLIT | CONCESION | MARCA_BLANCA` (DDL 109, HU #12406). Los dos
+  nuevos son **tipos de cabeza de red**; los tres anteriores conservan su significado comercial y
+  son los únicos admitidos para clientes hijos y clientes sin jerarquía.
+- No existe columna `group_kind`. `is_group_parent` se conserva (lo leen el resolver de alcance y el
+  trigger) pero queda **acoplado al tipo** por CHECK `ck_tenants_group_parent_by_type`:
+  `is_group_parent = (tenant_type IN ('CONCESION','MARCA_BLANCA'))`. Fail-closed: quien escribe un
+  tipo de cabeza escribe la marca en la misma fila; no hay trigger que la corrija en silencio.
+- «Marcar cabeza» = fijar el tipo en Concesión/Marca Blanca (alta o edición, exclusivo SuperAdmin);
+  «desmarcar» = cambiar a un tipo no-cabeza. El trigger `trg_tenant_hierarchy_depth()` rechaza todo
+  cambio de tipo hacia/desde/entre clases de cabeza mientras haya hijos vigentes; sin hijos se
+  acepta y se audita (`admin.tenant_config_audit_logs`, old/new).
+- En código, `TenantScope.Group` sigue exponiendo `GroupKind` (Concesion | MarcaBlanca), ahora
+  **derivado de `tenant_type`** en `DbTenantScopeResolver`, leído de BD en cada petición.
+- Consecuencias asumidas: un OT o una empresa de renting ya no puede ser cabeza «sin cambiar de
+  tipo» (D9 ya estaba revocada: el OT no es cabeza); el tipo deja de ser decorativo en runtime
+  (decide política de organismos, marca, dominio y tema de correo); el select de tipo de la consola
+  del SuperAdmin muestra los 5 valores con la etiqueta «Concesionario de vehículos» para el dealer
+  (HU #12357).
+- Motivo: un solo control y una sola pregunta al crear la compañía; el eje comercial de la cabeza
+  (que un renting sea a la vez Marca Blanca) se pierde solo a efectos de filtros y analítica.
+
+Las secciones siguientes se conservan como historia de la decisión original; donde digan «atributo
+independiente de `tenant_type`» o «D10», prevalece esta revisión.
+
 ## Contexto
 
 La Épica #12235 pide que un cliente `CONCESIONARIO` actúe como **cabeza de grupo**: crea clientes

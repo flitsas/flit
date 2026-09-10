@@ -30,13 +30,14 @@ public sealed class DbTenantScopeResolverTests
     private static FlitDbContext NewDb(string name) =>
         new(new DbContextOptionsBuilder<FlitDbContext>().UseInMemoryDatabase(name).Options);
 
+    /// <summary>HU #12406: la clase de la cabeza es su tipo; una cabeza nace <c>CONCESION</c> (como exige <c>ck_tenants_group_parent_by_type</c>).</summary>
     private static Tenant Row(Guid id, bool isGroupParent = false, Guid? parent = null, bool isActive = true) => new()
     {
         Id = id,
         Code = id.ToString("N")[..8],
         LegalName = "T " + id.ToString("N")[..8],
         TaxId = id.ToString("N")[..9],
-        TenantType = "CONCESIONARIO",
+        TenantType = isGroupParent ? GroupKindCodes.Concesion : "CONCESIONARIO",
         IsActive = isActive,
         IsGroupParent = isGroupParent,
         ParentTenantId = parent,

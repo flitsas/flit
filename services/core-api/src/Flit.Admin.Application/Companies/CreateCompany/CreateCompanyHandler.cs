@@ -96,7 +96,7 @@ public sealed class CreateCompanyHandler
         if (!CompanyTenantTypes.IsValid(tenantType))
         {
             errors.Add(new CompanyValidationError(
-                "tenantType", "El tipo de compañía debe ser RENTING, CONCESIONARIO o FLIT."));
+                "tenantType", $"El tipo de compañía debe ser {CompanyTenantTypes.DisplayList}."));
         }
 
         // Unicidad del code: solo se consulta si el code pasó las validaciones de formato.

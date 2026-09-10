@@ -93,7 +93,9 @@ public sealed class TenantHierarchyConstraintsTests(PostgresDatabaseFixture fixt
         await using var connection = await Fixture.OpenConnectionAsync();
         await using var tx = await connection.BeginTransactionAsync();
         await Exec(connection, tx, "ALTER TABLE identity.tenants DISABLE TRIGGER tr_tenants_hierarchy");
-        await Exec(connection, tx, $"UPDATE identity.tenants SET is_group_parent = true WHERE id = '{TenantSeed.ChildId}'");
+        // HU #12406: ck_tenants_group_parent_by_type acopla is_group_parent al tipo, así que el estado
+        // ilegal se fabrica con los dos campos a la vez (solo el trigger está deshabilitado, no el CHECK).
+        await Exec(connection, tx, $"UPDATE identity.tenants SET is_group_parent = true, tenant_type = 'CONCESION' WHERE id = '{TenantSeed.ChildId}'");
         await Exec(connection, tx, "ALTER TABLE identity.tenants ENABLE TRIGGER tr_tenants_hierarchy");
 
         await using var insert = new NpgsqlCommand(
