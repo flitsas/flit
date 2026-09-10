@@ -318,4 +318,21 @@ describe('TramiteDetalleModal — subsanación', () => {
     expect(screen.getByText('Rechazado por el Organismo de Tránsito')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Subsanar trámite/i })).not.toBeInTheDocument();
   });
+
+  // Bug #12376, defecto 1 — el aviso de rechazo de este modal lee el mismo `ultimoRechazoMotivo`
+  // que el popover del listado: en Anulado tampoco debe mostrarse como vigente aquí.
+  it('en Anulado no muestra el aviso de rechazo (el motivo ya no es vigente)', async () => {
+    render(
+      <TramiteDetalleModal
+        open
+        instanceId="inst-1"
+        item={{ ...RECHAZADO, estado: 'anulado' }}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(await screen.findByText('Anulado')).toBeInTheDocument();
+    expect(screen.queryByText('Rechazado por el Organismo de Tránsito')).not.toBeInTheDocument();
+    expect(screen.queryByText('Rechazo de prueba: expediente completo.')).not.toBeInTheDocument();
+  });
 });
