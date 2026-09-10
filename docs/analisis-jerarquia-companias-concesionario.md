@@ -147,6 +147,8 @@ Dos reglas de code-review que hay que memorizar:
 
 ### 5.4 Los dos modelos de Organismo de Tránsito
 
+> **2026-09-10 (D15):** el Modelo 2 queda **fuera**. Se conserva el texto por trazabilidad.
+
 Ambos en alcance (§8.1), y comparten el mismo mecanismo: la lista efectiva de OT del hijo sale de su
 padre, no de él mismo.
 
@@ -282,14 +284,24 @@ forma seria**.
 | | Decisión |
 |---|---|
 | **S1** | **Los hijos son tenants completos con su propio NIT.** No son sucursales dentro del mismo tenant |
-| **D2** | **Los artefactos quedan fuera.** Sólo **trámites y estadísticas**; no se descargan documentos ni anexos de los hijos. *(Revierte una decisión previa del mismo día que sí habilitaba la descarga; se deja constancia porque cambió el alcance y el estimado del bloque B)* |
+| **D2** | ~~Los artefactos quedan fuera~~ — **revocada para Marca Blanca el 2026-09-10** (`Requerimiento_Concesion_Marca_Blanca.md` RF-MB-05 / CA-MB-03; HU #12410). Para Concesión sigue pendiente (pendiente 13 del requerimiento). Texto original: **Los artefactos quedan fuera.** Sólo **trámites y estadísticas**; no se descargan documentos ni anexos de los hijos. *(Revierte una decisión previa del mismo día que sí habilitaba la descarga; se deja constancia porque cambió el alcance y el estimado del bloque B)* |
 | **D6** | **El SuperAdmin conserva íntegras sus capacidades actuales**: gestiona la configuración de los hijos como la de cualquier compañía y sigue viendo todos los trámites y registros. No es capacidad nueva: es **restricción de no regresión**, y como tal se redacta y va a la suite de paridad |
 | **D7** | **El SuperAdmin sigue sin poder descargar contenido de otras compañías**, tal como funciona hoy. Cero trabajo, y preserva el comportamiento actual |
-| **D9** | **Van los dos modelos de OT** (§5.4): Concesión-compañía con lista de OT heredada por los hijos, **y** OT como cabeza de grupo |
-| **D10** | **No se crea ningún tipo nuevo.** Se usa `CONCESIONARIO`, que ya existe en base de datos. El CHECK no se toca |
+| **D9** | ~~Van los dos modelos de OT (§5.4)~~ — **sustituida por D15 el 2026-09-10** |
+| **D10** | ~~**No se crea ningún tipo nuevo.** Se usa `CONCESIONARIO`, que ya existe en base de datos. El CHECK no se toca~~ — **revocada por D19 el 2026-09-10 (tarde)** |
 | **D11** | **Sólo lectura sobre los trámites de los hijos; escritura sobre su configuración** (§5.5) |
 | **D12** | **Un hijo no puede crear hijos.** Profundidad 2, forzada por base de datos |
 | **D13** | **"Marca blanca" no entra todavía.** Fuera de alcance |
+
+**Resueltas por el PO humano — 2026-09-10**
+
+| | Decisión |
+|---|---|
+| **D14** | **Los OT de una Concesión los asocia el SuperAdmin al momento de crear la empresa como Concesión.** Ni la Concesión ni sus hijos editan esa lista (rechazo en servidor: #12346 AC7; UI en solo lectura y selección en el flujo de alta: #12357 AC6/AC7). Las compañías sin jerarquía conservan la autogestión de #11228 (AC4 de #12346) |
+| **D17** | **Marca Blanca tiene política de OT por exclusión** (todos los operables − bloqueos de la cabeza; RF-MB-03) y la Concesión por inclusión. La clase ~~vive en `identity.tenants.group_kind`~~ es el `tenant_type` de la cabeza (D19; HU #12406, F0). Bloqueos: HU #12407/#12408 (Feature C) |
+| **D18** | **Los correos de una red Marca Blanca llevan tema de marca** (nombre, logo, colores, estructura fija, respaldo FLIT; RF-MB-07). Sin editor libre. Feature #12405 |
+| **D19** | **La clase de la cabeza es un valor de `tenant_type`.** El catálogo pasa a `RENTING · CONCESIONARIO · FLIT · CONCESION · MARCA_BLANCA`; no existe `group_kind`; `is_group_parent` queda acoplado al tipo por CHECK (`is_group_parent = tenant_type IN (CONCESION, MARCA_BLANCA)`); el trigger rechaza el cambio de tipo hacia/desde/entre clases de cabeza con hijos vigentes. «Marcar cabeza» = fijar el tipo (alta o edición, SuperAdmin). El select «Tipo de compañía» muestra los 5 valores; `CONCESIONARIO` se etiqueta «Concesionario de vehículos». Los hijos eligen entre `RENTING` y `CONCESIONARIO`. Motivo: una sola pregunta al crear la compañía; se pierde solo el eje comercial de la cabeza para filtros/analítica. Revoca D10; revisión registrada en ADR-0057 |
+| **D15** | **El OT ya no es cabeza de grupo.** Se retira el Modelo 2 de §5.4; solo queda el Modelo 1 (Concesión-compañía con lista de OT heredada). #12349 y #12352 en `Removed`; la cobertura anti-fuga de #12352 (AC3-AC6) la lleva #12322. Feature #12256 pasa de 24 a 18 SP |
 
 ### 8.2 Pendientes
 
@@ -299,6 +311,7 @@ forma seria**.
 | **D3** | ¿Todo AdminCompany de la Concesión puede crear hijos, gestionar su configuración e invitar administradores, o hace falta distinguir "administrador del holding"? | Recomendación: empezar sin distinguir; el rol nuevo encarece y obliga a migrar usuarios |
 | **D4** | ¿Plazo máximo aceptable entre desvincular un hijo y que la Concesión deje de verlo? | Sin caché es inmediato. Hace falta el número para fijarlo como criterio |
 | **D5** | ¿Cuántas Concesiones y de qué tamaño en los primeros 6 meses? | Una con 5 hijos y una con 400 son problemas distintos |
+| **D16** | Tras desvincular una hija, ¿la ex-cabeza sigue viendo los trámites radicados mientras estaba vinculada? | El trámite guarda `parent_tenant_id_at_creation` (HU #12406) para poder decidirlo después; #12355 AC3 hoy dice que deja de verlos |
 
 ---
 
