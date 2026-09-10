@@ -24,6 +24,7 @@
     <Project Path="tests/Flit.Analytics.Application.Tests/Flit.Analytics.Application.Tests.csproj" />
     <Project Path="tests/Flit.Modules.Quipux.Application.Tests/Flit.Modules.Quipux.Application.Tests.csproj" />
     <Project Path="tests/Flit.DataMigration.Tests/Flit.DataMigration.Tests.csproj" />
+    <Project Path="tests/Flit.Integration.Tests/Flit.Integration.Tests.csproj" />
   </Folder>
   <!--
     Migracion V1 -> V2. Vive en tools/ y no en src/ a proposito: es andamiaje temporal que se
