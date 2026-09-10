@@ -134,6 +134,27 @@ public sealed class TenantSettings
     public string FinesQuerySource { get; init; } = TenantSettingsCodes.FinesSourceExternal;
 
     /// <summary>
+    /// Muestra el módulo Trámites del dashboard (<c>tramites_module_enabled</c>, HU #12250,
+    /// Feature #12249). Nace ENCENDIDO (default true): es el módulo histórico y ya en uso por
+    /// todos los tenants. No <c>required</c>: default true para no romper construcciones existentes.
+    /// </summary>
+    public bool TramitesModuleEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Muestra el módulo Comparendos del dashboard (<c>comparendos_module_enabled</c>, HU #12250,
+    /// Feature #12249). Nace APAGADO (default false): la compañía debe habilitarlo explícitamente.
+    /// No <c>required</c>: default false para no romper construcciones existentes.
+    /// </summary>
+    public bool ComparendosModuleEnabled { get; init; }
+
+    /// <summary>
+    /// Muestra el módulo Resoluciones del dashboard (<c>resoluciones_module_enabled</c>, HU #12250,
+    /// Feature #12249). Nace APAGADO (default false): la compañía debe habilitarlo explícitamente.
+    /// No <c>required</c>: default false para no romper construcciones existentes.
+    /// </summary>
+    public bool ResolucionesModuleEnabled { get; init; }
+
+    /// <summary>
     /// Configuración por defecto cuando aún no existe fila para el tenant. La matrícula
     /// inicial nace APAGADA (default false): la compañía debe habilitarla explícitamente.
     /// </summary>
@@ -162,5 +183,8 @@ public sealed class TenantSettings
         ConsultationProviderConfig = ConsultationProviderConfig.Empty,
         AvaluoProviderConfig = AvaluoProviderConfig.Default,
         FinesQuerySource = TenantSettingsCodes.FinesSourceExternal,
+        TramitesModuleEnabled = true,
+        ComparendosModuleEnabled = false,
+        ResolucionesModuleEnabled = false,
     };
 }

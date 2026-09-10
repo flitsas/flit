@@ -3,6 +3,7 @@ using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Application.Companies.ListCompanies;
 using Flit.Admin.Application.Companies.SetCompanyStatus;
 using Flit.Admin.Application.Companies.UpdateCompany;
+using Flit.Admin.Application.Companies.Settings.GetActiveModules;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
@@ -91,6 +92,8 @@ using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
+using Flit.Admin.Application.Banners.GetBannerImage;
+using Flit.Admin.Application.Banners.ListActiveBanners;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -121,6 +124,9 @@ public static class DependencyInjection
         services.AddScoped<GetTenantSettingsHandler>();
         services.AddScoped<UpdateTenantSettingsHandler>();
         services.AddSingleton<ITenantPolicyResolver, SnapshotTenantPolicyResolver>();
+
+        // HU #12251 (Feature #12249) — flags de módulos activos del dashboard, sin AdminCompanyPolicy.
+        services.AddScoped<GetActiveModulesHandler>();
 
         // HU #10191 — interceptor propiedad vehicular + API whitelist.
         services.AddScoped<IVehicleOwnershipGuard, VehicleOwnershipGuard>();
@@ -258,6 +264,14 @@ public static class DependencyInjection
         services.AddScoped<DeleteDocumentTypeHandler>();
         services.AddScoped<PurgeDocumentTypeHandler>();
         services.AddScoped<ReactivateDocumentTypeHandler>();
+
+        // HU #12239 (Feature #12236) -- CRUD de banners promocionales (admin.banners, ADR-0058).
+        // IBannerRepository e IBannerImageStorage se registran en Flit.Infrastructure.AddAdminInfrastructure.
+        services.AddScoped<Banners.CreateBanner.CreateBannerHandler>();
+        services.AddScoped<Banners.UpdateBanner.UpdateBannerHandler>();
+        services.AddScoped<Banners.ListBanners.ListBannersHandler>();
+        services.AddScoped<Banners.SetBannerActive.SetBannerActiveHandler>();
+        services.AddScoped<Banners.DeleteBanner.DeleteBannerHandler>();
 
         // Causales de rechazo — catálogo global (CRUD SuperAdmin). Sustituye al motivo escrito a
         // mano como dato agregable del reporte de motivos del organismo y de la empresa.
@@ -398,6 +412,11 @@ public static class DependencyInjection
         services.AddScoped<GeneracionDocumental.Batches.GetBatchStatusHandler>();
         services.AddScoped<GeneracionDocumental.Batches.ListBatchItemsHandler>();
         services.AddScoped<GeneracionDocumental.Batches.DownloadBatchZipHandler>();
+
+        // HU #12240 (Feature #12236, Feature #12231) — banners: endpoint publico de banners
+        // activos + imagen por streaming con ETag. Sin filtro de tenant (ADR-0058).
+        services.AddScoped<ListActiveBannersHandler>();
+        services.AddScoped<GetBannerImageHandler>();
 
         return services;
     }

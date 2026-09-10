@@ -144,6 +144,12 @@ export interface SettingsForm {
   avaluoPrimary: string;
   // FEATURE 02 — fuente de comparendos (internal | external).
   finesQuerySource: FinesQuerySource;
+  // HU #12252 (Feature #12249) — flags de módulos del dashboard, visibles al Admin/
+  // SuperAdmin de la compañía. Sin regla de "al menos uno activo": se pueden apagar
+  // los 3 sin bloquear el guardado.
+  tramitesModuleEnabled: boolean;
+  comparendosModuleEnabled: boolean;
+  resolucionesModuleEnabled: boolean;
 }
 
 /** Construye el estado del formulario a partir de la configuración cargada. */
@@ -183,6 +189,9 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     runtFailoverTimeoutMs: settings.runtFailoverTimeoutMs ?? DEFAULT_FAILOVER_MS,
     ...avaluoFromSettings(settings.avaluoProviderConfig),
     finesQuerySource: settings.finesQuerySource ?? DEFAULT_FINES_QUERY_SOURCE,
+    tramitesModuleEnabled: settings.tramitesModuleEnabled ?? false,
+    comparendosModuleEnabled: settings.comparendosModuleEnabled ?? false,
+    resolucionesModuleEnabled: settings.resolucionesModuleEnabled ?? false,
   };
 }
 
@@ -242,6 +251,9 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
       enabled: normalizeAvaluoEnabled(form.avaluoEnabled),
     },
     finesQuerySource: form.finesQuerySource,
+    tramitesModuleEnabled: form.tramitesModuleEnabled,
+    comparendosModuleEnabled: form.comparendosModuleEnabled,
+    resolucionesModuleEnabled: form.resolucionesModuleEnabled,
   };
 }
 
@@ -396,6 +408,24 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
       detail: `${FINES_QUERY_SOURCE_LABELS[i.finesQuerySource]} → ${FINES_QUERY_SOURCE_LABELS[c.finesQuerySource]}`,
       tone: "neutral",
     }),
+  },
+  {
+    key: "tramitesModuleEnabled",
+    module: "Configuración Empresa",
+    label: "Módulo de Trámites",
+    describe: (_i, c) => onOff(c.tramitesModuleEnabled),
+  },
+  {
+    key: "comparendosModuleEnabled",
+    module: "Configuración Empresa",
+    label: "Módulo de Comparendos",
+    describe: (_i, c) => onOff(c.comparendosModuleEnabled),
+  },
+  {
+    key: "resolucionesModuleEnabled",
+    module: "Configuración Empresa",
+    label: "Módulo de Resoluciones",
+    describe: (_i, c) => onOff(c.resolucionesModuleEnabled),
   },
   {
     key: "metodosRecaudo",
