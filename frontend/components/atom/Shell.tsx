@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { canReadIctLogs, canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { canManageBanners, canReadIctLogs, canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import {
   isOtHubSegmentActive,
@@ -57,6 +57,7 @@ import {
   Monitor,
   FileSignature,
   History,
+  Image as ImageIcon,
 } from "lucide-react";
 
 export type ModuleId =
@@ -152,6 +153,7 @@ function useCurrentUser() {
       isOtAdmin: isOtAdmin(payload),
       canReadLogQx: canReadLogQx(payload),
       canReadIctLogs: canReadIctLogs(payload),
+      canManageBanners: canManageBanners(payload),
     };
   });
   return user;
@@ -309,44 +311,68 @@ export function Shell({
         active: !onAdminRoute && active === "auditoria",
         onClick: () => onNav("auditoria"),
       },
+    );
+  }
+
+  // Plataforma es contenedor (mismo patrón que Tránsito): cuelga los sub-módulos de
+  // configuración de plataforma. Sus hijos "core" (tipos de trámite, mandatos, FUR,
+  // notificaciones) siguen exclusivos de SuperAdmin; Banners (HU #12241, Feature #12236)
+  // cuelga aparte del permiso `banners.manage` del JWT (bypass SuperAdmin incluido en
+  // `canManageBanners`), para que un AdminCompany con el módulo concedido también lo vea —
+  // por eso el contenedor se construye con una lista de hijos armada dinámicamente en vez
+  // de vivir dentro del bloque `if (currentUser?.isSuperAdmin)` de arriba.
+  const platformaChildren: DockEntry[] = [];
+  if (currentUser?.isSuperAdmin) {
+    platformaChildren.push(
       {
-        key: "admin-plataforma",
-        label: "Plataforma",
-        icon: Monitor,
-        active: pathname.startsWith("/admin/plataforma"),
-        onClick: () => undefined,
-        children: [
-          {
-            key: "admin-tipos-tramite",
-            label: "Tipos de trámites",
-            icon: ListChecks,
-            active: pathname.startsWith("/admin/plataforma/tipos-tramite"),
-            onClick: () => window.location.assign("/admin/plataforma/tipos-tramite"),
-          },
-          {
-            key: "admin-mandatos",
-            label: "Mandatos",
-            icon: FileSignature,
-            active: pathname.startsWith("/admin/plataforma/mandatos"),
-            onClick: () => window.location.assign("/admin/plataforma/mandatos"),
-          },
-          {
-            key: "admin-fur",
-            label: "FUR",
-            icon: FileText,
-            active: pathname.startsWith("/admin/plataforma/fur"),
-            onClick: () => window.location.assign("/admin/plataforma/fur"),
-          },
-          {
-            key: "admin-notificaciones",
-            label: "Notificaciones",
-            icon: Bell,
-            active: pathname.startsWith("/admin/plataforma/notificaciones"),
-            onClick: () => window.location.assign("/admin/plataforma/notificaciones"),
-          },
-        ],
+        key: "admin-tipos-tramite",
+        label: "Tipos de trámites",
+        icon: ListChecks,
+        active: pathname.startsWith("/admin/plataforma/tipos-tramite"),
+        onClick: () => window.location.assign("/admin/plataforma/tipos-tramite"),
+      },
+      {
+        key: "admin-mandatos",
+        label: "Mandatos",
+        icon: FileSignature,
+        active: pathname.startsWith("/admin/plataforma/mandatos"),
+        onClick: () => window.location.assign("/admin/plataforma/mandatos"),
+      },
+      {
+        key: "admin-fur",
+        label: "FUR",
+        icon: FileText,
+        active: pathname.startsWith("/admin/plataforma/fur"),
+        onClick: () => window.location.assign("/admin/plataforma/fur"),
+      },
+      {
+        key: "admin-notificaciones",
+        label: "Notificaciones",
+        icon: Bell,
+        active: pathname.startsWith("/admin/plataforma/notificaciones"),
+        onClick: () => window.location.assign("/admin/plataforma/notificaciones"),
       },
     );
+  }
+  if (currentUser?.canManageBanners) {
+    platformaChildren.push({
+      key: "admin-banners",
+      label: "Banners",
+      icon: ImageIcon,
+      active: pathname.startsWith("/admin/banners"),
+      onClick: () => window.location.assign("/admin/banners"),
+    });
+  }
+  if (platformaChildren.length > 0) {
+    entries.push({
+      key: "admin-plataforma",
+      label: "Plataforma",
+      icon: Monitor,
+      active:
+        pathname.startsWith("/admin/plataforma") || pathname.startsWith("/admin/banners"),
+      onClick: () => undefined,
+      children: platformaChildren,
+    });
   }
 
   // Generación documental (HU-01, Feature #12201) — R12: esta entrada NO cuelga de

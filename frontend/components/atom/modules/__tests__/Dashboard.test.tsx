@@ -1,18 +1,23 @@
-// Tests de HU #12253 (Feature #12249) — módulos activos del Dashboard.
-// Cubre AC1-AC5: visibilidad condicional de la sección de Trámites y tarjetas
-// "Próximamente" para Comparendos/Resoluciones, según los flags que expone
-// GET /api/v1/analytics/active-modules.
+// Tests de HU #12253 (Feature #12249) y HU #12242 (Feature #12236) para Dashboard.tsx.
 //
-// Redefinición post-validación en vivo con el usuario (2026-09-10): la tarjeta "Próximamente"
-// avisa de un módulo que la compañía SÍ activó (`...ModuleEnabled = true`) pero que todavía no
-// tiene contenido real construido — NO al revés. Si el flag está apagado, la compañía no lo
-// contrató y no se le menciona. Los AC de ADO se actualizaron para reflejar esto.
+// HU #12253 — Cubre AC1-AC5: visibilidad condicional de la sección de Trámites y tarjetas
+// "Próximamente" para Comparendos/Resoluciones, según los flags que expone
+// GET /api/v1/analytics/active-modules. Redefinición post-validación en vivo con el usuario
+// (2026-09-10): la tarjeta "Próximamente" avisa de un módulo que la compañía SÍ activó
+// (`...ModuleEnabled = true`) pero que todavía no tiene contenido real construido — NO al
+// revés. Si el flag está apagado, la compañía no lo contrató y no se le menciona. Los AC de
+// ADO se actualizaron para reflejar esto.
+//
+// HU #12242 — el carrusel de bienvenida del gestor deja de anunciar mensajes de relleno
+// hardcodeados y pasa a mostrar, después del slide fijo, los banners Activos que configura el
+// Administrador (endpoint público `GET /api/v1/public/banners/active`).
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import type { ActiveModulesResponse, AnalyticsOverviewResponse } from "@/lib/api/types";
 
-// ── Mocks de la capa de datos y de identidad (sin red real) ─────────────────
+// ── Mocks compartidos de la capa de datos y de identidad (sin red real) ─────
 const mocks = vi.hoisted(() => ({
   fetchAnalyticsOverview: vi.fn(),
   fetchMonthlyTrend: vi.fn(),
@@ -22,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   getToken: vi.fn(),
   decodeJwtPayload: vi.fn(),
   isSuperAdmin: vi.fn(),
+  getActiveBanners: vi.fn(),
 }));
 
 vi.mock("@/lib/api/analytics", () => ({
@@ -38,8 +44,16 @@ vi.mock("@/lib/auth/jwt", () => ({
   decodeJwtPayload: mocks.decodeJwtPayload,
   isSuperAdmin: mocks.isSuperAdmin,
 }));
+vi.mock("@/lib/api/public-banners", () => ({
+  getActiveBanners: mocks.getActiveBanners,
+  bannerImageUrl: (id: string) => `http://api.test/api/v1/public/banners/${id}/image`,
+}));
 
 import { Dashboard } from "@/components/atom/modules/Dashboard";
+
+function noop() {}
+
+// ── HU #12253 — módulos activos por tenant ───────────────────────────────────
 
 const FULL_OVERVIEW: AnalyticsOverviewResponse = {
   tenantId: "11111111-1111-1111-1111-111111111111",
@@ -75,20 +89,19 @@ const BIOMETRIC_EMPTY = {
   total: 0,
 };
 
-function noop() {}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.getToken.mockReturnValue("token");
-  mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
-  mocks.isSuperAdmin.mockReturnValue(false);
-  mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
-  mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
-  mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
-  mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
-});
-
 describe("Dashboard — HU #12253 módulos activos por tenant", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getToken.mockReturnValue("token");
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
+    mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
+    mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
+    mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.getActiveBanners.mockResolvedValue([]);
+  });
+
   it("AC1: TramitesModuleEnabled=true muestra la sección de Trámites igual que hoy (KPIs, distribución, tendencia)", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
@@ -212,5 +225,110 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
       await screen.findByText("Selecciona una compañía para ver sus módulos activos."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+// ── HU #12242 — carrusel de bienvenida con banners Activos ──────────────────
+
+const OVERVIEW = { categories: [] };
+const CAROUSEL_TREND = { items: [] };
+const BIOMETRICS = {
+  validations: [],
+  stats: { total: 0, aprobadas: 0, enProceso: 0, rechazadas: 0, expiradas: 0 },
+  page: 1,
+  pageSize: 20,
+  total: 0,
+};
+
+function banner(overrides: Partial<{ id: string; name: string; linkUrl: string | null }> = {}) {
+  return { id: "banner-1", name: "Novedad de la plataforma", linkUrl: null, ...overrides };
+}
+
+describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getToken.mockReturnValue("token");
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.fetchAnalyticsOverview.mockResolvedValue(OVERVIEW);
+    mocks.fetchMonthlyTrend.mockResolvedValue(CAROUSEL_TREND);
+    mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRICS);
+    // Módulos activos: irrelevante para estos tests del carrusel — se deja en el default
+    // (solo Trámites) para que no aparezcan tarjetas "Próximamente" de ruido.
+    mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+  });
+
+  it("AC1 — sin banners activos, el carrusel solo muestra el slide fijo de bienvenida", async () => {
+    mocks.getActiveBanners.mockResolvedValue([]);
+    render(<Dashboard onNewTramite={vi.fn()} />);
+
+    await waitFor(() => expect(mocks.getActiveBanners).toHaveBeenCalled());
+    // Un solo punto de navegación: no hay más slides detrás del fijo.
+    expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(1);
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("AC1 — los banners activos se agregan como slides después del fijo", async () => {
+    mocks.getActiveBanners.mockResolvedValue([
+      banner({ id: "b1", name: "Banner uno" }),
+      banner({ id: "b2", name: "Banner dos", linkUrl: "https://flit.example/novedad" }),
+    ]);
+    render(<Dashboard onNewTramite={vi.fn()} />);
+
+    await waitFor(() => expect(mocks.getActiveBanners).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(3),
+    );
+
+    // Avanza al primer banner (slide 2 de 3): sin enlace, no hay ningún <a> envolviendo el banner
+    // ni título visible — el nombre solo viaja como texto accesible de la imagen (alt).
+    await userEvent.click(screen.getByRole("button", { name: "Siguiente" }));
+    const primerBannerImg = await screen.findByRole("img", { name: "Banner uno" });
+    expect(primerBannerImg).toHaveAttribute(
+      "src",
+      "http://api.test/api/v1/public/banners/b1/image",
+    );
+    expect(screen.queryByRole("link", { name: "Banner uno" })).not.toBeInTheDocument();
+    // El nombre sigue presente para lectores de pantalla (sr-only), pero no como texto visible.
+    expect(screen.getByText("Banner uno")).toHaveClass("sr-only");
+
+    // Avanza al segundo banner, que sí tiene enlace: el enlace cubre todo el banner (clic en
+    // cualquier punto navega), sin ningún título visible — el nombre es el nombre accesible
+    // (aria-label) del propio <a>, no texto en pantalla.
+    await userEvent.click(screen.getByRole("button", { name: "Siguiente" }));
+    expect(await screen.findByRole("img", { name: "Banner dos" })).toBeInTheDocument();
+    const enlace = screen.getByRole("link", { name: "Banner dos" });
+    expect(enlace).toHaveAttribute("href", "https://flit.example/novedad");
+    expect(enlace).toHaveAttribute("target", "_blank");
+    expect(enlace).toHaveAttribute("rel", "noopener noreferrer");
+    expect(enlace.textContent).toBe("");
+  });
+
+  it("AC3 — un fallo al consultar banners degrada al slide fijo, sin romper el dashboard", async () => {
+    mocks.getActiveBanners.mockRejectedValue(new Error("network error"));
+    render(<Dashboard onNewTramite={vi.fn()} />);
+
+    await waitFor(() => expect(mocks.getActiveBanners).toHaveBeenCalled());
+    expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(1);
+    // El resto del dashboard (KPIs) se sigue viendo con normalidad.
+    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+  });
+
+  it("AC3 — si la imagen de un banner no carga, ese slide se retira sin romper el carrusel", async () => {
+    mocks.getActiveBanners.mockResolvedValue([banner({ id: "roto", name: "Banner roto" })]);
+    render(<Dashboard onNewTramite={vi.fn()} />);
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(2),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Siguiente" }));
+    const img = await screen.findByRole("img", { name: "Banner roto" });
+
+    img.dispatchEvent(new Event("error"));
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(1),
+    );
+    expect(screen.queryByRole("img", { name: "Banner roto" })).not.toBeInTheDocument();
   });
 });
