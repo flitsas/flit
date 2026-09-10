@@ -224,6 +224,8 @@ app.MapSecurityEndpoints();
 app.MapUserUiPreferencesEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminCompanyChildrenEndpoints();
+app.MapAdminCompanyChildrenConfigEndpoints();
+app.MapAdminCompanyChildrenInvitationsEndpoints();
 app.MapAdminOtEndpoints();
 app.MapAdminOtMetricsEndpoints();
 app.MapAdminOtQueriesEndpoints();
