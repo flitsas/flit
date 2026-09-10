@@ -278,6 +278,10 @@ public static class DependencyInjection
         services.AddScoped<UseCases.RuntConfirmation.UpdateRuntConfirmationSettingsHandler>();
         services.AddScoped<UseCases.RuntConfirmation.ReevaluateRuntConfirmationAttemptHandler>();
         services.AddScoped<UseCases.RuntConfirmation.RuntConfirmationRunner>();
+        services.AddScoped<UseCases.RuntConfirmation.ListRuntConfirmationAttemptsHandler>();
+        services.AddScoped<UseCases.RuntConfirmation.GetRuntConfirmationAttemptHandler>();
+        services.AddScoped<UseCases.RuntConfirmation.ListRuntConfirmationRunsHandler>();
+        services.AddScoped<UseCases.RuntConfirmation.ConsultNowHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
         services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();
         // Lookup jurídico RUES (bifurcación del "Consultar RUNT" para persona jurídica / NIT).

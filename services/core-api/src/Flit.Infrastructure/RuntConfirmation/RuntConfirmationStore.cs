@@ -280,4 +280,26 @@ internal sealed class RuntConfirmationStore(IServiceScopeFactory scopeFactory) :
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
         return await db.RuntConfirmationAttempts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == attemptId, ct).ConfigureAwait(false);
     }
+
+    public async Task<RuntConfirmationAttempt?> GetLatestAttemptForRunAsync(Guid runId, Guid instanceId, CancellationToken ct = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+        return await db.RuntConfirmationAttempts.AsNoTracking()
+            .Where(a => a.RunId == runId && a.ProcedureInstanceId == instanceId)
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<string?> GetProcedureStatusAsync(Guid instanceId, CancellationToken ct = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+        return await db.ProcedureInstances.AsNoTracking()
+            .Where(i => i.Id == instanceId && i.DeletedAt == null)
+            .Select(i => i.Status)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
 }

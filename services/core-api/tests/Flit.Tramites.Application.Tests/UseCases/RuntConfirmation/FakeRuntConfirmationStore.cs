@@ -88,4 +88,12 @@ internal sealed class FakeRuntConfirmationStore : IRuntConfirmationStore
 
     public Task<RuntConfirmationAttempt?> GetAttemptAsync(Guid attemptId, CancellationToken ct = default) =>
         Task.FromResult(Attempts.FirstOrDefault(a => a.Id == attemptId));
+
+    public Task<RuntConfirmationAttempt?> GetLatestAttemptForRunAsync(Guid runId, Guid instanceId, CancellationToken ct = default) =>
+        Task.FromResult(Attempts.LastOrDefault(a => a.RunId == runId && a.ProcedureInstanceId == instanceId));
+
+    public Dictionary<Guid, string> Statuses { get; } = [];
+
+    public Task<string?> GetProcedureStatusAsync(Guid instanceId, CancellationToken ct = default) =>
+        Task.FromResult(Statuses.TryGetValue(instanceId, out var s) ? s : Candidates.Any(c => c.InstanceId == instanceId) ? "aprobado" : null);
 }

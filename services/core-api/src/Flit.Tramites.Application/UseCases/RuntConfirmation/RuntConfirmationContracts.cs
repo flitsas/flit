@@ -72,6 +72,12 @@ public interface IRuntConfirmationStore
     Task RecordAttemptAsync(RuntConfirmationAttempt attempt, RuntConfirmationInstanceUpdate update, CancellationToken ct = default);
 
     Task<RuntConfirmationAttempt?> GetAttemptAsync(Guid attemptId, CancellationToken ct = default);
+
+    /// <summary>El intento que una corrida dejó para un trámite (para devolverlo tras «Consultar ahora»).</summary>
+    Task<RuntConfirmationAttempt?> GetLatestAttemptForRunAsync(Guid runId, Guid instanceId, CancellationToken ct = default);
+
+    /// <summary><c>status</c> actual del trámite, o NULL si no existe.</summary>
+    Task<string?> GetProcedureStatusAsync(Guid instanceId, CancellationToken ct = default);
 }
 
 /// <summary>Cómo se consulta al proveedor. Exactamente una de las dos formas.</summary>
