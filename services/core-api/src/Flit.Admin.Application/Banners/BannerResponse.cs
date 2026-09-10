@@ -40,7 +40,7 @@ public sealed record BannerResponse(
     }
 
     private static string BuildImageUrl(Guid id) =>
-        string.Concat("/public/banners/", id.ToString(), "/image");
+        string.Concat("/api/v1/public/banners/", id.ToString(), "/image");
 
     private static string ToEstadoString(BannerEstado estado) => estado switch
     {

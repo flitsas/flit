@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { canReadIctLogs, canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { canManageBanners, canReadIctLogs, canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import {
   isOtHubSegmentActive,
@@ -57,6 +57,7 @@ import {
   Monitor,
   FileSignature,
   History,
+  Image as ImageIcon,
 } from "lucide-react";
 
 export type ModuleId =
@@ -152,6 +153,7 @@ function useCurrentUser() {
       isOtAdmin: isOtAdmin(payload),
       canReadLogQx: canReadLogQx(payload),
       canReadIctLogs: canReadIctLogs(payload),
+      canManageBanners: canManageBanners(payload),
     };
   });
   return user;
@@ -501,6 +503,19 @@ export function Shell({
           onClick: () => onNav("ict-reportes"),
         },
       ],
+    });
+  }
+
+  // Banners promocionales (HU #12241, Feature #12236) — mismo patrón que Generación documental:
+  // NO cuelga de `isSuperAdmin` sino del permiso `banners.manage` del JWT (bypass SuperAdmin
+  // incluido en `canManageBanners`), para que un AdminCompany con el módulo concedido lo vea.
+  if (currentUser?.canManageBanners) {
+    entries.push({
+      key: "admin-banners",
+      label: "Banners",
+      icon: ImageIcon,
+      active: pathname.startsWith("/admin/banners"),
+      onClick: () => window.location.assign("/admin/banners"),
     });
   }
 

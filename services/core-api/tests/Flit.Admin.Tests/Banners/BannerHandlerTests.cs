@@ -46,6 +46,9 @@ public sealed class BannerHandlerTests
         result.Banner.Should().NotBeNull();
         result.Banner!.Name.Should().Be("Promo verano");
         result.Banner.Estado.Should().Be(BannerResponse.EstadoActivo);
+        // HU12241 — ImageUrl debe apuntar a la ruta REAL del endpoint publico
+        // (montado bajo /api/v1/public/..., ver PublicBannersEndpoints), no a /public/... a secas.
+        result.Banner.ImageUrl.Should().Be($"/api/v1/public/banners/{result.Banner.Id}/image");
         storage.SaveCount.Should().Be(1);
 
         var row = await act.Banners.SingleAsync(b => b.Id == result.Banner.Id, TestContext.Current.CancellationToken);

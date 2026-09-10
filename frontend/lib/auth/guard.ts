@@ -1,6 +1,13 @@
 // Lógica pura del gate de acceso a /admin/* y /empresa/* (HU #10194, AC6; HU #10218 OT admin).
 // Extraída del middleware para poder probarla sin el runtime de Next.js.
-import { canReadGeneracionDocumental, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin } from "./jwt";
+import {
+  canManageBanners,
+  canReadGeneracionDocumental,
+  decodeJwtPayload,
+  isAdminCompany,
+  isOtAdmin,
+  isSuperAdmin,
+} from "./jwt";
 
 export const FORBIDDEN_PATH = "/403";
 
@@ -22,6 +29,7 @@ export interface AdminAccessDecision {
  * - ot_admin → permitido solo en /admin/transit-offices/* (HU #10218).
  * - AdminCompany → permitido en /admin/companies/* (HU #11228; la página redirige a su tenant).
  * - Cualquier rol con `generacion-documental.read` → permitido en /admin/generacion-documental/* (Feature #12201).
+ * - Cualquier rol con `banners.manage` → permitido en /admin/banners/* (Feature #12236, HU #12241).
  * - Otros roles → redirigir a /403.
  */
 export function evaluateAdminAccess(
@@ -61,6 +69,15 @@ export function evaluateAdminAccess(
   if (
     pathname?.startsWith("/admin/generacion-documental") &&
     canReadGeneracionDocumental(payload)
+  ) {
+    return { allowed: true };
+  }
+
+  // Banners promocionales (Feature #12236, HU #12241): tampoco es exclusivo de SuperAdmin —
+  // se gobierna por el permiso `banners.manage` del JWT, mismo patrón que generación documental.
+  if (
+    pathname?.startsWith("/admin/banners") &&
+    canManageBanners(payload)
   ) {
     return { allowed: true };
   }
