@@ -103,6 +103,61 @@ describe('TramiteDetalleModal', () => {
     expect(await screen.findByText(/Firma del baúl/i)).toBeInTheDocument();
   });
 
+  // Bug #12376, defecto 4 — la reasignación de gestor aparece en la línea de tiempo GENERAL,
+  // como evento adicional junto al historial de estados.
+  it('línea de tiempo incluye la reasignación de gestor', async () => {
+    const user = userEvent.setup();
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-04-18T08:00:00Z', reason: null },
+      ],
+      fieldValues: [],
+      actors: [],
+      events: [
+        {
+          tipo: 'reasignar_gestor_admin',
+          createdAt: '2026-04-19T09:00:00Z',
+          createdByName: 'Willyn Londoño',
+          previousAssignedToName: 'Carlos Gómez',
+          newAssignedToName: 'Diana Ruiz',
+        },
+      ],
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={ITEM} onClose={() => undefined} />,
+    );
+    await user.click(screen.getByRole('button', { name: /Línea de Tiempo del Trámite/i }));
+    await user.click(await screen.findByText('Reasignación de gestor'));
+    expect(screen.getByText('De Carlos Gómez a Diana Ruiz')).toBeInTheDocument();
+  });
+
+  // Bug #12376, defecto 3 — el reenvío de validación aparece en la trazabilidad de identidad como
+  // evento ADICIONAL (correo enmascarado), sin reemplazar el nodo de identidad original.
+  it('trazabilidad de identidad incluye el reenvío de validación', async () => {
+    const user = userEvent.setup();
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [],
+      fieldValues: [],
+      actors: [],
+      events: [
+        {
+          tipo: 'reenvio_validacion_admin',
+          createdAt: '2026-04-19T09:00:00Z',
+          createdByName: 'Willyn Londoño',
+          partyRole: 'comprador',
+          emailActualizado: true,
+          correoDestinoEnmascarado: 'n***@dominio.com',
+        },
+      ],
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={ITEM} onClose={() => undefined} />,
+    );
+    await user.click(screen.getByRole('button', { name: /Trazabilidad de Identidad/i }));
+    expect((await screen.findAllByText('Reenvío de validación · Comprador')).length).toBeGreaterThan(0);
+    expect(screen.getByText('n***@dominio.com')).toBeInTheDocument();
+  });
+
   it('click en step cierra panel de tracking', async () => {
     const user = userEvent.setup();
     render(
