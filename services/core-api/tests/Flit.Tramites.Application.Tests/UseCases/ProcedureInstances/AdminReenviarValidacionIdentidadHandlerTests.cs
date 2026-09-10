@@ -72,6 +72,9 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
             DocumentType = "CC",
             DocumentNumber = "1020304050",
             Email = email,
+            // Bug #12376, defecto 3 — correo del REGISTRO, tal como quedó al iniciar la validación
+            // (antes de cualquier reenvío administrativo que esta prueba pueda disparar).
+            RegisteredEmail = email,
             Status = status,
             Provider = provider,
             TokenHash = "old-hash",
@@ -163,6 +166,29 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         error.Should().BeNull();
         result!.EmailActualizado.Should().BeTrue();
         validation.Email.Should().Be("comprador.nuevo@correcto.com");
+    }
+
+    // Bug #12376, defecto 3 — el reenvío actualiza el correo OPERATIVO (Email) pero NUNCA el correo del
+    // REGISTRO (RegisteredEmail): el tracking del trámite debe poder seguir mostrando el correo original
+    // aunque el reenvío haya ido a un destino distinto.
+    [Fact]
+    public async Task Bug12376_ActualizaCorreo_NoTocaElCorreoDelRegistro()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instanceId = Guid.NewGuid();
+        _repo.GetByIdAsync(instanceId, _tenantId, Arg.Any<CancellationToken>())
+            .Returns(Instance(instanceId, _tenantId, TramiteEstado.Entregado));
+        var validation = SeedTramiteValidation(instanceId, email: "comprador@old.com");
+        var handler = BuildHandler();
+
+        var command = new AdminReenviarValidacionIdentidadCommand(
+            instanceId, validation.Id, _tenantId, "comprador.nuevo@correcto.com", null);
+        var (result, error, _, _) = await handler.HandleAsync(command, ct);
+
+        error.Should().BeNull();
+        result!.EmailActualizado.Should().BeTrue();
+        validation.Email.Should().Be("comprador.nuevo@correcto.com");
+        validation.RegisteredEmail.Should().Be("comprador@old.com", "el correo del registro es inmutable");
     }
 
     [Fact]

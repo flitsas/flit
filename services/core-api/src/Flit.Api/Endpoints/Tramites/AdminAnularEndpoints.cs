@@ -10,12 +10,15 @@ namespace Flit.Api.Endpoints.Tramites;
 
 /// <summary>
 /// Anulación administrativa de un trámite (Feature #12155, HU #12160): mueve el trámite a
-/// <c>anulado</c> desde CUALQUIER estado, salvo dos excepciones que son autoridad exclusiva del
-/// organismo de tránsito — <c>aprobado</c> (422, <see cref="TramiteEstadoErrores.CannotAnnulApproved"/>)
-/// y <c>revocado</c> (422, <see cref="TramiteEstadoErrores.CannotAnnulRevoked"/>; ese estado todavía no
-/// existe en el dominio, lo agrega la Feature hermana #12156, HU #12165 — ver
-/// <see cref="AdminAnularHandler"/>). Rutas y permisos ya catalogados por HU #12157
-/// (<see cref="AdminTramiteAuthorization"/>); esta HU implementa el endpoint de negocio.
+/// <c>anulado</c> desde CUALQUIER estado, salvo las excepciones que son autoridad exclusiva del
+/// organismo de tránsito o que ya no tienen sentido de negocio — <c>aprobado</c> (422,
+/// <see cref="TramiteEstadoErrores.CannotAnnulApproved"/>), <c>revocado</c> (422,
+/// <see cref="TramiteEstadoErrores.CannotAnnulRevoked"/>; ese estado todavía no existe en el dominio,
+/// lo agrega la Feature hermana #12156, HU #12165) y <c>anulado</c> (422,
+/// <see cref="TramiteEstadoErrores.CannotAnnulAlready"/>; Bug #12376, defecto 2 — evita re-anular un
+/// trámite que ya quedó anulado — ver <see cref="AdminAnularHandler"/>). Rutas y permisos ya
+/// catalogados por HU #12157 (<see cref="AdminTramiteAuthorization"/>); esta HU implementa el
+/// endpoint de negocio.
 /// </summary>
 internal static class AdminAnularEndpoints
 {
@@ -25,6 +28,7 @@ internal static class AdminAnularEndpoints
 
         // POST /api/v1/admin/tramites/{id}/anular — AC1: anula desde cualquier estado. AC2/AC3:
         // 'aprobado' y 'revocado' (string, HU #12165 aún no existe como enum) rechazados como origen (422).
+        // Bug #12376: 'anulado' también rechazado como origen (422) — no se puede re-anular.
         group.MapPost("/{id:guid}/anular", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,

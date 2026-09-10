@@ -36,6 +36,7 @@ import { TramiteDetalleIdentidad } from './detalle/TramiteDetalleIdentidad';
 import { DetalleVehiculoSidebar } from './detalle/DetalleVehiculoSidebar';
 import { TimelineTrackPanel } from './detalle/TimelineTrackPanel';
 import {
+  mapEventsToTimelineNodes,
   mapIdentidadToTimelineNodes,
   mapStatusHistoryToTimelineNodes,
 } from './detalle/timeline-mappers';
@@ -413,8 +414,11 @@ export function TramiteDetalleModal({
           <div className="flex flex-col gap-3">
             {/* El rechazo es el bloqueo, así que su aviso es también donde vive la salida: activar
                 la subsanación. Si el trámite está rechazado pero el OT no dejó motivo, el aviso se
-                pinta igual — sin él la acción no tendría dónde vivir. */}
-            {item.ultimoRechazoMotivo?.trim() || ofreceActivar ? (
+                pinta igual — sin él la acción no tendría dónde vivir.
+                Bug #12376, defecto 1 — en Anulado el motivo del último rechazo ya NO es vigente
+                (se anuló el trámite, no se resolvió el rechazo): se oculta aquí igual que en el
+                popover del listado (`TramitesTable.tsx`). El historial general sí lo conserva. */}
+            {(item.estado !== 'anulado' && item.ultimoRechazoMotivo?.trim()) || ofreceActivar ? (
               <InlineAlert
                 tone="error"
                 title="Rechazado por el Organismo de Tránsito"
@@ -428,7 +432,7 @@ export function TramiteDetalleModal({
                   ) : undefined
                 }
               >
-                {item.ultimoRechazoMotivo?.trim() ??
+                {(item.estado !== 'anulado' && item.ultimoRechazoMotivo?.trim()) ??
                   'El organismo devolvió el trámite sin registrar un motivo. Actívale la subsanación para corregirlo y volver a radicarlo.'}
                 {subsanarError ? (
                   <span className="mt-1 block font-semibold">{subsanarError}</span>
@@ -513,7 +517,14 @@ export function TramiteDetalleModal({
                   ) : (
                     <TimelineTrackPanel
                       title="Línea de tiempo del trámite"
-                      nodes={mapStatusHistoryToTimelineNodes(detail?.statusHistory ?? [])}
+                      nodes={[
+                        ...mapStatusHistoryToTimelineNodes(detail?.statusHistory ?? []),
+                        // Bug #12376, defecto 4 — la reasignación de gestor no es un cambio de estado,
+                        // pero sí pertenece al historial general del trámite.
+                        ...mapEventsToTimelineNodes(
+                          (detail?.events ?? []).filter((e) => e.tipo === 'reasignar_gestor_admin'),
+                        ),
+                      ]}
                       emptyMessage="Sin eventos registrados todavía."
                     />
                   )}
@@ -531,11 +542,19 @@ export function TramiteDetalleModal({
                   ) : (
                     <TimelineTrackPanel
                       title="Trazabilidad de identidad"
-                      nodes={mapIdentidadToTimelineNodes(
-                        item.modalidad,
-                        validations,
-                        firmaBaulPartes,
-                      )}
+                      nodes={[
+                        ...mapIdentidadToTimelineNodes(
+                          item.modalidad,
+                          validations,
+                          firmaBaulPartes,
+                        ),
+                        // Bug #12376, defecto 3 — el reenvío administrativo queda como evento
+                        // ADICIONAL, sin reemplazar el correo del registro que ya pinta el nodo de
+                        // identidad de arriba.
+                        ...mapEventsToTimelineNodes(
+                          (detail?.events ?? []).filter((e) => e.tipo === 'reenvio_validacion_admin'),
+                        ),
+                      ]}
                       emptyMessage="Este trámite todavía no tiene validación de identidad iniciada."
                     />
                   )}

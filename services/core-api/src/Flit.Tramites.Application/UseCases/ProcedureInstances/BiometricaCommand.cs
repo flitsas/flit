@@ -51,7 +51,14 @@ public sealed record BiometricValidationDto(
     /// cuando no se pudo atribuir a un actor concreto (validación histórica/huérfana sin fila de actor
     /// vigente en el rol) — el caso mayoritario (1 actor por lado) siempre trae <c>1</c>.
     /// </summary>
-    int? Ordinal = null);
+    int? Ordinal = null,
+    /// <summary>
+    /// Bug #12376, defecto 3 — correo CON EL QUE SE CREÓ el registro (inmutable), para que el tracking
+    /// del trámite pueda seguir mostrando el correo original aunque <see cref="Email"/> haya cambiado
+    /// por un reenvío administrativo. Null en filas anteriores a la migración de este campo (fallback:
+    /// el frontend usa <see cref="Email"/>).
+    /// </summary>
+    string? RegisteredEmail = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -235,6 +242,7 @@ public sealed class IniciarBiometriaHandler(
             DocumentType = tipoDoc,
             DocumentNumber = documento,
             Email = input.Email.Trim(),
+            RegisteredEmail = input.Email.Trim(),
             Status = BiometricEstados.Enviado,
             TokenHash = BiometricToken.Hash(token),
             ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras),
@@ -285,7 +293,8 @@ public sealed class IniciarBiometriaHandler(
             ExtractMotivoRechazo(v),
             ExtractUltimoIntentoMotivo(v),
             CreatedAt: v.CreatedAt,
-            Ordinal: ordinal);
+            Ordinal: ordinal,
+            RegisteredEmail: string.IsNullOrWhiteSpace(v.RegisteredEmail) ? null : v.RegisteredEmail);
 
     /// <summary>
     /// Motivo de rechazo SANITIZADO para mostrar al gestor (HU #10234 AC4). Solo se expone en estado
@@ -889,6 +898,7 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
             validation.DocumentType = subject.TipoDocumento ?? actor.DocumentType;
             validation.DocumentNumber = subject.NumeroDocumento ?? actor.DocumentNumber;
             validation.Email = subject.Email ?? string.Empty;
+            validation.RegisteredEmail = subject.Email ?? string.Empty;
             validation.Approve(now); // estado + validated_at + estampa valid_until + updated_at
         }
         else
@@ -903,6 +913,7 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
                 DocumentType = subject.TipoDocumento ?? actor.DocumentType,
                 DocumentNumber = subject.NumeroDocumento ?? actor.DocumentNumber,
                 Email = subject.Email ?? string.Empty,
+                RegisteredEmail = subject.Email ?? string.Empty,
                 Status = BiometricEstados.Aprobado,
                 TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
                 ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras),

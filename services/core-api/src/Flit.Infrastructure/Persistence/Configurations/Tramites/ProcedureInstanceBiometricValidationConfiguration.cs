@@ -21,6 +21,10 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.DocumentType).HasColumnName("document_type").HasMaxLength(20).IsRequired();
         builder.Property(x => x.DocumentNumber).HasColumnName("document_number").HasMaxLength(40).IsRequired();
         builder.Property(x => x.Email).HasColumnName("email").HasMaxLength(320).IsRequired();
+        // Bug #12376, defecto 3 — correo con el que se creó el registro, inmutable (ver XML doc de la
+        // entidad). Default '' para filas insertadas sin el campo explícito (fixtures/tests antiguos).
+        builder.Property(x => x.RegisteredEmail).HasColumnName("registered_email").HasMaxLength(320)
+            .IsRequired().HasDefaultValue("");
         builder.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired().HasDefaultValue("enviado");
         builder.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
         builder.Property(x => x.ExpiresAt).HasColumnName("expires_at").IsRequired();

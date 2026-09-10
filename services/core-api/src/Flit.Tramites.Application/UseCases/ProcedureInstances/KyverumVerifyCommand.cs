@@ -172,6 +172,7 @@ public sealed class IniciarKyverumVerifyHandler(
                 DocumentType = tipoDoc,
                 DocumentNumber = documento,
                 Email = email,
+                RegisteredEmail = email,
                 Status = BiometricEstados.PendienteEnvio,
                 TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
                 ExpiresAt = queuedAt.AddHours(BiometricRules.TokenTtlHoras),
@@ -207,6 +208,7 @@ public sealed class IniciarKyverumVerifyHandler(
             DocumentType = tipoDoc,
             DocumentNumber = documento,
             Email = email,
+            RegisteredEmail = email,
             Status = BiometricEstados.EnProceso,
             // Sin magic-link en Kyverum: token_hash aleatorio para cumplir NOT NULL/único.
             TokenHash = BiometricToken.Hash(BiometricToken.Generate()),

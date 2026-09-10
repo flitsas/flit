@@ -116,6 +116,42 @@ function describeError(error: unknown): string {
   return "No se pudieron cargar las métricas del dashboard.";
 }
 
+/**
+ * Cuerpo del slide de bienvenida — datos que el propio Dashboard ya trae para la tarjeta
+ * "Validaciones Biométricas" (`biometricStats`/`expiringSoonCount`) y para la Distribución
+ * General (`totalTramites`), sin ninguna llamada adicional. Mientras esas cargas no estén listas
+ * se mantiene el texto genérico anterior, para no parpadear con "0 alertas" antes de tiempo.
+ */
+function buildWelcomeBody(
+  biometricStatus: UiStatus,
+  biometricStats: BiometricValidationStats | null,
+  expiringSoonCount: number,
+  totalTramites: number,
+): string {
+  const generic =
+    "Tus procesos y validaciones se encuentran sincronizados. Continúa gestionando tu operación de manera segura y eficiente.";
+  if (biometricStatus !== "ready" || !biometricStats) return generic;
+
+  const rechazadas = biometricStats.rechazadas;
+  const porVencer = expiringSoonCount;
+
+  if (rechazadas > 0 && porVencer > 0) {
+    return `Tienes ${rechazadas + porVencer} validaciones de identidad que requieren tu atención: ${rechazadas} rechazada${rechazadas === 1 ? "" : "s"} y ${porVencer} por vencer.`;
+  }
+  if (rechazadas > 0) {
+    const validacion = rechazadas === 1 ? "validación" : "validaciones";
+    const rechazada = rechazadas === 1 ? "rechazada" : "rechazadas";
+    const requiere = rechazadas === 1 ? "requiere" : "requieren";
+    return `Tienes ${rechazadas} ${validacion} de identidad ${rechazada} que ${requiere} tu atención.`;
+  }
+  if (porVencer > 0) {
+    const validacion = porVencer === 1 ? "validación" : "validaciones";
+    const requiere = porVencer === 1 ? "requiere" : "requieren";
+    return `Tienes ${porVencer} ${validacion} de identidad por vencer que ${requiere} tu atención.`;
+  }
+  return `Tienes ${totalTramites} trámite${totalTramites === 1 ? "" : "s"} en este periodo. Todo sincronizado — sin identidades pendientes de atención.`;
+}
+
 // ── Slides del banner ─────────────────────────────────────────────────────────
 //
 // HU #12242 (Feature #12236): el slide fijo de bienvenida siempre va primero, no es configurable
@@ -141,11 +177,11 @@ type BannerSlide = {
 
 type Slide = WelcomeSlide | BannerSlide;
 
-function buildSlides(displayName: string, banners: ActiveBanner[]): Slide[] {
+function buildSlides(displayName: string, welcomeBody: string, banners: ActiveBanner[]): Slide[] {
   const welcome: WelcomeSlide = {
     type: "welcome",
     title: `Hola, ${displayName} 👋`,
-    body: "Tus procesos y validaciones se encuentran sincronizados. Continúa gestionando tu operación de manera segura y eficiente.",
+    body: welcomeBody,
   };
 
   const bannerSlides: BannerSlide[] = banners.map((banner) => ({
@@ -234,13 +270,6 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       .catch(() => { /* silencioso: el selector queda vacío, el dashboard sigue operativo */ });
     return () => controller.abort();
   }, [isSuper]);
-
-  // Auto-avance del carrusel
-  const slides = useMemo(() => buildSlides(displayName, visibleBanners), [displayName, visibleBanners]);
-  useEffect(() => {
-    const id = setInterval(() => setSlide((s) => (s + 1) % slides.length), 6000);
-    return () => clearInterval(id);
-  }, [slides.length]);
 
   // Cargar datos reales (mes actual + últimos 6 meses para el gráfico)
   useEffect(() => {
@@ -363,6 +392,23 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   // Derivar métricas del overview
   const categories = useMemo(() => overview?.categories ?? [], [overview]);
   const totalTramites = categories.reduce((sum, c) => sum + c.total, 0);
+
+  // Auto-avance del carrusel. El cuerpo del slide de bienvenida depende de datos que cargan
+  // aparte (biometría, overview) — ver `buildWelcomeBody`. Memoizado aparte (no solo inline en
+  // `slides`) porque el React Compiler exige que toda dependencia de un `useMemo` sea a su vez
+  // estable/memoizada.
+  const welcomeBody = useMemo(
+    () => buildWelcomeBody(biometricStatus, biometricStats, expiringSoonCount, totalTramites),
+    [biometricStatus, biometricStats, expiringSoonCount, totalTramites],
+  );
+  const slides = useMemo(
+    () => buildSlides(displayName, welcomeBody, visibleBanners),
+    [displayName, welcomeBody, visibleBanners],
+  );
+  useEffect(() => {
+    const id = setInterval(() => setSlide((s) => (s + 1) % slides.length), 6000);
+    return () => clearInterval(id);
+  }, [slides.length]);
   const matriculas = categories.find((c) => c.category === "matriculas")?.total ?? 0;
   const traspasos = categories.find((c) => c.category === "traspasos")?.total ?? 0;
   const completados = countCompleted(categories);

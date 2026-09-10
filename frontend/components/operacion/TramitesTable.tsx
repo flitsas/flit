@@ -2173,7 +2173,11 @@ function TramiteRow({
     // HU #12163 — gestión avanzada del administrador, anexada al final del menú de la fila.
     ...adminActionItems,
   ];
-  const motivoRechazo = item.ultimoRechazoMotivo?.trim() || null;
+  // Bug #12376, defecto 1 — en Anulado el motivo del último rechazo ya NO es vigente: se anuló el
+  // trámite, no se resolvió el rechazo. El historial general (línea de tiempo) sí lo conserva; solo
+  // se oculta aquí, donde se pintaba como si siguiera activo.
+  const motivoRechazo =
+    item.estado === 'anulado' ? null : item.ultimoRechazoMotivo?.trim() || null;
   const subsanacionCount = item.subsanacionCount ?? 0;
   const enSubsanacion = !!item.subsanacionActiva;
   const showRejectPopover =
