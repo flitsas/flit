@@ -5208,6 +5208,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/analytics/active-modules:
+    get:
+      tags: [Analytics · Dashboard]
+      operationId: analyticsActiveModules
+      summary: Flags de módulos activos del dashboard (HU #12251, Feature #12249)
+      description: >
+        Devuelve únicamente los 3 flags de módulos activos del tenant (`tramitesModuleEnabled`,
+        `comparendosModuleEnabled`, `resolucionesModuleEnabled`) para que el dashboard decida qué
+        secciones mostrar. A diferencia de GET /api/v1/admin/companies/{tenantId}/settings, NO
+        exige AdminCompanyPolicy: cualquier usuario autenticado de la compañía puede consultarlo.
+        El tenant se toma del claim JWT `tenant_id`; un SuperAdmin DEBE indicar `tenantId` por
+        query (sin vista global, a diferencia de overview/monthly-trend). Un tenant sin fila en
+        `tenant_operational_policies` responde 200 con los defaults de `TenantSettings.Default`
+        (NUNCA 404).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para SuperAdmin (sin vista global).
+      responses:
+        "200":
+          description: Los 3 flags de módulos activos del tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActiveModulesResponse"
+        "400":
+          description: SuperAdmin sin tenantId, o token sin tenant_id y sin tenantId indicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Usuario de compañía solicitando los módulos activos de otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/analytics/export/excel:
     get:
       tags: [Analytics · Dashboard]
@@ -9754,6 +9798,24 @@ components:
           description: Muestra el módulo Resoluciones del dashboard (HU #12250). Default false.
       required:
         [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, avisosAprobacionActivos, avisosRechazoActivos, destinatariosNotificacion, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig, tramitesModuleEnabled, comparendosModuleEnabled, resolucionesModuleEnabled]
+
+    ActiveModulesResponse:
+      type: object
+      description: >-
+        DTO mínimo (HU #12251, Feature #12249) — deliberadamente separado de TenantSettings/
+        TenantSettingsResponse para no exponer al usuario no-admin el resto de la configuración
+        operativa del tenant.
+      properties:
+        tramitesModuleEnabled:
+          type: boolean
+          description: Muestra el módulo Trámites del dashboard. Default true.
+        comparendosModuleEnabled:
+          type: boolean
+          description: Muestra el módulo Comparendos del dashboard. Default false.
+        resolucionesModuleEnabled:
+          type: boolean
+          description: Muestra el módulo Resoluciones del dashboard. Default false.
+      required: [tramitesModuleEnabled, comparendosModuleEnabled, resolucionesModuleEnabled]
 
     ConsultationProviderChoice:
       type: object
