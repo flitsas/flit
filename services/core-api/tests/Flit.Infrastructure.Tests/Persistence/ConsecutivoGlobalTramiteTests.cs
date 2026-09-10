@@ -206,17 +206,16 @@ public sealed class ConsecutivoGlobalTramiteTests
         using var db = NewContext();
         var propiedad = ReferenceNumberProperty(db);
 
-        // Sin esto EF enviaría el string.Empty con el que se construye la entidad, el DEFAULT no se
-        // dispararía y el segundo trámite chocaría contra el índice único.
+        // Sin esto EF enviaría el string.Empty con el que se construye la entidad y el trigger que
+        // compone el radicado (HU #12371) recibiría una cadena vacía en vez de ausencia de valor.
         propiedad.GetBeforeSaveBehavior().Should().Be(PropertySaveBehavior.Ignore);
 
         // Y sin esto EF no traería de vuelta el valor que asignó la base.
         propiedad.ValueGenerated.Should().Be(ValueGenerated.OnAdd);
 
-        propiedad.GetDefaultValueSql()
-            .Should().NotBeNull()
-            .And.Subject.As<string>()
-            .Should().Contain("procedure_instance_reference_seq");
+        // HU #12371 — la secuencia ya no es DEFAULT de esta columna sino de `consecutivo`; el texto
+        // lo compone el trigger. Que el modelo no declare un DEFAULT que la base ya no tiene.
+        propiedad.GetDefaultValueSql().Should().BeNull();
     }
 
     [Fact]
