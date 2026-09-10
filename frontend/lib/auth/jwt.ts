@@ -17,6 +17,9 @@ export interface JwtPayload {
   permissions?: string[];
   tenant_id?: string;
   tenant_name?: string;
+  /** HU #12345 — cabeza de grupo (CONCESION | MARCA_BLANCA). */
+  is_group_parent?: boolean;
+  tenant_type?: string;
   role_id?: string;
   exp?: number;
   [key: string]: unknown;
@@ -217,6 +220,20 @@ export function canAdminResetPassword(payload: JwtPayload | null): boolean {
     isAdminCompany(payload) ||
     hasPermission(payload, RESET_PASSWORD_PERMISSION)
   );
+}
+
+/**
+ * HU #12356 — cabeza de grupo en el JWT. Fallback: inferir desde tenant_type acoplado en BD.
+ */
+export function isGroupParent(payload: JwtPayload | null): boolean {
+  if (!payload) {
+    return false;
+  }
+  if (payload.is_group_parent === true) {
+    return true;
+  }
+  const tenantType = payload.tenant_type;
+  return tenantType === "CONCESION" || tenantType === "MARCA_BLANCA";
 }
 
 /**

@@ -6,6 +6,7 @@ import type {
   AuditLogPageResponse,
   BlockingCriterion,
   CompaniesIndexParams,
+  CompanyChildListItem,
   CompanyListItem,
   CompanyPagedResult,
   ConsultationRestrictionKind,
@@ -262,5 +263,63 @@ export function fetchAuditLog(
   return apiFetch<AuditLogPageResponse>(`${base}/${tenantId}/audit-log`, {
     query: { page, pageSize },
     signal,
+  });
+}
+
+// ── Jerarquía de clientes (HU #12357, #12356) ───────────────────────────────
+
+/** GET /{headTenantId}/children — listado de clientes hijos de una cabeza. */
+export function fetchCompanyChildren(
+  headTenantId: string,
+  signal?: AbortSignal,
+): Promise<CompanyChildListItem[]> {
+  return apiFetch<CompanyChildListItem[]>(`${base}/${headTenantId}/children`, { signal });
+}
+
+/** POST /{headTenantId}/children — alta de cliente hijo por la cabeza. */
+export function createChildCompany(
+  headTenantId: string,
+  body: CreateCompanyRequest,
+): Promise<CompanyListItem> {
+  return apiFetch<CompanyListItem>(`${base}/${headTenantId}/children`, { method: "POST", body });
+}
+
+/** PUT /{headTenantId}/children/{childTenantId}/status — activa/desactiva un hijo. */
+export function setChildCompanyStatus(
+  headTenantId: string,
+  childTenantId: string,
+  estadoActivo: boolean,
+): Promise<CompanyListItem> {
+  return apiFetch<CompanyListItem>(`${base}/${headTenantId}/children/${childTenantId}/status`, {
+    method: "PUT",
+    body: { estadoActivo },
+  });
+}
+
+/** PUT /{tenantId}/parent — SuperAdmin vincula un cliente existente a una cabeza. */
+export function linkCompanyToParent(
+  childTenantId: string,
+  parentTenantId: string,
+): Promise<CompanyListItem> {
+  return apiFetch<CompanyListItem>(`${base}/${childTenantId}/parent`, {
+    method: "PUT",
+    body: { parentTenantId },
+  });
+}
+
+/** DELETE /{tenantId}/parent — SuperAdmin desvincula un cliente hijo. */
+export function unlinkCompanyFromParent(childTenantId: string): Promise<CompanyListItem> {
+  return apiFetch<CompanyListItem>(`${base}/${childTenantId}/parent`, { method: "DELETE" });
+}
+
+/** POST …/children/{childTenantId}/invitations — cabeza invita admin del hijo. */
+export function inviteChildCompanyUser(
+  headTenantId: string,
+  childTenantId: string,
+  body: { email: string; fullName: string; roleIds: string[] },
+): Promise<{ invitationId: string; email: string; emailSent: boolean }> {
+  return apiFetch(`${base}/${headTenantId}/children/${childTenantId}/invitations`, {
+    method: "POST",
+    body,
   });
 }

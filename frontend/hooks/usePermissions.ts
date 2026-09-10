@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { getToken } from "@/lib/api/client";
 import {
   decodeJwtPayload,
+  isGroupParent as checkGroupParent,
   isSuperAdmin as checkSuperAdmin,
   isAdminCompany as checkAdminCompany,
   isOtAdmin as checkOtAdmin,
@@ -14,6 +15,8 @@ export interface PermissionsState {
   isSuperAdmin: boolean;
   isAdminCompany: boolean;
   isOtAdmin: boolean;
+  /** HU #12356 — cabeza de grupo (CONCESION | MARCA_BLANCA). */
+  isGroupParent: boolean;
   tenantId: string | null;
   userId: string | null;
   roleId: string | null;
@@ -49,6 +52,7 @@ export function usePermissions(): PermissionsState {
       isSuperAdmin: checkSuperAdmin(payload),
       isAdminCompany: checkAdminCompany(payload),
       isOtAdmin: checkOtAdmin(payload),
+      isGroupParent: checkGroupParent(payload),
       tenantId: (payload?.tenant_id as string) ?? null,
       userId: (payload?.sub as string) ?? null,
       roleId,

@@ -43,7 +43,14 @@ import type {
 /** Filas por página del listado de OT. */
 const OT_PAGE_SIZE = 10;
 
-export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
+export function OTConfigTablePanel({
+  tenantId,
+  readOnly = false,
+}: {
+  tenantId: string;
+  /** HU #12357 AC7 — Concesión ve OT en solo lectura (administrado por plataforma). */
+  readOnly?: boolean;
+}) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [offices, setOffices] = useState<TransitOffice[]>([]);
@@ -189,6 +196,16 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
 
   return (
     <>
+      {readOnly && (
+        <p
+          className="mb-3 rounded-xl border px-3 py-2 text-xs"
+          style={{ borderColor: "#DFE5ED", background: "rgba(85,126,255,0.04)" }}
+          role="note"
+        >
+          Los organismos de tránsito de esta Concesión los administra la plataforma. Esta vista es de
+          solo lectura.
+        </p>
+      )}
       <UiStateBoundary
         status={status === "ready" && visibleOffices.length === 0 ? "empty" : status}
         onRetry={() => void load()}
@@ -199,12 +216,13 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
         <OTConfigTable
           offices={pageOffices}
           grantedIds={grantedIds}
-          agreementIds={agreementIds}
-          onToggleAgreement={handleToggleAgreement}
+          agreementIds={readOnly ? [] : agreementIds}
+          onToggleAgreement={readOnly ? undefined : handleToggleAgreement}
           operationalById={operationalById}
-          onToggleGrant={handleToggleGrant}
-          onOpenConfig={(office) => setConfigOffice(office)}
+          onToggleGrant={readOnly ? async () => {} : handleToggleGrant}
+          onOpenConfig={readOnly ? () => {} : (office) => setConfigOffice(office)}
           onError={(message) => show(message, "error")}
+          readOnly={readOnly}
         />
         <Pagination
           page={safePage}
@@ -214,7 +232,7 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
         />
       </UiStateBoundary>
 
-      {configOffice && (
+      {configOffice && !readOnly && (
         <OTConfigModal
           office={configOffice}
           policies={policies}
