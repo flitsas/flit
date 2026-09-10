@@ -3,7 +3,7 @@
 // presigned upload a storage — el archivo viaja DIRECTO en el mismo POST/PUT como
 // `multipart/form-data`. `apiFetch` es JSON-only, así que create/update usan `fetch` directo con
 // `FormData` (mismo patrón que `adjuntarOtLicenciaTransito` en `admin-ot.ts`).
-import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
+import { apiFetch, friendlyErrorMessage, getToken, resolveApiUrl } from "./client";
 import { ApiError } from "./types";
 
 export type BannerEstado = "programado" | "activo" | "inactivo" | "expirado";
@@ -51,7 +51,7 @@ const base = "/api/v1/admin/banners";
  * `PublicBannersEndpoints.cs`: `GET /api/v1/public/banners/{id}/image`.
  */
 export function bannerImageUrl(id: string): string {
-  return `${API_BASE_URL}/api/v1/public/banners/${id}/image`;
+  return resolveApiUrl(`/api/v1/public/banners/${id}/image`);
 }
 
 /** GET "" — listado paginado de banners (AC1). */
@@ -114,12 +114,6 @@ function buildFormData(input: BannerFormInput): FormData {
   return form;
 }
 
-function resolveUrl(path: string): string {
-  const origin =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
-  return new URL(path, origin).toString();
-}
-
 async function readErrorBody(response: Response): Promise<unknown> {
   try {
     return await response.json();
@@ -147,13 +141,13 @@ async function submitMultipart(url: string, method: "POST" | "PUT", form: FormDa
 
 /** POST "" — alta de banner (AC2). La imagen es obligatoria; siempre nace activa en el backend. */
 export async function createBanner(input: BannerFormInput): Promise<Banner> {
-  const created = await submitMultipart(resolveUrl(base), "POST", buildFormData(input));
+  const created = await submitMultipart(resolveApiUrl(base), "POST", buildFormData(input));
   return input.isActive ? created : applyActiveState(created, false);
 }
 
 /** PUT "/{id}" — edición de banner (AC2). Si no se elige imagen nueva, conserva la actual. */
 export async function updateBanner(id: string, input: BannerFormInput): Promise<Banner> {
-  const updated = await submitMultipart(resolveUrl(`${base}/${id}`), "PUT", buildFormData(input));
+  const updated = await submitMultipart(resolveApiUrl(`${base}/${id}`), "PUT", buildFormData(input));
   return updated.isActive === input.isActive ? updated : applyActiveState(updated, input.isActive);
 }
 
