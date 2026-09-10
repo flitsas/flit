@@ -99,6 +99,24 @@ public sealed class TenantOperationalPolicy
     /// </summary>
     public string FinesQuerySource { get; set; } = "external";
 
+    /// <summary>
+    /// Muestra el módulo Trámites del dashboard (HU #12250, Feature #12249). Default true: módulo
+    /// histórico ya en uso por todos los tenants.
+    /// </summary>
+    public bool TramitesModuleEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Muestra el módulo Comparendos del dashboard (HU #12250, Feature #12249). Default false: la
+    /// compañía debe habilitarlo explícitamente.
+    /// </summary>
+    public bool ComparendosModuleEnabled { get; set; }
+
+    /// <summary>
+    /// Muestra el módulo Resoluciones del dashboard (HU #12250, Feature #12249). Default false: la
+    /// compañía debe habilitarlo explícitamente.
+    /// </summary>
+    public bool ResolucionesModuleEnabled { get; set; }
+
     public long RowVersion { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

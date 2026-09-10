@@ -9743,8 +9743,17 @@ components:
             = usar los defaults globales. Claves: vehicle_vin, vehicle_plate, conductor.
           additionalProperties:
             $ref: "#/components/schemas/ConsultationProviderChoice"
+        tramitesModuleEnabled:
+          type: boolean
+          description: Muestra el módulo Trámites del dashboard (HU #12250). Default true.
+        comparendosModuleEnabled:
+          type: boolean
+          description: Muestra el módulo Comparendos del dashboard (HU #12250). Default false.
+        resolucionesModuleEnabled:
+          type: boolean
+          description: Muestra el módulo Resoluciones del dashboard (HU #12250). Default false.
       required:
-        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, avisosAprobacionActivos, avisosRechazoActivos, destinatariosNotificacion, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig]
+        [tenantId, switchesMatricula, baulFirmasActivo, enrutamientoSMTP, avisosAprobacionActivos, avisosRechazoActivos, destinatariosNotificacion, metodosRecaudo, runtFailoverTimeoutMs, consultationProviderConfig, tramitesModuleEnabled, comparendosModuleEnabled, resolucionesModuleEnabled]
 
     ConsultationProviderChoice:
       type: object
@@ -9791,6 +9800,24 @@ components:
             omite, se conserva el valor previo. Claves: vehicle_vin, vehicle_plate, conductor.
           additionalProperties:
             $ref: "#/components/schemas/ConsultationProviderChoice"
+        tramitesModuleEnabled:
+          type: boolean
+          nullable: true
+          description: >-
+            Opcional (HU #12250). Muestra el módulo Trámites del dashboard. Si se omite (null), se
+            conserva el valor previo — mismo mecanismo que documentosPersonalizadosActivo.
+        comparendosModuleEnabled:
+          type: boolean
+          nullable: true
+          description: >-
+            Opcional (HU #12250). Muestra el módulo Comparendos del dashboard. Si se omite (null), se
+            conserva el valor previo.
+        resolucionesModuleEnabled:
+          type: boolean
+          nullable: true
+          description: >-
+            Opcional (HU #12250). Muestra el módulo Resoluciones del dashboard. Si se omite (null), se
+            conserva el valor previo.
       required:
         [switchesMatricula, baulFirmasActivo, enrutamientoSMTP, metodosRecaudo]
 

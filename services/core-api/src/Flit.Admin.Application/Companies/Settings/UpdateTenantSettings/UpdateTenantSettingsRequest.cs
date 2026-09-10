@@ -33,4 +33,10 @@ public sealed record UpdateTenantSettingsRequest(
     bool? AvisosCambioEstadoActivos = null,
     bool? AvisosAprobacionActivos = null,
     bool? AvisosRechazoActivos = null,
-    DestinatariosNotificacionDto? DestinatariosNotificacion = null);
+    DestinatariosNotificacionDto? DestinatariosNotificacion = null,
+    // HU #12250 (Feature #12249) — flags de módulos del dashboard. Mismo mecanismo que
+    // DocumentosPersonalizadosActivo: opcionales, null conserva el valor previo (update parcial),
+    // así un cliente viejo que no los envía nunca los apaga por omisión.
+    bool? TramitesModuleEnabled = null,
+    bool? ComparendosModuleEnabled = null,
+    bool? ResolucionesModuleEnabled = null);

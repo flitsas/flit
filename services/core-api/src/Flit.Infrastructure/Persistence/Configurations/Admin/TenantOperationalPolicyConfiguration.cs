@@ -71,6 +71,12 @@ internal sealed class TenantOperationalPolicyConfiguration
         builder.Property(x => x.FinesQuerySource)
             .HasColumnType("text").HasDefaultValue("external").IsRequired();
 
+        // HU #12250 (Feature #12249) — flags de módulos del dashboard. Tramites nace encendido
+        // (módulo histórico); Comparendos/Resoluciones nacen apagados (opt-in por tenant).
+        builder.Property(x => x.TramitesModuleEnabled).HasDefaultValue(true);
+        builder.Property(x => x.ComparendosModuleEnabled).HasDefaultValue(false);
+        builder.Property(x => x.ResolucionesModuleEnabled).HasDefaultValue(false);
+
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
     }
