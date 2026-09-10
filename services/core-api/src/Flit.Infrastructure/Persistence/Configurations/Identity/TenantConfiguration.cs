@@ -22,6 +22,19 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(x => x.TenantType).HasMaxLength(20).IsRequired();
         builder.Property(x => x.IsActive).HasDefaultValue(true);
 
+        // HU #12318 — jerarquía padre-hija (profundidad 2). CHECK anti-autorreferencia y trigger
+        // bidireccional viven solo en SQL (107-HU12318-tenant-parent-hierarchy.sql).
+        builder.Property(x => x.ParentTenantId).HasColumnName("parent_tenant_id");
+        builder.Property(x => x.IsGroupParent).HasColumnName("is_group_parent").HasDefaultValue(false);
+        builder.HasOne<Tenant>()
+            .WithMany()
+            .HasForeignKey(x => x.ParentTenantId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_tenants_parent_tenant");
+        builder.HasIndex(x => x.ParentTenantId)
+            .HasDatabaseName("ix_tenants_parent_tenant_id")
+            .HasFilter("parent_tenant_id IS NOT NULL");
+
         builder.Property(x => x.CreatedAt).IsRequired();
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
     }

@@ -3825,11 +3825,21 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsGroupParent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_group_parent");
+
                     b.Property<string>("LegalName")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("legal_name");
+
+                    b.Property<Guid?>("ParentTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_tenant_id");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
@@ -3864,6 +3874,10 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("Code")
                         .IsUnique()
                         .HasDatabaseName("uq_tenants_code");
+
+                    b.HasIndex("ParentTenantId")
+                        .HasDatabaseName("ix_tenants_parent_tenant_id")
+                        .HasFilter("parent_tenant_id IS NOT NULL");
 
                     b.ToTable("tenants", "identity");
                 });
@@ -9076,6 +9090,15 @@ namespace Flit.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_alert_events_alert_rules");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Identity.Tenant", b =>
+                {
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Identity.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("ParentTenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_tenants_parent_tenant");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.InvitationRole", b =>
