@@ -188,6 +188,11 @@ export interface TenantSettings {
   finesQuerySource?: FinesQuerySource;
   /** HU #11469 legado. */
   avisosCambioEstadoActivos?: boolean;
+  // HU #12250 (Feature #12249) — flags de módulos del dashboard. Opcionales por
+  // compatibilidad; el backend siempre los devuelve.
+  tramitesModuleEnabled?: boolean;
+  comparendosModuleEnabled?: boolean;
+  resolucionesModuleEnabled?: boolean;
 }
 
 /** Payload del PUT settings — los mismos campos editables (sin tenantId). */
@@ -218,6 +223,11 @@ export interface TenantSettingsUpdate {
   finesQuerySource?: FinesQuerySource;
   /** HU #11469 legado. */
   avisosCambioEstadoActivos?: boolean;
+  // HU #12252 (Feature #12249) — flags de módulos del dashboard. Si se omiten el
+  // backend conserva el valor previo (mismo mecanismo que avisosAprobacionActivos).
+  tramitesModuleEnabled?: boolean;
+  comparendosModuleEnabled?: boolean;
+  resolucionesModuleEnabled?: boolean;
 }
 
 // ── Errores de validación 422 ───────────────────────────────────────────────
