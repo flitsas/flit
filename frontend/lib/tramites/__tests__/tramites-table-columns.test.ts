@@ -30,6 +30,8 @@ describe('buildTramitesGridLayout', () => {
       // HU #12183 — visible de salida: la prenda y la transformación no se ven en ninguna otra
       // columna, y una marca que hay que activar a mano no informa a quien no sabe que existe.
       'marcas',
+      // Feature #12276 — visible de salida: es lo único que el gestor ve del proceso de confirmación.
+      'confirmadoRunt',
       'secretaria',
     ]);
     // Fuera del default porque su dato viaja apilado dentro de `radicado` (fechas), `placa`
@@ -70,21 +72,22 @@ describe('buildTramitesGridLayout', () => {
 
   it('el orden del catálogo es el orden real de la tabla: primero el listado, luego los desgloses', () => {
     const keys = TRAMITES_COLUMNS.map((c) => c.key);
-    // Las 9 del listado van al frente, en el orden en que se leen de izquierda a derecha.
-    expect(keys.slice(0, 9)).toEqual([
+    // Las 10 del listado van al frente, en el orden en que se leen de izquierda a derecha.
+    expect(keys.slice(0, 10)).toEqual([
       'radicado',
       'placa',
       'propietario',
       'comprador',
       'tramite',
       'marcas',
+      'confirmadoRunt',
       'secretaria',
       'gestor',
       'fuente',
     ]);
     // Las visibles por defecto son un SUBCONJUNTO del grupo "Listado" —no todo el grupo— y se
     // leen en el mismo orden: es lo que garantiza que la cabecera no se reordene al ocultar una.
-    const listado = keys.slice(0, 9);
+    const listado = keys.slice(0, 10);
     expect(listado.filter((k) => DEFAULT_TRAMITES_VISIBLE_COLUMNS.includes(k))).toEqual([
       ...DEFAULT_TRAMITES_VISIBLE_COLUMNS,
     ]);
@@ -222,8 +225,9 @@ describe('buildTramitesColWidths', () => {
     const porClave = new Map(orden.map((key, index) => [key, widths[index]]));
     const defPorClave = new Map(TRAMITES_COLUMNS.map((c) => [c.key, c]));
 
-    // Fuente y marcas salen en px exactos (su `minPx`), sin porcentaje: no absorben el sobrante.
-    for (const fija of ['fuente', 'marcas']) {
+    // Fuente, marcas y confirmadoRunt (Feature #12276, también fija) salen en px exactos (su
+    // `minPx`), sin porcentaje: no absorben el sobrante.
+    for (const fija of ['fuente', 'marcas', 'confirmadoRunt']) {
       expect(porClave.get(fija)).toBe(`${defPorClave.get(fija)!.minPx}px`);
       expect(percentOf(porClave.get(fija)!)).toBeNull();
     }
@@ -235,6 +239,7 @@ describe('buildTramitesColWidths', () => {
     const fijoEsperado =
       defPorClave.get('fuente')!.minPx
       + defPorClave.get('marcas')!.minPx
+      + defPorClave.get('confirmadoRunt')!.minPx
       + parseFloat(widths[widths.length - 1]);
     expect(flexibles.reduce((sum, w) => sum + pxDiscountOf(w), 0)).toBeCloseTo(fijoEsperado, 0);
   });
@@ -253,5 +258,31 @@ describe('buildTramitesColWidths', () => {
     const widths = buildTramitesColWidths([]);
     expect(widths).toHaveLength(TRAMITES_COLUMNS.length + 1);
     expect(sumPercent(widths)).toBeCloseTo(100, 1);
+  });
+});
+
+// Feature #12276 (HU #12312) — la columna «Confirmado en RUNT» exporta SÍ / NO / vacío y nada más.
+import { tramitesExportFields as camposExport } from '../tramites-table-columns';
+import type { InstanceSummary as Resumen } from '@/lib/api/types/procedure-runtime';
+
+describe('columna «Confirmado en RUNT» (Feature #12276)', () => {
+  const fila = (runtConfirmed: Resumen['runtConfirmed']): Resumen =>
+    ({ id: '1', referenceNumber: '7', estado: 'aprobado', runtConfirmed }) as unknown as Resumen;
+
+  it('exporta SÍ, NO o celda vacía, sin explicaciones', () => {
+    const campo = camposExport(['confirmadoRunt']).find((c) => c.id === 'confirmadoRunt');
+    expect(campo?.label).toBe('Confirmado en RUNT');
+    // `raw` es lo que va a la celda del .xlsx: vacío (null) cuando no aplica o no se consultó.
+    expect(campo!.raw(fila('yes'))).toBe('SÍ');
+    expect(campo!.raw(fila('no'))).toBe('NO');
+    expect(campo!.raw(fila('not_consulted'))).toBeNull();
+    expect(campo!.raw(fila(null))).toBeNull();
+    // `value` es el texto en pantalla, con el mismo guion que el resto de columnas vacías.
+    expect(campo!.value(fila('not_consulted'))).toBe('—');
+  });
+
+  it('no ofrece orden: no es un dato por el que se ordene el listado', () => {
+    const campo = camposExport(['confirmadoRunt']).find((c) => c.id === 'confirmadoRunt');
+    expect(campo?.sort).toBeUndefined();
   });
 });

@@ -2,7 +2,18 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { canManageBanners, canReadIctLogs, canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import {
+  canAccessRuntConfirmation,
+  canManageBanners,
+  canReadIctLogs,
+  canReadLogQx,
+  decodeJwtPayload,
+  isAdminCompany,
+  isOtAdmin,
+  isSuperAdmin,
+  TOKEN_STORAGE_KEY,
+} from "@/lib/auth/jwt";
+import { CONFIRMACION_RUNT_BASE_PATH } from "@/components/admin/plataforma/confirmacion-runt/confirmacion-runt-nav";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import {
   isOtHubSegmentActive,
@@ -58,6 +69,7 @@ import {
   FileSignature,
   History,
   Image as ImageIcon,
+  BadgeCheck,
 } from "lucide-react";
 
 export type ModuleId =
@@ -154,6 +166,7 @@ function useCurrentUser() {
       canReadLogQx: canReadLogQx(payload),
       canReadIctLogs: canReadIctLogs(payload),
       canManageBanners: canManageBanners(payload),
+      canAccessRuntConfirmation: canAccessRuntConfirmation(payload),
     };
   });
   return user;
@@ -353,6 +366,19 @@ export function Shell({
         onClick: () => window.location.assign("/admin/plataforma/notificaciones"),
       },
     );
+  }
+  // Confirmación RUNT (Feature #12276, HU #12313): gateado por PERMISO (`runt_confirmation.settings.manage`
+  // o `.history.read`), no por rol; SuperAdmin lo ve por el bypass de `canAccessRuntConfirmation`.
+  // Va justo después de «Tipos de trámites» (AC4 de la HU); para un rol sin lo demás, es la única entrada.
+  if (currentUser?.canAccessRuntConfirmation) {
+    const posicion = platformaChildren.findIndex((c) => c.key === "admin-tipos-tramite") + 1;
+    platformaChildren.splice(posicion, 0, {
+      key: "admin-confirmacion-runt",
+      label: "Confirmación RUNT",
+      icon: BadgeCheck,
+      active: pathname.startsWith(CONFIRMACION_RUNT_BASE_PATH),
+      onClick: () => window.location.assign(CONFIRMACION_RUNT_BASE_PATH),
+    });
   }
   if (currentUser?.canManageBanners) {
     platformaChildren.push({

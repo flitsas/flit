@@ -1,0 +1,162 @@
+{
+  "data": {
+    "datosTecnicos": {
+      "alto": null,
+      "ancho": null,
+      "capacidadCarga": null,
+      "largo": null,
+      "noEjes": "2",
+      "noLlantas": null,
+      "pasajerosSentados": "5",
+      "pasajerosTotal": null,
+      "peso": null,
+      "pesoBrutoVehicular": "1992 Kgs",
+      "rodaje": null
+    },
+    "documentNumber": "1047392819",
+    "documentType": "CC",
+    "garantiasFavorDe": [
+      {
+        "acreedor": "BANCOLOMBIA S.A.",
+        "confecamaras": "SI",
+        "fechaInscripcion": "03/09/2026",
+        "numeroDocumentoAcreedor": "890903938",
+        "patrimonioAutonomo": null,
+        "tipoDocumentoAcreedor": "NIT"
+      }
+    ],
+    "garantiasMobiliarias": [],
+    "informacionBlindaje": {
+      "autorizacion": null,
+      "blindado": null,
+      "fechaBlindaje": null,
+      "fechaDesblindaje": null,
+      "fechaExpedicionCertificado": null,
+      "fechaExpedicionCertificadoFormatoWS": null,
+      "idDocumentoCertificadoBlindaje": null,
+      "nivelBlindaje": null,
+      "nivelBlindajeNumero": null,
+      "numeroResolucion": null,
+      "tipoBlindajeNombre": null
+    },
+    "informacionGeneral": {
+      "capacidadCarga": null,
+      "cilindraje": "0",
+      "claseVehiculo": "CAMIONETA",
+      "clasificacion": "AUTOMOVIL",
+      "color": "GRIS GRAFITO",
+      "diasMatriculado": "19",
+      "esRegrabadoChasis": "NO",
+      "esRegrabadoMotor": "NO",
+      "esRegrabadoSerie": "NO",
+      "esRegrabadoVin": "NO",
+      "estadoDelVehiculo": "ACTIVO",
+      "fechaExpedLTImportacion": null,
+      "fechaMatricula": "22/08/2026",
+      "fechaVenciLTImportacion": null,
+      "idTipoServicio": "1",
+      "linea": "MODEL Y",
+      "marca": "TESLA",
+      "modelo": "2026",
+      "mostrarSolicitudes": "SI",
+      "noChasis": "LRWYGCEK5TC770611",
+      "noEjes": "2",
+      "noIdentificacion": null,
+      "noLicenciaTransito": "10040084721",
+      "noMotor": null,
+      "noPlaca": "QYV381",
+      "noSerie": null,
+      "noVin": "LRWYGCEK5TC770611",
+      "nombrePais": null,
+      "organismoTransito": "STRIA DE TTOyTTE MEDELLIN",
+      "pasajerosSentados": "5",
+      "pasajerosTotal": null,
+      "pesoBruto": "1992",
+      "prendas": "SI",
+      "puertas": "4",
+      "repotenciado": "NO",
+      "seguridadEstado": "NO",
+      "subpartida": null,
+      "tarjetaServicio": "NO",
+      "tieneGravamenes": "NO",
+      "tieneLTImportacion": false,
+      "tipoCarroceria": "SUV",
+      "tipoCombustible": "ELECTRICO",
+      "tipoMaquinaria": null,
+      "tipoServicio": "Particular",
+      "validacionDIAN": "No Exitoso",
+      "vehiculoEnsenanza": "NO",
+      "verValidaDIAN": false
+    },
+    "limitacionPropiedad": [],
+    "normalizacionSaneamiento": [
+      {
+        "deficienciaMatriculaInicial": "NO",
+        "descargaCertificado": null,
+        "fecha": null,
+        "numeroActoAdministrativo": null,
+        "solicitudNormalizacion": null,
+        "vehiculoNormalizado": "NO DISPONIBLE"
+      }
+    ],
+    "plate": "QYV381",
+    "polizasResponsabilidadCivil": [],
+    "soat": [
+      {
+        "entidadExpideSoat": "LA PREVISORA S.A.COMPAÑIA DE SEGUROS",
+        "estado": "VIGENTE",
+        "estadoSoat": "EMITIDA",
+        "fechaExpediSoat": "20/08/2026",
+        "fechaExpedicion": "20/08/2026",
+        "fechaVencimiento": "20/08/2027",
+        "fechaVigencia": "21/08/2026",
+        "noPoliza": "1508007035676000",
+        "nombrePais": null,
+        "origen": "NACIONAL",
+        "placa": null,
+        "tipoTarifa": "211"
+      }
+    ],
+    "solicitudes": [
+      {
+        "entidad": "STRIA DE TTOyTTE MEDELLIN",
+        "estado": "AUTORIZADA",
+        "fechaSolicitud": "03/09/2026",
+        "noSolicitud": "301973305",
+        "tramitesRealizados": "TRÁMITE INSCRIPCIÓN ALERTA, "
+      },
+      {
+        "entidad": "STRIA DE TTOyTTE MEDELLIN",
+        "estado": "AUTORIZADA",
+        "fechaSolicitud": "21/08/2026",
+        "noSolicitud": "300892403",
+        "tramitesRealizados": "TRÁMITE MATRÍCULA INICIAL, "
+      },
+      {
+        "entidad": "STRIA DE TTOyTTE MEDELLIN",
+        "estado": "APROBADA",
+        "fechaSolicitud": "20/08/2026",
+        "noSolicitud": "300859535",
+        "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, "
+      }
+    ],
+    "tarjetaOperacion": {
+      "empresaAfiliadora": null,
+      "estado": null,
+      "fechaExpedicion": null,
+      "fechaFin": null,
+      "fechaInicio": null,
+      "modalidadTransporte": null,
+      "nroTarjetaOperacion": null,
+      "radioAccion": null,
+      "servicio": null
+    },
+    "tecnoMecanica": [],
+    "vin": "LRWYGCEK5TC770611"
+  },
+  "signature": {
+    "dateTime": "September 10, 2026 1:49 PM",
+    "message": "Certified by Verifik.co"
+  },
+  "id": "1DG58"
+}

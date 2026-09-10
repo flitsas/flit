@@ -34,6 +34,14 @@ public sealed class VerifikVehicleData
     public List<object>? GarantiasMobiliarias { get; set; }
 
     /// <summary>
+    /// Historial de solicitudes del vehículo (Feature #12276): mismas claves en español que Kyverum,
+    /// pero <c>fechaSolicitud</c> viene como <c>dd/MM/yyyy</c> sin hora. Lo lee el motor de
+    /// Confirmación RUNT desde el crudo; se declara para que el DTO no oculte que existe.
+    /// </summary>
+    [JsonPropertyName("solicitudes")]
+    public List<VerifikSolicitud>? Solicitudes { get; set; }
+
+    /// <summary>
     /// Bloque técnico del RUNT. En remolques/semirremolques ejes, dimensiones y llantas llegan aquí
     /// y no en <see cref="InformacionGeneral"/> — si no se modela, System.Text.Json los descarta.
     /// </summary>
@@ -204,4 +212,24 @@ public sealed class VerifikTecnomecanica
     /// <summary>Todo lo que el proveedor envía y el modelo no declara. Sin esto se descartaba en silencio.</summary>
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? CamposNoModelados { get; set; }
+}
+
+/// <summary>Una solicitud del historial del RUNT vía Verifik (v2, claves en español).</summary>
+public sealed class VerifikSolicitud
+{
+    [JsonPropertyName("noSolicitud")]
+    public string? NoSolicitud { get; set; }
+
+    /// <summary><c>dd/MM/yyyy</c>, solo día.</summary>
+    [JsonPropertyName("fechaSolicitud")]
+    public string? FechaSolicitud { get; set; }
+
+    [JsonPropertyName("estado")]
+    public string? Estado { get; set; }
+
+    [JsonPropertyName("tramitesRealizados")]
+    public string? TramitesRealizados { get; set; }
+
+    [JsonPropertyName("entidad")]
+    public string? Entidad { get; set; }
 }

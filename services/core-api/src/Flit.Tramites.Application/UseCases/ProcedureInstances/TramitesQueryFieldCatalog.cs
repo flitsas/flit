@@ -53,6 +53,7 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
     public const string Transformacion = "transformacion";
     public const string MetodoPago = "metodo_pago";
     public const string Compania = "compania";
+    public const string ConfirmadoRunt = "confirmado_runt";
 
     public const string GrupoVehiculo = "Vehículo";
     public const string GrupoPersonas = "Personas";
@@ -100,6 +101,17 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
     [
         new("true", "Sí"),
         new("false", "No"),
+    ];
+
+    /// <summary>
+    /// Los tres valores de la columna «Confirmado en RUNT» (Feature #12276). Mismo vocabulario que
+    /// <c>RuntConfirmedColumn</c>: el filtro y la celda no pueden discrepar.
+    /// </summary>
+    private static readonly QueryFieldOptionDto[] ConfirmadoRuntOptions =
+    [
+        new(Flit.Tramites.Domain.RuntConfirmation.RuntConfirmedColumn.Yes, "SÍ"),
+        new(Flit.Tramites.Domain.RuntConfirmation.RuntConfirmedColumn.No, "NO"),
+        new(Flit.Tramites.Domain.RuntConfirmation.RuntConfirmedColumn.NotConsulted, "No consultado"),
     ];
 
     private static readonly string[] TextoOperators =
@@ -169,6 +181,14 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
             BooleanoOperators, SiNoOptions,
             "Cambio de color, de carrocería, de combustible o blindaje: tanto los declarados dentro "
             + "de otro trámite como los que son el trámite mismo.", AdmiteLista: false),
+
+        // Feature #12276 (HU #12312) — la confirmación del RUNT, con las mismas tres opciones que
+        // muestra la celda. Solo aplica a los aprobados: «No consultado» son los aprobados que la
+        // corrida aún no ha mirado, no cualquier trámite sin valor.
+        new(ConfirmadoRunt, "Confirmado en RUNT", QueryFieldKind.Opcion, GrupoCaracteristicas,
+            BooleanoOperators, ConfirmadoRuntOptions,
+            "Si el RUNT ya refleja el trámite aprobado. Solo aplica a trámites aprobados.",
+            AdmiteLista: false),
 
         // Del repositorio: los métodos de pago realmente usados. Es texto libre en la base, así que
         // una lista fija se quedaría corta o sobraría según el cliente.
