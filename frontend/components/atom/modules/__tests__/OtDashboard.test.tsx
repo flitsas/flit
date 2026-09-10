@@ -42,6 +42,12 @@ vi.mock("@/lib/api/analytics", () => ({
   fetchMonthlyTrend: (...args: unknown[]) => fetchMonthlyTrend(...args),
 }));
 
+// HU #12242 — banners Activos; se doblan a lista vacía, sin cobertura propia en este archivo.
+vi.mock("@/lib/api/public-banners", () => ({
+  getActiveBanners: vi.fn().mockResolvedValue([]),
+  bannerImageUrl: (id: string) => `http://api.test/api/v1/public/banners/${id}/image`,
+}));
+
 const OT_ID = "aaaaaaaa-0001-4000-8000-000000000001";
 
 function panel(overrides: Partial<OtOperationalPanel> = {}): OtOperationalPanel {

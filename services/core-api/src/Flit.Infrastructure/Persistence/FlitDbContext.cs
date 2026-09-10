@@ -192,6 +192,8 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // ── Admin / parametrización documental (develop, HU #10193–#10198) ─────────
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 
+    public DbSet<Banner> Banners => Set<Banner>();
+
     public DbSet<ProcedureDocumentRequirement> ProcedureDocumentRequirements => Set<ProcedureDocumentRequirement>();
 
     public DbSet<DocumentOrderOverride> DocumentOrderOverrides => Set<DocumentOrderOverride>();
