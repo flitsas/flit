@@ -394,8 +394,13 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const totalTramites = categories.reduce((sum, c) => sum + c.total, 0);
 
   // Auto-avance del carrusel. El cuerpo del slide de bienvenida depende de datos que cargan
-  // aparte (biometría, overview) — ver `buildWelcomeBody`.
-  const welcomeBody = buildWelcomeBody(biometricStatus, biometricStats, expiringSoonCount, totalTramites);
+  // aparte (biometría, overview) — ver `buildWelcomeBody`. Memoizado aparte (no solo inline en
+  // `slides`) porque el React Compiler exige que toda dependencia de un `useMemo` sea a su vez
+  // estable/memoizada.
+  const welcomeBody = useMemo(
+    () => buildWelcomeBody(biometricStatus, biometricStats, expiringSoonCount, totalTramites),
+    [biometricStatus, biometricStats, expiringSoonCount, totalTramites],
+  );
   const slides = useMemo(
     () => buildSlides(displayName, welcomeBody, visibleBanners),
     [displayName, welcomeBody, visibleBanners],
