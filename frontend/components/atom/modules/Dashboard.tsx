@@ -15,8 +15,6 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
-  ShieldCheck,
   FileText,
   CheckCircle,
   Car,
@@ -27,6 +25,8 @@ import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import { tramitesClient } from "@/lib/api/tramites-client";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
+import { useActiveBanners } from "@/hooks/useActiveBanners";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
 import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
@@ -113,28 +113,45 @@ function describeError(error: unknown): string {
 }
 
 // ── Slides del banner ─────────────────────────────────────────────────────────
+//
+// HU #12242 (Feature #12236): el slide fijo de bienvenida siempre va primero, no es configurable
+// y no puede faltar. Detrás de él van los banners Activos del Administrador (AC1); sin banners
+// activos el carrusel solo muestra el slide fijo (AC3).
 
-function buildSlides(displayName: string) {
-  return [
-    {
-      type: "welcome" as const,
-      title: `Hola, ${displayName} 👋`,
-      body: "Tus procesos y validaciones se encuentran sincronizados. Continúa gestionando tu operación de manera segura y eficiente.",
-      bg: "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)",
-    },
-    {
-      type: "news" as const,
-      title: "Nueva integración disponible",
-      body: "Sistema de validación de identidad con Inteligencia Artificial ya integrado en tus trámites.",
-      bg: "linear-gradient(120deg,#16a34a 0%,#22c55e 100%)",
-    },
-    {
-      type: "info" as const,
-      title: "Nuevas novedades de la plataforma",
-      body: "Hemos publicado mejoras en validación RUNT, reportes ejecutivos y trazabilidad de firmas digitales.",
-      bg: "#557eff",
-    },
-  ] as const;
+type WelcomeSlide = {
+  type: "welcome";
+  title: string;
+  body: string;
+  bg: string;
+};
+
+type BannerSlide = {
+  type: "banner";
+  id: string;
+  name: string;
+  imageUrl: string;
+  linkUrl: string | null;
+};
+
+type Slide = WelcomeSlide | BannerSlide;
+
+function buildSlides(displayName: string, banners: ActiveBanner[]): Slide[] {
+  const welcome: WelcomeSlide = {
+    type: "welcome",
+    title: `Hola, ${displayName} 👋`,
+    body: "Tus procesos y validaciones se encuentran sincronizados. Continúa gestionando tu operación de manera segura y eficiente.",
+    bg: "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)",
+  };
+
+  const bannerSlides: BannerSlide[] = banners.map((banner) => ({
+    type: "banner",
+    id: banner.id,
+    name: banner.name,
+    imageUrl: bannerImageUrl(banner.id),
+    linkUrl: banner.linkUrl,
+  }));
+
+  return [welcome, ...bannerSlides];
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
@@ -171,6 +188,19 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   // Banner carousel
   const [slide, setSlide] = useState(0);
 
+  // Banners Activos (HU #12242, AC1). Un fallo de red ya degrada en silencio dentro del hook
+  // (AC3); aquí solo se filtran, además, los banners cuya imagen falló al cargar (`onError` del
+  // <img>) para que ese slide puntual desaparezca sin romper el resto del carrusel.
+  const activeBanners = useActiveBanners();
+  const [failedBannerIds, setFailedBannerIds] = useState<Set<string>>(new Set());
+  const visibleBanners = useMemo(
+    () => activeBanners.filter((banner) => !failedBannerIds.has(banner.id)),
+    [activeBanners, failedBannerIds],
+  );
+  const markBannerFailed = useCallback((id: string) => {
+    setFailedBannerIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+  }, []);
+
   // Leer identidad del JWT en cliente (el token solo existe en cliente tras el montaje).
   useEffect(() => {
     const payload = decodeJwtPayload(getToken());
@@ -193,7 +223,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   }, [isSuper]);
 
   // Auto-avance del carrusel
-  const slides = useMemo(() => buildSlides(displayName), [displayName]);
+  const slides = useMemo(() => buildSlides(displayName, visibleBanners), [displayName, visibleBanners]);
   useEffect(() => {
     const id = setInterval(() => setSlide((s) => (s + 1) % slides.length), 6000);
     return () => clearInterval(id);
@@ -316,7 +346,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const chartHasData = chartData.length > 0;
   const chartStatus: UiStatus = status === "ready" ? (chartHasData ? "ready" : "empty") : status;
 
-  const s = slides[slide];
+  // Defensivo: si un banner falla después de posicionar el índice en él (p. ej. `onError` de la
+  // última imagen visible), `slides` puede encoger antes de que el índice se reacomode.
+  const s = slides[slide] ?? slides[0];
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
@@ -324,29 +356,58 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0">
         {/* Banner carousel */}
         <div
-          className="relative md:col-span-2 rounded-2xl px-6 py-5 text-white overflow-hidden flex flex-col justify-between"
-          style={{ background: s.bg, minHeight: "220px" }}
+          className="relative md:col-span-2 rounded-2xl text-white overflow-hidden flex flex-col justify-between"
+          style={{ minHeight: "220px" }}
         >
-          <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-15 bg-white" />
-          <div className="relative flex flex-col gap-3 max-w-[85%]">
-            <div className="flex items-center gap-3">
-              <div
-                className="h-10 w-10 rounded-xl grid place-items-center shrink-0"
-                style={{ background: "rgba(255,255,255,0.18)" }}
-              >
-                {s.type === "welcome" ? (
+          {/* Capa de fondo: gradiente fijo para el slide de bienvenida, imagen del banner (por
+              streaming, endpoint público sin auth) para los demás — AC1/AC2. */}
+          {s.type === "welcome" ? (
+            <div className="absolute inset-0" style={{ background: s.bg }} />
+          ) : (
+            <img
+              src={s.imageUrl}
+              alt={s.name}
+              onError={() => markBannerFailed(s.id)}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          )}
+          {/* Velo para que los controles (puntos/flechas) mantengan contraste sobre cualquier
+              imagen de banner; sobre el gradiente del slide fijo es imperceptible. */}
+          <div
+            className="absolute inset-0"
+            style={{ background: "linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.35) 100%)" }}
+          />
+          {s.type === "welcome" && (
+            <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-15 bg-white" />
+          )}
+          {s.type === "welcome" ? (
+            <div className="relative flex flex-col gap-3 max-w-[85%] px-6 pt-5">
+              <div className="flex items-center gap-3">
+                <div
+                  className="h-10 w-10 rounded-xl grid place-items-center shrink-0"
+                  style={{ background: "rgba(255,255,255,0.18)" }}
+                >
                   <Activity className="h-5 w-5" />
-                ) : s.type === "news" ? (
-                  <Sparkles className="h-5 w-5" />
-                ) : (
-                  <ShieldCheck className="h-5 w-5" />
-                )}
+                </div>
+                <h2 className="text-2xl md:text-3xl font-bold leading-tight">{s.title}</h2>
               </div>
-              <h2 className="text-2xl md:text-3xl font-bold leading-tight">{s.title}</h2>
+              <p className="text-sm md:text-base opacity-95 leading-snug line-clamp-3">{s.body}</p>
             </div>
-            <p className="text-sm md:text-base opacity-95 leading-snug line-clamp-3">{s.body}</p>
-          </div>
-          <div className="flex items-center justify-between mt-3 relative">
+          ) : s.linkUrl ? (
+            <div className="relative px-6 pt-5">
+              <a
+                href={s.linkUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold bg-white/15 hover:bg-white/25"
+              >
+                {s.name}
+              </a>
+            </div>
+          ) : (
+            <span className="sr-only">{s.name}</span>
+          )}
+          <div className="flex items-center justify-between mt-3 relative px-6 pb-5">
             <div className="flex gap-1">
               {slides.map((_, i) => (
                 <button

@@ -26,6 +26,14 @@ vi.mock("@/lib/api/ot-metrics", async (importOriginal) => ({
   fetchOtDrilldown: (...args: unknown[]) => fetchOtDrilldown(...args),
 }));
 
+// HU #12242 — banners Activos del carrusel de bienvenida; sin cobertura propia en este archivo
+// (ver Dashboard.test.tsx y OtDashboard.actividad.test.tsx), se doblan a lista vacía para no
+// disparar peticiones reales de red en estos escenarios de navegación por drilldown.
+vi.mock("@/lib/api/public-banners", () => ({
+  getActiveBanners: vi.fn().mockResolvedValue([]),
+  bannerImageUrl: (id: string) => `http://api.test/api/v1/public/banners/${id}/image`,
+}));
+
 const OT_ID = "aaaaaaaa-0001-4000-8000-000000000001";
 
 const PANEL: OtOperationalPanel = {

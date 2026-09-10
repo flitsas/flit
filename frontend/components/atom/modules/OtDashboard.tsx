@@ -53,6 +53,8 @@ import {
   type OtReportSeriesPoint,
   type OtReportSummary,
 } from "@/lib/api/ot-metrics";
+import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
+import { useActiveBanners } from "@/hooks/useActiveBanners";
 import { resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import {
   DrilldownPanel,
@@ -136,6 +138,9 @@ export function OtDashboard() {
 
   const reintentar = useCallback(() => setIntento((n) => n + 1), []);
 
+  // Banners Activos globales (HU #12242, AC2): mismo set y mismo hook que ve el gestor.
+  const activeBanners = useActiveBanners();
+
   // El detalle se pide con los MISMOS parámetros del panel, para que la lista nunca contradiga a la
   // tarjeta que la abrió: es el backend quien recalcula el bloque con idénticos predicados.
   const abrirBloque = useCallback<AbrirBloque>(
@@ -165,6 +170,7 @@ export function OtDashboard() {
       <Bienvenida
         organismo={organismo}
         porRevisar={estado === "listo" ? (panel?.cola.porRevisar ?? null) : null}
+        banners={activeBanners}
       />
 
       {estado === "error" ? (
@@ -187,15 +193,38 @@ export function OtDashboard() {
 /** Cada cuánto rota el banner. Mismo ritmo que el del gestor, para que la plataforma se sienta una. */
 const ROTACION_MS = 6000;
 
+type MensajeSlide = {
+  kind: "mensaje";
+  id: string;
+  title: string;
+  body: string;
+  bg: string;
+};
+
+type BannerSlide = {
+  kind: "banner";
+  id: string;
+  name: string;
+  imageUrl: string;
+  linkUrl: string | null;
+};
+
+type OrganismoSlide = MensajeSlide | BannerSlide;
+
 /**
- * Mensajes del banner del organismo.
+ * Slides del banner del organismo.
  *
  * El carrusel del gestor no servía tal cual: anunciaba «validación de identidad con IA ya integrada
  * en TUS trámites» a quien no radica trámites ni valida biometrías. Lo que se conserva es el
- * mecanismo —el sitio donde se pasan mensajes—; lo que cambia es que aquí los mensajes hablan del
- * organismo. Añadir uno nuevo es añadir una entrada a esta lista.
+ * mecanismo —el sitio donde se pasan mensajes—; lo que cambia es que aquí el único mensaje propio
+ * habla de la cola. Detrás van los banners Activos del Administrador (HU #12242, AC2): el mismo
+ * set global que ve el gestor. Sin banners activos, el slide fijo queda solo (AC3).
  */
-function mensajesDelOrganismo(organismo: string | null, porRevisar: number | null) {
+function mensajesDelOrganismo(
+  organismo: string | null,
+  porRevisar: number | null,
+  banners: ActiveBanner[],
+): OrganismoSlide[] {
   const cola =
     porRevisar === null
       ? "Aquí ves el estado de tu cola en este momento y el movimiento del día."
@@ -203,30 +232,27 @@ function mensajesDelOrganismo(organismo: string | null, porRevisar: number | nul
         ? "No tienes trámites esperando decisión en este momento."
         : `Tienes ${porRevisar} ${porRevisar === 1 ? "trámite" : "trámites"} esperando tu decisión.`;
 
-  return [
-    {
-      id: "bienvenida",
-      title: "Tu cola de trabajo",
-      body: `${cola} Los datos son del día calendario de Bogotá.`,
-      bg: "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)",
-    },
-    {
-      id: "antiguedad",
-      title: "Lo que se envejece, primero",
-      body: "La antigüedad de lo pendiente avisa antes de que un trámite se convierta en un reclamo. El tramo de más de 7 días solo se enciende cuando tiene algo.",
-      bg: "linear-gradient(120deg,#557eff 0%,#8a5cf6 100%)",
-    },
-    {
-      id: "reportes",
-      title: "Reportes del organismo",
-      body: "Consulta el desempeño por revisor, la calidad de cada empresa que radica y los motivos de rechazo más frecuentes.",
-      bg: "linear-gradient(120deg,#0ea5e9 0%,#00dbd5 100%)",
-    },
-  ];
+  const fijo: MensajeSlide = {
+    kind: "mensaje",
+    id: "bienvenida",
+    title: "Tu cola de trabajo",
+    body: `${cola} Los datos son del día calendario de Bogotá.`,
+    bg: "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)",
+  };
+
+  const bannerSlides: BannerSlide[] = banners.map((banner) => ({
+    kind: "banner",
+    id: banner.id,
+    name: banner.name,
+    imageUrl: bannerImageUrl(banner.id),
+    linkUrl: banner.linkUrl,
+  }));
+
+  return [fijo, ...bannerSlides];
 }
 
 /**
- * Banner del organismo: el nombre siempre visible y los mensajes rotando encima.
+ * Banner del organismo: el nombre siempre visible y los slides rotando encima.
  *
  * El nombre NO entra en la rotación a propósito: identifica el organismo y desaparecería dos de cada
  * tres veces.
@@ -234,13 +260,22 @@ function mensajesDelOrganismo(organismo: string | null, porRevisar: number | nul
 function Bienvenida({
   organismo,
   porRevisar,
+  banners,
 }: {
   organismo: string | null;
   porRevisar: number | null;
+  banners: ActiveBanner[];
 }) {
+  // Si una imagen de banner falla al cargar (`onError`), ese slide puntual se retira sin romper
+  // el resto del carrusel (AC3).
+  const [failedBannerIds, setFailedBannerIds] = useState<Set<string>>(new Set());
+  const bannersVisibles = useMemo(
+    () => banners.filter((banner) => !failedBannerIds.has(banner.id)),
+    [banners, failedBannerIds],
+  );
   const mensajes = useMemo(
-    () => mensajesDelOrganismo(organismo, porRevisar),
-    [organismo, porRevisar],
+    () => mensajesDelOrganismo(organismo, porRevisar, bannersVisibles),
+    [organismo, porRevisar, bannersVisibles],
   );
   const [actual, setActual] = useState(0);
 
@@ -249,56 +284,96 @@ function Bienvenida({
     return () => clearInterval(id);
   }, [mensajes.length]);
 
-  const mensaje = mensajes[actual];
+  // Defensivo: si el slide actual desaparece (banner con imagen rota), el índice se reacomoda
+  // en el siguiente render; mientras tanto no debe intentar leer un slide inexistente.
+  const mensaje = mensajes[actual] ?? mensajes[0];
 
   return (
     <header
-      className="relative flex flex-col justify-between overflow-hidden rounded-2xl px-6 py-5 text-white"
-      style={{ background: mensaje.bg, minHeight: "168px" }}
+      className="relative flex flex-col justify-between overflow-hidden rounded-2xl text-white"
+      style={{ minHeight: "168px" }}
     >
-      <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white opacity-15" />
-      <div className="relative max-w-[85%]">
-        <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
-          {organismo ?? "Organismo de tránsito"}
-        </p>
-        <h1 className="mt-1 text-2xl font-bold leading-tight md:text-3xl">{mensaje.title}</h1>
-        <p className="mt-1.5 text-sm leading-snug opacity-90">{mensaje.body}</p>
-      </div>
+      {/* Capa de fondo: gradiente fijo para el slide de la cola, imagen del banner (endpoint
+          público, sin auth) para los demás. */}
+      {mensaje.kind === "mensaje" ? (
+        <div className="absolute inset-0" style={{ background: mensaje.bg }} />
+      ) : (
+        <img
+          src={mensaje.imageUrl}
+          alt={mensaje.name}
+          onError={() => setFailedBannerIds((prev) => (prev.has(mensaje.id) ? prev : new Set(prev).add(mensaje.id)))}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+      {/* Velo para que el nombre del organismo y los controles mantengan contraste sobre
+          cualquier imagen de banner; sobre el gradiente es imperceptible. */}
+      <div
+        className="absolute inset-0"
+        style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.35) 100%)" }}
+      />
+      {mensaje.kind === "mensaje" && (
+        <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white opacity-15" />
+      )}
 
-      <div className="relative mt-4 flex items-center justify-between">
-        <div className="flex gap-1">
-          {mensajes.map((m, i) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => setActual(i)}
-              aria-label={`Mensaje ${i + 1} de ${mensajes.length}: ${m.title}`}
-              aria-current={i === actual}
-              className="h-1.5 rounded-full transition-all"
-              style={{
-                width: i === actual ? 16 : 5,
-                background: i === actual ? "#ffffff" : "rgba(255,255,255,0.5)",
-              }}
-            />
-          ))}
+      <div className="relative flex flex-1 flex-col justify-between px-6 py-5">
+        <div className="max-w-[85%]">
+          <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+            {organismo ?? "Organismo de tránsito"}
+          </p>
+          {mensaje.kind === "mensaje" ? (
+            <>
+              <h1 className="mt-1 text-2xl font-bold leading-tight md:text-3xl">{mensaje.title}</h1>
+              <p className="mt-1.5 text-sm leading-snug opacity-90">{mensaje.body}</p>
+            </>
+          ) : mensaje.linkUrl ? (
+            <a
+              href={mensaje.linkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-flex w-fit items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-sm font-semibold hover:bg-white/25"
+            >
+              {mensaje.name}
+            </a>
+          ) : (
+            <h1 className="mt-1 text-2xl font-bold leading-tight md:text-3xl">{mensaje.name}</h1>
+          )}
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setActual((i) => (i - 1 + mensajes.length) % mensajes.length)}
-            aria-label="Mensaje anterior"
-            className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
-          >
-            <ChevronLeft className="h-3 w-3" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setActual((i) => (i + 1) % mensajes.length)}
-            aria-label="Mensaje siguiente"
-            className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
-          >
-            <ChevronRight className="h-3 w-3" aria-hidden="true" />
-          </button>
+
+        <div className="mt-4 flex items-center justify-between">
+          <div className="flex gap-1">
+            {mensajes.map((m, i) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setActual(i)}
+                aria-label={`Mensaje ${i + 1} de ${mensajes.length}`}
+                aria-current={i === actual}
+                className="h-1.5 rounded-full transition-all"
+                style={{
+                  width: i === actual ? 16 : 5,
+                  background: i === actual ? "#ffffff" : "rgba(255,255,255,0.5)",
+                }}
+              />
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setActual((i) => (i - 1 + mensajes.length) % mensajes.length)}
+              aria-label="Mensaje anterior"
+              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+            >
+              <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActual((i) => (i + 1) % mensajes.length)}
+              aria-label="Mensaje siguiente"
+              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+            >
+              <ChevronRight className="h-3 w-3" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </div>
     </header>
