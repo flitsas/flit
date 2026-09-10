@@ -172,4 +172,23 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(screen.queryByText("Comparendos")).not.toBeInTheDocument();
     expect(screen.queryByText("Resoluciones")).not.toBeInTheDocument();
   });
+
+  it("SuperAdmin en 'Todas las compañías': no llama al endpoint (no hay un tenant concreto) y no queda en error permanente", async () => {
+    mocks.isSuperAdmin.mockReturnValue(true);
+    mocks.fetchCompaniesIndex.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 100 });
+
+    render(<Dashboard onNewTramite={noop} />);
+
+    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+
+    // Para este endpoint (sin vista global) un tenantId vacío respondería 400 del backend —
+    // antes de este fix eso dejaba la fila de "Próximamente" en error permanente sin importar
+    // qué se cambiara en configuración de compañía. Se explica con un mensaje, no con la
+    // alerta roja de error genérico.
+    expect(
+      await screen.findByText("Selecciona una compañía para ver sus módulos activos."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

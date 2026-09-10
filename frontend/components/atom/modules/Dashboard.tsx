@@ -299,6 +299,15 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
     const controller = new AbortController();
 
     async function loadActiveModules() {
+      // El endpoint NO tiene vista global (son los flags de UN tenant): un SuperAdmin en
+      // "Todas las compañías" recibiría 400 en cada intento, y sin este atajo la sección quedaba
+      // en error permanente sin importar qué se cambiara en configuración — el toggle nunca
+      // llegaba a verse reflejado porque la llamada ni siquiera se hacía contra un tenant
+      // concreto. Mismo patrón que `loadBiometrics` (líneas arriba) para el mismo caso.
+      if (isSuper && !tenantId) {
+        setActiveModulesStatus("empty");
+        return;
+      }
       setActiveModulesStatus("loading");
       try {
         const res = await fetchActiveModules(tenantId || undefined, controller.signal);
@@ -314,7 +323,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
 
     void loadActiveModules();
     return () => controller.abort();
-  }, [tenantId, reloadKey]);
+  }, [tenantId, isSuper, reloadKey]);
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -366,6 +375,13 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   // biometricStats, etc. tienen su propio status independiente).
   const comingSoonStatus: UiStatus =
     activeModulesStatus === "ready" ? (comingSoonModules.length > 0 ? "ready" : "empty") : activeModulesStatus;
+  // "Empty" cubre dos causas distintas: sin compañía elegida (SuperAdmin) vs. los 3 módulos ya
+  // habilitados para la compañía concreta — cada una con su propio mensaje, mismo patrón que
+  // `emptyMessage` de biometricStatus arriba.
+  const comingSoonEmptyMessage =
+    isSuper && !tenantId
+      ? "Selecciona una compañía para ver sus módulos activos."
+      : "Todos los módulos del dashboard están habilitados para tu compañía.";
 
   const s = slides[slide];
 
@@ -501,7 +517,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
         status={comingSoonStatus}
         errorMessage={activeModulesErrorMessage}
         onRetry={retry}
-        emptyMessage="Todos los módulos del dashboard están habilitados para tu compañía."
+        emptyMessage={comingSoonEmptyMessage}
         skeletonRows={1}
         className="shrink-0"
       >
