@@ -65,6 +65,9 @@ public interface IRuntConfirmationStore
     /// <summary>¿Hay una corrida con <c>finished_at</c> NULL más reciente que <paramref name="staleAfter"/>?</summary>
     Task<bool> IsRunInProgressAsync(TimeSpan staleAfter, CancellationToken ct = default);
 
+    /// <summary>Inicio de la última corrida PROGRAMADA (saltada o no), para decidir si hoy ya tocó.</summary>
+    Task<DateTimeOffset?> GetLastScheduledRunStartedAtAsync(CancellationToken ct = default);
+
     /// <summary>Inserta el intento y aplica <paramref name="update"/> al trámite en la misma unidad de trabajo.</summary>
     Task RecordAttemptAsync(RuntConfirmationAttempt attempt, RuntConfirmationInstanceUpdate update, CancellationToken ct = default);
 

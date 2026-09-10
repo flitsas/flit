@@ -32,7 +32,10 @@ internal sealed class FakeRuntConfirmationStore : IRuntConfirmationStore
     public Task<Guid?> SaveRawPayloadAsync(Guid tenantId, Guid instanceId, string providerKey, string? subjectKey, string rawJson, DateTimeOffset queriedAt, CancellationToken ct = default)
     {
         var id = Guid.CreateVersion7();
-        Payloads[id] = rawJson;
+        lock (_gate)
+        {
+            Payloads[id] = rawJson;
+        }
         return Task.FromResult<Guid?>(id);
     }
 
@@ -53,21 +56,31 @@ internal sealed class FakeRuntConfirmationStore : IRuntConfirmationStore
 
     public Task<bool> IsRunInProgressAsync(TimeSpan staleAfter, CancellationToken ct = default) => Task.FromResult(RunInProgress);
 
+    public Task<DateTimeOffset?> GetLastScheduledRunStartedAtAsync(CancellationToken ct = default) =>
+        Task.FromResult(Runs.Where(r => r.Trigger == RuntConfirmationRunTriggers.Scheduled).Select(r => (DateTimeOffset?)r.StartedAt).Max());
+
+    private readonly Lock _gate = new();
+
+    // La corrida graba desde varias tareas a la vez (concurrencia acotada): el doble debe ser
+    // seguro para hilos igual que el almacén real (scope propio por operación).
     public Task RecordAttemptAsync(RuntConfirmationAttempt attempt, RuntConfirmationInstanceUpdate update, CancellationToken ct = default)
     {
-        Attempts.Add(attempt);
-        Updates.Add((attempt.ProcedureInstanceId, update));
-
-        var i = Candidates.FindIndex(c => c.InstanceId == attempt.ProcedureInstanceId);
-        if (i >= 0)
+        lock (_gate)
         {
-            var c = Candidates[i];
-            Candidates[i] = c with
+            Attempts.Add(attempt);
+            Updates.Add((attempt.ProcedureInstanceId, update));
+
+            var i = Candidates.FindIndex(c => c.InstanceId == attempt.ProcedureInstanceId);
+            if (i >= 0)
             {
-                RuntAttempts = update.IncrementAttempts ? c.RuntAttempts + 1 : c.RuntAttempts,
-                RuntConfirmedAt = update.ConfirmedAt ?? c.RuntConfirmedAt,
-                RuntFlag = update.ClearFlag ? null : update.Flag ?? c.RuntFlag,
-            };
+                var c = Candidates[i];
+                Candidates[i] = c with
+                {
+                    RuntAttempts = update.IncrementAttempts ? c.RuntAttempts + 1 : c.RuntAttempts,
+                    RuntConfirmedAt = update.ConfirmedAt ?? c.RuntConfirmedAt,
+                    RuntFlag = update.ClearFlag ? null : update.Flag ?? c.RuntFlag,
+                };
+            }
         }
 
         return Task.CompletedTask;
