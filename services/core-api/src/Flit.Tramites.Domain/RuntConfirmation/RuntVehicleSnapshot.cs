@@ -192,6 +192,11 @@ public static class RuntVehicleSnapshotParser
             if (root.ValueKind != JsonValueKind.Object)
                 return Unreadable();
 
+            // Cuerpo de un error HTTP del proveedor guardado como evidencia (Verifik 409/5xx): no es un
+            // «no encontrado» aunque lleve ok:false; sin dato no hay veredicto.
+            if (root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.True)
+                return Unreadable();
+
             if (root.TryGetProperty("notFound", out var nf) && nf.ValueKind == JsonValueKind.True)
                 return RuntVehicleSnapshot.NotFound(Str(root, "providerKey") ?? "desconocido");
 

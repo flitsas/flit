@@ -121,7 +121,14 @@ internal sealed class VerifikRuntRawHttpClient(HttpClient http, IOptions<Verifik
             }
 
             if (!response.IsSuccessStatusCode)
-                return (RuntRawQueryResult.Error($"HTTP {(int)response.StatusCode}"), (int)response.StatusCode >= 500);
+            {
+                // El cuerpo del error se conserva como crudo del intento: sin él, un 409 de Verifik en el
+                // historial no dice nada (¿parámetro faltante?, ¿petición duplicada?) y no se puede
+                // diagnosticar sin repetir la consulta pagada.
+                var status = (int)response.StatusCode;
+                var raw = IsJsonObject(body) ? MarkError(body, status) : null;
+                return (new RuntRawQueryResult(RuntRawOutcome.Error, raw, ErrorMessage(body, status)), status >= 500);
+            }
 
             if (!IsJsonObject(body))
                 return (RuntRawQueryResult.Error("Respuesta ilegible del proveedor"), false);
@@ -156,6 +163,30 @@ internal sealed class VerifikRuntRawHttpClient(HttpClient http, IOptions<Verifik
             return false;
         }
     }
+
+    /// <summary>«HTTP 409 — MissingParameter: missing plate», con lo que Verifik haya puesto en <c>code</c>/<c>message</c>.</summary>
+    private static string ErrorMessage(string? body, int status)
+    {
+        var prefix = $"HTTP {status}";
+        if (!IsJsonObject(body))
+            return prefix;
+        using var doc = JsonDocument.Parse(body!);
+        var code = doc.RootElement.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+        var message = doc.RootElement.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null;
+        var detail = string.Join(": ", new[] { code, message }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        return detail.Length == 0 ? prefix : $"{prefix} — {detail}";
+    }
+
+    /// <summary>Envuelve el cuerpo de un error HTTP (4xx/5xx) para guardarlo como evidencia del intento.</summary>
+    private static string MarkError(string body, int status) =>
+        JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["ok"] = false,
+            ["error"] = true,
+            ["providerKey"] = RuntConfirmationProviderKeys.Verifik,
+            ["statusCode"] = status,
+            ["providerBody"] = JsonSerializer.Deserialize<JsonElement>(body),
+        });
 
     /// <summary>Envuelve el cuerpo del 404 para conservarlo como evidencia y que el parser lo lea como no encontrado.</summary>
     private static string MarkNotFound(string body) =>
