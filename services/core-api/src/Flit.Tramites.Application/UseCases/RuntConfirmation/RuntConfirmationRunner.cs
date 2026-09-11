@@ -68,19 +68,25 @@ public sealed class RuntConfirmationRunner(
             var candidates = await LoadCandidatesAsync(request, settings, now, ct).ConfigureAwait(false);
             RunnerLog.Started(logger, run.Id, request.Trigger, settings.ProviderKey, candidates.Count);
 
+            // Paralelo entre vehículos, secuencial dentro del mismo: el proveedor colapsa consultas
+            // simultáneas de una misma placa (ver ProcessCandidateAsync), así que dos trámites del mismo
+            // vehículo en la misma corrida van uno detrás del otro.
             using var gate = new SemaphoreSlim(Math.Max(1, options.MaxConcurrency));
-            var tasks = candidates.Select(async candidate =>
-            {
-                await gate.WaitAsync(ct).ConfigureAwait(false);
-                try
+            var tasks = candidates
+                .GroupBy(c => c.Plate?.Trim().ToUpperInvariant() is { Length: > 0 } plate ? plate : c.InstanceId.ToString())
+                .Select(async group =>
                 {
-                    await ProcessCandidateAsync(run, settings, candidate, request.RequestedBy, counters, ct).ConfigureAwait(false);
-                }
-                finally
-                {
-                    gate.Release();
-                }
-            });
+                    await gate.WaitAsync(ct).ConfigureAwait(false);
+                    try
+                    {
+                        foreach (var candidate in group)
+                            await ProcessCandidateAsync(run, settings, candidate, request.RequestedBy, counters, ct).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        gate.Release();
+                    }
+                });
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
@@ -161,11 +167,13 @@ public sealed class RuntConfirmationRunner(
                 return;
             }
 
-            // Consultas al proveedor. En traspaso las dos van en paralelo: son independientes.
-            var primaryTask = client.ConsultAsync(settings.ProviderKey, plan.Primary!, ct);
-            var sellerTask = plan.Seller is null ? null : client.ConsultAsync(settings.ProviderKey, plan.Seller, ct);
-            var primary = await primaryTask.ConfigureAwait(false);
-            var seller = sellerTask is null ? null : await sellerTask.ConfigureAwait(false);
+            // Consultas al proveedor. En traspaso las dos van EN SECUENCIA, vendedor primero, nunca en
+            // paralelo: Kyverum colapsa dos peticiones simultáneas de la misma placa en una sola
+            // resolución (la que llega primero manda, sin importar el documento) y Verifik responde
+            // 409 a la segunda. Visto en dev el 2026-09-10 con JNH38H: los dos crudos salían byte a
+            // byte iguales y el veredicto se daba con datos falsos.
+            var seller = plan.Seller is null ? null : await client.ConsultAsync(settings.ProviderKey, plan.Seller, ct).ConfigureAwait(false);
+            var primary = await client.ConsultAsync(settings.ProviderKey, plan.Primary!, ct).ConfigureAwait(false);
             counters.ProviderCalls(plan.Seller is null ? 1 : 2);
 
             // AC4 — el crudo se guarda ANTES de evaluar, aunque el veredicto vaya a ser error.
@@ -178,6 +186,19 @@ public sealed class RuntConfirmationRunner(
                 var d = new RuntConfirmationDecision(
                     RuntConfirmationVerdict.Error,
                     $"El proveedor no respondió ({message ?? "error"}); no cuenta como intento y se reintenta en la siguiente corrida.",
+                    RuntConfirmationRules.Version);
+                await RecordAsync(run, settings, candidate, attemptNo, queriedAt, plan.Kind, d, primaryId, sellerId, requestedBy, counters, ct).ConfigureAwait(false);
+                return;
+            }
+
+            // Colapso del proveedor: dos documentos distintos no pueden producir exactamente el mismo
+            // cuerpo (Kyverum ecoa tipoDocPropietario; Verifik, documentNumber). Si pasa, es la caché por
+            // placa del proveedor, no un dato del RUNT: error de proveedor, sin consumir intento.
+            if (seller is not null && ProviderCollapsed(plan, primary, seller))
+            {
+                var d = new RuntConfirmationDecision(
+                    RuntConfirmationVerdict.Error,
+                    "El proveedor devolvió exactamente la misma respuesta para el documento del comprador y el del vendedor (caché por placa del proveedor); no se puede distinguir quién es el propietario; no cuenta como intento y se reintenta en la siguiente corrida.",
                     RuntConfirmationRules.Version);
                 await RecordAsync(run, settings, candidate, attemptNo, queriedAt, plan.Kind, d, primaryId, sellerId, requestedBy, counters, ct).ConfigureAwait(false);
                 return;
@@ -241,6 +262,17 @@ public sealed class RuntConfirmationRunner(
             }
         }
     }
+
+    /// <summary>
+    /// Dos consultas con documentos distintos y el mismo cuerpo crudo, byte a byte. Solo aplica cuando
+    /// ambas devolvieron algo (un «no encontrado» sintetizado por FLIT es igual para las dos por
+    /// construcción y no dice nada del proveedor).
+    /// </summary>
+    internal static bool ProviderCollapsed(QueryPlan plan, RuntRawQueryResult primary, RuntRawQueryResult seller) =>
+        plan.Primary?.Document is { } a && plan.Seller?.Document is { } b
+        && !string.Equals(a.Number, b.Number, StringComparison.Ordinal)
+        && primary.Outcome == RuntRawOutcome.Found && seller.Outcome == RuntRawOutcome.Found
+        && primary.RawJson is { Length: > 0 } && string.Equals(primary.RawJson, seller.RawJson, StringComparison.Ordinal);
 
     private async Task<Guid?> SaveAsync(
         RuntConfirmationCandidate candidate, string providerKey, RuntRawQuery query, RuntRawQueryResult result, DateTimeOffset queriedAt, CancellationToken ct)

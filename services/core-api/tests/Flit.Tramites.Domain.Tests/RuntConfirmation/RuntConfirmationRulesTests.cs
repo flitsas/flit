@@ -388,6 +388,9 @@ public sealed class RuntConfirmationRulesTests
         RuntVehicleSnapshotParser.Parse(RuntVehicleSnapshotParser.NotFoundPayload("verifik", 404, "Vehicle not found")).Outcome.Should().Be(RuntVehicleOutcome.NotFound);
         RuntVehicleSnapshotParser.Parse("no es json").Outcome.Should().Be(RuntVehicleOutcome.Unreadable);
         RuntVehicleSnapshotParser.Parse(null).Outcome.Should().Be(RuntVehicleOutcome.Unreadable);
+        // Cuerpo de un error HTTP guardado como evidencia (Verifik 409): no es «no encontrado».
+        RuntVehicleSnapshotParser.Parse("""{"ok":false,"error":true,"providerKey":"verifik","statusCode":409,"providerBody":{"code":"MissingParameter"}}""")
+            .Outcome.Should().Be(RuntVehicleOutcome.Unreadable);
     }
 
     [Fact]

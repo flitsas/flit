@@ -222,7 +222,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                 ] as const).map((m) => {
                   const sel = modalidad === m.id;
                   return (
-                    <button key={m.id} onClick={() => setModalidad(m.id)} className={`text-left rounded-2xl p-5 glass transition hover:scale-[1.02] ${sel ? "" : "opacity-80"}`} style={sel ? { boxShadow: "inset 0 0 0 2px #557eff" } : {}}>
+                    <button key={m.id} onClick={() => setModalidad(m.id)} className={`text-left rounded-2xl p-5 glass ${sel ? "" : "opacity-80"}`} style={sel ? { boxShadow: "inset 0 0 0 2px #557eff" } : {}}>
                       <div className="flex items-center justify-between">
                         <p className="font-bold text-slate-800">{m.title}</p>
                         {sel && <div className="h-6 w-6 rounded-full flex items-center justify-center" style={{ background: "#557eff" }}><Check className="h-4 w-4 text-white" /></div>}

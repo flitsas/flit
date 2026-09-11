@@ -19,7 +19,7 @@ export interface RuntGarantiaVista {
 }
 
 export interface RuntRespuestaVista {
-  resultado: "encontrado" | "no_encontrado" | "ilegible";
+  resultado: "encontrado" | "no_encontrado" | "error" | "ilegible";
   proveedor: "kyverum" | "verifik" | "desconocido";
   mensaje: string | null;
   vehiculo: Array<{ etiqueta: string; valor: string | null }>;
@@ -59,6 +59,20 @@ export function leerRespuestaRunt(raw: unknown): RuntRespuestaVista {
     garantias: [],
   };
   if (!root) return base;
+
+  // Cuerpo de un error HTTP del proveedor guardado como evidencia (Verifik 409/5xx): lleva ok:false
+  // pero NO es «no encontrado». Se muestra el código y el mensaje que dio el proveedor.
+  if (root.error === true) {
+    const body = obj(root.providerBody);
+    const status = typeof root.statusCode === "number" ? `HTTP ${root.statusCode}` : null;
+    const detalle = [str(body, "code"), str(body, "message")].filter(Boolean).join(": ");
+    return {
+      ...base,
+      resultado: "error",
+      proveedor: str(root, "providerKey") === "verifik" ? "verifik" : "desconocido",
+      mensaje: [status, detalle].filter(Boolean).join(" — ") || null,
+    };
+  }
 
   if (root.notFound === true || root.ok === false) {
     const hint = str(root, "providerKey");

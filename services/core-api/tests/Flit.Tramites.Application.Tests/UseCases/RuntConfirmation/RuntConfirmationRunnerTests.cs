@@ -107,6 +107,61 @@ public sealed class RuntConfirmationRunnerTests
 
     // ── AC3: consulta según familia ───────────────────────────────────────────────────
 
+    // Kyverum colapsa dos peticiones simultáneas de la misma placa en una sola resolución y Verifik
+    // responde 409 a la segunda (dev, 2026-09-10, JNH38H). El par del traspaso va en secuencia,
+    // vendedor primero, y nunca se solapa.
+    [Fact]
+    public async Task AC3c_Traspaso_ElParVaEnSecuencia_VendedorPrimero_SinSolape()
+    {
+        var (runner, store, client) = Build(new RuntConfirmationSettings { Enabled = true });
+        store.Candidates.Add(Traspaso());
+        client.Delay = TimeSpan.FromMilliseconds(30);
+        client.Respond(q => q.Document!.Number == "111"
+            ? new(RuntRawOutcome.NotFound, null, "no es propietario")
+            : new(RuntRawOutcome.Found, TraspasoOk, null));
+
+        var run = await runner.RunAsync(new(RuntConfirmationRunTriggers.Scheduled), TestContext.Current.CancellationToken);
+
+        run.ProviderCalls.Should().Be(2);
+        client.Calls.Select(q => q.Document!.Number).Should().Equal("111", "222");
+        client.MaxObservedConcurrency.Should().Be(1, "dos consultas de la misma placa en vuelo se colapsan en el proveedor");
+        store.Attempts.Single().Verdict.Should().Be("confirmed");
+    }
+
+    [Fact]
+    public async Task AC3c_DosTramitesDeLaMismaPlaca_NoSeConsultanALaVez()
+    {
+        var (runner, store, client) = Build(new RuntConfirmationSettings { Enabled = true });
+        store.Candidates.Add(Otros("CAMBIO_COLOR"));
+        store.Candidates.Add(Otros("CAMBIO_COLOR") with { ReferenceNumber = "FLT-2" });
+        client.Delay = TimeSpan.FromMilliseconds(30);
+        client.Respond(_ => new(RuntRawOutcome.Found, CambioColorOk, null));
+
+        var run = await runner.RunAsync(new(RuntConfirmationRunTriggers.Scheduled), TestContext.Current.CancellationToken);
+
+        run.Consulted.Should().Be(2);
+        client.Calls.Should().OnlyContain(q => q.Plate == "QZU024");
+        client.MaxObservedConcurrency.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AC3c_Traspaso_MismoCrudoParaLosDosDocumentos_EsErrorDeProveedor_NoConsumeIntento()
+    {
+        var (runner, store, client) = Build(new RuntConfirmationSettings { Enabled = true });
+        store.Candidates.Add(Traspaso());
+        client.Respond(_ => new(RuntRawOutcome.Found, TraspasoOk, null));
+
+        var run = await runner.RunAsync(new(RuntConfirmationRunTriggers.Scheduled), TestContext.Current.CancellationToken);
+
+        run.Errors.Should().Be(1);
+        var attempt = store.Attempts.Single();
+        attempt.Verdict.Should().Be("error");
+        attempt.ReasonText.Should().Contain("misma respuesta").And.Contain("no cuenta como intento");
+        attempt.RawPayloadId.Should().NotBeNull();
+        attempt.SellerRawPayloadId.Should().NotBeNull("los dos crudos quedan como evidencia del colapso");
+        store.Candidates.Single().RuntAttempts.Should().Be(0, "el error de proveedor no consume intento");
+    }
+
     [Fact]
     public async Task AC3_MatriculaPorVin_TraspasoDosPorPlaca_OtrosUnaPorPlacaConPropietario()
     {

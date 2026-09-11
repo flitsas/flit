@@ -63,6 +63,36 @@ public sealed class FileManagerAttachmentStorageTests
     }
 
     [Fact]
+    public async Task SaveAsync_CuandoElFileManagerPideMetodoPut_SubeLosBytesCrudosConPut()
+    {
+        // ADR-0057: con proveedores cuyo gateway rechaza el POST policy (Contabo), el
+        // file-manager devuelve method=PUT y el cliente sube el binario crudo, sin multipart.
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((req, _) =>
+        {
+            if (req.Method == HttpMethod.Post && req.RequestUri!.AbsolutePath == "/pdn/api/v1/files")
+                return Json(HttpStatusCode.Created,
+                    """{"id":"file_put","presignedUrl":{"url":"https://s3.test/upload?X-Amz-Signature=abc","method":"PUT"}}""");
+            if (req.Method == HttpMethod.Put && req.RequestUri!.Host == "s3.test")
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+        });
+
+        await using var content = new MemoryStream(Encoding.UTF8.GetBytes("hola-mundo"));
+        var result = await Storage(handler).SaveAsync(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"), "factura", "f.pdf", content, ct);
+
+        result.StoragePath.Should().Be("file_put");
+        result.SizeBytes.Should().Be(10);
+
+        // La subida fue PUT con el binario tal cual: ni multipart ni campos firmados.
+        var upload = handler.Requests.First(r => r.Uri.Host == "s3.test");
+        upload.Method.Should().Be(HttpMethod.Put);
+        upload.ContentType.Should().NotStartWith("multipart/form-data");
+        upload.Body.Should().Be("hola-mundo");
+    }
+
+    [Fact]
     public async Task CreatePresignedUploadAsync_CreaRegistroYDevuelvePresigned_SinSubirAS3()
     {
         var ct = TestContext.Current.CancellationToken;

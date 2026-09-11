@@ -351,7 +351,9 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
         <p className="rounded-lg px-3 py-2 text-[11px] font-medium" style={{ background: "rgba(255,78,0,0.10)", color: "#C2410C" }}>
           {vista.resultado === "no_encontrado"
             ? `El proveedor no encontró el vehículo con ese documento${vista.mensaje ? `: «${vista.mensaje}»` : "."}`
-            : "La respuesta no tiene la forma esperada; mira la pestaña JSON."}
+            : vista.resultado === "error"
+              ? `El proveedor respondió con error${vista.mensaje ? `: ${vista.mensaje}` : "."}`
+              : "La respuesta no tiene la forma esperada; mira la pestaña JSON."}
         </p>
       </section>
     );

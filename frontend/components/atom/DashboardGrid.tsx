@@ -43,7 +43,7 @@ export function DashboardGrid({ onNewTramite }: { onNewTramite: () => void }) {
         </div>
         <button
           onClick={onNewTramite}
-          className="rounded-2xl px-5 py-3 text-sm font-semibold text-white flex items-center gap-2 transition hover:scale-[1.02]"
+          className="rounded-2xl px-5 py-3 text-sm font-semibold text-white flex items-center gap-2"
           style={{ background: "linear-gradient(135deg,#557eff,#3b5bdb)", boxShadow: "0 10px 30px -10px rgba(85,126,255,0.6)" }}
         >
           Iniciar Nuevo Traspaso Vehicular Avanzado

@@ -65,6 +65,10 @@ tags:
       radicaciones por placa/trámite/radicado y línea de tiempo de eventos con detalle
       técnico sanitizado y enmascarado. Solo lectura; permiso logqx.read (HU #10794,
       SuperAdmin bypassa).
+  - name: Admin · ICT · Jobs
+    description: >
+      Cadencia global de jobs ICT (ict.job_settings) y catálogo SuperAdmin de procesos
+      periódicos (HU #12512 / #12513). Sin secretos. Solo rol SuperAdmin.
   - name: Admin · Baúl de Firmas
     description: "Gestión del baúl de firmas precargadas por compañía (HU #10643, ADR-0025). Solo SuperAdmin."
   - name: Admin · Representantes Legales
@@ -372,6 +376,126 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ict/job-settings:
+    get:
+      tags: [Admin · ICT · Jobs]
+      operationId: adminIctGetJobSettings
+      summary: Configuración vigente de jobs ICT (HU #12512)
+      description: >
+        Lee el singleton ict.job_settings (id=1). Cadencia, ventana America/Bogota,
+        lotes y concurrencia. Sin secretos. Requiere JWT SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Snapshot vigente (o defaults si aún no hay fila).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IctJobSettingsView"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Admin · ICT · Jobs]
+      operationId: adminIctPutJobSettings
+      summary: Actualiza ict.job_settings (HU #12512)
+      description: >
+        Persiste clamps (polls/batch/concurrency ≥ 1 y techos; ventana start < end).
+        core-ict aplica los valores en el siguiente ciclo via IctJobSettingsProvider.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IctJobSettingsWrite"
+      responses:
+        "200":
+          description: Configuración persistida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IctJobSettingsView"
+        "400":
+          description: Clamps o ventana incoherente.
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+
+  /api/v1/admin/ict/jobs:
+    get:
+      tags: [Admin · ICT · Jobs]
+      operationId: adminIctGetJobCatalog
+      summary: Catálogo de jobs ICT (HU #12513)
+      description: >
+        Metadatos estáticos (owner=core-ict, tipología BD/ENDPOINT_INTERNO/ENDPOINT_EXTERNO)
+        más último run de ict.job_runs cuando exista. Retention no tiene bitácora de pipeline.
+        Orchestrator declara consultas RUNT/familia vía proveedor; no es Confirmación RUNT.
+        Sin secretos, sin error_message ni payloads. Requiere JWT SuperAdmin.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de jobs ICT.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IctJobCatalogItemView"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ict/jobs/{jobKey}/runs:
+    get:
+      tags: [Admin · ICT · Jobs]
+      operationId: adminIctGetJobRuns
+      summary: Últimas corridas de un job ICT (HU #12513)
+      description: >
+        take acotado (1–50, default 20). No incluye error_message ni payloads.
+        Retention (sin pipeline) responde 200 con lista vacía.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: jobKey
+          in: path
+          required: true
+          schema: { type: string }
+          description: Clave del catálogo (p.ej. orchestrator, business-validation).
+        - name: take
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: Corridas recientes (más reciente primero).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IctJobRunListItemView"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+        "404":
+          description: jobKey no pertenece al catálogo.
 
   /api/v1/admin/companies:
     post:
@@ -9777,6 +9901,110 @@ components:
       properties:
         error: { type: string }
       required: [error]
+
+    IctJobSettingsView:
+      type: object
+      required:
+        - windowStartHour
+        - windowEndHour
+        - businessPollSeconds
+        - externalPollSeconds
+        - orchestratorPollSeconds
+        - orchestratorConcurrency
+        - orchestratorBatchSize
+        - sendPollSeconds
+        - sendConcurrency
+        - sendBatchSize
+        - webhookPollSeconds
+        - webhookBatchSize
+        - businessBatchSize
+        - externalBatchSize
+      properties:
+        windowStartHour: { type: integer, minimum: 0, maximum: 23 }
+        windowEndHour: { type: integer, minimum: 0, maximum: 23 }
+        businessPollSeconds: { type: integer, minimum: 1, maximum: 3600 }
+        externalPollSeconds: { type: integer, minimum: 1, maximum: 3600 }
+        orchestratorPollSeconds: { type: integer, minimum: 1, maximum: 3600 }
+        orchestratorConcurrency: { type: integer, minimum: 1, maximum: 100 }
+        orchestratorBatchSize: { type: integer, minimum: 1, maximum: 5000 }
+        sendPollSeconds: { type: integer, minimum: 1, maximum: 3600 }
+        sendConcurrency: { type: integer, minimum: 1, maximum: 100 }
+        sendBatchSize: { type: integer, minimum: 1, maximum: 5000 }
+        webhookPollSeconds: { type: integer, minimum: 1, maximum: 3600 }
+        webhookBatchSize: { type: integer, minimum: 1, maximum: 5000 }
+        businessBatchSize: { type: integer, minimum: 1, maximum: 5000 }
+        externalBatchSize: { type: integer, minimum: 1, maximum: 5000 }
+        updatedAt: { type: string, format: date-time, nullable: true }
+        updatedBy: { type: string, format: uuid, nullable: true }
+
+    IctJobSettingsWrite:
+      type: object
+      required:
+        - windowStartHour
+        - windowEndHour
+        - businessPollSeconds
+        - externalPollSeconds
+        - orchestratorPollSeconds
+        - orchestratorConcurrency
+        - orchestratorBatchSize
+        - sendPollSeconds
+        - sendConcurrency
+        - sendBatchSize
+        - webhookPollSeconds
+        - webhookBatchSize
+        - businessBatchSize
+        - externalBatchSize
+      properties:
+        windowStartHour: { type: integer }
+        windowEndHour: { type: integer }
+        businessPollSeconds: { type: integer }
+        externalPollSeconds: { type: integer }
+        orchestratorPollSeconds: { type: integer }
+        orchestratorConcurrency: { type: integer }
+        orchestratorBatchSize: { type: integer }
+        sendPollSeconds: { type: integer }
+        sendConcurrency: { type: integer }
+        sendBatchSize: { type: integer }
+        webhookPollSeconds: { type: integer }
+        webhookBatchSize: { type: integer }
+        businessBatchSize: { type: integer }
+        externalBatchSize: { type: integer }
+
+    IctJobCatalogItemView:
+      type: object
+      required: [key, displayName, owner, types, hasPipelineRuns]
+      properties:
+        key: { type: string }
+        displayName: { type: string }
+        owner: { type: string, example: core-ict }
+        types:
+          type: array
+          items:
+            type: string
+            enum: [BD, ENDPOINT_INTERNO, ENDPOINT_EXTERNO]
+        hasPipelineRuns: { type: boolean }
+        notes: { type: string, nullable: true }
+        lastRun:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/IctJobLastRunView"
+
+    IctJobLastRunView:
+      type: object
+      required: [outcome, startedAt, durationMs]
+      properties:
+        outcome: { type: string, enum: [ok, error] }
+        startedAt: { type: string, format: date-time }
+        durationMs: { type: integer, minimum: 0 }
+
+    IctJobRunListItemView:
+      type: object
+      required: [startedAt, durationMs, outcome]
+      properties:
+        startedAt: { type: string, format: date-time }
+        durationMs: { type: integer, minimum: 0 }
+        outcome: { type: string, enum: [ok, error] }
 
     DocumentOcrResponse:
       type: object
