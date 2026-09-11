@@ -12,6 +12,11 @@ import { AdminChildContextBanner } from "@/components/admin/companies/AdminChild
 import { CompanyChildrenSection } from "@/components/admin/companies/CompanyChildrenSection";
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
 import { OTConfigTablePanel } from "@/components/admin/companies/panels/OTConfigTablePanel";
+import { TransitBlocksPanel } from "@/components/admin/companies/panels/TransitBlocksPanel";
+import {
+  resolveOtConfigPanelMode,
+  showSuperAdminTransitBlocksPanel,
+} from "@/lib/companies/ot-config-mode";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
 import { PlatePreassignViewer } from "@/components/admin/companies/panels/PlatePreassignViewer";
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
@@ -44,6 +49,7 @@ function CompanyDetail() {
   const [isNew, setIsNew] = useState(false);
   const [company, setCompany] = useState<CompanyListItem | null>(null);
   const [activeChildrenCount, setActiveChildrenCount] = useState(0);
+  const [parentCompany, setParentCompany] = useState<CompanyListItem | null>(null);
   const [accessChecked, setAccessChecked] = useState(false);
 
   const managingChild =
@@ -53,11 +59,19 @@ function CompanyDetail() {
     callerTenantId === networkHeadId &&
     tenantId !== callerTenantId;
 
-  const otReadOnly =
-    !isSuperAdmin &&
-    isAdminCompany &&
-    company?.tenantType === "CONCESION" &&
-    !managingChild;
+  const otPanelMode = resolveOtConfigPanelMode({
+    company,
+    parentTenantType: parentCompany?.tenantType ?? null,
+    isSuperAdmin,
+    isAdminCompany,
+  });
+
+  const showTransitBlocksPanel = showSuperAdminTransitBlocksPanel(company, isSuperAdmin);
+
+  const blocksTenantId =
+    company?.parentTenantId && parentCompany?.tenantType === "MARCA_BLANCA"
+      ? parentCompany.id
+      : tenantId;
 
   const showChildrenSection = isSuperAdmin && company && isHeadTenantType(company.tenantType);
 
@@ -117,6 +131,15 @@ function CompanyDetail() {
         setCompany(identity);
         setIsNew(data === null);
         setSettings(data ?? defaultSettings(tenantId));
+
+        if (identity?.parentTenantId) {
+          const parent = await fetchCompany(identity.parentTenantId, signal);
+          if (!signal?.aborted) {
+            setParentCompany(parent);
+          }
+        } else if (!signal?.aborted) {
+          setParentCompany(null);
+        }
 
         if (identity && isSuperAdmin && isHeadTenantType(identity.tenantType)) {
           try {
@@ -225,7 +248,26 @@ function CompanyDetail() {
                 company={company}
                 onSaveSettings={handleSaveSettings}
                 whitelistSlot={<WhitelistPanel tenantId={tenantId} />}
-                otSlot={<OTConfigTablePanel tenantId={tenantId} readOnly={otReadOnly} />}
+                otSlot={
+                  <>
+                    {showTransitBlocksPanel && (
+                      <div className="mb-4 rounded-2xl border p-4">
+                        <TransitBlocksPanel
+                          tenantId={tenantId}
+                          activeChildrenCount={activeChildrenCount}
+                        />
+                      </div>
+                    )}
+                    <OTConfigTablePanel
+                      tenantId={tenantId}
+                      mode={otPanelMode}
+                      grantScopeWarningCount={
+                        otPanelMode === "superadmin-concession" ? activeChildrenCount : 0
+                      }
+                      blocksTenantId={blocksTenantId}
+                    />
+                  </>
+                }
                 auditSlot={<AuditLogPanel tenantId={tenantId} />}
                 documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
                 platesSlot={<PlatePreassignViewer tenantId={tenantId} />}
