@@ -16,6 +16,7 @@ import type {
   OtPrendaDocumentPolicy,
   TenantSettings,
   TenantSettingsUpdate,
+  TransitBlocksResponse,
   TransitGrantsResponse,
   TransitOffice,
   UpdateCompanyRequest,
@@ -140,6 +141,29 @@ export function addTransitGrant(tenantId: string, transitOfficeId: string): Prom
 /** DELETE /{tenantId}/transit-grants/{transitOfficeId} — deshabilita un OT (AC4). */
 export function removeTransitGrant(tenantId: string, transitOfficeId: string): Promise<void> {
   return apiFetch<void>(`${base}/${tenantId}/transit-grants/${transitOfficeId}`, {
+    method: "DELETE",
+  });
+}
+
+/** GET /{tenantId}/transit-blocks — OT bloqueados en cabeza Marca Blanca (HU #12408). */
+export function fetchTransitBlocks(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<TransitBlocksResponse> {
+  return apiFetch<TransitBlocksResponse>(`${base}/${tenantId}/transit-blocks`, { signal });
+}
+
+/** POST /{tenantId}/transit-blocks — bloquea un OT (HU #12408, idempotente). */
+export function addTransitBlock(tenantId: string, transitOfficeId: string): Promise<void> {
+  return apiFetch<void>(`${base}/${tenantId}/transit-blocks`, {
+    method: "POST",
+    body: { transitOfficeId },
+  });
+}
+
+/** DELETE /{tenantId}/transit-blocks/{transitOfficeId} — retira bloqueo (HU #12408). */
+export function removeTransitBlock(tenantId: string, transitOfficeId: string): Promise<void> {
+  return apiFetch<void>(`${base}/${tenantId}/transit-blocks/${transitOfficeId}`, {
     method: "DELETE",
   });
 }

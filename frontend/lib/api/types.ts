@@ -326,6 +326,11 @@ export interface TransitGrantsResponse {
   transitOfficeIds: string[];
 }
 
+/** HU #12408 — OT bloqueados en una cabeza Marca Blanca. */
+export interface TransitBlocksResponse {
+  transitOfficeIds: string[];
+}
+
 // ── Restricciones de consulta por OT (HU #10759/#10761) ─────────────────────
 /** Consultas restringibles. `vehicle` queda fuera: rompería la hidratación del FUR. */
 export type ConsultationRestrictionKind = "rnmc" | "fines";
