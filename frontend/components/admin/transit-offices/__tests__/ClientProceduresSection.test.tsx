@@ -60,7 +60,6 @@ import {
   approveOtClientProcedure,
   fetchOtAttachmentPreviewUrl,
   fetchOtBandejaHealth,
-  fetchOtClientProcedures,
   searchOtClientProcedures,
   fetchOtBandejaFilterFields,
   fetchOtProfile,

@@ -54,7 +54,6 @@ import {
   fetchOtBandejaCounters,
   fetchOtBandejaHealth,
   fetchOtClientProcedure,
-  fetchOtClientProcedures,
   searchOtClientProcedures,
   fetchOtBandejaFilterFields,
   fetchOtDocuments,

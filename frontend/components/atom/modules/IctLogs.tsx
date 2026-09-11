@@ -89,6 +89,8 @@ function LogsTab() {
 
   useEffect(() => {
     const controller = new AbortController();
+    // Carga al montar y al cambiar filtros: skeleton intencional.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetchIctLogs({ ...applied, page, pageSize: PAGE_SIZE }, controller.signal)
       .then((res) => {

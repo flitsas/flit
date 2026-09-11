@@ -61,6 +61,8 @@ export function JobsCatalog() {
 
   useEffect(() => {
     const controller = new AbortController();
+    // Carga inicial: el setState de `load` ocurre tras el await (no es setState síncrono).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);

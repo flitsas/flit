@@ -45,7 +45,6 @@ vi.mock("@/lib/api/tramites-client", () => ({
 
 import {
   fetchOtBandejaHealth,
-  fetchOtClientProcedures,
   searchOtClientProcedures,
   fetchOtBandejaFilterFields,
   fetchOtProfile,
