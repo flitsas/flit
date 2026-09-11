@@ -423,6 +423,10 @@ public static class DependencyInjection
         services.AddScoped<GetIctJobSettingsHandler>();
         services.AddScoped<SaveIctJobSettingsHandler>();
 
+        // HU #12513 — catálogo de jobs ICT + último run (sin PII).
+        services.AddScoped<GetIctJobCatalogHandler>();
+        services.AddScoped<GetIctJobRunsHandler>();
+
         return services;
     }
 }

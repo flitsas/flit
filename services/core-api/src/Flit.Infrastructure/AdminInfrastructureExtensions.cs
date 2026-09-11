@@ -60,6 +60,8 @@ public static class AdminInfrastructureExtensions
 
         // HU #12512 — ict.job_settings (schema ict, DDL de core-ict; SQL parametrizado).
         services.AddScoped<IIctJobSettingsRepository, IctJobSettingsRepository>();
+        // HU #12513 — ict.job_runs (último ciclo / take acotado; sin error_message).
+        services.AddScoped<IIctJobRunRepository, IctJobRunRepository>();
 
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
