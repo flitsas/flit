@@ -65,6 +65,10 @@ tags:
       radicaciones por placa/trámite/radicado y línea de tiempo de eventos con detalle
       técnico sanitizado y enmascarado. Solo lectura; permiso logqx.read (HU #10794,
       SuperAdmin bypassa).
+  - name: Admin · ICT · Jobs
+    description: >
+      Cadencia global de jobs ICT (ict.job_settings) y catálogo SuperAdmin de procesos
+      periódicos (HU #12512 / #12513). Sin secretos. Solo rol SuperAdmin.
   - name: Admin · Baúl de Firmas
     description: "Gestión del baúl de firmas precargadas por compañía (HU #10643, ADR-0025). Solo SuperAdmin."
   - name: Admin · Representantes Legales
@@ -9903,6 +9907,7 @@ components:
         hasPipelineRuns: { type: boolean }
         notes: { type: string, nullable: true }
         lastRun:
+          type: object
           nullable: true
           allOf:
             - $ref: "#/components/schemas/IctJobLastRunView"

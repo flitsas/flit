@@ -6,7 +6,6 @@ import { useToast } from "@/components/admin/Toast";
 import { tramitesClient } from "@/lib/api/tramites-client";
 import {
   adjuntarOtLicenciaTransito,
-  type AdjuntarLtResult,
   approveOtClientProcedure,
   fetchOtAttachmentPreviewUrl,
   fetchOtBandejaCounters,
