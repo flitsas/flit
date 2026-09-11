@@ -9,7 +9,10 @@ import { Shell } from "@/components/atom/Shell";
  * tras el dock (AC1) y wizard con scroll en main + tracker sticky (AC2).
  */
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 const FE_ROOT = path.resolve(__dirname, "..");
 const read = (rel: string) => readFileSync(path.join(FE_ROOT, rel), "utf8");

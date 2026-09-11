@@ -53,7 +53,7 @@ export function CreateButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center justify-center rounded-xl font-semibold text-white shadow-sm transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50 ${SIZE_CLASS[size]} ${className}`}
+      className={`inline-flex items-center justify-center rounded-xl font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50 ${SIZE_CLASS[size]} ${className}`}
       style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
     >
       {Icon && <Icon className={ICON_SIZE[size]} aria-hidden="true" />}

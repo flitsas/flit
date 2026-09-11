@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   canAccessRuntConfirmation,
   canManageBanners,
@@ -70,6 +70,7 @@ import {
   History,
   Image as ImageIcon,
   BadgeCheck,
+  Timer,
 } from "lucide-react";
 
 export type ModuleId =
@@ -234,6 +235,7 @@ export function Shell({
   // según rol). El FAB de inicio va siempre en el centro y las entradas se reparten
   // de forma balanceada a izquierda/derecha; si se agregan más, se redistribuyen solas.
   const pathname = usePathname() ?? "";
+  const router = useRouter();
   const onAdminRoute = pathname.startsWith("/admin") || pathname.startsWith("/empresa");
 
   const goOtHub = (tab: OtHubTabId) => {
@@ -241,7 +243,7 @@ export function Shell({
       const profile = await fetchOtProfile();
       return profile.transitOfficeId;
     }).then((href) => {
-      window.location.assign(href);
+      router.push(href);
     });
   };
 
@@ -260,7 +262,7 @@ export function Shell({
         label: "Compañías",
         icon: Building2,
         active: pathname.startsWith("/admin/companies"),
-        onClick: () => window.location.assign("/admin/companies"),
+        onClick: () => router.push("/admin/companies"),
       },
       {
         // Tránsito pasa a ser contenedor (mismo patrón que Plataforma): el catálogo de causales
@@ -278,14 +280,14 @@ export function Shell({
             label: "Organismos",
             icon: Landmark,
             active: pathname.startsWith("/admin/transit-offices"),
-            onClick: () => window.location.assign(otHubListPath()),
+            onClick: () => router.push(otHubListPath()),
           },
           {
             key: "admin-rejection-reasons",
             label: "Causales de rechazo",
             icon: ClipboardList,
             active: pathname.startsWith("/admin/causales-rechazo"),
-            onClick: () => window.location.assign("/admin/causales-rechazo"),
+            onClick: () => router.push("/admin/causales-rechazo"),
           },
         ],
       },
@@ -294,21 +296,28 @@ export function Shell({
         label: "Documental",
         icon: FolderCog,
         active: pathname.startsWith("/admin/documents"),
-        onClick: () => window.location.assign("/admin/documents"),
+        onClick: () => router.push("/admin/documents"),
       },
       {
         key: "admin-improntas",
         label: "Improntas",
         icon: Fingerprint,
         active: pathname.startsWith("/admin/improntas"),
-        onClick: () => window.location.assign("/admin/improntas"),
+        onClick: () => router.push("/admin/improntas"),
       },
       {
         key: "admin-quipux",
         label: "Quipux",
         icon: Send,
         active: pathname.startsWith("/admin/quipux"),
-        onClick: () => window.location.assign("/admin/quipux"),
+        onClick: () => router.push("/admin/quipux"),
+      },
+      {
+        key: "admin-jobs",
+        label: "Procesos periódicos",
+        icon: Timer,
+        active: pathname.startsWith("/admin/jobs"),
+        onClick: () => router.push("/admin/jobs"),
       },
       {
         key: "rbac",
@@ -342,28 +351,28 @@ export function Shell({
         label: "Tipos de trámites",
         icon: ListChecks,
         active: pathname.startsWith("/admin/plataforma/tipos-tramite"),
-        onClick: () => window.location.assign("/admin/plataforma/tipos-tramite"),
+        onClick: () => router.push("/admin/plataforma/tipos-tramite"),
       },
       {
         key: "admin-mandatos",
         label: "Mandatos",
         icon: FileSignature,
         active: pathname.startsWith("/admin/plataforma/mandatos"),
-        onClick: () => window.location.assign("/admin/plataforma/mandatos"),
+        onClick: () => router.push("/admin/plataforma/mandatos"),
       },
       {
         key: "admin-fur",
         label: "FUR",
         icon: FileText,
         active: pathname.startsWith("/admin/plataforma/fur"),
-        onClick: () => window.location.assign("/admin/plataforma/fur"),
+        onClick: () => router.push("/admin/plataforma/fur"),
       },
       {
         key: "admin-notificaciones",
         label: "Notificaciones",
         icon: Bell,
         active: pathname.startsWith("/admin/plataforma/notificaciones"),
-        onClick: () => window.location.assign("/admin/plataforma/notificaciones"),
+        onClick: () => router.push("/admin/plataforma/notificaciones"),
       },
     );
   }
@@ -377,7 +386,7 @@ export function Shell({
       label: "Confirmación RUNT",
       icon: BadgeCheck,
       active: pathname.startsWith(CONFIRMACION_RUNT_BASE_PATH),
-      onClick: () => window.location.assign(CONFIRMACION_RUNT_BASE_PATH),
+      onClick: () => router.push(CONFIRMACION_RUNT_BASE_PATH),
     });
   }
   if (currentUser?.canManageBanners) {
@@ -386,7 +395,7 @@ export function Shell({
       label: "Banners",
       icon: ImageIcon,
       active: pathname.startsWith("/admin/banners"),
-      onClick: () => window.location.assign("/admin/banners"),
+      onClick: () => router.push("/admin/banners"),
     });
   }
   if (platformaChildren.length > 0) {
@@ -413,7 +422,7 @@ export function Shell({
       label: "Generación documental",
       icon: FileText,
       active: pathname.startsWith(GENERACION_DOCUMENTAL_BASE_PATH),
-      onClick: () => window.location.assign(GENERACION_DOCUMENTAL_BASE_PATH),
+      onClick: () => router.push(GENERACION_DOCUMENTAL_BASE_PATH),
     });
   }
 
@@ -497,7 +506,7 @@ export function Shell({
       icon: Building2,
       // AdminCompany: /admin/companies redirige al configurador de su tenant (HU #11228).
       active: pathname.startsWith("/admin/companies"),
-      onClick: () => window.location.assign("/admin/companies"),
+      onClick: () => router.push("/admin/companies"),
     });
   }
 
@@ -639,7 +648,7 @@ export function Shell({
                   label="Cambio de contraseña"
                   onClick={() => {
                     setMenuOpen(false);
-                    window.location.href = "/profile/change-password";
+                    router.push("/profile/change-password");
                   }}
                 />
                 <div className="h-px my-1" style={{ background: dark ? "rgba(255,255,255,0.08)" : "#DFE5ED" }} />
@@ -689,7 +698,7 @@ export function Shell({
           <button
             ref={dockLauncherRef}
             onClick={() => setDockOpen(true)}
-            className="pointer-events-auto absolute left-1/2 -translate-x-1/2 bottom-5 z-40 h-14 w-14 overflow-hidden rounded-full transition-transform duration-[var(--nav-duracion)] ease-[var(--nav-ease)] hover:scale-105 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2"
+            className="pointer-events-auto absolute left-1/2 -translate-x-1/2 bottom-5 z-40 h-14 w-14 overflow-hidden rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2"
             style={{ boxShadow: "var(--nav-sombra-activo)" }}
             aria-label="Abrir menú de navegación"
             aria-expanded={dockOpen}

@@ -227,6 +227,8 @@ app.MapAdminPlateRangesEndpoints();
 app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();
 app.MapAdminQuipuxEndpoints();
+app.MapAdminIctJobSettingsEndpoints();
+app.MapAdminIctJobCatalogEndpoints();
 app.MapAdminPlataformaMandatosEndpoints();
 app.MapAdminOtMandatosEndpoints();
 app.MapAdminPlataformaFurEndpoints();

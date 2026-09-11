@@ -47,6 +47,27 @@ describe("HU #10496 — Modal (AC1 ancho + blur, AC2 contraste dark)", () => {
     expect(panel.className).toContain("max-w-lg");
   });
 
+  it("el pie queda fuera del cuerpo con scroll (sin barra horizontal al CTA)", () => {
+    render(
+      <Modal
+        open
+        onClose={vi.fn()}
+        title="Con pie"
+        footer={<button type="button">Entendido</button>}
+      >
+        <p>cuerpo</p>
+      </Modal>,
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("overflow-hidden");
+    const panel = dialog.firstElementChild as HTMLElement;
+    const body = panel.children[1] as HTMLElement;
+    expect(body.className).toContain("overflow-x-hidden");
+    expect(body).toHaveTextContent("cuerpo");
+    expect(body).not.toHaveTextContent("Entendido");
+    expect(screen.getByRole("button", { name: "Entendido" })).toBeInTheDocument();
+  });
+
   it("AC1: size='sm' usa el ancho compacto y size='lg' el amplio", () => {
     const { rerender } = render(
       <Modal open onClose={vi.fn()} size="sm" title="sm">
