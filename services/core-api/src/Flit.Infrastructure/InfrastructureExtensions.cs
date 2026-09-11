@@ -113,6 +113,10 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
+        // HU #12520 (Feature #12519) — plantillas XLSX de carga masiva de trámites.
+        services.AddScoped<
+            Flit.Tramites.Application.BulkTramites.IBulkTramitesXlsxTemplate,
+            Flit.Infrastructure.Documents.BulkTramites.BulkTramitesXlsxTemplate>();
         // HU #10878 (Feature #10862, CF-04) — caché cross-trámite de consultas externas (ADR-0030)
         // + gate de consentimiento Habeas Data para el reúso de datos de persona (ADR-0031).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IExternalQueryCacheRepository, ExternalQueryCacheRepository>();
