@@ -762,6 +762,10 @@ public static class InfrastructureExtensions
         // lotes queued (y los processing atascados: reaper R5) y delega el recorrido en el runner de
         // Application, que invoca los MISMOS handlers de la generación individual.
         services.AddHostedService<StandaloneDocumentBatchProcessor>();
+        // HU #12523 (Feature #12519) — worker de lotes de carga masiva de TRÁMITES. Mismo patrón que
+        // el de generación documental, pero recorriendo los casos de uso del wizard (consulta de
+        // vehículo, creación y actores) fila a fila y en secuencia.
+        services.AddHostedService<BulkTramitesBatchProcessorService>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.

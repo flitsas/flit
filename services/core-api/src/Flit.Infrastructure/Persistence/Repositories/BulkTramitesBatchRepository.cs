@@ -22,5 +22,14 @@ internal sealed class BulkTramitesBatchRepository(FlitDbContext db) : IBulkTrami
             .Take(top)
             .ToListAsync(ct);
 
+    public Task<List<Guid>> ListQueuedIdsAsync(int top, CancellationToken ct = default) =>
+        db.BulkTramitesBatches
+            .AsNoTracking()
+            .Where(b => b.Status == BulkTramitesBatchStatus.Queued)
+            .OrderBy(b => b.CreatedAt)
+            .Take(top)
+            .Select(b => b.Id)
+            .ToListAsync(ct);
+
     public Task SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 }
