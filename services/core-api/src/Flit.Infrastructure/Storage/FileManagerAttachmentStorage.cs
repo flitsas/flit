@@ -168,24 +168,27 @@ internal sealed class FileManagerAttachmentStorage(
 
     private async Task UploadToS3Async(PresignedUrl presigned, byte[] bytes, string filename, CancellationToken ct)
     {
-        // Reintento único ante fallos transitorios de red/SSL al subir a S3 (presigned POST).
+        // El método lo DECIDE el file-manager y viaja en la respuesta (ADR-0057); aquí no se
+        // deduce del proveedor, que este cliente no conoce. Ausente ⇒ POST, que es lo que hacían
+        // todos los backends antes. PUT existe porque hay gateways (Contabo) que rechazan el POST
+        // policy: sus credenciales viajan en el cuerpo multipart y el gateway no las ve.
+        var usePut = string.Equals(presigned.Method, "PUT", StringComparison.OrdinalIgnoreCase);
+
+        // Reintento único ante fallos transitorios de red/SSL al subir al storage.
         Exception? last = null;
         for (var attempt = 0; attempt < 2; attempt++)
         {
             try
             {
-                using var form = new MultipartFormDataContent();
-                // S3 POST policy: los campos firmados (key, policy, x-amz-*) van ANTES del 'file'.
-                if (presigned.Fields is not null)
-                    foreach (var (key, value) in presigned.Fields)
-                        form.Add(new StringContent(value), key);
+                using HttpContent content = usePut
+                    ? BuildPutContent(bytes)
+                    : (HttpContent)BuildPostContent(presigned, bytes, filename);
 
-                var fileContent = new ByteArrayContent(bytes);
-                fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-                form.Add(fileContent, "file", filename);
-
-                // URL absoluta de S3 ⇒ ignora el BaseAddress del cliente. SIN header de auth del file-manager.
-                using var resp = await http.PostAsync(presigned.Url, form, ct);
+                // URL absoluta del storage ⇒ ignora el BaseAddress del cliente.
+                // SIN header de auth del file-manager: la firma va en la URL o en el cuerpo.
+                using var resp = usePut
+                    ? await http.PutAsync(presigned.Url, content, ct)
+                    : await http.PostAsync(presigned.Url, content, ct);
                 resp.EnsureSuccessStatusCode();
                 return;
             }
@@ -200,7 +203,29 @@ internal sealed class FileManagerAttachmentStorage(
         }
 
         throw new InvalidOperationException(
-            "file-manager: no se pudo subir el archivo a S3 tras reintentar.", last);
+            $"file-manager: no se pudo subir el archivo al storage ({(usePut ? "PUT" : "POST")}) tras reintentar.",
+            last);
+    }
+
+    private static ByteArrayContent BuildPutContent(byte[] bytes)
+    {
+        var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        return content;
+    }
+
+    private static MultipartFormDataContent BuildPostContent(PresignedUrl presigned, byte[] bytes, string filename)
+    {
+        var form = new MultipartFormDataContent();
+        // S3 POST policy: los campos firmados (key, policy, x-amz-*) van ANTES del 'file'.
+        if (presigned.Fields is not null)
+            foreach (var (key, value) in presigned.Fields)
+                form.Add(new StringContent(value), key);
+
+        var fileContent = new ByteArrayContent(bytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        form.Add(fileContent, "file", filename);
+        return form;
     }
 
     private void ApplyAuth(HttpRequestMessage req)
@@ -223,7 +248,9 @@ internal sealed class FileManagerAttachmentStorage(
     private sealed record FilePresignedResponse(
         [property: JsonPropertyName("presignedUrl")] PresignedUrl? PresignedUrl);
 
+    // Method: "POST" (multipart con Fields) o "PUT" (bytes crudos). Ausente ⇒ POST.
     private sealed record PresignedUrl(
         [property: JsonPropertyName("url")] string? Url,
+        [property: JsonPropertyName("method")] string? Method,
         [property: JsonPropertyName("fields")] Dictionary<string, string>? Fields);
 }
