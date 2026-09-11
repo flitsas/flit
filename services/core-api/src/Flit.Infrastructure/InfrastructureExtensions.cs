@@ -117,6 +117,13 @@ public static class InfrastructureExtensions
         services.AddScoped<
             Flit.Tramites.Application.BulkTramites.IBulkTramitesXlsxTemplate,
             Flit.Infrastructure.Documents.BulkTramites.BulkTramitesXlsxTemplate>();
+        // HU #12522 — persistencia del lote de carga masiva y su parser XLSX.
+        services.AddScoped<
+            Flit.Tramites.Domain.Repositories.IBulkTramitesBatchRepository,
+            Flit.Infrastructure.Persistence.Repositories.BulkTramitesBatchRepository>();
+        services.AddScoped<
+            Flit.Tramites.Application.BulkTramites.IBulkTramitesXlsxParser,
+            Flit.Infrastructure.Documents.BulkTramites.BulkTramitesXlsxParser>();
         // HU #10878 (Feature #10862, CF-04) — caché cross-trámite de consultas externas (ADR-0030)
         // + gate de consentimiento Habeas Data para el reúso de datos de persona (ADR-0031).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IExternalQueryCacheRepository, ExternalQueryCacheRepository>();

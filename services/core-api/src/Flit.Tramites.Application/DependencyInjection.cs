@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.BulkTramites.SubmitBatch;
 using Flit.Tramites.Application.UseCases.Catalogs;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
@@ -37,6 +38,8 @@ public static class DependencyInjection
 
         services.AddScoped<CaptureTypeSnapshotHandler>();
         services.AddScoped<CreateProcedureInstanceHandler>();
+        // HU #12522 (Feature #12519) — carga masiva de trámites por Excel.
+        services.AddScoped<SubmitBulkTramitesBatchHandler>();
         services.AddScoped<GetProcedureInstanceHandler>();
         services.AddScoped<ListProcedureInstancesHandler>();
         // Filtrado/ordenamiento server-side del listado (WHERE/ORDER BY en SQL, no en memoria).

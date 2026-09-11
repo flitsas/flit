@@ -1,4 +1,7 @@
+using System.Security.Claims;
+using Flit.Api.Authorization;
 using Flit.Tramites.Application.BulkTramites;
+using Flit.Tramites.Application.BulkTramites.SubmitBatch;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints.Tramites;
@@ -21,8 +24,75 @@ public static class BulkTramitesEndpoints
         // GET /plantilla?tipo=matricula|traspaso|otros — AC1/AC3 → 200 (xlsx) / 400.
         group.MapGet("/plantilla", DescargarPlantillaAsync).WithName("BulkTramitesDescargarPlantilla");
 
+        // POST /lotes?tipo=... — HU #12522 AC1/AC2/AC3 → 201 / 400 (template_invalid, too_many_rows, invalid_file).
+        group.MapPost("/lotes", SubirLoteAsync)
+            .WithName("BulkTramitesSubirLote")
+            .DisableAntiforgery();
+
         return app;
     }
+
+    private static async Task<IResult> SubirLoteAsync(
+        [FromQuery] string? tipo,
+        IFormFile? archivo,
+        HttpContext httpContext,
+        [FromServices] SubmitBulkTramitesBatchHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var tipoResuelto = BulkTramitesTemplateTypeParser.Parse(tipo);
+        if (tipoResuelto is null)
+        {
+            return Results.Json(
+                new ErrorResponse(
+                    $"El tipo de plantilla '{tipo}' no está disponible para carga masiva. "
+                    + "Usa 'matricula', 'traspaso' u 'otros'."),
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        if (archivo is null || archivo.Length == 0)
+        {
+            return Results.Json(
+                new ErrorResponse("Debes adjuntar el archivo Excel diligenciado."),
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var tenantId = ResolveTenantId(httpContext.User);
+        var userId = ResolveUserId(httpContext.User);
+        if (tenantId is null || userId is null)
+        {
+            return Results.Json(
+                new ErrorResponse("No fue posible resolver el cliente o el usuario del token."),
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        await using var contenido = archivo.OpenReadStream();
+        var command = new SubmitBulkTramitesBatchCommand(
+            tenantId.Value, userId.Value, tipoResuelto.Value, archivo.FileName, contenido);
+
+        var resultado = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+
+        return resultado.Outcome switch
+        {
+            SubmitBulkTramitesBatchOutcome.Accepted => Results.Created(
+                $"/api/v1/tramites/carga-masiva/lotes/{resultado.BatchId}",
+                new BulkTramitesBatchAcceptedResponse(
+                    resultado.BatchId!.Value, resultado.TotalRows, resultado.RowsWithStructuralErrors)),
+            _ => Results.Json(new ErrorResponse(resultado.Error!), statusCode: StatusCodes.Status400BadRequest),
+        };
+    }
+
+    private static Guid? ResolveTenantId(ClaimsPrincipal user) =>
+        Guid.TryParse(user.FindFirstValue(AdminAuthorization.TenantIdClaimType), out var tenantId)
+            ? tenantId
+            : null;
+
+    private static Guid? ResolveUserId(ClaimsPrincipal user)
+    {
+        var raw = user.FindFirstValue("sub") ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(raw, out var userId) ? userId : null;
+    }
+
+    private sealed record BulkTramitesBatchAcceptedResponse(Guid BatchId, int TotalRows, int RowsWithStructuralErrors);
 
     private static async Task<IResult> DescargarPlantillaAsync(
         [FromQuery] string? tipo,
