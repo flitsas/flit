@@ -510,7 +510,7 @@ export function Shell({
       // AdminCompany: /admin/companies redirige al configurador de su tenant (HU #11228).
       // `/children` es «Red de clientes»: no marcar Administración como activa ahí.
       active: pathname.startsWith("/admin/companies") && !pathname.includes("/children"),
-      onClick: () => window.location.assign("/admin/companies"),
+      onClick: () => router.push("/admin/companies"),
     });
     if (currentUser.isGroupParent && currentUser.tenantId) {
       entries.push({
@@ -518,8 +518,7 @@ export function Shell({
         label: "Red de clientes",
         icon: Building2,
         active: pathname.includes("/admin/companies/") && pathname.endsWith("/children"),
-        onClick: () =>
-          window.location.assign(`/admin/companies/${currentUser.tenantId}/children`),
+        onClick: () => router.push(`/admin/companies/${currentUser.tenantId}/children`),
       });
     }
   }

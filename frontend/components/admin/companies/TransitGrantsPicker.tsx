@@ -64,7 +64,8 @@ export function TransitGrantsPicker({
       (o) =>
         o.name.toLowerCase().includes(q) ||
         o.code.toLowerCase().includes(q) ||
-        o.municipality?.toLowerCase().includes(q),
+        o.cityCode.toLowerCase().includes(q) ||
+        o.departmentCode.toLowerCase().includes(q),
     );
   }, [offices, search]);
 
@@ -150,8 +151,8 @@ export function TransitGrantsPicker({
                   <span className="min-w-0 flex-1 text-xs">
                     <span className="font-semibold">{office.name}</span>
                     <span className="ml-1 font-mono opacity-60">{office.code}</span>
-                    {office.municipality && (
-                      <span className="block text-[10px] opacity-50">{office.municipality}</span>
+                    {office.cityCode && (
+                      <span className="block text-[10px] opacity-50">{office.cityCode}</span>
                     )}
                   </span>
                 </label>

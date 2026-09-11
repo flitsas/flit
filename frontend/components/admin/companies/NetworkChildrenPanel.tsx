@@ -11,7 +11,7 @@ import { InviteUserModal } from "@/components/atom/modules/users/InviteUserModal
 import { createChildCompany, fetchCompanyChildren, inviteChildCompanyUser } from "@/lib/api/admin-companies";
 import { getRoles, type TenantRole } from "@/lib/api/security";
 import { tenantTypeLabel } from "@/lib/api/types";
-import type { CompanyChildListItem } from "@/lib/api/types";
+import type { CompanyChildListItem, CompanyListItem } from "@/lib/api/types";
 import { ChildCompanyStatusDialog } from "./ChildCompanyStatusDialog";
 import { CreateChildCompanyDialog } from "./CreateChildCompanyDialog";
 
@@ -72,7 +72,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
       .finally(() => setRolesLoading(false));
   }, [inviteTarget]);
 
-  const handleCreated = (created: CompanyChildListItem) => {
+  const handleCreated = (created: CompanyListItem) => {
     setCreateOpen(false);
     setChildren((prev) => [
       {
@@ -82,7 +82,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
         code: created.code,
         tenantType: created.tenantType,
         estadoActivo: created.estadoActivo,
-        fechaVinculacion: new Date().toISOString(),
+        fechaVinculacion: created.fechaCreacion,
         rowVersion: created.rowVersion,
       },
       ...prev,
