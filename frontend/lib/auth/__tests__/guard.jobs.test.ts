@@ -9,13 +9,17 @@ function makeToken(payload: Record<string, unknown>): string {
 
 const PATH = "/admin/jobs/ict";
 
-describe("evaluateAdminAccess — /admin/jobs/ict", () => {
-  it("permite SuperAdmin", () => {
+describe("evaluateAdminAccess — /admin/jobs", () => {
+  it("permite SuperAdmin en el catálogo y en el formulario ICT", () => {
     const token = makeToken({ sub: "u1", role: "SuperAdmin" });
+    expect(evaluateAdminAccess(token, "/admin/jobs").allowed).toBe(true);
     expect(evaluateAdminAccess(token, PATH).allowed).toBe(true);
   });
 
   it("bloquea AdminCompany y ot_admin", () => {
+    expect(
+      evaluateAdminAccess(makeToken({ sub: "u1", role: "AdminCompany" }), "/admin/jobs"),
+    ).toEqual({ allowed: false, redirectTo: FORBIDDEN_PATH });
     expect(
       evaluateAdminAccess(makeToken({ sub: "u1", role: "AdminCompany" }), PATH),
     ).toEqual({ allowed: false, redirectTo: FORBIDDEN_PATH });

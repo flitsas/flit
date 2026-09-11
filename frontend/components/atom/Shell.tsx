@@ -70,6 +70,7 @@ import {
   History,
   Image as ImageIcon,
   BadgeCheck,
+  Timer,
 } from "lucide-react";
 
 export type ModuleId =
@@ -309,6 +310,13 @@ export function Shell({
         icon: Send,
         active: pathname.startsWith("/admin/quipux"),
         onClick: () => window.location.assign("/admin/quipux"),
+      },
+      {
+        key: "admin-jobs",
+        label: "Procesos periódicos",
+        icon: Timer,
+        active: pathname.startsWith("/admin/jobs"),
+        onClick: () => window.location.assign("/admin/jobs"),
       },
       {
         key: "rbac",

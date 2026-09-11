@@ -15,12 +15,12 @@ export default function AdminIctJobSettingsPage() {
       <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
         <button
           type="button"
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/admin/jobs")}
           className="flex w-fit items-center gap-1.5 text-xs font-semibold"
           style={{ color: "#557EFF" }}
         >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-          Volver al inicio
+          Volver al catálogo
         </button>
 
         <ModuleTitle
