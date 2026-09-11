@@ -94,6 +94,7 @@ using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Flit.Admin.Application.Banners.GetBannerImage;
 using Flit.Admin.Application.Banners.ListActiveBanners;
+using Flit.Admin.Application.Ict;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -417,6 +418,10 @@ public static class DependencyInjection
         // activos + imagen por streaming con ETag. Sin filtro de tenant (ADR-0058).
         services.AddScoped<ListActiveBannersHandler>();
         services.AddScoped<GetBannerImageHandler>();
+
+        // HU #12512 — GET/PUT SuperAdmin de ict.job_settings (cadencia ICT en caliente).
+        services.AddScoped<GetIctJobSettingsHandler>();
+        services.AddScoped<SaveIctJobSettingsHandler>();
 
         return services;
     }

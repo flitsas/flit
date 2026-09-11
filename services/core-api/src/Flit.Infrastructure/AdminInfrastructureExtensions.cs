@@ -12,6 +12,7 @@ using Flit.Admin.Domain.DocumentRequirementOverrides;
 using Flit.Admin.Domain.DocumentRequirements;
 using Flit.Admin.Domain.DocumentTypes;
 using Flit.Admin.Domain.Improntas;
+using Flit.Admin.Domain.Ict;
 using Flit.Admin.Domain.OtProfile;
 using Flit.Admin.Domain.OtRequirements;
 using Flit.Admin.Domain.OtWebhooks;
@@ -56,6 +57,9 @@ public static class AdminInfrastructureExtensions
         // HU #10679 — consulta global (cross-tenant, SuperAdmin) del rastro unificado de
         // auditoría administrativa/seguridad.
         services.AddScoped<IAdminAuditLogRepository, AdminAuditLogRepository>();
+
+        // HU #12512 — ict.job_settings (schema ict, DDL de core-ict; SQL parametrizado).
+        services.AddScoped<IIctJobSettingsRepository, IctJobSettingsRepository>();
 
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
