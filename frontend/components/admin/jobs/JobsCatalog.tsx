@@ -1,137 +1,220 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Settings } from "lucide-react";
+import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { CreateButton } from "@/components/atom/CreateButton";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { InlineAlert } from "@/components/atom/InlineAlert";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
-  CARDLIST_CELL,
-  CARDLIST_CELL_CLICKABLE,
-  CARDLIST_HEAD_ROW,
-  CARDLIST_ROW,
-  CARDLIST_SCROLL,
-  CARDLIST_TABLE,
-  CARDLIST_TH,
-} from "@/components/atom/table-cardlist";
+  TABLA_CELDA_SECUNDARIA_CLS,
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
+import { controlCls } from "@/components/operacion/tramites-control-styles";
 import { fetchIctJobCatalog } from "@/lib/api/admin-ict-job-catalog";
 import { fetchIctJobSettings } from "@/lib/api/admin-ict-job-settings";
 import { fetchQuipuxSettings } from "@/lib/api/admin-quipux-settings";
-import { composeUnifiedJobs, type UnifiedJobRow } from "@/lib/admin/compose-unified-jobs";
+import {
+  composeUnifiedJobs,
+  type JobModule,
+  type UnifiedJobRow,
+} from "@/lib/admin/compose-unified-jobs";
+
+type ModuleFilter = "all" | JobModule;
+
+const FILTERS: { id: ModuleFilter; label: string }[] = [
+  { id: "all", label: "Todos" },
+  { id: "ICT", label: "ICT" },
+  { id: "Quipux", label: "Quipux" },
+];
+
+const BORDER = "#DFE5ED";
 
 export function JobsCatalog() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const [status, setStatus] = useState<UiStatus>("loading");
   const [rows, setRows] = useState<UnifiedJobRow[]>([]);
+  const [filter, setFilter] = useState<ModuleFilter>("all");
+
+  const load = useCallback(async (signal?: AbortSignal) => {
+    setStatus("loading");
+    try {
+      const [ict, settings, quipux] = await Promise.all([
+        fetchIctJobCatalog(signal),
+        fetchIctJobSettings(signal),
+        fetchQuipuxSettings(signal),
+      ]);
+      if (signal?.aborted) return;
+      const next = composeUnifiedJobs(ict, settings, quipux);
+      setRows(next);
+      setStatus(next.length === 0 ? "empty" : "ready");
+    } catch {
+      if (signal?.aborted) return;
+      setStatus("error");
+    }
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    void Promise.all([
-      fetchIctJobCatalog(controller.signal),
-      fetchIctJobSettings(controller.signal),
-      fetchQuipuxSettings(controller.signal),
-    ])
-      .then(([ict, settings, quipux]) => {
-        if (controller.signal.aborted) return;
-        setRows(composeUnifiedJobs(ict, settings, quipux));
-        setLoading(false);
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setLoadError(true);
-        setLoading(false);
-      });
+    void load(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [load]);
 
-  if (loading) {
-    return (
-      <div
-        className="flex items-center justify-center py-16"
-        role="status"
-        aria-busy="true"
-        aria-live="polite"
-      >
-        <span className="sr-only">Cargando catálogo de procesos periódicos…</span>
-        <div
-          className="h-10 w-10 animate-spin rounded-full border-2 border-t-transparent"
-          style={{ borderColor: "#557EFF", borderTopColor: "transparent" }}
-          aria-hidden="true"
-        />
-      </div>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <p role="alert" className="text-sm" style={{ color: "#FF4E00" }}>
-        No se pudo cargar el catálogo de procesos periódicos. Recarga la página para reintentar.
-      </p>
-    );
-  }
-
-  if (rows.length === 0) {
-    return (
-      <p role="status" className="text-sm opacity-70">
-        No hay procesos periódicos para mostrar.
-      </p>
-    );
-  }
+  const visible = useMemo(
+    () => (filter === "all" ? rows : rows.filter((r) => r.module === filter)),
+    [filter, rows],
+  );
 
   return (
-    <div className="space-y-4">
-      <aside
-        className="rounded-xl px-3 py-2 text-[11px]"
-        style={{ background: "#EEF3FF", color: "#1E3A8A", border: "1px solid #C5D4FF" }}
-      >
-        <p>
-          Las consultas RUNT del pre-trámite (familia/placa) las gobierna el job{" "}
-          <strong>Orchestrator</strong> de ICT, no un Lambda. La Confirmación RUNT
-          post-aprobación vive en{" "}
-          <a
-            href="/admin/plataforma/confirmacion-runt"
-            className="font-semibold underline"
-            style={{ color: "#557EFF" }}
-          >
-            /admin/plataforma/confirmacion-runt
-          </a>{" "}
-          y no forma parte de este catálogo.
-        </p>
-      </aside>
+    <div className="flex flex-col gap-4">
+      <InlineAlert tone="info" title="Consultas RUNT y Confirmación RUNT no son lo mismo">
+        El proceso <strong>Consultas RUNT</strong> (ICT) pide familia/placa en el pre-trámite. La
+        Confirmación RUNT post-aprobación vive en{" "}
+        <a
+          href="/admin/plataforma/confirmacion-runt"
+          className="font-semibold underline"
+          style={{ color: "#557EFF" }}
+        >
+          Confirmación RUNT
+        </a>{" "}
+        y no se configura aquí.
+      </InlineAlert>
 
-      <div className={CARDLIST_SCROLL}>
-        <table className={CARDLIST_TABLE}>
-          <thead>
-            <tr className={CARDLIST_HEAD_ROW}>
-              <th className={CARDLIST_TH}>Proceso</th>
-              <th className={CARDLIST_TH}>Dueño</th>
-              <th className={CARDLIST_TH}>Tipología</th>
-              <th className={CARDLIST_TH}>Estado</th>
-              <th className={CARDLIST_TH}>Intervalo</th>
-              <th className={CARDLIST_TH}>Último run</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.key} className={CARDLIST_ROW}>
-                <td className={`${CARDLIST_CELL} ${CARDLIST_CELL_CLICKABLE}`}>
-                  <button
-                    type="button"
-                    className="text-left font-semibold underline"
-                    style={{ color: "#557EFF" }}
-                    onClick={() => router.push(row.href)}
-                  >
-                    {row.displayName}
-                  </button>
-                </td>
-                <td className={CARDLIST_CELL}>{row.owner}</td>
-                <td className={CARDLIST_CELL}>{row.types.join(" · ")}</td>
-                <td className={CARDLIST_CELL}>{row.enabledLabel}</td>
-                <td className={CARDLIST_CELL}>{row.intervalLabel}</td>
-                <td className={CARDLIST_CELL}>{row.lastRunLabel}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Filtrar por módulo">
+          {FILTERS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={controlCls(filter === item.id)}
+              aria-pressed={filter === item.id}
+              onClick={() => setFilter(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Configurar cadencia">
+          {filter !== "Quipux" ? (
+            <CreateButton
+              label="Configurar cadencia ICT"
+              icon={Settings}
+              onClick={() => router.push("/admin/jobs/ict")}
+            />
+          ) : null}
+          {filter !== "ICT" ? (
+            <CreateButton
+              label="Configurar Quipux"
+              icon={Settings}
+              onClick={() => router.push("/admin/quipux")}
+            />
+          ) : null}
+        </div>
       </div>
+
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando procesos periódicos…" />
+      ) : (
+        <UiStateBoundary
+          status={status === "ready" && visible.length === 0 ? "empty" : status}
+          emptyMessage="No hay procesos periódicos para mostrar en este filtro."
+          errorMessage="No se pudo cargar el catálogo de procesos periódicos."
+          onRetry={() => void load()}
+        >
+          <JobsTable rows={visible} />
+        </UiStateBoundary>
+      )}
     </div>
+  );
+}
+
+function JobsTable({ rows }: { rows: UnifiedJobRow[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table
+        aria-label="Procesos periódicos"
+        style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+      >
+        <thead>
+          <tr>
+            <HeaderCell first>Proceso</HeaderCell>
+            <HeaderCell>Módulo</HeaderCell>
+            <HeaderCell>Qué hace</HeaderCell>
+            <HeaderCell>Estado</HeaderCell>
+            <HeaderCell>Cadencia</HeaderCell>
+            <HeaderCell last>Último run</HeaderCell>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} className={`bg-white text-xs dark:bg-[#162744] ${TABLA_ROW_HOVER_CLS}`}>
+              <td
+                className="rounded-l-xl border-y border-l px-4 py-3 align-middle"
+                style={{ borderColor: BORDER }}
+              >
+                <span className="block font-semibold text-[#162744] dark:text-white">{row.displayName}</span>
+                <span className={`mt-0.5 block ${TABLA_CELDA_SECUNDARIA_CLS}`}>{row.technicalName}</span>
+              </td>
+              <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
+                <StatusBadge
+                  label={row.module}
+                  tone={row.module === "ICT" ? "info" : "neutral"}
+                  ariaLabel={`Módulo ${row.module}`}
+                />
+              </td>
+              <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
+                <span className="flex flex-wrap gap-1">
+                  {row.typeLabels.map((label) => (
+                    <StatusBadge key={label} label={label} tone="neutral" />
+                  ))}
+                </span>
+              </td>
+              <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
+                <StatusBadge label={row.enabledLabel} tone={row.enabledTone} />
+              </td>
+              <td className="border-y px-4 py-3 align-middle font-medium" style={{ borderColor: BORDER }}>
+                {row.intervalLabel}
+              </td>
+              <td
+                className="rounded-r-xl border-y border-r px-4 py-3 align-middle"
+                style={{ borderColor: BORDER }}
+              >
+                <span className="flex min-w-0 flex-col items-start gap-0.5">
+                  <StatusBadge label={row.lastRunPrimary} tone={row.lastRunTone} />
+                  {row.lastRunSecondary ? (
+                    <span className={TABLA_CELDA_SECUNDARIA_CLS}>{row.lastRunSecondary}</span>
+                  ) : null}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function HeaderCell({
+  children,
+  first,
+  last,
+}: {
+  children: string;
+  first?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <th
+      scope="col"
+      className={`${TABLA_HEADER_CELL_CLS} ${first ? "rounded-l-xl" : ""} ${last ? "rounded-r-xl" : ""}`}
+      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+    >
+      {children}
+    </th>
   );
 }

@@ -2,10 +2,18 @@
 
 // HU #12123 — formulario SuperAdmin de ict.job_settings. Espejo de QuipuxSettingsForm:
 // 4 estados (vacío/carga/error/lleno), clamps en UI alineados al API, sin secretos.
-import { useEffect, useState } from "react";
-import { Send } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Save } from "lucide-react";
+import { CreateButton } from "@/components/atom/CreateButton";
+import { CarLoader, CarLoaderModal } from "@/components/atom/CarLoader";
+import { InlineAlert } from "@/components/atom/InlineAlert";
+import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
-import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
+import {
+  WIZARD_HINT,
+  WIZARD_INPUT,
+  WIZARD_LABEL,
+} from "@/components/operacion/wizard-field-styles";
 import { ApiError } from "@/lib/api/types";
 import { digitsOnly } from "@/lib/format/currency";
 import {
@@ -20,6 +28,9 @@ import {
 
 const ICT_JOBS_REPORT_HREF = "/?m=ict-reportes&ictReportesTab=jobs";
 
+const CARD =
+  "space-y-4 rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#162744]";
+
 export function IctJobSettingsForm() {
   const { show } = useToast();
 
@@ -31,21 +42,26 @@ export function IctJobSettingsForm() {
   const [form, setForm] = useState<IctJobSettingsWrite | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
+  const load = useCallback(async (signal?: AbortSignal) => {
+    setLoadError(false);
+    setLoading(true);
+    try {
+      const settings = await fetchIctJobSettings(signal);
+      if (signal?.aborted) return;
+      applySettings(settings);
+      setLoading(false);
+    } catch {
+      if (signal?.aborted) return;
+      setLoadError(true);
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    void fetchIctJobSettings(controller.signal)
-      .then((settings) => {
-        if (controller.signal.aborted) return;
-        applySettings(settings);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setLoadError(true);
-        setLoading(false);
-      });
+    void load(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [load]);
 
   function applySettings(settings: IctJobSettings) {
     setForm(toIctJobSettingsWrite(settings));
@@ -89,217 +105,251 @@ export function IctJobSettingsForm() {
 
   if (loading) {
     return (
-      <div
-        className="flex items-center justify-center py-16"
-        role="status"
-        aria-busy="true"
-        aria-live="polite"
-      >
-        <span className="sr-only">Cargando configuración ICT…</span>
-        <div
-          className="h-10 w-10 animate-spin rounded-full border-2 border-t-transparent"
-          style={{ borderColor: "#557EFF", borderTopColor: "transparent" }}
-          aria-hidden="true"
-        />
+      <div className="py-16">
+        <CarLoader label="Cargando cadencia ICT…" />
       </div>
     );
   }
 
   if (loadError || !form) {
     return (
-      <p role="alert" className="text-sm" style={{ color: "#FF4E00" }}>
-        No se pudo cargar la configuración ICT. Recarga la página para reintentar.
-      </p>
+      <UiStateBoundary
+        status="error"
+        errorMessage="No se pudo cargar la configuración ICT."
+        onRetry={() => void load()}
+      />
     );
   }
 
   const isEmpty = updatedAt == null;
 
   return (
-    <div className="space-y-6">
-      {isEmpty && (
-        <p
-          role="status"
-          className="rounded-xl px-3 py-2 text-[11px]"
-          style={{ background: "#EEF3FF", color: "#1E3A8A", border: "1px solid #C5D4FF" }}
-        >
-          Aún no hay una fila persistida. Se muestran los valores por defecto; al guardar se
-          crea <code>ict.job_settings</code>.
-        </p>
-      )}
+    <div className="flex flex-col gap-4">
+      {saving ? <CarLoaderModal label="Guardando configuración…" /> : null}
+      {isEmpty ? (
+        <InlineAlert tone="info" title="Todavía no hay una configuración guardada">
+          Se muestran los valores por defecto. Al guardar se crea la fila de cadencia ICT.
+        </InlineAlert>
+      ) : null}
 
-      <p className="text-xs opacity-70">
-        Cadencia y lotes del pipeline ICT (America/Bogota). Los cambios aplican en caliente, sin
-        redeploy.{" "}
+      <InlineAlert tone="info">
+        Los cambios aplican en el siguiente ciclo, sin redeploy. Zona horaria America/Bogota.{" "}
         <a href={ICT_JOBS_REPORT_HREF} className="font-semibold underline" style={{ color: "#557EFF" }}>
           Ver últimas corridas (Reportes ICT → Jobs)
         </a>
-      </p>
+      </InlineAlert>
 
-      <Section title="Ventana horaria (America/Bogota)">
-        <NumberField
-          id="ict-window-start"
-          label="Hora inicio (inclusiva)"
-          value={form.windowStartHour}
-          error={fieldErrors.windowStartHour}
-          disabled={saving}
-          onChange={(v) => set("windowStartHour", v)}
+      <section className={CARD}>
+        <SectionHeader
+          title="Ventana horaria"
+          description="El pipeline solo corre entre estas horas. El inicio se incluye; el fin no."
         />
-        <NumberField
-          id="ict-window-end"
-          label="Hora fin (exclusiva)"
-          value={form.windowEndHour}
-          error={fieldErrors.windowEndHour}
-          disabled={saving}
-          onChange={(v) => set("windowEndHour", v)}
-        />
-      </Section>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <NumberField
+            id="ict-window-start"
+            label="Hora de inicio"
+            hint="0 a 23, incluida"
+            value={form.windowStartHour}
+            error={fieldErrors.windowStartHour}
+            disabled={saving}
+            onChange={(v) => set("windowStartHour", v)}
+          />
+          <NumberField
+            id="ict-window-end"
+            label="Hora de fin"
+            hint="0 a 23, exclusiva"
+            value={form.windowEndHour}
+            error={fieldErrors.windowEndHour}
+            disabled={saving}
+            onChange={(v) => set("windowEndHour", v)}
+          />
+        </div>
+      </section>
 
-      <Section title="Validación de negocio">
-        <NumberField
-          id="ict-business-poll"
-          label="Intervalo (segundos)"
-          value={form.businessPollSeconds}
-          error={fieldErrors.businessPollSeconds}
-          disabled={saving}
-          onChange={(v) => set("businessPollSeconds", v)}
-        />
-        <NumberField
-          id="ict-business-batch"
-          label="Lote"
-          value={form.businessBatchSize}
-          error={fieldErrors.businessBatchSize}
-          disabled={saving}
-          onChange={(v) => set("businessBatchSize", v)}
-        />
-      </Section>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <section className={CARD}>
+          <SectionHeader
+            title="Validación de negocio"
+            description="Reglas internas del pre-trámite."
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <NumberField
+              id="ict-business-poll"
+              label="Intervalo (segundos)"
+              hint="1 a 3600"
+              value={form.businessPollSeconds}
+              error={fieldErrors.businessPollSeconds}
+              disabled={saving}
+              onChange={(v) => set("businessPollSeconds", v)}
+            />
+            <NumberField
+              id="ict-business-batch"
+              label="Lote"
+              hint="1 a 5000"
+              value={form.businessBatchSize}
+              error={fieldErrors.businessBatchSize}
+              disabled={saving}
+              onChange={(v) => set("businessBatchSize", v)}
+            />
+          </div>
+        </section>
 
-      <Section title="Validación externa (fuentes)">
-        <NumberField
-          id="ict-external-poll"
-          label="Intervalo (segundos)"
-          value={form.externalPollSeconds}
-          error={fieldErrors.externalPollSeconds}
-          disabled={saving}
-          onChange={(v) => set("externalPollSeconds", v)}
-        />
-        <NumberField
-          id="ict-external-batch"
-          label="Lote"
-          value={form.externalBatchSize}
-          error={fieldErrors.externalBatchSize}
-          disabled={saving}
-          onChange={(v) => set("externalBatchSize", v)}
-        />
-      </Section>
+        <section className={CARD}>
+          <SectionHeader
+            title="Validación externa"
+            description="Fuentes externas del pre-trámite."
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <NumberField
+              id="ict-external-poll"
+              label="Intervalo (segundos)"
+              hint="1 a 3600"
+              value={form.externalPollSeconds}
+              error={fieldErrors.externalPollSeconds}
+              disabled={saving}
+              onChange={(v) => set("externalPollSeconds", v)}
+            />
+            <NumberField
+              id="ict-external-batch"
+              label="Lote"
+              hint="1 a 5000"
+              value={form.externalBatchSize}
+              error={fieldErrors.externalBatchSize}
+              disabled={saving}
+              onChange={(v) => set("externalBatchSize", v)}
+            />
+          </div>
+        </section>
+      </div>
 
-      <Section title="Orchestrator (consultas RUNT/familia vía proveedor)">
-        <NumberField
-          id="ict-orch-poll"
-          label="Intervalo (segundos)"
-          value={form.orchestratorPollSeconds}
-          error={fieldErrors.orchestratorPollSeconds}
-          disabled={saving}
-          onChange={(v) => set("orchestratorPollSeconds", v)}
+      <section className={CARD}>
+        <SectionHeader
+          title="Consultas RUNT"
+          description="Familia y placa del pre-trámite vía proveedor. No es Confirmación RUNT."
         />
-        <NumberField
-          id="ict-orch-conc"
-          label="Concurrencia"
-          value={form.orchestratorConcurrency}
-          error={fieldErrors.orchestratorConcurrency}
-          disabled={saving}
-          onChange={(v) => set("orchestratorConcurrency", v)}
-        />
-        <NumberField
-          id="ict-orch-batch"
-          label="Lote"
-          value={form.orchestratorBatchSize}
-          error={fieldErrors.orchestratorBatchSize}
-          disabled={saving}
-          onChange={(v) => set("orchestratorBatchSize", v)}
-        />
-      </Section>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <NumberField
+            id="ict-orch-poll"
+            label="Intervalo (segundos)"
+            hint="1 a 3600"
+            value={form.orchestratorPollSeconds}
+            error={fieldErrors.orchestratorPollSeconds}
+            disabled={saving}
+            onChange={(v) => set("orchestratorPollSeconds", v)}
+          />
+          <NumberField
+            id="ict-orch-conc"
+            label="Concurrencia"
+            hint="1 a 100"
+            value={form.orchestratorConcurrency}
+            error={fieldErrors.orchestratorConcurrency}
+            disabled={saving}
+            onChange={(v) => set("orchestratorConcurrency", v)}
+          />
+          <NumberField
+            id="ict-orch-batch"
+            label="Lote"
+            hint="1 a 5000"
+            value={form.orchestratorBatchSize}
+            error={fieldErrors.orchestratorBatchSize}
+            disabled={saving}
+            onChange={(v) => set("orchestratorBatchSize", v)}
+          />
+        </div>
+      </section>
 
-      <Section title="Envío a core-api">
-        <NumberField
-          id="ict-send-poll"
-          label="Intervalo (segundos)"
-          value={form.sendPollSeconds}
-          error={fieldErrors.sendPollSeconds}
-          disabled={saving}
-          onChange={(v) => set("sendPollSeconds", v)}
+      <section className={CARD}>
+        <SectionHeader
+          title="Envío a FLIT"
+          description="Pasa el pre-trámite validado a core-api."
         />
-        <NumberField
-          id="ict-send-conc"
-          label="Concurrencia"
-          value={form.sendConcurrency}
-          error={fieldErrors.sendConcurrency}
-          disabled={saving}
-          onChange={(v) => set("sendConcurrency", v)}
-        />
-        <NumberField
-          id="ict-send-batch"
-          label="Lote"
-          value={form.sendBatchSize}
-          error={fieldErrors.sendBatchSize}
-          disabled={saving}
-          onChange={(v) => set("sendBatchSize", v)}
-        />
-      </Section>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <NumberField
+            id="ict-send-poll"
+            label="Intervalo (segundos)"
+            hint="1 a 3600"
+            value={form.sendPollSeconds}
+            error={fieldErrors.sendPollSeconds}
+            disabled={saving}
+            onChange={(v) => set("sendPollSeconds", v)}
+          />
+          <NumberField
+            id="ict-send-conc"
+            label="Concurrencia"
+            hint="1 a 100"
+            value={form.sendConcurrency}
+            error={fieldErrors.sendConcurrency}
+            disabled={saving}
+            onChange={(v) => set("sendConcurrency", v)}
+          />
+          <NumberField
+            id="ict-send-batch"
+            label="Lote"
+            hint="1 a 5000"
+            value={form.sendBatchSize}
+            error={fieldErrors.sendBatchSize}
+            disabled={saving}
+            onChange={(v) => set("sendBatchSize", v)}
+          />
+        </div>
+      </section>
 
-      <Section title="Webhooks al gestor">
-        <NumberField
-          id="ict-webhook-poll"
-          label="Intervalo (segundos)"
-          value={form.webhookPollSeconds}
-          error={fieldErrors.webhookPollSeconds}
-          disabled={saving}
-          onChange={(v) => set("webhookPollSeconds", v)}
+      <section className={CARD}>
+        <SectionHeader
+          title="Notificaciones a gestores"
+          description="Avisos webhook cuando cambia el estado del pre-trámite."
         />
-        <NumberField
-          id="ict-webhook-batch"
-          label="Lote"
-          value={form.webhookBatchSize}
-          error={fieldErrors.webhookBatchSize}
+        <div className="grid gap-4 sm:grid-cols-2 xl:max-w-xl">
+          <NumberField
+            id="ict-webhook-poll"
+            label="Intervalo (segundos)"
+            hint="1 a 3600"
+            value={form.webhookPollSeconds}
+            error={fieldErrors.webhookPollSeconds}
+            disabled={saving}
+            onChange={(v) => set("webhookPollSeconds", v)}
+          />
+          <NumberField
+            id="ict-webhook-batch"
+            label="Lote"
+            hint="1 a 5000"
+            value={form.webhookBatchSize}
+            error={fieldErrors.webhookBatchSize}
+            disabled={saving}
+            onChange={(v) => set("webhookBatchSize", v)}
+          />
+        </div>
+      </section>
+
+      {saveError ? (
+        <InlineAlert tone="error">{saveError}</InlineAlert>
+      ) : null}
+
+      <div className="flex justify-end pb-2">
+        <CreateButton
+          label={saving ? "Guardando…" : "Guardar configuración"}
+          icon={Save}
           disabled={saving}
-          onChange={(v) => set("webhookBatchSize", v)}
-        />
-      </Section>
-
-      {saveError && (
-        <p role="alert" className="text-sm" style={{ color: "#FF4E00" }}>
-          {saveError}
-        </p>
-      )}
-
-      <div className="flex items-center justify-end gap-3">
-        <button
-          type="button"
           onClick={() => void save()}
-          disabled={saving}
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: "#557EFF" }}
-        >
-          <Send className="h-4 w-4" aria-hidden="true" />
-          {saving ? "Guardando…" : "Guardar configuración"}
-        </button>
+        />
       </div>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
-    <section className="space-y-4 rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
-    </section>
+    <header className="border-b border-[#DFE5ED] pb-3 dark:border-white/10">
+      <h2 className="text-sm font-semibold text-[#162744] dark:text-white">{title}</h2>
+      <p className="mt-0.5 text-xs leading-snug text-[#59677D] dark:text-white/70">{description}</p>
+    </header>
   );
 }
 
 function NumberField({
   id,
   label,
+  hint,
   value,
   error,
   disabled,
@@ -307,14 +357,15 @@ function NumberField({
 }: {
   id: string;
   label: string;
+  hint?: string;
   value: number;
   error?: string;
   disabled: boolean;
   onChange: (value: number) => void;
 }) {
   return (
-    <div>
-      <label htmlFor={id} className="text-xs font-semibold">
+    <div className="min-w-0">
+      <label htmlFor={id} className={WIZARD_LABEL}>
         {label}
       </label>
       <input
@@ -324,7 +375,7 @@ function NumberField({
         pattern="[0-9]*"
         autoComplete="off"
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-error` : undefined}
+        aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
         value={value}
         disabled={disabled}
         onChange={(e) => {
@@ -336,13 +387,17 @@ function NumberField({
           const n = Number.parseInt(raw, 10);
           onChange(Number.isFinite(n) ? n : value);
         }}
-        className={`mt-1 ${OT_INPUT_CLS}`}
+        className={`mt-1 ${WIZARD_INPUT}`}
       />
-      {error && (
-        <p id={`${id}-error`} className="mt-1 text-[11px]" style={{ color: "#FF4E00" }}>
+      {error ? (
+        <p id={`${id}-error`} className={WIZARD_HINT} style={{ color: "#FF4E00" }}>
           {error}
         </p>
-      )}
+      ) : hint ? (
+        <p id={`${id}-hint`} className={WIZARD_HINT}>
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }

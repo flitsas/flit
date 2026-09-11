@@ -6,13 +6,14 @@ import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ToastProvider } from "@/components/admin/Toast";
 import { IctJobSettingsForm } from "@/components/admin/jobs/IctJobSettingsForm";
+import { JobsComoFunciona } from "@/components/admin/jobs/JobsComoFunciona";
 
 export default function AdminIctJobSettingsPage() {
   const router = useRouter();
 
   return (
     <ToastProvider>
-      <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
+      <div className="flex min-h-screen flex-col gap-4 px-4 pt-6 pb-24 md:px-6">
         <button
           type="button"
           onClick={() => router.push("/admin/jobs")}
@@ -24,13 +25,12 @@ export default function AdminIctJobSettingsPage() {
         </button>
 
         <ModuleTitle
-          title="Procesos periódicos ICT"
-          subtitle="Ventana horaria Bogotá, polls, lotes y concurrencia del pipeline. Solo SuperAdmin. Sin secretos."
+          title="Cadencia ICT"
+          subtitle="Ventana horaria Bogotá, intervalos, lotes y concurrencia. Los cambios aplican en el siguiente ciclo."
+          action={<JobsComoFunciona />}
         />
 
-        <div className="mx-auto w-full max-w-3xl">
-          <IctJobSettingsForm />
-        </div>
+        <IctJobSettingsForm />
       </div>
     </ToastProvider>
   );

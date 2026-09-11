@@ -18,10 +18,10 @@ const nextConfig: NextConfig = {
   // Requires: pnpm run dev:core-api + pnpm run dev:frontend (leave NEXT_PUBLIC_API_URL unset).
   async rewrites() {
     const apiOrigin = process.env.CORE_API_ORIGIN ?? 'http://localhost:4003';
-    // core-ict es un servicio aparte (:4020). En Docker lo enruta el Gateway; en local sin Docker
-    // no hay gateway, así que el proxy manda /api/v1/ict/* a su origen. Si la variable no está,
-    // cae al core-api de siempre y el comportamiento no cambia.
-    const ictOrigin = process.env.CORE_ICT_ORIGIN ?? apiOrigin;
+    // core-ict es un servicio aparte (:4020). En Docker lo enruta el Gateway; en `pnpm run dev`
+    // el browser pega a :3000 y este rewrite debe ir a core-ict. Si cae a core-api, Trazabilidad /
+    // Log ICT responden 404 y la UI muestra “no se pudieron cargar los trámites”.
+    const ictOrigin = process.env.CORE_ICT_ORIGIN ?? 'http://localhost:4020';
     return [
       {
         source: '/api/v1/ict/:path*',

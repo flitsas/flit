@@ -57,7 +57,8 @@ describe("IctJobSettingsForm — HU #12123", () => {
     vi.mocked(fetchIctJobSettings).mockResolvedValue(settings());
     renderForm();
     expect(screen.getByRole("status", { busy: true })).toBeInTheDocument();
-    expect(await screen.findByLabelText("Hora inicio (inclusiva)")).toHaveValue("8");
+    expect(screen.getByText("Cargando cadencia ICT…")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Hora de inicio")).toHaveValue("8");
     expect(screen.getByLabelText("Lote", { selector: "#ict-business-batch" })).toHaveValue("500");
     expect(screen.getByRole("link", { name: /últimas corridas/i })).toHaveAttribute(
       "href",
@@ -68,7 +69,7 @@ describe("IctJobSettingsForm — HU #12123", () => {
   it("estado vacío cuando aún no hay updatedAt", async () => {
     vi.mocked(fetchIctJobSettings).mockResolvedValue(settings({ updatedAt: null, updatedBy: null }));
     renderForm();
-    expect(await screen.findByText(/aún no hay una fila persistida/i)).toBeInTheDocument();
+    expect(await screen.findByText(/todavía no hay una configuración guardada/i)).toBeInTheDocument();
   });
 
   it("estado de error de carga", async () => {
@@ -81,7 +82,7 @@ describe("IctJobSettingsForm — HU #12123", () => {
     vi.mocked(fetchIctJobSettings).mockResolvedValue(settings());
     const user = userEvent.setup();
     renderForm();
-    await screen.findByLabelText("Hora inicio (inclusiva)");
+    await screen.findByLabelText("Hora de inicio");
     await user.click(screen.getByRole("button", { name: /guardar configuración/i }));
     await waitFor(() => expect(saveIctJobSettings).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/configuración ict guardada/i)).toBeInTheDocument();
@@ -107,10 +108,10 @@ describe("IctJobSettingsForm — HU #12123", () => {
     vi.mocked(saveIctJobSettings).mockRejectedValue(new ApiError(500, "boom"));
     const user = userEvent.setup();
     renderForm();
-    await screen.findByLabelText("Hora inicio (inclusiva)");
+    await screen.findByLabelText("Hora de inicio");
     await user.click(screen.getByRole("button", { name: /guardar configuración/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo guardar/i);
     expect(screen.queryByText(/configuración ict guardada/i)).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Hora inicio (inclusiva)")).toHaveValue("8");
+    expect(screen.getByLabelText("Hora de inicio")).toHaveValue("8");
   });
 });

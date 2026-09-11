@@ -697,7 +697,7 @@ export function Shell({
           <button
             ref={dockLauncherRef}
             onClick={() => setDockOpen(true)}
-            className="pointer-events-auto absolute left-1/2 -translate-x-1/2 bottom-5 z-40 h-14 w-14 overflow-hidden rounded-full transition-transform duration-[var(--nav-duracion)] ease-[var(--nav-ease)] hover:scale-105 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2"
+            className="pointer-events-auto absolute left-1/2 -translate-x-1/2 bottom-5 z-40 h-14 w-14 overflow-hidden rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2"
             style={{ boxShadow: "var(--nav-sombra-activo)" }}
             aria-label="Abrir menú de navegación"
             aria-expanded={dockOpen}

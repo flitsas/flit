@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { JobsCatalog } from "../JobsCatalog";
 
@@ -69,7 +69,7 @@ describe("JobsCatalog — HU #12514", () => {
     });
   });
 
-  it("lista ICT y Quipux y aclara RUNT vs Confirmación RUNT", async () => {
+  it("lista ICT y Quipux como consulta y aclara RUNT vs Confirmación RUNT", async () => {
     vi.mocked(fetchIctJobCatalog).mockResolvedValue([
       {
         key: "orchestrator",
@@ -82,17 +82,20 @@ describe("JobsCatalog — HU #12514", () => {
       },
     ]);
     render(<JobsCatalog />);
-    expect(await screen.findByRole("button", { name: "Orchestrator" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "RegisterProcessor" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "StatusPollProcessor" })).toBeInTheDocument();
-    expect(screen.getByText(/consultas runt del pre-trámite/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /confirmacion-runt/i })).toHaveAttribute(
+    expect(screen.getByText("Cargando procesos periódicos…")).toBeInTheDocument();
+    const table = await screen.findByRole("table", { name: "Procesos periódicos" });
+    expect(within(table).getByText("Consultas RUNT")).toBeInTheDocument();
+    expect(within(table).getByText("Radicar en Quipux")).toBeInTheDocument();
+    expect(within(table).getByText("Consultar estado Quipux")).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Acciones" })).not.toBeInTheDocument();
+    expect(screen.getByText(/consultas runt y confirmación runt no son lo mismo/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /confirmación runt/i })).toHaveAttribute(
       "href",
       "/admin/plataforma/confirmacion-runt",
     );
   });
 
-  it("ICT navega al formulario y Quipux a /admin/quipux", async () => {
+  it("un CTA por módulo; las filas no navegan", async () => {
     vi.mocked(fetchIctJobCatalog).mockResolvedValue([
       {
         key: "orchestrator",
@@ -106,9 +109,12 @@ describe("JobsCatalog — HU #12514", () => {
     ]);
     const user = userEvent.setup();
     render(<JobsCatalog />);
-    await user.click(await screen.findByRole("button", { name: "Orchestrator" }));
+    const table = await screen.findByRole("table", { name: "Procesos periódicos" });
+    await user.click(within(table).getByText("Consultas RUNT"));
+    expect(push).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Configurar cadencia ICT" }));
     expect(push).toHaveBeenCalledWith("/admin/jobs/ict");
-    await user.click(screen.getByRole("button", { name: "RegisterProcessor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar Quipux" }));
     expect(push).toHaveBeenCalledWith("/admin/quipux");
   });
 
@@ -116,6 +122,28 @@ describe("JobsCatalog — HU #12514", () => {
     vi.mocked(fetchIctJobCatalog).mockRejectedValue(new Error("net"));
     render(<JobsCatalog />);
     expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo cargar/i);
-    expect(screen.queryByRole("button", { name: "Orchestrator" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Procesos periódicos" })).not.toBeInTheDocument();
+  });
+
+  it("el filtro ICT oculta las filas de Quipux y su CTA", async () => {
+    vi.mocked(fetchIctJobCatalog).mockResolvedValue([
+      {
+        key: "orchestrator",
+        displayName: "Orchestrator",
+        owner: "core-ict",
+        types: ["BD"],
+        hasPipelineRuns: true,
+        notes: "RUNT",
+        lastRun: null,
+      },
+    ]);
+    const user = userEvent.setup();
+    render(<JobsCatalog />);
+    const table = await screen.findByRole("table", { name: "Procesos periódicos" });
+    await user.click(screen.getByRole("button", { name: "ICT" }));
+    expect(within(table).getByText("Consultas RUNT")).toBeInTheDocument();
+    expect(within(table).queryByText("Radicar en Quipux")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Configurar cadencia ICT" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Configurar Quipux" })).not.toBeInTheDocument();
   });
 });

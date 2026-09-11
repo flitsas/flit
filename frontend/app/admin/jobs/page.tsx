@@ -4,12 +4,13 @@ import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { JobsCatalog } from "@/components/admin/jobs/JobsCatalog";
+import { JobsComoFunciona } from "@/components/admin/jobs/JobsComoFunciona";
 
 export default function AdminJobsPage() {
   const router = useRouter();
 
   return (
-    <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
+    <div className="flex min-h-screen flex-col gap-4 px-4 pt-6 pb-24 md:px-6">
       <button
         type="button"
         onClick={() => router.push("/")}
@@ -22,12 +23,11 @@ export default function AdminJobsPage() {
 
       <ModuleTitle
         title="Procesos periódicos"
-        subtitle="Catálogo unificado ICT + Quipux. Configura cada proceso sin duplicar secretos. Solo SuperAdmin."
+        subtitle="Consulta el estado de cada proceso. La cadencia se configura una sola vez por módulo."
+        action={<JobsComoFunciona />}
       />
 
-      <div className="mx-auto w-full max-w-6xl">
-        <JobsCatalog />
-      </div>
+      <JobsCatalog />
     </div>
   );
 }

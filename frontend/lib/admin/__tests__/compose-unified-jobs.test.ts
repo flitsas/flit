@@ -62,15 +62,17 @@ describe("composeUnifiedJobs — HU #12514", () => {
   it("une ICT y Quipux sin reimplementar secretos", () => {
     const rows = composeUnifiedJobs([orch], settings, quipux);
     expect(rows.map((r) => r.displayName)).toEqual([
-      "Orchestrator",
-      "RegisterProcessor",
-      "StatusPollProcessor",
+      "Consultas RUNT",
+      "Radicar en Quipux",
+      "Consultar estado Quipux",
     ]);
-    expect(rows[0].href).toBe("/admin/jobs/ict");
+    expect(rows[0].technicalName).toBe("Orchestrator");
     expect(rows[0].owner).toBe("core-ict");
-    expect(rows[0].intervalLabel).toBe("20 s");
-    expect(rows[1].href).toBe("/admin/quipux");
-    expect(rows[1].intervalLabel).toBe("15 min");
+    expect(rows[0].module).toBe("ICT");
+    expect(rows[0].intervalLabel).toBe("Cada 20 s");
+    expect(rows[0].lastRunPrimary).toBe("Completado");
+    expect(rows[1].intervalLabel).toBe("Cada 15 min");
+    expect(rows[1].enabledLabel).toBe("Encendido");
     expect(JSON.stringify(rows)).not.toContain("password");
     expect(JSON.stringify(rows)).not.toContain("awsSecret");
   });

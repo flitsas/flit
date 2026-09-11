@@ -90,7 +90,7 @@ describe("QuipuxSettingsForm — HU #10710", () => {
 
     expect(await screen.findByLabelText("Prefijo de la key")).toHaveValue("FLIT/");
     expect(screen.getByLabelText("Región AWS")).toHaveValue("us-east-1");
-    expect(screen.getByLabelText("Tamaño de lote")).toHaveValue(20);
+    expect(screen.getByLabelText("Tamaño de lote")).toHaveValue("20");
   });
 
   it("al guardar sin tocar los secretos, NO los reenvía (conserva los cifrados)", async () => {
@@ -117,5 +117,27 @@ describe("QuipuxSettingsForm — HU #10710", () => {
     await waitFor(() => expect(saveQuipuxSettings).toHaveBeenCalled());
     const body = vi.mocked(saveQuipuxSettings).mock.calls[0][0];
     expect(body.password).toBe("clave-nueva");
+  });
+
+  it("muestra estado de carga y luego el formulario lleno", async () => {
+    vi.mocked(fetchQuipuxSettings).mockResolvedValue(settings());
+    renderForm();
+    expect(screen.getByRole("status", { busy: true })).toBeInTheDocument();
+    expect(screen.getByText("Cargando Integración Quipux…")).toBeInTheDocument();
+    expect(await screen.findByLabelText("URL de login")).toHaveValue("https://qx/login");
+    expect(screen.getByText(/los workers releen estos valores/i)).toBeInTheDocument();
+  });
+
+  it("estado vacío cuando aún no hay fila guardada", async () => {
+    vi.mocked(fetchQuipuxSettings).mockResolvedValue(null);
+    renderForm();
+    expect(await screen.findByText(/todavía no hay una configuración guardada/i)).toBeInTheDocument();
+  });
+
+  it("estado de error de carga con reintento", async () => {
+    vi.mocked(fetchQuipuxSettings).mockRejectedValue(new Error("network"));
+    renderForm();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo cargar/i);
+    expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
   });
 });
