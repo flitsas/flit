@@ -280,10 +280,25 @@ function CompanyDetail() {
                   </>
                 }
                 auditSlot={<AuditLogPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
-                documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
+                documentosSlot={
+                  <CompanyDocumentParamsPanel
+                    tenantId={tenantId}
+                    networkHeadId={managingChild ? networkHeadId : null}
+                  />
+                }
                 platesSlot={<PlatePreassignViewer tenantId={tenantId} />}
-                legalRepresentativesSlot={<RepresentativesAndVaultTab tenantId={tenantId} />}
-                mandatariosSlot={<CompanyMandatariosPanel tenantId={tenantId} />}
+                legalRepresentativesSlot={
+                  <RepresentativesAndVaultTab
+                    tenantId={tenantId}
+                    networkHeadId={managingChild ? networkHeadId : null}
+                  />
+                }
+                mandatariosSlot={
+                  <CompanyMandatariosPanel
+                    tenantId={tenantId}
+                    networkHeadId={managingChild ? networkHeadId : null}
+                  />
+                }
                 usuariosSlot={
                   isSuperAdmin || managingChild ? (
                     <CompanyUsersPanel

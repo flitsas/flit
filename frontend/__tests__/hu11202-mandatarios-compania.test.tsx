@@ -108,6 +108,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
             { transitOfficeId: "ot-medellin", representedCompanyIds: ["emp-acme"] },
           ],
         }),
+        undefined,
       ),
     );
   });
@@ -131,6 +132,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
       expect(mocks.createCompanyMandateSigner).toHaveBeenCalledWith(
         "tenant-1",
         expect.objectContaining({ officeCompanies: [] }),
+        undefined,
       ),
     );
   });
@@ -156,6 +158,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
           email: "carlos@ejemplo.com",
           transitOfficeIds: ["ot-medellin"],
         }),
+        undefined,
       ),
     );
   });
@@ -184,6 +187,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
       expect(mocks.createCompanyMandateSigner).toHaveBeenCalledWith(
         "tenant-1",
         expect.objectContaining({ transitOfficeIds: ["ot-medellin", "ot-envigado"] }),
+        undefined,
       ),
     );
   });
@@ -226,6 +230,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
         "tenant-1",
         "ms-1",
         expect.objectContaining({ transitOfficeIds: ["ot-medellin"] }),
+        undefined,
       ),
     );
   });

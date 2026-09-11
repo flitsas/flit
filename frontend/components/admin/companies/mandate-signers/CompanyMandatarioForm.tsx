@@ -26,6 +26,7 @@ const DOC_TYPES = ["CC", "CE", "PAS", "NIT"];
  */
 export function CompanyMandatarioForm({
   tenantId,
+  networkHeadId,
   offices,
   companies = [],
   editing,
@@ -36,6 +37,7 @@ export function CompanyMandatarioForm({
   onSubmit,
 }: {
   tenantId: string;
+  networkHeadId?: string | null;
   offices: CompanyTransitOfficeOption[];
   /** Empresas representadas de la compañía, para acotar para quién firma en cada organismo. */
   companies?: RepresentedCompanyOption[];
@@ -265,6 +267,7 @@ export function CompanyMandatarioForm({
             </label>
             <SignatureVaultSelector
               tenantId={tenantId}
+              networkHeadId={networkHeadId}
               documentType={documentType}
               documentNumber={documentNumber}
               value={signatureVaultId}

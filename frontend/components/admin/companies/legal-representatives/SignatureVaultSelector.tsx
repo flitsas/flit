@@ -18,6 +18,7 @@ import { ApiError, ApiValidationError } from "@/lib/api/types";
 
 export interface SignatureVaultSelectorProps {
   tenantId: string;
+  networkHeadId?: string | null;
   documentType: string;
   documentNumber: string;
   /** ID de la firma seleccionada (null = sin selección). */
@@ -51,6 +52,7 @@ function etiquetaFirma(sig: SignatureVaultItem): string {
  */
 export function SignatureVaultSelector({
   tenantId,
+  networkHeadId,
   documentType,
   documentNumber,
   value,
@@ -80,7 +82,14 @@ export function SignatureVaultSelector({
       setLoading(true);
       setError(false);
       setFetched(false);
-      return fetchSignatureVaultByDocument(tenantId, documentType, documentNumber, true, signal)
+      return fetchSignatureVaultByDocument(
+        tenantId,
+        documentType,
+        documentNumber,
+        true,
+        signal,
+        networkHeadId,
+      )
         .then((list) => {
           if (signal?.aborted) return;
           setItems(list);
@@ -94,7 +103,7 @@ export function SignatureVaultSelector({
           }
         });
     },
-    [tenantId, documentType, documentNumber],
+    [tenantId, networkHeadId, documentType, documentNumber],
   );
 
   useEffect(() => {
@@ -148,7 +157,7 @@ export function SignatureVaultSelector({
         vigenciaDesde: desde,
         vigenciaHasta: hasta,
         artefactoFirmaBase64: artefacto,
-      });
+      }, networkHeadId);
       await load();
       // AC3 — la firma recién capturada queda elegida; el guardado del representante la persiste.
       onChange(creada.id);

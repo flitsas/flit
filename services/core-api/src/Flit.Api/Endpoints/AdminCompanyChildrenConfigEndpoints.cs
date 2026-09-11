@@ -54,6 +54,12 @@ public static class AdminCompanyChildrenConfigEndpoints
         group.MapGroup("/personalized-documents")
             .MapAdminCompanyPersonalizedDocumentsChildRoutes();
 
+        group.MapGroup("/deeds")
+            .MapAdminCompanyDeedsChildRoutes();
+
+        group.MapGroup("/document-params")
+            .MapAdminCompanyDocumentParamsChildRoutes();
+
         return app;
     }
 

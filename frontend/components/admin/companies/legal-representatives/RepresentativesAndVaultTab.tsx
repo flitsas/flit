@@ -17,8 +17,10 @@ import { RL_COLOR } from "./rl-flit-styles";
  */
 export function RepresentativesAndVaultTab({
   tenantId,
+  networkHeadId,
 }: {
   tenantId: string;
+  networkHeadId?: string | null;
   /** @deprecated Ya no se usa: el baúl no se muestra en esta pantalla. */
   baulVisible?: boolean;
 }) {
@@ -39,7 +41,7 @@ export function RepresentativesAndVaultTab({
             Representantes legales
           </h2>
         </header>
-        <LegalRepresentativesTab tenantId={tenantId} />
+        <LegalRepresentativesTab tenantId={tenantId} networkHeadId={networkHeadId} />
       </section>
     </div>
   );

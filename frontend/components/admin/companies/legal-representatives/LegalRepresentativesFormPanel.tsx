@@ -48,6 +48,7 @@ export interface LegalRepresentativesFormPanelProps {
   representativeId: string | null;
   /** TenantId necesario para la llamada a GET /{id}. */
   tenantId: string;
+  networkHeadId?: string | null;
   /** Catálogo de tipos de trámite asignables (activos + publicados). */
   procedureTypes: AssignableProcedureType[];
   onClose: () => void;
@@ -153,6 +154,7 @@ export function LegalRepresentativesFormPanel({
   mode,
   representativeId,
   tenantId,
+  networkHeadId,
   procedureTypes,
   onClose,
   onSubmit,
@@ -204,7 +206,7 @@ export function LegalRepresentativesFormPanel({
     setDetailError(false);
     const controller = new AbortController();
 
-    fetchLegalRepresentative(tenantId, representativeId, controller.signal)
+    fetchLegalRepresentative(tenantId, representativeId, controller.signal, networkHeadId)
       .then((full) => {
         if (controller.signal.aborted) return;
         setDetail(full);
@@ -222,7 +224,7 @@ export function LegalRepresentativesFormPanel({
 
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, mode, representativeId, tenantId]);
+  }, [open, mode, representativeId, tenantId, networkHeadId]);
 
   // ── Helpers de formulario ────────────────────────────────────────────────────
 
@@ -368,7 +370,7 @@ export function LegalRepresentativesFormPanel({
     setFieldErrors({});
     try {
       await onSubmit(buildInput(form.companies));
-      const full = await fetchLegalRepresentative(tenantId, representativeId);
+      const full = await fetchLegalRepresentative(tenantId, representativeId, undefined, networkHeadId);
       setDetail(full);
       setForm(fromItem(full));
       onCompaniesPersisted?.();
@@ -406,7 +408,7 @@ export function LegalRepresentativesFormPanel({
   // lista de escrituras en el acordeón. Sin recarga de página: solo actualiza el estado local.
   const refreshDetail = () => {
     if (!representativeId) return;
-    fetchLegalRepresentative(tenantId, representativeId)
+    fetchLegalRepresentative(tenantId, representativeId, undefined, networkHeadId)
       .then((full) => setDetail(full))
       .catch(() => {
         // Fallo silencioso: la escritura ya se guardó; el gestor puede reabrir el panel.
@@ -624,6 +626,7 @@ export function LegalRepresentativesFormPanel({
               onRemoveCompany={() => undefined}
               fieldErrors={{}}
               tenantId={tenantId}
+              networkHeadId={networkHeadId}
               representativeId={representativeId}
               onDeedSaved={refreshDetail}
               onError={onError}
@@ -850,6 +853,7 @@ export function LegalRepresentativesFormPanel({
             </h3>
             <SignatureVaultSelector
               tenantId={tenantId}
+              networkHeadId={networkHeadId}
               documentType={form.documentType}
               documentNumber={form.documentNumber}
               value={form.signatureVaultId}
@@ -923,6 +927,7 @@ export function LegalRepresentativesFormPanel({
           onRemoveCompany={removeCompany}
           fieldErrors={fieldErrors}
           tenantId={tenantId}
+          networkHeadId={networkHeadId}
           representativeId={representativeId}
           onDeedSaved={refreshDetail}
           onEnsureCompanySaved={ensureCompanySaved}

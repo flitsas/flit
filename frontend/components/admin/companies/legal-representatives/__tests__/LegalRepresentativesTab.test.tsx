@@ -167,7 +167,11 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     await screen.findByText(/aún no tiene representantes legales registrados/i);
 
     await waitFor(() =>
-      expect(fetchAssignableProcedureTypes).toHaveBeenCalledWith(TENANT, expect.anything()),
+      expect(fetchAssignableProcedureTypes).toHaveBeenCalledWith(
+        TENANT,
+        expect.anything(),
+        undefined,
+      ),
     );
 
     await userEvent.click(screen.getByRole("button", { name: /^nuevo representante$/i }));
@@ -198,7 +202,9 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     const dialog = await screen.findByRole("dialog");
     await userEvent.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
 
-    await waitFor(() => expect(deleteLegalRepresentative).toHaveBeenCalledWith(TENANT, "rep-1"));
+    await waitFor(() =>
+      expect(deleteLegalRepresentative).toHaveBeenCalledWith(TENANT, "rep-1", undefined),
+    );
   });
 
   it("permite agregar/quitar empresas desde el botón Empresas del listado", async () => {
@@ -252,7 +258,12 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
       await screen.findByRole("dialog", { name: /editar persona, firma y trámites/i }),
     ).toBeInTheDocument();
     await waitFor(() =>
-      expect(fetchLegalRepresentative).toHaveBeenCalledWith(TENANT, "rep-1", expect.anything()),
+      expect(fetchLegalRepresentative).toHaveBeenCalledWith(
+        TENANT,
+        "rep-1",
+        expect.anything(),
+        undefined,
+      ),
     );
   });
 

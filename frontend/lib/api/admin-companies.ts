@@ -24,6 +24,8 @@ import type {
   WhitelistEntry,
 } from "./types";
 
+import { companyScopedPath } from "./company-scoped-path";
+
 const base = "/api/v1/admin/companies";
 
 function companyResourcePath(
@@ -31,9 +33,7 @@ function companyResourcePath(
   suffix: string,
   networkHeadId?: string | null,
 ): string {
-  return networkHeadId
-    ? `${base}/${networkHeadId}/children/${tenantId}${suffix}`
-    : `${base}/${tenantId}${suffix}`;
+  return companyScopedPath(tenantId, suffix, networkHeadId);
 }
 
 function childToCompanyListItem(
