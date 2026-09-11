@@ -13,11 +13,18 @@ public interface ITransitGrantRepository
     /// devuelve <c>false</c> sin duplicar fila ni auditoría; si lo crea devuelve
     /// <c>true</c> y registra una fila de auditoría.
     /// </summary>
+    /// <summary>Obtiene el origen del grant si existe.</summary>
+    Task<string?> GetGrantSourceAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default);
+
     Task<bool> AddGrantAsync(
         Guid tenantId,
         Guid transitOfficeId,
         Guid? createdBy,
         Guid? correlationId,
+        string source = TransitGrantSources.Client,
         CancellationToken cancellationToken = default);
 
     /// <summary>

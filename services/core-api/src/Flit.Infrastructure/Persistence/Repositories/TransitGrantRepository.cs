@@ -48,15 +48,27 @@ internal sealed class TransitGrantRepository : ITransitGrantRepository
             .ConfigureAwait(false);
     }
 
+    public async Task<string?> GetGrantSourceAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default) =>
+        await _context.TenantTransitOfficeGrants
+            .AsNoTracking()
+            .Where(g => g.TenantId == tenantId && g.TransitOfficeId == transitOfficeId)
+            .Select(g => g.Source)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
     public Task<bool> AddGrantAsync(
         Guid tenantId,
         Guid transitOfficeId,
         Guid? createdBy,
         Guid? correlationId,
+        string source = TransitGrantSources.Client,
         CancellationToken cancellationToken = default) =>
         ExecuteInTenantScopeAsync(
             tenantId,
-            () => PersistAddAsync(tenantId, transitOfficeId, createdBy, correlationId, cancellationToken),
+            () => PersistAddAsync(tenantId, transitOfficeId, createdBy, correlationId, source, cancellationToken),
             cancellationToken);
 
     public Task<bool> RemoveGrantAsync(
@@ -113,6 +125,7 @@ internal sealed class TransitGrantRepository : ITransitGrantRepository
         Guid transitOfficeId,
         Guid? createdBy,
         Guid? correlationId,
+        string source,
         CancellationToken cancellationToken)
     {
         // Idempotencia (AC2): si ya existe el grant no se duplica fila ni auditoría.
@@ -133,6 +146,7 @@ internal sealed class TransitGrantRepository : ITransitGrantRepository
             TenantId = tenantId,
             TransitOfficeId = transitOfficeId,
             IsEnabled = true,
+            Source = source,
             CreatedAt = now,
             CreatedBy = createdBy,
         });

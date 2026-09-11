@@ -12,4 +12,7 @@ public sealed class AddTransitGrantCommand
 
     /// <summary>Id de correlación opcional para trazabilidad de la auditoría.</summary>
     public Guid? CorrelationId { get; init; }
+
+    /// <summary>Si el caller es SuperAdmin (HU #12346 AC5).</summary>
+    public bool IsSuperAdmin { get; init; }
 }

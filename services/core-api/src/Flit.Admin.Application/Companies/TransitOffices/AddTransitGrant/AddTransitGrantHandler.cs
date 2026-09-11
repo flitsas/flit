@@ -1,3 +1,5 @@
+using Flit.Admin.Domain.Companies;
+using Flit.Admin.Domain.Companies.Create;
 using Flit.Admin.Domain.Companies.TransitOffices;
 
 namespace Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
@@ -22,15 +24,18 @@ public sealed class AddTransitGrantHandler
     public const string InactivoMessage =
         "Este organismo está inactivo en FLIT. Actívelo antes de habilitarlo para la compañía.";
 
+    private readonly ICompanyHierarchyRepository _hierarchy;
     private readonly ITransitOfficeCatalog _catalog;
     private readonly ITransitOfficeOperationalStatusReader _operationalStatus;
     private readonly ITransitGrantRepository _repository;
 
     public AddTransitGrantHandler(
+        ICompanyHierarchyRepository hierarchy,
         ITransitOfficeCatalog catalog,
         ITransitOfficeOperationalStatusReader operationalStatus,
         ITransitGrantRepository repository)
     {
+        _hierarchy = hierarchy ?? throw new ArgumentNullException(nameof(hierarchy));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _operationalStatus = operationalStatus ?? throw new ArgumentNullException(nameof(operationalStatus));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
@@ -41,6 +46,18 @@ public sealed class AddTransitGrantHandler
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
+
+        var guard = await TransitGrantMutationGuard
+            .ValidateAddAsync(command.TenantId, command.IsSuperAdmin, _hierarchy, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!guard.IsAllowed)
+        {
+            return AddTransitGrantResult.Invalid(
+            [
+                new TransitGrantValidationError("tenantId", guard.Message!, command.TenantId.ToString()),
+            ]);
+        }
 
         // AC2: el organismo debe existir en el catálogo.
         if (command.TransitOfficeId == Guid.Empty || !_catalog.Exists(command.TransitOfficeId))
@@ -69,12 +86,29 @@ public sealed class AddTransitGrantHandler
             return InvalidOperability(command.TransitOfficeId, InactivoMessage);
         }
 
+        var source = ResolveGrantSource(command);
+
         var added = await _repository
             .AddGrantAsync(
-                command.TenantId, command.TransitOfficeId, command.CreatedBy, command.CorrelationId, cancellationToken)
+                command.TenantId,
+                command.TransitOfficeId,
+                command.CreatedBy,
+                command.CorrelationId,
+                source,
+                cancellationToken)
             .ConfigureAwait(false);
 
         return AddTransitGrantResult.Success(added);
+    }
+
+    private static string ResolveGrantSource(AddTransitGrantCommand command)
+    {
+        if (!command.IsSuperAdmin)
+        {
+            return TransitGrantSources.Client;
+        }
+
+        return TransitGrantSources.System;
     }
 
     private static AddTransitGrantResult InvalidOperability(Guid transitOfficeId, string message) =>
