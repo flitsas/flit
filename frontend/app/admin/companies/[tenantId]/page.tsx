@@ -159,7 +159,7 @@ function CompanyDetail() {
         }
       }
     },
-    [tenantId, accessChecked],
+    [tenantId, accessChecked, isSuperAdmin],
   );
 
   useEffect(() => {

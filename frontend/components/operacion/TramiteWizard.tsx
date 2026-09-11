@@ -3157,9 +3157,7 @@ function ConsultaStep({
     let active = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSecretariasLoading(true);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSecretariasLoaded(false);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSecretariasError(null);
     void tramitesClient
       .listTransitOffices()
