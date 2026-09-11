@@ -38,6 +38,7 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);

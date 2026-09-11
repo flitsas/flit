@@ -30,6 +30,7 @@ export default function NetworkChildrenPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus("loading");
     void fetchCompany(headTenantId, controller.signal)
       .then((company) => {

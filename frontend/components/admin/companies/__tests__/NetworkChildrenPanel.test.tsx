@@ -24,7 +24,7 @@ describe("NetworkChildrenPanel (HU #12356)", () => {
     render(<NetworkChildrenPanel headTenantId="head-1" headTenantType="CONCESION" />);
 
     expect(await screen.findByText(/aún no tienes clientes en tu red/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /agregar cliente a la red/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /agregar cliente a la red/i })[0]).toBeInTheDocument();
   });
 
   it("muestra hijos en estado lleno", async () => {

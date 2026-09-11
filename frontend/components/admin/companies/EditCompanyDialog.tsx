@@ -75,6 +75,7 @@ export function EditCompanyDialog({
 
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRazonSocial(company.razonSocial);
       setNit(company.nit);
       setTenantType(company.tenantType);

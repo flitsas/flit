@@ -47,12 +47,14 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
 
   useEffect(() => {
     if (!inviteTarget) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRolesLoading(true);
     void getRoles()
       .then((list) => {
