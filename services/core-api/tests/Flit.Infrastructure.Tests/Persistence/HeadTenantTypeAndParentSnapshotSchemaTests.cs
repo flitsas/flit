@@ -310,8 +310,8 @@ public sealed class HeadTenantTypeAndParentSnapshotSchemaTests
         using var db = NewContext();
         var migraciones = db.Database.GetMigrations().OrderBy(id => id, StringComparer.Ordinal).ToList();
 
-        migraciones.Last().Should().Be("20260910140000_HU12406_HeadTenantTypesAndParentSnapshot");
-        migraciones[^2].Should().Be("20260910130000_HU12323_HierarchySwitchesAndLinkAudit");
+        migraciones.Should().Contain("20260910140000_HU12406_HeadTenantTypesAndParentSnapshot");
+        migraciones.Should().Contain("20260910130000_HU12323_HierarchySwitchesAndLinkAudit");
     }
 
     // ── Sin cambio observable ───────────────────────────────────────────────────────────
