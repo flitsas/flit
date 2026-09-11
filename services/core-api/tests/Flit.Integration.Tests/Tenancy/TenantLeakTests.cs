@@ -254,9 +254,12 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
 
     // ── Q24 / Q25: organismo de tránsito por grants ─────────────────────────────────────────────
 
-    /// <summary>La bandeja del OT ve SOLO los clientes con grant habilitado en su OT (C1), aunque P, C2, X y S también radicaron ahí.</summary>
+    /// <summary>
+    /// HU #12350 AC7 — la bandeja lista trámites ya recibidos por el organismo (todos los clientes
+    /// del escenario entregaron a Ot1), no la vigencia del grant.
+    /// </summary>
     [PostgresFact]
-    public async Task Q24_bandeja_del_OT_solo_lista_clientes_con_grant()
+    public async Task Q24_bandeja_del_OT_lista_tramites_recibidos_independiente_del_grant()
     {
         await HierarchyScenario.SeedAsync(Fixture);
         await using var ctx = NewContext();
@@ -264,9 +267,13 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
 
         var page = await repo.ListAsync(HierarchyScenario.O, new OtClientProcedureFilter { Page = 1, PageSize = 100 });
 
+        var expectedIds = HierarchyScenario.Clients
+            .Select(HierarchyScenario.DeliveredProcedureOf)
+            .ToHashSet();
+
         LeakAssert.NoForeignRows("Q24 OtClientProcedureRepository.ListAsync", HierarchyScenario.O,
-            new HashSet<Guid> { HierarchyScenario.C1 }, page.Items, r => r.ClientTenantId, r => r.Id);
-        page.Items.Should().ContainSingle().Which.Id.Should().Be(HierarchyScenario.DeliveredProcedureOf(HierarchyScenario.C1));
+            expectedIds, page.Items, r => r.Id, r => r.Id);
+        page.Items.Should().HaveCount(HierarchyScenario.Clients.Count);
     }
 
     [PostgresFact]
