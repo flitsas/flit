@@ -32,6 +32,8 @@ describe("IctLogs — solo Logs y Alertas ICT (HU #11619)", () => {
 
   it("muestra únicamente las pestañas Logs y Alertas ICT, con Logs activa por defecto", () => {
     render(<IctLogs />);
+    expect(screen.getByRole("heading", { name: "Log ICT" })).toBeInTheDocument();
+    expect(screen.getByText("Cargando logs ICT…")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Logs" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Alertas ICT" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Consultas" })).not.toBeInTheDocument();

@@ -37,6 +37,10 @@ public sealed record IctJobSettings
 
     public required int WebhookBatchSize { get; init; }
 
+    public required int BusinessBatchSize { get; init; }
+
+    public required int ExternalBatchSize { get; init; }
+
     /// <summary>Defaults del código (fallback si <c>ict.job_settings</c> no tiene fila o falla la lectura).</summary>
     public static IctJobSettings FromOptions(IctJobOptions o)
     {
@@ -55,6 +59,8 @@ public sealed record IctJobSettings
             SendBatchSize = o.SendBatchSize,
             WebhookPollSeconds = o.WebhookPollSeconds,
             WebhookBatchSize = o.WebhookBatchSize,
+            BusinessBatchSize = o.BusinessBatchSize,
+            ExternalBatchSize = o.ExternalBatchSize,
         };
     }
 }
@@ -152,7 +158,8 @@ public sealed class IctJobSettingsProvider : IIctJobSettingsProvider
                 SELECT window_start_hour, window_end_hour, business_poll_seconds, external_poll_seconds,
                        orchestrator_poll_seconds, orchestrator_concurrency, orchestrator_batch_size,
                        send_poll_seconds, send_concurrency, send_batch_size,
-                       webhook_poll_seconds, webhook_batch_size
+                       webhook_poll_seconds, webhook_batch_size,
+                       business_batch_size, external_batch_size
                 FROM ict.job_settings WHERE id = 1
                 """;
             await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -177,6 +184,8 @@ public sealed class IctJobSettingsProvider : IIctJobSettingsProvider
                 SendBatchSize = AtLeast1(reader.GetInt32(9)),
                 WebhookPollSeconds = AtLeast1(reader.GetInt32(10)),
                 WebhookBatchSize = AtLeast1(reader.GetInt32(11)),
+                BusinessBatchSize = AtLeast1(reader.GetInt32(12)),
+                ExternalBatchSize = AtLeast1(reader.GetInt32(13)),
             };
         }
         finally

@@ -26,6 +26,8 @@ public sealed class IctJobSettingsProviderTests
             WebhookBatchSize = 50,
             WindowStartHour = 8,
             WindowEndHour = 20,
+            BusinessBatchSize = 500,
+            ExternalBatchSize = 500,
         });
 
         var provider = new IctJobSettingsProvider(scopeFactory, options);
@@ -38,6 +40,8 @@ public sealed class IctJobSettingsProviderTests
         provider.Current.WebhookBatchSize.Should().Be(50);
         provider.Current.WindowStartHour.Should().Be(8);
         provider.Current.WindowEndHour.Should().Be(20);
+        provider.Current.BusinessBatchSize.Should().Be(500);
+        provider.Current.ExternalBatchSize.Should().Be(500);
     }
 
     [Fact]
@@ -57,6 +61,8 @@ public sealed class IctJobSettingsProviderTests
             SendBatchSize = 150,
             WebhookPollSeconds = 5,
             WebhookBatchSize = 100,
+            BusinessBatchSize = 400,
+            ExternalBatchSize = 450,
         });
 
         settings.WindowStartHour.Should().Be(6);
@@ -69,5 +75,7 @@ public sealed class IctJobSettingsProviderTests
         settings.SendBatchSize.Should().Be(150);
         settings.WebhookPollSeconds.Should().Be(5);
         settings.WebhookBatchSize.Should().Be(100);
+        settings.BusinessBatchSize.Should().Be(400);
+        settings.ExternalBatchSize.Should().Be(450);
     }
 }
