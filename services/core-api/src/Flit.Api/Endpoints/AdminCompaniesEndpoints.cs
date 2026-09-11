@@ -15,6 +15,10 @@ using Flit.Admin.Application.Companies.TransitOffices.GetOtConsultationRestricti
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
+using Flit.Admin.Application.Companies.TransitOffices.TransitBlocks.AddTransitBlock;
+using Flit.Admin.Application.Companies.TransitOffices.TransitBlocks.GetTransitBlocks;
+using Flit.Admin.Application.Companies.TransitOffices.TransitBlocks.RemoveTransitBlock;
+using Flit.Admin.Domain.Companies;
 using Flit.Admin.Application.Companies.TransitOffices.SetOtBlockingPolicy;
 using Flit.Admin.Application.Companies.TransitOffices.SetOtConsultationRestriction;
 using Flit.Admin.Application.Companies.TransitOffices.OtPrendaDocumentPolicy;
@@ -22,7 +26,6 @@ using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.Whitelist;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
-using Flit.Admin.Domain.Companies;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -203,6 +206,27 @@ public static class AdminCompaniesEndpoints
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
+
+        // HU #12407 — bloqueos de OT para cabeza Marca Blanca (SuperAdmin muta; cabeza/hijo leen).
+        group.MapGet("/{tenantId:guid}/transit-blocks", GetTransitBlocksAsync)
+            .WithName("AdminCompanyGetTransitBlocks")
+            .WithSummary("Lista los OT bloqueados de una cabeza Marca Blanca")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPost("/{tenantId:guid}/transit-blocks", AddTransitBlockAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithName("AdminCompanyAddTransitBlock")
+            .WithSummary("Bloquea un OT para una cabeza Marca Blanca")
+            .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        group.MapDelete("/{tenantId:guid}/transit-blocks/{transitOfficeId:guid}", RemoveTransitBlockAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithName("AdminCompanyRemoveTransitBlock")
+            .WithSummary("Retira el bloqueo de un OT")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound);
 
         // PUT /api/v1/admin/companies/{tenantId}/transit-agreements/{transitOfficeId} — convenio comercial.
         group.MapPut("/{tenantId:guid}/transit-agreements/{transitOfficeId:guid}", SetTransitAgreementAsync)
@@ -612,6 +636,7 @@ public static class AdminCompaniesEndpoints
             TenantId = tenantId,
             TransitOfficeId = request?.TransitOfficeId ?? Guid.Empty,
             CreatedBy = ResolveUserId(httpContext.User),
+            IsSuperAdmin = CompanyTenantAccess.IsSuperAdmin(httpContext.User),
         };
 
         var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
@@ -633,19 +658,27 @@ public static class AdminCompaniesEndpoints
         [FromServices] RemoveTransitGrantHandler handler,
         CancellationToken cancellationToken)
     {
-        var removed = await handler
+        var result = await handler
             .HandleAsync(
                 new RemoveTransitGrantCommand
                 {
                     TenantId = tenantId,
                     TransitOfficeId = transitOfficeId,
                     ChangedBy = ResolveUserId(httpContext.User),
+                    IsSuperAdmin = CompanyTenantAccess.IsSuperAdmin(httpContext.User),
                 },
                 cancellationToken)
             .ConfigureAwait(false);
 
+        if (result.Denied)
+        {
+            return Results.Json(
+                new { error = "BUSINESS_RULE", message = result.Message },
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
         // AC3: 204 si se eliminó; 404 si el grant no existía.
-        return removed
+        return result.Removed
             ? Results.NoContent()
             : Results.NotFound(new { error = $"No existe grant {transitOfficeId} para el tenant {tenantId}." });
     }
@@ -661,6 +694,82 @@ public static class AdminCompaniesEndpoints
 
         return Results.Ok(result);
     }
+
+    private static async Task<IResult> GetTransitBlocksAsync(
+        Guid tenantId,
+        HttpContext httpContext,
+        [FromServices] GetTransitBlocksHandler handler,
+        [FromServices] ICompanyHierarchyRepository hierarchy,
+        CancellationToken cancellationToken)
+    {
+        var forbid = await TransitBlocksReadAccess
+            .EnsureReadAccessAsync(httpContext.User, tenantId, hierarchy, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (forbid is not null)
+        {
+            return forbid;
+        }
+
+        var result = await handler
+            .HandleAsync(new GetTransitBlocksQuery(tenantId), cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> AddTransitBlockAsync(
+        Guid tenantId,
+        AddTransitBlockRequest request,
+        HttpContext httpContext,
+        [FromServices] AddTransitBlockHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(
+                new AddTransitBlockCommand(
+                    tenantId,
+                    request?.TransitOfficeId ?? Guid.Empty,
+                    ResolveUserId(httpContext.User)),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.IsValid
+            ? Results.Created(
+                $"/api/v1/admin/companies/{tenantId}/transit-blocks/{request?.TransitOfficeId}",
+                new { transitOfficeId = request?.TransitOfficeId, added = result.Added })
+            : Results.Json(
+                new { errors = result.Errors },
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
+    private static async Task<IResult> RemoveTransitBlockAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        HttpContext httpContext,
+        [FromServices] RemoveTransitBlockHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var (removed, errorCode) = await handler
+            .HandleAsync(
+                new RemoveTransitBlockCommand(
+                    tenantId,
+                    transitOfficeId,
+                    ResolveUserId(httpContext.User)),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return errorCode switch
+        {
+            "not_found" => Results.NotFound(new { error = "not_found" }),
+            "business_rule" => Results.Json(
+                new { error = "BUSINESS_RULE", message = AddTransitBlockHandler.SoloMarcaBlancaMessage },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => removed ? Results.NoContent() : Results.NotFound(new { error = "not_found" }),
+        };
+    }
+
+    public sealed record AddTransitBlockRequest(Guid TransitOfficeId);
 
     private static async Task<IResult> GetAuditLogAsync(
         Guid tenantId,

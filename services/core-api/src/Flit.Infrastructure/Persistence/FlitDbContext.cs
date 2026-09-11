@@ -60,6 +60,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    /// <summary>HU #12407 — bloqueos de OT para cabezas Marca Blanca.</summary>
+    public DbSet<TenantTransitOfficeBlock> TenantTransitOfficeBlocks => Set<TenantTransitOfficeBlock>();
+
+    /// <summary>HU #12348 — rechazos auditados al crear trámite.</summary>
+    public DbSet<ProcedureRadicationGateDenial> ProcedureRadicationGateDenials =>
+        Set<ProcedureRadicationGateDenial>();
+
     /// <summary>
     /// Convenio comercial compañía ↔ organismo. Distinto del grant de arriba, que es el permiso para
     /// radicar: este solo decide si el mandato lleva bloque de firma del mandatario.

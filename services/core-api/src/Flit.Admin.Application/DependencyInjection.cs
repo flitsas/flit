@@ -16,6 +16,9 @@ using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
 using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
+using Flit.Admin.Application.Companies.TransitOffices.TransitBlocks.AddTransitBlock;
+using Flit.Admin.Application.Companies.TransitOffices.TransitBlocks.GetTransitBlocks;
+using Flit.Admin.Application.Companies.TransitOffices.TransitBlocks.RemoveTransitBlock;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 using Flit.Admin.Application.Companies.TransitOffices.GetOtBlockingPolicies;
@@ -154,6 +157,9 @@ public static class DependencyInjection
         services.AddScoped<UpdateTransitOfficeQuipuxSettingsHandler>();
         services.AddScoped<AddTransitGrantHandler>();
         services.AddScoped<RemoveTransitGrantHandler>();
+        services.AddScoped<GetTransitBlocksHandler>();
+        services.AddScoped<AddTransitBlockHandler>();
+        services.AddScoped<RemoveTransitBlockHandler>();
 
         // Refactor adminOT — alta/listado de tenants OT.
         // ITransitOfficeTenantWriteRepository se registra en AddAdminInfrastructure.

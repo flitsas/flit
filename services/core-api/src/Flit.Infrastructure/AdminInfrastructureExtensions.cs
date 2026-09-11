@@ -292,8 +292,17 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IOtRuleRepository, OtRuleRepository>();
         services.AddScoped<IOtRuleGate, OtRuleGateService>();
 
+        // HU #12407 — bloqueos de OT para cabezas Marca Blanca.
+        services.AddScoped<ITenantTransitOfficeBlockRepository, TenantTransitOfficeBlockRepository>();
+
+        // HU #12347 — lista efectiva de OT según jerarquía.
+        services.AddScoped<IEffectiveTransitOfficeListResolver, EffectiveTransitOfficeListResolver>();
+
         // #2 — validación de OT habilitado por empresa en el submit de trámites.
         services.AddScoped<ITransitOfficeGrantGate, TransitOfficeGrantGate>();
+
+        // HU #12348 / #12409 — gate de radicación (OT permitido + compañía/red activa).
+        services.AddScoped<IProcedureRadicationGate, ProcedureRadicationGate>();
 
         // HU #10518 — enforcement runtime del ciclo de vida OT: el OT elegido debe estar
         // OPERATIVO (catálogo activo + perfil/tenant OT + tenant activo), no solo con grant.
