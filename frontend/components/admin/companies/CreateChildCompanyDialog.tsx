@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Building2, Loader2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
-import { ApiValidationError, CHILD_TENANT_TYPES, TENANT_TYPE_LABELS, defaultChildTenantType } from "@/lib/api/types";
+import { ApiValidationError, TENANT_TYPE_LABELS, defaultChildTenantType } from "@/lib/api/types";
 import type { ChildTenantType, CompanyListItem, CreateCompanyRequest } from "@/lib/api/types";
 import {
   hasDigit,
@@ -165,15 +165,16 @@ export function CreateChildCompanyDialog({
           <select
             id="nc-type"
             value={tenantType}
-            onChange={(e) => setTenantType(e.target.value as ChildTenantType)}
-            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+            disabled
+            aria-describedby="nc-type-hint"
+            className="w-full cursor-not-allowed rounded-xl border px-3 py-2 text-xs opacity-60 outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+            style={{ borderColor: "#DFE5ED" }}
           >
-            {CHILD_TENANT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {TENANT_TYPE_LABELS[t]}
-              </option>
-            ))}
+            <option value={tenantType}>{TENANT_TYPE_LABELS[tenantType]}</option>
           </select>
+          <p id="nc-type-hint" className="mt-1 text-xs opacity-60">
+            El tipo queda fijado según la cabeza de grupo.
+          </p>
         </Field>
 
         <ToggleSwitch

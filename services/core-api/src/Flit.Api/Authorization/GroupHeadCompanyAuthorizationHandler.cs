@@ -19,11 +19,18 @@ public sealed class GroupHeadCompanyAuthorizationHandler(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(hierarchy);
 
-        var hasAdminCompany = context.User.Claims
+        var roleCodes = context.User.Claims
             .Where(c => c.Type == AdminAuthorization.RoleClaimType)
-            .Any(c => string.Equals(c.Value, AdminAuthorization.AdminCompanyRole, StringComparison.Ordinal));
+            .Select(c => c.Value)
+            .ToList();
 
-        if (!hasAdminCompany)
+        if (roleCodes.Contains(AdminAuthorization.SuperAdminRole, StringComparer.Ordinal))
+        {
+            context.Succeed(requirement);
+            return;
+        }
+
+        if (!roleCodes.Contains(AdminAuthorization.AdminCompanyRole, StringComparer.Ordinal))
         {
             return;
         }

@@ -7,8 +7,8 @@ import {
 } from "../types";
 
 describe("tenant type helpers (HU #12357 / #12356)", () => {
-  it("etiqueta Concesionario de vehículos en UI", () => {
-    expect(tenantTypeLabel("CONCESIONARIO")).toBe("Concesionario de vehículos");
+  it("etiqueta Cliente concesión en UI", () => {
+    expect(tenantTypeLabel("CONCESIONARIO")).toBe("Cliente concesión");
   });
 
   it("detecta tipos de cabeza de grupo", () => {

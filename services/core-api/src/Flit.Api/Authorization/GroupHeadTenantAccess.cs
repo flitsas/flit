@@ -38,6 +38,15 @@ public static class GroupHeadTenantAccess
         ICompanyHierarchyRepository hierarchy,
         CancellationToken cancellationToken)
     {
+        if (CompanyTenantAccess.IsSuperAdmin(user))
+        {
+            var head = await hierarchy
+                .GetHierarchyInfoAsync(headTenantId, cancellationToken)
+                .ConfigureAwait(false);
+
+            return head is { IsGroupParent: true, ParentTenantId: null } ? null : Forbidden();
+        }
+
         var unauthorized = UnauthorizedIfNoTenant(user, out var callerTenantId);
         if (unauthorized is not null)
         {

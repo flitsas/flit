@@ -12,6 +12,19 @@ public interface ICompanyHierarchyRepository
         Guid tenantId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Clientes cuyo <c>parent_tenant_id</c> es <paramref name="headTenantId"/>.</summary>
+    Task<IReadOnlyList<CompanyChildListItem>> ListChildrenAsync(
+        Guid headTenantId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Identidad de un hijo directo. <c>null</c> si no existe o no cuelga de la cabeza.
+    /// </summary>
+    Task<CompanyChildListItem?> GetChildAsync(
+        Guid headTenantId,
+        Guid childTenantId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Alta de un cliente hijo vinculado a <paramref name="company"/>.ParentTenantId.
     /// </summary>

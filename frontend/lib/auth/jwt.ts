@@ -17,8 +17,8 @@ export interface JwtPayload {
   permissions?: string[];
   tenant_id?: string;
   tenant_name?: string;
-  /** HU #12345 — cabeza de grupo (CONCESION | MARCA_BLANCA). */
-  is_group_parent?: boolean;
+  /** HU #12345 — cabeza de grupo (CONCESION | MARCA_BLANCA). JWT JSON boolean o string. */
+  is_group_parent?: boolean | string;
   /** HU #12351 — tenant padre cuando el usuario opera un cliente hijo. */
   parent_tenant_id?: string;
   tenant_type?: string;
@@ -241,7 +241,7 @@ export function isGroupParent(payload: JwtPayload | null): boolean {
   if (!payload) {
     return false;
   }
-  if (payload.is_group_parent === true) {
+  if (payload.is_group_parent === true || payload.is_group_parent === "true") {
     return true;
   }
   const tenantType = payload.tenant_type;

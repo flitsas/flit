@@ -127,6 +127,7 @@ public static class DependencyInjection
         services.AddScoped<Companies.Children.CreateChildCompany.CreateChildCompanyHandler>();
         services.AddScoped<Companies.Children.UpdateChildCompany.UpdateChildCompanyHandler>();
         services.AddScoped<Companies.Children.SetChildCompanyStatus.SetChildCompanyStatusHandler>();
+        services.AddScoped<Companies.Children.ListChildCompanies.ListChildCompaniesHandler>();
 
         // HU #12355 — vínculo/desvínculo SuperAdmin.
         services.AddScoped<Companies.Hierarchy.LinkTenantParent.LinkTenantParentHandler>();

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.Create;
 using Flit.Infrastructure.Persistence.Entities.Identity;
@@ -31,6 +32,43 @@ internal sealed class CompanyHierarchyRepository : ICompanyHierarchyRepository
 
         return row;
     }
+
+    public async Task<IReadOnlyList<CompanyChildListItem>> ListChildrenAsync(
+        Guid headTenantId,
+        CancellationToken cancellationToken = default)
+    {
+        return await ChildrenOf(headTenantId)
+            .OrderByDescending(t => t.CreatedAt)
+            .ThenByDescending(t => t.Id)
+            .Select(ToChildListItem)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public Task<CompanyChildListItem?> GetChildAsync(
+        Guid headTenantId,
+        Guid childTenantId,
+        CancellationToken cancellationToken = default) =>
+        ChildrenOf(headTenantId)
+            .Where(t => t.Id == childTenantId)
+            .Select(ToChildListItem)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private IQueryable<Tenant> ChildrenOf(Guid headTenantId) =>
+        _context.Tenants.AsNoTracking().Where(t => t.ParentTenantId == headTenantId);
+
+    private static Expression<Func<Tenant, CompanyChildListItem>> ToChildListItem =>
+        t => new CompanyChildListItem
+        {
+            Id = t.Id,
+            Nit = t.TaxId,
+            RazonSocial = t.LegalName,
+            Code = t.Code,
+            TenantType = t.TenantType,
+            EstadoActivo = t.IsActive,
+            FechaVinculacion = t.UpdatedAt ?? t.CreatedAt,
+            RowVersion = t.RowVersion,
+        };
 
     public async Task<CompanyListItem> CreateChildAsync(
         NewChildCompany company,

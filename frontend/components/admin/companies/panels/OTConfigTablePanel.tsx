@@ -55,14 +55,17 @@ export function OTConfigTablePanel({
   mode = "editable",
   grantScopeWarningCount = 0,
   blocksTenantId,
+  grantsTenantId,
 }: {
   tenantId: string;
   /** HUs #12351 / #12408 — condiciona lectura, leyenda y confirmaciones de alcance. */
   mode?: OtConfigPanelMode;
   /** SuperAdmin en Concesión: hijos vigentes afectados por cambios de grants (AC5). */
   grantScopeWarningCount?: number;
-  /** Tenant cuya lista de bloqueos se muestra en Marca Blanca (cabeza o padre del hijo). */
+  /** Tenant whose blocks are listed (head, when the ficha is a Marca Blanca child). */
   blocksTenantId?: string;
+  /** Tenant whose grants are listed (head, when the ficha is a concession child). */
+  grantsTenantId?: string;
 }) {
   const { show } = useToast();
   const readOnly = otConfigPanelReadOnly(mode);
@@ -70,6 +73,7 @@ export function OTConfigTablePanel({
   const showMarcaBlocks = mode === "readonly-marca-blanca";
   const inheritedOnly = mode === "readonly-concession-inherited";
   const effectiveBlocksTenantId = blocksTenantId ?? tenantId;
+  const effectiveGrantsTenantId = grantsTenantId ?? tenantId;
 
   const [status, setStatus] = useState<UiStatus>("loading");
   const [offices, setOffices] = useState<TransitOffice[]>([]);
@@ -99,7 +103,7 @@ export function OTConfigTablePanel({
         const [catalog, grants, agreements, opStatus, blockingRows, restrictionRows, prendaRows, blocks] =
           await Promise.all([
             fetchTransitOffices(undefined, signal),
-            fetchTransitGrants(tenantId, signal),
+            fetchTransitGrants(effectiveGrantsTenantId, signal),
             needsPolicies
               ? fetchTransitAgreements(tenantId, signal).catch(() => ({ transitOfficeIds: [] }))
               : Promise.resolve({ transitOfficeIds: [] }),
@@ -135,7 +139,7 @@ export function OTConfigTablePanel({
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [tenantId, readOnly, showMarcaBlocks, effectiveBlocksTenantId],
+    [tenantId, readOnly, showMarcaBlocks, effectiveBlocksTenantId, effectiveGrantsTenantId],
   );
 
   useEffect(() => {

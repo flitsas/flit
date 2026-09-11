@@ -97,9 +97,9 @@ function CompanyDetail() {
       }
       if (networkHeadId === callerTenantId) {
         try {
-          const child = await fetchCompany(tenantId);
+          const child = await fetchCompany(tenantId, undefined, networkHeadId);
           if (cancelled) return;
-          if (child?.parentTenantId === callerTenantId) {
+          if (child) {
             setAccessChecked(true);
             return;
           }
@@ -121,9 +121,13 @@ function CompanyDetail() {
       if (!accessChecked) return;
       setStatus("loading");
       try {
+        const childScope =
+          networkHeadId && tenantId !== callerTenantId && networkHeadId === callerTenantId
+            ? networkHeadId
+            : null;
         const [data, identity] = await Promise.all([
-          fetchTenantSettings(tenantId, signal),
-          fetchCompany(tenantId, signal),
+          fetchTenantSettings(tenantId, signal, childScope),
+          fetchCompany(tenantId, signal, childScope),
         ]);
         if (signal?.aborted) {
           return;
@@ -159,7 +163,7 @@ function CompanyDetail() {
         }
       }
     },
-    [tenantId, accessChecked, isSuperAdmin],
+    [tenantId, accessChecked, isSuperAdmin, networkHeadId, callerTenantId],
   );
 
   useEffect(() => {
@@ -170,7 +174,11 @@ function CompanyDetail() {
   }, [load]);
 
   const handleSaveSettings = async (update: TenantSettingsUpdate) => {
-    const updated = await updateTenantSettings(tenantId, update);
+    const updated = await updateTenantSettings(
+      tenantId,
+      update,
+      managingChild ? networkHeadId : undefined,
+    );
     setSettings(updated);
     setIsNew(false);
   };
@@ -247,7 +255,7 @@ function CompanyDetail() {
                 settings={settings}
                 company={company}
                 onSaveSettings={handleSaveSettings}
-                whitelistSlot={<WhitelistPanel tenantId={tenantId} />}
+                whitelistSlot={<WhitelistPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
                 otSlot={
                   <>
                     {showTransitBlocksPanel && (
@@ -265,16 +273,24 @@ function CompanyDetail() {
                         otPanelMode === "superadmin-concession" ? activeChildrenCount : 0
                       }
                       blocksTenantId={blocksTenantId}
+                      grantsTenantId={
+                        managingChild && networkHeadId ? networkHeadId : tenantId
+                      }
                     />
                   </>
                 }
-                auditSlot={<AuditLogPanel tenantId={tenantId} />}
+                auditSlot={<AuditLogPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
                 documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
                 platesSlot={<PlatePreassignViewer tenantId={tenantId} />}
                 legalRepresentativesSlot={<RepresentativesAndVaultTab tenantId={tenantId} />}
                 mandatariosSlot={<CompanyMandatariosPanel tenantId={tenantId} />}
                 usuariosSlot={
-                  isSuperAdmin ? <CompanyUsersPanel tenantId={tenantId} /> : undefined
+                  isSuperAdmin || managingChild ? (
+                    <CompanyUsersPanel
+                      tenantId={tenantId}
+                      networkHeadId={managingChild ? networkHeadId : null}
+                    />
+                  ) : undefined
                 }
               />
             </>

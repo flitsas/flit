@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
+import { fetchTransitOfficesOperationalStatus } from "@/lib/api/admin-transit-office-tenants";
 import type { TransitOffice } from "@/lib/api/types";
 
 export interface TransitGrantsPickerProps {
@@ -29,10 +30,15 @@ export function TransitGrantsPicker({
     setLoading(true);
     setLoadError(null);
     try {
-      const data = await fetchTransitOffices(undefined, signal);
-      if (!signal?.aborted) {
-        setOffices(data);
-      }
+      const [catalog, operational] = await Promise.all([
+        fetchTransitOffices(undefined, signal),
+        fetchTransitOfficesOperationalStatus(signal),
+      ]);
+      if (signal?.aborted) return;
+      const activeIds = new Set(
+        operational.filter((s) => s.hasTenant && s.estadoActivo === true).map((s) => s.id),
+      );
+      setOffices(catalog.filter((office) => activeIds.has(office.id)));
     } catch {
       if (!signal?.aborted) {
         setLoadError("No se pudo cargar el catálogo de organismos de tránsito.");
@@ -124,7 +130,11 @@ export function TransitGrantsPicker({
         aria-label="Organismos de tránsito disponibles"
       >
         {filtered.length === 0 ? (
-          <p className="py-3 text-center text-xs opacity-60">No hay organismos que coincidan con la búsqueda.</p>
+          <p className="py-3 text-center text-xs opacity-60">
+            {offices.length === 0
+              ? "No hay organismos de tránsito activos en la plataforma."
+              : "No hay organismos que coincidan con la búsqueda."}
+          </p>
         ) : (
           <ul className="space-y-1">
             {filtered.map((office) => (

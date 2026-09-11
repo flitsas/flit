@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.Children.CreateChildCompany;
+using Flit.Admin.Application.Companies.Children.ListChildCompanies;
 using Flit.Admin.Application.Companies.Children.SetChildCompanyStatus;
 using Flit.Admin.Application.Companies.Children.UpdateChildCompany;
 using Flit.Admin.Application.Companies.CreateCompany;
@@ -27,6 +28,21 @@ public static class AdminCompanyChildrenEndpoints
             .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithTags("Admin · Red de compañías");
 
+        group.MapGet("", ListChildrenAsync)
+            .WithName("AdminCompanyChildrenList")
+            .WithSummary("Lista los clientes hijos de la cabeza de grupo")
+            .Produces<IReadOnlyList<CompanyChildListItem>>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapGet("/{childTenantId:guid}", GetChildAsync)
+            .WithName("AdminCompanyChildrenGet")
+            .WithSummary("Obtiene un cliente hijo propio")
+            .Produces<CompanyChildListItem>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapPost("", CreateChildAsync)
             .WithName("AdminCompanyChildrenCreate")
             .WithSummary("Crea un cliente hijo de la cabeza de grupo")
@@ -53,6 +69,47 @@ public static class AdminCompanyChildrenEndpoints
             .Produces(StatusCodes.Status404NotFound);
 
         return app;
+    }
+
+    private static async Task<IResult> ListChildrenAsync(
+        Guid headTenantId,
+        ClaimsPrincipal user,
+        [FromServices] ICompanyHierarchyRepository hierarchy,
+        [FromServices] ListChildCompaniesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var forbid = await GroupHeadTenantAccess
+            .EnsureHeadCallerAsync(user, headTenantId, hierarchy, cancellationToken)
+            .ConfigureAwait(false);
+        if (forbid is not null)
+        {
+            return forbid;
+        }
+
+        var items = await handler.HandleAsync(headTenantId, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(items);
+    }
+
+    private static async Task<IResult> GetChildAsync(
+        Guid headTenantId,
+        Guid childTenantId,
+        ClaimsPrincipal user,
+        [FromServices] ICompanyHierarchyRepository hierarchy,
+        [FromServices] ListChildCompaniesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var forbid = await GroupHeadTenantAccess
+            .EnsureHeadAndChildAsync(user, headTenantId, childTenantId, hierarchy, cancellationToken)
+            .ConfigureAwait(false);
+        if (forbid is not null)
+        {
+            return forbid;
+        }
+
+        var item = await handler.GetAsync(headTenantId, childTenantId, cancellationToken).ConfigureAwait(false);
+        return item is null
+            ? Results.NotFound(new { error = "NOT_FOUND" })
+            : Results.Ok(item);
     }
 
     private static async Task<IResult> CreateChildAsync(

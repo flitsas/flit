@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { InviteUserModal } from "@/components/atom/modules/users/InviteUserModal";
-import { createChildCompany, fetchCompanyChildren } from "@/lib/api/admin-companies";
+import { createChildCompany, fetchCompanyChildren, inviteChildCompanyUser } from "@/lib/api/admin-companies";
 import { getRoles, type TenantRole } from "@/lib/api/security";
 import { tenantTypeLabel } from "@/lib/api/types";
 import type { CompanyChildListItem } from "@/lib/api/types";
@@ -229,6 +229,9 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
             profile: "GESTOR",
             name: inviteTarget.razonSocial,
           }}
+          submitInvitation={({ email, fullName, roleIds }) =>
+            inviteChildCompanyUser(headTenantId, inviteTarget.id, { email, fullName, roleIds })
+          }
         />
       )}
     </div>

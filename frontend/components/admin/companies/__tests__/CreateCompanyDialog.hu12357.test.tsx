@@ -17,7 +17,7 @@ describe("CreateCompanyDialog (HU #12357)", () => {
     const select = screen.getByLabelText(/tipo de compañía/i);
     expect(select).toHaveTextContent("Concesión");
     expect(select).toHaveTextContent("Marca Blanca");
-    expect(select).toHaveTextContent("Concesionario de vehículos");
+    expect(select).toHaveTextContent("Cliente concesión");
   });
 
   it("usuario no SuperAdmin no ve Concesión ni Marca Blanca", () => {
@@ -34,7 +34,7 @@ describe("CreateCompanyDialog (HU #12357)", () => {
     const select = screen.getByLabelText(/tipo de compañía/i);
     expect(select).not.toHaveTextContent("Concesión");
     expect(select).not.toHaveTextContent("Marca Blanca");
-    expect(select).toHaveTextContent("Concesionario de vehículos");
+    expect(select).toHaveTextContent("Cliente concesión");
   });
 
   it("al elegir Marca Blanca muestra placeholder de dominio", () => {

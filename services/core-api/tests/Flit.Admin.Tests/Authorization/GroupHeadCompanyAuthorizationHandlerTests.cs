@@ -61,4 +61,26 @@ public sealed class GroupHeadCompanyAuthorizationHandlerTests
 
         context.HasSucceeded.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task SuperAdmin_SucceedSinConsultarJerarquia()
+    {
+        var repo = Substitute.For<ICompanyHierarchyRepository>();
+        var handler = new GroupHeadCompanyAuthorizationHandler(repo);
+        var user = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim("role", AdminAuthorization.SuperAdminRole),
+            new Claim("tenant_id", Guid.NewGuid().ToString()),
+        ], "test"));
+
+        var context = new AuthorizationHandlerContext(
+            [new GroupHeadCompanyRequirement()],
+            user,
+            resource: null);
+
+        await handler.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeTrue();
+        await repo.DidNotReceiveWithAnyArgs().GetHierarchyInfoAsync(default, default);
+    }
 }

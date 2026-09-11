@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   canAdminResetPassword,
   isAdminCompany,
+  isGroupParent,
   isOtAdmin,
   isSuperAdmin,
   type JwtPayload,
@@ -58,6 +59,27 @@ describe("isSuperAdmin / isAdminCompany / isOtAdmin — claim roles como array d
     expect(isAdminCompany({})).toBe(false);
     expect(isOtAdmin({})).toBe(false);
     expect(isSuperAdmin(null)).toBe(false);
+  });
+});
+
+describe("isGroupParent — claims tenant_type / is_group_parent (HU #12345)", () => {
+  it("es verdadero cuando is_group_parent es boolean true", () => {
+    expect(isGroupParent({ is_group_parent: true, tenant_type: "RENTING" })).toBe(true);
+  });
+
+  it("es verdadero cuando is_group_parent viene como string JSON true", () => {
+    expect(isGroupParent({ is_group_parent: "true", tenant_type: "RENTING" })).toBe(true);
+  });
+
+  it("infiere cabeza de red desde tenant_type CONCESION o MARCA_BLANCA", () => {
+    expect(isGroupParent({ tenant_type: "CONCESION" })).toBe(true);
+    expect(isGroupParent({ tenant_type: "MARCA_BLANCA" })).toBe(true);
+  });
+
+  it("es falso para Concesionario standalone o payload vacío", () => {
+    expect(isGroupParent({ tenant_type: "CONCESIONARIO", is_group_parent: false })).toBe(false);
+    expect(isGroupParent({})).toBe(false);
+    expect(isGroupParent(null)).toBe(false);
   });
 });
 

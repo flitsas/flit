@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/api/admin-companies", () => ({
   fetchCompanyChildren: vi.fn(),
   createChildCompany: vi.fn(),
+  inviteChildCompanyUser: vi.fn(),
 }));
 
 import { fetchCompanyChildren } from "@/lib/api/admin-companies";

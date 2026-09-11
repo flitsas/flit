@@ -9,7 +9,13 @@ import type { WhitelistEntry } from "@/lib/api/types";
 
 // Slot de lista blanca (HU #10194, AC3). Carga los correos exentos y delega el
 // alta a la API; la validación inline por línea vive en WhitelistTextarea.
-export function WhitelistPanel({ tenantId }: { tenantId: string }) {
+export function WhitelistPanel({
+  tenantId,
+  networkHeadId,
+}: {
+  tenantId: string;
+  networkHeadId?: string | null;
+}) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [entries, setEntries] = useState<WhitelistEntry[]>([]);
@@ -18,7 +24,7 @@ export function WhitelistPanel({ tenantId }: { tenantId: string }) {
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const data = await fetchWhitelist(tenantId, signal);
+        const data = await fetchWhitelist(tenantId, signal, networkHeadId);
         if (signal?.aborted) {
           return;
         }
@@ -30,7 +36,7 @@ export function WhitelistPanel({ tenantId }: { tenantId: string }) {
         }
       }
     },
-    [tenantId],
+    [tenantId, networkHeadId],
   );
 
   useEffect(() => {
@@ -42,7 +48,7 @@ export function WhitelistPanel({ tenantId }: { tenantId: string }) {
   }, [load]);
 
   const handleSave = async (emails: string[]) => {
-    await addWhitelistEmails(tenantId, emails);
+    await addWhitelistEmails(tenantId, emails, undefined, networkHeadId);
     show("Lista blanca actualizada.", "success");
     await load();
   };
