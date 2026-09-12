@@ -63,7 +63,7 @@ export function DockDesktop({ groups, atBottom, onHome, homeActive }: Props) {
 
         <button
           onClick={onHome}
-          className={`mx-2 shrink-0 overflow-hidden rounded-full transition-all duration-[var(--nav-duracion)] ease-[var(--nav-ease)] hover:scale-105 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2 ${
+          className={`mx-2 shrink-0 overflow-hidden rounded-full transition-all duration-[var(--nav-duracion)] ease-[var(--nav-ease)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2 ${
             large ? "h-14 w-14" : "h-11 w-11"
           }`}
           style={{ boxShadow: "var(--nav-sombra-activo)" }}

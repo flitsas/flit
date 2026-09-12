@@ -6,7 +6,10 @@ import { setDevSuperAdminToken } from "@/lib/api/client";
 import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 import { Shell } from "../Shell";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 function makeToken(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");

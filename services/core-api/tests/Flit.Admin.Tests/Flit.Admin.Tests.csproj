@@ -35,6 +35,9 @@
     <!-- Fixture del certificado real (HU #10467) — valida que la decodificación del Data URI
          base64 devuelto por Kyverum RUNT produce un PDF íntegro. -->
     <Content Include="Improntas\Fixtures\*.pdf" CopyToOutputDirectory="PreserveNewest" />
+    <!-- HU #12515 — guía y ADR de procesos periódicos (assert de existencia + referencias). -->
+    <Content Include="..\..\..\..\docs\estandar-jobs-periodicos-flit.md" CopyToOutputDirectory="PreserveNewest" Link="docs\estandar-jobs-periodicos-flit.md" />
+    <Content Include="..\..\..\..\docs\decisions\ADR-0059-estandar-procesos-automaticos-periodicos.md" CopyToOutputDirectory="PreserveNewest" Link="docs\decisions\ADR-0059-estandar-procesos-automaticos-periodicos.md" />
   </ItemGroup>
 
 </Project>

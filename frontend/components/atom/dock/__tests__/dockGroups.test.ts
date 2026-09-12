@@ -73,6 +73,7 @@ describe("buildDockGroups", () => {
       entry("admin-documents", "Documental"),
       entry("admin-improntas", "Improntas"),
       entry("admin-quipux", "Quipux"),
+      entry("admin-jobs", "Procesos periódicos"),
       entry("rbac", "RBAC Admin"),
       entry("auditoria", "Auditoría"),
       entry("admin-plataforma", "Plataforma", [
@@ -89,6 +90,7 @@ describe("buildDockGroups", () => {
       "Documental",
       "Improntas",
       "Quipux",
+      "Procesos periódicos",
       "RBAC Admin",
       "Auditoría",
       "Plataforma",

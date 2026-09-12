@@ -8,11 +8,21 @@
 //
 // Secretos: la contraseña Quipux y la secret key AWS NUNCA se devuelven (el GET solo dice si
 // hay una cargada). Dejar el campo vacío = "no lo cambies"; escribir algo = reemplazarlo.
-import { useEffect, useMemo, useState } from "react";
-import { Send } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Save } from "lucide-react";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
+import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
-import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
+import { CreateButton } from "@/components/atom/CreateButton";
+import { CarLoader, CarLoaderModal } from "@/components/atom/CarLoader";
+import { InlineAlert } from "@/components/atom/InlineAlert";
+import {
+  WIZARD_HINT,
+  WIZARD_INPUT,
+  WIZARD_LABEL,
+  WIZARD_SELECT,
+} from "@/components/operacion/wizard-field-styles";
+import { ApiError } from "@/lib/api/types";
 import {
   fetchQuipuxSettings,
   saveQuipuxSettings,
@@ -20,6 +30,9 @@ import {
   type SaveQuipuxSettingsRequest,
 } from "@/lib/api/admin-quipux-settings";
 import { digitsOnly } from "@/lib/format/currency";
+
+const CARD =
+  "space-y-4 rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#162744]";
 
 // Valores por defecto de una fila nueva (espejan los DEFAULT del DDL y de QuipuxSettings).
 const DEFAULTS = {
@@ -103,26 +116,38 @@ export function QuipuxSettingsForm() {
   const [hasAwsSecret, setHasAwsSecret] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
+  const load = useCallback(async (signal?: AbortSignal) => {
+    setLoadError(false);
+    setLoading(true);
+    try {
+      const settings = await fetchQuipuxSettings(signal);
+      if (signal?.aborted) return;
+      if (settings) {
+        setForm(toForm(settings));
+        setHasPassword(settings.hasPassword);
+        setHasAwsSecret(settings.hasAwsSecretAccessKey);
+        setUpdatedAt(settings.updatedAt);
+      } else {
+        setForm(DEFAULTS);
+        setHasPassword(false);
+        setHasAwsSecret(false);
+        setUpdatedAt(null);
+      }
+      setLoading(false);
+    } catch {
+      if (signal?.aborted) return;
+      setLoadError(true);
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    void fetchQuipuxSettings(controller.signal)
-      .then((settings) => {
-        if (controller.signal.aborted) return;
-        if (settings) {
-          setForm(toForm(settings));
-          setHasPassword(settings.hasPassword);
-          setHasAwsSecret(settings.hasAwsSecretAccessKey);
-          setUpdatedAt(settings.updatedAt);
-        }
-        setLoading(false);
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setLoadError(true);
-        setLoading(false);
-      });
+    // Carga inicial: el setState de `load` ocurre tras el await (no es setState síncrono).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [load]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -149,6 +174,7 @@ export function QuipuxSettingsForm() {
   }, [form, hasPassword, hasAwsSecret, password, awsSecret]);
 
   const enabledButIncomplete = form.enabled && !looksComplete;
+  const isEmpty = updatedAt == null;
 
   async function save() {
     setSaveError(null);
@@ -175,7 +201,7 @@ export function QuipuxSettingsForm() {
         "success",
       );
     } catch (err) {
-      const status = (err as { status?: number }).status;
+      const status = err instanceof ApiError ? err.status : (err as { status?: number }).status;
       setSaveError(
         status === 403
           ? "No tienes permisos para editar la configuración de Quipux."
@@ -187,59 +213,62 @@ export function QuipuxSettingsForm() {
 
   if (loading) {
     return (
-      <div
-        className="flex items-center justify-center py-16"
-        role="status"
-        aria-busy="true"
-        aria-live="polite"
-      >
-        <span className="sr-only">Cargando configuración…</span>
-        <div
-          className="h-10 w-10 animate-spin rounded-full border-2 border-t-transparent"
-          style={{ borderColor: "#557EFF", borderTopColor: "transparent" }}
-          aria-hidden="true"
-        />
+      <div className="py-16">
+        <CarLoader label="Cargando Integración Quipux…" />
       </div>
     );
   }
 
   if (loadError) {
     return (
-      <p role="alert" className="text-sm" style={{ color: "#FF4E00" }}>
-        No se pudo cargar la configuración de Quipux. Recarga la página para reintentar.
-      </p>
+      <UiStateBoundary
+        status="error"
+        errorMessage="No se pudo cargar la configuración de Quipux."
+        onRetry={() => void load()}
+      />
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Interruptor maestro */}
-      <section className="rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+    <div className="flex flex-col gap-4">
+      {saving ? <CarLoaderModal label="Guardando configuración…" /> : null}
+      {isEmpty ? (
+        <InlineAlert tone="info" title="Todavía no hay una configuración guardada">
+          Se muestran los valores por defecto. Al guardar se crea la fila de Integración Quipux.
+        </InlineAlert>
+      ) : null}
+
+      <InlineAlert tone="info">
+        Los workers releen estos valores en cada ciclo, sin redeploy. La contraseña y la clave AWS
+        no se muestran: déjalas vacías para conservarlas.
+      </InlineAlert>
+
+      <section className={CARD}>
+        <SectionHeader
+          title="Interruptor maestro"
+          description="Apagado (o sin configurar), los workers de Quipux no hacen nada."
+        />
         <ToggleSwitch
           id="qx-enabled"
           label="Integración Quipux activa"
-          description="Interruptor maestro. Apagado (o sin configurar), los workers no hacen nada."
           checked={form.enabled}
           disabled={saving}
           onChange={(v) => set("enabled", v)}
         />
-        {enabledButIncomplete && (
-          <p
-            role="alert"
-            className="mt-3 rounded-xl px-3 py-2 text-[11px]"
-            style={{ background: "#FFF4EC", color: "#7A2E00", border: "1px solid #FFD9C2" }}
-          >
-            <span className="font-semibold">Encendida pero incompleta.</span> Puedes guardar, pero
-            los workers no radicarán hasta que estén todos los campos obligatorios (URLs, usuario y
-            contraseña Quipux, código de consumidor, bucket y credenciales AWS, y el documento del
-            funcionario).
-          </p>
-        )}
+        {enabledButIncomplete ? (
+          <InlineAlert tone="warning" title="Encendida pero incompleta">
+            Puedes guardar, pero los workers no radicarán hasta que estén todos los campos
+            obligatorios (URLs, usuario y contraseña Quipux, código de consumidor, bucket y
+            credenciales AWS, y el documento del funcionario).
+          </InlineAlert>
+        ) : null}
       </section>
 
-      {/* Conexión con Quipux */}
-      <section className="space-y-4 rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
-        <h2 className="text-sm font-semibold">Conexión con Quipux</h2>
+      <section className={CARD}>
+        <SectionHeader
+          title="Conexión con Quipux"
+          description="Direcciones y credenciales con las que FLIT inicia sesión y radica."
+        />
         <Field id="qx-url-login" label="URL de login">
           <input
             id="qx-url-login"
@@ -248,7 +277,7 @@ export function QuipuxSettingsForm() {
             disabled={saving}
             onChange={(e) => set("urlLogin", e.target.value)}
             placeholder="https://…/login"
-            className={`mt-1 ${OT_INPUT_CLS}`}
+            className={`mt-1 ${WIZARD_INPUT}`}
           />
         </Field>
         <Field id="qx-url-register" label="URL de registro de documento">
@@ -259,7 +288,7 @@ export function QuipuxSettingsForm() {
             disabled={saving}
             onChange={(e) => set("urlRegisterDocument", e.target.value)}
             placeholder="https://…/registroDocumento"
-            className={`mt-1 ${OT_INPUT_CLS}`}
+            className={`mt-1 ${WIZARD_INPUT}`}
           />
         </Field>
         <Field id="qx-url-validate" label="URL de validación de estado">
@@ -270,7 +299,7 @@ export function QuipuxSettingsForm() {
             disabled={saving}
             onChange={(e) => set("urlValidateStatus", e.target.value)}
             placeholder="https://…/validarEstadoDocumento"
-            className={`mt-1 ${OT_INPUT_CLS}`}
+            className={`mt-1 ${WIZARD_INPUT}`}
           />
         </Field>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -282,7 +311,7 @@ export function QuipuxSettingsForm() {
               value={form.username}
               disabled={saving}
               onChange={(e) => set("username", e.target.value)}
-              className={`mt-1 ${OT_INPUT_CLS}`}
+              className={`mt-1 ${WIZARD_INPUT}`}
             />
           </Field>
           <SecretField
@@ -308,19 +337,16 @@ export function QuipuxSettingsForm() {
             value={form.consumerCode}
             disabled={saving}
             onChange={(e) => set("consumerCode", digitsOnly(e.target.value))}
-            className={`mt-1 font-mono ${OT_INPUT_CLS}`}
+            className={`mt-1 font-mono ${WIZARD_INPUT}`}
           />
         </Field>
       </section>
 
-      {/* Almacenamiento S3 (bucket de Quipux) */}
-      <section className="space-y-4 rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
-        <h2 className="text-sm font-semibold">Almacenamiento S3 (bucket de Quipux)</h2>
-        <p className="text-[11px] opacity-60">
-          El PDF consolidado se publica en el bucket S3 <span className="font-semibold">de Quipux</span>
-          , de donde ellos lo leen. Es la única parte de la integración donde FLIT maneja
-          credenciales AWS directas.
-        </p>
+      <section className={CARD}>
+        <SectionHeader
+          title="Almacenamiento S3 (bucket de Quipux)"
+          description="El PDF consolidado se publica en el bucket de Quipux, de donde ellos lo leen. Es la única parte donde FLIT maneja credenciales AWS directas."
+        />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field id="qx-bucket" label="Bucket">
             <input
@@ -330,7 +356,7 @@ export function QuipuxSettingsForm() {
               disabled={saving}
               onChange={(e) => set("bucket", e.target.value)}
               placeholder="qxinterconnect"
-              className={`mt-1 font-mono ${OT_INPUT_CLS}`}
+              className={`mt-1 font-mono ${WIZARD_INPUT}`}
             />
           </Field>
           <Field id="qx-prefix" label="Prefijo de la key">
@@ -341,7 +367,7 @@ export function QuipuxSettingsForm() {
               disabled={saving}
               onChange={(e) => set("s3Prefix", e.target.value)}
               placeholder="FLIT/"
-              className={`mt-1 font-mono ${OT_INPUT_CLS}`}
+              className={`mt-1 font-mono ${WIZARD_INPUT}`}
             />
           </Field>
           <Field id="qx-region" label="Región AWS">
@@ -352,7 +378,7 @@ export function QuipuxSettingsForm() {
               disabled={saving}
               onChange={(e) => set("awsRegion", e.target.value)}
               placeholder="us-east-1"
-              className={`mt-1 font-mono ${OT_INPUT_CLS}`}
+              className={`mt-1 font-mono ${WIZARD_INPUT}`}
             />
           </Field>
           <Field id="qx-access-key" label="Access Key ID">
@@ -363,7 +389,7 @@ export function QuipuxSettingsForm() {
               value={form.awsAccessKeyId}
               disabled={saving}
               onChange={(e) => set("awsAccessKeyId", e.target.value)}
-              className={`mt-1 font-mono ${OT_INPUT_CLS}`}
+              className={`mt-1 font-mono ${WIZARD_INPUT}`}
             />
           </Field>
         </div>
@@ -377,26 +403,20 @@ export function QuipuxSettingsForm() {
         />
       </section>
 
-      {/* Entidad que radica (FLIT) */}
-      <section className="space-y-4 rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
-        <h2 className="text-sm font-semibold">Entidad que radica (FLIT)</h2>
-        <p className="text-[11px] opacity-60">
-          Identifica a <span className="font-semibold">FLIT</span> como la entidad que presenta el
-          documento ante Quipux. No es el ciudadano ni el dueño del vehículo (ese viaja por trámite);
-          es el «remitente» de la radicación. Normalmente es el NIT de FLIT.
-        </p>
+      <section className={CARD}>
+        <SectionHeader
+          title="Entidad que radica (FLIT)"
+          description="Identifica a FLIT como remitente ante Quipux. No es el ciudadano ni el dueño del vehículo; normalmente es el NIT de FLIT."
+        />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field id="qx-officer-type" label="Tipo de documento">
-            {/* Fondo/texto sólidos por tema: con `bg-transparent` (OT_INPUT_CLS) el popup nativo de
-                opciones queda ilegible en modo oscuro. Se estiliza también cada <option>. */}
             <select
               id="qx-officer-type"
               value={form.officerDocumentType}
               disabled={saving}
               onChange={(e) => set("officerDocumentType", toInt(e.target.value, DEFAULTS.officerDocumentType))}
-              className="mt-1 w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#0B0F14] outline-none focus:border-[#557EFF] disabled:opacity-60 dark:border-[#2A3441] dark:bg-[#0B0F14] dark:text-white"
+              className={`mt-1 ${WIZARD_SELECT}`}
             >
-              {/* Si el valor guardado no está en el catálogo (dato viejo), se muestra igual. */}
               {!DOCUMENT_TYPES.some((t) => t.value === form.officerDocumentType) && (
                 <option
                   value={form.officerDocumentType}
@@ -427,104 +447,96 @@ export function QuipuxSettingsForm() {
               disabled={saving}
               onChange={(e) => set("officerDocumentNumber", digitsOnly(e.target.value))}
               placeholder="NIT de FLIT"
-              className={`mt-1 font-mono ${OT_INPUT_CLS}`}
+              className={`mt-1 font-mono ${WIZARD_INPUT}`}
             />
           </Field>
         </div>
       </section>
 
-      {/* Cadencia y límites */}
-      <section className="space-y-4 rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
-        <h2 className="text-sm font-semibold">Cadencia y límites</h2>
-        <p className="text-[11px] opacity-60">
-          Cambian en caliente: los workers releen estos valores en cada ciclo, sin desplegar.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:grid-cols-3">
+      <section className={CARD}>
+        <SectionHeader
+          title="Cadencia y límites"
+          description="Intervalos, lote y reintentos. Aplican en el siguiente ciclo, sin desplegar."
+        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
           <NumberField
             id="qx-register-interval"
             label="Intervalo de registro (min)"
+            hint="1 a 1440"
             value={form.registerIntervalMinutes}
-            min={1}
-            max={1440}
             disabled={saving}
             onChange={(v) => set("registerIntervalMinutes", v)}
           />
           <NumberField
             id="qx-poll-interval"
             label="Intervalo de consulta (min)"
+            hint="1 a 1440"
             value={form.pollIntervalMinutes}
-            min={1}
-            max={1440}
             disabled={saving}
             onChange={(v) => set("pollIntervalMinutes", v)}
           />
           <NumberField
             id="qx-batch"
             label="Tamaño de lote"
+            hint="1 a 500"
             value={form.batchSize}
-            min={1}
-            max={500}
             disabled={saving}
             onChange={(v) => set("batchSize", v)}
           />
           <NumberField
             id="qx-max-attempts"
             label="Máx. intentos"
+            hint="1 a 100"
             value={form.maxAttempts}
-            min={1}
-            max={100}
             disabled={saving}
             onChange={(v) => set("maxAttempts", v)}
           />
           <NumberField
             id="qx-max-polls"
             label="Máx. consultas"
+            hint="1 a 100000"
             value={form.maxPolls}
-            min={1}
-            max={100000}
             disabled={saving}
             onChange={(v) => set("maxPolls", v)}
           />
           <NumberField
             id="qx-timeout"
             label="Timeout (seg)"
+            hint="1 a 600"
             value={form.timeoutSeconds}
-            min={1}
-            max={600}
             disabled={saving}
             onChange={(v) => set("timeoutSeconds", v)}
           />
         </div>
       </section>
 
-      {saveError && (
-        <p role="alert" className="text-sm" style={{ color: "#FF4E00" }}>
-          {saveError}
-        </p>
-      )}
+      {saveError ? <InlineAlert tone="error">{saveError}</InlineAlert> : null}
 
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] opacity-60">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-2">
+        <p className="text-xs text-[#59677D] dark:text-white/70">
           {updatedAt
             ? `Última actualización: ${new Date(updatedAt).toLocaleString("es-CO")}`
             : "Aún no se ha guardado ninguna configuración."}
         </p>
-        <button
-          type="button"
-          onClick={save}
+        <CreateButton
+          label={saving ? "Guardando…" : "Guardar configuración"}
+          icon={Save}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-        >
-          <Send className="h-4 w-4" aria-hidden="true" />
-          {saving ? "Guardando…" : "Guardar configuración"}
-        </button>
+          onClick={() => void save()}
+        />
       </div>
     </div>
   );
 }
 
-// ── Subcomponentes de campo ─────────────────────────────────────────────────────────────
+function SectionHeader({ title, description }: { title: string; description: string }) {
+  return (
+    <header className="border-b border-[#DFE5ED] pb-3 dark:border-white/10">
+      <h2 className="text-sm font-semibold text-[#162744] dark:text-white">{title}</h2>
+      <p className="mt-0.5 text-xs leading-snug text-[#59677D] dark:text-white/70">{description}</p>
+    </header>
+  );
+}
 
 function Field({
   id,
@@ -538,12 +550,14 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <label htmlFor={id} className="text-xs font-semibold">
+    <div className="min-w-0">
+      <label htmlFor={id} className={WIZARD_LABEL}>
         {label}
       </label>
       {children}
-      {hint && <p className="mt-1 text-[11px] opacity-60">{hint}</p>}
+      {hint ? (
+        <p className={WIZARD_HINT}>{hint}</p>
+      ) : null}
     </div>
   );
 }
@@ -581,7 +595,7 @@ function SecretField({
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         placeholder={hasStored ? "•••••••• (guardado)" : "Sin configurar"}
-        className={`mt-1 ${OT_INPUT_CLS}`}
+        className={`mt-1 ${WIZARD_INPUT}`}
       />
     </Field>
   );
@@ -590,24 +604,20 @@ function SecretField({
 function NumberField({
   id,
   label,
+  hint,
   value,
-  min: _min,
-  max: _max,
   disabled,
   onChange,
 }: {
   id: string;
   label: string;
+  hint?: string;
   value: number;
-  min: number;
-  max: number;
   disabled: boolean;
   onChange: (value: number) => void;
 }) {
-  void _min;
-  void _max;
   return (
-    <Field id={id} label={label}>
+    <Field id={id} label={label} hint={hint}>
       <input
         id={id}
         type="text"
@@ -620,7 +630,7 @@ function NumberField({
           const raw = digitsOnly(e.target.value);
           onChange(raw === "" ? value : toInt(raw, value));
         }}
-        className={`mt-1 ${OT_INPUT_CLS}`}
+        className={`mt-1 ${WIZARD_INPUT}`}
       />
     </Field>
   );

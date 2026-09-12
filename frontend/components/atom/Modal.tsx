@@ -57,6 +57,8 @@ export interface ModalProps {
   panelClassName?: string;
   /** Clases adicionales en el contenedor scroll del cuerpo. */
   bodyClassName?: string;
+  /** Pie fijo (fuera del scroll). Evita que un CTA al final dispare barras horizontales. */
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -75,6 +77,7 @@ export function Modal({
   header,
   panelClassName = "",
   bodyClassName = "",
+  footer,
   children,
 }: ModalProps) {
   const titleId = useId();
@@ -110,7 +113,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-y-auto bg-slate-900/50 px-4 py-6 backdrop-blur-md`}
+      className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-hidden bg-slate-900/50 px-4 py-6 backdrop-blur-md`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -124,7 +127,7 @@ export function Modal({
       onClick={(e) => e.stopPropagation()}
     >
       <div
-        className={`flex max-h-[calc(100dvh-3rem)] w-full ${SIZE_CLASS[size]} flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 text-[#162744] shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white ${panelClassName}`}
+        className={`flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 text-[#162744] shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white ${panelClassName}`}
       >
         {resolvedHeader !== undefined ? (
           <div className="mb-4 shrink-0">{resolvedHeader}</div>
@@ -158,7 +161,10 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className={`min-h-0 flex-1 overflow-y-auto ${bodyClassName}`}>{children}</div>
+        <div className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto ${bodyClassName}`}>{children}</div>
+        {footer ? (
+          <div className="mt-4 shrink-0 border-t border-[#DFE5ED] pt-4 dark:border-white/10">{footer}</div>
+        ) : null}
       </div>
     </div>,
     document.body,

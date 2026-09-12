@@ -25,7 +25,6 @@ export function DrFlitFab({
       className={[
         "dr-flit fixed z-[45] h-16 w-16 overflow-visible rounded-full bg-transparent p-0",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2",
-        "transition-transform hover:scale-[1.04] motion-reduce:transition-none motion-reduce:hover:scale-100",
         "bottom-24 right-4 lg:bottom-6 lg:right-6",
       ].join(" ")}
       style={{

@@ -49,6 +49,12 @@ public sealed class IctJobOptions
     /// <summary>Tamaño de lote de webhooks (Job 5): entregas reclamadas por ciclo.</summary>
     public int WebhookBatchSize { get; init; } = 50;
 
+    /// <summary>Filas por CALL del SP de validación de negocio (ict.job_settings.business_batch_size).</summary>
+    public int BusinessBatchSize { get; init; } = 500;
+
+    /// <summary>Filas por CALL del SP de validación externa (ict.job_settings.external_batch_size).</summary>
+    public int ExternalBatchSize { get; init; } = 500;
+
     // Retención/purga (HU5): corre 24/7 (sin ventana horaria), cadencia en horas.
     public bool RetentionEnabled { get; init; } = true;
 

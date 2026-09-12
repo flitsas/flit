@@ -124,7 +124,32 @@ public sealed class FileManagerAttachmentStorage(HttpClient http, IOptions<FileM
 
     private async Task UploadToS3Async(PresignedUrlDto presigned, byte[] bytes, string filename, CancellationToken ct)
     {
-        using var form = new MultipartFormDataContent();
+        // El método lo DECIDE el File Manager y viaja en la respuesta (ADR-0057); aquí no se
+        // deduce del proveedor, que este cliente no conoce. Ausente ⇒ POST, que es lo que hacían
+        // todos los backends antes. PUT existe porque hay gateways (Contabo) que rechazan el POST
+        // policy: sus credenciales viajan en el cuerpo multipart y el gateway no las ve.
+        var usePut = string.Equals(presigned.Method, "PUT", StringComparison.OrdinalIgnoreCase);
+
+        using HttpContent content = usePut
+            ? BuildPutContent(bytes)
+            : (HttpContent)BuildPostContent(presigned, bytes, filename);
+
+        // URL absoluta del storage ⇒ ignora el BaseAddress del cliente.
+        // SIN header de auth del File Manager: la firma va en la URL o en el cuerpo.
+        using var resp = usePut
+            ? await http.PutAsync(presigned.Url, content, ct)
+            : await http.PostAsync(presigned.Url, content, ct);
+        resp.EnsureSuccessStatusCode();
+    }
+
+    private static ByteArrayContent BuildPutContent(byte[] bytes)
+    {
+        return new ByteArrayContent(bytes);
+    }
+
+    private static MultipartFormDataContent BuildPostContent(PresignedUrlDto presigned, byte[] bytes, string filename)
+    {
+        var form = new MultipartFormDataContent();
         // S3 POST policy: los campos firmados (key, policy, x-amz-*) van ANTES del 'file'.
         if (presigned.Fields is not null)
         {
@@ -135,10 +160,7 @@ public sealed class FileManagerAttachmentStorage(HttpClient http, IOptions<FileM
         }
 
         form.Add(new ByteArrayContent(bytes), "file", filename);
-
-        // URL absoluta de S3 ⇒ ignora el BaseAddress del cliente. SIN header de auth del File Manager.
-        using var resp = await http.PostAsync(presigned.Url, form, ct);
-        resp.EnsureSuccessStatusCode();
+        return form;
     }
 
     private void ApplyAuth(HttpRequestMessage req)
@@ -160,7 +182,9 @@ public sealed class FileManagerAttachmentStorage(HttpClient http, IOptions<FileM
         [property: JsonPropertyName("id")] string? Id,
         [property: JsonPropertyName("presignedUrl")] PresignedUrlDto? PresignedUrl);
 
+    // Method: "POST" (multipart con Fields) o "PUT" (bytes crudos). Ausente ⇒ POST.
     private sealed record PresignedUrlDto(
         [property: JsonPropertyName("url")] string? Url,
+        [property: JsonPropertyName("method")] string? Method,
         [property: JsonPropertyName("fields")] Dictionary<string, string>? Fields);
 }
