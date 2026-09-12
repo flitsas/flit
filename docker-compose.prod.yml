@@ -127,6 +127,11 @@ services:
       # a un sitio y la API lee de otro, los adjuntos migrados existen en la tabla
       # pero no abren. Falla en silencio.
       FileManager__BaseUrl: ${FILE_MANAGER_BASE_URL:-https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/}
+      # Bearer del file-manager. El legado es publico y el de MinIO de la 177 tambien,
+      # asi que por defecto va VACIO y no se manda cabecera: comportamiento de siempre.
+      # El file-manager sobre Contabo (filemanager.flitsas.com) SI lo exige y responde
+      # 401 sin el. Tiene que ir en el MISMO valor que en core-ict (ADR-0057).
+      FileManager__AuthToken: ${FILE_MANAGER_AUTH_TOKEN:-}
       # Login deshabilitado temporalmente: DevGenerate evita exigir llaves JWT
       # montadas. Para reactivar login, montar jwt-private/public.pem y quitar esto.
       Jwt__DevGenerate: "true"
@@ -317,6 +322,10 @@ services:
       # ICT sube a un sitio y core-api lee de otro → el adjunto transferido por referencia al borrador
       # existe en la tabla pero no abre. Falla en silencio.
       FileManager__BaseUrl: ${FILE_MANAGER_BASE_URL:-https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/}
+      # MISMO valor que en core-api (misma var FILE_MANAGER_AUTH_TOKEN). Si solo se
+      # pone en uno de los dos, ese sube y el otro recibe 401: el adjunto existe en la
+      # tabla pero no abre, igual que con BaseUrl (ADR-0057).
+      FileManager__AuthToken: ${FILE_MANAGER_AUTH_TOKEN:-}
       # Lever B (default false): synchronous_commit=off LOCAL en el camino del registro para no esperar el
       # fsync del WAL por fila (el registro hace 1 commit por fila). Solo afecta al registro (staging
       # reprocesable), no a reads/abort/edit. Para activarlo en un ambiente, poner
@@ -329,7 +338,12 @@ services:
       core-api:
         condition: service_started
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_ICT_PORT:-6020}/health"]
+      # 127.0.0.1 y NO localhost: core-ict arranca con URLS=http://0.0.0.0:<puerto>, que
+      # es solo IPv4, y `localhost` resuelve antes a ::1 -> "Connection refused". El
+      # contenedor quedaba unhealthy con la aplicacion respondiendo perfectamente
+      # (verificado 2026-09-12 en dev, qa y pdn). core-api no lo sufre porque no fuerza
+      # URLS y Kestrel abre las dos pilas.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${CORE_ICT_PORT:-6020}/health"]
       interval: 30s
       timeout: 5s
       retries: 3
