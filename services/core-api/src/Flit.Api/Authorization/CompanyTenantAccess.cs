@@ -38,8 +38,7 @@ public static class CompanyTenantAccess
             return null;
         }
 
-        var raw = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        if (!Guid.TryParse(raw, out var callerTenantId) || callerTenantId != tenantId)
+        if (!RequestTenantResolver.TryResolveTenantId(user, out var callerTenantId) || callerTenantId != tenantId)
         {
             return Results.Json(
                 new

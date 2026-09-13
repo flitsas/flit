@@ -8,7 +8,8 @@ namespace Flit.Admin.Application.Companies.UpdateCompany;
 /// </summary>
 /// <param name="RazonSocial">Razón social (legal_name). Requerido, ≤255.</param>
 /// <param name="Nit">NIT (tax_id). Requerido, ≤20.</param>
-/// <param name="TenantType">Tipo de compañía: RENTING | CONCESIONARIO | FLIT.</param>
+/// <param name="TenantType">Tipo de compañía: RENTING | CONCESIONARIO | FLIT | CONCESION | MARCA_BLANCA
+/// (los dos últimos son cabezas de grupo, HU #12406).</param>
 /// <param name="EstadoActivo">Estado activo. Opcional (default true).</param>
 /// <param name="RowVersion">
 /// Versión de fila que el cliente leyó al abrir la edición. Opcional: si se envía y no

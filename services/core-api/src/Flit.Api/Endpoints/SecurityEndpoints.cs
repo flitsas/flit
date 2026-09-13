@@ -42,8 +42,7 @@ public static class SecurityEndpoints
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var callerTenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -254,8 +253,7 @@ public static class SecurityEndpoints
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var callerTenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");
@@ -316,8 +314,7 @@ public static class SecurityEndpoints
             CancelInvitationHandler handler,
             CancellationToken cancellationToken) =>
         {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var callerTenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -369,8 +366,7 @@ public static class SecurityEndpoints
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var callerTenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -478,8 +474,7 @@ public static class SecurityEndpoints
             FlitDbContext db,
             CancellationToken cancellationToken) =>
         {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var tenantId))
                 return Results.Unauthorized();
 
             var isOtTenant = await db.TransitOfficeProfiles
@@ -517,8 +512,7 @@ public static class SecurityEndpoints
             CancellationToken cancellationToken) =>
         {
             var logger = lf.CreateLogger(nameof(SecurityEndpoints));
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var tenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -623,8 +617,7 @@ public static class SecurityEndpoints
             CancellationToken cancellationToken) =>
         {
             var logger = lf.CreateLogger(nameof(SecurityEndpoints));
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var tenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -730,8 +723,7 @@ public static class SecurityEndpoints
             RemoveRoleAssignmentHandler handler,
             CancellationToken cancellationToken) =>
         {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var tenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var tenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -767,8 +759,7 @@ public static class SecurityEndpoints
             bool? onlyDeleted,
             CancellationToken cancellationToken) =>
         {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var callerTenantId))
                 return Results.Unauthorized();
 
             // Multi-rol (HU #10506): FindFirstValue solo evalúa el primer claim "role" del JWT,
@@ -1084,8 +1075,7 @@ public static class SecurityEndpoints
             SuspendUserHandler handler,
             CancellationToken cancellationToken) =>
         {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var callerTenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");
@@ -1137,8 +1127,7 @@ public static class SecurityEndpoints
             UnsuspendUserHandler handler,
             CancellationToken cancellationToken) =>
         {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var callerTenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");
@@ -1187,8 +1176,7 @@ public static class SecurityEndpoints
             DeleteUserHandler handler,
             CancellationToken cancellationToken) =>
         {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+            if (!RequestTenantResolver.TryResolveTenantId(caller, out var callerTenantId))
                 return Results.Unauthorized();
 
             var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");

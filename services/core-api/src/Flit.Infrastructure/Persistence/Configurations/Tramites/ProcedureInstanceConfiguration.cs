@@ -208,6 +208,14 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("external_ref")
             .HasMaxLength(64);
 
+        // HU #12406 — padre de la compañía radicadora al crear el trámite (109-HU12406). Se manda en
+        // el INSERT y NUNCA en un UPDATE: cualquier intento de modificarlo en una entidad rastreada
+        // lanza InvalidOperationException antes de llegar a la base (AfterSaveBehavior.Throw), y
+        // db.Update(instance) no lo marca modificado. Sin FK a propósito (trazabilidad): aquí solo se mapea.
+        builder.Property(x => x.ParentTenantIdAtCreation)
+            .HasColumnName("parent_tenant_id_at_creation")
+            .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+
         // ICT — pausa del trámite (servicio v1 pauseDraftProcess + bandera starts_procedure_in_paused).
         // Columnas agregadas por 39-ICT-procedure-pause.sql (tabla ExcludeFromMigrations); aquí solo se
         // mapean al modelo EF. is_paused NOT NULL default false; paused_observation nullable varchar(250).

@@ -2,6 +2,7 @@
 // ADR-0033). Endpoints SuperAdmin acotados por tenantId. El número de documento y el NIT son PII
 // (Ley 1581): solo viajan en respuestas autenticadas de gestión y nunca deben loguearse.
 import { apiFetch } from "./client";
+import { companyScopedPath } from "./company-scoped-path";
 
 /**
  * Representante legal proyectado para la gestión admin. Incluye los datos denormalizados de la
@@ -172,8 +173,8 @@ export interface LegalRepresentativeSaved {
   signals: string[];
 }
 
-function base(tenantId: string): string {
-  return `/api/v1/admin/companies/${tenantId}/legal-representatives`;
+function base(tenantId: string, networkHeadId?: string | null): string {
+  return companyScopedPath(tenantId, "/legal-representatives", networkHeadId);
 }
 
 /** GET "" — página de representantes de la compañía. */
@@ -182,8 +183,9 @@ export function fetchLegalRepresentatives(
   page: number,
   pageSize: number,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<LegalRepresentativePage> {
-  return apiFetch<LegalRepresentativePage>(base(tenantId), {
+  return apiFetch<LegalRepresentativePage>(base(tenantId, networkHeadId), {
     query: { page, pageSize },
     signal,
   });
@@ -194,8 +196,9 @@ export function fetchLegalRepresentative(
   tenantId: string,
   id: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<LegalRepresentativeItem> {
-  return apiFetch<LegalRepresentativeItem>(`${base(tenantId)}/${id}`, { signal });
+  return apiFetch<LegalRepresentativeItem>(`${base(tenantId, networkHeadId)}/${id}`, { signal });
 }
 
 /**
@@ -205,8 +208,9 @@ export function fetchLegalRepresentative(
 export function createLegalRepresentative(
   tenantId: string,
   body: LegalRepresentativeInput,
+  networkHeadId?: string | null,
 ): Promise<LegalRepresentativeSaved> {
-  return apiFetch<LegalRepresentativeSaved>(base(tenantId), { method: "POST", body });
+  return apiFetch<LegalRepresentativeSaved>(base(tenantId, networkHeadId), { method: "POST", body });
 }
 
 /** PUT "/{id}" — edición. 404 si no existe, 422 si inválido; en 200 devuelve id + señales. */
@@ -214,13 +218,18 @@ export function updateLegalRepresentative(
   tenantId: string,
   id: string,
   body: LegalRepresentativeInput,
+  networkHeadId?: string | null,
 ): Promise<LegalRepresentativeSaved> {
-  return apiFetch<LegalRepresentativeSaved>(`${base(tenantId)}/${id}`, { method: "PUT", body });
+  return apiFetch<LegalRepresentativeSaved>(`${base(tenantId, networkHeadId)}/${id}`, { method: "PUT", body });
 }
 
 /** DELETE "/{id}" — baja lógica idempotente (204). */
-export function deleteLegalRepresentative(tenantId: string, id: string): Promise<void> {
-  return apiFetch<void>(`${base(tenantId)}/${id}`, { method: "DELETE" });
+export function deleteLegalRepresentative(
+  tenantId: string,
+  id: string,
+  networkHeadId?: string | null,
+): Promise<void> {
+  return apiFetch<void>(`${base(tenantId, networkHeadId)}/${id}`, { method: "DELETE" });
 }
 
 /**
@@ -231,8 +240,11 @@ export function deleteLegalRepresentative(tenantId: string, id: string): Promise
 export function fetchAssignableProcedureTypes(
   tenantId: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<AssignableProcedureType[]> {
-  return apiFetch<AssignableProcedureType[]>(`${base(tenantId)}/procedure-types`, { signal });
+  return apiFetch<AssignableProcedureType[]>(`${base(tenantId, networkHeadId)}/procedure-types`, {
+    signal,
+  });
 }
 
 // HU #11755/#11758 (ADR-0050) — `resendLegalRepresentativeIdentity`, `linkLegalRepresentativeIdentity`

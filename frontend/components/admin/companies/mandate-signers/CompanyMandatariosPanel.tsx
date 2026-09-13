@@ -30,7 +30,13 @@ import { CompanyMandatarioForm } from "./CompanyMandatarioForm";
  * empresa da de alta a su mandatario una sola vez y marca en cuáles de sus organismos aplica, que es
  * como funciona en la práctica —el mandatario es de la empresa, no del organismo—.
  */
-export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
+export function CompanyMandatariosPanel({
+  tenantId,
+  networkHeadId,
+}: {
+  tenantId: string;
+  networkHeadId?: string | null;
+}) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [signers, setSigners] = useState<MandateSigner[]>([]);
@@ -45,11 +51,11 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
       setStatus("loading");
       try {
         const [signerList, officeList, companyList] = await Promise.all([
-          fetchCompanyMandateSigners(tenantId, signal),
-          fetchCompanyTransitOffices(tenantId, signal),
+          fetchCompanyMandateSigners(tenantId, signal, networkHeadId),
+          fetchCompanyTransitOffices(tenantId, signal, networkHeadId),
           // Best-effort: sin empresas el formulario sigue funcionando y el mandatario aplica a todas,
           // que es el comportamiento por defecto.
-          fetchRepresentedCompanies(tenantId, signal).catch(() => []),
+          fetchRepresentedCompanies(tenantId, signal, networkHeadId).catch(() => []),
         ]);
         if (signal?.aborted) {
           return;
@@ -64,7 +70,7 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
         }
       }
     },
-    [tenantId],
+    [tenantId, networkHeadId],
   );
 
   useEffect(() => {
@@ -81,8 +87,8 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
 
   const handleSubmit = async (input: CompanyMandateSignerInput) => {
     const saved = editing
-      ? await updateCompanyMandateSigner(tenantId, editing.id, input)
-      : await createCompanyMandateSigner(tenantId, input);
+      ? await updateCompanyMandateSigner(tenantId, editing.id, input, networkHeadId)
+      : await createCompanyMandateSigner(tenantId, input, networkHeadId);
     setFormOpen(false);
     setEditing(null);
     show(editing ? "Mandatario actualizado." : "Mandatario registrado.", "success");
@@ -94,10 +100,10 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
     setBusyId(signer.id);
     try {
       if (signer.isActive) {
-        await inactivateCompanyMandateSigner(tenantId, signer.id);
+        await inactivateCompanyMandateSigner(tenantId, signer.id, networkHeadId);
         show(`${signer.fullName} quedó inactivo.`, "success");
       } else {
-        await reactivateCompanyMandateSigner(tenantId, signer.id);
+        await reactivateCompanyMandateSigner(tenantId, signer.id, networkHeadId);
         show(`${signer.fullName} vuelve a estar activo.`, "success");
       }
       await load();
@@ -238,6 +244,7 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
       {formOpen && (
         <CompanyMandatarioForm
           tenantId={tenantId}
+          networkHeadId={networkHeadId}
           offices={offices}
           companies={companies}
           editing={editing}

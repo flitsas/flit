@@ -5,4 +5,12 @@
     <RootNamespace>Flit.Queries.Domain</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- HU #12321 — TenantScope.All() es internal: solo el middleware (Flit.Api) y los tests lo fabrican. -->
+    <InternalsVisibleTo Include="Flit.Api" />
+    <InternalsVisibleTo Include="Flit.Admin.Tests" />
+    <InternalsVisibleTo Include="Flit.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="Flit.Integration.Tests" />
+  </ItemGroup>
+
 </Project>

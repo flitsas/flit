@@ -42,6 +42,7 @@ public sealed class RsaJwtTokenIssuerTests
         var issued = issuer.IssueToken(
             Guid.NewGuid(), "admin@empresa.com", Guid.NewGuid(),
             "Acme Renting SAS", "900123456-7", "COMPANY",
+            "RENTING", false,
             roles, ["companies.read"]);
 
         var token = Decode(issued.Token);
@@ -60,6 +61,7 @@ public sealed class RsaJwtTokenIssuerTests
         var issued = issuer.IssueToken(
             Guid.NewGuid(), "admin@ot.gov.co", Guid.NewGuid(),
             "Organismo de Tránsito Norte", "800987654-1", "TRANSIT_OFFICE",
+            "RENTING", false,
             roles, ["ot.read"]);
 
         var token = Decode(issued.Token);
@@ -78,6 +80,7 @@ public sealed class RsaJwtTokenIssuerTests
         var act = () => issuer.IssueToken(
             Guid.NewGuid(), "admin@sinnit.com", Guid.NewGuid(),
             "Tenant Legacy Sin NIT", string.Empty, "COMPANY",
+            "RENTING", false,
             roles, []);
 
         var issued = act.Should().NotThrow().Subject;
@@ -98,6 +101,7 @@ public sealed class RsaJwtTokenIssuerTests
         var issued = issuer.IssueToken(
             Guid.NewGuid(), "multi@empresa.com", Guid.NewGuid(),
             "Acme Renting SAS", "900123456-7", "COMPANY",
+            "RENTING", false,
             roles, ["procedures.read", "procedures.write"]);
 
         var token = Decode(issued.Token);
@@ -105,5 +109,22 @@ public sealed class RsaJwtTokenIssuerTests
             .Should().BeEquivalentTo([roleAId.ToString(), roleBId.ToString()]);
         token.Claims.Where(c => c.Type == "role_code").Select(c => c.Value)
             .Should().BeEquivalentTo(["gestor", "radicador"]);
+    }
+
+    [Fact]
+    public void IssueToken_ConcesionHead_EmitsTenantTypeAndGroupParentClaims()
+    {
+        var issuer = CreateIssuer();
+        var roles = new List<UserRoleSnapshot> { new(Guid.NewGuid(), "AdminCompany") };
+
+        var issued = issuer.IssueToken(
+            Guid.NewGuid(), "admin@concesion.com", Guid.NewGuid(),
+            "Concesión Norte SAS", "901000111-2", "COMPANY",
+            "CONCESION", true,
+            roles, ["companies.read"]);
+
+        var token = Decode(issued.Token);
+        token.Claims.Single(c => c.Type == "tenant_type").Value.Should().Be("CONCESION");
+        token.Claims.Single(c => c.Type == "is_group_parent").Value.Should().Be("true");
     }
 }

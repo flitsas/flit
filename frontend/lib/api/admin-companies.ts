@@ -6,6 +6,7 @@ import type {
   AuditLogPageResponse,
   BlockingCriterion,
   CompaniesIndexParams,
+  CompanyChildListItem,
   CompanyListItem,
   CompanyPagedResult,
   ConsultationRestrictionKind,
@@ -15,6 +16,7 @@ import type {
   OtPrendaDocumentPolicy,
   TenantSettings,
   TenantSettingsUpdate,
+  TransitBlocksResponse,
   TransitGrantsResponse,
   TransitOffice,
   UpdateCompanyRequest,
@@ -22,7 +24,35 @@ import type {
   WhitelistEntry,
 } from "./types";
 
+import { companyScopedPath } from "./company-scoped-path";
+
 const base = "/api/v1/admin/companies";
+
+function companyResourcePath(
+  tenantId: string,
+  suffix: string,
+  networkHeadId?: string | null,
+): string {
+  return companyScopedPath(tenantId, suffix, networkHeadId);
+}
+
+function childToCompanyListItem(
+  child: CompanyChildListItem,
+  parentTenantId: string,
+): CompanyListItem {
+  return {
+    id: child.id,
+    nit: child.nit,
+    razonSocial: child.razonSocial,
+    code: child.code,
+    tenantType: child.tenantType,
+    isTransitOffice: false,
+    parentTenantId,
+    estadoActivo: child.estadoActivo,
+    fechaCreacion: child.fechaVinculacion,
+    rowVersion: child.rowVersion,
+  };
+}
 
 /** GET /index — listado paginado con filtros server-side (AC1). */
 export function fetchCompaniesIndex(
@@ -39,8 +69,16 @@ export function fetchCompaniesIndex(
 export async function fetchCompany(
   tenantId: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<CompanyListItem | null> {
   try {
+    if (networkHeadId) {
+      const child = await apiFetch<CompanyChildListItem>(
+        `${base}/${networkHeadId}/children/${tenantId}`,
+        { signal },
+      );
+      return childToCompanyListItem(child, networkHeadId);
+    }
     return await apiFetch<CompanyListItem>(`${base}/${tenantId}`, { signal });
   } catch {
     return null;
@@ -82,9 +120,12 @@ export function setCompanyStatus(tenantId: string, estadoActivo: boolean): Promi
 export async function fetchTenantSettings(
   tenantId: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<TenantSettings | null> {
   try {
-    return await apiFetch<TenantSettings>(`${base}/${tenantId}/settings`, { signal });
+    return await apiFetch<TenantSettings>(companyResourcePath(tenantId, "/settings", networkHeadId), {
+      signal,
+    });
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return null;
@@ -97,13 +138,23 @@ export async function fetchTenantSettings(
 export function updateTenantSettings(
   tenantId: string,
   body: TenantSettingsUpdate,
+  networkHeadId?: string | null,
 ): Promise<TenantSettings> {
-  return apiFetch<TenantSettings>(`${base}/${tenantId}/settings`, { method: "PUT", body });
+  return apiFetch<TenantSettings>(companyResourcePath(tenantId, "/settings", networkHeadId), {
+    method: "PUT",
+    body,
+  });
 }
 
 /** GET /{tenantId}/whitelist — correos exentos (AC3). */
-export function fetchWhitelist(tenantId: string, signal?: AbortSignal): Promise<WhitelistEntry[]> {
-  return apiFetch<WhitelistEntry[]>(`${base}/${tenantId}/whitelist`, { signal });
+export function fetchWhitelist(
+  tenantId: string,
+  signal?: AbortSignal,
+  networkHeadId?: string | null,
+): Promise<WhitelistEntry[]> {
+  return apiFetch<WhitelistEntry[]>(companyResourcePath(tenantId, "/whitelist", networkHeadId), {
+    signal,
+  });
 }
 
 /** POST /{tenantId}/whitelist — alta masiva (AC3). Lanza ApiValidationError en 422. */
@@ -111,8 +162,9 @@ export function addWhitelistEmails(
   tenantId: string,
   emails: string[],
   reason?: string,
+  networkHeadId?: string | null,
 ): Promise<WhitelistAddResponse> {
-  return apiFetch<WhitelistAddResponse>(`${base}/${tenantId}/whitelist`, {
+  return apiFetch<WhitelistAddResponse>(companyResourcePath(tenantId, "/whitelist", networkHeadId), {
     method: "POST",
     body: { emails, reason },
   });
@@ -139,6 +191,29 @@ export function addTransitGrant(tenantId: string, transitOfficeId: string): Prom
 /** DELETE /{tenantId}/transit-grants/{transitOfficeId} — deshabilita un OT (AC4). */
 export function removeTransitGrant(tenantId: string, transitOfficeId: string): Promise<void> {
   return apiFetch<void>(`${base}/${tenantId}/transit-grants/${transitOfficeId}`, {
+    method: "DELETE",
+  });
+}
+
+/** GET /{tenantId}/transit-blocks — OT bloqueados en cabeza Marca Blanca (HU #12408). */
+export function fetchTransitBlocks(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<TransitBlocksResponse> {
+  return apiFetch<TransitBlocksResponse>(`${base}/${tenantId}/transit-blocks`, { signal });
+}
+
+/** POST /{tenantId}/transit-blocks — bloquea un OT (HU #12408, idempotente). */
+export function addTransitBlock(tenantId: string, transitOfficeId: string): Promise<void> {
+  return apiFetch<void>(`${base}/${tenantId}/transit-blocks`, {
+    method: "POST",
+    body: { transitOfficeId },
+  });
+}
+
+/** DELETE /{tenantId}/transit-blocks/{transitOfficeId} — retira bloqueo (HU #12408). */
+export function removeTransitBlock(tenantId: string, transitOfficeId: string): Promise<void> {
+  return apiFetch<void>(`${base}/${tenantId}/transit-blocks/${transitOfficeId}`, {
     method: "DELETE",
   });
 }
@@ -258,9 +333,90 @@ export function fetchAuditLog(
   page = 1,
   pageSize = 20,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<AuditLogPageResponse> {
-  return apiFetch<AuditLogPageResponse>(`${base}/${tenantId}/audit-log`, {
+  return apiFetch<AuditLogPageResponse>(companyResourcePath(tenantId, "/audit-log", networkHeadId), {
     query: { page, pageSize },
     signal,
   });
+}
+
+// ── Jerarquía de clientes (HU #12357, #12356) ───────────────────────────────
+
+/** GET /{headTenantId}/children — listado de clientes hijos de una cabeza. */
+export function fetchCompanyChildren(
+  headTenantId: string,
+  signal?: AbortSignal,
+): Promise<CompanyChildListItem[]> {
+  return apiFetch<CompanyChildListItem[]>(`${base}/${headTenantId}/children`, { signal });
+}
+
+/** POST /{headTenantId}/children — alta de cliente hijo por la cabeza. */
+export function createChildCompany(
+  headTenantId: string,
+  body: CreateCompanyRequest,
+): Promise<CompanyListItem> {
+  return apiFetch<CompanyListItem>(`${base}/${headTenantId}/children`, { method: "POST", body });
+}
+
+/** PUT /{headTenantId}/children/{childTenantId}/status — activa/desactiva un hijo. */
+export function setChildCompanyStatus(
+  headTenantId: string,
+  childTenantId: string,
+  estadoActivo: boolean,
+): Promise<CompanyListItem> {
+  return apiFetch<CompanyListItem>(`${base}/${headTenantId}/children/${childTenantId}/status`, {
+    method: "PUT",
+    body: { estadoActivo },
+  });
+}
+
+/** PUT /{tenantId}/parent — SuperAdmin vincula un cliente existente a una cabeza. */
+export function linkCompanyToParent(
+  childTenantId: string,
+  parentTenantId: string,
+): Promise<CompanyListItem> {
+  return apiFetch<CompanyListItem>(`${base}/${childTenantId}/parent`, {
+    method: "PUT",
+    body: { parentTenantId },
+  });
+}
+
+/** DELETE /{tenantId}/parent — SuperAdmin desvincula un cliente hijo. */
+export function unlinkCompanyFromParent(childTenantId: string): Promise<CompanyListItem> {
+  return apiFetch<CompanyListItem>(`${base}/${childTenantId}/parent`, { method: "DELETE" });
+}
+
+/** POST …/children/{childTenantId}/invitations — cabeza invita admin del hijo. */
+export function inviteChildCompanyUser(
+  headTenantId: string,
+  childTenantId: string,
+  body: { email: string; fullName: string; roleIds: string[] },
+): Promise<{ invitationId: string; email: string; emailSent: boolean }> {
+  return apiFetch(`${base}/${headTenantId}/children/${childTenantId}/invitations`, {
+    method: "POST",
+    body,
+  });
+}
+
+export interface ChildCompanyUserItem {
+  userId: string;
+  displayName: string;
+  email: string;
+  roleCode: string;
+  roleId: string;
+  status: string;
+}
+
+/** GET …/children/{childTenantId}/users — usuarios del hijo vistos por la cabeza. */
+export async function fetchChildCompanyUsers(
+  headTenantId: string,
+  childTenantId: string,
+  signal?: AbortSignal,
+): Promise<ChildCompanyUserItem[]> {
+  const result = await apiFetch<{ items: ChildCompanyUserItem[] }>(
+    `${base}/${headTenantId}/children/${childTenantId}/users`,
+    { signal },
+  );
+  return result.items ?? [];
 }

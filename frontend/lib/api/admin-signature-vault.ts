@@ -2,6 +2,7 @@
 // Endpoints SuperAdmin acotados por tenantId. El binario de la firma NUNCA se devuelve:
 // la lista y el detalle solo exponen metadatos + referencias de almacenamiento (storagePath).
 import { apiFetch } from "./client";
+import { companyScopedPath } from "./company-scoped-path";
 
 /** Estado de una firma en el baúl. `activa` reutilizable; `revocada` inhabilitada. */
 export type SignatureVaultEstado = "activa" | "revocada" | "vencida";
@@ -62,8 +63,8 @@ export interface SignatureVaultCreated {
   id: string;
 }
 
-function base(tenantId: string): string {
-  return `/api/v1/admin/companies/${tenantId}/signature-vault`;
+function base(tenantId: string, networkHeadId?: string | null): string {
+  return companyScopedPath(tenantId, "/signature-vault", networkHeadId);
 }
 
 // El backend puede responder un arreglo plano o envuelto en `{ data: [] }`; se normaliza.
@@ -79,8 +80,9 @@ function unwrapList(result: unknown): SignatureVaultItem[] {
 export async function fetchSignatureVault(
   tenantId: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<SignatureVaultItem[]> {
-  const result = await apiFetch<unknown>(base(tenantId), { signal });
+  const result = await apiFetch<unknown>(base(tenantId, networkHeadId), { signal });
   return unwrapList(result);
 }
 
@@ -95,8 +97,9 @@ export async function fetchSignatureVaultByDocument(
   documentNumber: string,
   soloVigentes = true,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<SignatureVaultItem[]> {
-  const result = await apiFetch<unknown>(base(tenantId), {
+  const result = await apiFetch<unknown>(base(tenantId, networkHeadId), {
     query: { documentType, documentNumber, soloVigentes },
     signal,
   });
@@ -108,8 +111,9 @@ export function fetchSignatureVaultItem(
   tenantId: string,
   id: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<SignatureVaultItem> {
-  return apiFetch<SignatureVaultItem>(`${base(tenantId)}/${id}`, { signal });
+  return apiFetch<SignatureVaultItem>(`${base(tenantId, networkHeadId)}/${id}`, { signal });
 }
 
 /**
@@ -119,8 +123,9 @@ export function fetchSignatureVaultItem(
 export function createSignatureVaultEntry(
   tenantId: string,
   body: SignatureVaultInput,
+  networkHeadId?: string | null,
 ): Promise<SignatureVaultCreated> {
-  return apiFetch<SignatureVaultCreated>(base(tenantId), {
+  return apiFetch<SignatureVaultCreated>(base(tenantId, networkHeadId), {
     method: "POST",
     body: { mandateSignerId: null, ...body },
   });
@@ -137,11 +142,16 @@ export function updateSignatureVaultEntry(
   tenantId: string,
   id: string,
   body: SignatureVaultEditInput,
+  networkHeadId?: string | null,
 ): Promise<void> {
-  return apiFetch<void>(`${base(tenantId)}/${id}`, { method: "PUT", body });
+  return apiFetch<void>(`${base(tenantId, networkHeadId)}/${id}`, { method: "PUT", body });
 }
 
 /** POST "/{id}/revoke" — anula una firma (204, idempotente). */
-export function revokeSignatureVaultEntry(tenantId: string, id: string): Promise<void> {
-  return apiFetch<void>(`${base(tenantId)}/${id}/revoke`, { method: "POST" });
+export function revokeSignatureVaultEntry(
+  tenantId: string,
+  id: string,
+  networkHeadId?: string | null,
+): Promise<void> {
+  return apiFetch<void>(`${base(tenantId, networkHeadId)}/${id}/revoke`, { method: "POST" });
 }

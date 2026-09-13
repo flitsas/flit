@@ -18,6 +18,9 @@ public interface IJwtTokenIssuer
     /// claims <c>company_nit</c> y <c>entity_type</c> (además de <c>company_name</c>, que reutiliza
     /// <paramref name="tenantName"/>) para que los consumidores del token identifiquen la empresa/OT
     /// asociada sin llamadas adicionales. <paramref name="companyNit"/> puede venir vacío (AC4).
+    /// HU #12345/#12406: <paramref name="tenantType"/> e <paramref name="isGroupParent"/> se emiten
+    /// como claims <c>tenant_type</c> e <c>is_group_parent</c> para que el frontend controle la UI
+    /// de "Red de clientes" sin round-trips adicionales.
     /// </summary>
     IssuedAccessToken IssueToken(
         Guid userId,
@@ -26,6 +29,8 @@ public interface IJwtTokenIssuer
         string tenantName,
         string companyNit,
         string entityType,
+        string tenantType,
+        bool isGroupParent,
         IReadOnlyList<UserRoleSnapshot> roles,
         IReadOnlyList<string> permissionSlugs);
 }

@@ -56,6 +56,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             return [];
         }
 
+        // Solo el tenant del trámite: la cabeza de red no presta mandatarios a las hijas
+        // (Epic #12235). Cada compañía firma con su propio directorio.
         var signers = await (
             from s in _context.MandateSigners.AsNoTracking()
             join c in _context.MandateSignerCompanies.AsNoTracking() on s.Id equals c.MandateSignerId

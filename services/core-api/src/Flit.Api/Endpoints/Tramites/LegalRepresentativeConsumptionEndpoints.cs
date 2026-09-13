@@ -4,6 +4,7 @@ using Flit.Api.Middleware;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Flit.Api.Authorization;
 
 namespace Flit.Api.Endpoints.Tramites;
 
@@ -101,9 +102,9 @@ public static class LegalRepresentativeConsumptionEndpoints
         tenantId = Guid.Empty;
         problem = Results.Empty;
 
-        if (http.Items.TryGetValue(TenantEnforcementMiddleware.TenantItemKey, out var t) && t is Guid g)
+        if (RequestTenantResolver.FromItems(http).TenantId is { } resolved)
         {
-            tenantId = g;
+            tenantId = resolved;
             return true;
         }
 

@@ -1,5 +1,6 @@
 using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
@@ -58,7 +59,7 @@ public sealed class AuditSuccessWritersTests
         await using var db = NewContext(nameof(TransitGrant_Add_WritesCreateSuccessWithIp));
         var repo = new TransitGrantRepository(db, new FixedAuditContextAccessor { ClientIp = ClientIp });
 
-        var added = await repo.AddGrantAsync(TenantId, Guid.NewGuid(), Guid.NewGuid(), correlationId: null, ct);
+        var added = await repo.AddGrantAsync(TenantId, Guid.NewGuid(), Guid.NewGuid(), correlationId: null, source: TransitGrantSources.Client, cancellationToken: ct);
 
         added.Should().BeTrue();
         var audit = await db.TenantConfigAuditLogs.SingleAsync(ct);
@@ -74,7 +75,7 @@ public sealed class AuditSuccessWritersTests
         await using var db = NewContext(nameof(NullAccessor_Success_LeavesIpNullButKeepsOperationAndResult));
         var repo = new TransitGrantRepository(db, NullAuditContextAccessor.Instance);
 
-        await repo.AddGrantAsync(TenantId, Guid.NewGuid(), Guid.NewGuid(), correlationId: null, ct);
+        await repo.AddGrantAsync(TenantId, Guid.NewGuid(), Guid.NewGuid(), correlationId: null, source: TransitGrantSources.Client, cancellationToken: ct);
 
         var audit = await db.TenantConfigAuditLogs.SingleAsync(ct);
         audit.ClientIp.Should().BeNull();

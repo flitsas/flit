@@ -53,8 +53,7 @@ public sealed class UsageTelemetryMiddleware(
         if (user?.Identity?.IsAuthenticated != true)
             return;
 
-        if (!Guid.TryParse(user.FindFirstValue(AdminAuthorization.TenantIdClaimType), out var tenantId)
-            || tenantId == Guid.Empty)
+        if (!RequestTenantResolver.TryResolveNonEmptyTenantId(user, out var tenantId))
             return;
 
         Guid? userId = Guid.TryParse(user.FindFirstValue("sub"), out var sub) ? sub : null;

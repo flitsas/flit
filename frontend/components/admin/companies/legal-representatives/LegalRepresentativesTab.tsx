@@ -57,7 +57,13 @@ const PAGE_SIZE = 20;
  * Acciones por fila (iconos lineales FLIT): Editar, Empresas, Eliminar.
  * La ficha completa (modo view) queda disponible en código pero sin entrada en el grid.
  */
-export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
+export function LegalRepresentativesTab({
+  tenantId,
+  networkHeadId,
+}: {
+  tenantId: string;
+  networkHeadId?: string | null;
+}) {
   const { show } = useToast();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -77,7 +83,13 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const result = await fetchLegalRepresentatives(tenantId, page, PAGE_SIZE, signal);
+        const result = await fetchLegalRepresentatives(
+          tenantId,
+          page,
+          PAGE_SIZE,
+          signal,
+          networkHeadId,
+        );
         if (signal?.aborted) return;
         setItems(result.data);
         setTotalCount(result.totalCount);
@@ -86,7 +98,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [tenantId, page],
+    [tenantId, page, networkHeadId],
   );
 
   useEffect(() => {
@@ -98,7 +110,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchAssignableProcedureTypes(tenantId, controller.signal)
+    fetchAssignableProcedureTypes(tenantId, controller.signal, networkHeadId)
       .then((types) => {
         if (!controller.signal.aborted) setProcedureTypes(types);
       })
@@ -106,7 +118,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
         /* el aviso de "sin tipos habilitados" cubre el caso */
       });
     return () => controller.abort();
-  }, [tenantId]);
+  }, [tenantId, networkHeadId]);
 
   const openCreate = () => {
     setPanelMode("create");
@@ -141,8 +153,8 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
 
   const handleSubmit = (input: LegalRepresentativeInput): Promise<LegalRepresentativeSaved> =>
     panelMode === "create" || !panelRepresentativeId
-      ? createLegalRepresentative(tenantId, input)
-      : updateLegalRepresentative(tenantId, panelRepresentativeId, input);
+      ? createLegalRepresentative(tenantId, input, networkHeadId)
+      : updateLegalRepresentative(tenantId, panelRepresentativeId, input, networkHeadId);
 
   const handleSaved = (saved: LegalRepresentativeSaved) => {
     const wasCreate = panelMode === "create";
@@ -170,7 +182,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
     if (!toDelete) return;
     setDeleting(true);
     try {
-      await deleteLegalRepresentative(tenantId, toDelete.id);
+      await deleteLegalRepresentative(tenantId, toDelete.id, networkHeadId);
       show(`Representante ${fullName(toDelete)} eliminado.`, "success");
       if (pendingSignatureId === toDelete.id) setPendingSignatureId(null);
       setToDelete(null);
@@ -401,6 +413,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
         open={panelOpen}
         mode={panelMode}
         tenantId={tenantId}
+        networkHeadId={networkHeadId}
         representativeId={panelRepresentativeId}
         procedureTypes={procedureTypes}
         onClose={closePanel}

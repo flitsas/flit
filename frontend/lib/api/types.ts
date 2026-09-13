@@ -18,12 +18,31 @@ export interface CompanyListItem {
    * No inferir solo desde `tenantType`: los OT también usan RENTING.
    */
   isTransitOffice: boolean;
+  /**
+   * HU #12406 — cabeza de grupo (CONCESION | MARCA_BLANCA). Opcional hasta que el backend lo exponga.
+   */
+  isGroupParent?: boolean;
+  /** HU #12318 — padre de jerarquía, si es cliente hijo. */
+  parentTenantId?: string | null;
   estadoActivo: boolean;
   fechaCreacion: string;
   /**
    * Token de concurrencia optimista (`identity.tenants.row_version`). Se reenvía al editar
    * para que el backend detecte ediciones concurrentes (409 si otra persona la modificó).
    */
+  rowVersion: number;
+}
+
+/** Cliente hijo vinculado a una cabeza de grupo (GET …/children). */
+export interface CompanyChildListItem {
+  id: string;
+  nit: string;
+  razonSocial: string;
+  code: string;
+  tenantType: string;
+  estadoActivo: boolean;
+  /** Fecha de vinculación a la cabeza (ISO 8601). */
+  fechaVinculacion: string;
   rowVersion: number;
 }
 
@@ -47,17 +66,39 @@ export interface CompaniesIndexParams {
 }
 
 // ── Alta de compañía ────────────────────────────────────────────────────────
-export type TenantType = "RENTING" | "CONCESIONARIO" | "FLIT";
+export type TenantType = "RENTING" | "CONCESIONARIO" | "FLIT" | "CONCESION" | "MARCA_BLANCA";
+
+/** Tipos de cabeza de grupo (HU #12406). Solo SuperAdmin puede asignarlos. */
+export type HeadTenantType = "CONCESION" | "MARCA_BLANCA";
+
+/** Tipos admitidos al dar de alta un cliente hijo (HU #12345). */
+export type ChildTenantType = "RENTING" | "CONCESIONARIO";
 
 /** Etiquetas legibles para el tipo de compañía (el valor enviado sigue siendo el enum). */
 export const TENANT_TYPE_LABELS: Record<TenantType, string> = {
   RENTING: "Renting",
-  CONCESIONARIO: "Concesionario",
+  CONCESIONARIO: "Cliente concesión",
   FLIT: "FLIT",
+  CONCESION: "Concesión",
+  MARCA_BLANCA: "Marca Blanca",
 };
 
 /** Catálogo B2B administrable desde la consola de compañías. */
-export const B2B_TENANT_TYPES: readonly TenantType[] = ["RENTING", "CONCESIONARIO", "FLIT"];
+export const B2B_TENANT_TYPES: readonly TenantType[] = [
+  "RENTING",
+  "CONCESIONARIO",
+  "FLIT",
+  "CONCESION",
+  "MARCA_BLANCA",
+];
+
+/** Tipos de cabeza de grupo — exclusivos del SuperAdmin en selectores de alta/edición. */
+export const HEAD_TENANT_TYPES: readonly HeadTenantType[] = ["CONCESION", "MARCA_BLANCA"];
+
+/** Tipos base visibles para cualquier operador con acceso al catálogo B2B. */
+export const BASE_TENANT_TYPES: readonly TenantType[] = ["RENTING", "CONCESIONARIO", "FLIT"];
+
+export const CHILD_TENANT_TYPES: readonly ChildTenantType[] = ["RENTING", "CONCESIONARIO"];
 
 /**
  * `true` si el tipo pertenece al catálogo B2B editable. Los tenants con tipos heredados
@@ -66,6 +107,25 @@ export const B2B_TENANT_TYPES: readonly TenantType[] = ["RENTING", "CONCESIONARI
  */
 export function isB2BTenantType(value: string): value is TenantType {
   return (B2B_TENANT_TYPES as readonly string[]).includes(value);
+}
+
+export function isHeadTenantType(value: string): value is HeadTenantType {
+  return (HEAD_TENANT_TYPES as readonly string[]).includes(value);
+}
+
+/** Etiqueta legible de un tipo (incluye heredados fuera del catálogo). */
+export function tenantTypeLabel(value: string): string {
+  return TENANT_TYPE_LABELS[value as TenantType] ?? value;
+}
+
+/** Tipo por defecto al dar de alta un hijo según la cabeza (HU #12345). */
+export function defaultChildTenantType(headTenantType: string): ChildTenantType {
+  return headTenantType === "MARCA_BLANCA" ? "RENTING" : "CONCESIONARIO";
+}
+
+/** Tipos disponibles en el selector según rol y contexto. */
+export function selectableTenantTypes(isSuperAdmin: boolean): TenantType[] {
+  return isSuperAdmin ? [...B2B_TENANT_TYPES] : [...BASE_TENANT_TYPES];
 }
 
 /** Payload del POST /api/v1/admin/companies (alta de compañía). */
@@ -263,6 +323,11 @@ export interface TransitOffice {
 }
 
 export interface TransitGrantsResponse {
+  transitOfficeIds: string[];
+}
+
+/** HU #12408 — OT bloqueados en una cabeza Marca Blanca. */
+export interface TransitBlocksResponse {
   transitOfficeIds: string[];
 }
 

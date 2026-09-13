@@ -8,11 +8,11 @@ namespace Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 /// </summary>
 public sealed class GetTransitGrantsHandler
 {
-    private readonly ITransitGrantRepository _repository;
+    private readonly IEffectiveTransitOfficeListResolver _effectiveList;
 
-    public GetTransitGrantsHandler(ITransitGrantRepository repository)
+    public GetTransitGrantsHandler(IEffectiveTransitOfficeListResolver effectiveList)
     {
-        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _effectiveList = effectiveList ?? throw new ArgumentNullException(nameof(effectiveList));
     }
 
     public async Task<TransitGrantsResponse> HandleAsync(
@@ -21,8 +21,8 @@ public sealed class GetTransitGrantsHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var ids = await _repository
-            .ListEnabledOfficeIdsAsync(query.TenantId, cancellationToken)
+        var ids = await _effectiveList
+            .ListEffectiveOfficeIdsAsync(query.TenantId, cancellationToken)
             .ConfigureAwait(false);
 
         return new TransitGrantsResponse(ids);

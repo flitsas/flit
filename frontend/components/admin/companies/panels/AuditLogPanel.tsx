@@ -10,7 +10,13 @@ const PAGE_SIZE = 20;
 
 // Slot del historial de auditoría (HU #10194, AC5). Se monta al abrir la pestaña
 // "Historial de Cambios" → carga diferida. Paginación server-side.
-export function AuditLogPanel({ tenantId }: { tenantId: string }) {
+export function AuditLogPanel({
+  tenantId,
+  networkHeadId,
+}: {
+  tenantId: string;
+  networkHeadId?: string | null;
+}) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [result, setResult] = useState<AuditLogPageResponse | null>(null);
@@ -19,7 +25,7 @@ export function AuditLogPanel({ tenantId }: { tenantId: string }) {
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const data = await fetchAuditLog(tenantId, page, PAGE_SIZE, signal);
+        const data = await fetchAuditLog(tenantId, page, PAGE_SIZE, signal, networkHeadId);
         if (signal?.aborted) {
           return;
         }
@@ -31,7 +37,7 @@ export function AuditLogPanel({ tenantId }: { tenantId: string }) {
         }
       }
     },
-    [tenantId, page],
+    [tenantId, page, networkHeadId],
   );
 
   useEffect(() => {

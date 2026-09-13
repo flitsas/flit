@@ -9,6 +9,7 @@ import {
   canReadLogQx,
   decodeJwtPayload,
   isAdminCompany,
+  isGroupParent,
   isOtAdmin,
   isSuperAdmin,
   TOKEN_STORAGE_KEY,
@@ -163,7 +164,9 @@ function useCurrentUser() {
       tenantName: payload.tenant_name ?? null,
       isSuperAdmin: isSuperAdmin(payload),
       isAdminCompany: isAdminCompany(payload),
+      isGroupParent: isGroupParent(payload),
       isOtAdmin: isOtAdmin(payload),
+      tenantId: (payload.tenant_id as string) ?? null,
       canReadLogQx: canReadLogQx(payload),
       canReadIctLogs: canReadIctLogs(payload),
       canManageBanners: canManageBanners(payload),
@@ -505,9 +508,19 @@ export function Shell({
       label: "Administración",
       icon: Building2,
       // AdminCompany: /admin/companies redirige al configurador de su tenant (HU #11228).
-      active: pathname.startsWith("/admin/companies"),
+      // `/children` es «Red de clientes»: no marcar Administración como activa ahí.
+      active: pathname.startsWith("/admin/companies") && !pathname.includes("/children"),
       onClick: () => router.push("/admin/companies"),
     });
+    if (currentUser.isGroupParent && currentUser.tenantId) {
+      entries.push({
+        key: "admin-network",
+        label: "Red de clientes",
+        icon: Building2,
+        active: pathname.includes("/admin/companies/") && pathname.endsWith("/children"),
+        onClick: () => router.push(`/admin/companies/${currentUser.tenantId}/children`),
+      });
+    }
   }
 
   // LOG QX (HU #10795): trazabilidad Quipux. Agrupador "Integraciones" (ex Soporte),

@@ -37,7 +37,8 @@ public sealed class CreateProcedureInstanceHandler(
     CaptureTypeSnapshotHandler? snapshotCapture = null,
     IOtOperabilityGate? otOperability = null,
     ITransitOfficeGrantGate? companyGrant = null,
-    IProcedureFamilyCreationGate? familyCreationGate = null)
+    IProcedureFamilyCreationGate? familyCreationGate = null,
+    IProcedureRadicationGate? radicationGate = null)
 {
     // M0: mapeo modalidad → código canónico del procedure_type sembrado (dev seed).
     // matricula_inicial → MATRICULA_NUEVA (familia MATRICULAS), traspaso → TRASPASO_STANDARD (familia TRASPASO).
@@ -107,6 +108,17 @@ public sealed class CreateProcedureInstanceHandler(
         var familyGate = familyCreationGate ?? new NullProcedureFamilyCreationGate();
         if (await familyGate.IsFamilyBlockedAsync(request.TenantId, procedureType.Family, ct))
             return (null, "procedure_family_blocked");
+
+        // HU #12348 / #12409 — OT permitido y compañía/red activa antes de persistir.
+        if (radicationGate is not null)
+        {
+            var radication = await radicationGate
+                .ValidateCreateAsync(request.TenantId, request.CreatedByUserId, request.TransitOfficeId, ct)
+                .ConfigureAwait(false);
+
+            if (!radication.IsAllowed)
+                return (null, radication.ErrorCode);
+        }
 
         // FEATURE-08 / HU-BE-02 (CFD-03): validaciones iniciales configurables por gate_profile,
         // evaluadas ANTES de persistir. La duplicidad por placa/VIN no se evalúa aquí (la instancia

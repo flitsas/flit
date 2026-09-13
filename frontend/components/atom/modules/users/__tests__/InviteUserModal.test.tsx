@@ -316,4 +316,34 @@ describe("InviteUserModal — AdminCompany", () => {
       ),
     );
   });
+
+  it("invita al hijo por submitInvitation y no usa /security/invitations", async () => {
+    const user = userEvent.setup();
+    const submitInvitation = vi.fn().mockResolvedValue({
+      invitationId: "inv-child",
+      email: "hijo@flit.local",
+      emailSent: true,
+    });
+    renderModal({
+      isSuperAdmin: false,
+      roles: [
+        { id: "role-radicador", code: "Radicador", name: "Radicador", description: null, isSystem: false, permissionCount: 0, createdAt: "" },
+      ],
+      fixedTarget: { tenantId: "child-1", profile: "GESTOR", name: "Hijo Demo" },
+      submitInvitation,
+    });
+
+    await fillIdentity(user);
+    await user.click(screen.getByRole("radio", { name: "Radicador" }));
+    await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
+
+    await waitFor(() =>
+      expect(submitInvitation).toHaveBeenCalledWith({
+        email: "nuevo@flit.local",
+        fullName: "Nuevo Usuario",
+        roleIds: ["role-radicador"],
+      }),
+    );
+    expect(createInvitation).not.toHaveBeenCalled();
+  });
 });

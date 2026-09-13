@@ -31,7 +31,7 @@ describe("CompanyDocumentParamsPanel", () => {
     render(<CompanyDocumentParamsPanel tenantId={TENANT} />);
 
     expect(await screen.findByText("soat")).toBeInTheDocument();
-    expect(fetchCompanyDocumentParams).toHaveBeenCalledWith(TENANT, expect.anything());
+    expect(fetchCompanyDocumentParams).toHaveBeenCalledWith(TENANT, expect.anything(), undefined);
   });
 
   it("muestra el empty state sin parámetros", async () => {
@@ -50,10 +50,14 @@ describe("CompanyDocumentParamsPanel", () => {
     await userEvent.selectOptions(select, "OCULTO");
 
     await waitFor(() =>
-      expect(upsertCompanyDocumentParam).toHaveBeenCalledWith(TENANT, {
+      expect(upsertCompanyDocumentParam).toHaveBeenCalledWith(
+        TENANT,
+        {
         documentTypeCode: "soat",
         state: "OCULTO",
-      }),
+        },
+        undefined,
+      ),
     );
   });
 
@@ -68,11 +72,24 @@ describe("CompanyDocumentParamsPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>
-      expect(upsertCompanyDocumentParam).toHaveBeenCalledWith(TENANT, {
+      expect(upsertCompanyDocumentParam).toHaveBeenCalledWith(
+        TENANT,
+        {
         documentTypeCode: "cepd",
         state: "OPCIONAL",
-      }),
+        },
+        undefined,
+      ),
     );
     expect(await screen.findByText("cepd")).toBeInTheDocument();
+  });
+
+  it("consulta por ruta de hijo cuando hay networkHeadId", async () => {
+    vi.mocked(fetchCompanyDocumentParams).mockResolvedValue([]);
+    render(<CompanyDocumentParamsPanel tenantId={TENANT} networkHeadId="head-1" />);
+
+    await waitFor(() =>
+      expect(fetchCompanyDocumentParams).toHaveBeenCalledWith(TENANT, expect.anything(), "head-1"),
+    );
   });
 });

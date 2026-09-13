@@ -57,12 +57,16 @@ public sealed class AuthUserRepository(FlitDbContext db, IUserRoleAssignmentRepo
         var tenant = await db.Tenants
             .AsNoTracking()
             .Where(t => t.Id == tenantId.Value)
-            .Select(t => new { t.LegalName, t.TaxId })
+            .Select(t => new { t.LegalName, t.TaxId, t.TenantType, t.IsGroupParent })
             .FirstOrDefaultAsync(cancellationToken);
         var tenantName = tenant?.LegalName ?? string.Empty;
         // HU #10616 AC4 — el NIT puede no estar registrado (columna requerida pero admite vacío
         // heredado); se emite tal cual, sin romper el login ni la emisión del JWT.
         var tenantTaxId = tenant?.TaxId ?? string.Empty;
+        // HU #12345/#12406 — tipo de compañía e indicador de cabeza de grupo, emitidos como
+        // claims en el JWT para que el frontend controle la UI de "Red de clientes" sin round-trips.
+        var tenantType = tenant?.TenantType ?? string.Empty;
+        var isGroupParent = tenant?.IsGroupParent ?? false;
 
         // HU #10616 AC1/AC2 — tipo de entidad del tenant (COMPANY | TRANSIT_OFFICE), mismo
         // criterio ya usado por SecurityEndpoints/UserRoleAssignmentRepository (HU #10504/#10506).
@@ -109,6 +113,8 @@ public sealed class AuthUserRepository(FlitDbContext db, IUserRoleAssignmentRepo
             TenantName = tenantName,
             TenantTaxId = tenantTaxId,
             EntityType = entityType,
+            TenantType = tenantType,
+            IsGroupParent = isGroupParent,
             ActiveRoles = activeRoles,
             TotalAssignedRolesCount = totalAssignedRolesCount,
             PermissionSlugs = permissionSlugs,

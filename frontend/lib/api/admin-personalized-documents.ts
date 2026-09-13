@@ -9,6 +9,7 @@
 // recuperable, sin versión real que mostrar).
 import { apiFetch } from "./client";
 import { ApiError, ApiValidationError } from "./types";
+import { companyScopedPath } from "./company-scoped-path";
 
 /** Vocabulario cerrado de tipos de documento personalizable (espejo de `PersonalizedDocumentTypes`). */
 export type PersonalizedDocumentType = "mandato" | "tramite_virtual";
@@ -85,8 +86,8 @@ export interface PersonalizedDocumentValidationError {
   message: string;
 }
 
-function base(tenantId: string): string {
-  return `/api/v1/admin/companies/${tenantId}/personalized-documents`;
+function base(tenantId: string, networkHeadId?: string | null): string {
+  return companyScopedPath(tenantId, "/personalized-documents", networkHeadId);
 }
 
 /** SHA-256 hex (minúsculas) del PDF, calculado en el navegador (integridad declarada del artefacto). */
@@ -107,8 +108,12 @@ export async function sha256Hex(file: File): Promise<string> {
 export async function fetchPersonalizedDocuments(
   tenantId: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<PersonalizedDocumentGroup[]> {
-  const response = await apiFetch<{ documents: PersonalizedDocumentGroup[] }>(base(tenantId), { signal });
+  const response = await apiFetch<{ documents: PersonalizedDocumentGroup[] }>(
+    base(tenantId, networkHeadId),
+    { signal },
+  );
   return response.documents.map((group) => ({
     ...group,
     history: group.history.filter((v) => v.status === "activo" || v.status === "historico"),
@@ -119,8 +124,9 @@ export async function fetchPersonalizedDocuments(
 export function createPersonalizedDocumentVersion(
   tenantId: string,
   input: { documentType: PersonalizedDocumentType; filename: string; sha256: string; sizeBytes: number },
+  networkHeadId?: string | null,
 ): Promise<CreatePersonalizedDocumentVersionResponse> {
-  return apiFetch<CreatePersonalizedDocumentVersionResponse>(base(tenantId), {
+  return apiFetch<CreatePersonalizedDocumentVersionResponse>(base(tenantId, networkHeadId), {
     method: "POST",
     body: {
       documentType: input.documentType,
@@ -160,10 +166,14 @@ export async function uploadPersonalizedDocumentFile(
 export function confirmPersonalizedDocumentVersion(
   tenantId: string,
   id: string,
+  networkHeadId?: string | null,
 ): Promise<ConfirmPersonalizedDocumentVersionResponse> {
-  return apiFetch<ConfirmPersonalizedDocumentVersionResponse>(`${base(tenantId)}/${id}/confirm`, {
+  return apiFetch<ConfirmPersonalizedDocumentVersionResponse>(
+    `${base(tenantId, networkHeadId)}/${id}/confirm`,
+    {
     method: "POST",
-  });
+  },
+  );
 }
 
 /**
@@ -173,26 +183,32 @@ export function confirmPersonalizedDocumentVersion(
 export function activatePersonalizedDocumentVersion(
   tenantId: string,
   id: string,
+  networkHeadId?: string | null,
 ): Promise<ActivatePersonalizedDocumentVersionResponse> {
-  return apiFetch<ActivatePersonalizedDocumentVersionResponse>(`${base(tenantId)}/${id}/activate`, {
+  return apiFetch<ActivatePersonalizedDocumentVersionResponse>(
+    `${base(tenantId, networkHeadId)}/${id}/activate`,
+    {
     method: "POST",
-  });
+  },
+  );
 }
 
 /** `DELETE "/{documentType}"` — vuelve al documento del sistema; conserva el historial, idempotente. */
 export function deactivatePersonalizedDocument(
   tenantId: string,
   documentType: PersonalizedDocumentType,
+  networkHeadId?: string | null,
 ): Promise<void> {
-  return apiFetch<void>(`${base(tenantId)}/${documentType}`, { method: "DELETE" });
+  return apiFetch<void>(`${base(tenantId, networkHeadId)}/${documentType}`, { method: "DELETE" });
 }
 
 /** `GET "/{id}/view"` — presigned GET inline para previsualizar SIN activar. */
 export function getPersonalizedDocumentView(
   tenantId: string,
   id: string,
+  networkHeadId?: string | null,
 ): Promise<PersonalizedDocumentViewResponse> {
-  return apiFetch<PersonalizedDocumentViewResponse>(`${base(tenantId)}/${id}/view`, {});
+  return apiFetch<PersonalizedDocumentViewResponse>(`${base(tenantId, networkHeadId)}/${id}/view`, {});
 }
 
 /** `true` si el error HTTP es el 409 `canal_no_habilitado` (DT-7: rutas de escritura sin TENANT_API). */
@@ -234,14 +250,19 @@ export async function uploadAndConfirmPersonalizedDocument(
   tenantId: string,
   documentType: PersonalizedDocumentType,
   file: File,
+  networkHeadId?: string | null,
 ): Promise<ConfirmPersonalizedDocumentVersionResponse> {
   const sha256 = await sha256Hex(file);
-  const created = await createPersonalizedDocumentVersion(tenantId, {
+  const created = await createPersonalizedDocumentVersion(
+    tenantId,
+    {
     documentType,
     filename: file.name,
     sha256,
     sizeBytes: file.size,
-  });
+    },
+    networkHeadId,
+  );
   await uploadPersonalizedDocumentFile(created.upload, file);
-  return confirmPersonalizedDocumentVersion(tenantId, created.id);
+  return confirmPersonalizedDocumentVersion(tenantId, created.id, networkHeadId);
 }

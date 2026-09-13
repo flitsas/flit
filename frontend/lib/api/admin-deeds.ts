@@ -4,6 +4,7 @@
 // El cliente calcula el SHA-256 del PDF (integridad) y lo envía en el alta/edición.
 import { apiFetch } from "./client";
 import { fetchLegalRepresentatives } from "./admin-legal-representatives";
+import { companyScopedPath } from "./company-scoped-path";
 
 /**
  * Escritura proyectada para la gestión admin (metadatos, sin binario). `representedCompanyIds` es la
@@ -90,8 +91,8 @@ export interface RepresentedCompany {
   name: string;
 }
 
-function base(tenantId: string): string {
-  return `/api/v1/admin/companies/${tenantId}/deeds`;
+function base(tenantId: string, networkHeadId?: string | null): string {
+  return companyScopedPath(tenantId, "/deeds", networkHeadId);
 }
 
 /** SHA-256 hex (minúsculas) del PDF, calculado en el navegador (integridad del artefacto). */
@@ -109,8 +110,9 @@ export function fetchDeeds(
   page: number,
   pageSize: number,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<DeedPage> {
-  return apiFetch<DeedPage>(base(tenantId), { query: { page, pageSize }, signal });
+  return apiFetch<DeedPage>(base(tenantId, networkHeadId), { query: { page, pageSize }, signal });
 }
 
 /** GET "/{id}" — detalle + presigned URL de vista inline del PDF. */
@@ -118,23 +120,37 @@ export function fetchDeedDetail(
   tenantId: string,
   id: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<DeedDetail> {
-  return apiFetch<DeedDetail>(`${base(tenantId)}/${id}`, { signal });
+  return apiFetch<DeedDetail>(`${base(tenantId, networkHeadId)}/${id}`, { signal });
 }
 
 /** POST "" — alta de escritura. Devuelve id + presigned upload. Lanza ApiValidationError en 422. */
-export function createDeed(tenantId: string, body: DeedRequest): Promise<DeedSaved> {
-  return apiFetch<DeedSaved>(base(tenantId), { method: "POST", body });
+export function createDeed(
+  tenantId: string,
+  body: DeedRequest,
+  networkHeadId?: string | null,
+): Promise<DeedSaved> {
+  return apiFetch<DeedSaved>(base(tenantId, networkHeadId), { method: "POST", body });
 }
 
 /** PUT "/{id}" — edición. Devuelve id + presigned upload (null si no se reemplaza el PDF). */
-export function updateDeed(tenantId: string, id: string, body: DeedRequest): Promise<DeedSaved> {
-  return apiFetch<DeedSaved>(`${base(tenantId)}/${id}`, { method: "PUT", body });
+export function updateDeed(
+  tenantId: string,
+  id: string,
+  body: DeedRequest,
+  networkHeadId?: string | null,
+): Promise<DeedSaved> {
+  return apiFetch<DeedSaved>(`${base(tenantId, networkHeadId)}/${id}`, { method: "PUT", body });
 }
 
 /** DELETE "/{id}" — baja lógica idempotente (204). */
-export function deleteDeed(tenantId: string, id: string): Promise<void> {
-  return apiFetch<void>(`${base(tenantId)}/${id}`, { method: "DELETE" });
+export function deleteDeed(
+  tenantId: string,
+  id: string,
+  networkHeadId?: string | null,
+): Promise<void> {
+  return apiFetch<void>(`${base(tenantId, networkHeadId)}/${id}`, { method: "DELETE" });
 }
 
 /**
@@ -166,6 +182,7 @@ export async function saveDeed(
   editingId: string | null,
   input: DeedFormInput,
   representativeId?: string,
+  networkHeadId?: string | null,
 ): Promise<DeedSaved> {
   const sha256 = input.file ? await sha256Hex(input.file) : null;
   const body: DeedRequest = {
@@ -179,8 +196,8 @@ export async function saveDeed(
     ...(editingId ? {} : { representativeId }),
   };
   const saved = editingId
-    ? await updateDeed(tenantId, editingId, body)
-    : await createDeed(tenantId, body);
+    ? await updateDeed(tenantId, editingId, body, networkHeadId)
+    : await createDeed(tenantId, body, networkHeadId);
 
   if (input.file && saved.upload) {
     await uploadDeedPdf(saved.upload, input.file);
@@ -197,8 +214,9 @@ export async function saveDeed(
 export async function fetchRepresentedCompanies(
   tenantId: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<RepresentedCompany[]> {
-  const reps = await fetchLegalRepresentatives(tenantId, 1, 200, signal);
+  const reps = await fetchLegalRepresentatives(tenantId, 1, 200, signal, networkHeadId);
   const byNit = new Map<string, RepresentedCompany>();
   for (const r of reps.data) {
     const sources =

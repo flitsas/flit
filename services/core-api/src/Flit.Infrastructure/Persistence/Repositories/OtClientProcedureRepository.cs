@@ -47,19 +47,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             transitOfficeIdOverride,
             async transitOfficeId =>
             {
-                var clientTenantIds = await ListGrantedClientTenantIdsAsync(
-                    transitOfficeId,
-                    cancellationToken).ConfigureAwait(false);
-
-                if (clientTenantIds.Count == 0)
-                {
-                    return PagedResult<OtClientProcedure>.Empty;
-                }
-
                 return await ExecuteCrossTenantReadAsync(
                     async () =>
                     {
-                        var query = BuildAccessibleQuery(transitOfficeId, clientTenantIds);
+                        var query = BuildAccessibleQuery(transitOfficeId);
                         query = ApplyListFilters(query, filter);
 
                         var totalCount = await query.LongCountAsync(cancellationToken).ConfigureAwait(false);
@@ -208,16 +199,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             transitOfficeIdOverride,
             async transitOfficeId =>
             {
-                var clientTenantIds = await ListGrantedClientTenantIdsAsync(
+                var clientTenantIds = await ListClientTenantIdsFromReceivedProceduresAsync(
                     transitOfficeId,
                     cancellationToken).ConfigureAwait(false);
 
                 return await ExecuteCrossTenantReadAsync(
                     async () =>
                     {
-                        // Las empresas con grant vigente, TODAS y no solo las que tienen trámites
-                        // ahora mismo: el contenido del filtro no debe cambiar según lo que haya en
-                        // la bandeja hoy, o el mismo desplegable ofrecería cosas distintas cada día.
+                        // Empresas que ya entregaron trámites a este organismo (HU #12350 AC7).
                         var empresas = await _context.Tenants
                             .AsNoTracking()
                             .Where(t => clientTenantIds.Contains(t.Id))
@@ -285,27 +274,11 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             transitOfficeIdOverride,
             async transitOfficeId =>
             {
-                var grantedClientTenantIds = await ListGrantedClientTenantIdsAsync(
-                    transitOfficeId,
-                    cancellationToken).ConfigureAwait(false);
-
-                // Sin grants no hay bandeja que contar: todo cero, y sin pegarle a la base.
-                if (grantedClientTenantIds.Count == 0)
-                {
-                    return (OtBandejaCounters?)new OtBandejaCounters(0, 0, 0, 0, 0, 0);
-                }
-
                 return await ExecuteCrossTenantReadAsync(
                     async () =>
                     {
-                        // Mismo universo que la bandeja: dirigidos a este organismo y con grant
-                        // vigente. Si el conteo mirara más ancho que el listado, las tarjetas
-                        // prometerían filas que al pulsar no aparecerían.
-                        var accesibles = _context.ProcedureInstances
-                            .AsNoTracking()
-                            .Where(p => p.DeletedAt == null
-                                && p.TransitOfficeId == transitOfficeId
-                                && grantedClientTenantIds.Contains(p.TenantId));
+                        // HU #12350 AC7 — mismo universo que la bandeja: trámites ya recibidos por el organismo.
+                        var accesibles = BuildAccessibleQuery(transitOfficeId);
 
                         // UNA consulta agrupada en vez de cinco COUNT: la bandeja los pide juntos y
                         // cinco viajes a la base para pintar una tira de cabecera no se justifican.
@@ -1129,22 +1102,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid procedureInstanceId,
         CancellationToken cancellationToken)
     {
-        var clientTenantIds = await ListGrantedClientTenantIdsAsync(
-            transitOfficeId,
-            cancellationToken).ConfigureAwait(false);
-
-        if (clientTenantIds.Count == 0)
-        {
-            return null;
-        }
-
         return await ExecuteCrossTenantReadAsync(
             async () =>
             {
                 // Solo las columnas que viven en la propia instancia. Los datos que están en
                 // field_values se resuelven después con UNA lectura de la tabla: una subconsulta
                 // correlacionada por atributo escalaba a más de veinte para el detalle completo.
-                var mapped = await BuildAccessibleQuery(transitOfficeId, clientTenantIds)
+                var mapped = await BuildAccessibleQuery(transitOfficeId)
                     .Where(p => p.Id == procedureInstanceId)
                     .Select(p => new ProcedureInstanceRow(
                         p.Id,
@@ -1380,15 +1344,23 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     /// <c>?status=borrador</c> devuelve vacío por construcción y el detalle de un no entregado da 404,
     /// sin lógica adicional en ninguno de los consumidores.</para>
     /// </summary>
-    private IQueryable<ProcedureInstance> BuildAccessibleQuery(
-        Guid transitOfficeId,
-        IReadOnlyList<Guid> clientTenantIds) =>
+    private IQueryable<ProcedureInstance> BuildAccessibleQuery(Guid transitOfficeId) =>
         _context.ProcedureInstances
             .AsNoTracking()
             .Where(p => p.DeletedAt == null
                 && p.TransitOfficeId == transitOfficeId
-                && clientTenantIds.Contains(p.TenantId)
                 && TramiteEstado.RecibidosPorOrganismo.Contains(p.Status));
+
+    private async Task<IReadOnlyList<Guid>> ListClientTenantIdsFromReceivedProceduresAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken) =>
+        await ExecuteCrossTenantReadAsync(
+            async () => (IReadOnlyList<Guid>)await BuildAccessibleQuery(transitOfficeId)
+                .Select(p => p.TenantId)
+                .Distinct()
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
 
     private async Task<Guid?> ResolveTransitOfficeIdAsync(
         Guid otTenantId,

@@ -22,12 +22,12 @@ internal sealed class TransitOfficeResolver : ITransitOfficeResolver
 {
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
 
-    private readonly ITransitGrantRepository _grants;
+    private readonly IEffectiveTransitOfficeListResolver _effectiveList;
     private readonly ITransitOfficeCatalog _catalog;
 
-    public TransitOfficeResolver(ITransitGrantRepository grants, ITransitOfficeCatalog catalog)
+    public TransitOfficeResolver(IEffectiveTransitOfficeListResolver effectiveList, ITransitOfficeCatalog catalog)
     {
-        _grants = grants ?? throw new ArgumentNullException(nameof(grants));
+        _effectiveList = effectiveList ?? throw new ArgumentNullException(nameof(effectiveList));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
     }
 
@@ -41,8 +41,8 @@ internal sealed class TransitOfficeResolver : ITransitOfficeResolver
             return null;
         }
 
-        var enabledIds = await _grants
-            .ListEnabledOfficeIdsAsync(tenantId, cancellationToken)
+        var enabledIds = await _effectiveList
+            .ListEffectiveOfficeIdsAsync(tenantId, cancellationToken)
             .ConfigureAwait(false);
 
         var target = NormalizeName(transitOfficeName);
@@ -70,8 +70,8 @@ internal sealed class TransitOfficeResolver : ITransitOfficeResolver
             return null;
         }
 
-        var enabledIds = await _grants
-            .ListEnabledOfficeIdsAsync(tenantId, cancellationToken)
+        var enabledIds = await _effectiveList
+            .ListEffectiveOfficeIdsAsync(tenantId, cancellationToken)
             .ConfigureAwait(false);
 
         if (!enabledIds.Contains(transitOfficeId))

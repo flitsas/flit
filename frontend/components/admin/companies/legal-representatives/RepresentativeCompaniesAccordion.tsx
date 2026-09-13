@@ -75,6 +75,7 @@ export interface RepresentativeCompaniesAccordionProps {
   onRemoveCompany: (index: number) => void;
   fieldErrors: Record<string, string>;
   tenantId: string;
+  networkHeadId?: string | null;
   /** ID del representante para asociar escrituras (null en modo alta). */
   representativeId: string | null;
   /** Llamada tras guardar una escritura — el padre re-fetcha el detalle completo. */
@@ -103,6 +104,7 @@ export function RepresentativeCompaniesAccordion({
   onRemoveCompany,
   fieldErrors,
   tenantId,
+  networkHeadId,
   representativeId,
   onDeedSaved,
   onEnsureCompanySaved,
@@ -133,6 +135,7 @@ export function RepresentativeCompaniesAccordion({
       editingId,
       { ...input, companyIds: [companyId] },
       representativeId ?? undefined,
+      networkHeadId,
     );
   };
 
@@ -170,7 +173,7 @@ export function RepresentativeCompaniesAccordion({
   const handleVer = async (deedId: string) => {
     setViewing(deedId);
     try {
-      const detail = await fetchDeedDetail(tenantId, deedId);
+      const detail = await fetchDeedDetail(tenantId, deedId, undefined, networkHeadId);
       if (detail.viewUrl) {
         window.open(detail.viewUrl, "_blank", "noopener,noreferrer");
       } else {

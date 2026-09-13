@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Landmark, Shield, ShieldCheck, X } from "lucide-react";
-import { createInvitation, type TenantRole } from "@/lib/api/security";
+import { createInvitation, type InvitationCreatedResult, type TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
@@ -42,6 +42,15 @@ export interface InviteUserModalProps {
    * destino, pero el de ROL se sigue mostrando.
    */
   fixedTarget?: { tenantId: string; profile: Exclude<UserProfileKind, "FLIT">; name?: string };
+  /**
+   * Si se informa, reemplaza POST /security/invitations (p. ej. invitación a un cliente hijo
+   * vía POST …/children/{id}/invitations).
+   */
+  submitInvitation?: (payload: {
+    email: string;
+    fullName: string;
+    roleIds: string[];
+  }) => Promise<InvitationCreatedResult>;
 }
 
 /**
@@ -56,6 +65,7 @@ export function InviteUserModal({
   roles,
   rolesLoading,
   fixedTarget,
+  submitInvitation,
 }: InviteUserModalProps) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -189,7 +199,9 @@ export function InviteUserModal({
 
     setStatus("loading");
     try {
-      const result = await createInvitation(email.trim(), fullName.trim(), roleIds, targetTenantId);
+      const result = submitInvitation
+        ? await submitInvitation({ email: email.trim(), fullName: fullName.trim(), roleIds })
+        : await createInvitation(email.trim(), fullName.trim(), roleIds, targetTenantId);
       setInvitedEmail(result.email);
       setStatus(result.emailSent ? "done" : "done_no_email");
       onSuccess();
