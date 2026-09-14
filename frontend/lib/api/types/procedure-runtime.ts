@@ -455,8 +455,8 @@ export interface ProcedureInstanceEvent {
   // reenvio_validacion_admin
   partyRole?: BiometricParte | null;
   emailActualizado?: boolean | null;
-  /** Correo SIEMPRE enmascarado (Habeas Data). */
-  correoDestinoEnmascarado?: string | null;
+  /** Correo en claro (a pedido del producto): el admin necesita ver la dirección exacta reenviada. */
+  correoDestino?: string | null;
 }
 
 /** Item del body de PATCH /instances/{id}/field-values. */

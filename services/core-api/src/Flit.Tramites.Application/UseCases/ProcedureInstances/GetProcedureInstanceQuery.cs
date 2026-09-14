@@ -44,8 +44,9 @@ public sealed record ProcedureInstanceEventDto(
     // reenvio_validacion_admin (HU #12161)
     string? PartyRole = null,
     bool? EmailActualizado = null,
-    // Correo SIEMPRE enmascarado (Habeas Data) — mismo criterio que la bitácora técnica de identidad.
-    string? CorreoDestinoEnmascarado = null);
+    // Correo en claro (a pedido del producto) — el admin necesita ver la dirección exacta a la que se
+    // reenvió, no una versión enmascarada.
+    string? CorreoDestino = null);
 
 public sealed record ProcedureInstanceActorDto(
     string ActorType,
@@ -186,7 +187,7 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
                 e.Tipo, e.CreatedAt, createdByName,
                 PartyRole: partyRole,
                 EmailActualizado: emailActualizado,
-                CorreoDestinoEnmascarado: correo);
+                CorreoDestino: correo);
         }).ToList();
     }
 

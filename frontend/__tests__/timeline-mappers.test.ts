@@ -137,13 +137,13 @@ describe('timeline-mappers', () => {
         createdByName: 'Willyn Londoño',
         partyRole: 'comprador',
         emailActualizado: true,
-        correoDestinoEnmascarado: 'n***@dominio.com',
+        correoDestino: 'nueva@dominio.com',
       },
     ];
     const nodes = mapEventsToTimelineNodes(events);
     expect(nodes).toHaveLength(1);
     expect(nodes[0]!.label).toBe('Reenvío de validación · Comprador');
-    expect(nodes[0]!.info.correo).toBe('n***@dominio.com');
+    expect(nodes[0]!.info.correo).toBe('nueva@dominio.com');
     expect(nodes[0]!.info.extra).toBe('Reenviado a un correo distinto del registrado');
   });
 

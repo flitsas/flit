@@ -281,7 +281,7 @@ public sealed class GetProcedureInstanceTests
                         validation_id = Guid.NewGuid(),
                         party_role = "comprador",
                         email_actualizado = true,
-                        correo_destino = "n***@dominio.com",
+                        correo_destino = "nueva@dominio.com",
                         encolado = false,
                     }),
                     CreatedAt = DateTimeOffset.UtcNow,
@@ -302,7 +302,7 @@ public sealed class GetProcedureInstanceTests
         evento.CreatedByName.Should().Be("Ana Ejecutora");
         evento.PartyRole.Should().Be("comprador");
         evento.EmailActualizado.Should().BeTrue();
-        evento.CorreoDestinoEnmascarado.Should().Be("n***@dominio.com");
+        evento.CorreoDestino.Should().Be("nueva@dominio.com");
     }
 
     // Bug #12376 — solo reenvío/reasignación se exponen en Events; el resto de tipos (p.ej.

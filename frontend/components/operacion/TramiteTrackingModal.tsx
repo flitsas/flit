@@ -322,8 +322,8 @@ function eventoALinea(e: ProcedureInstanceEvent, index: number): ItemLinea {
 
   // reenvio_validacion_admin
   const parte = e.partyRole ? PARTE_LABEL[e.partyRole] ?? e.partyRole : null;
-  // El correo va SIEMPRE enmascarado (Habeas Data): ya llega así del backend, no se procesa más.
-  const correo = e.correoDestinoEnmascarado || '—';
+  // Correo en claro (a pedido del producto): el admin necesita ver la dirección exacta reenviada.
+  const correo = e.correoDestino || '—';
   const reenvio = e.emailActualizado
     ? 'Reenviado a un correo distinto del registrado'
     : 'Reenviado al correo actual';

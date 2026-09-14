@@ -146,7 +146,7 @@ describe('TramiteDetalleModal', () => {
           createdByName: 'Willyn Londoño',
           partyRole: 'comprador',
           emailActualizado: true,
-          correoDestinoEnmascarado: 'n***@dominio.com',
+          correoDestino: 'nueva@dominio.com',
         },
       ],
     } as never);
@@ -155,7 +155,7 @@ describe('TramiteDetalleModal', () => {
     );
     await user.click(screen.getByRole('button', { name: /Trazabilidad de Identidad/i }));
     expect((await screen.findAllByText('Reenvío de validación · Comprador')).length).toBeGreaterThan(0);
-    expect(screen.getByText('n***@dominio.com')).toBeInTheDocument();
+    expect(screen.getByText('nueva@dominio.com')).toBeInTheDocument();
   });
 
   it('click en step cierra panel de tracking', async () => {

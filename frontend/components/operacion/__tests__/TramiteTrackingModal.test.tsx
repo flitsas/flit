@@ -245,7 +245,7 @@ describe('TramiteTrackingModal', () => {
           createdByName: 'Carlos Admin',
           partyRole: 'comprador',
           emailActualizado: true,
-          correoDestinoEnmascarado: 'l***@g***.com',
+          correoDestino: 'laura.gomez@example.com',
         },
       ],
     });
@@ -255,7 +255,7 @@ describe('TramiteTrackingModal', () => {
     expect(within(historial).getByText('Reenvío de validación · Comprador')).toBeInTheDocument();
     expect(within(historial).getByText('Ejecutado por Carlos Admin')).toBeInTheDocument();
     expect(
-      within(historial).getByText('Correo: l***@g***.com · Reenviado a un correo distinto del registrado'),
+      within(historial).getByText('Correo: laura.gomez@example.com · Reenviado a un correo distinto del registrado'),
     ).toBeInTheDocument();
   });
 

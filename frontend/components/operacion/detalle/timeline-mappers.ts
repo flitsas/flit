@@ -183,7 +183,7 @@ export function mapEventsToTimelineNodes(events: ProcedureInstanceEvent[]): Time
       color: BLUE,
       info: {
         gestor: '—',
-        correo: e.correoDestinoEnmascarado || '—',
+        correo: e.correoDestino || '—',
         empresa: '—',
         rol: e.createdByName ? `Ejecutado por ${e.createdByName}` : 'Ejecutado por admin',
         fecha: formatFecha(e.createdAt),

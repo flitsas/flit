@@ -141,8 +141,8 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
                 && e.ProcedureInstanceId == instanceId
                 && e.CreatedBy == userId
                 && e.CreatedAt >= antes
-                // Habeas Data — el correo NUNCA viaja en claro en el payload del historial.
-                && e.Payload != null && !e.Payload.Contains("comprador@old.com")),
+                // El correo viaja en claro en el payload del historial (a pedido del producto).
+                && e.Payload != null && e.Payload.Contains("comprador@old.com")),
             Arg.Any<CancellationToken>());
         await _repo.Received(1).SaveChangesAsync(ct);
     }
