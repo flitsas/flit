@@ -193,20 +193,19 @@ public sealed class ReenviarPrevalidacionHandlerTests
         result.Should().BeNull();
     }
 
-    // ── AC9 — cooldown entre reenvíos ─────────────────────────────────────────────
+    // ── AC9 — ya NO hay cooldown entre reenvíos (D10 eliminado a pedido del producto) ────
 
     [Fact]
-    public async Task AC9_Cooldown_BlocksResend_WhenResentTwoMinutesAgo()
+    public async Task AC9_Resend_NoTieneCooldown_AunReenviandoDosMinutosDespues()
     {
         var ct = TestContext.Current.CancellationToken;
         var (_, validation) = SeedStandalone(lastResentAt: DateTimeOffset.UtcNow.AddMinutes(-2));
         var handler = BuildHandler();
 
-        var (result, error, cooldownMinutos) = await handler.HandleAsync(_tenantId, validation.Id, ct);
+        var (result, error, _) = await handler.HandleAsync(_tenantId, validation.Id, ct);
 
-        error.Should().Be("reenvio_en_cooldown");
-        result.Should().BeNull();
-        cooldownMinutos.Should().BeGreaterThan(0).And.BeLessThanOrEqualTo(BiometricRules.ReenvioCooldownMinutos);
+        error.Should().BeNull();
+        result.Should().NotBeNull();
     }
 
     [Fact]
@@ -222,20 +221,21 @@ public sealed class ReenviarPrevalidacionHandlerTests
         result.Should().NotBeNull();
     }
 
-    // ── AC10 — tope de reenvíos agotado ──────────────────────────────────────────
+    // ── AC10 — ya NO hay tope de reenvíos (D10 eliminado a pedido del producto) ──────────
 
     [Fact]
-    public async Task AC10_MaxResendsReached_Returns429_AndDoesNotConsumeProvider()
+    public async Task AC10_Resend_NoTieneTope_AunConMuchosReenviosPrevios()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (_, validation) = SeedStandalone(resendCount: BiometricRules.MaxReenvios, provider: BiometricProviders.Kyverum);
+        var (_, validation) = SeedStandalone(resendCount: 50, provider: BiometricProviders.Kyverum);
+        StubKyverumOk();
         var handler = BuildHandler(isKyverum: true);
 
         var (result, error, _) = await handler.HandleAsync(_tenantId, validation.Id, ct);
 
-        error.Should().Be("tope_reenvios");
-        result.Should().BeNull();
-        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        await _kyverum.Received(1).StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
     }
 
     // ── AC11 — falla transitoria del proveedor al reenviar ───────────────────────

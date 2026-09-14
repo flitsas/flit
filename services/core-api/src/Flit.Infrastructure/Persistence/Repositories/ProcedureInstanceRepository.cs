@@ -362,6 +362,30 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ToDictionary(r => r.Id, r => r.DisplayName);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetUserEmailsAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct)
+    {
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = userIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (distinct.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var rows = await db.Users
+            .Where(u => distinct.Contains(u.Id))
+            .Select(u => new { u.Id, u.Email })
+            .ToListAsync(ct);
+
+        return rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.Email))
+            .ToDictionary(r => r.Id, r => r.Email);
+    }
+
+    public Task<IReadOnlyDictionary<Guid, string>> GetUserCompaniasAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct) =>
+        ResolveCompaniasDeUsuariosAsync(userIds.Where(id => id != Guid.Empty).Distinct().ToList(), ct);
+
     public async Task<IReadOnlyDictionary<string, bool>> ListFirmaBaulVigenciaKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateOnly hoy, CancellationToken ct)
     {

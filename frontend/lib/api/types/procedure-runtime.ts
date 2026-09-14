@@ -392,6 +392,14 @@ export interface StatusHistory {
    * entonces al `reason` plano (ver SubsanacionPanel).
    */
   metadata?: string | null;
+  /**
+   * Bug #12526 — quién ejecutó la transición: nombre, correo y compañía. `null`/ausente cuando fue un
+   * proceso automático o el usuario ya no existe; la tarjeta de la Línea de tiempo cae al guion en vez
+   * de inventar el dato.
+   */
+  changedByName?: string | null;
+  changedByEmail?: string | null;
+  changedByCompania?: string | null;
 }
 
 export interface Actor {
@@ -452,11 +460,16 @@ export interface ProcedureInstanceEvent {
   // reasignar_gestor_admin
   previousAssignedToName?: string | null;
   newAssignedToName?: string | null;
+  /** Correo/compañía del gestor NUEVO (misma persona que `newAssignedToName`). */
+  newAssignedToEmail?: string | null;
+  newAssignedToCompania?: string | null;
   // reenvio_validacion_admin
   partyRole?: BiometricParte | null;
   emailActualizado?: boolean | null;
-  /** Correo SIEMPRE enmascarado (Habeas Data). */
-  correoDestinoEnmascarado?: string | null;
+  /** Correo en claro (a pedido del producto): el admin necesita ver la dirección exacta reenviada. */
+  correoDestino?: string | null;
+  /** Compañía de quien ejecutó el evento (ya nombrado en `createdByName`). */
+  createdByCompania?: string | null;
 }
 
 /** Item del body de PATCH /instances/{id}/field-values. */
