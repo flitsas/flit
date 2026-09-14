@@ -44,6 +44,8 @@ public static class DependencyInjection
         // HU #12523 — procesamiento fila a fila del lote sobre los casos de uso del wizard.
         services.AddScoped<IBulkTramitesWizardGateway, BulkTramitesWizardGateway>();
         services.AddScoped<BulkTramitesBatchProcessor>();
+        // HU #12524 — resumen de lotes en /tramites.
+        services.AddScoped<BulkTramites.Query.GetBulkTramitesBatchesHandler>();
         services.AddScoped<GetProcedureInstanceHandler>();
         services.AddScoped<ListProcedureInstancesHandler>();
         // Filtrado/ordenamiento server-side del listado (WHERE/ORDER BY en SQL, no en memoria).

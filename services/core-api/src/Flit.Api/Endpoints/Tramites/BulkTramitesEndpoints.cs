@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Flit.Api.Authorization;
 using Flit.Tramites.Application.BulkTramites;
+using Flit.Tramites.Application.BulkTramites.Query;
 using Flit.Tramites.Application.BulkTramites.SubmitBatch;
 using Microsoft.AspNetCore.Mvc;
 
@@ -29,7 +30,50 @@ public static class BulkTramitesEndpoints
             .WithName("BulkTramitesSubirLote")
             .DisableAntiforgery();
 
+        // GET /lotes — HU #12524 AC1/AC2: resumen de los últimos lotes del cliente.
+        group.MapGet("/lotes", ListarLotesAsync).WithName("BulkTramitesListarLotes");
+
+        // GET /lotes/{id} — HU #12524: detalle fila a fila para saber qué retomar.
+        group.MapGet("/lotes/{batchId:guid}", DetalleLoteAsync).WithName("BulkTramitesDetalleLote");
+
         return app;
+    }
+
+    private static async Task<IResult> ListarLotesAsync(
+        HttpContext httpContext,
+        [FromServices] GetBulkTramitesBatchesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = ResolveTenantId(httpContext.User);
+        if (tenantId is null)
+        {
+            return Results.Json(
+                new ErrorResponse("No fue posible resolver el cliente del token."),
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var lotes = await handler.ListAsync(tenantId.Value, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(new { items = lotes });
+    }
+
+    private static async Task<IResult> DetalleLoteAsync(
+        Guid batchId,
+        HttpContext httpContext,
+        [FromServices] GetBulkTramitesBatchesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = ResolveTenantId(httpContext.User);
+        if (tenantId is null)
+        {
+            return Results.Json(
+                new ErrorResponse("No fue posible resolver el cliente del token."),
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var detalle = await handler.GetAsync(tenantId.Value, batchId, cancellationToken).ConfigureAwait(false);
+        return detalle is null
+            ? Results.NotFound(new ErrorResponse("No existe ese lote de carga masiva."))
+            : Results.Ok(detalle);
     }
 
     private static async Task<IResult> SubirLoteAsync(

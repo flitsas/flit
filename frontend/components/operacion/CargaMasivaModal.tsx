@@ -15,6 +15,7 @@ import {
 } from '@/lib/api/bulk-tramites-client';
 import { controlCls } from './tramites-control-styles';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { CargaMasivaResultados } from './CargaMasivaResultados';
 
 interface Props {
   open: boolean;
@@ -39,6 +40,9 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
   const [subiendo, setSubiendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [encolado, setEncolado] = useState<BulkTramitesBatchAccepted | null>(null);
+  const [pestana, setPestana] = useState<'cargar' | 'resultados'>('cargar');
+  // Sube al encolar: obliga al panel de resultados a releer y traer el lote recién creado.
+  const [lotesKey, setLotesKey] = useState(0);
 
   const reiniciar = () => {
     setArchivo(null);
@@ -89,6 +93,7 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
       setEncolado(resultado);
       setArchivo(null);
       if (inputRef.current) inputRef.current.value = '';
+      setLotesKey((k) => k + 1);
       onEncolado?.(resultado);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo subir el archivo.');
@@ -107,6 +112,41 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
       size="lg"
     >
       <div className="flex flex-col gap-6" data-testid="carga-masiva-modal">
+        {/* Dos pestañas y no dos pantallas: el usuario que vuelve a ver en qué quedó su lote entra
+            por el mismo botón que usó para cargarlo. */}
+        <div
+          role="tablist"
+          aria-label="Carga masiva"
+          className="flex gap-1 border-b border-[#DFE5ED] dark:border-white/10"
+        >
+          {(
+            [
+              ['cargar', 'Cargar archivo'],
+              ['resultados', 'Resultados'],
+            ] as const
+          ).map(([clave, titulo]) => (
+            <button
+              key={clave}
+              type="button"
+              role="tab"
+              aria-selected={pestana === clave}
+              onClick={() => setPestana(clave)}
+              data-testid={`carga-masiva-tab-${clave}`}
+              className={`-mb-px border-b-2 px-3 pb-2 text-xs font-semibold transition ${
+                pestana === clave
+                  ? 'border-[#557EFF] text-[#3B4FD6] dark:text-[#8FA8FF]'
+                  : 'border-transparent text-[#162744]/60 hover:text-[#162744] dark:text-white/50 dark:hover:text-white'
+              }`}
+            >
+              {titulo}
+            </button>
+          ))}
+        </div>
+
+        {pestana === 'resultados' ? (
+          <CargaMasivaResultados refreshKey={lotesKey} onNavegar={cerrar} />
+        ) : (
+          <>
         {/* Paso 1 — plantilla */}
         <section className="flex flex-col gap-3">
           <h3 className="text-sm font-semibold text-[#162744] dark:text-white">
@@ -192,7 +232,7 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
                   ? `${encolado.rowsWithStructuralErrors} quedaron en error antes de procesarse. `
                   : ''}
                 Puedes cerrar esta ventana y seguir usando la aplicación: el resultado de cada fila
-                aparecerá en el listado de trámites cuando termine.
+                queda en la pestaña Resultados cuando termine.
               </span>
             </InlineAlert>
           ) : null}
@@ -214,6 +254,8 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
             {subiendo ? 'Subiendo…' : 'Procesar archivo'}
           </button>
         </div>
+          </>
+        )}
       </div>
     </Modal>
   );

@@ -58,6 +58,54 @@ export function mensajeErrorCargaMasiva(codigo: string | undefined): string {
   return ERRORES_ARCHIVO[codigo] ?? codigo;
 }
 
+/** Resultado de una fila tras procesarse (HU #12523). `null` mientras el lote está en cola. */
+export type BulkTramitesRowOutcome = 'created' | 'created_pending' | 'not_created';
+
+export interface BulkTramitesBatchCounts {
+  created: number;
+  createdPending: number;
+  notCreated: number;
+  pendientes: number;
+}
+
+export interface BulkTramitesBatchSummary {
+  id: string;
+  templateType: BulkTramitesTemplateType;
+  sourceFilename: string;
+  status: 'queued' | 'processing' | 'completed';
+  totalRows: number;
+  createdAt: string;
+  completedAt: string | null;
+  counts: BulkTramitesBatchCounts;
+}
+
+export interface BulkTramitesBatchRow {
+  rowNumber: number;
+  identificador: string | null;
+  outcome: BulkTramitesRowOutcome | null;
+  motivo: string | null;
+  procedureInstanceId: string | null;
+}
+
+export interface BulkTramitesBatchDetail {
+  batch: BulkTramitesBatchSummary;
+  rows: BulkTramitesBatchRow[];
+}
+
+/** Etiqueta de lo que pasó con la fila, en el idioma del usuario y no en el del backend. */
+export function etiquetaOutcome(outcome: BulkTramitesRowOutcome | null): string {
+  switch (outcome) {
+    case 'created':
+      return 'Creado';
+    case 'created_pending':
+      return 'Creado — falta retomarlo';
+    case 'not_created':
+      return 'No creado';
+    default:
+      return 'En cola';
+  }
+}
+
 export const bulkTramitesClient = {
   /**
    * Descarga la plantilla del tipo indicado. Devuelve el blob y el nombre que el backend propone
@@ -110,5 +158,26 @@ export const bulkTramitesClient = {
     }
 
     return (await res.json()) as BulkTramitesBatchAccepted;
+  },
+
+  /** Últimos lotes del cliente, más recientes primero (HU #12524). */
+  listarLotes: async (): Promise<BulkTramitesBatchSummary[]> => {
+    const res = await fetch(apiUrl('/api/v1/tramites/carga-masiva/lotes'), {
+      headers: tenantHeader(),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
+    const body = (await res.json()) as { items: BulkTramitesBatchSummary[] };
+    return body.items;
+  },
+
+  /** Detalle fila a fila de un lote. */
+  detalleLote: async (batchId: string): Promise<BulkTramitesBatchDetail> => {
+    const res = await fetch(apiUrl(`/api/v1/tramites/carga-masiva/lotes/${batchId}`), {
+      headers: tenantHeader(),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
+    return (await res.json()) as BulkTramitesBatchDetail;
   },
 };
