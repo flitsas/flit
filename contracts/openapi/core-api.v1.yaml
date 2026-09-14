@@ -4019,6 +4019,122 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/network/reports/procedures:
+    get:
+      operationId: tramitesNetworkReportsProcedures
+      tags: [Tramites, Red]
+      summary: Reporte detallado de la red, paginado, filtrable por cliente hijo o agregado (cabeza de grupo)
+      description: >
+        HU #12360 — los MISMOS filtros y paginación que `GET /api/v1/detailed-report/procedures` (rango de
+        fechas obligatorio; organismo, tipo, categoría, estado, radicado, documento, nombre, transformación,
+        leasing; `page`/`pageSize` con tope 100) sobre el conjunto de lectura de la cabeza (padre y sus
+        hijos) resuelto en el servidor. Cada fila lleva el cliente dueño (`tenantId`, `tenantName`) y los
+        totales se desglosan además por cliente (`summary.byTenant`) (AC1). `childTenantId` acota a UN
+        cliente de la red (puede ser la propia cabeza) y los totales son solo de ese cliente (AC2); uno
+        fuera del conjunto de lectura responde 403 `network_child_out_of_scope` SIN ejecutar la consulta
+        (AC3). El conjunto viaja a la base como un único parámetro de arreglo (`tenant_id = ANY(@tenants)`);
+        un conjunto vacío produce un reporte sin registros, nunca uno sin filtro (AC4). Ni el listado ni la
+        exportación incluyen contenido ni enlaces de documentos generados o anexos (AC6). Las rutas de
+        `/api/v1/detailed-report` no cambian ni reciben parámetros nuevos (AC7). Cada petición deja un
+        registro en la auditoría de acceso consolidado (`network.reports.procedures`, HU #12361) con los
+        filtros de texto libre registrados solo por nombre.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - $ref: "#/components/parameters/NetworkStatsChildTenantId"
+        - $ref: "#/components/parameters/NetworkReportTransitOfficeId"
+        - $ref: "#/components/parameters/NetworkReportProcedureTypeId"
+        - $ref: "#/components/parameters/NetworkReportCategory"
+        - $ref: "#/components/parameters/NetworkReportStatus"
+        - $ref: "#/components/parameters/NetworkReportReferenceNumber"
+        - $ref: "#/components/parameters/NetworkReportPersonDocument"
+        - $ref: "#/components/parameters/NetworkReportPersonName"
+        - $ref: "#/components/parameters/NetworkReportHasTransformation"
+        - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, default: 1, minimum: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+          description: Tamaño de página (por defecto 20; por encima de 100 cae al tope).
+      responses:
+        "200":
+          description: Página del reporte detallado de la red.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkDetailedProceduresPage"
+        "400":
+          description: Rango inválido (`from` posterior a `to`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin) o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/reports/procedures/export:
+    get:
+      operationId: tramitesNetworkReportsExportExcel
+      tags: [Tramites, Red]
+      summary: Exporta a Excel el reporte detallado de la red con el mismo filtro que el listado
+      description: >
+        HU #12360 — XLSX generado con el MISMO generador OpenXml que `GET /api/v1/detailed-report/procedures/export`
+        y las mismas columnas precedidas por «Compañía» (razón social del cliente dueño de cada fila). Usa la
+        misma consulta y el mismo filtro resuelto que `/network/reports/procedures` para la misma petición:
+        el archivo contiene exactamente los registros de la consulta y ninguno de un cliente ajeno a la red
+        (AC5). Sin registros responde un archivo solo con la cabecera (AC4). Mismas reglas de
+        `childTenantId` y mismos filtros (sin paginación). Requiere rol de administrador de compañía.
+        Registra `network.reports.export` en la auditoría de acceso consolidado.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - $ref: "#/components/parameters/NetworkStatsChildTenantId"
+        - $ref: "#/components/parameters/NetworkReportTransitOfficeId"
+        - $ref: "#/components/parameters/NetworkReportProcedureTypeId"
+        - $ref: "#/components/parameters/NetworkReportCategory"
+        - $ref: "#/components/parameters/NetworkReportStatus"
+        - $ref: "#/components/parameters/NetworkReportReferenceNumber"
+        - $ref: "#/components/parameters/NetworkReportPersonDocument"
+        - $ref: "#/components/parameters/NetworkReportPersonName"
+        - $ref: "#/components/parameters/NetworkReportHasTransformation"
+        - $ref: "#/components/parameters/NetworkReportIsLeasing"
+      responses:
+        "200":
+          description: Archivo `reporte_red_{from}_{to}.xlsx` (hoja «Reporte detallado»).
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Rango inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required`, `network_child_out_of_scope` o rol insuficiente."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/network-access-audit/mine:
     get:
       operationId: tramitesNetworkAccessAuditMine
@@ -9084,6 +9200,58 @@ components:
         Cliente de la red al que acotar (puede ser la propia cabeza). Siempre subconjunto del alcance
         resuelto en el servidor; uno fuera del conjunto de lectura responde 403 `network_child_out_of_scope`
         sin ejecutar la consulta (HU #12359, AC5).
+    NetworkReportTransitOfficeId:
+      name: transitOfficeId
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+      description: Organismo de tránsito del trámite (HU #12360; mismo filtro que `/detailed-report/procedures`).
+    NetworkReportProcedureTypeId:
+      name: procedureTypeId
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+      description: Tipo de trámite.
+    NetworkReportCategory:
+      name: category
+      in: query
+      required: false
+      schema: { type: string, enum: [matriculas, traspasos, otros] }
+      description: Categoría (se normaliza a minúsculas).
+    NetworkReportStatus:
+      name: status
+      in: query
+      required: false
+      schema: { type: string }
+      description: Estado del trámite.
+    NetworkReportReferenceNumber:
+      name: referenceNumber
+      in: query
+      required: false
+      schema: { type: string }
+      description: Radicado (contiene). Se audita solo por nombre, nunca su valor.
+    NetworkReportPersonDocument:
+      name: personDocument
+      in: query
+      required: false
+      schema: { type: string }
+      description: Documento de la persona (contiene). Se audita solo por nombre, nunca su valor.
+    NetworkReportPersonName:
+      name: personName
+      in: query
+      required: false
+      schema: { type: string }
+      description: Nombre de la persona (contiene). Se audita solo por nombre, nunca su valor.
+    NetworkReportHasTransformation:
+      name: hasTransformation
+      in: query
+      required: false
+      schema: { type: boolean }
+    NetworkReportIsLeasing:
+      name: isLeasing
+      in: query
+      required: false
+      schema: { type: boolean }
     NetworkAccessAuditFrom:
       name: from
       in: query
@@ -12091,6 +12259,91 @@ components:
         scope:
           $ref: "#/components/schemas/NetworkScope"
       required: [items, scope]
+
+    NetworkDetailedProcedureRow:
+      type: object
+      description: >
+        Fila del reporte detallado de la red (HU #12360): las columnas del trámite de
+        `/detailed-report/procedures` más el cliente dueño. Sin documentos ni enlaces (AC6).
+      properties:
+        tenantId: { type: string, format: uuid, description: Cliente dueño del trámite (cabeza o hijo). }
+        tenantName: { type: string, description: Razón social del cliente dueño. }
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        procedureTypeName: { type: string }
+        category: { type: string, enum: [matriculas, traspasos, otros] }
+        status: { type: string }
+        createdByDisplayName: { type: string }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        personDocument: { type: string }
+        personFullName: { type: string }
+        hasTransformation: { type: boolean }
+        transformationDetail: { type: string, nullable: true }
+        isLeasing: { type: boolean }
+        paymentType: { type: string }
+        transferType: { type: string, nullable: true }
+      required: [tenantId, tenantName, id, referenceNumber, procedureTypeName, category, status, createdByDisplayName, personDocument, personFullName, hasTransformation, isLeasing, paymentType]
+
+    NetworkTenantCount:
+      type: object
+      properties:
+        tenantId: { type: string, format: uuid }
+        tenantName: { type: string }
+        count: { type: integer }
+      required: [tenantId, tenantName, count]
+
+    NetworkDetailedReportSummary:
+      type: object
+      description: Totales del reporte de red (HU #12360); con `childTenantId`, `byTenant` tiene una sola entrada y los totales son solo de ese cliente (AC2).
+      properties:
+        totalCount: { type: integer }
+        byStatus:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string }
+              count: { type: integer }
+            required: [status, count]
+        byCategory:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              count: { type: integer }
+            required: [label, count]
+        byProcedureType:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              count: { type: integer }
+            required: [label, count]
+        byTenant:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkTenantCount"
+      required: [totalCount, byStatus, byCategory, byProcedureType, byTenant]
+
+    NetworkDetailedProceduresPage:
+      type: object
+      description: Respuesta de `GET /api/v1/tramites/network/reports/procedures` (HU #12360).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkDetailedProcedureRow"
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        summary:
+          $ref: "#/components/schemas/NetworkDetailedReportSummary"
+        scope:
+          $ref: "#/components/schemas/NetworkScope"
+      required: [items, totalCount, page, pageSize, summary, scope]
 
     PlateHistoryResponse:
       type: object

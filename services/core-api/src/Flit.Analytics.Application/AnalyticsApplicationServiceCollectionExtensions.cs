@@ -25,6 +25,8 @@ public static class AnalyticsApplicationServiceCollectionExtensions
         services.AddScoped<GetNetworkAnalyticsOverviewHandler>();
         services.AddScoped<GetNetworkTopProducersHandler>();
         services.AddScoped<GetNetworkMonthlyTrendHandler>();
+        // HU #12360 (Feature #12257) — reporte detallado de la red (rutas /tramites/network/reports/*).
+        services.AddScoped<GetNetworkDetailedProceduresHandler>();
 
         // Reportes2 HU-B — handlers de métricas (§4.2–§4.5 del contrato).
         services.AddScoped<GetOtMetricsHandler>();

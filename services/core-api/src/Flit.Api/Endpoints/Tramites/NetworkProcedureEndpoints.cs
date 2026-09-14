@@ -26,6 +26,8 @@ namespace Flit.Api.Endpoints.Tramites;
 ///   documentos (AC5): el único canal de contenido es la descarga proxeada de la HU #12410.</item>
 ///   <item><c>GET /stats/overview</c>, <c>GET /stats/productivity/top</c>, <c>GET /stats/monthly-trend</c>
 ///   (HU #12359, <see cref="NetworkAnalyticsEndpoints"/>): estadísticas agregadas del universo consolidado.</item>
+///   <item><c>GET /reports/procedures</c> y <c>GET /reports/procedures/export</c> (HU #12360,
+///   <see cref="NetworkReportsEndpoints"/>): reporte detallado de la red, filtrable por hijo o agregado.</item>
 /// </list>
 /// Policy de cabeza (<see cref="GroupHeadReadFilter"/>) sobre todo el grupo: sin alcance de grupo ⇒ 403.
 /// HU #12361: <see cref="NetworkAccessAuditFilter"/> (más externo) escribe UN registro por petición en
@@ -194,6 +196,8 @@ internal static class NetworkProcedureEndpoints
         // HU #12359 — estadísticas agregadas de la red (/stats/overview, /stats/productivity/top,
         // /stats/monthly-trend) sobre el MISMO grupo: heredan policy de cabeza y auditoría.
         group.MapNetworkStats();
+        // HU #12360 — reporte detallado de la red (listado + exportación) bajo /reports/*.
+        group.MapNetworkReports();
 
         return app;
     }

@@ -26,6 +26,12 @@ public static class NetworkAccessVocabulary
         /// <summary>Tendencia mensual de la red (<c>GET /network/stats/monthly-trend</c>, HU #12359).</summary>
         public const string StatsMonthlyTrend = "network.stats.monthly_trend";
 
+        /// <summary>Reporte detallado de la red, listado paginado (<c>GET /network/reports/procedures</c>, HU #12360).</summary>
+        public const string ReportsProcedures = "network.reports.procedures";
+
+        /// <summary>Exportación a Excel del reporte detallado de la red (<c>GET /network/reports/procedures/export</c>, HU #12360).</summary>
+        public const string ReportsExport = "network.reports.export";
+
         /// <summary>Listado de documentos de un trámite de un hijo (HU #12410).</summary>
         public const string AttachmentsList = "network.attachments.list";
 

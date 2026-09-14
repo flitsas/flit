@@ -107,6 +107,9 @@ internal static class CoveredQueries
         new("Q33", "AnalyticsNetworkReadRepository.GetNetworkOverviewAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 2, SupportsGlobal: false),
         new("Q34", "AnalyticsNetworkReadRepository.GetNetworkTopProducersAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 1, SupportsGlobal: false),
         new("Q35", "AnalyticsNetworkReadRepository.GetNetworkMonthlyTrendAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 2, SupportsGlobal: false),
+        // HU #12360 — reporte detallado de red con conjunto explicito = ANY(@tenants) sobre la vista (NetworkReportsTests). Sin modo global.
+        new("Q36", "DetailedReportNetworkReadRepository.GetNetworkProceduresAsync (red, uuid[])", "NetworkDetailedReportFilter.TenantIds", 2, SupportsGlobal: false),
+        new("Q37", "DetailedReportNetworkReadRepository.ExportNetworkProceduresAsync (red, uuid[], mismo predicado que Q36)", "NetworkDetailedReportFilter.TenantIds", 2, SupportsGlobal: false),
     ];
 
     public static CoveredQuery Get(string id) =>

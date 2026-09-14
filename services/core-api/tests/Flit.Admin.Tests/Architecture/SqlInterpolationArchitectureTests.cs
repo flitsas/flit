@@ -6,7 +6,8 @@ namespace Flit.Admin.Tests.Architecture;
 
 /// <summary>
 /// HU #12359 (Feature #12257, épica #12235) — AC3: en los repositorios analíticos de SQL directo
-/// (<c>Persistence/Repositories/Analytics*.cs</c> y <c>DetailedReport*.cs</c>) los identificadores de
+/// (<c>Persistence/Repositories/Analytics*.cs</c> y <c>DetailedReport*.cs</c>, incluido el reporte de red de
+/// la HU #12360) los identificadores de
 /// cliente viajan SIEMPRE como parámetro (<c>@tenant</c>, <c>@tenants</c> tipado <c>uuid[]</c>) y nunca
 /// interpolados ni concatenados en el texto de la consulta. El barrido es léxico sobre el fuente y falla
 /// nombrando <c>archivo:línea</c>:
@@ -35,7 +36,7 @@ public sealed class SqlInterpolationArchitectureTests
     {
         var files = ScannedFiles();
         files.Should().NotBeEmpty("el barrido debe encontrar los repositorios analíticos");
-        files.Select(Path.GetFileName).Should().Contain(["AnalyticsReadRepository.cs", "AnalyticsNetworkReadRepository.cs", "AnalyticsMetricsReadRepository.cs", "DetailedReportReadRepository.cs"]);
+        files.Select(Path.GetFileName).Should().Contain(["AnalyticsReadRepository.cs", "AnalyticsNetworkReadRepository.cs", "AnalyticsMetricsReadRepository.cs", "DetailedReportReadRepository.cs", "DetailedReportNetworkReadRepository.cs"]);
 
         var findings = files
             .SelectMany(f => SqlInterpolationScanner.Scan(Path.GetFileName(f), File.ReadAllLines(f)))
@@ -60,6 +61,28 @@ public sealed class SqlInterpolationArchitectureTests
         anyTenantsCount.Should().Be(networkSqlCount, "cada consulta de red filtra con = ANY(@tenants)");
         source.Should().Contain("NpgsqlDbType.Array | NpgsqlDbType.Uuid", "el parámetro se tipa explícitamente como uuid[]");
         source.Should().NotContain("set_config(", "la rama de red no fija GUC por tenant: no hay un solo tenant");
+    }
+
+    /// <summary>
+    /// HU #12360 AC3 — el repositorio del reporte de red comparte UN predicado (<c>BaseFrom</c>) con
+    /// <c>= ANY(@tenants)</c> tipado <c>uuid[]</c>; todas sus consultas (<c>…NetworkSql</c>) se componen
+    /// solo de fragmentos constantes y no fija GUC por tenant.
+    /// </summary>
+    [Fact]
+    public void AC3_ElReporteDeRedRecibeElConjuntoComoParametroDeArregloEnUnSoloPredicado()
+    {
+        var network = ScannedFiles().Single(f => Path.GetFileName(f) == "DetailedReportNetworkReadRepository.cs");
+        var source = string.Join('\n', File.ReadAllLines(network).Where(l => !l.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+
+        var networkSqlCount = Regex.Count(source, @"private const string \w+NetworkSql\s*=");
+        var anyTenantsCount = Regex.Count(source, @"tenant_id = ANY\(@tenants\)");
+
+        networkSqlCount.Should().Be(7, "página, exportación, conteo y cuatro desgloses (estado, categoría, tipo, cliente)");
+        anyTenantsCount.Should().Be(1, "un único predicado BaseFrom compartido por listado y exportación (AC5)");
+        source.Should().Contain("private const string BaseFrom", "el predicado es un fragmento constante");
+        source.Should().Contain("NpgsqlDbType.Array | NpgsqlDbType.Uuid", "el parámetro se tipa explícitamente como uuid[]");
+        source.Should().NotContain("set_config(", "la rama de red no fija GUC por tenant: no hay un solo tenant");
+        Regex.IsMatch(source, @"= @tenant\b").Should().BeFalse("la rama de red no usa el parámetro escalar de la ruta de siempre");
     }
 
     // ── El detector detecta (caso sintético en memoria) ────────────────────────────────────
