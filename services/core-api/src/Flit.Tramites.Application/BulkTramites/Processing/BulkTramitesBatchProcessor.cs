@@ -49,7 +49,9 @@ public sealed class BulkTramitesBatchProcessor(
     public async Task ProcessAsync(Guid batchId, CancellationToken ct = default)
     {
         var batch = await repository.GetByIdAsync(batchId, ct).ConfigureAwait(false);
-        if (batch is null || batch.Status != BulkTramitesBatchStatus.Queued)
+        // Processing también entra: es un lote reclamado tras quedar huérfano (ver el repositorio);
+        // solo se retoman las filas sin resultado, así que reprocesar no duplica trámites.
+        if (batch is null || batch.Status is not (BulkTramitesBatchStatus.Queued or BulkTramitesBatchStatus.Processing))
         {
             return;
         }

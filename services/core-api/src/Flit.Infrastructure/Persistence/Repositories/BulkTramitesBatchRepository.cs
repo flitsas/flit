@@ -29,14 +29,41 @@ internal sealed class BulkTramitesBatchRepository(FlitDbContext db) : IBulkTrami
             .Take(top)
             .ToListAsync(ct);
 
-    public Task<List<Guid>> ListQueuedIdsAsync(int top, CancellationToken ct = default) =>
+    public Task<List<Guid>> ListQueuedIdsAsync(int top, DateTimeOffset reclaimBefore, CancellationToken ct = default) =>
         db.BulkTramitesBatches
             .AsNoTracking()
-            .Where(b => b.Status == BulkTramitesBatchStatus.Queued)
+            .Where(b => b.Status == BulkTramitesBatchStatus.Queued
+                // Sin avance = ninguna fila resuelta desde reclaimBefore y el lote nació antes.
+                || (b.Status == BulkTramitesBatchStatus.Processing
+                    && b.CreatedAt < reclaimBefore
+                    && !b.Rows.Any(r => r.ProcessedAt != null && r.ProcessedAt >= reclaimBefore)))
             .OrderBy(b => b.CreatedAt)
             .Take(top)
             .Select(b => b.Id)
             .ToListAsync(ct);
 
-    public Task SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
+    /// <summary>
+    /// El procesador del lote comparte el DbContext con los casos de uso del wizard que invoca, y
+    /// alguno puede dejar una entidad ajena sucia con un token de concurrencia viejo (p. ej. la
+    /// caché de consultas, cuyo <c>row_version</c> sube un trigger). Si eso ocurre, la fila del lote
+    /// no puede quedarse sin guardar —el lote entero se quedaría «en proceso» para siempre—: las
+    /// entidades ajenas en conflicto se sueltan y se guarda lo propio.
+    /// </summary>
+    public async Task SaveChangesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException ex) when (ex.Entries.All(e =>
+            e.Entity is not BulkTramitesBatch and not BulkTramitesBatchRow))
+        {
+            foreach (var entry in ex.Entries)
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+    }
 }

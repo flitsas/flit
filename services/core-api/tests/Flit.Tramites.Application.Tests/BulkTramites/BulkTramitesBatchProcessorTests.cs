@@ -253,6 +253,31 @@ public sealed class BulkTramitesBatchProcessorTests
     }
 
     [Fact]
+    public async Task LoteReclamadoEnProceso_RetomaSoloLasFilasSinResultado()
+    {
+        // Un lote huérfano (el proceso murió a mitad) vuelve por el worker en Processing: la fila ya
+        // resuelta no se toca —no se duplica el trámite— y la pendiente se procesa.
+        VehiculoOk();
+        CreacionOk();
+        PersonaOk();
+        _gateway.SaveActorsAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<IReadOnlyList<ActorInput>>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        var yaResuelta = Row(1);
+        yaResuelta.Outcome = BulkTramitesRowOutcome.Created;
+        yaResuelta.ProcedureInstanceId = Guid.NewGuid();
+        var batch = Batch("matricula", yaResuelta, Row(2));
+        batch.Status = BulkTramitesBatchStatus.Processing;
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        batch.Rows.Single(r => r.RowNumber == 2).Outcome.Should().Be(BulkTramitesRowOutcome.Created);
+        batch.Status.Should().Be(BulkTramitesBatchStatus.Completed);
+        await _gateway.Received(1).PreviewVehicleAsync(Arg.Any<BulkTramitesRowContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task UnaFilaQueFalla_NoDetieneLasDemas()
     {
         // La fila 1 se cae en la consulta del vehículo; la 2 sigue su curso.

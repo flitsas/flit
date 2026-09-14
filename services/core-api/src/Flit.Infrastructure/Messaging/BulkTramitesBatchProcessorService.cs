@@ -23,6 +23,13 @@ internal sealed class BulkTramitesBatchProcessorService(
     private static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(5);
     private const int MaxBatchesPerCycle = 5;
 
+    /// <summary>
+    /// Un lote «en proceso» sin ninguna fila resuelta en este tiempo se considera huérfano (el proceso
+    /// murió o el guardado falló a mitad de lote) y se reclama. Holgado a propósito: una fila puede
+    /// tardar medio minuto entre consultas al proveedor y el reintento con espera.
+    /// </summary>
+    private static readonly TimeSpan ReclaimAfter = TimeSpan.FromMinutes(10);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try { await Task.Delay(StartupDelay, stoppingToken).ConfigureAwait(false); }
@@ -55,7 +62,9 @@ internal sealed class BulkTramitesBatchProcessorService(
         using var scope = scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IBulkTramitesBatchRepository>();
 
-        var pendientes = await repository.ListQueuedIdsAsync(MaxBatchesPerCycle, ct).ConfigureAwait(false);
+        var pendientes = await repository
+            .ListQueuedIdsAsync(MaxBatchesPerCycle, DateTimeOffset.UtcNow - ReclaimAfter, ct)
+            .ConfigureAwait(false);
         if (pendientes.Count == 0)
         {
             return;
