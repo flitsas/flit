@@ -52,9 +52,10 @@ public sealed class HarnessBootstrapTests(PostgresDatabaseFixture fixture) : Pos
 
         pending.Should().BeEmpty();
         applied.Should().BeEquivalentTo(declared);
+        // Sin constante fija: la referencia es la última migración declarada en el ensamblado, para que
+        // cada merge de develop con migraciones nuevas no rompa el arnés (antes se fijaba en #12406).
         Fixture.LastAppliedMigration.Should().Be(declared[^1]);
-        Fixture.LastAppliedMigration.Should().Be("20260910140000_HU12406_HeadTenantTypesAndParentSnapshot",
-            "es la última migración de la Feature #12254 al escribir esta HU (actualizada deliberadamente por #12406); si cambia, actualizar la aserción es deliberado");
+        declared[^1].Should().StartWith("2026", "las migraciones llevan timestamp UTC como prefijo");
     }
 
     /// <summary>

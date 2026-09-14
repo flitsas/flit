@@ -62,10 +62,11 @@ public sealed class OtBandejaHealthE2ETests
         health.HasDeliveredWithoutGrant.Should().BeFalse();
     }
 
-    // AC2 — entregado hacia un OT sin grant: la bandeja no lo muestra, pero el diagnóstico lo
-    // reporta como "entregado sin grant" (causa clara para corregir la configuración).
+    // AC2 — entregado hacia un OT sin grant vigente: desde HU #12350 AC7 la bandeja SÍ lo muestra
+    // (lo ya recibido no se oculta al retirar/deshabilitar el grant), y el diagnóstico lo sigue
+    // reportando como "entregado sin grant" (causa clara para corregir la configuración).
     [Fact]
-    public async Task AC2_DeliveredWithoutGrant_IsInvisibleButDiagnosable()
+    public async Task AC2_DeliveredWithoutGrant_IsVisibleAndDiagnosable()
     {
         var db = NewDbName();
         var procedureId = Guid.NewGuid();
@@ -85,7 +86,7 @@ public sealed class OtBandejaHealthE2ETests
             new ListOtClientProceduresQuery { OtTenantId = OtTenant },
             TestContext.Current.CancellationToken);
 
-        bandeja.Data.Should().BeEmpty();
+        bandeja.Data.Should().ContainSingle(p => p.Id == procedureId);
 
         var health = await new GetOtBandejaHealthHandler(repo).HandleAsync(
             new GetOtBandejaHealthQuery { OtTenantId = OtTenant },

@@ -12,19 +12,27 @@ namespace Flit.Integration.Tests.Hierarchy;
 /// PostgreSQL real: sin poblado (ningún tipo ni <c>is_group_parent</c> cambia; todo trámite existente
 /// queda con padre NULL), idempotente (reaplicar el DDL no falla ni duplica nada) y reversible
 /// (<c>Down</c> deja la base como en #12323 —catálogo de tres tipos, trigger de 107— y <c>Up</c> la
-/// vuelve a subir). Cada prueba termina con la efímera en la última migración para no contaminar a
-/// las demás.
+/// vuelve a subir). Cada prueba termina con la efímera en la ÚLTIMA migración registrada (sin
+/// target fijo: <c>IMigrator.MigrateAsync()</c>) para no contaminar a las demás ni romperse cada vez
+/// que <c>develop</c> agrega migraciones posteriores a #12406.
 /// <para>
 /// Uso de ejemplo: <c>await Migrator(ctx).MigrateAsync(Previous)</c> → columna ausente y catálogo de
-/// tres → <c>MigrateAsync(Latest)</c> → columna presente y NULL, catálogo de cinco.
+/// tres → <c>MigrateToLatestAsync(ctx)</c> → columna presente y NULL, catálogo de cinco.
 /// </para>
 /// </summary>
 public sealed class HeadTenantTypeMigrationTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
     private const string Previous = "20260910130000_HU12323_HierarchySwitchesAndLinkAudit";
-    private const string Latest = "20260910140000_HU12406_HeadTenantTypesAndParentSnapshot";
 
     private static IMigrator Migrator(DbContext ctx) => ctx.GetService<IMigrator>();
+
+    /// <summary>
+    /// Sube hasta la última migración registrada (target null). Antes se apuntaba a la constante
+    /// <c>20260910140000_HU12406_…</c>; al existir migraciones posteriores en <c>develop</c>, la efímera
+    /// quedaba a medias (p. ej. sin <c>admin.tenant_transit_office_blocks</c>) y contaminaba a todos los
+    /// tests siguientes en <c>PostgresDatabaseFixture.ResetAsync()</c>.
+    /// </summary>
+    private static Task MigrateToLatestAsync(DbContext ctx) => Migrator(ctx).MigrateAsync();
 
     [PostgresFact]
     public async Task AC8_Down_y_Up_dejan_los_tipos_intactos_y_todo_tramite_con_padre_nulo()
@@ -44,7 +52,7 @@ public sealed class HeadTenantTypeMigrationTests(PostgresDatabaseFixture fixture
 
         await using (var ctx = NewContext())
         {
-            await Migrator(ctx).MigrateAsync(Latest);
+            await MigrateToLatestAsync(ctx);
         }
 
         (await ColumnExistsAsync("tramites", "procedure_instances", "parent_tenant_id_at_creation")).Should().BeTrue();
@@ -106,7 +114,8 @@ public sealed class HeadTenantTypeMigrationTests(PostgresDatabaseFixture fixture
         {
             await using (var ctx = NewContext())
             {
-                var up = () => Migrator(ctx).MigrateAsync(Latest);
+                // Desde Previous, la primera migración pendiente es 12406: ahí revienta el check (transaccional).
+                var up = () => MigrateToLatestAsync(ctx);
                 var pg = (await up.Should().ThrowAsync<PostgresException>()).Which;
                 pg.SqlState.Should().Be("23514");
                 pg.ConstraintName.Should().Be("ck_tenants_group_parent_by_type");
@@ -121,13 +130,18 @@ public sealed class HeadTenantTypeMigrationTests(PostgresDatabaseFixture fixture
             await using var fix = NewContext();
             await fix.Database.ExecuteSqlInterpolatedAsync(
                 $"UPDATE identity.tenants SET is_group_parent = false WHERE id = {TenantSeed.ParentId}");
-            await Migrator(fix).MigrateAsync(Latest);
+            await MigrateToLatestAsync(fix);
         }
 
         (await ConstraintExistsAsync("ck_tenants_group_parent_by_type")).Should().BeTrue();
     }
 
-    /// <summary>El Down devuelve el catálogo a tres valores: con una cabeza declarada falla a propósito (no reescribe tipos).</summary>
+    /// <summary>
+    /// El Down devuelve el catálogo a tres valores: con una cabeza declarada falla a propósito (no
+    /// reescribe tipos). EF aplica cada migración en su propia transacción: las posteriores a #12406
+    /// (F12276, #12371, …) sí se revierten y solo #12406 falla, dejando intactos SUS artefactos. Por eso
+    /// el <c>finally</c> vuelve a subir a la última migración antes de afirmar «sin pendientes».
+    /// </summary>
     [PostgresFact]
     public async Task AC8_El_Down_con_una_cabeza_declarada_falla_en_vez_de_reescribir_su_tipo()
     {
@@ -137,17 +151,28 @@ public sealed class HeadTenantTypeMigrationTests(PostgresDatabaseFixture fixture
             await ctx.SaveChangesAsync();
         }
 
-        await using (var ctx = NewContext())
+        try
         {
-            var down = () => Migrator(ctx).MigrateAsync(Previous);
-            var pg = (await down.Should().ThrowAsync<PostgresException>()).Which;
-            pg.SqlState.Should().Be("23514");
-            pg.ConstraintName.Should().Be("ck_tenants_tenant_type");
+            await using (var ctx = NewContext())
+            {
+                var down = () => Migrator(ctx).MigrateAsync(Previous);
+                var pg = (await down.Should().ThrowAsync<PostgresException>()).Which;
+                pg.SqlState.Should().Be("23514");
+                pg.ConstraintName.Should().Be("ck_tenants_tenant_type");
+            }
+
+            // Transaccional (por migración): el Down de #12406 falló completo y sus artefactos siguen ahí.
+            (await ColumnExistsAsync("tramites", "procedure_instances", "parent_tenant_id_at_creation")).Should().BeTrue();
+            (await ConstraintExistsAsync("ck_tenants_group_parent_by_type")).Should().BeTrue();
+            (await ConstraintDefAsync("ck_tenants_tenant_type")).Should().Contain("'CONCESION'").And.Contain("'MARCA_BLANCA'");
+        }
+        finally
+        {
+            // Reaplica las migraciones posteriores a #12406 que el Down sí alcanzó a revertir.
+            await using var fix = NewContext();
+            await MigrateToLatestAsync(fix);
         }
 
-        // Transaccional: sigue en la última migración, con todos los artefactos.
-        (await ColumnExistsAsync("tramites", "procedure_instances", "parent_tenant_id_at_creation")).Should().BeTrue();
-        (await ConstraintExistsAsync("ck_tenants_group_parent_by_type")).Should().BeTrue();
         await using var check = NewContext();
         (await check.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         (await check.Tenants.AsNoTracking().SingleAsync(t => t.Id == TenantSeed.ParentId)).TenantType.Should().Be("CONCESION");

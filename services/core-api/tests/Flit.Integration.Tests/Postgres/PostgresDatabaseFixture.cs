@@ -80,14 +80,17 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
     /// <summary>
     /// Tablas que quedan NO vacías tras migrar pero que NO son catálogo y por eso SÍ se truncan:
     /// <c>identity.tenants</c> (compañías mock de <c>SeedMockCompanies</c>, datos de trabajo),
-    /// <c>admin.notification_test_settings</c> (fila de configuración de pruebas de correo) y
-    /// <c>audit.audit_logs</c> (rastro que dejan los triggers de auditoría al sembrar). Documentadas
-    /// para que <c>HarnessBootstrapTests</c> detecte cualquier tabla sembrada nueva sin clasificar.
+    /// <c>admin.notification_test_settings</c> (fila de configuración de pruebas de correo),
+    /// <c>tramites.runt_confirmation_settings</c> (fila única global de la Confirmación RUNT, F12276:
+    /// configuración, no catálogo) y <c>audit.audit_logs</c> (rastro que dejan los triggers de
+    /// auditoría al sembrar). Documentadas para que <c>HarnessBootstrapTests</c> detecte cualquier
+    /// tabla sembrada nueva sin clasificar.
     /// </summary>
     public static readonly IReadOnlySet<string> KnownNonCatalogSeededTables = new HashSet<string>(StringComparer.Ordinal)
     {
         "identity.tenants",
         "admin.notification_test_settings",
+        "tramites.runt_confirmation_settings",
         "audit.audit_logs",
     };
 
