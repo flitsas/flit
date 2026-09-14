@@ -26,7 +26,8 @@ public sealed class BulkTramitesXlsxParserTests
                 ["fila"] = "1",
                 ["placa"] = "ABC123",
                 ["propietario_numero_documento"] = "123456789",
-                ["propietario_nombre"] = "Juan Pérez",
+                ["propietario_email"] = "juan@example.com",
+                ["propietario_ciudad"] = "Bogotá",
             });
 
         var resultado = _parser.Parse(BulkTramitesTemplateType.Matricula, new MemoryStream(archivo));
@@ -36,6 +37,7 @@ public sealed class BulkTramitesXlsxParserTests
         resultado.Rows[0].RowNumber.Should().Be(1);
         resultado.Rows[0].StructuralErrorCode.Should().BeNull();
         resultado.Rows[0].Values["placa"].Should().Be("ABC123");
+        resultado.Rows[0].Values["propietario_ciudad"].Should().Be("Bogotá");
     }
 
     [Fact]

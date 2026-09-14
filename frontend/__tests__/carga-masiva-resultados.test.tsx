@@ -50,7 +50,7 @@ const DETALLE: BulkTramitesBatchDetail = {
       rowNumber: 2,
       identificador: 'DEF456',
       outcome: 'created_pending',
-      motivo: 'conductor_no_encontrado',
+      motivo: 'conductor_no_encontrado:CC 1020304050',
       procedureInstanceId: 'inst-2',
     },
     {
@@ -79,6 +79,10 @@ describe('CargaMasivaResultados (HU #12524)', () => {
 
     expect(screen.getByTestId('carga-masiva-fila-1')).toHaveTextContent('Creado');
     expect(screen.getByTestId('carga-masiva-fila-2')).toHaveTextContent(/falta retomarlo/i);
+    // El motivo dice QUÉ documento falló: en traspaso hay hasta 8 personas por fila.
+    expect(screen.getByTestId('carga-masiva-fila-2')).toHaveTextContent(
+      /RUNT no encontró a la persona .*\(CC 1020304050\)/i,
+    );
 
     // El motivo se traduce: el usuario no tiene por qué leer el código del backend.
     expect(screen.getByTestId('carga-masiva-fila-3')).toHaveTextContent(

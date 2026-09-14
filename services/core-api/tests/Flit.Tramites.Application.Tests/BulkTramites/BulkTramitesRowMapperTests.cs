@@ -25,8 +25,10 @@ public sealed class BulkTramitesRowMapperTests
             ("vin", "9BWZZZ377VT004251"),
             ("propietario_tipo_documento", "CC"),
             ("propietario_numero_documento", "123456789"),
-            ("propietario_nombre", "Juan Pérez"),
-            ("propietario_email", "juan@example.com"));
+            ("propietario_email", "juan@example.com"),
+            ("propietario_celular", "3001112233"),
+            ("propietario_ciudad", "Bogotá"),
+            ("propietario_direccion", "Calle 1 # 2-3"));
 
         var ctx = BulkTramitesRowMapper.Map(BulkTramitesTemplateType.Matricula, Tenant, Usuario, fila);
 
@@ -37,6 +39,13 @@ public sealed class BulkTramitesRowMapperTests
         ctx.Actors[0].NumeroDocumento.Should().Be("123456789");
         ctx.Actors[0].Ordinal.Should().Be(1);
         ctx.Actors[0].Porcentaje.Should().BeNull();
+
+        // El nombre no viene del Excel: lo pone el procesador con la consulta al RUNT. Los datos
+        // de contacto sí, y viajan tal cual al guardado de actores.
+        ctx.Actors[0].NombreCompleto.Should().BeEmpty();
+        ctx.Actors[0].Telefono.Should().Be("3001112233");
+        ctx.Actors[0].Ciudad.Should().Be("Bogotá");
+        ctx.Actors[0].Direccion.Should().Be("Calle 1 # 2-3");
     }
 
     [Fact]
@@ -85,7 +94,7 @@ public sealed class BulkTramitesRowMapperTests
         var fila = Fila(
             ("placa", "ABC123"),
             ("comprador_1_numero_documento", "1"),
-            ("comprador_2_nombre", "Escrito por error, sin documento"),
+            ("comprador_2_email", "escrito-por-error-sin-documento@example.com"),
             ("vendedor_1_numero_documento", "9"));
 
         var ctx = BulkTramitesRowMapper.Map(BulkTramitesTemplateType.Traspaso, Tenant, Usuario, fila);

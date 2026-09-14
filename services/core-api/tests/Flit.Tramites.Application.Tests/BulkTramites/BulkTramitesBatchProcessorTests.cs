@@ -55,8 +55,10 @@ public sealed class BulkTramitesBatchProcessorTests
             ["vin"] = "9BWZZZ377VT00425" + numero.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["propietario_tipo_documento"] = "CC",
             ["propietario_numero_documento"] = "1000" + numero.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["propietario_nombre"] = "Titular " + numero.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["propietario_email"] = $"t{numero.ToString(System.Globalization.CultureInfo.InvariantCulture)}@example.com",
+            ["propietario_celular"] = "3000000000",
+            ["propietario_ciudad"] = "Bogotá",
+            ["propietario_direccion"] = "Calle 1 # 2-3",
         }),
         StructuralErrorCode = structuralError,
         CreatedAt = DateTimeOffset.UtcNow,
@@ -70,11 +72,16 @@ public sealed class BulkTramitesBatchProcessorTests
         .CreateTramiteAsync(Arg.Any<BulkTramitesRowContext>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
         .Returns(((Guid?)InstanceId, (string?)null));
 
+    private void PersonaOk(string nombre = "TITULAR DEL RUNT") => _gateway
+        .LookupPersonAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        .Returns(((string?)nombre, (string?)null));
+
     [Fact]
     public async Task TodoBien_LaFilaQuedaCreada_YElLoteCompletado()
     {
         VehiculoOk();
         CreacionOk();
+        PersonaOk();
         _gateway.SaveActorsAsync(
                 Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<IReadOnlyList<ActorInput>>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
@@ -116,6 +123,7 @@ public sealed class BulkTramitesBatchProcessorTests
     {
         VehiculoOk();
         CreacionOk();
+        PersonaOk();
         _gateway.SaveActorsAsync(
                 Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<IReadOnlyList<ActorInput>>(), Arg.Any<CancellationToken>())
             .Returns("conductor_no_encontrado");
@@ -131,6 +139,54 @@ public sealed class BulkTramitesBatchProcessorTests
     }
 
     [Fact]
+    public async Task PersonaQueElRuntNoEncuentra_ElTramiteSeCrea_PeroLosActoresQuedanParaElWizard()
+    {
+        // El nombre del actor NO viene en el Excel: sale de la consulta al RUNT. Sin ella no hay
+        // actor que guardar, y el motivo tiene que decir QUÉ documento falló, porque una fila de
+        // traspaso puede traer hasta 8 personas.
+        VehiculoOk();
+        CreacionOk();
+        _gateway.LookupPersonAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), "CC", "10001", Arg.Any<CancellationToken>())
+            .Returns(((string?)null, (string?)BulkTramitesWizardGateway.ConductorNoEncontrado));
+
+        var batch = Batch("matricula", Row(1));
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        var fila = batch.Rows.Single();
+        fila.Outcome.Should().Be(BulkTramitesRowOutcome.CreatedPending);
+        fila.OutcomeReason.Should().Be("conductor_no_encontrado:CC 10001");
+        fila.ProcedureInstanceId.Should().Be(InstanceId);
+
+        // Todas o ninguna: el guardado del wizard es un upsert del conjunto completo.
+        await _gateway.DidNotReceive().SaveActorsAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<IReadOnlyList<ActorInput>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ElNombreQueSeGuarda_EsElQueReportaElRunt_ConLosDatosDeContactoDelExcel()
+    {
+        VehiculoOk();
+        CreacionOk();
+        PersonaOk("ANA MARIA GOMEZ");
+        IReadOnlyList<ActorInput>? guardados = null;
+        _gateway.SaveActorsAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Do<IReadOnlyList<ActorInput>>(a => guardados = a), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        var batch = Batch("matricula", Row(1));
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        var actor = guardados.Should().ContainSingle().Subject;
+        actor.NombreCompleto.Should().Be("ANA MARIA GOMEZ");
+        actor.Telefono.Should().Be("3000000000");
+        actor.Ciudad.Should().Be("Bogotá");
+        actor.Direccion.Should().Be("Calle 1 # 2-3");
+        batch.Rows.Single().Outcome.Should().Be(BulkTramitesRowOutcome.Created);
+    }
+
+    [Fact]
     public async Task UnaFilaQueFalla_NoDetieneLasDemas()
     {
         // La fila 1 se cae en la consulta del vehículo; la 2 sigue su curso.
@@ -139,6 +195,7 @@ public sealed class BulkTramitesBatchProcessorTests
                 _ => ((string?)null, "placa_invalida"),
                 _ => ("token", (string?)null));
         CreacionOk();
+        PersonaOk();
         _gateway.SaveActorsAsync(
                 Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<IReadOnlyList<ActorInput>>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
@@ -157,6 +214,7 @@ public sealed class BulkTramitesBatchProcessorTests
     {
         VehiculoOk();
         CreacionOk();
+        PersonaOk();
 
         var batch = Batch("traspaso", Row(1, structuralError: "porcentajes_no_suman_100"));
 

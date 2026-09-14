@@ -41,7 +41,7 @@ public sealed class BulkTramitesWizardGatewayTests
     /// un nombre que no resuelve corta la fila ANTES de tocar el wizard.
     /// </summary>
     private BulkTramitesWizardGateway Gateway() =>
-        new(null!, null!, null!, _resolver);
+        new(null!, null!, null!, null!, _resolver);
 
     [Fact]
     public async Task NombreQueNoEstaEntreLosHabilitados_CortaLaFila_SinLlegarAlWizard()

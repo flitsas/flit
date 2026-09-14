@@ -14,6 +14,12 @@ namespace Flit.Tramites.Application.BulkTramites;
 /// color, inscripción de prenda, etc.): trae un selector de tipo de trámite en vez de una
 /// plantilla por tipo, con hasta 2 actores porque algunos tipos (p. ej. cambio de locatario)
 /// necesitan más de uno.</para>
+///
+/// <para>Las columnas de actor NO piden el nombre: el procesamiento (HU #12523) consulta la persona
+/// en el RUNT por tipo y número de documento y toma el nombre de ahí, igual que hace el paso de
+/// actores del wizard. Pedirlo en el Excel era redundante y, peor, permitía guardar un actor sin
+/// haberlo consultado. Sí piden celular, ciudad y dirección: son datos de contacto que el RUNT no
+/// entrega y el PO los exige en el trámite.</para>
 /// </summary>
 public static class BulkTramitesTemplateCatalog
 {
@@ -59,10 +65,15 @@ public static class BulkTramitesTemplateCatalog
         yield return ActorColumn(prefijo, "tipo_documento", $"Tipo de documento del {rol}.")
             with
             { Opciones = TiposDocumento };
-        yield return ActorColumn(prefijo, "numero_documento", $"Número de documento del {rol}, sin puntos ni guiones.");
-        yield return ActorColumn(prefijo, "nombre", $"Nombre completo del {rol}, como figura en su documento.");
+        yield return ActorColumn(
+            prefijo,
+            "numero_documento",
+            $"Número de documento del {rol}, sin puntos ni guiones. El nombre NO se pide: se toma "
+                + "de la consulta al RUNT con este documento, igual que en el paso de actores.");
         yield return ActorColumn(prefijo, "email", $"Correo electrónico del {rol}, para el envío de la validación de identidad.");
-        yield return ActorColumn(prefijo, "celular", $"Celular del {rol} (opcional).");
+        yield return ActorColumn(prefijo, "celular", $"Celular del {rol}.");
+        yield return ActorColumn(prefijo, "ciudad", $"Ciudad de residencia del {rol}.");
+        yield return ActorColumn(prefijo, "direccion", $"Dirección de residencia del {rol}.");
 
         if (conPorcentaje)
         {

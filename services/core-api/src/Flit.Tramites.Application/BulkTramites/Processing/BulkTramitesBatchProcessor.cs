@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities.BulkTramites;
 using Flit.Tramites.Domain.Repositories;
 
@@ -20,7 +21,11 @@ namespace Flit.Tramites.Application.BulkTramites.Processing;
 /// trámite que valga, y el motivo típico es un dato mal escrito (placa o VIN).</item>
 /// <item><b>Vehículo bien pero actor que falla ⇒ el trámite SÍ se crea</b>
 /// (<c>created_pending</c>), marcado para que el usuario lo retome desde el wizard en el paso donde
-/// quedó. Tirar el trámite obligaría a repetir la consulta que ya salió bien.</item>
+/// quedó. Tirar el trámite obligaría a repetir la consulta que ya salió bien. «Actor que falla»
+/// incluye la consulta de persona al RUNT: el nombre del actor NO viene en el Excel, sale de esa
+/// consulta, así que sin ella no hay nada que guardar y el paso de actores queda para el wizard.
+/// El motivo lleva el documento que falló (<c>codigo:TIPO NUMERO</c>) porque una fila de traspaso
+/// puede traer hasta 8 personas y «conductor no encontrado» a secas no dice cuál.</item>
 /// <item><b>Todo bien ⇒ <c>created</c>.</b></item>
 /// </list>
 /// </summary>
@@ -105,8 +110,30 @@ public sealed class BulkTramitesBatchProcessor(
                 return;
             }
 
+            // Consulta de persona ANTES de guardar, y todas o ninguna: el guardado del wizard es un
+            // upsert del conjunto completo (con reglas entre actores, p. ej. los porcentajes deben
+            // sumar 100 por lado), así que guardar «los que sí se encontraron» no pasaría igual.
+            var actores = new List<ActorInput>(context.Actors.Count);
+            foreach (var actor in context.Actors)
+            {
+                var (fullName, lookupError) = await gateway
+                    .LookupPersonAsync(instanceId.Value, batch.TenantId, actor.TipoDocumento, actor.NumeroDocumento, ct)
+                    .ConfigureAwait(false);
+                if (lookupError is not null)
+                {
+                    Resolve(
+                        row,
+                        BulkTramitesRowOutcome.CreatedPending,
+                        $"{lookupError}:{actor.TipoDocumento} {actor.NumeroDocumento}",
+                        instanceId);
+                    return;
+                }
+
+                actores.Add(actor with { NombreCompleto = fullName! });
+            }
+
             var actorsError = await gateway
-                .SaveActorsAsync(instanceId.Value, batch.TenantId, context.Actors, ct)
+                .SaveActorsAsync(instanceId.Value, batch.TenantId, actores, ct)
                 .ConfigureAwait(false);
 
             Resolve(

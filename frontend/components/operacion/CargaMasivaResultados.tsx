@@ -200,16 +200,30 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
  * Motivos por fila. Los códigos que ya traduce el cliente (los del archivo completo) se reusan;
  * el resto se enseña tal cual antes que inventar una traducción que se desactualice — el catálogo
  * de errores del wizard es grande y cambia.
+ *
+ * <p>El motivo puede venir como `codigo:detalle` (p. ej. `conductor_no_encontrado:CC 123`): una
+ * fila de traspaso trae hasta 8 personas y «conductor no encontrado» a secas no dice cuál. El
+ * detalle se muestra tal cual, entre paréntesis.</p>
  */
-function mensajeMotivo(codigo: string): string {
+export function mensajeMotivo(motivo: string): string {
   const propios: Record<string, string> = {
     organismo_transito_no_habilitado:
       'El organismo de tránsito no es uno de los habilitados para tu empresa.',
     porcentajes_no_suman_100: 'Los porcentajes de propiedad no suman 100.',
     porcentaje_en_cero: 'Hay un propietario con porcentaje en 0.',
     sin_actores_en_la_fila: 'La fila no traía ningún actor: complétalo en el trámite.',
+    conductor_no_encontrado:
+      'El RUNT no encontró a la persona con ese documento. Revísalo y complétalo en el trámite.',
+    consulta_conductor_fallida:
+      'La consulta de la persona al RUNT falló. Retoma el trámite y vuelve a consultarla.',
+    unsupported_document_type:
+      'Ese tipo de documento no se consulta en el RUNT (personas jurídicas): complétalo en el trámite.',
     error_inesperado: 'Ocurrió un error inesperado al procesar la fila.',
   };
 
-  return propios[codigo] ?? mensajeErrorCargaMasiva(codigo);
+  const separador = motivo.indexOf(':');
+  const codigo = separador === -1 ? motivo : motivo.slice(0, separador);
+  const detalle = separador === -1 ? '' : motivo.slice(separador + 1).trim();
+  const base = propios[codigo] ?? mensajeErrorCargaMasiva(codigo);
+  return detalle ? `${base} (${detalle})` : base;
 }

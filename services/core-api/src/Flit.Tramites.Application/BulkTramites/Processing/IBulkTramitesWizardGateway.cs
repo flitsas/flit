@@ -27,6 +27,20 @@ public interface IBulkTramitesWizardGateway
         BulkTramitesRowContext context, string? previewToken, CancellationToken ct);
 
     /// <summary>
+    /// Consulta de persona (RUNT conductor) por documento, con el MISMO caso de uso que el botón
+    /// «Consultar RUNT» del paso de actores. Devuelve el nombre completo que reporta el RUNT, o el
+    /// código de error: <c>conductor_no_encontrado</c> cuando el proveedor responde pero no conoce
+    /// el documento, <c>unsupported_document_type</c> para los tipos que el RUNT conductor no
+    /// consulta (NIT), o el código del proveedor si la consulta falla.
+    /// </summary>
+    Task<(string? FullName, string? Error)> LookupPersonAsync(
+        Guid procedureInstanceId,
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        CancellationToken ct);
+
+    /// <summary>
     /// Paso de actores: guarda las partes con el MISMO caso de uso del wizard, de modo que el envío
     /// de validación de identidad se dispara solo, sin lógica propia de la carga masiva. Devuelve el
     /// código de error, o null si guardó.

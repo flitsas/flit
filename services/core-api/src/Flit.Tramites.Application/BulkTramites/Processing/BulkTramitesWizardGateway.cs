@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Integration;
 
@@ -12,8 +13,15 @@ public sealed class BulkTramitesWizardGateway(
     RunPreflightPreviewHandler previewHandler,
     CreateProcedureInstanceFromConsultaHandler createHandler,
     PutActorsHandler actorsHandler,
+    RuntPersonLookupHandler personLookupHandler,
     ITransitOfficeResolver transitOfficeResolver) : IBulkTramitesWizardGateway
 {
+    /// <summary>El proveedor respondió pero no conoce el documento: dato mal escrito o persona sin registro RUNT.</summary>
+    public const string ConductorNoEncontrado = "conductor_no_encontrado";
+
+    /// <summary>La consulta al proveedor se cayó (red, 5xx, timeout). Distinto de «no existe».</summary>
+    public const string ConsultaConductorFallida = "consulta_conductor_fallida";
+
     /// <summary>
     /// Motivo de fila cuando el organismo escrito en el Excel no es uno de los habilitados de la
     /// empresa. Se distingue del error del wizard a propósito: el usuario tiene que saber que el
@@ -99,6 +107,40 @@ public sealed class BulkTramitesWizardGateway(
         // propaga tal cual para que el procesador lo registre como creado-con-pendiente en vez de
         // dejar un trámite huérfano marcado como «no creado».
         return (result?.Instance.Id ?? existingId, error);
+    }
+
+    public async Task<(string? FullName, string? Error)> LookupPersonAsync(
+        Guid procedureInstanceId,
+        Guid tenantId,
+        string documentType,
+        string documentNumber,
+        CancellationToken ct)
+    {
+        RuntPersonDto? persona;
+        string? error;
+        try
+        {
+            (persona, error) = await personLookupHandler
+                .HandleAsync(procedureInstanceId, tenantId, documentType, documentNumber, ct)
+                .ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // La caída del proveedor es un resultado de la fila, no un fallo del lote.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning restore CA1031
+        {
+            return (null, ConsultaConductorFallida);
+        }
+
+        if (error is not null)
+        {
+            return (null, error);
+        }
+
+        // El handler responde Found=false con el mismo shape que un hallazgo: aquí se vuelve un
+        // código, que es lo que el resumen del lote sabe traducir.
+        return persona is { Found: true } && !string.IsNullOrWhiteSpace(persona.FullName)
+            ? (persona.FullName.Trim(), null)
+            : (null, ConductorNoEncontrado);
     }
 
     public async Task<string?> SaveActorsAsync(

@@ -150,13 +150,18 @@ public static class BulkTramitesRowMapper
             return null;
         }
 
+        // El nombre sale VACÍO a propósito: la plantilla no lo pide y lo rellena el procesador con
+        // el resultado de la consulta de persona al RUNT (ver BulkTramitesBatchProcessor). Un actor
+        // que llegue al guardado con el nombre vacío es un error de flujo, no un dato faltante.
         return new ActorInput(
             rol.Trim().ToLowerInvariant(),
             Value(values, $"{prefijo}_tipo_documento") ?? "CC",
             numeroDocumento,
-            Value(values, $"{prefijo}_nombre") ?? string.Empty,
+            NombreCompleto: string.Empty,
             Value(values, $"{prefijo}_email") ?? string.Empty,
             Value(values, $"{prefijo}_celular"),
+            Ciudad: Value(values, $"{prefijo}_ciudad"),
+            Direccion: Value(values, $"{prefijo}_direccion"),
             Ordinal: ordinal,
             Porcentaje: porcentaje);
     }
