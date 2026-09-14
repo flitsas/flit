@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Download, Eye } from 'lucide-react';
 import {
   AttachmentPreview,
+  AvisoDescargaFallida,
   useAttachmentPreview,
 } from '@/components/operacion/TramiteDocumentosModal';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -49,7 +50,8 @@ import { DETALLE_BLUE, DETALLE_GREEN, DETALLE_GOLD, DETALLE_GREY } from './detal
  * lista SOLO los adjuntos por la ruta proxeada `network/**` (contrato B5 #12410) — no hay checklist
  * de red, y la ruta propia respondería 403 — y ofrece únicamente «Ver» y «Descargar» por esa misma
  * ruta. Nunca `preview-url`, nunca cargar/reemplazar/regenerar/eliminar. Un 403/404 es «fuera de tu
- * alcance», sin reintento.
+ * alcance», sin reintento. Un 503 `audit_unavailable` (auditoría fail-closed de la descarga) es
+ * transitorio: alerta con «Reintentar», sin visor ni binario.
  */
 
 const AZUL = DETALLE_BLUE;
@@ -301,11 +303,8 @@ function TramiteDetalleDocumentosConsulta({ instanceId, tenantId }: SeccionDetal
         </ul>
       </TarjetaDetalle>
 
-      {preview.doc === null && preview.error ? (
-        <p className="text-xs" style={{ color: '#C2410C' }} role="alert">
-          {preview.error}
-        </p>
-      ) : null}
+      {/* 403/404 de alcance: solo texto. 503 audit_unavailable: texto + «Reintentar». */}
+      <AvisoDescargaFallida preview={preview} />
 
       <AttachmentPreview preview={preview} />
     </div>

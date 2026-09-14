@@ -24,6 +24,9 @@ import type {
  * AC4 — trámite propio: rutas y acciones de hoy (paridad exacta de llamadas).
  * AC5 — cliente sin jerarquía: idéntico a hoy, ninguna llamada de red.
  * AC6 — rótulo «Solo consulta» textual, nombres accesibles con el archivo, orden de tabulación.
+ * AC7 — 503 `audit_unavailable` (auditoría fail-closed de la descarga, commit d06cc3e6): copy
+ *       específico como `role="alert"` con «Reintentar» que repite la MISMA llamada; sin visor ni
+ *       binario. El 403/404 de alcance sigue sin reintento.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -63,8 +66,10 @@ vi.mock('@/lib/api/tramites-client', () => ({
 import { TramiteDetalleDocumentos } from '@/components/operacion/detalle/TramiteDetalleDocumentos';
 import { ConsultaModeProvider } from '@/components/operacion/ConsultaModeContext';
 import {
+  COPY_DESCARGA_SIN_AUDITORIA,
   COPY_DOCUMENTOS_FUERA_DE_ALCANCE,
   ETIQUETA_SOLO_CONSULTA,
+  isAuditUnavailable,
 } from '@/lib/tramites/network-scope';
 
 const CABEZA = '11111111-1111-1111-1111-111111111111';
@@ -421,5 +426,101 @@ describe('HU #12411 — AC6: accesibilidad y sistema de diseño', () => {
     expect(copy).toHaveAttribute('role', 'status');
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.getByText(ETIQUETA_SOLO_CONSULTA)).toBeInTheDocument();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe('HU #12411 — AC7: 503 audit_unavailable en la descarga de red (auditoría fail-closed)', () => {
+  const AUDIT = () => apiError(503, 'audit_unavailable');
+
+  it('«Descargar» con 503 audit_unavailable ⇒ copy específico como alerta (no el de alcance) y nada descargado', async () => {
+    mocks.downloadNetworkAttachment.mockRejectedValueOnce(AUDIT());
+    renderConsulta();
+    await screen.findByText(/soat\.pdf/);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    await userEvent.click(screen.getByRole('button', { name: 'Descargar soat.pdf' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(COPY_DESCARGA_SIN_AUDITORIA);
+    expect(alert).not.toHaveTextContent(COPY_DOCUMENTOS_FUERA_DE_ALCANCE);
+    expect(screen.queryByText(/503|audit_unavailable/)).not.toBeInTheDocument();
+    expect(click).not.toHaveBeenCalled();
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(within(alert).getByRole('button', { name: /Reintentar/ })).toBeInTheDocument();
+    expect(prohibidasDisparadas()).toEqual([]);
+  });
+
+  it('«Reintentar» repite la descarga con la MISMA firma (2 llamadas) y al ir bien el aviso desaparece', async () => {
+    mocks.downloadNetworkAttachment.mockRejectedValueOnce(AUDIT());
+    renderConsulta();
+    await screen.findByText(/soat\.pdf/);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    await userEvent.click(screen.getByRole('button', { name: 'Descargar soat.pdf' }));
+    await screen.findByText(COPY_DESCARGA_SIN_AUDITORIA);
+    expect(mocks.downloadNetworkAttachment).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole('button', { name: /Reintentar/ }));
+    await waitFor(() => expect(mocks.downloadNetworkAttachment).toHaveBeenCalledTimes(2));
+    expect(mocks.downloadNetworkAttachment.mock.calls[1]).toEqual(['inst-red', 'att-soat', 'soat.pdf']);
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(prohibidasDisparadas()).toEqual([]);
+  });
+
+  it('«Ver» con 503 audit_unavailable ⇒ no abre el visor; «Reintentar» vuelve a llamar y entonces sí lo abre', async () => {
+    mocks.downloadNetworkAttachment.mockRejectedValueOnce(AUDIT());
+    renderConsulta();
+    await screen.findByText(/soat\.pdf/);
+    await userEvent.click(screen.getByRole('button', { name: 'Ver soat.pdf' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(COPY_DESCARGA_SIN_AUDITORIA);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(createObjectURL).not.toHaveBeenCalled();
+
+    await userEvent.click(within(alert).getByRole('button', { name: /Reintentar/ }));
+    await waitFor(() => expect(mocks.downloadNetworkAttachment).toHaveBeenCalledTimes(2));
+    expect(mocks.downloadNetworkAttachment.mock.calls[1]).toEqual(['inst-red', 'att-soat', 'soat.pdf']);
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByTestId('preview-iframe')).toHaveAttribute('src', 'blob:mock-url');
+    expect(mocks.fetchAttachmentPreviewUrl).not.toHaveBeenCalled();
+  });
+
+  it('si el reintento vuelve a fallar por auditoría, el aviso sigue siendo reintentable', async () => {
+    mocks.downloadNetworkAttachment.mockRejectedValue(AUDIT());
+    renderConsulta();
+    await screen.findByText(/soat\.pdf/);
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    await userEvent.click(screen.getByRole('button', { name: 'Descargar FUR.pdf' }));
+    await screen.findByText(COPY_DESCARGA_SIN_AUDITORIA);
+    await userEvent.click(screen.getByRole('button', { name: /Reintentar/ }));
+    await waitFor(() => expect(mocks.downloadNetworkAttachment).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('alert')).toHaveTextContent(COPY_DESCARGA_SIN_AUDITORIA);
+    expect(screen.getByRole('button', { name: /Reintentar/ })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['403 network_documents_disabled', apiError(403, 'network_documents_disabled')],
+    ['404 not_found', apiError(404, 'not_found')],
+  ])('el %s al descargar sigue SIN reintento y con el copy de alcance', async (_n, err) => {
+    mocks.downloadNetworkAttachment.mockRejectedValue(err);
+    renderConsulta();
+    await screen.findByText(/soat\.pdf/);
+    await userEvent.click(screen.getByRole('button', { name: 'Descargar soat.pdf' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(COPY_DOCUMENTOS_FUERA_DE_ALCANCE);
+    expect(alert).not.toHaveTextContent(COPY_DESCARGA_SIN_AUDITORIA);
+    expect(screen.queryByRole('button', { name: /Reintentar/ })).not.toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.downloadNetworkAttachment).toHaveBeenCalledTimes(1);
+  });
+
+  it('contrato: isAuditUnavailable solo acepta 503 + { error: "audit_unavailable" }', () => {
+    expect(isAuditUnavailable(apiError(503, 'audit_unavailable'))).toBe(true);
+    expect(isAuditUnavailable(apiError(503, 'other'))).toBe(false);
+    expect(isAuditUnavailable(apiError(403, 'audit_unavailable'))).toBe(false);
+    expect(isAuditUnavailable(Object.assign(new Error('503'), { status: 503, problem: null }))).toBe(false);
+    expect(isAuditUnavailable(new Error('boom'))).toBe(false);
+    expect(isAuditUnavailable(null)).toBe(false);
+    expect(isAuditUnavailable(undefined)).toBe(false);
   });
 });

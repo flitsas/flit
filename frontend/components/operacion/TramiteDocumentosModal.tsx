@@ -7,7 +7,12 @@ import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { ICON_BUTTON_HIT_AREA } from '@/components/atom/RowActions';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { documentLabel } from '@/lib/tramites/document-labels';
-import { COPY_DOCUMENTOS_FUERA_DE_ALCANCE, isScopeRejection } from '@/lib/tramites/network-scope';
+import {
+  COPY_DESCARGA_SIN_AUDITORIA,
+  COPY_DOCUMENTOS_FUERA_DE_ALCANCE,
+  isAuditUnavailable,
+  isScopeRejection,
+} from '@/lib/tramites/network-scope';
 import { formatFecha } from '@/lib/format/date';
 import type { ProcedureAttachment } from '@/lib/api/types/procedure-runtime';
 import { findConsolidadoAttachment } from './ExpedienteVisor';
@@ -59,6 +64,14 @@ export function useAttachmentPreview(
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * HU #12411 — última acción rechazada por 503 `audit_unavailable` (auditoría fail-closed). Solo en
+   * modo consulta. Mientras exista, la UI ofrece «Reintentar», que repite exactamente esa acción.
+   */
+  const [pendienteAuditoria, setPendienteAuditoria] = useState<{
+    kind: 'open' | 'download';
+    target: PreviewTarget;
+  } | null>(null);
 
   /** Libera el objectURL anterior: son blobs en memoria del navegador. */
   const revoke = useCallback(() => {
@@ -73,6 +86,7 @@ export function useAttachmentPreview(
     setDoc(null);
     setError(null);
     setLoading(false);
+    setPendienteAuditoria(null);
   }, [revoke]);
 
   const open = useCallback(
@@ -81,6 +95,7 @@ export function useAttachmentPreview(
       setDoc(attachment);
       revoke();
       setError(null);
+      setPendienteAuditoria(null);
       setLoading(true);
       try {
         if (consultaMode) {
@@ -115,6 +130,13 @@ export function useAttachmentPreview(
         const typed = attachment.mimetype ? new Blob([raw], { type: attachment.mimetype }) : raw;
         setUrl(URL.createObjectURL(typed));
       } catch (e: unknown) {
+        if (consultaMode && isAuditUnavailable(e)) {
+          // 503 fail-closed: no hay binario, así que tampoco visor. Aviso reintentable en la sección.
+          setDoc(null);
+          setError(COPY_DESCARGA_SIN_AUDITORIA);
+          setPendienteAuditoria({ kind: 'open', target: attachment });
+          return;
+        }
         if (consultaMode && isScopeRejection(e)) {
           setError(COPY_DOCUMENTOS_FUERA_DE_ALCANCE);
           return;
@@ -140,6 +162,7 @@ export function useAttachmentPreview(
     async (attachment?: PreviewTarget) => {
       const target = attachment ?? doc;
       if (!instanceId || !target) return;
+      setPendienteAuditoria(null);
       try {
         const { blob, filename } = consultaMode
           ? await tramitesClient.downloadNetworkAttachment(instanceId, target.id, target.filename)
@@ -153,6 +176,11 @@ export function useAttachmentPreview(
         a.remove();
         URL.revokeObjectURL(objectUrl);
       } catch (e: unknown) {
+        if (consultaMode && isAuditUnavailable(e)) {
+          setError(COPY_DESCARGA_SIN_AUDITORIA);
+          setPendienteAuditoria({ kind: 'download', target });
+          return;
+        }
         if (consultaMode && isScopeRejection(e)) {
           setError(COPY_DOCUMENTOS_FUERA_DE_ALCANCE);
           return;
@@ -163,7 +191,52 @@ export function useAttachmentPreview(
     [instanceId, doc, tenantId, consultaMode],
   );
 
-  return { doc, url, loading, error, open, close, download };
+  /**
+   * HU #12411 — repite la acción rechazada por `audit_unavailable`. `null` cuando no hay nada que
+   * reintentar (el 403/404 de alcance NO es reintentable: repetirlo no cambiaría nada).
+   */
+  const reintentar = pendienteAuditoria
+    ? () => {
+        const { kind, target } = pendienteAuditoria;
+        setError(null);
+        void (kind === 'open' ? open(target) : download(target));
+      }
+    : null;
+
+  return { doc, url, loading, error, open, close, download, reintentar };
+}
+
+/**
+ * HU #12411 — aviso de una descarga/apertura fallida cuando el visor NO está abierto. Con
+ * `reintentar` (503 `audit_unavailable`) añade el botón; con el 403/404 de alcance o un fallo técnico
+ * solo el texto, como hasta ahora.
+ */
+export function AvisoDescargaFallida({
+  preview,
+  className,
+}: {
+  preview: Pick<ReturnType<typeof useAttachmentPreview>, 'doc' | 'error' | 'reintentar'>;
+  className?: string;
+}) {
+  if (preview.doc !== null || !preview.error) return null;
+  return (
+    <div className={`flex flex-col items-start gap-2 ${className ?? ''}`} role="alert">
+      <p className="text-xs" style={{ color: '#C2410C' }}>
+        {preview.error}
+      </p>
+      {preview.reintentar ? (
+        <button
+          type="button"
+          onClick={preview.reintentar}
+          aria-label="Reintentar la descarga del documento"
+          className="rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+          style={{ borderColor: BLUE, color: BLUE }}
+        >
+          Reintentar
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 /** Visor del adjunto abierto por {@link useAttachmentPreview}. Nada si no hay documento abierto. */

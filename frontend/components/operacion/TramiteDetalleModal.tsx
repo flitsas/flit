@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { plateFlowHint } from './TramitesTable';
-import { AttachmentPreview, useAttachmentPreview } from './TramiteDocumentosModal';
+import { AttachmentPreview, AvisoDescargaFallida, useAttachmentPreview } from './TramiteDocumentosModal';
 import { SeccionCargando, SeccionError } from './detalle/primitivos';
 import { DetalleTramiteShell } from './detalle/DetalleTramiteShell';
 import { DetalleStepper } from './detalle/DetalleStepper';
@@ -759,11 +759,8 @@ export function TramiteDetalleModal({
                                   ))}
                                 </ul>
                               ) : null}
-                              {preview.doc === null && preview.error ? (
-                                <p className="mt-3 text-xs" style={{ color: '#FF4E00' }} role="alert">
-                                  {preview.error}
-                                </p>
-                              ) : null}
+                              {/* 503 audit_unavailable (consulta): mismo aviso con «Reintentar». */}
+                              <AvisoDescargaFallida preview={preview} className="mt-3" />
                             </section>
                           </div>
 

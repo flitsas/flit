@@ -82,6 +82,23 @@ export const COPY_DOCUMENTOS_FUERA_DE_ALCANCE =
 export const COPY_SECCION_FUERA_DE_ALCANCE =
   'Esta información del cliente hijo no forma parte de tu alcance de consulta';
 
+/**
+ * HU #12411 — la descarga de un documento de la red es FAIL-CLOSED en auditoría: si el servidor no
+ * puede dejar el registro `network.attachments.download`, responde 503 `{ "error": "audit_unavailable" }`
+ * y NO entrega el binario. A diferencia del 403/404 de alcance, es transitorio: se muestra como
+ * alerta con reintento, sin abrir el visor ni descargar nada.
+ */
+export const COPY_DESCARGA_SIN_AUDITORIA =
+  'No se pudo dejar registro de auditoría de la descarga; inténtalo de nuevo en unos segundos.';
+
+/** `true` si el error es el 503 `audit_unavailable` de la descarga de red (contrato B5 #12410). */
+export function isAuditUnavailable(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 503 || !problem || typeof problem !== 'object') return false;
+  return (problem as { error?: unknown }).error === 'audit_unavailable';
+}
+
 /** Etiqueta del distintivo visible (texto + icono; nunca solo color). */
 export const ETIQUETA_SOLO_CONSULTA = 'Solo consulta';
 
