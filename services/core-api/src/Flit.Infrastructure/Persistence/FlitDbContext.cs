@@ -260,6 +260,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — outbox de cambios de estado del trámite (N 03 RNF01, ADR-0022)
     public DbSet<ProcedureStateChangeOutbox> ProcedureStateChangeOutbox => Set<ProcedureStateChangeOutbox>();
 
+    // Trámites — carga masiva por Excel (HU #12522, Feature #12519)
+    public DbSet<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatch> BulkTramitesBatches =>
+        Set<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatch>();
+    public DbSet<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow> BulkTramitesBatchRows =>
+        Set<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow>();
+
     // Trámites — cola de despachos de correo al cambio de estado (HU #11461, ADR-0045)
     public DbSet<ProcedureStateChangeEmailDispatch> ProcedureStateChangeEmailDispatches =>
         Set<ProcedureStateChangeEmailDispatch>();

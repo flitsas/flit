@@ -35,6 +35,36 @@ internal sealed class ExternalQueryCacheRepository(FlitDbContext db) : IExternal
     public async Task AddAsync(ExternalQueryCacheEntry entry, CancellationToken ct = default) =>
         await db.ExternalQueryCache.AddAsync(entry, ct);
 
-    public Task SaveChangesAsync(CancellationToken ct = default) =>
-        db.SaveChangesAsync(ct);
+    /// <summary>
+    /// La caché es «último en escribir gana»: el <c>row_version</c> lo sube un trigger en la base y
+    /// EF no refresca el valor rastreado tras guardar, así que la SEGUNDA escritura a la misma fila
+    /// dentro del mismo DbContext choca por token viejo. El wizard nunca la escribe dos veces en una
+    /// petición; la carga masiva sí (reintento de la consulta de persona, HU #12523), y sin esto el
+    /// reintento no podía acertar nunca. Ante el choque se toma el token actual de la base y se
+    /// reintenta una vez.
+    /// </summary>
+    public async Task SaveChangesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException ex) when (ex.Entries.All(e => e.Entity is ExternalQueryCacheEntry))
+        {
+            foreach (var entry in ex.Entries)
+            {
+                var actual = await entry.GetDatabaseValuesAsync(ct).ConfigureAwait(false);
+                if (actual is null)
+                {
+                    entry.State = EntityState.Detached;
+                    continue;
+                }
+
+                entry.Property(nameof(ExternalQueryCacheEntry.RowVersion)).OriginalValue =
+                    actual[nameof(ExternalQueryCacheEntry.RowVersion)];
+            }
+
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+    }
 }

@@ -180,6 +180,10 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // quedara fuera: el operador podría leer el contacto de una persona capturado por OTRA
         // compañía cambiando X-Tenant-Id). El tenant se impone desde el JWT, no del header crudo.
         new("/api/v1/tramites/actors", RouteMatch.Prefix),
+        // Feature #12519 — carga masiva de trámites: plantilla (organismos habilitados de la
+        // compañía), lotes y resultados son de UNA compañía. El tenant se impone desde el JWT igual
+        // que el resto del runtime; el SuperAdmin acota con X-Tenant-Id como en /instances.
+        new("/api/v1/tramites/carga-masiva", RouteMatch.Prefix),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

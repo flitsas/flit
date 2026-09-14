@@ -306,7 +306,7 @@ public sealed class RequestTenantResolverTests
     }
 
     [Fact]
-    public void RuntimeScopedRoutes_ConservaLos10PrefijosYSusComparaciones()
+    public void RuntimeScopedRoutes_ConservaLos11PrefijosYSusComparaciones()
     {
         var routes = TenantEnforcementMiddleware.RuntimeScopedRoutes;
 
@@ -322,6 +322,8 @@ public sealed class RequestTenantResolverTests
             ("/api/v1/tramites/deeds", TenantEnforcementMiddleware.RouteMatch.Prefix),
             ("/api/v1/tramites/legal-representatives", TenantEnforcementMiddleware.RouteMatch.Prefix),
             ("/api/v1/tramites/actors", TenantEnforcementMiddleware.RouteMatch.Prefix),
+            // Feature #12519 — carga masiva: plantilla, lotes y resultados de UNA compañía.
+            ("/api/v1/tramites/carga-masiva", TenantEnforcementMiddleware.RouteMatch.Prefix),
         });
         routes.Should().OnlyContain(r => r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal));
     }

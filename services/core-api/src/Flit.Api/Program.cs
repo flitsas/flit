@@ -268,6 +268,7 @@ app.MapAdminImprontasEndpoints();
 // Autorización por permiso (generacion-documental.*), no por policy de grupo.
 app.MapAdminGeneracionDocumentalEndpoints();
 app.MapTramitesEndpoints();
+app.MapBulkTramitesEndpoints();
 app.MapTransfersEndpoints();
 
 // ── Runtime de trámites (rework #10128) ───────────────────────────────────────

@@ -18,6 +18,7 @@ import {
   Pause,
   Play,
   Star,
+  Upload,
   X,
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -307,9 +308,12 @@ interface TramitesTableProps {
    * como en el diseño. Antes esta vista decidía la modalidad en un diálogo previo.
    */
   onNewTramite?: () => void;
+
+  /** HU #12521 — abre el modal de carga masiva por Excel. */
+  onBulkUpload?: () => void;
 }
 
-export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTableProps) {
+export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: TramitesTableProps) {
   const router = useRouter();
   const [items, setItems] = useState<InstanceSummary[]>([]);
   /** Conteo por estado del UNIVERSO filtrado — lo sirve el backend, no se deriva de `items`. */
@@ -1181,6 +1185,26 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                   <Download className={`h-3.5 w-3.5 ${exporting ? 'animate-pulse' : ''}`} aria-hidden="true" />
                   {exporting ? 'Exportando…' : 'Exportar'}
                 </button>
+              }
+              bulkUploadAction={
+                onBulkUpload ? (
+                  <button
+                    type="button"
+                    onClick={() => onBulkUpload()}
+                    disabled={blockNew.matricula && blockNew.traspaso}
+                    aria-label="Cargar trámites de forma masiva desde un archivo Excel"
+                    title={
+                      blockNew.matricula && blockNew.traspaso
+                        ? 'La compañía tiene bloqueada la creación de trámites.'
+                        : 'Carga masiva desde Excel'
+                    }
+                    className={controlCls(false)}
+                    data-testid="tramites-carga-masiva"
+                  >
+                    <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+                    Carga masiva
+                  </button>
+                ) : null
               }
             />
           }
