@@ -38,17 +38,19 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const cargar = useCallback(async () => {
+  /**
+   * Recarga la lista y el detalle. Conserva el lote que el usuario tenía elegido: «Actualizar» se
+   * pulsa para ver cómo va ESE lote, y saltar al más reciente le cambiaba la selección debajo de
+   * las manos. Solo cae al primero cuando no hay selección (carga inicial) o el elegido ya no está.
+   */
+  const cargar = useCallback(async (loteElegido?: string) => {
     setCargando(true);
     setError(null);
     try {
       const items = await bulkTramitesClient.listarLotes();
       setLotes(items);
-      if (items.length > 0) {
-        setDetalle(await bulkTramitesClient.detalleLote(items[0]!.id));
-      } else {
-        setDetalle(null);
-      }
+      const objetivo = items.find((l) => l.id === loteElegido) ?? items[0];
+      setDetalle(objetivo ? await bulkTramitesClient.detalleLote(objetivo.id) : null);
     } catch {
       setError('No se pudieron cargar los lotes.');
     } finally {
@@ -120,7 +122,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
 
         <button
           type="button"
-          onClick={() => void cargar()}
+          onClick={() => void cargar(detalle?.batch.id)}
           className={controlCls(false)}
           data-testid="carga-masiva-actualizar"
         >
@@ -222,6 +224,19 @@ export function mensajeMotivo(motivo: string): string {
     unsupported_document_type:
       'Ese tipo de documento no se consulta en el RUNT (personas jurídicas): complétalo en el trámite.',
     error_inesperado: 'Ocurrió un error inesperado al procesar la fila.',
+    // Códigos del paso 1 del wizard que una fila puede heredar. Son los mismos que el wizard
+    // muestra con su propio texto; aquí se traducen para que el motivo no sea una constante.
+    DUPLICATE_ACTIVE_PROCEDURE:
+      'Ya existe un trámite en proceso para este vehículo en tu empresa. Retómalo o anúlalo antes de cargarlo de nuevo.',
+    TRANSIT_OFFICE_REQUIRED: 'La matrícula exige un organismo de tránsito.',
+    TRANSIT_OFFICE_NOT_AVAILABLE: 'El organismo de tránsito no está disponible para tu empresa.',
+    VEHICLE_STATE_INVALID_FOR_TYPE: 'El estado del vehículo en el RUNT no permite este trámite.',
+    VEHICLE_BODY_TYPE_MISSING: 'El RUNT no reporta el tipo de carrocería del vehículo.',
+    identificador_requerido: 'La fila no trae placa ni VIN.',
+    modalidad_not_available: 'Este tipo de trámite no está habilitado para tu empresa.',
+    procedure_type_not_found: 'El tipo de trámite no existe en el catálogo.',
+    create_failed: 'No se pudo crear el trámite.',
+    tipo_de_plantilla_no_soportado: 'El tipo de plantilla del lote no se reconoce.',
   };
 
   const separador = motivo.indexOf(':');

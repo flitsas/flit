@@ -134,6 +134,22 @@ describe('CargaMasivaResultados (HU #12524)', () => {
     expect(detallar).not.toHaveBeenCalled();
   });
 
+  it('«Actualizar» conserva el lote elegido en vez de saltar al más reciente', async () => {
+    const otro = { ...LOTE, id: 'b-2', sourceFilename: 'otro.xlsx' };
+    listar.mockResolvedValue([LOTE, otro]);
+    detallar.mockImplementation(async (id) => ({ ...DETALLE, batch: { ...LOTE, id } }));
+    const user = userEvent.setup();
+
+    render(<CargaMasivaResultados />);
+    await user.selectOptions(await screen.findByTestId('carga-masiva-selector-lote'), 'b-2');
+    await waitFor(() => expect(detallar).toHaveBeenLastCalledWith('b-2'));
+
+    await user.click(screen.getByTestId('carga-masiva-actualizar'));
+
+    await waitFor(() => expect(listar).toHaveBeenCalledTimes(2));
+    expect(detallar).toHaveBeenLastCalledWith('b-2');
+  });
+
   it('al cambiar de lote trae su detalle', async () => {
     const otro = { ...LOTE, id: 'b-2', sourceFilename: 'otro.xlsx' };
     listar.mockResolvedValue([LOTE, otro]);
