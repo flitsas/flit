@@ -41,11 +41,14 @@ jobs:
       gateway_port: ${{ steps.env.outputs.gateway_port }}
       core_port: ${{ steps.env.outputs.core_port }}
       python_port: ${{ steps.env.outputs.python_port }}
+      migracion_port: ${{ steps.env.outputs.migracion_port }}
     steps:
       - name: Map branch to environment
         id: env
         run: |
-          # Puertos por ambiente: DEV 40xx, QA 50xx, PDN 60xx (front/gateway/core/python).
+          # Puertos por ambiente: DEV 40xx, QA 50xx, PDN 60xx (front/gateway/core/python/migracion).
+          # migracion_port es SOLO de la red interna del compose (no se publica en el host),
+          # pero se exporta igual porque el gateway y migracion-api tienen que leer el mismo valor.
           # gh_env: nombre del GitHub Environment donde viven los secrets del VPS
           # (los Environments configurados son develop/staging/production). env_name
           # (dev/qa/pdn) se usa solo para tags de imagen y etiquetas de display.
@@ -56,7 +59,7 @@ jobs:
               front_domain=flitsas.online
               api_domain=api.flitsas.online
               image_tag=pdn
-              front_port=6001; gateway_port=6002; core_port=6003; python_port=6012
+              front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030
               ;;
             staging)
               env_name=qa
@@ -64,7 +67,7 @@ jobs:
               front_domain=qa.flitsas.online
               api_domain=api.qa.flitsas.online
               image_tag=qa
-              front_port=5001; gateway_port=5002; core_port=5003; python_port=5012
+              front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030
               ;;
             develop)
               env_name=dev
@@ -72,7 +75,7 @@ jobs:
               front_domain=dev.flitsas.online
               api_domain=api.dev.flitsas.online
               image_tag=dev
-              front_port=4001; gateway_port=4002; core_port=4003; python_port=4012
+              front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030
               ;;
             *)
               echo "::error::Rama no soportada para deploy: ${{ github.ref_name }}"
@@ -98,6 +101,7 @@ jobs:
             echo "gateway_port=$gateway_port"
             echo "core_port=$core_port"
             echo "python_port=$python_port"
+            echo "migracion_port=$migracion_port"
           } >> "$GITHUB_OUTPUT"
           echo "Ambiente: $env_name | front: $front_domain ($front_port) | api: $api_domain ($gateway_port) | build-tag: $image_tag | deploy-tag: $deploy_tag"
 
@@ -427,6 +431,7 @@ jobs:
             export GATEWAY_PORT=${{ needs.setup.outputs.gateway_port }}
             export CORE_API_PORT=${{ needs.setup.outputs.core_port }}
             export PYTHON_ML_PORT=${{ needs.setup.outputs.python_port }}
+            export MIGRACION_API_PORT=${{ needs.setup.outputs.migracion_port }}
 
             # GHCR login: el usuario DEBE ser el dueño del PAT (GHCR_USERNAME), NO github.actor.
             # Si el merge lo hace otro usuario, login con github.actor falla en ~10s (exit 1).
