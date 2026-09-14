@@ -68,6 +68,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         Set<ProcedureRadicationGateDenial>();
 
     /// <summary>
+    /// HU #12361 — auditoría append-only del acceso consolidado de una cabeza de red a datos de sus
+    /// hijos (<c>tramites.network_access_audit</c>). Se escribe solo vía <c>NetworkAccessAuditWriter</c>.
+    /// </summary>
+    public DbSet<NetworkAccessAuditEntry> NetworkAccessAuditEntries => Set<NetworkAccessAuditEntry>();
+
+    /// <summary>
     /// Convenio comercial compañía ↔ organismo. Distinto del grant de arriba, que es el permiso para
     /// radicar: este solo decide si el mandato lleva bloque de firma del mandatario.
     /// </summary>

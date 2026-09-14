@@ -52,6 +52,12 @@ export interface TramitesColumnDef {
    * quedaban intercalados entre las base y la lista se leía revuelta.
    */
   group?: string;
+  /**
+   * HU #12363 — columna que SOLO existe con el alcance de red de una cabeza de grupo. No entra en
+   * el selector «Columnas» ni en el default de nadie: la enciende el alcance, no el usuario. Para un
+   * cliente sin jerarquía el catálogo efectivo es el mismo de siempre (AC1).
+   */
+  networkOnly?: boolean;
 }
 
 const GRUPO_BASE = 'Listado';
@@ -107,6 +113,9 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   { key: 'gestor', label: 'Gestor', minPx: 160, group: GRUPO_BASE },
   // Fija: tres etiquetas conocidas y cortas ("Dashboard", "Integración", "Migrado").
   { key: 'fuente', label: 'Fuente', minPx: 120, fixed: true, group: GRUPO_BASE },
+  // HU #12363 — cliente dueño del trámite, solo en el alcance de red. Va al final del listado base
+  // (no al frente) para que el resto de columnas no se desplace al cambiar de alcance.
+  { key: 'cliente', label: 'Cliente', minPx: 170, group: GRUPO_BASE, networkOnly: true },
   // Desgloses: su dato ya viaja apilado en una celda del listado (VIN y marca/modelo bajo
   // Vehículo, estado y paso bajo Trámite, fechas bajo Radicado). Activarlos lo MUEVE a su propia
   // columna: el dato sale de la celda compuesta, nunca aparece dos veces.
@@ -128,6 +137,28 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
  * esto, cada columna nueva nace invisible para quien ya tenía preferencia y parece un dato que falta.
  */
 export const TRAMITES_COLUMN_KEYS: readonly string[] = TRAMITES_COLUMNS.map((c) => c.key);
+
+/** HU #12363 — claves que solo existen en el alcance de red (hoy: `cliente`). */
+export const TRAMITES_NETWORK_ONLY_KEYS: readonly string[] = TRAMITES_COLUMNS.filter(
+  (c) => c.networkOnly,
+).map((c) => c.key);
+
+/** Catálogo que ve el selector «Columnas»: el de siempre, sin las columnas que manda el alcance. */
+export const TRAMITES_SELECTABLE_COLUMNS: readonly TramitesColumnDef[] = TRAMITES_COLUMNS.filter(
+  (c) => !c.networkOnly,
+);
+
+/**
+ * HU #12363 — columnas efectivas según el alcance: con la red activa se añade `cliente` (en su
+ * sitio canónico, lo reordena la tabla); sin ella se quita aunque una preferencia vieja la traiga.
+ */
+export function applyNetworkScopeColumns(
+  visible: readonly string[],
+  networkActive: boolean,
+): string[] {
+  const sinRed = visible.filter((k) => !TRAMITES_NETWORK_ONLY_KEYS.includes(k));
+  return networkActive ? [...sinRed, ...TRAMITES_NETWORK_ONLY_KEYS] : sinRed;
+}
 
 /**
  * Claves añadidas al catálogo DESPUÉS de que ya hubiera preferencias guardadas sin registro de
@@ -470,6 +501,16 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
     { ...campoTexto('gestor', 'Gestor', (row) => row.gestorNombre, 24), sort: 'gestor' },
   ],
   fuente: [{ ...campoTexto('fuente', 'Fuente', (row) => FUENTE_LABEL[row.fuente ?? 'dashboard'], 14), sort: 'fuente' }],
+  // HU #12363 — el dueño del trámite en el alcance de red: `tenantName` lo ponen las rutas
+  // `network/**`; fuera de ellas cae a la razón social que ya viaja en la fila.
+  cliente: [
+    campoTexto(
+      'cliente',
+      'Cliente',
+      (row) => (row as { tenantName?: string | null }).tenantName ?? row.companiaNombre,
+      28,
+    ),
+  ],
   vin: [CAMPO_VIN],
   vehiculo: [CAMPO_VEHICULO],
   estado: [CAMPO_ESTADO],

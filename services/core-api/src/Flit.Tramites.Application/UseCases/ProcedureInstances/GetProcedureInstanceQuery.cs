@@ -128,9 +128,24 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
         if (instance is null)
             return (null, "not_found");
 
+        return (await BuildDetailAsync(repo, instance, ct).ConfigureAwait(false), null);
+    }
+
+    /// <summary>
+    /// ÚNICO punto que arma el <see cref="ProcedureInstanceDetailDto"/> a partir del agregado cargado:
+    /// lo usan el detalle propio (este handler) y el consolidado de la red
+    /// (<c>NetworkGetProcedureInstanceHandler</c>, HU #12358), cuyo contrato es «los MISMOS campos que el
+    /// detalle propio». Toda resolución adicional que enriquezca el detalle (eventos administrativos,
+    /// autores del historial, …) va AQUÍ y nunca solo en <see cref="HandleAsync"/>: si se añade en el
+    /// handler propio y no aquí, la vista de red deja de ser equivalente sin que compile nada distinto
+    /// (fallo de CI del PR #370 al integrar el Bug #12526).
+    /// </summary>
+    internal static async Task<ProcedureInstanceDetailDto> BuildDetailAsync(
+        IProcedureInstanceRepository repo, ProcedureInstance instance, CancellationToken ct)
+    {
         var events = await BuildEventsAsync(repo, instance.Events, ct).ConfigureAwait(false);
         var actorInfo = await BuildStatusHistoryActorInfoAsync(repo, instance.StatusHistory, ct).ConfigureAwait(false);
-        return (ToDetail(instance, events, actorInfo), null);
+        return ToDetail(instance, events, actorInfo);
     }
 
     /// <summary>
@@ -169,7 +184,7 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
     /// (mismo criterio que la columna "Gestor" del listado, <see cref="IProcedureInstanceRepository
     /// .GetUserDisplayNamesAsync"/>) en vez de una consulta por evento.
     /// </summary>
-    private static async Task<IReadOnlyList<ProcedureInstanceEventDto>> BuildEventsAsync(
+    internal static async Task<IReadOnlyList<ProcedureInstanceEventDto>> BuildEventsAsync(
         IProcedureInstanceRepository repo, IEnumerable<ProcedureInstanceEvent> events, CancellationToken ct)
     {
         var relevant = events

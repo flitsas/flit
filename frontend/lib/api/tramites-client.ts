@@ -141,8 +141,41 @@ import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
+import type {
+  NetworkChildFilter,
+  NetworkInstanceDetail,
+  NetworkInstanceSummary,
+} from '@/lib/tramites/network-scope';
 
 export { DEV_TENANT_ID, DEV_USER_ID };
+
+/** Sobre de `GET /api/v1/tramites/network/instances/{id}` (`NetworkProcedureDetailResponse`). */
+interface NetworkProcedureDetailResponse {
+  tenantId: string;
+  tenantName?: string | null;
+  instance: ProcedureInstanceDetail;
+}
+
+/**
+ * Aplana el sobre del detalle de red al shape del detalle propio. Tolera una respuesta ya plana
+ * (sin `instance`) para no romper a un backend que aún no envuelva — el sobre es la forma canónica.
+ */
+export function desenvolverDetalleDeRed(
+  res: NetworkProcedureDetailResponse | (ProcedureInstanceDetail & { tenantName?: string | null }),
+): NetworkInstanceDetail {
+  const sobre = res as Partial<NetworkProcedureDetailResponse>;
+  const instance: ProcedureInstanceDetail =
+    sobre.instance && typeof sobre.instance === 'object'
+      ? sobre.instance
+      : (res as ProcedureInstanceDetail);
+  const tenantId = sobre.tenantId ?? instance.tenantId;
+  return {
+    ...instance,
+    tenantId,
+    tenantName: sobre.tenantName ?? '',
+    fromNetwork: true,
+  };
+}
 
 // La API vive en otro origen (api.<env>.flitsas.online); el CD inyecta
 // NEXT_PUBLIC_API_BASE_URL (la MISMA variable que usa lib/api/client.ts). Sin variable
@@ -381,6 +414,49 @@ export function isRuesPreviewUnavailable(err: unknown): boolean {
   return status === 503;
 }
 
+/**
+ * Nombre de archivo de una cabecera `Content-Disposition` (`filename="x.pdf"` o
+ * `filename*=UTF-8''x%20y.pdf`). Cadena vacía si no viene.
+ */
+export function parseContentDispositionFilename(cd: string | null | undefined): string {
+  const header = cd ?? '';
+  const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(header);
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  const raw = (star?.[1] ?? plain?.[1] ?? '').trim();
+  if (!raw) return '';
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    // raw no era URI-encoded; se usa tal cual.
+    return raw;
+  }
+}
+
+/**
+ * GET binario con token: devuelve blob + filename/mimetype resueltos de la respuesta. Lo comparten
+ * la descarga propia (`downloadAttachment`) y la de red (`downloadNetworkAttachment`, HU #12411).
+ * Un fallo lleva `status` para que quien llama distinga rechazo de alcance (403/404) de error técnico.
+ */
+async function downloadBinary(
+  path: string,
+  headers: HeadersInit,
+  fallbackFilename: string,
+): Promise<{ blob: Blob; filename: string; mimetype: string }> {
+  const res = await fetch(apiUrl(path), { headers });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new TramitesApiError(
+      res.status,
+      `${res.status} ${res.statusText}${body ? ': ' + body : ''}`,
+      parseProblem(body),
+    );
+  }
+  const blob = await res.blob();
+  const mimetype = res.headers.get('content-type') ?? 'application/octet-stream';
+  const filename = parseContentDispositionFilename(res.headers.get('content-disposition'));
+  return { blob, filename: filename || fallbackFilename, mimetype };
+}
+
 // Exportado para que otros clientes del mismo dominio (p. ej. lib/api/ui-preferences.ts)
 // reutilicen el mismo manejo de errores/JSON en vez de reimplementarlo.
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -442,6 +518,12 @@ function jwtTenantId(): string | undefined {
 // Exportado por el mismo motivo que `request`: es el único lugar que resuelve Bearer +
 // X-Tenant-Id (explícito → tenant activo → JWT), y otros clientes (ui-preferences.ts) lo
 // necesitan tal cual, sin duplicar la resolución de tenant.
+/** Solo `Authorization`, sin `X-Tenant-Id`: para las rutas `network/**` (el alcance va en el JWT). */
+function authOnlyHeader(): HeadersInit {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export function tenantHeader(tenantId?: string): HeadersInit {
   const headers: Record<string, string> = {};
   const token = getToken();
@@ -639,6 +721,69 @@ export const tramitesClient = {
    * completa desde Excel, y unos cientos de valores no caben en una query string.</p>
    */
   searchInstances: (params: ListInstancesParams = {}) => searchInstances(params),
+
+  // ── HU #12362 / #12358 — lectura consolidada de la red (cabeza de grupo) ──────────────────────
+  //
+  // Mismo shape que las rutas propias más `tenantId`/`tenantName` del dueño de cada fila. NO viaja
+  // `X-Tenant-Id`: el alcance («yo + mis hijas») lo resuelve el servidor desde el JWT y una cabecera
+  // de tenant aquí sería una forma de pedir «otra compañía», que es justo lo que estas rutas no
+  // admiten. Cada ítem sale marcado `fromNetwork: true` para que `isNetworkReadOnly` lo reconozca
+  // por PROCEDENCIA aunque coincida el tenant. Sin tipos OpenAPI regenerados (encargo).
+  //
+  // HU #12363 — `childTenantId` (un hijo concreto) viaja en el CUERPO y es lo único de alcance que
+  // el cliente manda: el servidor lo intersecta con la red del JWT, así que un id ajeno devuelve
+  // cero filas, nunca datos de otra compañía (AC7). No se manda lista de tenants ni cabecera.
+
+  /** Listado consolidado de la red. `POST /api/v1/tramites/network/instances/search`. */
+  searchNetworkInstances: async (
+    params: ListInstancesParams & NetworkChildFilter = {},
+  ): Promise<{ items: NetworkInstanceSummary[]; total: number }> => {
+    const { filterTenantId: _tenant, ...body } = params;
+    const res = await request<{ items?: NetworkInstanceSummary[]; total?: number }>(
+      '/api/v1/tramites/network/instances/search',
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+    const items = normalizeInstances(res?.items).map((it) => ({
+      ...(it as NetworkInstanceSummary),
+      tenantName: (it as NetworkInstanceSummary).tenantName ?? it.companiaNombre ?? '',
+      fromNetwork: true as const,
+    }));
+    return { items, total: res?.total ?? items.length };
+  },
+
+  /** Conteo por estado del universo consolidado. Vacío ante fallo, como su gemelo propio. */
+  searchNetworkEstadoCounts: async (
+    params: ListInstancesParams & NetworkChildFilter = {},
+  ): Promise<Record<string, number>> => {
+    const { filterTenantId: _tenant, ...body } = params;
+    try {
+      return (
+        (await request<Record<string, number>>(
+          '/api/v1/tramites/network/instances/estado-counts',
+          { method: 'POST', body: JSON.stringify(body) },
+        )) ?? {}
+      );
+    } catch {
+      return {};
+    }
+  },
+
+  /**
+   * Detalle de un trámite de la red. `GET /api/v1/tramites/network/instances/{id}`.
+   *
+   * El contrato (`NetworkProcedureDetailResponse`, #12358) ENVUELVE el detalle:
+   * `{ tenantId, tenantName, instance }`, donde `instance` es el mismo objeto que devuelve
+   * `GET /instances/{id}` al propio cliente (actors, fieldValues, statusHistory, events…). Aquí se
+   * aplana a `ProcedureInstanceDetail & NetworkOwned` para que el modal y sus secciones lean el
+   * MISMO shape en consulta y en propio. Los `tenantId`/`tenantName` del sobre mandan sobre los de
+   * `instance` (son el dueño del trámite tal como lo resolvió la cabeza).
+   */
+  getNetworkInstance: async (id: string): Promise<NetworkInstanceDetail> => {
+    const res = await request<NetworkProcedureDetailResponse>(
+      `/api/v1/tramites/network/instances/${id}`,
+    );
+    return desenvolverDetalleDeRed(res);
+  },
 
   /**
    * HU #12106 — por qué se puede filtrar el listado. La barra se pinta a partir de esta respuesta,
@@ -1260,38 +1405,52 @@ export const tramitesClient = {
   // GET descarga binaria de un adjunto. Devuelve el blob + filename/mimetype
   // (resueltos del Content-Disposition / Content-Type de la respuesta) para que
   // el consumidor dispare la descarga del navegador (blob → objectURL → anchor).
-  downloadAttachment: async (
+  downloadAttachment: (
     instanceId: string,
     attachmentId: string,
     tenantId?: string,
     fallbackFilename?: string,
-  ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
-    const res = await fetch(
-      apiUrl(`/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`),
-      { headers: tenantHeader(tenantId) },
+  ): Promise<{ blob: Blob; filename: string; mimetype: string }> =>
+    downloadBinary(
+      `/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`,
+      tenantHeader(tenantId),
+      fallbackFilename || attachmentId,
+    ),
+
+  // ── HU #12411 — documentos de un trámite de la red (cabeza de grupo), solo lectura ─────────────
+  //
+  // contrato B5 #12410. Mismas reglas que el resto de `network/**`: NO viaja `X-Tenant-Id` (el
+  // alcance lo resuelve el servidor desde el JWT) y no existe `preview-url` de red: «Ver» se hace
+  // con el MISMO binario de `download` re-empaquetado como blob en el navegador. Un 403
+  // (`network_documents_disabled` / `network_scope_required`) o un 404 (`not_found`,
+  // anti-enumeración) llegan como `TramitesApiError` con `status`, que `isScopeRejection` reconoce.
+
+  /** Adjuntos de un trámite de la red. `GET /api/v1/tramites/network/instances/{id}/attachments`. */
+  getNetworkAttachments: async (instanceId: string): Promise<ProcedureAttachment[]> => {
+    // contrato B5 #12410 — `AttachmentDto[]` sin `previewUrl`. Se admite también el sobre
+    // `{ attachments }` de la ruta propia por si el servidor los unifica.
+    const res = await request<ProcedureAttachment[] | AttachmentsResponse | undefined>(
+      `/api/v1/tramites/network/instances/${instanceId}/attachments`,
     );
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(
-        `${res.status} ${res.statusText}${body ? ': ' + body : ''}`,
-      );
-    }
-    const blob = await res.blob();
-    const mimetype =
-      res.headers.get('content-type') ?? 'application/octet-stream';
-    // Content-Disposition: attachment; filename="fur.txt"  (o filename*=UTF-8'')
-    const cd = res.headers.get('content-disposition') ?? '';
-    const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
-    const plain = /filename="?([^";]+)"?/i.exec(cd);
-    const raw = star?.[1] ?? plain?.[1] ?? '';
-    let filename = raw.trim();
-    try {
-      filename = raw ? decodeURIComponent(raw.trim()) : '';
-    } catch {
-      // raw no era URI-encoded; se usa tal cual.
-    }
-    return { blob, filename: filename || fallbackFilename || attachmentId, mimetype };
+    if (Array.isArray(res)) return res;
+    return res?.attachments ?? [];
   },
+
+  /**
+   * Binario de un adjunto de la red.
+   * `GET /api/v1/tramites/network/instances/{id}/attachments/{attachmentId}/download`.
+   */
+  downloadNetworkAttachment: (
+    instanceId: string,
+    attachmentId: string,
+    fallbackFilename?: string,
+  ): Promise<{ blob: Blob; filename: string; mimetype: string }> =>
+    // contrato B5 #12410 — `Content-Disposition: attachment; filename=…`, sin `X-Tenant-Id`.
+    downloadBinary(
+      `/api/v1/tramites/network/instances/${instanceId}/attachments/${attachmentId}/download`,
+      authOnlyHeader(),
+      fallbackFilename || attachmentId,
+    ),
 
   // GET URL presignada de previsualización inline (ADR-0029). TTL ~10 min.
   // El backend valida tenant + ownership antes de emitir { url, expiresAt }.

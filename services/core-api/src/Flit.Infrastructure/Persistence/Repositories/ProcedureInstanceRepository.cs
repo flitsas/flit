@@ -12,6 +12,7 @@ using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Domain.Enums;
 using Flit.Queries.Domain;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -140,6 +141,19 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             // append-only (reenvío/reasignación admin escribían el evento, pero ningún endpoint lo leía).
             .Include(x => x.Events)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+
+    // HU #12358 — detalle consolidado de la red: mismo grafo que la sobrecarga Guid, alcance por
+    // TenantScope (vacío ⇒ WHERE 1=0). AsNoTracking: solo lectura por contrato (AC1 «en solo lectura»).
+    public Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, TenantScope scope, CancellationToken ct) =>
+        db.ProcedureInstances
+            .AsNoTracking()
+            .Include(x => x.ProcedureType)
+            .Include(x => x.FieldValues)
+            .Include(x => x.StatusHistory)
+            .Include(x => x.Actors)
+            .Include(x => x.Events)
+            .WhereTenantInScope(scope, x => x.TenantId)
+            .FirstOrDefaultAsync(x => x.Id == id && x.DeletedAt == null, ct);
 
     public Task<ProcedureInstance?> GetByIdWithActorsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
@@ -1823,6 +1837,22 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         if (tenantId is { } tid)
             baseQuery = baseQuery.Where(x => x.TenantId == tid);
 
+        return await ListPageWithSummaryGraphAsync(baseQuery, skip, take, filter, sortBy, direction, ct);
+    }
+
+    /// <summary>
+    /// Núcleo compartido de las dos sobrecargas de <c>ListWithSummaryGraphFilteredAsync</c>: recibe la
+    /// consulta ya acotada por tenant y aplica filtros, conteo total, orden, grafo y página.
+    /// </summary>
+    private async Task<(IReadOnlyList<ProcedureInstance> Items, int Total)> ListPageWithSummaryGraphAsync(
+        IQueryable<ProcedureInstance> baseQuery,
+        int skip,
+        int take,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct)
+    {
         baseQuery = ApplyListFilters(baseQuery, filter);
 
         var total = await baseQuery.CountAsync(ct);
@@ -1856,6 +1886,25 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return (items, total);
     }
 
+    // HU #12358 — listado consolidado de la red. Único cambio frente a la sobrecarga Guid?: el alcance
+    // entra por WhereTenantInScope (conjunto vacío ⇒ cero filas, nunca «sin filtro»). Filtros, orden,
+    // paginación y grafo son EXACTAMENTE los mismos (núcleo compartido arriba).
+    public async Task<(IReadOnlyList<ProcedureInstance> Items, int Total)> ListWithSummaryGraphFilteredAsync(
+        TenantScope scope,
+        int skip,
+        int take,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct)
+    {
+        var baseQuery = db.ProcedureInstances.AsNoTracking()
+            .Where(x => x.DeletedAt == null)
+            .WhereTenantInScope(scope, x => x.TenantId);
+
+        return await ListPageWithSummaryGraphAsync(baseQuery, skip, take, filter, sortBy, direction, ct);
+    }
+
     /// <summary>
     /// Aplica los filtros de <see cref="ProcedureInstanceListFilter"/>. VIN/placa comparan por IGUALDAD
     /// case-insensitive (<c>ToUpper() == ...</c>, mismo criterio de <see cref="FindTramitesByVinAsync"/>);
@@ -1874,6 +1923,44 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         if (tenantId is { } tid)
             query = query.Where(x => x.TenantId == tid);
 
+        return await CountByStatusAsync(query, filter, ct);
+    }
+
+    // HU #12358 — conteo por estado del universo consolidado de la red (alcance por WhereTenantInScope).
+    public async Task<IReadOnlyDictionary<string, int>> CountByStatusFilteredAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct)
+    {
+        var query = db.ProcedureInstances.AsNoTracking()
+            .Where(x => x.DeletedAt == null)
+            .WhereTenantInScope(scope, x => x.TenantId);
+
+        return await CountByStatusAsync(query, filter, ct);
+    }
+
+    // HU #12361 — hijos alcanzados por las estadísticas de la red (DISTINCT tenant_id bajo el filtro).
+    public async Task<IReadOnlyList<Guid>> ListTenantIdsWithMatchesAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct)
+    {
+        var query = db.ProcedureInstances.AsNoTracking()
+            .Where(x => x.DeletedAt == null)
+            .WhereTenantInScope(scope, x => x.TenantId);
+
+        return await ApplyListFilters(query, filter)
+            .Select(x => x.TenantId)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
+    /// <summary>Núcleo compartido de las dos sobrecargas de <c>CountByStatusFilteredAsync</c>.</summary>
+    private async Task<IReadOnlyDictionary<string, int>> CountByStatusAsync(
+        IQueryable<ProcedureInstance> query,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct)
+    {
         query = ApplyListFilters(query, filter);
 
         // GROUP BY en SQL: se traen tantas filas como estados existan (siete), no los expedientes.

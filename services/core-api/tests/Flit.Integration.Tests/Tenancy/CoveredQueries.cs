@@ -96,6 +96,23 @@ internal static class CoveredQueries
         new("Q25", "OtMetricsReadRepository.ListClientCompaniesAsync (grants)", "Guid otTenantId", 1, SupportsGlobal: false),
         new("Q26", "DbTenantScopeResolver.ResolveAsync", "Guid tenantId", 0, SupportsGlobal: false),
         new("Q27", "TenantScopeQueryableExtensions.WhereTenantInScope (ruta nueva)", "TenantScope", 2, SupportsGlobal: true),
+        // HU #12358 — sobrecargas con TenantScope de la vista consolidada de la red (NetworkProceduresReadTests).
+        new("Q28", "ProcedureInstanceRepository.ListWithSummaryGraphFilteredAsync (TenantScope, red)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q29", "ProcedureInstanceRepository.CountByStatusFilteredAsync (TenantScope, red)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q30", "ProcedureInstanceRepository.GetByIdWithDetailsAsync (TenantScope, detalle de red)", "TenantScope", 2, SupportsGlobal: false),
+        // HU #12361 — auditoria del acceso consolidado (NetworkAccessAuditTests).
+        new("Q31", "ProcedureInstanceRepository.ListTenantIdsWithMatchesAsync (TenantScope, hijos alcanzados por las estadisticas)", "TenantScope", 1, SupportsGlobal: false),
+        new("Q32", "NetworkAccessAuditReader.SearchAsync (auditoria del hijo / SuperAdmin)", "NetworkAccessAuditQuery.TenantId", 0, SupportsGlobal: true),
+        // HU #12359 — estadisticas de red con conjunto explicito = ANY(@tenants) (NetworkAnalyticsTests). Sin modo global.
+        new("Q33", "AnalyticsNetworkReadRepository.GetNetworkOverviewAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 2, SupportsGlobal: false),
+        new("Q34", "AnalyticsNetworkReadRepository.GetNetworkTopProducersAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 1, SupportsGlobal: false),
+        new("Q35", "AnalyticsNetworkReadRepository.GetNetworkMonthlyTrendAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 2, SupportsGlobal: false),
+        // HU #12360 — reporte detallado de red con conjunto explicito = ANY(@tenants) sobre la vista (NetworkReportsTests). Sin modo global.
+        new("Q36", "DetailedReportNetworkReadRepository.GetNetworkProceduresAsync (red, uuid[])", "NetworkDetailedReportFilter.TenantIds", 2, SupportsGlobal: false),
+        new("Q37", "DetailedReportNetworkReadRepository.ExportNetworkProceduresAsync (red, uuid[], mismo predicado que Q36)", "NetworkDetailedReportFilter.TenantIds", 2, SupportsGlobal: false),
+        // HU #12410 — documentos de la red: dueño por IProcedureInstanceOwnerLookup + CanRead, luego los handlers de anexos con ese tenant (NetworkAttachmentsTests). Sin modo global.
+        new("Q38", "NetworkAttachmentsHandler.ListAsync (red: ProcedureInstanceOwnerLookup + ListAttachmentsHandler con el tenant del dueno)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q39", "NetworkAttachmentsHandler.DownloadAsync (red: ProcedureInstanceOwnerLookup + DownloadAttachmentHandler con el tenant del dueno)", "TenantScope", 2, SupportsGlobal: false),
     ];
 
     public static CoveredQuery Get(string id) =>

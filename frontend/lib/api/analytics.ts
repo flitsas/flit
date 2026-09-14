@@ -129,3 +129,63 @@ export function fetchActiveModules(tenantId?: string, signal?: AbortSignal): Pro
     signal,
   });
 }
+
+// ── HU #12364 — estadísticas de la RED (Feature #12257) ─────────────────────────────────────────
+//
+// Rutas de #12359 bajo `/api/v1/tramites/network/stats/*`: MISMA respuesta que las de
+// `/api/v1/analytics/*` más `scope.tenantIds` (los clientes efectivamente consultados). El alcance
+// lo resuelve el servidor desde el JWT; el cliente NO manda `X-Tenant-Id` ni lista de tenants —
+// solo `childTenantId` para acotar a UN cliente de la red (403 `network_child_out_of_scope` si es
+// ajeno). Para quien no es cabeza estas funciones no se llaman nunca (AC4): 403 `network_scope_required`.
+
+const networkBase = "/api/v1/tramites/network/stats";
+
+/** Query de las rutas `network/stats/*`: rango + hijo opcional. Sin `tenantId` (lo decide el JWT). */
+export interface NetworkStatsParams {
+  from: string;
+  to: string;
+  /** Acota a un cliente de la red (puede ser la propia cabeza). Vacío ⇒ toda la red. */
+  childTenantId?: string;
+}
+
+/** Los clientes que el servidor consultó de verdad (padre + hijos, o solo el hijo elegido). */
+export interface NetworkScopeInfo {
+  tenantIds: string[];
+}
+
+export type NetworkAnalyticsOverviewResponse = AnalyticsOverviewResponse & { scope: NetworkScopeInfo };
+export type NetworkMonthlyTrendResponse = MonthlyTrendResponse & { scope: NetworkScopeInfo };
+export type NetworkTopProducersResponse = TopProducersResponse & { scope: NetworkScopeInfo };
+
+/** GET /tramites/network/stats/overview — `AnalyticsOverviewResponse` del universo de la red. */
+export function fetchNetworkAnalyticsOverview(
+  params: NetworkStatsParams,
+  signal?: AbortSignal,
+): Promise<NetworkAnalyticsOverviewResponse> {
+  return apiFetch<NetworkAnalyticsOverviewResponse>(`${networkBase}/overview`, {
+    query: { from: params.from, to: params.to, childTenantId: params.childTenantId },
+    signal,
+  });
+}
+
+/** GET /tramites/network/stats/monthly-trend — tendencia mensual del universo de la red. */
+export function fetchNetworkMonthlyTrend(
+  params: NetworkStatsParams,
+  signal?: AbortSignal,
+): Promise<NetworkMonthlyTrendResponse> {
+  return apiFetch<NetworkMonthlyTrendResponse>(`${networkBase}/monthly-trend`, {
+    query: { from: params.from, to: params.to, childTenantId: params.childTenantId },
+    signal,
+  });
+}
+
+/** GET /tramites/network/stats/productivity/top — ranking de radicadores de la red. */
+export function fetchNetworkTopProducers(
+  params: NetworkStatsParams & { limit?: number },
+  signal?: AbortSignal,
+): Promise<NetworkTopProducersResponse> {
+  return apiFetch<NetworkTopProducersResponse>(`${networkBase}/productivity/top`, {
+    query: { from: params.from, to: params.to, limit: params.limit, childTenantId: params.childTenantId },
+    signal,
+  });
+}

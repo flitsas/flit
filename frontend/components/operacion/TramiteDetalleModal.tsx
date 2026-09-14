@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Coins,
   Download,
+  Eye,
   FileCheck2,
   FileText,
   FolderCheck,
@@ -15,7 +16,7 @@ import {
 } from 'lucide-react';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { plateFlowHint } from './TramitesTable';
-import { AttachmentPreview, useAttachmentPreview } from './TramiteDocumentosModal';
+import { AttachmentPreview, AvisoDescargaFallida, useAttachmentPreview } from './TramiteDocumentosModal';
 import { SeccionCargando, SeccionError } from './detalle/primitivos';
 import { DetalleTramiteShell } from './detalle/DetalleTramiteShell';
 import { DetalleStepper } from './detalle/DetalleStepper';
@@ -41,6 +42,14 @@ import {
   mapStatusHistoryToTimelineNodes,
 } from './detalle/timeline-mappers';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { ConsultaModeProvider } from './ConsultaModeContext';
+import { StatusBadge } from '@/components/atom/StatusBadge';
+import {
+  COPY_DOCUMENTOS_FUERA_DE_ALCANCE,
+  COPY_SECCION_FUERA_DE_ALCANCE,
+  ETIQUETA_SOLO_CONSULTA,
+  describirErrorDeSeccion,
+} from '@/lib/tramites/network-scope';
 import type {
   BiometricValidation,
   InstanceSummary,
@@ -156,6 +165,13 @@ export interface TramiteDetalleModalProps {
    * módulo de Trámites: allí sigue siendo la salida del estado `rechazado`.
    */
   readOnly?: boolean;
+  /**
+   * HU #12362 — modo consulta de un trámite de un cliente HIJO (cabeza de red). Implica
+   * `readOnly` y además: el detalle se lee por la ruta consolidada (`network/instances/{id}`),
+   * ninguna sección ofrece gestión de documentos, y un 403/404 de alcance se pinta con el copy del
+   * AC3 en vez de un error técnico con reintento.
+   */
+  consultaMode?: boolean;
 }
 
 export function TramiteDetalleModal({
@@ -165,8 +181,10 @@ export function TramiteDetalleModal({
   tenantId,
   item,
   onAbrirAsistente,
-  readOnly = false,
+  readOnly: readOnlyProp = false,
+  consultaMode = false,
 }: TramiteDetalleModalProps) {
+  const readOnly = readOnlyProp || consultaMode;
   const [detail, setDetail] = useState<ProcedureInstanceDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -175,6 +193,8 @@ export function TramiteDetalleModal({
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [attLoading, setAttLoading] = useState(false);
   const [attError, setAttError] = useState<string | null>(null);
+  /** HU #12362 (AC3) — el servidor no habilita los documentos de la red para esta cabeza. */
+  const [attFueraDeAlcance, setAttFueraDeAlcance] = useState(false);
   const [attReloadKey, setAttReloadKey] = useState(0);
 
   const [panelTracking, setPanelTracking] = useState<PanelTracking>(null);
@@ -201,7 +221,8 @@ export function TramiteDetalleModal({
     setSubsanarError(null);
   }
 
-  const preview = useAttachmentPreview(instanceId, tenantId);
+  // HU #12411 — en consulta, «Archivos finales» ve/descarga por la ruta de red (nunca preview-url).
+  const preview = useAttachmentPreview(instanceId, tenantId, { consultaMode });
 
   useEffect(() => {
     if (!open || !instanceId) return;
@@ -210,11 +231,16 @@ export function TramiteDetalleModal({
       setLoading(true);
       setError(null);
       try {
-        const data = await tramitesClient.getInstance(instanceId, tenantId);
+        // HU #12362 — el trámite de un hijo solo existe para la cabeza en la ruta consolidada.
+        const data = consultaMode
+          ? await tramitesClient.getNetworkInstance(instanceId)
+          : await tramitesClient.getInstance(instanceId, tenantId);
         if (!cancelled) setDetail(data ?? null);
       } catch (e: unknown) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'No se pudo cargar el trámite.');
+          setError(
+            describirErrorDeSeccion(e, consultaMode, 'No se pudo cargar el trámite.').mensaje,
+          );
           setDetail(null);
         }
       } finally {
@@ -225,7 +251,7 @@ export function TramiteDetalleModal({
     return () => {
       cancelled = true;
     };
-  }, [open, instanceId, tenantId, detailReloadKey]);
+  }, [open, instanceId, tenantId, detailReloadKey, consultaMode]);
 
   useEffect(() => {
     if (!open || !instanceId) return;
@@ -233,12 +259,24 @@ export function TramiteDetalleModal({
     const load = async () => {
       setAttLoading(true);
       setAttError(null);
+      setAttFueraDeAlcance(false);
       try {
-        const list = await tramitesClient.getAttachments(instanceId, tenantId);
+        // HU #12411 — el trámite de un hijo solo existe para la cabeza en la ruta consolidada
+        // (contrato B5 #12410); el propio sigue por la ruta de hoy.
+        const list = consultaMode
+          ? await tramitesClient.getNetworkAttachments(instanceId)
+          : await tramitesClient.getAttachments(instanceId, tenantId);
         if (!cancelled) setAttachments(list);
       } catch (e: unknown) {
         if (!cancelled) {
-          setAttError(e instanceof Error ? e.message : 'No se pudieron cargar los archivos finales.');
+          const descrito = describirErrorDeSeccion(
+            e,
+            consultaMode,
+            'No se pudieron cargar los archivos finales.',
+            COPY_DOCUMENTOS_FUERA_DE_ALCANCE,
+          );
+          setAttError(descrito.mensaje);
+          setAttFueraDeAlcance(descrito.fueraDeAlcance);
           setAttachments([]);
         }
       } finally {
@@ -249,10 +287,13 @@ export function TramiteDetalleModal({
     return () => {
       cancelled = true;
     };
-  }, [open, instanceId, tenantId, attReloadKey]);
+  }, [open, instanceId, tenantId, attReloadKey, consultaMode]);
 
   useEffect(() => {
     if (!open || !instanceId || panelTracking !== 'identidad') return;
+    // HU #12362 — el expediente biométrico solo existe por la ruta propia; para un trámite de un
+    // hijo el servidor responde 404 por diseño. No se pide: el panel pinta el copy del AC3.
+    if (consultaMode) return;
     let cancelled = false;
     const load = async () => {
       setIdentidadLoading(true);
@@ -279,9 +320,17 @@ export function TramiteDetalleModal({
     return () => {
       cancelled = true;
     };
-  }, [open, instanceId, tenantId, panelTracking, identidadReloadKey]);
+  }, [open, instanceId, tenantId, panelTracking, identidadReloadKey, consultaMode]);
+
+  const reintentarDetalle = useCallback(() => setDetailReloadKey((k) => k + 1), []);
 
   const title = item ? resolveTitle(item) : 'Detalle del trámite';
+  /** HU #12362 — razón social del hijo dueño del trámite, si viaja en la fila o en el detalle. */
+  const tenantNameRed =
+    (item as { tenantName?: string | null } | null)?.tenantName ??
+    (detail as { tenantName?: string | null } | null)?.tenantName ??
+    item?.companiaNombre ??
+    null;
   const pasos = item ? PASOS_POR_MODALIDAD[item.modalidad] : PASOS_POR_MODALIDAD.TRASPASO;
   const pasoActivoIndex = Math.max(
     0,
@@ -361,10 +410,24 @@ export function TramiteDetalleModal({
                   {estadoHdr.label}
                 </span>
               ) : null}
+              {/* HU #12362 — distintivo del modo consulta: texto + icono, no solo color. */}
+              {consultaMode ? (
+                <StatusBadge
+                  tone="neutral"
+                  ariaLabel={`${ETIQUETA_SOLO_CONSULTA}: trámite de un cliente de la red`}
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                      {ETIQUETA_SOLO_CONSULTA}
+                    </span>
+                  }
+                />
+              ) : null}
             </div>
             <p className="mt-1 text-[12px]" style={{ color: '#475569' }}>
               <span className="font-mono">{item.referenceNumber}</span> · {item.placa ?? '—'} ·
               Responsable: {item.gestorNombre ?? '—'}
+              {consultaMode && tenantNameRed ? ` · Cliente: ${tenantNameRed}` : ''}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -406,7 +469,15 @@ export function TramiteDetalleModal({
     : undefined;
 
   return (
-    <>
+    <ConsultaModeProvider
+      consultaMode={consultaMode}
+      // HU #12362 — en consulta las secciones leen del detalle consolidado (actores, campos) en
+      // vez de pedir por rutas propias que el servidor rechaza para un trámite de un hijo.
+      detalle={detail}
+      detalleLoading={loading}
+      detalleError={error}
+      reintentarDetalle={reintentarDetalle}
+    >
       <DetalleTramiteShell open={open} onClose={onClose} title={title} header={header}>
         {!item ? (
           <p className="py-6 text-center text-xs opacity-70">No se encontró información del trámite.</p>
@@ -531,7 +602,12 @@ export function TramiteDetalleModal({
                 </div>
               ) : panelTracking === 'identidad' ? (
                 <div className="lg:col-span-12">
-                  {identidadLoading ? (
+                  {consultaMode ? (
+                    // HU #12362 (AC3) — sin petición, sin error técnico ni reintento.
+                    <p className="text-xs text-[#162744]/70 dark:text-white/70" role="status">
+                      {COPY_SECCION_FUERA_DE_ALCANCE}
+                    </p>
+                  ) : identidadLoading ? (
                     <SeccionCargando etiqueta="Cargando trazabilidad de identidad" filas={3} />
                   ) : identidadError ? (
                     <SeccionError
@@ -636,7 +712,13 @@ export function TramiteDetalleModal({
                               {attLoading ? (
                                 <SeccionCargando etiqueta="Cargando archivos finales" filas={2} />
                               ) : null}
-                              {!attLoading && attError ? (
+                              {!attLoading && attError && attFueraDeAlcance ? (
+                                // HU #12362 (AC3) — sin error técnico ni reintento.
+                                <p className="text-xs opacity-70" role="status">
+                                  {attError}
+                                </p>
+                              ) : null}
+                              {!attLoading && attError && !attFueraDeAlcance ? (
                                 <SeccionError
                                   mensaje={attError}
                                   contexto="los archivos finales"
@@ -661,6 +743,8 @@ export function TramiteDetalleModal({
                                           SHA-256 · {a.sha256}
                                         </span>
                                       </span>
+                                      {/* HU #12411 — en consulta la descarga va por la ruta de
+                                          red (el hook decide); la UI es la misma que la propia. */}
                                       <button
                                         type="button"
                                         onClick={() => void preview.download(a)}
@@ -675,11 +759,8 @@ export function TramiteDetalleModal({
                                   ))}
                                 </ul>
                               ) : null}
-                              {preview.doc === null && preview.error ? (
-                                <p className="mt-3 text-xs" style={{ color: '#FF4E00' }} role="alert">
-                                  {preview.error}
-                                </p>
-                              ) : null}
+                              {/* 503 audit_unavailable (consulta): mismo aviso con «Reintentar». */}
+                              <AvisoDescargaFallida preview={preview} className="mt-3" />
                             </section>
                           </div>
 
@@ -711,6 +792,6 @@ export function TramiteDetalleModal({
       </DetalleTramiteShell>
 
       <AttachmentPreview preview={preview} />
-    </>
+    </ConsultaModeProvider>
   );
 }

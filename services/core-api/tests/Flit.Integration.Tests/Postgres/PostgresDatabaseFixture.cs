@@ -207,7 +207,8 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
     /// <summary>
     /// Deja la base como recién migrada (AC2): un solo <c>TRUNCATE … RESTART IDENTITY CASCADE</c>
     /// sobre <see cref="ResettableTables"/> y, en el mismo round-trip, los interruptores de
-    /// <c>identity.hierarchy_switches</c> vuelven a <c>is_enabled = true</c> (su seed). Lo invoca
+    /// <c>identity.hierarchy_switches</c> vuelven a su seed (<c>is_enabled = true</c>, salvo
+    /// <c>network_documents_concesion</c> de la HU #12410, que nace apagado). Lo invoca
     /// <see cref="PostgresTestBase"/> antes de cada prueba; también puede llamarse a mano.
     /// <para>
     /// Las demás tablas de <see cref="PreservedSeededTables"/> se asumen de solo lectura para las
@@ -366,8 +367,8 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
                 END IF;
             END $$;
             UPDATE identity.hierarchy_switches
-               SET is_enabled = true, updated_by = NULL
-             WHERE NOT is_enabled OR updated_by IS NOT NULL;
+               SET is_enabled = (switch_key <> 'network_documents_concesion'), updated_by = NULL
+             WHERE is_enabled <> (switch_key <> 'network_documents_concesion') OR updated_by IS NOT NULL;
             """;
 
         await using (var cmd = new NpgsqlCommand(

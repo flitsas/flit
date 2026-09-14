@@ -22,7 +22,13 @@ import {
   Car,
 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { fetchActiveModules, fetchAnalyticsOverview, fetchMonthlyTrend } from "@/lib/api/analytics";
+import {
+  fetchActiveModules,
+  fetchAnalyticsOverview,
+  fetchMonthlyTrend,
+  fetchNetworkAnalyticsOverview,
+  fetchNetworkMonthlyTrend,
+} from "@/lib/api/analytics";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import { tramitesClient } from "@/lib/api/tramites-client";
 import { getToken } from "@/lib/api/client";
@@ -30,6 +36,10 @@ import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
 import { useActiveBanners } from "@/hooks/useActiveBanners";
 import { bannerAmbientGradient, useDominantColor } from "@/hooks/useDominantColor";
+import { useNetworkScope } from "@/hooks/useNetworkScope";
+import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
+import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
+import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
 import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
@@ -108,9 +118,13 @@ const STATUS_COLORS: Record<string, string> = {
   rejected_ot: "#FF4E00",
 };
 
-function describeError(error: unknown): string {
+function describeError(error: unknown, networkActive = false): string {
   if (error instanceof ApiError) {
-    if (error.status === 403) return "No tienes acceso a las métricas de esa compañía.";
+    if (error.status === 403) {
+      return networkActive
+        ? "No tienes acceso a las métricas de la red."
+        : "No tienes acceso a las métricas de esa compañía.";
+    }
     if (error.status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión.";
   }
   return "No se pudieron cargar las métricas del dashboard.";
@@ -210,6 +224,14 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   // Rango de fechas de las métricas (KPIs, distribución general, validaciones biométricas) — visible a todos los roles.
   const [range, setRange] = useState<DateRange>(() => defaultRange());
 
+  // HU #12364 — alcance de red de una cabeza de grupo: el MISMO control y la MISMA preferencia
+  // (`tramites.scope`) que el listado de trámites (AC5). Para quien no es cabeza el hook no hace
+  // ninguna llamada y `networkActive` es siempre falso: las llamadas de abajo quedan como hoy (AC4).
+  const net = useNetworkScope();
+  const networkActive = net.networkActive;
+  const networkChildTenantId = net.scope.childTenantId;
+  const networkReady = net.ready;
+
   // Datos de la API
   const [overview, setOverview] = useState<AnalyticsOverviewResponse | null>(null);
   const [trend, setTrend] = useState<MonthlyTrendPoint[]>([]);
@@ -291,24 +313,39 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       const tid = tenantId || undefined;
 
       try {
-        const [overviewRes, trendRes] = await Promise.all([
-          fetchAnalyticsOverview({ from: monthRange.from, to: monthRange.to, tenantId: tid }, controller.signal),
-          fetchMonthlyTrend({ from: trendRange.from, to: trendRange.to, tenantId: tid }, controller.signal),
-        ]);
+        // HU #12364 AC1 — con la red activa las mismas dos consultas van a `network/stats/*`
+        // (con `childTenantId` si se eligió un hijo); con alcance propio, llamadas idénticas a hoy.
+        const [overviewRes, trendRes] = networkActive
+          ? await Promise.all([
+              fetchNetworkAnalyticsOverview(
+                { from: monthRange.from, to: monthRange.to, childTenantId: networkChildTenantId },
+                controller.signal,
+              ),
+              fetchNetworkMonthlyTrend(
+                { from: trendRange.from, to: trendRange.to, childTenantId: networkChildTenantId },
+                controller.signal,
+              ),
+            ])
+          : await Promise.all([
+              fetchAnalyticsOverview({ from: monthRange.from, to: monthRange.to, tenantId: tid }, controller.signal),
+              fetchMonthlyTrend({ from: trendRange.from, to: trendRange.to, tenantId: tid }, controller.signal),
+            ]);
         if (controller.signal.aborted) return;
         setOverview(overviewRes);
         setTrend(trendRes.items);
         setStatus("ready");
       } catch (err) {
         if (controller.signal.aborted || (err as Error).name === "AbortError") return;
-        setErrorMessage(describeError(err));
+        setErrorMessage(describeError(err, networkActive));
         setStatus("error");
       }
     }
 
+    // La cabeza espera a conocer su alcance guardado para no pedir «lo propio» y luego «la red».
+    if (!networkReady) return () => controller.abort();
     void load();
     return () => controller.abort();
-  }, [range, tenantId, reloadKey]);
+  }, [range, tenantId, reloadKey, networkActive, networkChildTenantId, networkReady]);
 
   // Cargar KPIs de validaciones biométricas (card "Validaciones Biométricas"), independiente
   // del overview de analytics.
@@ -595,6 +632,17 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 defaultLabel="Todas las compañías"
               />
             )}
+            {/* HU #12364 — solo para una cabeza de red (AC4: nadie más lo ve). */}
+            {net.isGroupParent && (
+              <NetworkScopeSelector
+                scope={net.scope}
+                onChange={net.setScope}
+                hijos={net.children}
+                childrenStatus={net.childrenStatus}
+                disabled={net.saving}
+                testId="dashboard-network-scope-select"
+              />
+            )}
           </div>
           {/* KPIs de Trámites — solo visibles si el módulo está habilitado para el tenant
               (AC1: `true` por defecto mientras carga, evita ocultar la sección con parpadeo). */}
@@ -613,8 +661,17 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                     key={k.label}
                     className="rounded-2xl p-4 flex items-center justify-between bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[11px] opacity-70 font-medium">{k.label}</p>
+                      {/* AC1 — cada indicador dice que es de la red (texto, no solo color). */}
+                      {networkActive && (
+                        <NetworkScopeBadge
+                          scope={net.scope}
+                          hijos={net.children}
+                          className="mt-1"
+                          testId={`kpi-red-${k.label}`}
+                        />
+                      )}
                       {isError ? (
                         <p
                           className="text-xl font-bold mt-1 flex items-center gap-1.5"
@@ -692,7 +749,10 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             >
               {/* Distribución general de trámites por estado (las 4 categorías, no solo traspasos) */}
               <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
-                <h2 className="text-sm font-bold mb-3">Distribución General de Trámites</h2>
+                <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+                  Distribución General de Trámites
+                  {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="distribucion-red" />}
+                </h2>
                 {globalFunnel.length === 0 ? (
                   <p className="text-xs opacity-50 mt-2">Sin trámites en el rango seleccionado.</p>
                 ) : (
@@ -734,7 +794,16 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           >
             {/* Validaciones Biométricas: KPIs + aviso de próximas a vencer */}
             <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
-              <h2 className="text-sm font-bold mb-3">Validaciones Biométricas</h2>
+              <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+                Validaciones Biométricas
+                {/* Sin ruta de red para biometría: sigue siendo del cliente propio y se rotula
+                    para que no se lea como agregado de la red (AC1). */}
+                {networkActive && (
+                  <span className="text-[11px] font-medium opacity-70" data-testid="biometria-solo-propia">
+                    {ETIQUETA_SOLO_COMPANIA_PROPIA}
+                  </span>
+                )}
+              </h2>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: "Total", value: biometricStats?.total ?? 0, color: "#557EFF" },
@@ -775,7 +844,10 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             skeletonRows={3}
           >
             <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
-              <h2 className="text-sm font-bold mb-3">Seguimiento operativo</h2>
+              <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+                Seguimiento operativo
+                {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="seguimiento-red" />}
+              </h2>
               <div className="h-[280px] -mx-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
