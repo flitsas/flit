@@ -8,7 +8,11 @@ import { SeccionCargando, SeccionError } from '@/components/operacion/detalle/pr
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { tramiteLabel, vehiculo } from '@/lib/tramites/tramites-row-labels';
-import type { InstanceSummary, StatusHistoryItem } from '@/lib/api/types/procedure-runtime';
+import type {
+  InstanceSummary,
+  ProcedureInstanceEvent,
+  StatusHistoryItem,
+} from '@/lib/api/types/procedure-runtime';
 
 /**
  * Panel del trámite: se abre desde el indicador de estado del listado (HU #12185).
@@ -19,8 +23,9 @@ import type { InstanceSummary, StatusHistoryItem } from '@/lib/api/types/procedu
  * partes, organismo— y el historial responde «por dónde va».</p>
  *
  * <p><b>La ficha no cuesta ninguna consulta.</b> Placa, VIN, marca, línea, comprador, vendedor con
- * sus documentos, organismo, compañía y paso ya viajan en cada fila del listado. Lo único que se
- * pide al servidor es el historial.</p>
+ * sus documentos, organismo, compañía y paso ya viajan en cada fila del listado. Lo que se pide al
+ * servidor es el historial de estados y, en paralelo, los eventos administrativos (reasignación de
+ * gestor, reenvío de validación) que se mezclan en la misma línea de tiempo.</p>
  *
  * <p><b>No es el tracking del detalle.</b> El que vive dentro del trámite (`ExpedienteTimeline`) no
  * se toca: ese cuenta la cronología del expediente y se lee con el trámite abierto delante. Este
@@ -40,6 +45,7 @@ export function TramiteTrackingModal({
   onClose: () => void;
 }) {
   const [history, setHistory] = useState<StatusHistoryItem[]>([]);
+  const [events, setEvents] = useState<ProcedureInstanceEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -52,20 +58,26 @@ export function TramiteTrackingModal({
     const load = async () => {
       setLoading(true);
       setError(null);
-      try {
+      // Historial de estados y eventos administrativos se piden en paralelo y se resuelven de forma
+      // independiente: si `getInstance` falla, los eventos degradan a `[]` sin tocar el historial de
+      // estados (el dato principal, con su propio manejo de error).
+      const [historyResult, instanceResult] = await Promise.allSettled([
+        tramitesClient.getStatusHistory(instanceId, 1, 50, tenantId ?? undefined),
+        tramitesClient.getInstance(instanceId, tenantId ?? undefined),
+      ]);
+      if (cancelled) return;
+      if (historyResult.status === 'fulfilled') {
         // Tope alto a propósito: un trámite tiene una decena de movimientos, no cien. Paginar el
         // historial dentro de un panel que se abre para ojearlo sería pedirle al gestor que
         // navegue dos veces para responder una sola pregunta.
-        const page = await tramitesClient.getStatusHistory(instanceId, 1, 50, tenantId ?? undefined);
-        if (!cancelled) setHistory(page?.items ?? []);
-      } catch (e: unknown) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'No se pudo cargar el historial del trámite.');
-          setHistory([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+        setHistory(historyResult.value?.items ?? []);
+      } else {
+        const reason = historyResult.reason;
+        setError(reason instanceof Error ? reason.message : 'No se pudo cargar el historial del trámite.');
+        setHistory([]);
       }
+      setEvents(instanceResult.status === 'fulfilled' ? instanceResult.value?.events ?? [] : []);
+      setLoading(false);
     };
     void load();
     return () => {
@@ -74,11 +86,9 @@ export function TramiteTrackingModal({
   }, [open, instanceId, tenantId, reloadKey]);
 
   // El backend ya ordena de más reciente a más antiguo; se reordena de forma defensiva para que el
-  // panel se lea siempre igual aunque el caller entregue los datos desordenados.
-  const movimientos = useMemo(
-    () => [...history].sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime()),
-    [history],
-  );
+  // panel se lea siempre igual aunque el caller entregue los datos desordenados. Los eventos
+  // administrativos se mezclan en la misma línea, también por fecha descendente.
+  const movimientos = useMemo(() => construirLinea(history, events), [history, events]);
 
   if (!item) return null;
 
@@ -255,14 +265,86 @@ function fecha(iso: string): string {
   }
 }
 
+/** Fila unificada de la línea de tiempo: un movimiento de estado o un evento administrativo. */
+interface ItemLinea {
+  key: string;
+  /** `estado` es un movimiento de `statusHistory`; `evento` es un evento administrativo (Bug #12376). */
+  kind: 'estado' | 'evento';
+  fecha: string;
+  titulo: string;
+  quien: string | null;
+  motivo: string | null;
+}
+
+const PARTE_LABEL: Record<string, string> = {
+  vendedor: 'Vendedor',
+  comprador: 'Comprador',
+};
+
+/**
+ * Bug #12376, defectos 3/4 — mezcla `statusHistory` con los eventos administrativos
+ * (reasignación de gestor, reenvío de validación) en una sola línea de tiempo, ordenada por fecha
+ * descendente. Los eventos NUNCA reemplazan un movimiento de estado, solo se agregan.
+ */
+function construirLinea(history: StatusHistoryItem[], events: ProcedureInstanceEvent[]): ItemLinea[] {
+  const deEstados: ItemLinea[] = history.map((m) => ({
+    key: m.id,
+    kind: 'estado',
+    fecha: m.changedAt,
+    titulo: hito(m),
+    quien:
+      m.changedByName || m.changedByCompania
+        ? [m.changedByCompania, m.changedByName].filter(Boolean).join(' · ')
+        : null,
+    motivo: m.reason?.trim() || null,
+  }));
+  const deEventos: ItemLinea[] = events.map((e, i) => eventoALinea(e, i));
+  return [...deEstados, ...deEventos].sort(
+    (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
+  );
+}
+
+/** Mismo lenguaje que `mapEventsToTimelineNodes` (`timeline-mappers.ts`), sin acoplarse a él. */
+function eventoALinea(e: ProcedureInstanceEvent, index: number): ItemLinea {
+  const quien = e.createdByName ? `Ejecutado por ${e.createdByName}` : 'Ejecutado por admin';
+  const key = `evento-${e.tipo}-${e.createdAt}-${index}`;
+
+  if (e.tipo === 'reasignar_gestor_admin') {
+    return {
+      key,
+      kind: 'evento',
+      fecha: e.createdAt,
+      titulo: 'Reasignación de gestor',
+      quien,
+      motivo: `De ${e.previousAssignedToName || 'sin gestor asignado'} a ${e.newAssignedToName || '—'}`,
+    };
+  }
+
+  // reenvio_validacion_admin
+  const parte = e.partyRole ? PARTE_LABEL[e.partyRole] ?? e.partyRole : null;
+  // Correo en claro (a pedido del producto): el admin necesita ver la dirección exacta reenviada.
+  const correo = e.correoDestino || '—';
+  const reenvio = e.emailActualizado
+    ? 'Reenviado a un correo distinto del registrado'
+    : 'Reenviado al correo actual';
+  return {
+    key,
+    kind: 'evento',
+    fecha: e.createdAt,
+    titulo: `Reenvío de validación${parte ? ` · ${parte}` : ''}`,
+    quien,
+    motivo: `Correo: ${correo} · ${reenvio}`,
+  };
+}
+
 /**
  * Los movimientos, del más reciente al más antiguo.
  *
- * <p>Cada uno dice estado, quién y desde qué compañía. La compañía importa porque un trámite lo
- * abre una empresa y lo mueve, después, quien lo revisa: sin ella, «Preparado · Laura Restrepo» no
- * distingue si Laura es de la empresa dueña o del organismo.</p>
+ * <p>Cada uno dice estado (o evento administrativo), quién y desde qué compañía. La compañía
+ * importa porque un trámite lo abre una empresa y lo mueve, después, quien lo revisa: sin ella,
+ * «Preparado · Laura Restrepo» no distingue si Laura es de la empresa dueña o del organismo.</p>
  */
-function Historial({ movimientos }: { movimientos: StatusHistoryItem[] }) {
+function Historial({ movimientos }: { movimientos: ItemLinea[] }) {
   if (movimientos.length === 0) {
     return (
       <p className="text-xs text-[#162744]/60 dark:text-white/50">
@@ -271,6 +353,11 @@ function Historial({ movimientos }: { movimientos: StatusHistoryItem[] }) {
     );
   }
 
+  // El vigente es el movimiento de ESTADO más reciente, no necesariamente el primero de la lista:
+  // un evento administrativo (p. ej. una reasignación de gestor) puede ser más reciente que el
+  // último cambio de estado, pero no representa el estado actual del trámite.
+  const idxVigente = movimientos.findIndex((m) => m.kind === 'estado');
+
   return (
     <ol
       aria-label="Historial de estados del trámite"
@@ -278,36 +365,31 @@ function Historial({ movimientos }: { movimientos: StatusHistoryItem[] }) {
       style={{ borderColor: '#DFE5ED' }}
     >
       {movimientos.map((m, i) => (
-        <li key={m.id} className="relative">
-          {/* El movimiento vigente en verde de marca, los anteriores en azul: la lista está en
-              orden inverso, así que el vigente es el PRIMERO. No se usa el color del chip de
-              estado (siete tonos) — aquí solo hace falta distinguir «dónde está» de «por dónde
-              pasó». */}
+        <li key={m.key} className="relative">
+          {/* El movimiento de estado vigente en verde de marca, los demás en azul. No se usa el
+              color del chip de estado (siete tonos) — aquí solo hace falta distinguir «dónde
+              está» de «por dónde pasó» (o qué se hizo administrativamente). */}
           <span
             className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full"
-            style={{ background: i === 0 ? '#8CC63F' : '#557EFF' }}
+            style={{ background: i === idxVigente ? '#8CC63F' : '#557EFF' }}
             aria-hidden="true"
           />
-          <p className="text-xs font-semibold text-[#162744] dark:text-white">
-            {hito(m)}
-          </p>
-          {m.changedByName || m.changedByCompania ? (
-            <p className="mt-0.5 text-xs text-[#162744]/70 dark:text-white/60">
-              {[m.changedByCompania, m.changedByName].filter(Boolean).join(' · ')}
-            </p>
+          <p className="text-xs font-semibold text-[#162744] dark:text-white">{m.titulo}</p>
+          {m.quien ? (
+            <p className="mt-0.5 text-xs text-[#162744]/70 dark:text-white/60">{m.quien}</p>
           ) : null}
           {/* El motivo va DEBAJO y en tono secundario, no dentro del titular.
               Muchos motivos los escribe el propio sistema al radicar («Radicación: entregado;
               placa seleccionada/RUNT y paso gestor omitido (sub-estado terminado)») y son largos
               y técnicos: en negrita, junto al estado, se comían dos renglones de titular y
               tapaban lo único que el gestor busca en esta lista, que es POR DÓNDE VA. */}
-          {m.reason?.trim() ? (
+          {m.motivo ? (
             <p className="mt-0.5 text-[11px] leading-4 text-[#162744]/55 dark:text-white/45">
-              {m.reason.trim()}
+              {m.motivo}
             </p>
           ) : null}
           <p className="mt-1 font-mono text-[11px] text-[#162744]/50 dark:text-white/40">
-            {fecha(m.changedAt)}
+            {fecha(m.fecha)}
           </p>
         </li>
       ))}

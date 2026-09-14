@@ -22,6 +22,41 @@ describe('timeline-mappers', () => {
     expect(nodes[1]!.isActive).toBe(true);
   });
 
+  // Bug #12526 — gestor/correo/empresa venían fijos en '—' (y rol en 'Sistema') aunque el backend
+  // tuviera el dato de quién ejecutó la transición.
+  it('mapStatusHistoryToTimelineNodes pinta gestor, correo y empresa cuando el backend los trae', () => {
+    const history: StatusHistory[] = [
+      {
+        fromStatus: 'borrador',
+        toStatus: 'entregado',
+        changedAt: '2026-01-02T10:00:00Z',
+        reason: null,
+        changedByName: 'Laura Restrepo',
+        changedByEmail: 'laura.restrepo@renting.com',
+        changedByCompania: 'Renting Colombia S.A.S',
+      },
+    ];
+    const nodes = mapStatusHistoryToTimelineNodes(history);
+    expect(nodes[0]!.info.gestor).toBe('Laura Restrepo');
+    expect(nodes[0]!.info.correo).toBe('laura.restrepo@renting.com');
+    expect(nodes[0]!.info.empresa).toBe('Renting Colombia S.A.S');
+    expect(nodes[0]!.info.rol).toBe('Gestor');
+    // El campo se llama "Fecha y hora" en la tarjeta: debe traer la hora, no solo el día
+    // (formatFechaHora, no formatFecha — esta última es la fecha de negocio sin hora, HU #11018).
+    expect(nodes[0]!.info.fecha).toBe('2026/01/02 05:00');
+  });
+
+  it('mapStatusHistoryToTimelineNodes cae al guion cuando fue un proceso automático', () => {
+    const history: StatusHistory[] = [
+      { fromStatus: null, toStatus: 'borrador', changedAt: '2026-01-01T10:00:00Z', reason: null },
+    ];
+    const nodes = mapStatusHistoryToTimelineNodes(history);
+    expect(nodes[0]!.info.gestor).toBe('—');
+    expect(nodes[0]!.info.correo).toBe('—');
+    expect(nodes[0]!.info.empresa).toBe('—');
+    expect(nodes[0]!.info.rol).toBe('Sistema');
+  });
+
   it('mapIdentidadToTimelineNodes respeta firma del baúl', () => {
     const nodes = mapIdentidadToTimelineNodes('TRASPASO', [], ['vendedor']);
     expect(nodes).toHaveLength(2);
@@ -117,12 +152,17 @@ describe('timeline-mappers', () => {
         createdByName: 'Willyn Londoño',
         previousAssignedToName: 'Carlos Gómez',
         newAssignedToName: 'Diana Ruiz',
+        newAssignedToEmail: 'diana.ruiz@renting.com',
+        newAssignedToCompania: 'Renting Colombia S.A.S',
       },
     ];
     const nodes = mapEventsToTimelineNodes(events);
     expect(nodes).toHaveLength(1);
     expect(nodes[0]!.label).toBe('Reasignación de gestor');
     expect(nodes[0]!.info.gestor).toBe('Diana Ruiz');
+    // El correo/empresa son del gestor NUEVO (la misma "Diana Ruiz" de arriba), no de quien ejecutó.
+    expect(nodes[0]!.info.correo).toBe('diana.ruiz@renting.com');
+    expect(nodes[0]!.info.empresa).toBe('Renting Colombia S.A.S');
     expect(nodes[0]!.info.rol).toContain('Willyn Londoño');
     expect(nodes[0]!.info.extra).toBe('De Carlos Gómez a Diana Ruiz');
   });
@@ -135,15 +175,18 @@ describe('timeline-mappers', () => {
         tipo: 'reenvio_validacion_admin',
         createdAt: '2026-06-02T10:00:00Z',
         createdByName: 'Willyn Londoño',
+        createdByCompania: 'Renting Colombia S.A.S',
         partyRole: 'comprador',
         emailActualizado: true,
-        correoDestinoEnmascarado: 'n***@dominio.com',
+        correoDestino: 'nueva@dominio.com',
       },
     ];
     const nodes = mapEventsToTimelineNodes(events);
     expect(nodes).toHaveLength(1);
     expect(nodes[0]!.label).toBe('Reenvío de validación · Comprador');
-    expect(nodes[0]!.info.correo).toBe('n***@dominio.com');
+    expect(nodes[0]!.info.correo).toBe('nueva@dominio.com');
+    // Sin gestor propio del evento: la empresa que aporta es la de quien lo ejecutó.
+    expect(nodes[0]!.info.empresa).toBe('Renting Colombia S.A.S');
     expect(nodes[0]!.info.extra).toBe('Reenviado a un correo distinto del registrado');
   });
 

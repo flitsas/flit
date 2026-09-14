@@ -283,38 +283,36 @@ public sealed class EditarPrevalidacionHandlerTests
         validation.Status.Should().Be(BiometricEstados.Aprobado);
     }
 
-    // ── AC9 / AC10 — cooldown y tope de reenvíos también aplican al cambio de correo (D10) ──
+    // ── AC9 / AC10 — ya NO hay cooldown ni tope de reenvíos en el cambio de correo (D10 eliminado) ──
 
     [Fact]
-    public async Task AC9_Cooldown_BlocksEmailChange_WhenResentRecently()
+    public async Task AC9_EmailChange_NoTieneCooldown_AunReenviandoDosMinutosDespues()
     {
         var ct = TestContext.Current.CancellationToken;
         var (person, validation) = SeedStandaloneNatural(lastResentAt: DateTimeOffset.UtcNow.AddMinutes(-2));
         var handler = BuildHandler();
 
-        var (result, error, cooldownMinutos) = await handler.HandleAsync(
+        var (result, error, _) = await handler.HandleAsync(
             _tenantId, validation.Id, new EditarPrevalidacionRequest(Email: "ana.rios@new.com"), ct);
 
-        error.Should().Be("reenvio_en_cooldown");
-        result.Should().BeNull();
-        cooldownMinutos.Should().BeGreaterThan(0);
-        person.Email.Should().Be("ana.rios@old.com", "el bloqueo no debe dejar cambios a medias");
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        person.Email.Should().Be("ana.rios@new.com");
     }
 
     [Fact]
-    public async Task AC10_MaxResendsReached_BlocksEmailChange_AndDoesNotConsumeProvider()
+    public async Task AC10_EmailChange_NoTieneTope_AunConMuchosReenviosPrevios()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (person, validation) = SeedStandaloneNatural(resendCount: BiometricRules.MaxReenvios);
+        var (person, validation) = SeedStandaloneNatural(resendCount: 50);
         var handler = BuildHandler();
 
         var (result, error, _) = await handler.HandleAsync(
             _tenantId, validation.Id, new EditarPrevalidacionRequest(Email: "ana.rios@new.com"), ct);
 
-        error.Should().Be("tope_reenvios");
-        result.Should().BeNull();
-        person.Email.Should().Be("ana.rios@old.com");
-        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        person.Email.Should().Be("ana.rios@new.com");
     }
 
     // ── AC13 (Habeas Data) — auditoría del cambio de correo, correos enmascarados ──

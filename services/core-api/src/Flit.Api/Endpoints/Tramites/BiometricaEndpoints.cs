@@ -468,7 +468,7 @@ internal static class BiometricaEndpoints
             if (body is null)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el cuerpo de la solicitud.");
 
-            var (result, error, cooldownMinutos) = await handler.HandleAsync(tenantId.Value, id, body, ct);
+            var (result, error, _) = await handler.HandleAsync(tenantId.Value, id, body, ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Prevalidación no encontrada."),
@@ -483,10 +483,8 @@ internal static class BiometricaEndpoints
                     detail: "Esta prevalidación ya está referenciada por un trámite."),
                 "documento_no_editable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity",
                     detail: "El tipo/número de documento no es editable. Anula el registro y crea una prevalidación nueva."),
-                "reenvio_en_cooldown" => Results.Problem(statusCode: 429, title: "Too Many Requests",
-                    detail: $"Espera {cooldownMinutos} minuto(s) antes de reenviar de nuevo."),
-                "tope_reenvios" => Results.Problem(statusCode: 429, title: "Too Many Requests",
-                    detail: "Se agotaron los reenvíos disponibles. Anula el registro y crea una prevalidación nueva."),
+                "validacion_en_curso" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
                     detail: "El proveedor de validación de identidad rechazó la solicitud."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
@@ -509,7 +507,7 @@ internal static class BiometricaEndpoints
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error, cooldownMinutos) = await handler.HandleAsync(tenantId.Value, id, ct);
+            var (result, error, _) = await handler.HandleAsync(tenantId.Value, id, ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Prevalidación no encontrada."),
@@ -522,10 +520,8 @@ internal static class BiometricaEndpoints
                 // el mapeo para no cambiar el contrato si el guard llega a implementarse por separado.
                 "referenciada_por_tramite" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Esta prevalidación ya está referenciada por un trámite."),
-                "reenvio_en_cooldown" => Results.Problem(statusCode: 429, title: "Too Many Requests",
-                    detail: $"Espera {cooldownMinutos} minuto(s) antes de reenviar de nuevo."),
-                "tope_reenvios" => Results.Problem(statusCode: 429, title: "Too Many Requests",
-                    detail: "Se agotaron los reenvíos disponibles. Anula el registro y crea una prevalidación nueva."),
+                "validacion_en_curso" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
                     detail: "El proveedor de validación de identidad rechazó la solicitud."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
