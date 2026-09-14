@@ -460,11 +460,16 @@ export interface ProcedureInstanceEvent {
   // reasignar_gestor_admin
   previousAssignedToName?: string | null;
   newAssignedToName?: string | null;
+  /** Correo/compañía del gestor NUEVO (misma persona que `newAssignedToName`). */
+  newAssignedToEmail?: string | null;
+  newAssignedToCompania?: string | null;
   // reenvio_validacion_admin
   partyRole?: BiometricParte | null;
   emailActualizado?: boolean | null;
   /** Correo en claro (a pedido del producto): el admin necesita ver la dirección exacta reenviada. */
   correoDestino?: string | null;
+  /** Compañía de quien ejecutó el evento (ya nombrado en `createdByName`). */
+  createdByCompania?: string | null;
 }
 
 /** Item del body de PATCH /instances/{id}/field-values. */

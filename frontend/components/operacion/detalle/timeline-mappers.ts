@@ -7,7 +7,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
-import { formatFecha } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 import type { TimelineTrackNode } from './TimelineTrackPanel';
 
 const GREEN = '#8CC63F';
@@ -63,7 +63,7 @@ export function mapStatusHistoryToTimelineNodes(history: StatusHistory[]): Timel
       correo: e.changedByEmail || '—',
       empresa: e.changedByCompania || '—',
       rol: e.changedByName ? 'Gestor' : 'Sistema',
-      fecha: formatFecha(e.changedAt),
+      fecha: formatFechaHora(e.changedAt),
       extra: hitoLabel(e),
     },
     isActive: i === sorted.length - 1,
@@ -105,9 +105,9 @@ export function mapIdentidadToTimelineNodes(
           empresa: ultima.provider || 'Kyverum',
           rol: label,
           fecha: ultima.validatedAt
-            ? formatFecha(ultima.validatedAt)
+            ? formatFechaHora(ultima.validatedAt)
             : ultima.expiresAt
-              ? formatFecha(ultima.expiresAt)
+              ? formatFechaHora(ultima.expiresAt)
               : '—',
           extra: detalle,
         },
@@ -169,10 +169,12 @@ export function mapEventsToTimelineNodes(events: ProcedureInstanceEvent[]): Time
         color: BLUE,
         info: {
           gestor: e.newAssignedToName || '—',
-          correo: '—',
-          empresa: '—',
+          // Mismo hallazgo del Bug #12526: correo/empresa son del gestor NUEVO (la misma persona que
+          // ya nombra "gestor" arriba), no de quien ejecutó la reasignación.
+          correo: e.newAssignedToEmail || '—',
+          empresa: e.newAssignedToCompania || '—',
           rol: e.createdByName ? `Ejecutado por ${e.createdByName}` : 'Ejecutado por admin',
-          fecha: formatFecha(e.createdAt),
+          fecha: formatFechaHora(e.createdAt),
           extra: `De ${e.previousAssignedToName || 'sin gestor asignado'} a ${e.newAssignedToName || '—'}`,
         },
       };
@@ -186,9 +188,11 @@ export function mapEventsToTimelineNodes(events: ProcedureInstanceEvent[]): Time
       info: {
         gestor: '—',
         correo: e.correoDestino || '—',
-        empresa: '—',
+        // Aquí no hay un "gestor" propio del evento (el correo ya es el destino del reenvío): la
+        // empresa que aporta información es la de quien lo ejecutó, ya nombrado en Rol.
+        empresa: e.createdByCompania || '—',
         rol: e.createdByName ? `Ejecutado por ${e.createdByName}` : 'Ejecutado por admin',
-        fecha: formatFecha(e.createdAt),
+        fecha: formatFechaHora(e.createdAt),
         extra: e.emailActualizado
           ? 'Reenviado a un correo distinto del registrado'
           : 'Reenviado al correo actual',

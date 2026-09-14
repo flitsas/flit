@@ -329,6 +329,13 @@ public sealed class GetProcedureInstanceTests
                 [gestorAnterior] = "Carlos Anterior",
                 [gestorNuevo] = "Diana Nueva",
             });
+        // Hallazgo posterior al Bug #12526: el mismo vacío de Correo/Empresa ocurría en la tarjeta de
+        // "Reasignación de gestor" — correo/empresa son del gestor NUEVO, la misma persona ya resuelta
+        // arriba como "Diana Nueva".
+        _repo.GetUserEmailsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [gestorNuevo] = "diana.nueva@renting.com" });
+        _repo.GetUserCompaniasAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [gestorNuevo] = "Renting Colombia S.A.S" });
 
         var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
 
@@ -338,6 +345,8 @@ public sealed class GetProcedureInstanceTests
         evento.CreatedByName.Should().Be("Ana Ejecutora");
         evento.PreviousAssignedToName.Should().Be("Carlos Anterior");
         evento.NewAssignedToName.Should().Be("Diana Nueva");
+        evento.NewAssignedToEmail.Should().Be("diana.nueva@renting.com");
+        evento.NewAssignedToCompania.Should().Be("Renting Colombia S.A.S");
         evento.CreatedAt.Should().Be(cuando);
     }
 
@@ -381,6 +390,10 @@ public sealed class GetProcedureInstanceTests
         _repo.GetByIdWithDetailsAsync(instance.Id, tenantId, ct).Returns(instance);
         _repo.GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
             .Returns(new Dictionary<Guid, string> { [ejecutor] = "Ana Ejecutora" });
+        // Sin gestor propio del evento (el correo ya es el destino del reenvío): la empresa que aporta
+        // información es la de quien lo ejecutó, ya nombrado en Rol.
+        _repo.GetUserCompaniasAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [ejecutor] = "Renting Colombia S.A.S" });
 
         var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
 
@@ -391,6 +404,7 @@ public sealed class GetProcedureInstanceTests
         evento.PartyRole.Should().Be("comprador");
         evento.EmailActualizado.Should().BeTrue();
         evento.CorreoDestino.Should().Be("nueva@dominio.com");
+        evento.CreatedByCompania.Should().Be("Renting Colombia S.A.S");
     }
 
     // Bug #12376 — solo reenvío/reasignación se exponen en Events; el resto de tipos (p.ej.

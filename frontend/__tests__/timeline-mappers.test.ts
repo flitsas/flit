@@ -41,6 +41,9 @@ describe('timeline-mappers', () => {
     expect(nodes[0]!.info.correo).toBe('laura.restrepo@renting.com');
     expect(nodes[0]!.info.empresa).toBe('Renting Colombia S.A.S');
     expect(nodes[0]!.info.rol).toBe('Gestor');
+    // El campo se llama "Fecha y hora" en la tarjeta: debe traer la hora, no solo el día
+    // (formatFechaHora, no formatFecha — esta última es la fecha de negocio sin hora, HU #11018).
+    expect(nodes[0]!.info.fecha).toBe('2026/01/02 05:00');
   });
 
   it('mapStatusHistoryToTimelineNodes cae al guion cuando fue un proceso automático', () => {
@@ -149,12 +152,17 @@ describe('timeline-mappers', () => {
         createdByName: 'Willyn Londoño',
         previousAssignedToName: 'Carlos Gómez',
         newAssignedToName: 'Diana Ruiz',
+        newAssignedToEmail: 'diana.ruiz@renting.com',
+        newAssignedToCompania: 'Renting Colombia S.A.S',
       },
     ];
     const nodes = mapEventsToTimelineNodes(events);
     expect(nodes).toHaveLength(1);
     expect(nodes[0]!.label).toBe('Reasignación de gestor');
     expect(nodes[0]!.info.gestor).toBe('Diana Ruiz');
+    // El correo/empresa son del gestor NUEVO (la misma "Diana Ruiz" de arriba), no de quien ejecutó.
+    expect(nodes[0]!.info.correo).toBe('diana.ruiz@renting.com');
+    expect(nodes[0]!.info.empresa).toBe('Renting Colombia S.A.S');
     expect(nodes[0]!.info.rol).toContain('Willyn Londoño');
     expect(nodes[0]!.info.extra).toBe('De Carlos Gómez a Diana Ruiz');
   });
@@ -167,6 +175,7 @@ describe('timeline-mappers', () => {
         tipo: 'reenvio_validacion_admin',
         createdAt: '2026-06-02T10:00:00Z',
         createdByName: 'Willyn Londoño',
+        createdByCompania: 'Renting Colombia S.A.S',
         partyRole: 'comprador',
         emailActualizado: true,
         correoDestino: 'nueva@dominio.com',
@@ -176,6 +185,8 @@ describe('timeline-mappers', () => {
     expect(nodes).toHaveLength(1);
     expect(nodes[0]!.label).toBe('Reenvío de validación · Comprador');
     expect(nodes[0]!.info.correo).toBe('nueva@dominio.com');
+    // Sin gestor propio del evento: la empresa que aporta es la de quien lo ejecutó.
+    expect(nodes[0]!.info.empresa).toBe('Renting Colombia S.A.S');
     expect(nodes[0]!.info.extra).toBe('Reenviado a un correo distinto del registrado');
   });
 

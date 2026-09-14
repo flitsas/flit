@@ -52,7 +52,15 @@ public sealed record ProcedureInstanceEventDto(
     bool? EmailActualizado = null,
     // Correo en claro (a pedido del producto) — el admin necesita ver la dirección exacta a la que se
     // reenvió, no una versión enmascarada.
-    string? CorreoDestino = null);
+    string? CorreoDestino = null,
+    // Correo/compañía del gestor NUEVO — misma persona que ya nombra NewAssignedToName, para que la
+    // tarjeta de "Reasignación de gestor" no deje Correo/Empresa en blanco (mismo hallazgo del Bug
+    // #12526, aquí para el evento de reasignación en vez del historial de estados).
+    string? NewAssignedToEmail = null,
+    string? NewAssignedToCompania = null,
+    // Compañía de quien EJECUTÓ el evento (ya se nombra en Rol: "Ejecutado por X") — completa el campo
+    // Empresa en reenvio_validacion_admin, donde no hay un "gestor" propio del evento.
+    string? CreatedByCompania = null);
 
 public sealed record ProcedureInstanceActorDto(
     string ActorType,
@@ -191,22 +199,33 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
         }
 
         var names = await repo.GetUserDisplayNamesAsync(userIds, ct).ConfigureAwait(false);
+        // Hallazgo posterior al Bug #12526: el mismo vacío de Correo/Empresa ocurría en las tarjetas
+        // de evento administrativo (Reasignación de gestor, Reenvío de validación), que viven en esta
+        // función en vez de en BuildStatusHistoryActorInfoAsync — se resuelve con los mismos métodos.
+        var emails = await repo.GetUserEmailsAsync(userIds, ct).ConfigureAwait(false);
+        var companias = await repo.GetUserCompaniasAsync(userIds, ct).ConfigureAwait(false);
 
         return parsed.Select(p =>
         {
             var (e, payload) = p;
             var createdByName = e.CreatedBy is { } createdBy && names.TryGetValue(createdBy, out var cn) ? cn : null;
+            var createdByCompania = e.CreatedBy is { } createdByForCompania
+                && companias.TryGetValue(createdByForCompania, out var ccia) ? ccia : null;
 
             if (e.Tipo == "reasignar_gestor_admin")
             {
                 var previousName = TryGetGuid(payload, "previous_assigned_to_user_id", out var prev)
                     && names.TryGetValue(prev, out var pn) ? pn : null;
-                var newName = TryGetGuid(payload, "new_assigned_to_user_id", out var next)
-                    && names.TryGetValue(next, out var nn) ? nn : null;
+                var hasNew = TryGetGuid(payload, "new_assigned_to_user_id", out var next);
+                var newName = hasNew && names.TryGetValue(next, out var nn) ? nn : null;
+                var newEmail = hasNew && emails.TryGetValue(next, out var ne) ? ne : null;
+                var newCompania = hasNew && companias.TryGetValue(next, out var ncia) ? ncia : null;
                 return new ProcedureInstanceEventDto(
                     e.Tipo, e.CreatedAt, createdByName,
                     PreviousAssignedToName: previousName,
-                    NewAssignedToName: newName);
+                    NewAssignedToName: newName,
+                    NewAssignedToEmail: newEmail,
+                    NewAssignedToCompania: newCompania);
             }
 
             // reenvio_validacion_admin
@@ -224,7 +243,8 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
                 e.Tipo, e.CreatedAt, createdByName,
                 PartyRole: partyRole,
                 EmailActualizado: emailActualizado,
-                CorreoDestino: correo);
+                CorreoDestino: correo,
+                CreatedByCompania: createdByCompania);
         }).ToList();
     }
 
