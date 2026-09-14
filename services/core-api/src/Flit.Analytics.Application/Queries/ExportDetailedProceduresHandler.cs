@@ -49,4 +49,13 @@ public static class ExportDetailedProceduresHandler
 public interface IDetailedReportExcelExporter
 {
     Task ExportAsync(Stream output, DetailedReportFilter filter, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12360 (Feature #12257) — sobrecarga de RED: el mismo generador OpenXml y las mismas columnas
+    /// que <see cref="ExportAsync"/> precedidas por «Compañía» (razón social del cliente dueño de cada
+    /// fila, AC1), sobre el filtro resuelto del listado de red (AC5). Sin filas escribe solo la cabecera
+    /// (un reporte sin registros, AC4). Devuelve los clientes distintos con filas en el archivo
+    /// (auditoría HU #12361). La salida de <see cref="ExportAsync"/> no cambia (AC7).
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ExportNetworkAsync(Stream output, NetworkDetailedReportFilter filter, CancellationToken ct = default);
 }

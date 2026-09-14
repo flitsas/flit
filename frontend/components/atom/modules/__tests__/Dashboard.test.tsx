@@ -40,7 +40,10 @@ vi.mock("@/lib/api/tramites-client", () => ({
   tramitesClient: { listTenantBiometricValidations: mocks.listTenantBiometricValidations },
 }));
 vi.mock("@/lib/api/client", () => ({ getToken: mocks.getToken }));
-vi.mock("@/lib/auth/jwt", () => ({
+// HU #12364: el Dashboard monta `useNetworkScope` → `usePermissions`, que lee más helpers del
+// JWT; se conservan los reales y solo se sustituyen los dos que estos tests gobiernan.
+vi.mock("@/lib/auth/jwt", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/jwt")>()),
   decodeJwtPayload: mocks.decodeJwtPayload,
   isSuperAdmin: mocks.isSuperAdmin,
 }));

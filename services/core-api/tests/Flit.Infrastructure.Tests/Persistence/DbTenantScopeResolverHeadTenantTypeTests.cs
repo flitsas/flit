@@ -49,6 +49,8 @@ public sealed class DbTenantScopeResolverHeadTenantTypeTests
 
         public Task<bool> IsInheritedConfigurationEnabledAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
+        public Task<bool> IsNetworkDocumentsConcesionEnabledAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+
         public Task<IReadOnlyList<HierarchySwitchState>> ListAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<HierarchySwitchState>>([]);
 

@@ -145,11 +145,24 @@ export function SeccionError({
   mensaje,
   onReintentar,
   contexto,
+  sinReintento = false,
 }: {
   mensaje: string;
   onReintentar: () => void;
   contexto?: string;
+  /**
+   * HU #12362 (AC3) — rechazo de ALCANCE sobre un trámite de la red: no es un fallo técnico, así
+   * que se anuncia como estado (no como alerta) y sin botón de reintento, que no cambiaría nada.
+   */
+  sinReintento?: boolean;
 }) {
+  if (sinReintento) {
+    return (
+      <p className="text-xs text-[#162744]/70 dark:text-white/70" role="status">
+        {mensaje}
+      </p>
+    );
+  }
   return (
     <div className="flex flex-col items-start gap-2" role="alert">
       <p className="text-xs text-[#162744]/70 dark:text-white/70">{mensaje}</p>

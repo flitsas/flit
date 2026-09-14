@@ -1,5 +1,6 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.ReadModels;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Domain.Repositories;
@@ -35,6 +36,15 @@ public interface IProcedureInstanceRepository
         Guid tenantId, string placaNormalizada, Guid excludeInstanceId, CancellationToken ct = default);
 
     Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12358 (Feature #12257) — detalle en solo lectura para la vista consolidada de la red:
+    /// el mismo grafo que <see cref="GetByIdWithDetailsAsync(Guid, Guid, CancellationToken)"/> pero
+    /// acotado por <see cref="TenantScope"/> (<c>WhereTenantInScope</c>: conjunto de lectura vacío
+    /// ⇒ cero filas, nunca «sin filtro»). Sobrecarga NUEVA: la firma <c>Guid tenantId</c> existente
+    /// no cambia ni de forma ni de semántica (AC6/AC9).
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, TenantScope scope, CancellationToken ct = default);
 
     /// <summary>
     /// Carga la instancia con únicamente sus <c>Actors</c>. Query lean para operaciones
@@ -512,6 +522,22 @@ public interface IProcedureInstanceRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// HU #12358 (Feature #12257) — listado consolidado de la red: idéntico a
+    /// <see cref="ListWithSummaryGraphFilteredAsync(Guid?, int, int, ProcedureInstanceListFilter, ProcedureInstanceSortBy, SortDirection, CancellationToken)"/>
+    /// (mismos filtros, orden y grafo) pero el alcance se aplica con <see cref="TenantScope"/> vía
+    /// <c>WhereTenantInScope</c>: {padre} ∪ hijos para una cabeza, un conjunto de lectura vacío ⇒
+    /// cero filas. Sobrecarga NUEVA; la firma <c>Guid?</c> existente (null = TODOS) no se toca.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstance> Items, int Total)> ListWithSummaryGraphFilteredAsync(
+        TenantScope scope,
+        int skip,
+        int take,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Conteo por ESTADO del ciclo de vida, aplicando <paramref name="filter"/> sobre TODO el universo
     /// (no sobre una página): un <c>GROUP BY status</c> en SQL, sin cargar entidades ni el grafo.
     /// <para>
@@ -528,6 +554,26 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<IReadOnlyDictionary<string, int>> CountByStatusFilteredAsync(
         Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12358 (Feature #12257) — conteo por estado del universo consolidado de la red, acotado por
+    /// <see cref="TenantScope"/> (<c>WhereTenantInScope</c>). Sobrecarga NUEVA; la firma <c>Guid?</c>
+    /// existente no cambia.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, int>> CountByStatusFilteredAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12361 (Feature #12257) — clientes DISTINTOS del alcance que tienen al menos un trámite que
+    /// cumple el filtro (<c>SELECT DISTINCT tenant_id</c>, sin cargar entidades). Alimenta la auditoría
+    /// de acceso consolidado de las estadísticas: los conteos por estado no dicen a qué hijos alcanzan.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListTenantIdsWithMatchesAsync(
+        TenantScope scope,
         ProcedureInstanceListFilter filter,
         CancellationToken ct = default);
 

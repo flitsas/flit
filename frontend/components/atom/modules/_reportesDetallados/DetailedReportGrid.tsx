@@ -1,11 +1,15 @@
 "use client";
 
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import type { DetailedReportPage } from "@/lib/api/detailed-report";
+import type { DetailedReportPage, NetworkDetailedReportPage } from "@/lib/api/detailed-report";
 import { statusLabel } from "../_reportes/categories";
 
+const COLUMNAS = ["Referencia", "Tipo", "Estado", "Persona", "Transformación", "Leasing", "Pago", "Traspaso", "Radicador"];
+
 interface DetailedReportGridProps {
-  data: DetailedReportPage | null;
+  data: DetailedReportPage | NetworkDetailedReportPage | null;
+  /** HU #12364 — filas de la red: se añade la columna «Cliente» (dueño del trámite, AC2). */
+  networkScope?: boolean;
   uiStatus: UiStatus;
   errorMessage?: string;
   emptyMessage?: string;
@@ -22,8 +26,10 @@ export function DetailedReportGrid({
   onRetry,
   page,
   onPageChange,
+  networkScope = false,
 }: DetailedReportGridProps) {
   const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / data.pageSize)) : 1;
+  const columnas = networkScope ? ["Cliente", ...COLUMNAS] : COLUMNAS;
 
   return (
     <UiStateBoundary
@@ -37,7 +43,7 @@ export function DetailedReportGrid({
         <table className="min-w-full text-xs">
           <thead className="bg-[#F4F7FC] dark:bg-white/5">
             <tr>
-              {["Referencia", "Tipo", "Estado", "Persona", "Transformación", "Leasing", "Pago", "Traspaso", "Radicador"].map((h) => (
+              {columnas.map((h) => (
                 <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>
               ))}
             </tr>
@@ -45,6 +51,11 @@ export function DetailedReportGrid({
           <tbody>
             {data?.items.map((row) => (
               <tr key={row.id} className="border-t">
+                {networkScope && (
+                  <td className="px-3 py-2 font-medium" data-testid="detallado-fila-cliente">
+                    {"tenantName" in row && row.tenantName ? row.tenantName : "—"}
+                  </td>
+                )}
                 <td className="px-3 py-2">{row.referenceNumber}</td>
                 <td className="px-3 py-2">{row.procedureTypeName}</td>
                 <td className="px-3 py-2">{statusLabel(row.status) ?? row.status}</td>

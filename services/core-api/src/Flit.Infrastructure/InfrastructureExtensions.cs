@@ -102,6 +102,12 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.ISoatRuntValidationPolicy,
             OtRules.SoatRuntValidationPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // HU #12358 — dueño de un trámite por id, solo para el guard de escritura de la red (TenantWriteGuard).
+        services.AddScoped<IProcedureInstanceOwnerLookup, ProcedureInstanceOwnerLookup>();
+        // HU #12361 - auditoria del acceso consolidado (tramites.network_access_audit): escritura
+        // best-effort con scope propio y lectura para el hijo / SuperAdmin.
+        services.AddScoped<Flit.Tramites.Application.Auditing.INetworkAccessAuditWriter, Auditing.NetworkAccessAuditWriter>();
+        services.AddScoped<Flit.Tramites.Application.Auditing.INetworkAccessAuditReader, Auditing.NetworkAccessAuditReader>();
         // HU #11196 — marcas de firma a posteriori (el lote que se firma cuando el representante valida).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IDeferredSignatureMarkRepository,
             DeferredSignatureMarkRepository>();
@@ -113,6 +119,17 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
+        // HU #12520 (Feature #12519) — plantillas XLSX de carga masiva de trámites.
+        services.AddScoped<
+            Flit.Tramites.Application.BulkTramites.IBulkTramitesXlsxTemplate,
+            Flit.Infrastructure.Documents.BulkTramites.BulkTramitesXlsxTemplate>();
+        // HU #12522 — persistencia del lote de carga masiva y su parser XLSX.
+        services.AddScoped<
+            Flit.Tramites.Domain.Repositories.IBulkTramitesBatchRepository,
+            Flit.Infrastructure.Persistence.Repositories.BulkTramitesBatchRepository>();
+        services.AddScoped<
+            Flit.Tramites.Application.BulkTramites.IBulkTramitesXlsxParser,
+            Flit.Infrastructure.Documents.BulkTramites.BulkTramitesXlsxParser>();
         // HU #10878 (Feature #10862, CF-04) — caché cross-trámite de consultas externas (ADR-0030)
         // + gate de consentimiento Habeas Data para el reúso de datos de persona (ADR-0031).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IExternalQueryCacheRepository, ExternalQueryCacheRepository>();
@@ -203,9 +220,11 @@ public static class InfrastructureExtensions
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
+        services.AddScoped<INetworkAnalyticsReadRepository, AnalyticsNetworkReadRepository>(); // HU #12359 - estadisticas de red
         services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
         services.AddScoped<Flit.Analytics.Application.Abstractions.IDetailedReportReadRepository, DetailedReportReadRepository>(); // Feature #10813
         services.AddScoped<Flit.Analytics.Application.Queries.IDetailedReportExcelExporter, Documents.DetailedReportExcelExporter>(); // Feature #10813 HU #10816
+        services.AddScoped<Flit.Analytics.Application.Abstractions.INetworkDetailedReportReadRepository, DetailedReportNetworkReadRepository>(); // HU #12360 - reporte de red
         services.AddScoped<Flit.Analytics.Application.CompanyQueries.ICompanyQueryRepository, CompanyQueryRepository>();
         services.AddScoped<Flit.Analytics.Application.CompanyQueries.ISuperAdminSavedQueryRepository, SuperAdminSavedQueryRepository>();
         services.AddScoped<Flit.Analytics.Application.IctQueries.IIctQueryRepository, IctQueryRepository>();
@@ -751,6 +770,10 @@ public static class InfrastructureExtensions
         // lotes queued (y los processing atascados: reaper R5) y delega el recorrido en el runner de
         // Application, que invoca los MISMOS handlers de la generación individual.
         services.AddHostedService<StandaloneDocumentBatchProcessor>();
+        // HU #12523 (Feature #12519) — worker de lotes de carga masiva de TRÁMITES. Mismo patrón que
+        // el de generación documental, pero recorriendo los casos de uso del wizard (consulta de
+        // vehículo, creación y actores) fila a fila y en secuencia.
+        services.AddHostedService<BulkTramitesBatchProcessorService>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.

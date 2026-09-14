@@ -55,6 +55,46 @@ public sealed class DbHierarchySwitchesTests
         IHierarchySwitches.InheritedConfigurationKey.Should().Be(HierarchySwitch.InheritedConfigurationKey);
     }
 
+    // ── HU #12410 — interruptor «documentos de red para Concesión» ─────────────
+
+    [Fact]
+    public void HU12410_LaClaveDeDocumentosDeRedCoincideEntreDominioYEntidad()
+    {
+        IHierarchySwitches.NetworkDocumentsConcesionKey.Should().Be(HierarchySwitch.NetworkDocumentsConcesionKey);
+        HierarchySwitch.NetworkDocumentsConcesionKey.Should().Be("network_documents_concesion");
+    }
+
+    [Fact]
+    public async Task HU12410_IsNetworkDocumentsConcesionEnabled_SinFila_DevuelveFalse_FailClosed()
+    {
+        await using var db = await SeededDb(nameof(HU12410_IsNetworkDocumentsConcesionEnabled_SinFila_DevuelveFalse_FailClosed));
+
+        (await Sut(db).IsNetworkDocumentsConcesionEnabledAsync(TestContext.Current.CancellationToken)).Should().BeFalse(
+            "fail-closed: sin fila (o apagado, su seed) la Concesión no lee documentos de la red");
+    }
+
+    [Fact]
+    public async Task HU12410_SetAsync_ConmutaDocumentosDeRedSinTocarLosOtrosDos()
+    {
+        await using var db = await SeededDb(nameof(HU12410_SetAsync_ConmutaDocumentosDeRedSinTocarLosOtrosDos));
+        db.HierarchySwitches.Add(Row(HierarchySwitch.NetworkDocumentsConcesionKey, isEnabled: false));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var sut = Sut(db);
+
+        (await sut.IsNetworkDocumentsConcesionEnabledAsync(TestContext.Current.CancellationToken)).Should().BeFalse();
+        var on = await sut.SetAsync(HierarchySwitch.NetworkDocumentsConcesionKey, true, Actor, TestContext.Current.CancellationToken);
+        on.Should().NotBeNull("la clave es conocida (KnownKeys)");
+        on!.IsEnabled.Should().BeTrue();
+        on.UpdatedBy.Should().Be(Actor);
+        (await sut.IsNetworkDocumentsConcesionEnabledAsync(TestContext.Current.CancellationToken)).Should().BeTrue("sin caché");
+        (await sut.IsGroupReadScopeEnabledAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
+        (await sut.IsInheritedConfigurationEnabledAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
+
+        var off = await sut.SetAsync(HierarchySwitch.NetworkDocumentsConcesionKey, false, Actor, TestContext.Current.CancellationToken);
+        off!.IsEnabled.Should().BeFalse();
+        (await db.HierarchySwitches.CountAsync(TestContext.Current.CancellationToken)).Should().Be(3);
+    }
+
     // ── AC1 — lectura por petición ──────────────────────────────────────────────
 
     [Fact]

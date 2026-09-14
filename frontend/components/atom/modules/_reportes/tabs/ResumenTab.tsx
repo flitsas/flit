@@ -7,7 +7,15 @@
 import { useMemo } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
-import { fetchAnalyticsOverview, fetchMonthlyTrend } from "@/lib/api/analytics";
+import {
+  fetchAnalyticsOverview,
+  fetchMonthlyTrend,
+  fetchNetworkAnalyticsOverview,
+  fetchNetworkMonthlyTrend,
+} from "@/lib/api/analytics";
+import type { NetworkChildOption } from "@/hooks/useNetworkScope";
+import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
+import type { NetworkScopePreference } from "@/lib/tramites/network-scope";
 import { variationPct } from "@/lib/api/analytics-v2";
 import type {
   AnalyticsCategory,
@@ -30,6 +38,13 @@ export interface ResumenTabProps {
   onDrillDown: (segment: { category?: AnalyticsCategory; status?: string }) => void;
   /** `category:status` abierto en el panel de detalle, para resaltar la leyenda. */
   activeSegmentKey?: string;
+  /**
+   * HU #12364 — alcance de red vigente (solo cabeza de grupo con la red activa). Con él las
+   * consultas van a `network/stats/*` y cada indicador lleva el distintivo «Red» (AC1). Sin él,
+   * llamadas idénticas a hoy (AC4).
+   */
+  networkScope?: NetworkScopePreference;
+  networkChildren?: readonly NetworkChildOption[];
 }
 
 /** Completa las categorías ausentes con totales en cero para pintar siempre los donuts. */
@@ -57,14 +72,27 @@ function categoryTotals(data: AnalyticsOverviewResponse | null): Record<Analytic
   return totals;
 }
 
-export function ResumenTab({ filters, needsCompany, onDrillDown, activeSegmentKey }: ResumenTabProps) {
+export function ResumenTab({
+  filters,
+  needsCompany,
+  onDrillDown,
+  activeSegmentKey,
+  networkScope,
+  networkChildren = [],
+}: ResumenTabProps) {
   const { range, tenantId, compareWith } = filters;
   const params = { from: range.from, to: range.to, tenantId: tenantId || undefined };
+  const networkActive = networkScope?.mode === "network";
+  const childTenantId = networkActive ? networkScope?.childTenantId : undefined;
 
-  // Overview (endpoint legado): admite SuperAdmin sin tenant (vista global).
+  // Overview (endpoint legado): admite SuperAdmin sin tenant (vista global). Con la red activa,
+  // la misma consulta contra `network/stats/overview` (+ `childTenantId`).
   const overview = useAnalyticsQuery(
-    (signal) => fetchAnalyticsOverview(params, signal),
-    [range.from, range.to, tenantId],
+    (signal) =>
+      networkActive
+        ? fetchNetworkAnalyticsOverview({ from: range.from, to: range.to, childTenantId }, signal)
+        : fetchAnalyticsOverview(params, signal),
+    [range.from, range.to, tenantId, networkActive, childTenantId],
     { isEmpty: (res) => !res.categories.some((c) => c.total > 0) },
   );
 
@@ -72,15 +100,20 @@ export function ResumenTab({ filters, needsCompany, onDrillDown, activeSegmentKe
   const prevRange = compareWith ? compareRange(range, compareWith) : null;
   const previousOverview = useAnalyticsQuery(
     (signal) =>
-      fetchAnalyticsOverview({ from: prevRange!.from, to: prevRange!.to, tenantId: tenantId || undefined }, signal),
-    [prevRange?.from, prevRange?.to, tenantId],
+      networkActive
+        ? fetchNetworkAnalyticsOverview({ from: prevRange!.from, to: prevRange!.to, childTenantId }, signal)
+        : fetchAnalyticsOverview({ from: prevRange!.from, to: prevRange!.to, tenantId: tenantId || undefined }, signal),
+    [prevRange?.from, prevRange?.to, tenantId, networkActive, childTenantId],
     { skip: !prevRange },
   );
 
   // Tendencia mensual (fetchMonthlyTrend estrena consumidor).
   const trend = useAnalyticsQuery(
-    (signal) => fetchMonthlyTrend(params, signal),
-    [range.from, range.to, tenantId],
+    (signal) =>
+      networkActive
+        ? fetchNetworkMonthlyTrend({ from: range.from, to: range.to, childTenantId }, signal)
+        : fetchMonthlyTrend(params, signal),
+    [range.from, range.to, tenantId, networkActive, childTenantId],
     { isEmpty: (res) => res.items.length === 0 },
   );
 
@@ -106,6 +139,10 @@ export function ResumenTab({ filters, needsCompany, onDrillDown, activeSegmentKe
         skeletonRows={3}
       >
         <div className="flex flex-col gap-4">
+          {/* HU #12364 AC1 — los KPIs de abajo son de la red: distintivo con texto. */}
+          {networkScope && networkActive && (
+            <NetworkScopeBadge scope={networkScope} hijos={networkChildren} testId="resumen-red-badge" />
+          )}
           {/* KPIs grandes con variación y tooltip "cómo se calcula" */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <KpiCard
@@ -144,8 +181,15 @@ export function ResumenTab({ filters, needsCompany, onDrillDown, activeSegmentKe
 
       {/* Tendencia mensual */}
       <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="tendencia-title">
-        <h2 id="tendencia-title" className="text-sm font-bold mb-3" title="Trámites creados por mes y categoría dentro del rango.">
+        <h2
+          id="tendencia-title"
+          className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2"
+          title="Trámites creados por mes y categoría dentro del rango."
+        >
           Tendencia mensual
+          {networkScope && networkActive && (
+            <NetworkScopeBadge scope={networkScope} hijos={networkChildren} testId="tendencia-red-badge" />
+          )}
         </h2>
         <UiStateBoundary
           status={trend.status}
@@ -182,10 +226,11 @@ export function ResumenTab({ filters, needsCompany, onDrillDown, activeSegmentKe
         </UiStateBoundary>
       </section>
 
-      {/* Panel en tiempo real (endpoint nuevo → SuperAdmin necesita compañía) */}
+      {/* Panel en tiempo real (endpoint nuevo → SuperAdmin necesita compañía). Sin ruta de red:
+          con la red activa no se consulta (sería el dato propio bajo un rótulo de red). */}
       <LiveNowPanel
         tenantId={tenantId || undefined}
-        skip={needsCompany}
+        skip={needsCompany || networkActive}
         onDrillDown={(status) => onDrillDown({ status })}
       />
     </div>

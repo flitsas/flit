@@ -33,6 +33,11 @@ interface DetailedReportFiltersPanelProps {
   procedureTypes: ProcedureTypeSummary[];
   transitOffices: TransitOfficeOption[];
   compact?: boolean;
+  /**
+   * HU #12364 — el selector de alcance de red (`NetworkScopeSelector`), ya montado por el panel
+   * padre con la preferencia compartida. Va junto al rango: es un filtro más de la consulta.
+   */
+  networkScopeSelector?: ReactNode;
 }
 
 export function DetailedReportFiltersPanel({
@@ -44,6 +49,7 @@ export function DetailedReportFiltersPanel({
   procedureTypes,
   transitOffices,
   compact = false,
+  networkScopeSelector = null,
 }: DetailedReportFiltersPanelProps) {
   function patch(partial: Partial<DetailedReportFiltersState>) {
     onChange({ ...filters, ...partial });
@@ -76,6 +82,7 @@ export function DetailedReportFiltersPanel({
     <div className={`flex flex-col gap-3 ${compact ? "" : "rounded-2xl border p-4 bg-white dark:bg-[#0B0F14]"}`}>
       <div className="flex flex-wrap items-end gap-3">
         <DateRangeFilter value={filters.range} onChange={(range) => patch({ range })} />
+        {networkScopeSelector}
         {isSuper && (
           <CompanySelector
             companies={companies}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Modal } from '@/components/atom/Modal';
 import { OperacionView } from '@/components/operacion/OperacionView';
 import { NuevoTramiteSelector } from '@/components/operacion/NuevoTramiteSelector';
+import { CargaMasivaModal } from '@/components/operacion/CargaMasivaModal';
 
 /**
  * Track B — /tramites: listado de operación (KPIs + tabs + tabla).
@@ -16,10 +17,17 @@ import { NuevoTramiteSelector } from '@/components/operacion/NuevoTramiteSelecto
 export default function TramitesPage() {
   const router = useRouter();
   const [eligiendo, setEligiendo] = useState(false);
+  const [cargaMasiva, setCargaMasiva] = useState(false);
+  // Al encolar un lote el listado se recarga: las primeras filas pueden estar creadas ya.
+  const [refreshKey, setRefreshKey] = useState(0);
 
   return (
     <>
-      <OperacionView onNewTramite={() => setEligiendo(true)} />
+      <OperacionView
+        onNewTramite={() => setEligiendo(true)}
+        onBulkUpload={() => setCargaMasiva(true)}
+        refreshKey={refreshKey}
+      />
 
       <Modal
         open={eligiendo}
@@ -38,6 +46,12 @@ export default function TramitesPage() {
           onCancelar={() => setEligiendo(false)}
         />
       </Modal>
+
+      <CargaMasivaModal
+        open={cargaMasiva}
+        onClose={() => setCargaMasiva(false)}
+        onEncolado={() => setRefreshKey((k) => k + 1)}
+      />
     </>
   );
 }

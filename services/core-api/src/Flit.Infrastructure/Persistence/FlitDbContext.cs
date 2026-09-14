@@ -68,6 +68,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         Set<ProcedureRadicationGateDenial>();
 
     /// <summary>
+    /// HU #12361 — auditoría append-only del acceso consolidado de una cabeza de red a datos de sus
+    /// hijos (<c>tramites.network_access_audit</c>). Se escribe solo vía <c>NetworkAccessAuditWriter</c>.
+    /// </summary>
+    public DbSet<NetworkAccessAuditEntry> NetworkAccessAuditEntries => Set<NetworkAccessAuditEntry>();
+
+    /// <summary>
     /// Convenio comercial compañía ↔ organismo. Distinto del grant de arriba, que es el permiso para
     /// radicar: este solo decide si el mandato lleva bloque de firma del mandatario.
     /// </summary>
@@ -259,6 +265,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Trámites — outbox de cambios de estado del trámite (N 03 RNF01, ADR-0022)
     public DbSet<ProcedureStateChangeOutbox> ProcedureStateChangeOutbox => Set<ProcedureStateChangeOutbox>();
+
+    // Trámites — carga masiva por Excel (HU #12522, Feature #12519)
+    public DbSet<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatch> BulkTramitesBatches =>
+        Set<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatch>();
+    public DbSet<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow> BulkTramitesBatchRows =>
+        Set<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow>();
 
     // Trámites — cola de despachos de correo al cambio de estado (HU #11461, ADR-0045)
     public DbSet<ProcedureStateChangeEmailDispatch> ProcedureStateChangeEmailDispatches =>

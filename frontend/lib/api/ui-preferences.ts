@@ -9,7 +9,11 @@ import { request, tenantHeader } from './tramites-client';
  * Reusa `request`/`tenantHeader` de tramites-client: mismo Bearer + X-Tenant-Id que el resto
  * del cliente de trámites, en vez de reimplementar la resolución de tenant.
  */
-export type UiPreferenceScope = 'tramites.columns' | 'ot.procedures.columns';
+export type UiPreferenceScope =
+  | 'tramites.columns'
+  | 'ot.procedures.columns'
+  /** HU #12363 — alcance de lectura del listado de la cabeza de red (`{ mode, childTenantId? }`). */
+  | 'tramites.scope';
 
 /** Forma del valor persistido. Hoy solo se usa `visible` (claves de columna); se deja abierta
  *  a futuras claves de preferencia bajo el mismo scope. */
