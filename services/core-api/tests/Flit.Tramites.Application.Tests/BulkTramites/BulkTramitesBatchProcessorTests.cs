@@ -24,7 +24,7 @@ public sealed class BulkTramitesBatchProcessorTests
 
     public BulkTramitesBatchProcessorTests()
     {
-        _processor = new BulkTramitesBatchProcessor(_repository, _gateway, TimeProvider.System);
+        _processor = new BulkTramitesBatchProcessor(_repository, _gateway, TimeProvider.System, providerRetryDelay: TimeSpan.Zero);
     }
 
     private BulkTramitesBatch Batch(string templateType = "matricula", params BulkTramitesBatchRow[] rows)
@@ -184,6 +184,72 @@ public sealed class BulkTramitesBatchProcessorTests
         actor.Ciudad.Should().Be("Bogotá");
         actor.Direccion.Should().Be("Calle 1 # 2-3");
         batch.Rows.Single().Outcome.Should().Be(BulkTramitesRowOutcome.Created);
+    }
+
+    [Fact]
+    public async Task ProveedorCaidoEnLaConsultaDePersona_SeReintentaUnaVez_YSiRespondeLaFilaSeCrea()
+    {
+        // Kyverum daba 502 transitorios en la consulta que seguía a otra y respondía bien segundos
+        // después (visto en vivo). Un reintento convierte ese falso «por retomar» en creado.
+        VehiculoOk();
+        CreacionOk();
+        _gateway.LookupPersonAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(
+                _ => ((string?)null, (string?)BulkTramitesWizardGateway.ConsultaConductorFallida),
+                _ => ("TITULAR DEL RUNT", (string?)null));
+        _gateway.SaveActorsAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<IReadOnlyList<ActorInput>>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        var batch = Batch("matricula", Row(1));
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        batch.Rows.Single().Outcome.Should().Be(BulkTramitesRowOutcome.Created);
+        await _gateway.Received(2).LookupPersonAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProveedorCaidoDosVecesSeguidas_NoSeInsiste_YLaFilaQuedaPorRetomar()
+    {
+        VehiculoOk();
+        CreacionOk();
+        _gateway.LookupPersonAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(((string?)null, (string?)BulkTramitesWizardGateway.ConsultaConductorFallida));
+
+        var batch = Batch("matricula", Row(1));
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        batch.Rows.Single().Outcome.Should().Be(BulkTramitesRowOutcome.CreatedPending);
+        batch.Rows.Single().OutcomeReason.Should().Be("consulta_conductor_fallida:CC 10001");
+        await _gateway.Received(2).LookupPersonAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProveedorCaidoEnElVehiculo_SeReintentaUnaVez_PeroNoEncontradoNoSeReintenta()
+    {
+        _gateway.PreviewVehicleAsync(Arg.Any<BulkTramitesRowContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                _ => ((string?)null, (string?)BulkTramitesVehicleGate.ConsultaVehiculoFallida),
+                _ => ("token", (string?)null),
+                _ => ((string?)null, (string?)BulkTramitesVehicleGate.VehiculoNoEncontrado));
+        CreacionOk();
+        PersonaOk();
+        _gateway.SaveActorsAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<IReadOnlyList<ActorInput>>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        var batch = Batch("matricula", Row(1), Row(2));
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        // Fila 1: caída → reintento → OK → creada. Fila 2: no encontrado → sin reintento.
+        batch.Rows.Single(r => r.RowNumber == 1).Outcome.Should().Be(BulkTramitesRowOutcome.Created);
+        batch.Rows.Single(r => r.RowNumber == 2).Outcome.Should().Be(BulkTramitesRowOutcome.NotCreated);
+        await _gateway.Received(3).PreviewVehicleAsync(Arg.Any<BulkTramitesRowContext>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

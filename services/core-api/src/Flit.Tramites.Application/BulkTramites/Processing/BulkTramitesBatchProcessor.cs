@@ -32,8 +32,20 @@ namespace Flit.Tramites.Application.BulkTramites.Processing;
 public sealed class BulkTramitesBatchProcessor(
     IBulkTramitesBatchRepository repository,
     IBulkTramitesWizardGateway gateway,
-    TimeProvider clock)
+    TimeProvider clock,
+    TimeSpan? providerRetryDelay = null)
 {
+    /// <summary>
+    /// Espera antes del ÚNICO reintento cuando el proveedor se cae. Probando en vivo con Samuel
+    /// Cardenas, Kyverum devolvía 502/500 transitorios casi siempre en la consulta que seguía
+    /// inmediatamente a otra (vehículo → persona, persona → persona) y respondía bien segundos
+    /// después: sin esto, filas con datos correctos quedaban «por retomar» por un hueco del
+    /// proveedor. Un solo reintento: si falla dos veces seguidas no es un hueco, es una caída.
+    /// </summary>
+    public static readonly TimeSpan DefaultProviderRetryDelay = TimeSpan.FromSeconds(5);
+
+    private readonly TimeSpan _providerRetryDelay = providerRetryDelay ?? DefaultProviderRetryDelay;
+
     public async Task ProcessAsync(Guid batchId, CancellationToken ct = default)
     {
         var batch = await repository.GetByIdAsync(batchId, ct).ConfigureAwait(false);
@@ -81,6 +93,13 @@ public sealed class BulkTramitesBatchProcessor(
 
             var (previewToken, previewError) = await gateway
                 .PreviewVehicleAsync(context, ct).ConfigureAwait(false);
+            if (previewError == BulkTramitesVehicleGate.ConsultaVehiculoFallida)
+            {
+                await Task.Delay(_providerRetryDelay, clock, ct).ConfigureAwait(false);
+                (previewToken, previewError) = await gateway
+                    .PreviewVehicleAsync(context, ct).ConfigureAwait(false);
+            }
+
             if (previewError is not null)
             {
                 Resolve(row, BulkTramitesRowOutcome.NotCreated, previewError, null);
@@ -119,6 +138,14 @@ public sealed class BulkTramitesBatchProcessor(
                 var (fullName, lookupError) = await gateway
                     .LookupPersonAsync(instanceId.Value, batch.TenantId, actor.TipoDocumento, actor.NumeroDocumento, ct)
                     .ConfigureAwait(false);
+                if (lookupError == BulkTramitesWizardGateway.ConsultaConductorFallida)
+                {
+                    await Task.Delay(_providerRetryDelay, clock, ct).ConfigureAwait(false);
+                    (fullName, lookupError) = await gateway
+                        .LookupPersonAsync(instanceId.Value, batch.TenantId, actor.TipoDocumento, actor.NumeroDocumento, ct)
+                        .ConfigureAwait(false);
+                }
+
                 if (lookupError is not null)
                 {
                     Resolve(
