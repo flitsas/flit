@@ -637,6 +637,11 @@ export interface UseAdminTramiteAccionesArgs {
   /** Se invoca tras cualquier mutación exitosa, para refrescar la fila/tabla (estado, consolidado,
    *  gestor…) — mismo criterio que el resto de acciones administrativas de esta tabla. */
   onChanged: () => void;
+  /**
+   * HU #12362 — trámite de un cliente hijo visto por la cabeza de red: NINGUNA acción
+   * administrativa se ofrece (ni deshabilitada), porque todas mutan el trámite.
+   */
+  consultaMode?: boolean;
 }
 
 export interface UseAdminTramiteAccionesResult {
@@ -656,13 +661,16 @@ export function useAdminTramiteAcciones({
   item,
   isAdmin,
   onChanged,
+  consultaMode = false,
 }: UseAdminTramiteAccionesArgs): UseAdminTramiteAccionesResult {
   const { permissions, isSuperAdmin } = usePermissions();
   const { show } = useToast();
   // Mismo patrón que el resto de llamadas per-instance de esta pantalla (setPriority, pauseInstance…):
   // el tenant de la FILA solo viaja si quien opera es SuperAdmin viendo otra compañía.
   const tenantId = isAdmin ? item.tenantId : undefined;
-  const puede = (slug: string) => isSuperAdmin || permissions.includes(slug);
+  // HU #12362 — en modo consulta el permiso no cuenta: la restricción es del trámite, no del rol.
+  const puede = (slug: string) =>
+    !consultaMode && (isSuperAdmin || permissions.includes(slug));
   const esAprobado = item.estado === 'aprobado';
   // Bug #12376, defecto 2 — un trámite ya Anulado no puede volver a seleccionarse para anular
   // (el backend lo rechaza con CANNOT_ANNUL_ALREADY; esto solo evita el viaje redondo innecesario).

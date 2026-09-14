@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useConsultaMode } from '@/components/operacion/ConsultaModeContext';
+import { describirErrorDeSeccion } from '@/lib/tramites/network-scope';
 import type {
   FirmaParteEstado,
   ProcedureActor,
@@ -177,19 +179,29 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
   const [actors, setActors] = useState<ProcedureActor[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fueraDeAlcance, setFueraDeAlcance] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // HU #12362 — en modo consulta un 403/404 es «fuera de tu alcance», no un error técnico.
+  const consultaMode = useConsultaMode();
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
       setError(null);
+      setFueraDeAlcance(false);
       try {
         const res = await tramitesClient.getActors(instanceId, tenantId);
         if (!cancelled) setActors(res ?? []);
       } catch (e: unknown) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'No se pudieron cargar los actores del trámite.');
+          const d = describirErrorDeSeccion(
+            e,
+            consultaMode,
+            'No se pudieron cargar los actores del trámite.',
+          );
+          setError(d.mensaje);
+          setFueraDeAlcance(d.fueraDeAlcance);
           setActors([]);
         }
       } finally {
@@ -200,7 +212,7 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
     return () => {
       cancelled = true;
     };
-  }, [instanceId, tenantId, reloadKey]);
+  }, [instanceId, tenantId, reloadKey, consultaMode]);
 
   if (loading) {
     return (
@@ -213,7 +225,11 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
   if (error) {
     return (
       <TarjetaDetalle titulo="Actores del trámite">
-        <SeccionError mensaje={error} onReintentar={() => setReloadKey((k) => k + 1)} />
+        <SeccionError
+          mensaje={error}
+          sinReintento={fueraDeAlcance}
+          onReintentar={() => setReloadKey((k) => k + 1)}
+        />
       </TarjetaDetalle>
     );
   }

@@ -7,6 +7,11 @@ import {
   useAttachmentPreview,
 } from '@/components/operacion/TramiteDocumentosModal';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useConsultaMode } from '@/components/operacion/ConsultaModeContext';
+import {
+  COPY_DOCUMENTOS_FUERA_DE_ALCANCE,
+  describirErrorDeSeccion,
+} from '@/lib/tramites/network-scope';
 import { documentLabel } from '@/lib/tramites/document-labels';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
@@ -81,10 +86,13 @@ function RequisitoRow({
   item,
   attachment,
   onDownload,
+  sinDescarga = false,
 }: {
   item: ChecklistItemView;
   attachment: ProcedureAttachment | undefined;
   onDownload: (attachment: ProcedureAttachment) => void;
+  /** HU #12362 (AC3) — modo consulta: ver/descargar solo lo ofrece el componente de #12411. */
+  sinDescarga?: boolean;
 }) {
   return (
     <li
@@ -103,7 +111,7 @@ function RequisitoRow({
           text={item.satisfied ? '✓ Adjunto' : 'Sin adjuntar'}
           color={item.satisfied ? DETALLE_GREEN : DETALLE_GOLD}
         />
-        {attachment ? (
+        {attachment && !sinDescarga ? (
           <DownloadButton filename={attachment.filename} onClick={() => onDownload(attachment)} />
         ) : null}
       </span>
@@ -115,9 +123,11 @@ function RequisitoRow({
 function AdjuntoRow({
   attachment,
   onDownload,
+  sinDescarga = false,
 }: {
   attachment: ProcedureAttachment;
   onDownload: (attachment: ProcedureAttachment) => void;
+  sinDescarga?: boolean;
 }) {
   return (
     <li
@@ -131,7 +141,9 @@ function AdjuntoRow({
           {formatBytes(attachment.sizeBytes)} · {formatFecha(attachment.uploadedAt)}
         </span>
       </span>
-      <DownloadButton filename={attachment.filename} onClick={() => onDownload(attachment)} />
+      {!sinDescarga ? (
+        <DownloadButton filename={attachment.filename} onClick={() => onDownload(attachment)} />
+      ) : null}
     </li>
   );
 }
@@ -141,7 +153,14 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fueraDeAlcance, setFueraDeAlcance] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  /**
+   * HU #12362 (AC3) — modo consulta: la sección solo CONSULTA. No hay cargar, reemplazar, regenerar
+   * ni eliminar (nunca los hubo aquí), y tampoco descarga ni vista previa: eso lo ofrece el
+   * componente proxeado de #12411. Un 403/404 se convierte en el copy de «fuera de tu alcance».
+   */
+  const consultaMode = useConsultaMode();
 
   const preview = useAttachmentPreview(instanceId, tenantId);
 
@@ -150,6 +169,7 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
     const load = async () => {
       setLoading(true);
       setError(null);
+      setFueraDeAlcance(false);
       try {
         const [checklistRes, attachmentsRes] = await Promise.all([
           tramitesClient.getChecklist(instanceId, tenantId),
@@ -161,7 +181,14 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
         }
       } catch (e: unknown) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'No se pudieron cargar los documentos del trámite.');
+          const d = describirErrorDeSeccion(
+            e,
+            consultaMode,
+            'No se pudieron cargar los documentos del trámite.',
+            COPY_DOCUMENTOS_FUERA_DE_ALCANCE,
+          );
+          setError(d.mensaje);
+          setFueraDeAlcance(d.fueraDeAlcance);
           setChecklist([]);
           setAttachments([]);
         }
@@ -173,7 +200,7 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
     return () => {
       cancelled = true;
     };
-  }, [instanceId, tenantId, reloadKey]);
+  }, [instanceId, tenantId, reloadKey, consultaMode]);
 
   const satisfiedCount = checklist.filter((i) => i.satisfied).length;
   const checklistDocTipos = new Set(
@@ -195,7 +222,11 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
   if (error) {
     return (
       <TarjetaDetalle titulo="Documentos del trámite">
-        <SeccionError mensaje={error} onReintentar={() => setReloadKey((k) => k + 1)} />
+        <SeccionError
+          mensaje={error}
+          sinReintento={fueraDeAlcance}
+          onReintentar={() => setReloadKey((k) => k + 1)}
+        />
       </TarjetaDetalle>
     );
   }
@@ -231,6 +262,7 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
                   item={item}
                   attachment={attachment}
                   onDownload={(a) => void preview.download(a)}
+                  sinDescarga={consultaMode}
                 />
               );
             })}
@@ -242,7 +274,12 @@ export function TramiteDetalleDocumentos({ instanceId, tenantId }: SeccionDetall
         <TarjetaDetalle titulo="Otros adjuntos">
           <ul className="flex flex-col gap-2" aria-label="Otros adjuntos del trámite">
             {otrosAdjuntos.map((a) => (
-              <AdjuntoRow key={a.id} attachment={a} onDownload={(att) => void preview.download(att)} />
+              <AdjuntoRow
+                key={a.id}
+                attachment={a}
+                onDownload={(att) => void preview.download(att)}
+                sinDescarga={consultaMode}
+              />
             ))}
           </ul>
         </TarjetaDetalle>

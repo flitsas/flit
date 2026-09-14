@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useConsultaMode } from '@/components/operacion/ConsultaModeContext';
+import { describirErrorDeSeccion } from '@/lib/tramites/network-scope';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { FineDetailList, preflightOverall, statusPillWord } from '@/components/operacion/PreflightPanel';
 import {
@@ -91,9 +93,13 @@ interface CargaEstado<T> {
   loading: boolean;
   error: string | null;
   data: T | null;
+  /** HU #12362 — el error es un rechazo de alcance (modo consulta): sin reintento. */
+  fueraDeAlcance?: boolean;
 }
 
 export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleProps) {
+  // HU #12362 — el trámite de un hijo se lee por la ruta consolidada; 403/404 = fuera de alcance.
+  const consultaMode = useConsultaMode();
   const [especificaciones, setEspecificaciones] = useState<CargaEstado<FieldValue[]>>({
     loading: true,
     error: null,
@@ -115,13 +121,21 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
     const load = async () => {
       setEspecificaciones((s) => ({ ...s, loading: true, error: null }));
       try {
-        const detail = await tramitesClient.getInstance(instanceId, tenantId);
+        const detail = consultaMode
+          ? await tramitesClient.getNetworkInstance(instanceId)
+          : await tramitesClient.getInstance(instanceId, tenantId);
         if (active) setEspecificaciones({ loading: false, error: null, data: detail.fieldValues });
       } catch (err) {
         if (active) {
+          const d = describirErrorDeSeccion(
+            err,
+            consultaMode,
+            'No se pudieron cargar las especificaciones técnicas.',
+          );
           setEspecificaciones({
             loading: false,
-            error: err instanceof Error ? err.message : 'No se pudieron cargar las especificaciones técnicas.',
+            error: d.mensaje,
+            fueraDeAlcance: d.fueraDeAlcance,
             data: null,
           });
         }
@@ -131,7 +145,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
     return () => {
       active = false;
     };
-  }, [instanceId, tenantId, especificacionesIntento]);
+  }, [instanceId, tenantId, especificacionesIntento, consultaMode]);
 
   useEffect(() => {
     let active = true;
@@ -142,9 +156,15 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
         if (active) setPreflight({ loading: false, error: null, data: snapshot });
       } catch (err) {
         if (active) {
+          const d = describirErrorDeSeccion(
+            err,
+            consultaMode,
+            'No se pudo cargar la verificación de requisitos.',
+          );
           setPreflight({
             loading: false,
-            error: err instanceof Error ? err.message : 'No se pudo cargar la verificación de requisitos.',
+            error: d.mensaje,
+            fueraDeAlcance: d.fueraDeAlcance,
             data: null,
           });
         }
@@ -154,7 +174,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
     return () => {
       active = false;
     };
-  }, [instanceId, tenantId, preflightIntento]);
+  }, [instanceId, tenantId, preflightIntento, consultaMode]);
 
   const specs = especificaciones.data ? buildEspecificaciones(especificaciones.data) : [];
   const overall = preflight.data ? preflightOverall(preflight.data.overall) : null;
@@ -168,6 +188,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
         ) : especificaciones.error ? (
           <SeccionError
             mensaje={especificaciones.error}
+            sinReintento={especificaciones.fueraDeAlcance}
             onReintentar={() => setEspecificacionesIntento((n) => n + 1)}
           />
         ) : specs.length === 0 ? (
@@ -190,6 +211,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
         ) : preflight.error ? (
           <SeccionError
             mensaje={preflight.error}
+            sinReintento={preflight.fueraDeAlcance}
             onReintentar={() => setPreflightIntento((n) => n + 1)}
           />
         ) : !preflight.data ? (

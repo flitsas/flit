@@ -23,6 +23,13 @@ import {
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { usePermissions } from '@/hooks/usePermissions';
+import {
+  ETIQUETA_SOLO_CONSULTA,
+  isNetworkReadOnly,
+  partirSeleccionPorAlcance,
+  textoExcluidosRed,
+} from '@/lib/tramites/network-scope';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
@@ -431,6 +438,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
   }, []);
+  /**
+   * HU #12362 — tenant del usuario, con el que `isNetworkReadOnly` decide si una fila es de un
+   * cliente hijo (modo consulta). Para el SuperAdmin va en `null` a propósito: ve trámites de
+   * todas las compañías y ninguno es «de la red»; su alcance lo pone el servidor por rol. Un
+   * cliente sin jerarquía solo recibe filas de su propio tenant, así que para él nunca se activa.
+   */
+  const { tenantId: tenantDelUsuario, isSuperAdmin: esSuperAdmin } = usePermissions();
+  const currentTenantId = esSuperAdmin ? null : tenantDelUsuario;
 
   // HU #11054 / HU #11055 — consulta de documentos desde el listado, sin abrir el wizard. Se guarda
   // el trámite elegido (no solo su id) porque el panel se titula con el radicado y el SuperAdmin
@@ -440,6 +455,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // Frente C, etapa 1 — modal de detalle para trámites YA RADICADOS (estado ≠ 'borrador'). El
   // borrador sigue navegando al asistente; ver `TramiteRow.handleOpen`.
   const [detalleTramite, setDetalleTramite] = useState<InstanceSummary | null>(null);
+  /** HU #12362 — el detalle abierto es de un cliente hijo: solo consulta. */
+  const detalleConsulta = isNetworkReadOnly(detalleTramite, currentTenantId);
   /**
    * Ruta al asistente de pasos. Vive aquí y no en cada llamador porque el `?t=` del SuperAdmin
    * (trámite de OTRA compañía) tiene que viajar igual desde la fila y desde el modal de detalle.
@@ -888,6 +905,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // al siguiente refetch ni recargar la pagina para ver el efecto de haber marcado la prioridad.
   const handleTogglePriority = useCallback(
     async (id: string, next: boolean, tenantId: string) => {
+      // HU #12362 — red de seguridad: una fila de la red no monta el control, pero si llegara por
+      // un atajo, ni se toca el estado local ni se llama al servidor.
+      if (isNetworkReadOnly({ tenantId }, currentTenantId)) return;
       setItems((prev) =>
         prev.map((it) => (it.id === id ? { ...it, prioritario: next } : it)),
       );
@@ -899,7 +919,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         );
       }
     },
-    [isAdmin],
+    [isAdmin, currentTenantId],
   );
 
   // HU #11055 — visor del consolidado. El resumen ya trae el id del adjunto, así que no hace falta
@@ -925,6 +945,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // Solo aplica a borradores origin='ict' (el botón solo se muestra ahí). Al reanudar se limpia la nota.
   const handleTogglePause = useCallback(
     async (id: string, next: boolean, tenantId: string) => {
+      if (isNetworkReadOnly({ tenantId }, currentTenantId)) return; // HU #12362
       setItems((prev) =>
         prev.map((it) =>
           it.id === id
@@ -940,7 +961,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         );
       }
     },
-    [isAdmin],
+    [isAdmin, currentTenantId],
   );
 
   // ICT (paridad v1 pause-unpause-massive) — selección múltiple para pausa/reanudación en lote.
@@ -955,13 +976,28 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
+  /**
+   * HU #12362 (AC6) — de la selección, cuáles son PROPIOS (accionables) y cuántos son de la red
+   * (excluidos). La barra ofrece las acciones solo si hay propios y dice cuántos quedaron fuera.
+   */
+  const seleccionPorAlcance = useMemo(
+    () => partirSeleccionPorAlcance(items, selectedIds, currentTenantId),
+    [items, selectedIds, currentTenantId],
+  );
+
   const handleBulkPause = useCallback(
     async (paused: boolean) => {
       if (selectedIds.size === 0) return;
+      // HU #12362 — solo los propios: ni actualización optimista ni llamada para los de la red.
+      const propiosIds = new Set(seleccionPorAlcance.propios.map((it) => it.id));
+      if (propiosIds.size === 0) {
+        setSelectedIds(new Set());
+        return;
+      }
       // Optimista sobre las filas seleccionadas (solo tienen sentido las ICT en borrador).
       setItems((prev) =>
         prev.map((it) =>
-          selectedIds.has(it.id) && it.origin === 'ict' && it.estado === 'borrador'
+          propiosIds.has(it.id) && it.origin === 'ict' && it.estado === 'borrador'
             ? { ...it, isPaused: paused, pausedObservation: paused ? it.pausedObservation ?? null : null }
             : it,
         ),
@@ -970,7 +1006,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
       // X-Tenant-Id, así que se agrupa por tenant y se llama una vez por compañía.
       const byTenant = new Map<string, string[]>();
       for (const it of items) {
-        if (!selectedIds.has(it.id)) continue;
+        if (!propiosIds.has(it.id)) continue;
         const arr = byTenant.get(it.tenantId) ?? [];
         arr.push(it.id);
         byTenant.set(it.tenantId, arr);
@@ -987,7 +1023,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         setSelectedIds(new Set());
       }
     },
-    [selectedIds, items, isAdmin, load],
+    [selectedIds, items, isAdmin, load, seleccionPorAlcance],
   );
 
   const hasServerFilters =
@@ -1254,20 +1290,35 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
             <span className="font-semibold text-[#162744] dark:text-white">
               {`${selectedIds.size} seleccionado${selectedIds.size === 1 ? '' : 's'}`}
             </span>
-            <button
-              type="button"
-              onClick={() => void handleBulkPause(true)}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
-            >
-              <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBulkPause(false)}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-            >
-              <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
-            </button>
+            {/* HU #12362 (AC6) — las acciones solo existen si hay trámites PROPIOS en la selección;
+                los de la red se cuentan aparte, con su motivo, para que la exclusión no sea muda. */}
+            {seleccionPorAlcance.propios.length > 0 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleBulkPause(true)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
+                >
+                  <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleBulkPause(false)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                >
+                  <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
+                </button>
+              </>
+            ) : null}
+            {seleccionPorAlcance.excluidos > 0 ? (
+              <span
+                role="status"
+                className="inline-flex items-center gap-1 text-[#162744]/70 dark:text-white/70"
+              >
+                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                {textoExcluidosRed(seleccionPorAlcance.excluidos)}
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={clearSelection}
@@ -1314,6 +1365,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           onVerHistorialPlaca={verHistorialPlaca}
           isAdmin={isAdmin}
           onAdminActionSuccess={() => void load()}
+          currentTenantId={currentTenantId}
         />
       </div>
 
@@ -1344,6 +1396,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         instanceId={detalleTramite?.id ?? null}
         tenantId={isAdmin ? detalleTramite?.tenantId : undefined}
         item={detalleTramite}
+        // HU #12362 — trámite de un cliente hijo: solo lectura y sin gestión de documentos.
+        readOnly={detalleConsulta}
+        consultaMode={detalleConsulta}
         // Subsanar desde el detalle: el modal enciende el flag y delega el salto al asistente aquí,
         // que es donde vive la ruta con el `?t=` del SuperAdmin.
         onAbrirAsistente={(it) => {
@@ -1662,6 +1717,7 @@ function TableBody({
   onVerHistorialPlaca,
   isAdmin,
   onAdminActionSuccess,
+  currentTenantId,
 }: {
   loading: boolean;
   error: string | null;
@@ -1714,6 +1770,8 @@ function TableBody({
   isAdmin: boolean;
   /** HU #12163 — refresca la tabla tras una acción administrativa avanzada exitosa. */
   onAdminActionSuccess: () => void;
+  /** HU #12362 — tenant del usuario (null para SuperAdmin); decide el modo consulta por fila. */
+  currentTenantId: string | null;
 }) {
   if (loading) {
     // Carga de la pantalla principal del módulo: va con el loader de marca y no con barras de
@@ -1894,6 +1952,7 @@ function TableBody({
                 onVerHistorialPlaca={onVerHistorialPlaca}
                 isAdmin={isAdmin}
                 onAdminActionSuccess={onAdminActionSuccess}
+                currentTenantId={currentTenantId}
               />
             ))}
           </tbody>
@@ -2035,6 +2094,7 @@ function TramiteRow({
   onVerHistorialPlaca,
   isAdmin,
   onAdminActionSuccess,
+  currentTenantId,
 }: {
   item: InstanceSummary;
   /** Claves visibles (selector de columnas) — misma lista/orden que usa la cabecera. */
@@ -2068,7 +2128,13 @@ function TramiteRow({
   /** HU #12163 — ver doc de `TableBody`. */
   isAdmin: boolean;
   onAdminActionSuccess: () => void;
+  /** HU #12362 — ver doc de `TableBody`. */
+  currentTenantId: string | null;
 }) {
+  // HU #12362 — trámite de un cliente HIJO visto por la cabeza de red: se consulta, no se toca.
+  // Ninguna acción de escritura se monta (ni deshabilitada) y la apertura va SIEMPRE al detalle.
+  const consultaMode = isNetworkReadOnly(item, currentTenantId);
+  const tenantNameRed = (item as { tenantName?: string | null }).tenantName ?? item.companiaNombre;
   // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
   // trae el id del adjunto): el botón NUNCA dispara una generación.
   const consolidadoDisponible = !!item.consolidadoAttachmentId;
@@ -2089,18 +2155,19 @@ function TramiteRow({
   // subsanación: el estado sigue siendo `rechazado`, pero el trámite se está corrigiendo, y tanto
   // "Re-radicar" como "Cancelar la subsanación" solo existen dentro del asistente.
   const abreAsistente =
-    isDraft || !!item.subsanacionActiva || item.estado === 'subsanacion';
+    !consultaMode && (isDraft || !!item.subsanacionActiva || item.estado === 'subsanacion');
   const actionLabel = async?.ready ? 'Radicar' : abreAsistente ? 'Continuar' : 'Ver';
   const actionIcon = async?.ready ? FileCheck : abreAsistente ? Play : Eye;
   const plateHint = plateFlowHint(item.plateFlowStatus);
   const puedeProcesar =
-    item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
+    !consultaMode && item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
   // HU #12163 — acciones avanzadas del administrador (Cambiar estado, Anular, Consolidado,
   // Reenviar validación, Reasignar gestor), gateadas por permiso (AC1) y por estado (AC2).
   const { items: adminActionItems, modals: adminActionModals } = useAdminTramiteAcciones({
     item,
     isAdmin,
     onChanged: onAdminActionSuccess,
+    consultaMode,
   });
   const actionItems: ActionsMenuItem[] = [
     {
@@ -2111,7 +2178,7 @@ function TramiteRow({
       onSelect: () => handleOpen(),
     },
     // ICT (paridad v1) — pausar/reanudar como acción del menú (solo borradores origin='ict').
-    ...(isIctDraft
+    ...(isIctDraft && !consultaMode
       ? [
           {
             key: 'pausa',
@@ -2133,12 +2200,18 @@ function TramiteRow({
         ]
       : []),
     // HU #11054 — documentos del expediente sin entrar al wizard.
-    {
-      key: 'documentos',
-      label: 'Ver documentos',
-      icon: FileText,
-      onSelect: () => onVerDocumentos(item),
-    },
+    // HU #12362 — en modo consulta se OMITE: el panel abre vistas previas prefirmadas y descargas
+    // por la ruta propia; los documentos de la red solo se consultan desde el detalle (AC3, #12411).
+    ...(!consultaMode
+      ? [
+          {
+            key: 'documentos',
+            label: 'Ver documentos',
+            icon: FileText,
+            onSelect: () => onVerDocumentos(item),
+          },
+        ]
+      : []),
     // HU #12196 — atajo al historial de ESTA placa. Se OMITE por completo si el usuario no tiene
     // el módulo (`historial-placa` fuera de sus módulos navegables): enseñar un destino al que el
     // gate va a rebotar no informa de nada, solo promete acceso.
@@ -2161,7 +2234,7 @@ function TramiteRow({
       : []),
     // HU #11055 — el negocio pidió la acción "sólo visible si ya se encuentra generado": se OMITE
     // cuando no hay consolidado, en vez de mostrarse deshabilitada. Así nunca dispara una generación.
-    ...(consolidadoDisponible
+    ...(consolidadoDisponible && !consultaMode
       ? [
           {
             key: 'consolidado',
@@ -2240,7 +2313,18 @@ function TramiteRow({
     radicado: (
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex min-w-0 items-center gap-2">
-          {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila). */}
+          {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila).
+              HU #12362 — en modo consulta la estrella es solo informativa: no hay botón. */}
+          {consultaMode ? (
+            item.prioritario ? (
+              <Star
+                className="h-4 w-4 shrink-0"
+                style={{ color: '#F59E0B', fill: '#F59E0B' }}
+                role="img"
+                aria-label="Trámite prioritario"
+              />
+            ) : null
+          ) : (
           <button
             type="button"
             onClick={(e) => {
@@ -2266,6 +2350,7 @@ function TramiteRow({
               aria-hidden="true"
             />
           </button>
+          )}
           {/* Acceso por teclado/lector de pantalla a la fila: el `<tr>` ya no es focuseable (una
               tabla semántica no puede tener `role="button"` en la fila), así que el radicado
               lleva el mismo `handleOpen`/aria-label de antes en un botón real. El aspecto en
@@ -2282,6 +2367,27 @@ function TramiteRow({
             {item.referenceNumber}
           </button>
         </span>
+        {/* HU #12362 — distintivo perceptible sin depender del color: texto + icono, y el nombre
+            del cliente hijo dueño del trámite cuando viaja en la fila. */}
+        {consultaMode ? (
+          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <StatusBadge
+              tone="neutral"
+              ariaLabel={`${ETIQUETA_SOLO_CONSULTA}: trámite de un cliente de la red`}
+              label={
+                <span className="inline-flex items-center gap-1">
+                  <Eye className="h-3 w-3" aria-hidden="true" />
+                  {ETIQUETA_SOLO_CONSULTA}
+                </span>
+              }
+            />
+            {tenantNameRed ? (
+              <span className="block truncate text-[10px] opacity-70" title={tenantNameRed}>
+                {tenantNameRed}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
         {!shows('fechaCreacion') ? (
           <span className="block truncate text-[10px] opacity-55">
             Creación: {shortDate(item.createdAt)}
@@ -2650,8 +2756,16 @@ function TramiteRow({
               type="checkbox"
               checked={selected}
               onChange={() => onToggleSelect(item.id)}
-              aria-label={`Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`}
-              title="Seleccionar para pausar/reanudar en lote"
+              aria-label={
+                consultaMode
+                  ? `Seleccionar el trámite ${item.referenceNumber} (solo consulta: queda excluido de las acciones masivas)`
+                  : `Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`
+              }
+              title={
+                consultaMode
+                  ? 'Solo consulta: queda excluido de las acciones masivas'
+                  : 'Seleccionar para pausar/reanudar en lote'
+              }
               className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
             />
           ) : null}

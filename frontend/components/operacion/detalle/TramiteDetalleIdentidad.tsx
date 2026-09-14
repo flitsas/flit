@@ -5,6 +5,8 @@ import { Download } from 'lucide-react';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useConsultaMode } from '@/components/operacion/ConsultaModeContext';
+import { describirErrorDeSeccion } from '@/lib/tramites/network-scope';
 import { formatFecha } from '@/lib/format/date';
 import type {
   BiometricEstado,
@@ -136,12 +138,15 @@ function FilaValidacion({
   tenantId,
   descargando,
   onDescargar,
+  sinDescarga = false,
 }: {
   fila: FilaIdentidad;
   /** Compañía dueña del trámite: sin ella la bitácora responde 404 para quien mira desde fuera. */
   tenantId?: string | null;
   descargando: boolean;
   onDescargar: (validationId: string, nombre: string) => void;
+  /** HU #12362 (AC3) — sin descarga de certificado: solo la ofrece el componente de #12411. */
+  sinDescarga?: boolean;
 }) {
   return (
     <li className="space-y-2">
@@ -158,7 +163,7 @@ function FilaValidacion({
         </span>
         <span className="flex shrink-0 items-center gap-2">
           <StatusBadge tone={fila.tone} label={fila.statusText} />
-          {fila.certificado && fila.validationId ? (
+          {fila.certificado && fila.validationId && !sinDescarga ? (
             <button
               type="button"
               onClick={() => onDescargar(fila.validationId as string, fila.label)}
@@ -185,15 +190,19 @@ export function TramiteDetalleIdentidad({ instanceId, tenantId, item }: SeccionD
   const [firmaBaulPartes, setFirmaBaulPartes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fueraDeAlcance, setFueraDeAlcance] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [descargandoId, setDescargandoId] = useState<string | null>(null);
   const [descargaError, setDescargaError] = useState<string | null>(null);
+  // HU #12362 — en modo consulta un 403/404 es «fuera de tu alcance», no un error técnico.
+  const consultaMode = useConsultaMode();
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
       setError(null);
+      setFueraDeAlcance(false);
       try {
         const res = await tramitesClient.listBiometricExpediente(instanceId, tenantId);
         if (!cancelled) {
@@ -202,9 +211,13 @@ export function TramiteDetalleIdentidad({ instanceId, tenantId, item }: SeccionD
         }
       } catch (e: unknown) {
         if (!cancelled) {
-          setError(
-            e instanceof Error ? e.message : 'No se pudo cargar la validación de identidad del trámite.',
+          const d = describirErrorDeSeccion(
+            e,
+            consultaMode,
+            'No se pudo cargar la validación de identidad del trámite.',
           );
+          setError(d.mensaje);
+          setFueraDeAlcance(d.fueraDeAlcance);
           setValidations([]);
           setFirmaBaulPartes([]);
         }
@@ -216,7 +229,7 @@ export function TramiteDetalleIdentidad({ instanceId, tenantId, item }: SeccionD
     return () => {
       cancelled = true;
     };
-  }, [instanceId, tenantId, reloadKey]);
+  }, [instanceId, tenantId, reloadKey, consultaMode]);
 
   if (loading) {
     return (
@@ -233,6 +246,7 @@ export function TramiteDetalleIdentidad({ instanceId, tenantId, item }: SeccionD
             tres botones «Reintentar» a secas no se distinguen por lista de botones. */}
         <SeccionError
           mensaje={error}
+          sinReintento={fueraDeAlcance}
           contexto="la validación de identidad"
           onReintentar={() => setReloadKey((k) => k + 1)}
         />
@@ -286,6 +300,7 @@ export function TramiteDetalleIdentidad({ instanceId, tenantId, item }: SeccionD
             tenantId={tenantId}
             descargando={descargandoId === fila.validationId}
             onDescargar={(validationId, nombre) => void descargar(validationId, nombre)}
+            sinDescarga={consultaMode}
           />
         ))}
       </ul>

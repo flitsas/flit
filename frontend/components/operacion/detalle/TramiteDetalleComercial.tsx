@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useConsultaMode } from '@/components/operacion/ConsultaModeContext';
+import { describirErrorDeSeccion } from '@/lib/tramites/network-scope';
 import { formatCOP } from '@/lib/format/currency';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import {
@@ -73,9 +75,13 @@ interface CargaEstado<T> {
   loading: boolean;
   error: string | null;
   data: T | null;
+  /** HU #12362 — el error es un rechazo de alcance (modo consulta): sin reintento. */
+  fueraDeAlcance?: boolean;
 }
 
 export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalleProps) {
+  // HU #12362 — en modo consulta un 403/404 es «fuera de tu alcance», no un error técnico.
+  const consultaMode = useConsultaMode();
   const [comercial, setComercial] = useState<CargaEstado<CommercialData>>({
     loading: true,
     error: null,
@@ -101,9 +107,15 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
         if (active) setComercial({ loading: false, error: null, data: data ?? null });
       } catch (err) {
         if (active) {
+          const d = describirErrorDeSeccion(
+            err,
+            consultaMode,
+            'No se pudieron cargar los datos comerciales.',
+          );
           setComercial({
             loading: false,
-            error: err instanceof Error ? err.message : 'No se pudieron cargar los datos comerciales.',
+            error: d.mensaje,
+            fueraDeAlcance: d.fueraDeAlcance,
             data: null,
           });
         }
@@ -113,7 +125,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
     return () => {
       active = false;
     };
-  }, [instanceId, tenantId, comercialIntento]);
+  }, [instanceId, tenantId, comercialIntento, consultaMode]);
 
   useEffect(() => {
     let active = true;
@@ -128,9 +140,15 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
         if (active) setPrenda({ loading: false, error: null, data: data ?? null });
       } catch (err) {
         if (active) {
+          const d = describirErrorDeSeccion(
+            err,
+            consultaMode,
+            'No se pudo cargar la decisión de prenda.',
+          );
           setPrenda({
             loading: false,
-            error: err instanceof Error ? err.message : 'No se pudo cargar la decisión de prenda.',
+            error: d.mensaje,
+            fueraDeAlcance: d.fueraDeAlcance,
             data: null,
           });
         }
@@ -140,7 +158,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
     return () => {
       active = false;
     };
-  }, [instanceId, tenantId, prendaIntento]);
+  }, [instanceId, tenantId, prendaIntento, consultaMode]);
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -150,6 +168,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
         ) : comercial.error ? (
           <SeccionError
             mensaje={comercial.error}
+            sinReintento={comercial.fueraDeAlcance}
             onReintentar={() => setComercialIntento((n) => n + 1)}
           />
         ) : esComercialVacio(comercial.data) ? (
@@ -177,6 +196,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
         ) : prenda.error ? (
           <SeccionError
             mensaje={prenda.error}
+            sinReintento={prenda.fueraDeAlcance}
             onReintentar={() => setPrendaIntento((n) => n + 1)}
           />
         ) : !prenda.data ? (

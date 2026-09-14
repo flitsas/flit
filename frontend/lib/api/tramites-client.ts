@@ -141,6 +141,10 @@ import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
+import type {
+  NetworkInstanceDetail,
+  NetworkInstanceSummary,
+} from '@/lib/tramites/network-scope';
 
 export { DEV_TENANT_ID, DEV_USER_ID };
 
@@ -639,6 +643,56 @@ export const tramitesClient = {
    * completa desde Excel, y unos cientos de valores no caben en una query string.</p>
    */
   searchInstances: (params: ListInstancesParams = {}) => searchInstances(params),
+
+  // ── HU #12362 / #12358 — lectura consolidada de la red (cabeza de grupo) ──────────────────────
+  //
+  // Mismo shape que las rutas propias más `tenantId`/`tenantName` del dueño de cada fila. NO viaja
+  // `X-Tenant-Id`: el alcance («yo + mis hijas») lo resuelve el servidor desde el JWT y una cabecera
+  // de tenant aquí sería una forma de pedir «otra compañía», que es justo lo que estas rutas no
+  // admiten. Cada ítem sale marcado `fromNetwork: true` para que `isNetworkReadOnly` lo reconozca
+  // por PROCEDENCIA aunque coincida el tenant. Sin tipos OpenAPI regenerados (encargo).
+
+  /** Listado consolidado de la red. `POST /api/v1/tramites/network/instances/search`. */
+  searchNetworkInstances: async (
+    params: ListInstancesParams = {},
+  ): Promise<{ items: NetworkInstanceSummary[]; total: number }> => {
+    const { filterTenantId: _tenant, ...body } = params;
+    const res = await request<{ items?: NetworkInstanceSummary[]; total?: number }>(
+      '/api/v1/tramites/network/instances/search',
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+    const items = normalizeInstances(res?.items).map((it) => ({
+      ...(it as NetworkInstanceSummary),
+      tenantName: (it as NetworkInstanceSummary).tenantName ?? it.companiaNombre ?? '',
+      fromNetwork: true as const,
+    }));
+    return { items, total: res?.total ?? items.length };
+  },
+
+  /** Conteo por estado del universo consolidado. Vacío ante fallo, como su gemelo propio. */
+  searchNetworkEstadoCounts: async (
+    params: ListInstancesParams = {},
+  ): Promise<Record<string, number>> => {
+    const { filterTenantId: _tenant, ...body } = params;
+    try {
+      return (
+        (await request<Record<string, number>>(
+          '/api/v1/tramites/network/instances/estado-counts',
+          { method: 'POST', body: JSON.stringify(body) },
+        )) ?? {}
+      );
+    } catch {
+      return {};
+    }
+  },
+
+  /** Detalle de un trámite de la red. `GET /api/v1/tramites/network/instances/{id}`. */
+  getNetworkInstance: async (id: string): Promise<NetworkInstanceDetail> => {
+    const res = await request<NetworkInstanceDetail>(
+      `/api/v1/tramites/network/instances/${id}`,
+    );
+    return { ...res, fromNetwork: true };
+  },
 
   /**
    * HU #12106 — por qué se puede filtrar el listado. La barra se pinta a partir de esta respuesta,

@@ -1,7 +1,7 @@
 'use client';
 
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { TramiteWizard } from '@/components/operacion/TramiteWizard';
+import { useParams, useSearchParams } from 'next/navigation';
+import { TramiteInstanceGate } from '@/components/operacion/TramiteInstanceGate';
 import { setActiveTramitesTenant } from '@/lib/api/tramites-client';
 
 /**
@@ -16,18 +16,16 @@ import { setActiveTramitesTenant } from '@/lib/api/tramites-client';
  *
  * Estado del trámite / Anular / Prenda viven DENTRO del contenido scrolleable del wizard
  * (un solo scroll). Los historiales de identidad y de estados no se muestran en esta vista.
+ *
+ * HU #12362 (AC7) — `TramiteInstanceGate` decide si esta dirección abre el asistente o, para la
+ * cabeza de red sobre un trámite de un cliente hijo, el detalle en modo consulta. Para el resto
+ * de usuarios es el mismo asistente de siempre.
  */
 export default function TramiteInstancePage() {
   const params = useParams<{ instanceId: string }>();
   const searchParams = useSearchParams();
-  const router = useRouter();
 
   setActiveTramitesTenant(searchParams.get('t') ?? undefined);
 
-  return (
-    <TramiteWizard
-      existingInstanceId={params.instanceId}
-      onExit={() => router.push('/tramites')}
-    />
-  );
+  return <TramiteInstanceGate instanceId={params.instanceId} />;
 }
