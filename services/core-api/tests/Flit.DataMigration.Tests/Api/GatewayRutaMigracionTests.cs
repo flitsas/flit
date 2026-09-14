@@ -12,9 +12,11 @@ namespace Flit.DataMigration.Tests.Api;
 /// <c>ActivityTimeout</c> de 30 s y el gateway devuelve 504 sobre migraciones que SÍ se
 /// completaron — invitando a reintentar algo ya hecho. Una migración de instancia 3 (snapshot de
 /// PDFs de V1 + subidas de 9-12 MB) tarda bastante más de 30 s.</item>
-/// <item><b>Puerto interno 4030.</b> <c>migracion-api</c> no publica puerto en el host: el gateway
-/// lo alcanza por la red interna del compose. Si el destino y el <c>ASPNETCORE_URLS</c> del compose
-/// dejan de coincidir, el síntoma es un 502 sin más pista.</item>
+/// <item><b>Puerto interno 4030 por defecto.</b> <c>migracion-api</c> no publica puerto en el host:
+/// el gateway lo alcanza por la red interna del compose. 4030 es el valor de DEV/local; en el VPS el
+/// compose sobrescribe el destino con <c>MIGRACION_API_PORT</c> (QA 5030 / PDN 6030), la MISMA
+/// variable con la que arranca <c>migracion-api</c>. Si el destino y el <c>ASPNETCORE_URLS</c> del
+/// compose dejan de coincidir, el síntoma es un 502 sin más pista.</item>
 /// <item><b>Prefijo intacto.</b> El host sirve <c>/api/v1/migracion</c> tal cual; la ruta no lleva
 /// transformación. Si se le añadiera un <c>PathPattern</c>, todo daría 404.</item>
 /// </list>
