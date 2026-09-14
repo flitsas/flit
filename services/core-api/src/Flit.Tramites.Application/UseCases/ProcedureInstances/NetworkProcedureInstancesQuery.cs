@@ -98,7 +98,7 @@ public sealed record NetworkStatusCountsResult(
 /// <summary>
 /// Detalle consolidado en solo lectura (HU #12358, AC1/AC5): el cliente dueño (<c>TenantId</c> +
 /// <c>TenantName</c>) y EXACTAMENTE el mismo <see cref="ProcedureInstanceDetailDto"/> que ve el propio
-/// hijo por <c>GET /instances/{id}</c> (mismo mapeo <c>GetProcedureInstanceHandler.ToDetail</c>).
+/// hijo por <c>GET /instances/{id}</c> (mismo constructor <c>GetProcedureInstanceHandler.BuildDetailAsync</c>).
 /// No incluye contenido de documentos ni direcciones prefirmadas: el detalle nunca las tuvo y la
 /// ruta de red no las añade.
 /// </summary>
@@ -121,12 +121,14 @@ public sealed class NetworkGetProcedureInstanceHandler(IProcedureInstanceReposit
         if (instance is null)
             return (null, "not_found");
 
-        var events = await GetProcedureInstanceHandler.BuildEventsAsync(repo, instance.Events, ct).ConfigureAwait(false);
+        // Mismo constructor del DTO que el detalle propio (AC1 HU #12358: «los mismos campos»): cualquier
+        // enriquecimiento del detalle vive en BuildDetailAsync y llega aquí sin duplicar la resolución.
+        var detail = await GetProcedureInstanceHandler.BuildDetailAsync(repo, instance, ct).ConfigureAwait(false);
         var names = await repo.GetTenantNamesAsync([instance.TenantId], ct);
 
         return (new NetworkProcedureInstanceDetailDto(
             instance.TenantId,
             names.GetValueOrDefault(instance.TenantId),
-            GetProcedureInstanceHandler.ToDetail(instance, events)), null);
+            detail), null);
     }
 }

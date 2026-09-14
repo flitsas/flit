@@ -3917,6 +3917,8 @@ paths:
         inexistente, ajeno o fuera del conjunto de lectura responde 404 escueto `{ "error": "not_found" }`, idéntico
         en los tres casos (anti-enumeración). Cada listado deja UN registro `network.attachments.list` en la
         auditoría de acceso consolidado (HU #12361) con trámite, hijo y resultado (`ok` / `forbidden` / `not_found`).
+        Policy explícita: exige el permiso RBAC `tramites.read` en el JWT (SuperAdmin hace bypass del permiso
+        pero sigue recibiendo 403 `network_scope_required`); sin el permiso responde 403 sin cuerpo y sin auditar.
       security:
         - bearerAuth: []
       responses:
@@ -3936,7 +3938,7 @@ paths:
           description: >
             `network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin o interruptor
             `group_read_scope` apagado) o `network_documents_disabled` (cabeza CONCESION con
-            `network_documents_concesion` apagado).
+            `network_documents_concesion` apagado). Sin permiso `tramites.read`: 403 sin cuerpo.
           content:
             application/json:
               schema:
@@ -3970,6 +3972,9 @@ paths:
         interruptores que el listado. Trámite inexistente/ajeno, documento inexistente o binario perdido
         responden el MISMO 404 escueto `{ "error": "not_found" }`. Cada descarga (servida o rechazada) deja UN
         registro `network.attachments.download` con `attachmentId` en la auditoría de acceso consolidado.
+        La auditoría de la descarga es FAIL-CLOSED: si el registro no puede persistirse, el binario NO se entrega
+        y se responde 503 `{ "error": "audit_unavailable" }` (el listado de metadatos y las demás lecturas de red
+        siguen best-effort). Policy explícita: exige el permiso RBAC `tramites.read` en el JWT.
         Las rutas propias `GET /api/v1/tramites/instances/{id}/attachments/{attachmentId}/download` y `…/preview-url`
         no cambian.
       security:
@@ -3983,13 +3988,19 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` o `network_documents_disabled`."
+          description: "`network_scope_required` o `network_documents_disabled`; sin permiso `tramites.read`: 403 sin cuerpo."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: "`{ \"error\": \"not_found\" }` — trámite inexistente/ajeno, documento inexistente o binario perdido."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: "`{ \"error\": \"audit_unavailable\" }` — no se pudo registrar el acceso; el documento no se entrega (fail-closed)."
           content:
             application/json:
               schema:

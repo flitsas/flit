@@ -10,9 +10,10 @@ using Xunit;
 namespace Flit.Infrastructure.Tests.Auditing;
 
 /// <summary>
-/// HU #12361 (Feature #12257) — <see cref="NetworkAccessAuditWriter"/>: escritura best-effort con scope
-/// DI propio sobre <c>tramites.network_access_audit</c> (AC1/AC5/AC7). Sin PostgreSQL (InMemory).
-/// Uso de ejemplo: <c>await writer.RecordAttachmentAccessAsync(user, P, C1, tramite, anexo, "network.attachments.download", "forbidden")</c>.
+/// HU #12361 (Feature #12257) — <see cref="NetworkAccessAuditWriter"/>: escritura con scope DI propio
+/// sobre <c>tramites.network_access_audit</c> (AC1/AC5/AC7) que nunca propaga y devuelve si la fila
+/// quedó persistida (fail-closed en descargas, PR #370). Sin PostgreSQL (InMemory).
+/// Uso de ejemplo: <c>var ok = await writer.WriteAsync(new NetworkAccessAuditEntry(user, P, [C1], "network.attachments.download", null, tramite, C1, anexo, "forbidden"))</c>.
 /// </summary>
 public sealed class NetworkAccessAuditWriterTests
 {
@@ -38,12 +39,14 @@ public sealed class NetworkAccessAuditWriterTests
         var ct = TestContext.Current.CancellationToken;
         await using var provider = BuildProvider(nameof(WriteAsync_persiste_una_fila_con_los_hijos_distintos_y_sin_la_cabeza));
 
-        await Writer(provider).WriteAsync(new NetworkAccessAuditEntry(
+        var written = await Writer(provider).WriteAsync(new NetworkAccessAuditEntry(
             User, P, [P, C1, C1, C2, Guid.Empty], NetworkAccessVocabulary.Resources.InstancesSearch,
             "{\"take\":50}", null, null, null, NetworkAccessVocabulary.Results.Ok), ct);
 
+        written.Should().BeTrue();
         await using var verify = provider.CreateScope().ServiceProvider.GetRequiredService<FlitDbContext>();
         var row = await verify.NetworkAccessAuditEntries.SingleAsync(ct);
+        row.Id.Should().NotBeEmpty("la clave la genera el proveedor (DEFAULT uuidv7() en PostgreSQL), no el writer");
         row.ActorUserId.Should().Be(User);
         row.ActorTenantId.Should().Be(P);
         row.ReachedTenantIds.Should().BeEquivalentTo([C1, C2]);
@@ -59,17 +62,19 @@ public sealed class NetworkAccessAuditWriterTests
         var ct = TestContext.Current.CancellationToken;
         await using var provider = BuildProvider(nameof(WriteAsync_sin_hijos_alcanzados_no_escribe_nada_AC5));
 
-        await Writer(provider).WriteAsync(new NetworkAccessAuditEntry(
-            User, P, [P], NetworkAccessVocabulary.Resources.InstancesSearch, null, null, null, null, NetworkAccessVocabulary.Results.Ok), ct);
-        await Writer(provider).WriteAsync(new NetworkAccessAuditEntry(
-            User, P, [], NetworkAccessVocabulary.Resources.StatsOverview, null, null, null, null, NetworkAccessVocabulary.Results.Ok), ct);
+        (await Writer(provider).WriteAsync(new NetworkAccessAuditEntry(
+            User, P, [P], NetworkAccessVocabulary.Resources.InstancesSearch, null, null, null, null, NetworkAccessVocabulary.Results.Ok), ct))
+            .Should().BeTrue("nada que registrar no es un fallo");
+        (await Writer(provider).WriteAsync(new NetworkAccessAuditEntry(
+            User, P, [], NetworkAccessVocabulary.Resources.StatsOverview, null, null, null, null, NetworkAccessVocabulary.Results.Ok), ct))
+            .Should().BeTrue();
 
         await using var verify = provider.CreateScope().ServiceProvider.GetRequiredService<FlitDbContext>();
         (await verify.NetworkAccessAuditEntries.CountAsync(ct)).Should().Be(0);
     }
 
     [Fact]
-    public async Task WriteAsync_es_best_effort_una_excepcion_del_DbContext_no_se_propaga()
+    public async Task WriteAsync_una_excepcion_del_DbContext_no_se_propaga_y_devuelve_false()
     {
         var ct = TestContext.Current.CancellationToken;
         // Sin FlitDbContext registrado: GetRequiredService lanza dentro del writer.
@@ -78,21 +83,24 @@ public sealed class NetworkAccessAuditWriterTests
         var act = () => Writer(provider).WriteAsync(new NetworkAccessAuditEntry(
             User, P, [C1], NetworkAccessVocabulary.Resources.InstancesDetail, null, Guid.NewGuid(), C1, null, NetworkAccessVocabulary.Results.Ok), ct);
 
-        await act.Should().NotThrowAsync("auditar nunca rompe la respuesta al cliente");
+        var written = await act.Should().NotThrowAsync("auditar nunca lanza; el llamante decide con el bool");
+        written.Which.Should().BeFalse("la descarga de documentos se retiene (fail-closed) cuando no hay rastro");
     }
 
     [Fact]
-    public async Task RecordAttachmentAccessAsync_registra_el_intento_rechazado_con_tramite_documento_y_hijo_AC7()
+    public async Task WriteAsync_registra_el_intento_rechazado_de_descarga_con_tramite_documento_y_hijo_AC7()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var provider = BuildProvider(nameof(RecordAttachmentAccessAsync_registra_el_intento_rechazado_con_tramite_documento_y_hijo_AC7));
+        await using var provider = BuildProvider(nameof(WriteAsync_registra_el_intento_rechazado_de_descarga_con_tramite_documento_y_hijo_AC7));
         var procedure = Guid.NewGuid();
         var attachment = Guid.NewGuid();
 
-        await Writer(provider).RecordAttachmentAccessAsync(
-            User, P, C1, procedure, attachment,
-            NetworkAccessVocabulary.Resources.AttachmentsDownload, NetworkAccessVocabulary.Results.Forbidden, ct);
+        // Misma entrada que arma NetworkAccessAuditFilter para la ruta de descarga (HU #12410).
+        var written = await Writer(provider).WriteAsync(new NetworkAccessAuditEntry(
+            User, P, [C1], NetworkAccessVocabulary.Resources.AttachmentsDownload, null,
+            procedure, C1, attachment, NetworkAccessVocabulary.Results.Forbidden), ct);
 
+        written.Should().BeTrue();
         await using var verify = provider.CreateScope().ServiceProvider.GetRequiredService<FlitDbContext>();
         var row = await verify.NetworkAccessAuditEntries.SingleAsync(ct);
         row.ActorUserId.Should().Be(User);

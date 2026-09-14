@@ -173,7 +173,11 @@ public sealed class NetworkProceduresReadTests(PostgresDatabaseFixture fixture) 
         await HierarchyScenario.SeedAsync(Fixture);
         await using var ctx = NewContext();
         var repo = new ProcedureInstanceRepository(ctx);
-        // Único modo de obtener un conjunto vacío sin All(): un tenant que no tiene ninguna fila.
+        // Aquí «vacío» se aproxima con un tenant Single sin ninguna fila: prueba que el repositorio
+        // trata un conjunto de lectura sin datos como cero filas (no como ausencia de filtro). El
+        // conjunto de lectura REALMENTE vacío (cabeza con group_read_scope apagado o sin hijos, que el
+        // middleware convierte en Single de la propia cabeza y jamás en All) lo cubre
+        // TenantEnforcementMiddlewareScopeTests (HU #12321) sobre el resolutor y el middleware.
         var vacio = TenantScope.Single(new Guid("a0000000-0000-4000-8000-00000000dead"));
 
         var (filas, total) = await repo.ListWithSummaryGraphFilteredAsync(

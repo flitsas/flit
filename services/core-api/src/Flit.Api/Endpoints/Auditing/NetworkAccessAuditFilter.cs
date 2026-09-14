@@ -4,6 +4,7 @@ using Flit.Api.Authorization;
 using Flit.Tramites.Application.Auditing;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -119,11 +120,16 @@ internal static class NetworkAccessAuditContext
 ///   <item>Un rechazo por <c>childTenantId</c> fuera del alcance lo publica el endpoint con
 ///   <c>result = forbidden</c> y el hijo pedido: queda el intento (AC7 para descargas; el mecanismo
 ///   es el mismo).</item>
-///   <item>Best-effort: cualquier fallo al auditar se registra como advertencia y la respuesta sigue.</item>
+///   <item>Best-effort en las lecturas: un fallo al auditar se registra como advertencia y la respuesta
+///   sigue. <b>Fail-closed en la descarga de documentos</b> (<see cref="NetworkAccessVocabulary.Resources.AttachmentsDownload"/>,
+///   hallazgo de seguridad del PR #370): si la fila de auditoría no queda escrita, el binario NO se
+///   entrega — se responde 503 <c>{ error: "audit_unavailable" }</c> y el flujo del documento se libera.</item>
 /// </list>
 /// </summary>
 internal sealed partial class NetworkAccessAuditFilter : IEndpointFilter
 {
+    internal const string AuditUnavailable = "audit_unavailable";
+
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -131,45 +137,80 @@ internal sealed partial class NetworkAccessAuditFilter : IEndpointFilter
 
         var result = await next(context).ConfigureAwait(false);
 
+        bool audited;
         try
         {
-            await AuditAsync(context.HttpContext).ConfigureAwait(false);
+            audited = await AuditAsync(context.HttpContext).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            audited = false;
             var logger = context.HttpContext.RequestServices.GetService<ILoggerFactory>()?.CreateLogger<NetworkAccessAuditFilter>();
             if (logger is not null)
                 AuditFailed(logger, context.HttpContext.Request.Path.ToString(), ex);
         }
 
-        return result;
+        if (audited || !IsFailClosed(context.HttpContext))
+            return result;
+
+        // Fail-closed: sin rastro no hay documento. Se libera el flujo que la ruta ya abrió (el
+        // IResult de Results.File aún no se ha ejecutado) y se responde sin cuerpo binario.
+        await DisposeFileAsync(result).ConfigureAwait(false);
+        return Results.Json(new { error = AuditUnavailable }, statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    /// <summary>
+    /// Recursos cuya auditoría es condición para responder: hoy solo la descarga de un documento de un
+    /// hijo (el listado de metadatos y las lecturas siguen best-effort).
+    /// </summary>
+    private static bool IsFailClosed(HttpContext http) =>
+        NetworkAccessAuditContext.Get(http) is { Resource: NetworkAccessVocabulary.Resources.AttachmentsDownload };
+
+    private static async ValueTask DisposeFileAsync(object? result)
+    {
+        switch (result)
+        {
+            case FileStreamHttpResult file:
+                await file.FileStream.DisposeAsync().ConfigureAwait(false);
+                break;
+            case IAsyncDisposable asyncDisposable:
+                await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+                break;
+            case IDisposable disposable:
+                disposable.Dispose();
+                break;
+        }
     }
 
     [LoggerMessage(
         EventId = 12362,
         Level = LogLevel.Warning,
-        Message = "Fallo al auditar el acceso consolidado de {Path}; la respuesta no se altera (best-effort).")]
+        Message = "Fallo al auditar el acceso consolidado de {Path}; en lecturas la respuesta no se altera (best-effort), en descargas se retiene (fail-closed).")]
     private static partial void AuditFailed(ILogger logger, string path, Exception ex);
 
-    private static async Task AuditAsync(HttpContext http)
+    /// <returns>
+    /// <see langword="true"/> si no había nada que auditar o la fila quedó escrita; <see langword="false"/>
+    /// si el writer no pudo persistirla.
+    /// </returns>
+    private static async Task<bool> AuditAsync(HttpContext http)
     {
         var scope = RequestTenantResolver.ScopeFromItems(http);
         if (scope is null || !scope.IsGroup || scope.WriteTenantId is not { } head)
-            return; // no es una cabeza de grupo: nada que auditar (AC6)
+            return true; // no es una cabeza de grupo: nada que auditar (AC6)
 
         var outcome = NetworkAccessAuditContext.Get(http);
         if (outcome is null)
-            return;
+            return true;
 
         var reached = NetworkAccessAuditPolicy.ReachedChildren(scope, outcome.ReachedTenantIds, outcome.Result);
         if (reached.Count == 0)
-            return; // AC5 — solo datos propios (o nada): no infla el registro
+            return true; // AC5 — solo datos propios (o nada): no infla el registro
 
         var writer = http.RequestServices.GetService<INetworkAccessAuditWriter>();
         if (writer is null)
-            return;
+            return false; // sin writer no hay rastro: best-effort sigue; la descarga se retiene
 
-        await writer.WriteAsync(
+        return await writer.WriteAsync(
             new NetworkAccessAuditEntry(
                 ActorUserId: ResolveUserId(http.User),
                 ActorTenantId: head,

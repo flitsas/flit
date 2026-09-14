@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using Flit.Api.Endpoints.Tramites;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.Auditing;
 using Flit.Tramites.Application.Storage;
@@ -74,6 +75,8 @@ public sealed class NetworkAttachmentsEndpointsTests : IClassFixture<NetworkAtta
     {
         _factory = factory;
         _factory.AuditWriter.ClearReceivedCalls();
+        // Auditoría sana por defecto (fail-closed en la descarga: un writer que no confirma ⇒ 503).
+        _factory.AuditWriter.WriteAsync(Arg.Any<NetworkAccessAuditEntry>(), Arg.Any<CancellationToken>()).Returns(true);
         _factory.Storage.ClearReceivedCalls();
         _factory.Repo.ClearReceivedCalls();
         _factory.GroupReadScope = true;
@@ -94,6 +97,38 @@ public sealed class NetworkAttachmentsEndpointsTests : IClassFixture<NetworkAtta
     }
 
     [Fact]
+    public async Task Policy_explicita_sin_permiso_tramites_read_403_en_ambas_rutas_sin_auditar_ni_tocar_almacenamiento()
+    {
+        // Cabeza válida (P) y rol de operación, pero el JWT no trae el slug «tramites.read»: la policy
+        // de la ruta responde 403 ANTES de resolver el alcance, el dueño o el binario, así que no se
+        // publica desenlace (el actor no llegó a la ruta) ni se toca el almacenamiento.
+        var client = ClientFor(P, role: "Operador", withReadPermission: false);
+
+        var list = await client.GetAsync($"{NetworkBase}/{ChildProcedure}/attachments", TestContext.Current.CancellationToken);
+        var download = await client.GetAsync($"{NetworkBase}/{ChildProcedure}/attachments/{AttOk}/download", TestContext.Current.CancellationToken);
+
+        list.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        download.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await download.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().NotContain("%PDF");
+        await _factory.AuditWriter.DidNotReceive().WriteAsync(Arg.Any<NetworkAccessAuditEntry>(), Arg.Any<CancellationToken>());
+        await _factory.Storage.DidNotReceive().OpenReadAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Policy_explicita_operador_de_la_cabeza_con_tramites_read_accede_sin_ser_AdminCompany()
+    {
+        // La vista consolidada está abierta a todo usuario de la cabeza: un rol que no es AdminCompany
+        // pero sí tiene «Ver trámites» lista y descarga igual que el administrador.
+        var client = ClientFor(P, role: "Operador");
+
+        var list = await client.GetAsync($"{NetworkBase}/{ChildProcedure}/attachments", TestContext.Current.CancellationToken);
+        var download = await client.GetAsync($"{NetworkBase}/{ChildProcedure}/attachments/{AttOk}/download", TestContext.Current.CancellationToken);
+
+        list.StatusCode.Should().Be(HttpStatusCode.OK);
+        download.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task Cliente_sin_jerarquia_y_SuperAdmin_403_network_scope_required_sin_auditar()
     {
         foreach (var client in new[] { ClientFor(S, "AdminCompany"), ClientFor(P, "SuperAdmin") })
@@ -108,6 +143,24 @@ public sealed class NetworkAttachmentsEndpointsTests : IClassFixture<NetworkAtta
         }
 
         await _factory.AuditWriter.DidNotReceive().WriteAsync(Arg.Any<NetworkAccessAuditEntry>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── Fail-closed: sin auditoría no hay descarga (hallazgo de seguridad PR #370) ───────────
+
+    [Fact]
+    public async Task Descarga_con_auditoria_caida_responde_503_audit_unavailable_sin_binario_y_el_listado_sigue()
+    {
+        _factory.AuditWriter.WriteAsync(Arg.Any<NetworkAccessAuditEntry>(), Arg.Any<CancellationToken>()).Returns(false);
+        var client = ClientFor(P);
+
+        var download = await client.GetAsync($"{NetworkBase}/{ChildProcedure}/attachments/{AttOk}/download", TestContext.Current.CancellationToken);
+        var list = await client.GetAsync($"{NetworkBase}/{ChildProcedure}/attachments", TestContext.Current.CancellationToken);
+
+        download.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        download.Content.Headers.ContentDisposition.Should().BeNull();
+        var body = await download.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        body.Should().Contain("audit_unavailable").And.NotContain("%PDF");
+        list.StatusCode.Should().Be(HttpStatusCode.OK, "el listado de metadatos sigue best-effort");
     }
 
     // ── AC1 — metadatos sin URLs ──────────────────────────────────────────────────────────────
@@ -367,14 +420,14 @@ public sealed class NetworkAttachmentsEndpointsTests : IClassFixture<NetworkAtta
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────────
 
-    private HttpClient ClientFor(Guid tenantId, string role = "AdminCompany")
+    private HttpClient ClientFor(Guid tenantId, string role = "AdminCompany", bool withReadPermission = true)
     {
         var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(tenantId, role));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(tenantId, role, withReadPermission));
         return client;
     }
 
-    private static string Token(Guid tenantId, string role)
+    private static string Token(Guid tenantId, string role, bool withReadPermission = true)
     {
         var claims = new List<Claim>
         {
@@ -383,6 +436,10 @@ public sealed class NetworkAttachmentsEndpointsTests : IClassFixture<NetworkAtta
             new("role_code", role),
             new("tenant_id", tenantId.ToString()),
         };
+        // Policy explícita de las rutas de documentos de red: el slug RBAC «Ver trámites» viaja en el
+        // claim "permissions" del JWT FLIT (PermissionAuthorizationHandler). SuperAdmin no lo necesita.
+        if (withReadPermission)
+            claims.Add(new Claim("permissions", NetworkAttachmentEndpoints.ReadPermission));
 
         return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
         {

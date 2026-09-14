@@ -31,7 +31,7 @@ namespace Flit.Integration.Tests.Network;
 ///   <item>AC4 — el SuperAdmin filtra por cliente, rango y recurso, con paginación acotada.</item>
 ///   <item>AC5 — consulta acotada a la propia cabeza ⇒ cero filas.</item>
 ///   <item>AC6 — las rutas viejas (S, sobrecarga <c>Guid?</c>) no escriben nada.</item>
-///   <item>AC7 — <c>RecordAttachmentAccessAsync</c> deja el intento rechazado, consultable por el hijo.</item>
+///   <item>AC7 — la entrada de descarga que arma el filtro (<c>WriteAsync</c>) deja el intento rechazado, consultable por el hijo.</item>
 ///   <item>AC8 — 300 trámites de dos hijos ⇒ un registro con dos ids y filtros sin placa/documento/nombre.</item>
 ///   <item>Append-only — UPDATE y DELETE rechazados por la base.</item>
 /// </list>
@@ -39,6 +39,10 @@ namespace Flit.Integration.Tests.Network;
 /// </summary>
 public sealed class NetworkAccessAuditTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
+    /// <summary>Misma entrada que arma <c>NetworkAccessAuditFilter</c> para las rutas de documentos (HU #12410).</summary>
+    private static NetworkAccessAuditEntry Download(Guid owner, Guid procedure, Guid? attachment, string resource, string result) =>
+        new(HeadUser, HierarchyScenario.P, [owner], resource, null, procedure, owner, attachment, result);
+
     private static readonly Guid HeadUser = HierarchyScenario.UserOf(HierarchyScenario.P);
 
     private static TenantScope GroupP() =>
@@ -180,9 +184,8 @@ public sealed class NetworkAccessAuditTests(PostgresDatabaseFixture fixture) : P
                 HeadUser, HierarchyScenario.P, [HierarchyScenario.C1], NetworkAccessVocabulary.Resources.InstancesSearch,
                 "{\"take\":50}", null, null, null, NetworkAccessVocabulary.Results.Ok));
         }
-        await writer.RecordAttachmentAccessAsync(
-            HeadUser, HierarchyScenario.P, HierarchyScenario.C2, HierarchyScenario.DeliveredProcedureOf(HierarchyScenario.C2),
-            Guid.NewGuid(), NetworkAccessVocabulary.Resources.AttachmentsDownload, NetworkAccessVocabulary.Results.Ok);
+        await writer.WriteAsync(Download(HierarchyScenario.C2, HierarchyScenario.DeliveredProcedureOf(HierarchyScenario.C2),
+            Guid.NewGuid(), NetworkAccessVocabulary.Resources.AttachmentsDownload, NetworkAccessVocabulary.Results.Ok));
 
         await using var ctx = NewContext();
         var reader = Reader(ctx);
@@ -263,22 +266,22 @@ public sealed class NetworkAccessAuditTests(PostgresDatabaseFixture fixture) : P
         (await ctx.TenantConfigAuditLogs.CountAsync()).Should().Be(adminAuditAntes, "la auditoría administrativa existente no cambia de volumen");
     }
 
-    // ── AC7 — descargas: punto de entrada reutilizable e intentos rechazados ─────────────────
+    // ── AC7 — descargas: la fila que arma el filtro e intentos rechazados ────────────────────
 
     [PostgresFact]
-    public async Task AC7_RecordAttachmentAccessAsync_registra_la_descarga_y_el_intento_rechazado_consultables_por_el_hijo()
+    public async Task AC7_WriteAsync_registra_la_descarga_y_el_intento_rechazado_consultables_por_el_hijo()
     {
         await HierarchyScenario.SeedAsync(Fixture);
         var procedure = HierarchyScenario.DeliveredProcedureOf(HierarchyScenario.C1);
         var attachment = Guid.NewGuid();
         var writer = Writer();
 
-        await writer.RecordAttachmentAccessAsync(HeadUser, HierarchyScenario.P, HierarchyScenario.C1, procedure, attachment,
-            NetworkAccessVocabulary.Resources.AttachmentsDownload, NetworkAccessVocabulary.Results.Ok);
-        await writer.RecordAttachmentAccessAsync(HeadUser, HierarchyScenario.P, HierarchyScenario.C1, procedure, attachment,
-            NetworkAccessVocabulary.Resources.AttachmentsDownload, NetworkAccessVocabulary.Results.Forbidden);
-        await writer.RecordAttachmentAccessAsync(HeadUser, HierarchyScenario.P, HierarchyScenario.C1, procedure, null,
-            NetworkAccessVocabulary.Resources.AttachmentsList, NetworkAccessVocabulary.Results.Ok);
+        (await writer.WriteAsync(Download(HierarchyScenario.C1, procedure, attachment,
+            NetworkAccessVocabulary.Resources.AttachmentsDownload, NetworkAccessVocabulary.Results.Ok))).Should().BeTrue();
+        (await writer.WriteAsync(Download(HierarchyScenario.C1, procedure, attachment,
+            NetworkAccessVocabulary.Resources.AttachmentsDownload, NetworkAccessVocabulary.Results.Forbidden))).Should().BeTrue();
+        (await writer.WriteAsync(Download(HierarchyScenario.C1, procedure, null,
+            NetworkAccessVocabulary.Resources.AttachmentsList, NetworkAccessVocabulary.Results.Ok))).Should().BeTrue();
 
         await using var ctx = NewContext();
         var (deC1, total) = await Reader(ctx).SearchAsync(new NetworkAccessAuditQuery(HierarchyScenario.C1, null, null, null));

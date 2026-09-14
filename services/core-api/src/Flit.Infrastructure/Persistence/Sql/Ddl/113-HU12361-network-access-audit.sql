@@ -89,10 +89,10 @@ COMMENT ON COLUMN tramites.network_access_audit.actor_tenant_id IS
     'Cliente cabeza de red al que pertenece el actor (identity.tenants.id, sin FK a propósito).';
 
 COMMENT ON COLUMN tramites.network_access_audit.reached_tenant_ids IS
-    'Clientes hijos DISTINTOS cuyas filas aparecieron en el resultado (o el hijo dueño en detalle/descarga, o el hijo pedido en un rechazo). Nunca vacío; nunca incluye a la propia cabeza.';
+    'Clientes DISTINTOS cuyas filas aparecieron en el resultado (o el dueño del trámite en detalle/descarga). En un rechazo (result = forbidden) es el cliente PEDIDO, que puede ser un tenant ajeno a la red del actor (childTenantId fuera del alcance): el intento queda imputado a ese tenant. Nunca vacío; nunca incluye a la propia cabeza.';
 
 COMMENT ON COLUMN tramites.network_access_audit.resource IS
-    'Recurso consultado: network.instances.search | network.instances.detail | network.stats.overview | network.attachments.list | network.attachments.download.';
+    'Recurso consultado (vocabulario de NetworkAccessVocabulary.Resources, 9 valores): network.instances.search | network.instances.detail | network.stats.overview | network.stats.productivity_top | network.stats.monthly_trend | network.reports.procedures | network.reports.export | network.attachments.list | network.attachments.download.';
 
 COMMENT ON COLUMN tramites.network_access_audit.filters IS
     'Filtros aplicados a la consulta (solo identificadores y valores de filtro: estado, modalidad, tipo, rango de fechas, paginación, cliente hijo). NUNCA placa, documento, nombre ni ningún dato personal.';

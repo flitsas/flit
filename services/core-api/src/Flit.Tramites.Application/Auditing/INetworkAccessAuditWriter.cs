@@ -74,35 +74,21 @@ public sealed record NetworkAccessAuditEntry(
 
 /// <summary>
 /// Escribe en <c>tramites.network_access_audit</c> (HU #12361). Igual que <c>IAdminAuditWriter</c>: la
-/// implementación usa un scope/DbContext PROPIOS y es best-effort — nunca propaga excepciones ni
-/// rompe la respuesta al cliente; un fallo de escritura queda en el log como advertencia.
+/// implementación usa un scope/DbContext PROPIOS y <b>nunca propaga excepciones</b>; un fallo de
+/// escritura queda en el log como advertencia y se comunica por el valor devuelto para que el
+/// llamante decida (best-effort en lecturas; fail-closed en la descarga de documentos —
+/// <c>NetworkAccessAuditFilter</c>).
 /// </summary>
 public interface INetworkAccessAuditWriter
 {
-    /// <summary>Registra un acceso (una fila). Ignora silenciosamente entradas sin hijos alcanzados.</summary>
-    Task WriteAsync(NetworkAccessAuditEntry entry, CancellationToken cancellationToken = default);
-
     /// <summary>
-    /// AC7 — registra el acceso (o el intento rechazado) a los documentos de un trámite de un hijo por
-    /// la ruta proxeada de la HU #12410. Punto de entrada reutilizable: el consumidor solo aporta
-    /// identificadores; <c>reached_tenant_ids = [procedureTenantId]</c>.
+    /// Registra un acceso (una fila). Ignora silenciosamente entradas sin hijos alcanzados.
     /// </summary>
-    /// <param name="actorUserId">Usuario de la cabeza; <c>null</c> si no es resoluble.</param>
-    /// <param name="actorTenantId">Cliente cabeza de red del actor.</param>
-    /// <param name="procedureTenantId">Hijo dueño del trámite.</param>
-    /// <param name="procedureId">Trámite del documento.</param>
-    /// <param name="attachmentId">Documento descargado; <c>null</c> para el listado de documentos.</param>
-    /// <param name="resource"><see cref="NetworkAccessVocabulary.Resources.AttachmentsList"/> o <see cref="NetworkAccessVocabulary.Resources.AttachmentsDownload"/>.</param>
-    /// <param name="result"><see cref="NetworkAccessVocabulary.Results.Ok"/>, <see cref="NetworkAccessVocabulary.Results.Forbidden"/> (intento rechazado) o <see cref="NetworkAccessVocabulary.Results.NotFound"/>.</param>
-    Task RecordAttachmentAccessAsync(
-        Guid? actorUserId,
-        Guid actorTenantId,
-        Guid procedureTenantId,
-        Guid procedureId,
-        Guid? attachmentId,
-        string resource,
-        string result,
-        CancellationToken cancellationToken = default);
+    /// <returns>
+    /// <see langword="true"/> si la fila quedó persistida (o no había nada que registrar);
+    /// <see langword="false"/> si la escritura falló (ya registrado en el log, sin PII).
+    /// </returns>
+    Task<bool> WriteAsync(NetworkAccessAuditEntry entry, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Una fila de la auditoría de accesos consolidados, sin datos personales (AC4/AC8).</summary>

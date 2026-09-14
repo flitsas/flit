@@ -31,6 +31,19 @@ namespace Flit.Api.Endpoints.Tramites;
 /// </summary>
 internal static class NetworkAttachmentEndpoints
 {
+    /// <summary>
+    /// Policy explícita de las dos rutas (hallazgo de seguridad del PR #370): el slug RBAC de «Ver
+    /// trámites», el mismo que habilita el módulo de Operación al usuario. Se eligió sobre
+    /// <c>GroupHeadCompanyPolicy</c>/<c>AdminCompanyPolicy</c> porque ambas exigen el rol AdminCompany y
+    /// la vista consolidada está abierta a TODO usuario de la cabeza (el selector de alcance del
+    /// frontend se pinta por <c>is_group_parent</c>, no por rol): un operador de la cabeza que ve el
+    /// detalle del hijo debe poder ver sus documentos. SuperAdmin hace bypass del permiso y aun así
+    /// recibe 403 <c>network_scope_required</c> de <see cref="GroupHeadReadFilter"/> (D7). Un token sin
+    /// el slug ⇒ 403 antes de tocar el alcance, el interruptor o el almacenamiento, y sin auditar
+    /// (el actor no llegó a la ruta).
+    /// </summary>
+    internal const string ReadPermission = "tramites.read";
+
     internal static RouteGroupBuilder MapNetworkAttachments(this RouteGroupBuilder group)
     {
         ArgumentNullException.ThrowIfNull(group);
@@ -50,6 +63,7 @@ internal static class NetworkAttachmentEndpoints
                 _ => Forbidden(outcome.Error),
             };
         })
+            .RequirePermission(ReadPermission)
             .WithName("NetworkListProcedureInstanceAttachments")
             .WithSummary("Metadatos de los documentos de un trámite de la red (solo lectura, sin URLs)")
             .Produces<AttachmentsResponse>(StatusCodes.Status200OK)
@@ -74,6 +88,7 @@ internal static class NetworkAttachmentEndpoints
                 _ => Forbidden(outcome.Error),
             };
         })
+            .RequirePermission(ReadPermission)
             .WithName("NetworkDownloadProcedureInstanceAttachment")
             .WithSummary("Descarga proxeada (transmisión) de un documento de un trámite de la red")
             .Produces(StatusCodes.Status200OK, contentType: "application/octet-stream")

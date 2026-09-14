@@ -12,6 +12,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -226,7 +227,7 @@ public sealed class NetworkAccessAuditEndpointsTests : IClassFixture<NetworkAcce
     {
         var writer = Substitute.For<INetworkAccessAuditWriter>();
         writer.WriteAsync(Arg.Any<NetworkAccessAuditEntry>(), Arg.Any<CancellationToken>())
-            .Returns(_ => throw new InvalidOperationException("boom"));
+            .Returns<bool>(_ => throw new InvalidOperationException("boom"));
         var http = HttpContextFor(TenantScope.Group(P, [C1], GroupKind.Concesion), writer);
 
         var result = await Invoke(http, () =>
@@ -238,6 +239,95 @@ public sealed class NetworkAccessAuditEndpointsTests : IClassFixture<NetworkAcce
         });
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(200);
+    }
+
+    // ── Fail-closed en la descarga de documentos (hallazgo de seguridad PR #370) ─────────────
+
+    [Fact]
+    public async Task Filter_Descarga_con_writer_que_lanza_responde_503_audit_unavailable_sin_binario_y_libera_el_flujo()
+    {
+        var writer = Substitute.For<INetworkAccessAuditWriter>();
+        writer.WriteAsync(Arg.Any<NetworkAccessAuditEntry>(), Arg.Any<CancellationToken>())
+            .Returns<bool>(_ => throw new InvalidOperationException("boom"));
+        var http = HttpContextFor(TenantScope.Group(P, [C1], GroupKind.Concesion), writer);
+        var stream = new TrackingStream(new byte[] { 1, 2, 3 });
+
+        var result = await Invoke(http, () =>
+        {
+            NetworkAccessAuditContext.Publish(http, new NetworkAccessOutcome(
+                NetworkAccessVocabulary.Resources.AttachmentsDownload, NetworkAccessVocabulary.Results.Ok, [C1],
+                ProcedureId: Guid.NewGuid(), ProcedureTenantId: C1, AttachmentId: Guid.NewGuid()));
+            return Results.File(stream, "application/pdf", "doc.pdf");
+        });
+
+        result.Should().NotBeOfType<FileStreamHttpResult>("sin rastro no se entrega el binario");
+        (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(503);
+        (result as IValueHttpResult)!.Value.Should().BeEquivalentTo(new { error = NetworkAccessAuditFilter.AuditUnavailable });
+        stream.Disposed.Should().BeTrue("el flujo abierto por la ruta se libera al retener la respuesta");
+    }
+
+    [Fact]
+    public async Task Filter_Descarga_con_writer_que_devuelve_false_responde_503_igual_que_si_lanzara()
+    {
+        var writer = Substitute.For<INetworkAccessAuditWriter>();
+        writer.WriteAsync(Arg.Any<NetworkAccessAuditEntry>(), Arg.Any<CancellationToken>()).Returns(false);
+        var http = HttpContextFor(TenantScope.Group(P, [C1], GroupKind.Concesion), writer);
+
+        var result = await Invoke(http, () =>
+        {
+            NetworkAccessAuditContext.Publish(http, new NetworkAccessOutcome(
+                NetworkAccessVocabulary.Resources.AttachmentsDownload, NetworkAccessVocabulary.Results.NotFound, [C1],
+                ProcedureId: Guid.NewGuid(), ProcedureTenantId: C1, AttachmentId: Guid.NewGuid()));
+            return Results.Json(new { error = "not_found" }, statusCode: 404);
+        });
+
+        (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(503);
+        await writer.Received(1).WriteAsync(Arg.Any<NetworkAccessAuditEntry>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Filter_Descarga_auditada_entrega_el_binario_y_las_lecturas_siguen_best_effort_con_writer_que_falla()
+    {
+        var ok = Substitute.For<INetworkAccessAuditWriter>();
+        ok.WriteAsync(Arg.Any<NetworkAccessAuditEntry>(), Arg.Any<CancellationToken>()).Returns(true);
+        var httpOk = HttpContextFor(TenantScope.Group(P, [C1], GroupKind.Concesion), ok);
+        var served = await Invoke(httpOk, () =>
+        {
+            NetworkAccessAuditContext.Publish(httpOk, new NetworkAccessOutcome(
+                NetworkAccessVocabulary.Resources.AttachmentsDownload, NetworkAccessVocabulary.Results.Ok, [C1],
+                ProcedureId: Guid.NewGuid(), ProcedureTenantId: C1, AttachmentId: Guid.NewGuid()));
+            return Results.File(new MemoryStream([1]), "application/pdf", "doc.pdf");
+        });
+        served.Should().BeOfType<FileStreamHttpResult>();
+
+        var failing = Substitute.For<INetworkAccessAuditWriter>();
+        failing.WriteAsync(Arg.Any<NetworkAccessAuditEntry>(), Arg.Any<CancellationToken>()).Returns(false);
+        foreach (var resource in new[]
+        {
+            NetworkAccessVocabulary.Resources.AttachmentsList,
+            NetworkAccessVocabulary.Resources.InstancesSearch,
+            NetworkAccessVocabulary.Resources.ReportsExport,
+        })
+        {
+            var http = HttpContextFor(TenantScope.Group(P, [C1], GroupKind.Concesion), failing);
+            var result = await Invoke(http, () =>
+            {
+                NetworkAccessAuditContext.Publish(http, new NetworkAccessOutcome(resource, NetworkAccessVocabulary.Results.Ok, [C1]));
+                return Results.Ok(new { ok = true });
+            });
+            (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(200, "{0} sigue best-effort", resource);
+        }
+    }
+
+    private sealed class TrackingStream(byte[] data) : MemoryStream(data)
+    {
+        public bool Disposed { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            Disposed = true;
+            base.Dispose(disposing);
+        }
     }
 
     // ── AC8 — filtros sin datos personales ────────────────────────────────────────────────────
