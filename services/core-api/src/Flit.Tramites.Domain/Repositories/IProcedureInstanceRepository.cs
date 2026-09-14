@@ -110,6 +110,23 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
 
     /// <summary>
+    /// Bug #12526 — correo de cada usuario indicado, mismo criterio que
+    /// <see cref="GetUserDisplayNamesAsync"/> (una sola consulta, ids sin correo se omiten). Para la
+    /// columna "Correo" de la Línea de tiempo del trámite (quién ejecutó cada transición de estado).
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetUserEmailsAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bug #12526 / HU #12184 — compañía (razón social) de cada usuario indicado, mismo criterio y misma
+    /// resolución de tenant efectivo que ya usa <c>GetStatusHistoryPageAsync</c> internamente. Se expone
+    /// como método público independiente para que otros consumidores (Línea de tiempo del trámite) la
+    /// reutilicen sin duplicar la lógica de <c>home_tenant_id</c> + fallback de asignación de rol.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetUserCompaniasAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Estado de la firma del BAÚL por persona (clave <see cref="Entities.BiometricRules.IdentidadKey"/>),
     /// para las columnas "Firmado" del listado: <c>true</c> = hay firma vigente hoy; <c>false</c> = hay
     /// firma pero ya no sirve (vencida o revocada); AUSENTE = esa persona no tiene ninguna firma.

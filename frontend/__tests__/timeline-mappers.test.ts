@@ -22,6 +22,38 @@ describe('timeline-mappers', () => {
     expect(nodes[1]!.isActive).toBe(true);
   });
 
+  // Bug #12526 — gestor/correo/empresa venían fijos en '—' (y rol en 'Sistema') aunque el backend
+  // tuviera el dato de quién ejecutó la transición.
+  it('mapStatusHistoryToTimelineNodes pinta gestor, correo y empresa cuando el backend los trae', () => {
+    const history: StatusHistory[] = [
+      {
+        fromStatus: 'borrador',
+        toStatus: 'entregado',
+        changedAt: '2026-01-02T10:00:00Z',
+        reason: null,
+        changedByName: 'Laura Restrepo',
+        changedByEmail: 'laura.restrepo@renting.com',
+        changedByCompania: 'Renting Colombia S.A.S',
+      },
+    ];
+    const nodes = mapStatusHistoryToTimelineNodes(history);
+    expect(nodes[0]!.info.gestor).toBe('Laura Restrepo');
+    expect(nodes[0]!.info.correo).toBe('laura.restrepo@renting.com');
+    expect(nodes[0]!.info.empresa).toBe('Renting Colombia S.A.S');
+    expect(nodes[0]!.info.rol).toBe('Gestor');
+  });
+
+  it('mapStatusHistoryToTimelineNodes cae al guion cuando fue un proceso automático', () => {
+    const history: StatusHistory[] = [
+      { fromStatus: null, toStatus: 'borrador', changedAt: '2026-01-01T10:00:00Z', reason: null },
+    ];
+    const nodes = mapStatusHistoryToTimelineNodes(history);
+    expect(nodes[0]!.info.gestor).toBe('—');
+    expect(nodes[0]!.info.correo).toBe('—');
+    expect(nodes[0]!.info.empresa).toBe('—');
+    expect(nodes[0]!.info.rol).toBe('Sistema');
+  });
+
   it('mapIdentidadToTimelineNodes respeta firma del baúl', () => {
     const nodes = mapIdentidadToTimelineNodes('TRASPASO', [], ['vendedor']);
     expect(nodes).toHaveLength(2);

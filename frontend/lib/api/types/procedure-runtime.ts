@@ -392,6 +392,14 @@ export interface StatusHistory {
    * entonces al `reason` plano (ver SubsanacionPanel).
    */
   metadata?: string | null;
+  /**
+   * Bug #12526 — quién ejecutó la transición: nombre, correo y compañía. `null`/ausente cuando fue un
+   * proceso automático o el usuario ya no existe; la tarjeta de la Línea de tiempo cae al guion en vez
+   * de inventar el dato.
+   */
+  changedByName?: string | null;
+  changedByEmail?: string | null;
+  changedByCompania?: string | null;
 }
 
 export interface Actor {
