@@ -74,7 +74,7 @@ public sealed class AdminHierarchySwitchesEndpointsTests : IClassFixture<AdminHi
     // ── GET ─────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Get_SuperAdmin_Devuelve200ConLosDosInterruptores()
+    public async Task Get_SuperAdmin_Devuelve200ConLosTresInterruptores()
     {
         using var client = ClientAs("SuperAdmin");
 
@@ -83,9 +83,12 @@ public sealed class AdminHierarchySwitchesEndpointsTests : IClassFixture<AdminHi
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
         var items = body.GetProperty("items").EnumerateArray().ToList();
-        items.Should().HaveCount(2);
+        items.Should().HaveCount(3);
         items.Select(i => i.GetProperty("key").GetString()).Should().BeEquivalentTo(
-            IHierarchySwitches.GroupReadScopeKey, IHierarchySwitches.InheritedConfigurationKey);
+            IHierarchySwitches.GroupReadScopeKey, IHierarchySwitches.InheritedConfigurationKey, IHierarchySwitches.NetworkDocumentsConcesionKey);
+        // HU #12410 — el interruptor de documentos de red para Concesión es visible y nace apagado.
+        items.Single(i => i.GetProperty("key").GetString() == IHierarchySwitches.NetworkDocumentsConcesionKey)
+            .GetProperty("isEnabled").GetBoolean().Should().BeFalse();
         items.Single(i => i.GetProperty("key").GetString() == IHierarchySwitches.GroupReadScopeKey)
             .GetProperty("isEnabled").GetBoolean().Should().BeTrue();
         items.Single(i => i.GetProperty("key").GetString() == IHierarchySwitches.InheritedConfigurationKey)
@@ -159,6 +162,56 @@ public sealed class AdminHierarchySwitchesEndpointsTests : IClassFixture<AdminHi
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    // ── HU #12410 — interruptor network_documents_concesion (AC5) ───────────────
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task HU12410_Put_SuperAdmin_EnciendeYApagaDocumentosDeRedParaConcesion_YAudita(bool isEnabled)
+    {
+        using var client = ClientAs("SuperAdmin");
+        _factory.Switches.ClearReceivedCalls();
+        _factory.AuditWriter.ClearReceivedCalls();
+
+        var response = await client.PutAsJsonAsync(
+            $"{BaseUrl}/{IHierarchySwitches.NetworkDocumentsConcesionKey}",
+            new { isEnabled },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+        body.GetProperty("key").GetString().Should().Be(IHierarchySwitches.NetworkDocumentsConcesionKey);
+        body.GetProperty("isEnabled").GetBoolean().Should().Be(isEnabled);
+        body.GetProperty("updatedBy").GetGuid().Should().Be(SuperAdminUserId);
+        await _factory.Switches.Received(1).SetAsync(
+            IHierarchySwitches.NetworkDocumentsConcesionKey, isEnabled, SuperAdminUserId, Arg.Any<CancellationToken>());
+        // AC5 — el cambio queda en la auditoría administrativa, como los otros dos interruptores.
+        await _factory.AuditWriter.Received(1).WriteAsync(
+            Arg.Is<AdminAuditEntry>(e =>
+                e.Module == AuditVocabulary.Modules.Config
+                && e.Operation == AuditVocabulary.Operations.Update
+                && e.EntityName == "hierarchy_switch"
+                && e.Result == AuditVocabulary.Results.Success
+                && e.ActorUserId == SuperAdminUserId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HU12410_Put_AdminCompany_NoPuedeConmutarDocumentosDeRed()
+    {
+        using var client = ClientAs("AdminCompany");
+        _factory.Switches.ClearReceivedCalls();
+
+        var response = await client.PutAsJsonAsync(
+            $"{BaseUrl}/{IHierarchySwitches.NetworkDocumentsConcesionKey}",
+            new { isEnabled = true },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await _factory.Switches.DidNotReceiveWithAnyArgs()
+            .SetAsync(default!, default, default, TestContext.Current.CancellationToken);
+    }
+
     // ── Auditoría ───────────────────────────────────────────────────────────────
 
     [Fact]
@@ -205,12 +258,13 @@ public sealed class AdminHierarchySwitchesEndpointsTests : IClassFixture<AdminHi
             {
                 new(IHierarchySwitches.GroupReadScopeKey, true, now, null),
                 new(IHierarchySwitches.InheritedConfigurationKey, false, now, null),
+                new(IHierarchySwitches.NetworkDocumentsConcesionKey, false, now, null),
             });
             Switches.SetAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
                 .Returns(call =>
                 {
                     var key = call.ArgAt<string>(0);
-                    return key is IHierarchySwitches.GroupReadScopeKey or IHierarchySwitches.InheritedConfigurationKey
+                    return key is IHierarchySwitches.GroupReadScopeKey or IHierarchySwitches.InheritedConfigurationKey or IHierarchySwitches.NetworkDocumentsConcesionKey
                         ? new HierarchySwitchState(key, call.ArgAt<bool>(1), DateTimeOffset.UtcNow, call.ArgAt<Guid?>(2))
                         : null;
                 });

@@ -28,7 +28,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
     /// la columna solo admite tres valores. La categoría <c>vehicular</c> no podía producirse ya, así
     /// que mantenerla solo prometía un filtro vacío en la UI.</para>
     /// </summary>
-    private const string CategoriaCase =
+    internal const string CategoriaCase =
         "CASE "
         + "WHEN upper(pt.family) = 'MATRICULAS' THEN 'matriculas' "
         + "WHEN upper(pt.family) = 'TRASPASO' THEN 'traspasos' "

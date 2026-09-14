@@ -86,8 +86,11 @@ internal static class HierarchyScenario
     /// Siembra el escenario completo. Devuelve el tipo de trámite usado (uno del catálogo preservado).
     /// Cada bloque va en su propio <c>SaveChanges</c> porque los triggers <c>BEFORE</c> de
     /// <c>identity.tenants</c> exigen que el padre exista antes que sus hijos.
+    /// <paramref name="headTenantType"/> (HU #12410): clase de la cabeza P — <c>CONCESION</c> por
+    /// defecto o <c>MARCA_BLANCA</c>. Debe fijarse al sembrar: con hijos vinculados la base rechaza
+    /// cambiar la clase de la cabeza (trigger de <c>identity.tenants</c>, HU #12406).
     /// </summary>
-    public static async Task<ProcedureType> SeedAsync(PostgresDatabaseFixture fixture)
+    public static async Task<ProcedureType> SeedAsync(PostgresDatabaseFixture fixture, string? headTenantType = null)
     {
         await using var ctx = fixture.CreateDbContext();
 
@@ -100,7 +103,7 @@ internal static class HierarchyScenario
             NewOffice(Ot1, "11001000", "BOGOTA", "11", "11001"),
             NewOffice(Ot2, "5001000", "MEDELLIN", "05", "05001"));
 
-        ctx.Tenants.Add(NewTenant(P, "IT-P", isGroupParent: true, parentId: null));
+        ctx.Tenants.Add(NewTenant(P, "IT-P", isGroupParent: true, parentId: null, headTenantType));
         ctx.Tenants.Add(NewTenant(X, "IT-X", isGroupParent: false, parentId: null));
         ctx.Tenants.Add(NewTenant(S, "IT-S", isGroupParent: false, parentId: null));
         var ot = NewTenant(O, "IT-OT", isGroupParent: false, parentId: null);
@@ -292,9 +295,9 @@ internal static class HierarchyScenario
     }
 
     /// <summary><see cref="TenantSeed.New"/> con NIT único por sufijo (los ids del escenario comparten prefijo y <c>uq_tenants_tax_id</c> lo rechazaría).</summary>
-    private static Tenant NewTenant(Guid id, string code, bool isGroupParent, Guid? parentId)
+    private static Tenant NewTenant(Guid id, string code, bool isGroupParent, Guid? parentId, string? tenantType = null)
     {
-        var tenant = TenantSeed.New(id, code, isGroupParent, parentId);
+        var tenant = TenantSeed.New(id, code, isGroupParent, parentId, tenantType);
         tenant.TaxId = $"9{Suffix(id):D14}";
         return tenant;
     }

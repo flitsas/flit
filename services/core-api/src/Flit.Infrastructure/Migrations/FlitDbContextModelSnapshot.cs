@@ -5479,6 +5479,88 @@ namespace Flit.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Tramites.NetworkAccessAuditEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<Guid>("ActorTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_tenant_id");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<Guid?>("AttachmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("attachment_id");
+
+                    b.Property<string>("Filters")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("filters");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("ProcedureId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("procedure_id");
+
+                    b.Property<Guid?>("ProcedureTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("procedure_tenant_id");
+
+                    b.Property<Guid[]>("ReachedTenantIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("reached_tenant_ids");
+
+                    b.Property<string>("Resource")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("resource");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("result");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("row_version")
+                        .HasDefaultValue(0L);
+
+                    b.HasKey("Id")
+                        .HasName("pk_network_access_audit");
+
+                    b.HasIndex("ReachedTenantIds")
+                        .HasDatabaseName("ix_network_access_audit_reached_tenant_ids");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("ReachedTenantIds"), "gin");
+
+                    b.HasIndex("ActorTenantId", "OccurredAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_network_access_audit_actor_tenant_occurred_at");
+
+                    b.HasIndex("ProcedureTenantId", "OccurredAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_network_access_audit_procedure_tenant_occurred_at");
+
+                    b.ToTable("network_access_audit", "tramites", t =>
+                        {
+                            t.HasTrigger("tr_network_access_audit_immutable");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Tramites.ProcedureDocumentRequirement", b =>
                 {
                     b.Property<Guid>("Id")

@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useConsultaMode } from '@/components/operacion/ConsultaModeContext';
+import {
+  COPY_SECCION_FUERA_DE_ALCANCE,
+  describirErrorDeSeccion,
+} from '@/lib/tramites/network-scope';
 import { formatCOP } from '@/lib/format/currency';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import {
@@ -73,24 +78,36 @@ interface CargaEstado<T> {
   loading: boolean;
   error: string | null;
   data: T | null;
+  /** HU #12362 — el error es un rechazo de alcance (modo consulta): sin reintento. */
+  fueraDeAlcance?: boolean;
 }
 
+/**
+ * HU #12362 — en consulta las rutas `GET .../commercial` y `GET .../prenda` no existen para un
+ * trámite de un hijo (404 por diseño): la sección arranca YA en «fuera de tu alcance», sin pedir.
+ */
+const FUERA_DE_ALCANCE: CargaEstado<never> = {
+  loading: false,
+  error: COPY_SECCION_FUERA_DE_ALCANCE,
+  fueraDeAlcance: true,
+  data: null,
+};
+
 export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalleProps) {
-  const [comercial, setComercial] = useState<CargaEstado<CommercialData>>({
-    loading: true,
-    error: null,
-    data: null,
-  });
-  const [prenda, setPrenda] = useState<CargaEstado<PrendaData>>({
-    loading: true,
-    error: null,
-    data: null,
-  });
+  // HU #12362 — en modo consulta no se llama a las rutas propias; ver `FUERA_DE_ALCANCE`.
+  const consultaMode = useConsultaMode();
+  const [comercial, setComercial] = useState<CargaEstado<CommercialData>>(() =>
+    consultaMode ? FUERA_DE_ALCANCE : { loading: true, error: null, data: null },
+  );
+  const [prenda, setPrenda] = useState<CargaEstado<PrendaData>>(() =>
+    consultaMode ? FUERA_DE_ALCANCE : { loading: true, error: null, data: null },
+  );
   // Incrementa para forzar un nuevo intento de carga desde "Reintentar" sin duplicar el efecto.
   const [comercialIntento, setComercialIntento] = useState(0);
   const [prendaIntento, setPrendaIntento] = useState(0);
 
   useEffect(() => {
+    if (consultaMode) return;
     let active = true;
     // setState dentro de la función async (no en el cuerpo síncrono del effect), mismo patrón que
     // CommercialForm/PrendaForm, para no disparar react-hooks/set-state-in-effect.
@@ -101,9 +118,15 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
         if (active) setComercial({ loading: false, error: null, data: data ?? null });
       } catch (err) {
         if (active) {
+          const d = describirErrorDeSeccion(
+            err,
+            consultaMode,
+            'No se pudieron cargar los datos comerciales.',
+          );
           setComercial({
             loading: false,
-            error: err instanceof Error ? err.message : 'No se pudieron cargar los datos comerciales.',
+            error: d.mensaje,
+            fueraDeAlcance: d.fueraDeAlcance,
             data: null,
           });
         }
@@ -113,9 +136,10 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
     return () => {
       active = false;
     };
-  }, [instanceId, tenantId, comercialIntento]);
+  }, [instanceId, tenantId, comercialIntento, consultaMode]);
 
   useEffect(() => {
+    if (consultaMode) return;
     let active = true;
     const load = async () => {
       setPrenda((s) => ({ ...s, loading: true, error: null }));
@@ -128,9 +152,15 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
         if (active) setPrenda({ loading: false, error: null, data: data ?? null });
       } catch (err) {
         if (active) {
+          const d = describirErrorDeSeccion(
+            err,
+            consultaMode,
+            'No se pudo cargar la decisión de prenda.',
+          );
           setPrenda({
             loading: false,
-            error: err instanceof Error ? err.message : 'No se pudo cargar la decisión de prenda.',
+            error: d.mensaje,
+            fueraDeAlcance: d.fueraDeAlcance,
             data: null,
           });
         }
@@ -140,7 +170,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
     return () => {
       active = false;
     };
-  }, [instanceId, tenantId, prendaIntento]);
+  }, [instanceId, tenantId, prendaIntento, consultaMode]);
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -150,6 +180,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
         ) : comercial.error ? (
           <SeccionError
             mensaje={comercial.error}
+            sinReintento={comercial.fueraDeAlcance}
             onReintentar={() => setComercialIntento((n) => n + 1)}
           />
         ) : esComercialVacio(comercial.data) ? (
@@ -177,6 +208,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
         ) : prenda.error ? (
           <SeccionError
             mensaje={prenda.error}
+            sinReintento={prenda.fueraDeAlcance}
             onReintentar={() => setPrendaIntento((n) => n + 1)}
           />
         ) : !prenda.data ? (

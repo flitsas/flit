@@ -6,7 +6,10 @@
 import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
-import { fetchTopProducers } from "@/lib/api/analytics";
+import { fetchNetworkTopProducers, fetchTopProducers } from "@/lib/api/analytics";
+import type { NetworkChildOption } from "@/hooks/useNetworkScope";
+import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
+import type { NetworkScopePreference } from "@/lib/tramites/network-scope";
 import { toMetricsParams, type ReportFilters } from "../filters";
 import { formatInt, formatPct } from "../format";
 import { ProductivityCards } from "../ProductivityCards";
@@ -25,17 +28,24 @@ const CHART_LIMIT = 10;
 
 export interface ProductividadTabProps {
   filters: ReportFilters;
+  /** HU #12364 — alcance de red vigente: el Top va a `network/stats/productivity/top` (AC1). */
+  networkScope?: NetworkScopePreference;
+  networkChildren?: readonly NetworkChildOption[];
 }
 
-export function ProductividadTab({ filters }: ProductividadTabProps) {
+export function ProductividadTab({ filters, networkScope, networkChildren = [] }: ProductividadTabProps) {
   const params = toMetricsParams(filters);
+  const networkActive = networkScope?.mode === "network";
+  const childTenantId = networkActive ? networkScope?.childTenantId : undefined;
   const producers = useAnalyticsQuery(
     (signal) =>
-      fetchTopProducers(
-        { from: params.from, to: params.to, limit: DETAIL_LIMIT, tenantId: params.tenantId },
-        signal,
-      ),
-    [params.from, params.to, params.tenantId],
+      networkActive
+        ? fetchNetworkTopProducers({ from: params.from, to: params.to, limit: DETAIL_LIMIT, childTenantId }, signal)
+        : fetchTopProducers(
+            { from: params.from, to: params.to, limit: DETAIL_LIMIT, tenantId: params.tenantId },
+            signal,
+          ),
+    [params.from, params.to, params.tenantId, networkActive, childTenantId],
     { isEmpty: (res) => res.items.length === 0 },
   );
 
@@ -53,6 +63,9 @@ export function ProductividadTab({ filters }: ProductividadTabProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      {networkScope && networkActive && (
+        <NetworkScopeBadge scope={networkScope} hijos={networkChildren} testId="productividad-red-badge" />
+      )}
       {/* Tarjetas Top 5 existentes (multiselect) */}
       <ProductivityCards
         producers={items.slice(0, 5)}

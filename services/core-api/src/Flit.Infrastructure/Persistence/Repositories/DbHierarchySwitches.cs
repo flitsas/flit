@@ -13,8 +13,9 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// <list type="bullet">
 ///   <item>Fila ausente ⇒ <c>false</c> (apagado). Excepción ⇒ log Warning + <c>false</c>.
 ///   Fail-closed: apagado es el comportamiento previo al Feature (alcance <c>Single</c>).</item>
-///   <item><see cref="SetAsync"/> solo acepta las dos claves conocidas; una clave desconocida
-///   devuelve <c>null</c> y no crea filas.</item>
+///   <item><see cref="SetAsync"/> solo acepta las claves conocidas (<c>group_read_scope</c>,
+///   <c>inherited_configuration</c> y, desde la HU #12410, <c>network_documents_concesion</c>); una
+///   clave desconocida devuelve <c>null</c> y no crea filas.</item>
 /// </list>
 /// </summary>
 internal sealed partial class DbHierarchySwitches : IHierarchySwitches
@@ -23,6 +24,7 @@ internal sealed partial class DbHierarchySwitches : IHierarchySwitches
     [
         HierarchySwitch.GroupReadScopeKey,
         HierarchySwitch.InheritedConfigurationKey,
+        HierarchySwitch.NetworkDocumentsConcesionKey,
     ];
 
     private readonly FlitDbContext _db;
@@ -39,6 +41,9 @@ internal sealed partial class DbHierarchySwitches : IHierarchySwitches
 
     public Task<bool> IsInheritedConfigurationEnabledAsync(CancellationToken cancellationToken = default) =>
         IsEnabledAsync(HierarchySwitch.InheritedConfigurationKey, cancellationToken);
+
+    public Task<bool> IsNetworkDocumentsConcesionEnabledAsync(CancellationToken cancellationToken = default) =>
+        IsEnabledAsync(HierarchySwitch.NetworkDocumentsConcesionKey, cancellationToken);
 
     public async Task<IReadOnlyList<HierarchySwitchState>> ListAsync(CancellationToken cancellationToken = default)
     {

@@ -203,6 +203,11 @@ app.UseAuthorization();
 // (necesita HttpContext.User) y ANTES de los endpoints. No toca parametrización ni portal público.
 app.UseMiddleware<Flit.Api.Middleware.TenantEnforcementMiddleware>();
 
+// HU #12358 (Feature #12257) — guard único de escritura para cabezas de grupo: la lectura consolidada de
+// la red no otorga escritura sobre los hijos. Va DESPUÉS del enforcement (usa el TenantScope de Items) y
+// cubre /api/v1/tramites/instances/{id}/** y /api/v1/admin/tramites/{id}/** en todos los verbos de escritura.
+app.UseMiddleware<Flit.Api.Middleware.TenantWriteGuardMiddleware>();
+
 app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
 
 // Liveness: el healthcheck de Docker (docker-compose.prod.yml) y el /ready del
@@ -283,6 +288,10 @@ app.MapPublicPortalEndpoints();
 // HU #12240 (Feature #12236) — banners promocionales: listado publico + imagen por streaming.
 app.MapPublicBannersEndpoints();
 app.MapTramitesInstanceEndpoints();
+// HU #12358 (Feature #12257) — vista consolidada de la red (solo lectura) bajo /api/v1/tramites/network.
+app.MapTramitesNetworkEndpoints();
+// HU #12361 (Feature #12257) — consulta de la auditoría de accesos consolidados (hijo + SuperAdmin).
+app.MapNetworkAccessAuditEndpoints();
 app.MapTramitesActorEndpoints();
 // HU #11196 / #11197 — firma a posteriori: marcar el trámite y consultar si la opción aplica.
 app.MapTramitesFirmaPosteriorEndpoints();

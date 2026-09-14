@@ -16,11 +16,22 @@ public interface IHierarchySwitches
     /// <summary>Clave del interruptor de configuración heredada (hijos heredan del padre; Feature #12256).</summary>
     const string InheritedConfigurationKey = "inherited_configuration";
 
+    /// <summary>
+    /// Clave del interruptor «documentos de red para Concesión» (HU #12410, Feature #12257): con él
+    /// apagado (su valor por defecto, pendiente 13 del PO) una cabeza de clase CONCESION recibe 403 en
+    /// las rutas de documentos de la red; encendido, se comporta como MARCA_BLANCA. Independiente de
+    /// <see cref="GroupReadScopeKey"/>, que sigue siendo el freno global.
+    /// </summary>
+    const string NetworkDocumentsConcesionKey = "network_documents_concesion";
+
     /// <summary><c>true</c> si <see cref="GroupReadScopeKey"/> está encendido. Fail-closed: <c>false</c> si falta o falla.</summary>
     Task<bool> IsGroupReadScopeEnabledAsync(CancellationToken cancellationToken = default);
 
     /// <summary><c>true</c> si <see cref="InheritedConfigurationKey"/> está encendido. Fail-closed: <c>false</c> si falta o falla.</summary>
     Task<bool> IsInheritedConfigurationEnabledAsync(CancellationToken cancellationToken = default);
+
+    /// <summary><c>true</c> si <see cref="NetworkDocumentsConcesionKey"/> está encendido. Fail-closed: <c>false</c> si falta o falla (HU #12410).</summary>
+    Task<bool> IsNetworkDocumentsConcesionEnabledAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Estado actual de todos los interruptores persistidos.</summary>
     Task<IReadOnlyList<HierarchySwitchState>> ListAsync(CancellationToken cancellationToken = default);

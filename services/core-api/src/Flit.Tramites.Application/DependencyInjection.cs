@@ -51,6 +51,12 @@ public static class DependencyInjection
         // Filtrado/ordenamiento server-side del listado (WHERE/ORDER BY en SQL, no en memoria).
         services.AddScoped<ListProcedureInstancesFilteredHandler>();
         services.AddScoped<CountProcedureInstancesByStatusHandler>();
+        // HU #12358 (Feature #12257) - lectura consolidada de la red por TenantScope (rutas /network/**).
+        services.AddScoped<NetworkListProcedureInstancesHandler>();
+        services.AddScoped<NetworkCountProcedureInstancesByStatusHandler>();
+        services.AddScoped<NetworkGetProcedureInstanceHandler>();
+        // HU #12410 (Feature #12257) - documentos de un tramite de la red: metadatos + descarga proxeada.
+        services.AddScoped<NetworkAttachmentsHandler>();
         services.AddScoped<GetTramitesQueryFieldsHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
         // HU #10975 (Feature #10972) — persiste en field_values lo que el OCR semántico ya extrae.

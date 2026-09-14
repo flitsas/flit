@@ -71,16 +71,18 @@ public sealed class IsolationTests(PostgresDatabaseFixture fixture) : PostgresTe
 
     /// <summary>
     /// Los interruptores (HU #12323) están en la lista blanca (no se truncan), así que el reset los
-    /// devuelve explícitamente a su seed (<c>is_enabled = true</c>): una prueba que apague uno no
-    /// contamina a la siguiente.
+    /// devuelve explícitamente a su seed (<c>is_enabled = true</c>; <c>network_documents_concesion</c>
+    /// de la HU #12410 nace apagado): una prueba que conmute uno no contamina a la siguiente.
     /// </summary>
     [PostgresFact]
-    public async Task Reset_devuelve_los_interruptores_de_jerarquia_a_encendidos()
+    public async Task Reset_devuelve_los_interruptores_de_jerarquia_a_su_seed()
     {
         await using (var toggle = NewContext())
         {
             var sw = await toggle.HierarchySwitches.SingleAsync(s => s.SwitchKey == HierarchySwitch.GroupReadScopeKey);
             sw.IsEnabled = false;
+            var docs = await toggle.HierarchySwitches.SingleAsync(s => s.SwitchKey == HierarchySwitch.NetworkDocumentsConcesionKey);
+            docs.IsEnabled = true;
             await toggle.SaveChangesAsync();
         }
 
@@ -89,8 +91,9 @@ public sealed class IsolationTests(PostgresDatabaseFixture fixture) : PostgresTe
         await using var ctx = NewContext();
         var switches = await ctx.HierarchySwitches.AsNoTracking().ToListAsync();
         switches.Select(s => s.SwitchKey).Should().BeEquivalentTo(
-            [HierarchySwitch.GroupReadScopeKey, HierarchySwitch.InheritedConfigurationKey]);
-        switches.Should().AllSatisfy(s => s.IsEnabled.Should().BeTrue());
+            [HierarchySwitch.GroupReadScopeKey, HierarchySwitch.InheritedConfigurationKey, HierarchySwitch.NetworkDocumentsConcesionKey]);
+        switches.Where(s => s.SwitchKey != HierarchySwitch.NetworkDocumentsConcesionKey).Should().AllSatisfy(s => s.IsEnabled.Should().BeTrue());
+        switches.Single(s => s.SwitchKey == HierarchySwitch.NetworkDocumentsConcesionKey).IsEnabled.Should().BeFalse("apagado por defecto (pendiente 13 del PO)");
     }
 
     private async Task<List<long>> CountPreservedAsync()

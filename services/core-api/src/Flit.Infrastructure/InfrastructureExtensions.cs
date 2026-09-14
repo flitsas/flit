@@ -102,6 +102,12 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.ISoatRuntValidationPolicy,
             OtRules.SoatRuntValidationPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // HU #12358 — dueño de un trámite por id, solo para el guard de escritura de la red (TenantWriteGuard).
+        services.AddScoped<IProcedureInstanceOwnerLookup, ProcedureInstanceOwnerLookup>();
+        // HU #12361 - auditoria del acceso consolidado (tramites.network_access_audit): escritura
+        // best-effort con scope propio y lectura para el hijo / SuperAdmin.
+        services.AddScoped<Flit.Tramites.Application.Auditing.INetworkAccessAuditWriter, Auditing.NetworkAccessAuditWriter>();
+        services.AddScoped<Flit.Tramites.Application.Auditing.INetworkAccessAuditReader, Auditing.NetworkAccessAuditReader>();
         // HU #11196 — marcas de firma a posteriori (el lote que se firma cuando el representante valida).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IDeferredSignatureMarkRepository,
             DeferredSignatureMarkRepository>();
@@ -226,9 +232,11 @@ public static class InfrastructureExtensions
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
+        services.AddScoped<INetworkAnalyticsReadRepository, AnalyticsNetworkReadRepository>(); // HU #12359 - estadisticas de red
         services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
         services.AddScoped<Flit.Analytics.Application.Abstractions.IDetailedReportReadRepository, DetailedReportReadRepository>(); // Feature #10813
         services.AddScoped<Flit.Analytics.Application.Queries.IDetailedReportExcelExporter, Documents.DetailedReportExcelExporter>(); // Feature #10813 HU #10816
+        services.AddScoped<Flit.Analytics.Application.Abstractions.INetworkDetailedReportReadRepository, DetailedReportNetworkReadRepository>(); // HU #12360 - reporte de red
         services.AddScoped<Flit.Analytics.Application.CompanyQueries.ICompanyQueryRepository, CompanyQueryRepository>();
         services.AddScoped<Flit.Analytics.Application.CompanyQueries.ISuperAdminSavedQueryRepository, SuperAdminSavedQueryRepository>();
         services.AddScoped<Flit.Analytics.Application.IctQueries.IIctQueryRepository, IctQueryRepository>();
