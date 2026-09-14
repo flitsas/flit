@@ -269,6 +269,8 @@ app.MapAdminImprontasEndpoints();
 app.MapAdminGeneracionDocumentalEndpoints();
 app.MapTramitesEndpoints();
 app.MapBulkTramitesEndpoints();
+// Epic #12543 — aceptación de Términos y Condiciones antes de abrir el asistente.
+app.MapTramitesTermsAcceptanceEndpoints();
 app.MapTransfersEndpoints();
 
 // ── Runtime de trámites (rework #10128) ───────────────────────────────────────

@@ -324,6 +324,8 @@ public sealed class RequestTenantResolverTests
             ("/api/v1/tramites/actors", TenantEnforcementMiddleware.RouteMatch.Prefix),
             // Feature #12519 — carga masiva: plantilla, lotes y resultados de UNA compañía.
             ("/api/v1/tramites/carga-masiva", TenantEnforcementMiddleware.RouteMatch.Prefix),
+            // Epic #12543 — aceptación de T&C: evidencia con el tenant del JWT.
+            ("/api/v1/tramites/terms-acceptances", TenantEnforcementMiddleware.RouteMatch.Prefix),
         });
         routes.Should().OnlyContain(r => r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal));
     }

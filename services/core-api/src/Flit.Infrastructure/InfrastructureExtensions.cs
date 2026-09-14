@@ -138,6 +138,18 @@ public static class InfrastructureExtensions
             RuntConfirmation.RuntConfirmationSettingsRepository>();
         services.AddScoped<Flit.Tramites.Application.UseCases.RuntConfirmation.IRuntConfirmationAuditWriter,
             RuntConfirmation.RuntConfirmationAuditWriter>();
+        // Epic #12543 — aceptación de T&C antes de crear trámite: fila de evidencia (hard-fail) +
+        // reflejo en el rastro administrativo unificado. La URL del documento sale de ProcedureTerms:Url.
+        services.AddSingleton(new Flit.Tramites.Application.UseCases.TermsAcceptance.ProcedureTermsOptions
+        {
+            Url = string.IsNullOrWhiteSpace(configuration["ProcedureTerms:Url"])
+                ? Flit.Tramites.Application.UseCases.TermsAcceptance.ProcedureTermsOptions.DefaultUrl
+                : configuration["ProcedureTerms:Url"]!.Trim(),
+        });
+        services.AddScoped<Flit.Tramites.Application.UseCases.TermsAcceptance.IProcedureTermsAcceptanceRepository,
+            TermsAcceptance.ProcedureTermsAcceptanceRepository>();
+        services.AddScoped<Flit.Tramites.Application.UseCases.TermsAcceptance.IProcedureTermsAcceptanceAuditWriter,
+            TermsAcceptance.ProcedureTermsAcceptanceAuditWriter>();
         // HU #12309 — almacén con scope propio por operación (la corrida graba en paralelo), consumidor
         // propio del RUNT según providerKey (sin pasar por la cadena de proveedores del wizard) y el
         // programador diario. Registrado siempre; el gate es la fila de configuración en BD.

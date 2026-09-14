@@ -326,6 +326,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Confirmación RUNT (Feature #12276) — configuración global de fila única, bitácora por corrida
     // e intentos por trámite. La marca del trámite vive en ProcedureInstance (runt_*).
+    // Epic #12543 — evidencia de aceptación de T&C por creación de trámite.
+    public DbSet<Flit.Tramites.Domain.TermsAcceptance.ProcedureTermsAcceptance> ProcedureTermsAcceptances =>
+        Set<Flit.Tramites.Domain.TermsAcceptance.ProcedureTermsAcceptance>();
+
     public DbSet<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationSettings> RuntConfirmationSettings =>
         Set<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationSettings>();
     public DbSet<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationRun> RuntConfirmationRuns =>
