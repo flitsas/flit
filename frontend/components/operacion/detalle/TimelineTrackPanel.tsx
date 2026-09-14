@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { CampoValorInline } from './primitivos';
-import { DETALLE_BLUE, DETALLE_CARD, DETALLE_NAVY, DETALLE_BORDER } from './detalle-visual';
+import { DETALLE_BLUE, DETALLE_CARD, DETALLE_NAVY } from './detalle-visual';
 
 const CARD = `${DETALLE_CARD} flex h-full flex-col p-5`;
 
@@ -17,7 +16,7 @@ export interface TimelineTrackNode {
     fecha: string;
     extra?: string;
   };
-  /** Si true, se preselecciona al montar (p. ej. último hito de la línea de tiempo). */
+  /** El hito vigente (p. ej. el último estado del trámite) se marca con la etiqueta "Vigente". */
   isActive?: boolean;
 }
 
@@ -28,19 +27,32 @@ export interface TimelineTrackPanelProps {
 }
 
 /**
- * Línea de tiempo horizontal con puntos 16px (mockup `DetalleTramiteModal` / `TimelineTrack`).
- * Transformación puramente visual — los datos los mapean `timeline-mappers.ts`.
+ * Línea de tiempo vertical — rediseño del track horizontal con scroll que usaba el mockup
+ * `DetalleTramiteModal`/`TimelineTrack`.
+ *
+ * <p><b>Por qué se abandonó el track horizontal.</b> Cada hito era un punto con su etiqueta debajo
+ * en una sola línea (`whitespace-nowrap`, sin `overflow-hidden`): con pocos hitos se leía bien,
+ * pero con muchos —varios "Reenvío de validación · Comprador" seguidos, por ejemplo— las etiquetas
+ * se desbordaban de su columna y se superponían con las del vecino. No era un bug de un caso
+ * límite: es la forma que tiene un track horizontal de fallar en cuanto el contenido no cabe.</p>
+ *
+ * <p><b>Por qué carril vertical y no otro ajuste del track.</b> Truncar las etiquetas escondía
+ * justo el dato que este panel existe para mostrar (quién, qué correo, qué empresa). El patrón de
+ * carril vertical con una tarjeta por evento ya está probado en FLIT —el Historial de
+ * `TramiteTrackingModal`— y no tiene techo: cada evento es su propia tarjeta, nunca compite por
+ * ancho con el de al lado, y la lista simplemente crece hacia abajo (con scroll interno pasado
+ * cierto alto, para no descuadrar el modal).</p>
+ *
+ * <p><b>Por qué ya no hay selección máster/detalle.</b> El track horizontal mostraba el detalle de
+ * UN hito a la vez (el que estuviera enfocado); los demás quedaban reducidos a un punto mudo. Con
+ * el carril vertical todos los hitos muestran su información completa siempre: es más información
+ * en pantalla, pero es exactamente la que el panel promete, y evita depender de hover/click para
+ * revelarla.</p>
  */
 export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrackPanelProps) {
-  const defaultOpen = Math.max(
-    0,
-    nodes.findIndex((n) => n.isActive) >= 0 ? nodes.findIndex((n) => n.isActive) : nodes.length - 1,
-  );
-  const [open, setOpen] = useState(defaultOpen);
-
   if (nodes.length === 0) {
     return (
-      <div className={`${CARD} flex h-full flex-col p-5`}>
+      <div className={CARD}>
         <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: DETALLE_BLUE }}>
           {title}
         </h4>
@@ -49,66 +61,57 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
     );
   }
 
-  const active = nodes[open] ?? nodes[0]!;
-
   return (
-    <div className={`${CARD} flex h-full flex-col p-5`}>
-        <h4 className="mb-6 shrink-0 text-sm font-bold" style={{ color: DETALLE_BLUE }}>
+    <div className={CARD}>
+      <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: DETALLE_BLUE }}>
         {title}
       </h4>
-      <div className="flex select-none items-start overflow-x-auto pb-2">
+      <ol
+        aria-label={title}
+        className="relative max-h-[26rem] space-y-4 overflow-y-auto py-1 pl-5 pr-1"
+      >
         {nodes.map((n, i) => (
-          <div key={`${n.label}-${i}`} className="flex min-w-[160px] flex-1 items-center">
-            <button
-              type="button"
-              onClick={() => setOpen(i)}
-              onMouseEnter={() => setOpen(i)}
-              className="group flex min-w-[150px] shrink-0 flex-col items-center gap-2 px-3"
-              aria-pressed={open === i}
-            >
-              <span
-                className="h-4 w-4 rounded-full transition"
-                style={{
-                  background: n.color,
-                  boxShadow:
-                    open === i ? `0 0 0 5px ${n.color}33` : `0 0 0 3px ${n.color}1F`,
-                }}
-              />
-              <span
-                className="whitespace-nowrap text-[11px] transition"
-                style={{ color: open === i ? DETALLE_BLUE : DETALLE_NAVY, fontWeight: open === i ? 700 : 500 }}
-              >
-                {n.label}
-              </span>
-            </button>
+          <li key={`${n.label}-${i}`} className="relative">
+            {/* Carril: punto de color propio del hito + línea de conexión hacia el siguiente. El
+                color ya trae semántica de estado (verde/azul/rojo…) desde los mappers; "Vigente"
+                se dice con texto, no solo con el punto, para no depender solo de color. */}
+            <span
+              className="absolute -left-5 top-1.5 h-3 w-3 rounded-full"
+              style={{ background: n.color, boxShadow: `0 0 0 4px ${n.color}1F` }}
+              aria-hidden="true"
+            />
             {i < nodes.length - 1 ? (
-              <div
-                className="mx-1 mb-6 h-0.5 min-w-[24px] flex-1 rounded-full"
-                style={{ background: '#DFE5ED' }}
+              <span
+                className="absolute -left-[13px] top-6 bottom-[-16px] w-px bg-[#DFE5ED] dark:bg-white/10"
+                aria-hidden="true"
               />
             ) : null}
-          </div>
-        ))}
-      </div>
 
-      <div className="mt-5 flex-1 rounded-xl border border-[#DFE5ED] p-4 dark:border-white/10">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: active.color }} />
-          <p className="text-xs font-bold" style={{ color: DETALLE_NAVY }}>
-            {active.label}
-          </p>
-        </div>
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-          <CampoValorInline campo="Gestor" valor={active.info.gestor} />
-          <CampoValorInline campo="Correo" valor={active.info.correo} />
-          <CampoValorInline campo="Empresa" valor={active.info.empresa} />
-          <CampoValorInline campo="Rol" valor={active.info.rol} />
-          <CampoValorInline campo="Fecha y hora" valor={active.info.fecha} />
-          {active.info.extra ? (
-            <CampoValorInline campo="Detalle" valor={active.info.extra} className="sm:col-span-2" />
-          ) : null}
-        </dl>
-      </div>
+            <div className="rounded-lg border border-[#DFE5ED] p-3 dark:border-white/10">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <p className="text-xs font-bold" style={{ color: DETALLE_NAVY }}>
+                  {n.label}
+                </p>
+                {n.isActive ? (
+                  <span className="rounded-full bg-[rgba(0,219,213,0.15)] px-2 py-0.5 text-xs font-semibold text-[#0F766E] dark:bg-[rgba(0,219,213,0.18)] dark:text-[#5EEAD4]">
+                    Vigente
+                  </span>
+                ) : null}
+              </div>
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                <CampoValorInline campo="Gestor" valor={n.info.gestor} />
+                <CampoValorInline campo="Correo" valor={n.info.correo} />
+                <CampoValorInline campo="Empresa" valor={n.info.empresa} />
+                <CampoValorInline campo="Rol" valor={n.info.rol} />
+                <CampoValorInline campo="Fecha y hora" valor={n.info.fecha} />
+                {n.info.extra ? (
+                  <CampoValorInline campo="Detalle" valor={n.info.extra} className="sm:col-span-2" />
+                ) : null}
+              </dl>
+            </div>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

@@ -100,7 +100,10 @@ describe('TramiteDetalleModal', () => {
     );
     await user.click(screen.getByRole('button', { name: /Trazabilidad de Identidad/i }));
     expect(await screen.findByText('Trazabilidad de identidad')).toBeInTheDocument();
-    expect(await screen.findByText(/Firma del baúl/i)).toBeInTheDocument();
+    // La línea de tiempo vertical (rediseño) muestra siempre la etiqueta del nodo Y su detalle
+    // ("...Firma del baúl" aparece en ambos), así que se afirma la etiqueta exacta para no chocar
+    // con getByText por texto ambiguo.
+    expect(await screen.findByText('Vendedor · Firma del baúl')).toBeInTheDocument();
   });
 
   // Bug #12376, defecto 4 — la reasignación de gestor aparece en la línea de tiempo GENERAL,
