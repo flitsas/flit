@@ -386,6 +386,49 @@ export function isRuesPreviewUnavailable(err: unknown): boolean {
   return status === 503;
 }
 
+/**
+ * Nombre de archivo de una cabecera `Content-Disposition` (`filename="x.pdf"` o
+ * `filename*=UTF-8''x%20y.pdf`). Cadena vacía si no viene.
+ */
+export function parseContentDispositionFilename(cd: string | null | undefined): string {
+  const header = cd ?? '';
+  const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(header);
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  const raw = (star?.[1] ?? plain?.[1] ?? '').trim();
+  if (!raw) return '';
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    // raw no era URI-encoded; se usa tal cual.
+    return raw;
+  }
+}
+
+/**
+ * GET binario con token: devuelve blob + filename/mimetype resueltos de la respuesta. Lo comparten
+ * la descarga propia (`downloadAttachment`) y la de red (`downloadNetworkAttachment`, HU #12411).
+ * Un fallo lleva `status` para que quien llama distinga rechazo de alcance (403/404) de error técnico.
+ */
+async function downloadBinary(
+  path: string,
+  headers: HeadersInit,
+  fallbackFilename: string,
+): Promise<{ blob: Blob; filename: string; mimetype: string }> {
+  const res = await fetch(apiUrl(path), { headers });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new TramitesApiError(
+      res.status,
+      `${res.status} ${res.statusText}${body ? ': ' + body : ''}`,
+      parseProblem(body),
+    );
+  }
+  const blob = await res.blob();
+  const mimetype = res.headers.get('content-type') ?? 'application/octet-stream';
+  const filename = parseContentDispositionFilename(res.headers.get('content-disposition'));
+  return { blob, filename: filename || fallbackFilename, mimetype };
+}
+
 // Exportado para que otros clientes del mismo dominio (p. ej. lib/api/ui-preferences.ts)
 // reutilicen el mismo manejo de errores/JSON en vez de reimplementarlo.
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -447,6 +490,12 @@ function jwtTenantId(): string | undefined {
 // Exportado por el mismo motivo que `request`: es el único lugar que resuelve Bearer +
 // X-Tenant-Id (explícito → tenant activo → JWT), y otros clientes (ui-preferences.ts) lo
 // necesitan tal cual, sin duplicar la resolución de tenant.
+/** Solo `Authorization`, sin `X-Tenant-Id`: para las rutas `network/**` (el alcance va en el JWT). */
+function authOnlyHeader(): HeadersInit {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export function tenantHeader(tenantId?: string): HeadersInit {
   const headers: Record<string, string> = {};
   const token = getToken();
@@ -1319,38 +1368,52 @@ export const tramitesClient = {
   // GET descarga binaria de un adjunto. Devuelve el blob + filename/mimetype
   // (resueltos del Content-Disposition / Content-Type de la respuesta) para que
   // el consumidor dispare la descarga del navegador (blob → objectURL → anchor).
-  downloadAttachment: async (
+  downloadAttachment: (
     instanceId: string,
     attachmentId: string,
     tenantId?: string,
     fallbackFilename?: string,
-  ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
-    const res = await fetch(
-      apiUrl(`/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`),
-      { headers: tenantHeader(tenantId) },
+  ): Promise<{ blob: Blob; filename: string; mimetype: string }> =>
+    downloadBinary(
+      `/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`,
+      tenantHeader(tenantId),
+      fallbackFilename || attachmentId,
+    ),
+
+  // ── HU #12411 — documentos de un trámite de la red (cabeza de grupo), solo lectura ─────────────
+  //
+  // contrato B5 #12410. Mismas reglas que el resto de `network/**`: NO viaja `X-Tenant-Id` (el
+  // alcance lo resuelve el servidor desde el JWT) y no existe `preview-url` de red: «Ver» se hace
+  // con el MISMO binario de `download` re-empaquetado como blob en el navegador. Un 403
+  // (`network_documents_disabled` / `network_scope_required`) o un 404 (`not_found`,
+  // anti-enumeración) llegan como `TramitesApiError` con `status`, que `isScopeRejection` reconoce.
+
+  /** Adjuntos de un trámite de la red. `GET /api/v1/tramites/network/instances/{id}/attachments`. */
+  getNetworkAttachments: async (instanceId: string): Promise<ProcedureAttachment[]> => {
+    // contrato B5 #12410 — `AttachmentDto[]` sin `previewUrl`. Se admite también el sobre
+    // `{ attachments }` de la ruta propia por si el servidor los unifica.
+    const res = await request<ProcedureAttachment[] | AttachmentsResponse | undefined>(
+      `/api/v1/tramites/network/instances/${instanceId}/attachments`,
     );
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(
-        `${res.status} ${res.statusText}${body ? ': ' + body : ''}`,
-      );
-    }
-    const blob = await res.blob();
-    const mimetype =
-      res.headers.get('content-type') ?? 'application/octet-stream';
-    // Content-Disposition: attachment; filename="fur.txt"  (o filename*=UTF-8'')
-    const cd = res.headers.get('content-disposition') ?? '';
-    const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
-    const plain = /filename="?([^";]+)"?/i.exec(cd);
-    const raw = star?.[1] ?? plain?.[1] ?? '';
-    let filename = raw.trim();
-    try {
-      filename = raw ? decodeURIComponent(raw.trim()) : '';
-    } catch {
-      // raw no era URI-encoded; se usa tal cual.
-    }
-    return { blob, filename: filename || fallbackFilename || attachmentId, mimetype };
+    if (Array.isArray(res)) return res;
+    return res?.attachments ?? [];
   },
+
+  /**
+   * Binario de un adjunto de la red.
+   * `GET /api/v1/tramites/network/instances/{id}/attachments/{attachmentId}/download`.
+   */
+  downloadNetworkAttachment: (
+    instanceId: string,
+    attachmentId: string,
+    fallbackFilename?: string,
+  ): Promise<{ blob: Blob; filename: string; mimetype: string }> =>
+    // contrato B5 #12410 — `Content-Disposition: attachment; filename=…`, sin `X-Tenant-Id`.
+    downloadBinary(
+      `/api/v1/tramites/network/instances/${instanceId}/attachments/${attachmentId}/download`,
+      authOnlyHeader(),
+      fallbackFilename || attachmentId,
+    ),
 
   // GET URL presignada de previsualización inline (ADR-0029). TTL ~10 min.
   // El backend valida tenant + ownership antes de emitir { url, expiresAt }.

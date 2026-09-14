@@ -7,6 +7,7 @@ import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { ICON_BUTTON_HIT_AREA } from '@/components/atom/RowActions';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { documentLabel } from '@/lib/tramites/document-labels';
+import { COPY_DOCUMENTOS_FUERA_DE_ALCANCE, isScopeRejection } from '@/lib/tramites/network-scope';
 import { formatFecha } from '@/lib/format/date';
 import type { ProcedureAttachment } from '@/lib/api/types/procedure-runtime';
 import { findConsolidadoAttachment } from './ExpedienteVisor';
@@ -38,7 +39,22 @@ export interface PreviewTarget {
  * del listado: el panel de documentos (HU #11054) y la acción directa al expediente consolidado
  * (HU #11055), que abre el visor sin pasar por la lista.
  */
-export function useAttachmentPreview(instanceId: string | null, tenantId?: string) {
+export interface AttachmentPreviewOptions {
+  /**
+   * HU #12411 — trámite de un cliente hijo abierto por la cabeza de red: «Ver» y «Descargar» van
+   * por las rutas proxeadas `network/**` (contrato B5 #12410). NUNCA se pide `preview-url`
+   * (dirección prefirmada): el visor se alimenta del mismo binario de descarga re-empaquetado
+   * como blob en memoria. Por defecto `false`: el trámite propio no cambia (AC4/AC5).
+   */
+  consultaMode?: boolean;
+}
+
+export function useAttachmentPreview(
+  instanceId: string | null,
+  tenantId?: string,
+  options: AttachmentPreviewOptions = {},
+) {
+  const consultaMode = options.consultaMode === true;
   const [doc, setDoc] = useState<PreviewTarget | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,6 +83,18 @@ export function useAttachmentPreview(instanceId: string | null, tenantId?: strin
       setError(null);
       setLoading(true);
       try {
+        if (consultaMode) {
+          // HU #12411 (AC2) — sin dirección prefirmada: el binario llega por la ruta de red y se
+          // muestra desde un objectURL local. Un rechazo de alcance (403/404) no es fallo técnico.
+          const { blob, mimetype } = await tramitesClient.downloadNetworkAttachment(
+            instanceId,
+            attachment.id,
+            attachment.filename,
+          );
+          const type = attachment.mimetype || mimetype;
+          setUrl(URL.createObjectURL(type ? new Blob([blob], { type }) : blob));
+          return;
+        }
         const res = await tramitesClient.fetchAttachmentPreviewUrl(
           instanceId,
           attachment.id,
@@ -87,6 +115,10 @@ export function useAttachmentPreview(instanceId: string | null, tenantId?: strin
         const typed = attachment.mimetype ? new Blob([raw], { type: attachment.mimetype }) : raw;
         setUrl(URL.createObjectURL(typed));
       } catch (e: unknown) {
+        if (consultaMode && isScopeRejection(e)) {
+          setError(COPY_DOCUMENTOS_FUERA_DE_ALCANCE);
+          return;
+        }
         setError(
           e instanceof Error && e.message
             ? `No se pudo abrir el documento (${e.message}). Puedes descargarlo.`
@@ -96,7 +128,7 @@ export function useAttachmentPreview(instanceId: string | null, tenantId?: strin
         setLoading(false);
       }
     },
-    [instanceId, tenantId, revoke],
+    [instanceId, tenantId, revoke, consultaMode],
   );
 
   /**
@@ -109,11 +141,9 @@ export function useAttachmentPreview(instanceId: string | null, tenantId?: strin
       const target = attachment ?? doc;
       if (!instanceId || !target) return;
       try {
-        const { blob, filename } = await tramitesClient.downloadAttachment(
-          instanceId,
-          target.id,
-          tenantId,
-        );
+        const { blob, filename } = consultaMode
+          ? await tramitesClient.downloadNetworkAttachment(instanceId, target.id, target.filename)
+          : await tramitesClient.downloadAttachment(instanceId, target.id, tenantId);
         const objectUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = objectUrl;
@@ -123,10 +153,14 @@ export function useAttachmentPreview(instanceId: string | null, tenantId?: strin
         a.remove();
         URL.revokeObjectURL(objectUrl);
       } catch (e: unknown) {
+        if (consultaMode && isScopeRejection(e)) {
+          setError(COPY_DOCUMENTOS_FUERA_DE_ALCANCE);
+          return;
+        }
         setError(e instanceof Error ? e.message : 'No se pudo descargar el documento.');
       }
     },
-    [instanceId, doc, tenantId],
+    [instanceId, doc, tenantId, consultaMode],
   );
 
   return { doc, url, loading, error, open, close, download };

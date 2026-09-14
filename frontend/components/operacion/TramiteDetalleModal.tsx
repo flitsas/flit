@@ -220,7 +220,8 @@ export function TramiteDetalleModal({
     setSubsanarError(null);
   }
 
-  const preview = useAttachmentPreview(instanceId, tenantId);
+  // HU #12411 — en consulta, «Archivos finales» ve/descarga por la ruta de red (nunca preview-url).
+  const preview = useAttachmentPreview(instanceId, tenantId, { consultaMode });
 
   useEffect(() => {
     if (!open || !instanceId) return;
@@ -259,7 +260,11 @@ export function TramiteDetalleModal({
       setAttError(null);
       setAttFueraDeAlcance(false);
       try {
-        const list = await tramitesClient.getAttachments(instanceId, tenantId);
+        // HU #12411 — el trámite de un hijo solo existe para la cabeza en la ruta consolidada
+        // (contrato B5 #12410); el propio sigue por la ruta de hoy.
+        const list = consultaMode
+          ? await tramitesClient.getNetworkAttachments(instanceId)
+          : await tramitesClient.getAttachments(instanceId, tenantId);
         if (!cancelled) setAttachments(list);
       } catch (e: unknown) {
         if (!cancelled) {
@@ -719,20 +724,18 @@ export function TramiteDetalleModal({
                                           SHA-256 · {a.sha256}
                                         </span>
                                       </span>
-                                      {/* HU #12362 (AC3) — en modo consulta la descarga solo
-                                          existe por el componente proxeado de #12411. */}
-                                      {!consultaMode ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => void preview.download(a)}
-                                          aria-label={`Descargar ${a.filename}`}
-                                          title="Descargar"
-                                          className="shrink-0 rounded-lg border p-1.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] border-[#DFE5ED] dark:border-white/10"
-                                          style={{ color: BLUE }}
-                                        >
-                                          <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                                        </button>
-                                      ) : null}
+                                      {/* HU #12411 — en consulta la descarga va por la ruta de
+                                          red (el hook decide); la UI es la misma que la propia. */}
+                                      <button
+                                        type="button"
+                                        onClick={() => void preview.download(a)}
+                                        aria-label={`Descargar ${a.filename}`}
+                                        title="Descargar"
+                                        className="shrink-0 rounded-lg border p-1.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] border-[#DFE5ED] dark:border-white/10"
+                                        style={{ color: BLUE }}
+                                      >
+                                        <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                                      </button>
                                     </li>
                                   ))}
                                 </ul>

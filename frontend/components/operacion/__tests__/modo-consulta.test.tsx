@@ -33,6 +33,9 @@ const mocks = vi.hoisted(() => ({
   getConsultationConfig: vi.fn(),
   setPriority: vi.fn(),
   getAttachments: vi.fn(),
+  // HU #12411 — documentos de la red en consulta (contrato B5 #12410).
+  getNetworkAttachments: vi.fn(),
+  downloadNetworkAttachment: vi.fn(),
   getChecklist: vi.fn(),
   getActors: vi.fn(),
   getCommercial: vi.fn(),
@@ -274,6 +277,7 @@ beforeEach(() => {
   mocks.getInstance.mockResolvedValue({ ...detalle, id: 'inst-propio', tenantId: CABEZA });
   mocks.getNetworkInstance.mockResolvedValue({ ...detalle, fromNetwork: true });
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.getNetworkAttachments.mockResolvedValue([]);
   mocks.getChecklist.mockResolvedValue({ items: [] });
   mocks.listBiometricExpediente.mockResolvedValue({
     validations: [],
@@ -530,7 +534,8 @@ describe('HU #12362 — AC1/AC2/AC3: detalle en modo consulta', () => {
   });
 
   it('archivos finales: 403 ⇒ copy de fuera de alcance, sin error técnico ni reintento', async () => {
-    mocks.getAttachments.mockRejectedValue(Object.assign(new Error('Forbidden'), { status: 403 }));
+    // HU #12411 — en consulta los adjuntos llegan por la ruta de red; la propia no se toca.
+    mocks.getNetworkAttachments.mockRejectedValue(Object.assign(new Error('Forbidden'), { status: 403 }));
     render(
       <TramiteDetalleModal
         open
@@ -547,8 +552,10 @@ describe('HU #12362 — AC1/AC2/AC3: detalle en modo consulta', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('archivos finales con adjuntos: se listan pero SIN botón de descarga', async () => {
-    mocks.getAttachments.mockResolvedValue([
+  // Ajustado por HU #12411: antes verificaba «SIN botón de descarga» (F1 esperaba la ruta proxeada).
+  // Ahora la descarga existe, pero SOLO por `downloadNetworkAttachment` — nunca por la ruta propia.
+  it('archivos finales con adjuntos: se listan con descarga por la ruta de red, nunca la propia', async () => {
+    mocks.getNetworkAttachments.mockResolvedValue([
       {
         id: 'att-1',
         tipo: 'fur',
@@ -570,15 +577,24 @@ describe('HU #12362 — AC1/AC2/AC3: detalle en modo consulta', () => {
       />,
     );
     expect(await screen.findByText('FUR.pdf')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Descargar FUR.pdf/ })).not.toBeInTheDocument();
+    expect(mocks.getAttachments).not.toHaveBeenCalled();
+    mocks.downloadNetworkAttachment.mockResolvedValue({
+      blob: new Blob(['x']),
+      filename: 'FUR.pdf',
+      mimetype: 'application/pdf',
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Descargar FUR.pdf' }));
+    await waitFor(() =>
+      expect(mocks.downloadNetworkAttachment).toHaveBeenCalledWith('inst-red', 'att-1', 'FUR.pdf'),
+    );
     expect(mocks.downloadAttachment).not.toHaveBeenCalled();
+    expect(mocks.fetchAttachmentPreviewUrl).not.toHaveBeenCalled();
   });
 
-  it('sección Documentos: en consulta no ofrece descarga; el 403 se pinta con el copy del AC3', async () => {
-    mocks.getChecklist.mockResolvedValue({
-      items: [{ key: 'soat', label: 'SOAT', docTipo: 'soat', obligatorio: true, satisfied: true }],
-    });
-    mocks.getAttachments.mockResolvedValue([
+  // Ajustado por HU #12411: antes verificaba «no ofrece descarga». Ahora ofrece Ver/Descargar por la
+  // ruta de red; lo que sigue prohibido es cualquier gestión y la ruta propia (checklist/adjuntos).
+  it('sección Documentos: en consulta lista por la ruta de red, solo Ver/Descargar; el 403 se pinta con el copy del AC3', async () => {
+    mocks.getNetworkAttachments.mockResolvedValue([
       {
         id: 'att-soat',
         tipo: 'soat',
@@ -595,11 +611,15 @@ describe('HU #12362 — AC1/AC2/AC3: detalle en modo consulta', () => {
         <TramiteDetalleDocumentos instanceId="inst-red" item={makeRed()} />
       </ConsultaModeProvider>,
     );
-    expect(await screen.findByText(/SOAT/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Descargar/ })).not.toBeInTheDocument();
+    expect(await screen.findByText(/soat\.pdf/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ver soat.pdf' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Descargar soat.pdf' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(2);
+    expect(mocks.getChecklist).not.toHaveBeenCalled();
+    expect(mocks.getAttachments).not.toHaveBeenCalled();
     unmount();
 
-    mocks.getChecklist.mockRejectedValue(Object.assign(new Error('Forbidden'), { status: 403 }));
+    mocks.getNetworkAttachments.mockRejectedValue(Object.assign(new Error('Forbidden'), { status: 403 }));
     render(
       <ConsultaModeProvider consultaMode>
         <TramiteDetalleDocumentos instanceId="inst-red" item={makeRed()} />
