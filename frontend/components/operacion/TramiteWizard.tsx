@@ -215,6 +215,10 @@ type PendingConsulta = {
 const SECRETARIA_LISTA_AVISO =
   '¿No encuentras el organismo? Solicita al administrador la activación del convenio.';
 
+/** HU #12351 AC4 — lista efectiva vacía: no se puede continuar ni escribir otro OT. */
+const SECRETARIA_LISTA_VACIA =
+  'Tu compañía no tiene organismos de tránsito habilitados para radicar. Si perteneces a una red, contacta al administrador de la Concesión o Marca Blanca; de lo contrario, solicita la habilitación en la plataforma.';
+
 /**
  * HU #11200 (AC2/AC3) — el vehículo está matriculado en un organismo donde la compañía no puede
  * radicar. Se avisa en el paso 1, no al final: avanzar el trámite entero para descubrirlo al radicar
@@ -480,6 +484,7 @@ export function TramiteWizard(props: Props) {
   // o no aplica (traspaso, VIN con placa RUNT, organismo sin preasignación activa), no hay nada que
   // exigir. `ConsultaStep` es quien decide si aplica y en qué momento cierra el gate.
   const [digitoPlacaGateOk, setDigitoPlacaGateOk] = useState(true);
+  const [secretariaListaGateOk, setSecretariaListaGateOk] = useState(true);
 
   // Estado de la instancia existente + sello de borrador finalizado (HU #10350). Se derivan
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
@@ -1351,6 +1356,7 @@ export function TramiteWizard(props: Props) {
     // HU #11628 — dígito de preferencia de placa sin declarar (ni dígito ni "sin preferencia") con
     // preasignación activa: no Continuar. `digitoPlacaGateOk` ya contempla los casos donde no aplica.
     (activeStep?.key === 'consulta_vin' && !digitoPlacaGateOk) ||
+    (activeStep?.key === 'consulta_vin' && !secretariaListaGateOk) ||
     // Trámites simultáneos incompletos (valor vacío o sin soporte): no Continuar.
     (isPrendaStep && !simultaneosGateOk) ||
     // Tipo de servicio: sin tipo elegido no se avanza del paso de requisitos; si el tipo es PÚBLICO,
@@ -1912,6 +1918,7 @@ export function TramiteWizard(props: Props) {
                 onPrioritarioChange={setPendingPrioritario}
                 onTipoServicioGateChange={setTipoServicioGateOk}
                 onDigitoPlacaGateChange={setDigitoPlacaGateOk}
+                onSecretariaListaGateChange={setSecretariaListaGateOk}
                 paqueteDocsStatus={paqueteDocsStatus}
                 onPaqueteStatusChange={setPaqueteDocsStatus}
                 onMarkDirty={() => setHasUnsavedChanges(true)}
@@ -2987,6 +2994,7 @@ function ConsultaStep({
   onPrioritarioChange,
   esMigrado = false,
   onDigitoPlacaGateChange,
+  onSecretariaListaGateChange,
 }: {
   step: WizardStep;
   /** ADR-0050 — capacidades del tipo: deciden si el vehículo entra por VIN o por placa. */
@@ -3014,6 +3022,8 @@ function ConsultaStep({
   esMigrado?: boolean;
   /** HU #11628 — Gate Continuar: dígito de preferencia de placa declarado (dígito o "sin preferencia"). */
   onDigitoPlacaGateChange?: (ok: boolean) => void;
+  /** HU #12351 AC4 — Gate Continuar: hay al menos un OT en la lista efectiva cuando aplica elegir secretaría. */
+  onSecretariaListaGateChange?: (ok: boolean) => void;
 }) {
   // ADR-0050 — por qué identificador entra el vehículo lo declara el tipo (`entryMode`), no el
   // nombre del paso. La clave sigue valiendo como respaldo para los borradores cuyo estado aún no
@@ -3121,6 +3131,8 @@ function ConsultaStep({
         : fieldValues.find((f) => f.fieldKey === 'transit_office_name')?.valueText?.trim() ?? null)
     : null;
   const [secretarias, setSecretarias] = useState<TransitOfficeOption[]>([]);
+  const [secretariasLoading, setSecretariasLoading] = useState(false);
+  const [secretariasLoaded, setSecretariasLoaded] = useState(false);
   const [secretariasError, setSecretariasError] = useState<string | null>(null);
   const [transitOfficeId, setTransitOfficeId] = useState('');
   /**
@@ -3143,18 +3155,35 @@ function ConsultaStep({
   useEffect(() => {
     if (!muestraRadicacion && !caps.declaraOrganismoDestino) return;
     let active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSecretariasLoading(true);
+    setSecretariasLoaded(false);
+    setSecretariasError(null);
     void tramitesClient
       .listTransitOffices()
       .then((list) => {
-        if (active) setSecretarias(list);
+        if (!active) return;
+        setSecretarias(list);
+        setSecretariasLoaded(true);
       })
       .catch(() => {
         if (active) setSecretariasError('No se pudieron cargar los organismos de tránsito.');
+      })
+      .finally(() => {
+        if (active) setSecretariasLoading(false);
       });
     return () => {
       active = false;
     };
   }, [muestraRadicacion, caps.declaraOrganismoDestino]);
+
+  const secretariaListaGateOk =
+    !eligeSecretaria || (secretariasLoaded && secretarias.length > 0);
+
+  useEffect(() => {
+    onSecretariaListaGateChange?.(secretariaListaGateOk);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secretariaListaGateOk]);
 
   /**
    * Dígito de preferencia de placa (HU #10805) declarado aquí, donde lo ubica el diseño. Es el MISMO
@@ -3896,18 +3925,30 @@ function ConsultaStep({
                 if (digitoPlaca) handleDigitoPlaca('');
                 handleOrganismo(id);
               }}
-              disabled={readOnly}
+              disabled={readOnly || secretariasLoading || secretarias.length === 0}
+              loading={secretariasLoading}
               describedBy="consulta-secretaria-aviso"
             />
             {/* Aviso ámbar mientras falta: sin secretaría la consulta no se habilita, y el botón
                 deshabilitado por sí solo no dice por qué. */}
-            {!transitOfficeId && (
+            {!transitOfficeId && secretarias.length > 0 && (
               <p className="mt-1.5 text-xs font-medium leading-tight" style={{ color: '#B45309' }}>
                 Aún no has seleccionado la secretaría de tránsito.
               </p>
             )}
+            {secretariasLoaded && secretarias.length === 0 && !secretariasError && (
+              <p
+                className="mt-1.5 text-xs font-medium leading-tight"
+                style={{ color: '#B45309' }}
+                role="alert"
+              >
+                {SECRETARIA_LISTA_VACIA}
+              </p>
+            )}
             <p id="consulta-secretaria-aviso" className="mt-1 text-xs leading-tight opacity-70">
-              {SECRETARIA_LISTA_AVISO}
+              {secretarias.length === 0 && secretariasLoaded
+                ? SECRETARIA_LISTA_VACIA
+                : SECRETARIA_LISTA_AVISO}
             </p>
             {secretariasError && (
               <p className="mt-1 text-xs leading-tight" style={{ color: '#E5484D' }}>
@@ -4462,6 +4503,7 @@ function StepBody({
   onPrioritarioChange,
   onTipoServicioGateChange,
   onDigitoPlacaGateChange,
+  onSecretariaListaGateChange,
   paqueteDocsStatus = 'idle',
   onPaqueteStatusChange,
   onMarkDirty,
@@ -4491,6 +4533,8 @@ function StepBody({
   onTipoServicioGateChange?: (ok: boolean) => void;
   /** HU #11628 — Gate Continuar: dígito de preferencia de placa declarado (dígito o "sin preferencia"). */
   onDigitoPlacaGateChange?: (ok: boolean) => void;
+  /** HU #12351 AC4 — Gate Continuar: lista efectiva de OT no vacía cuando el trámite elige secretaría. */
+  onSecretariaListaGateChange?: (ok: boolean) => void;
   preflight: PreflightSnapshot | null;
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
@@ -4580,6 +4624,7 @@ function StepBody({
           onPrioritarioChange={onPrioritarioChange}
           esMigrado={esMigrado}
           onDigitoPlacaGateChange={onDigitoPlacaGateChange}
+          onSecretariaListaGateChange={onSecretariaListaGateChange}
         />
       );
 

@@ -133,7 +133,7 @@ internal static class AnalyticsEndpointsHelpers
         if (tenantIdQuery is { } requested && requested != Guid.Empty)
         {
             if (isSuperAdmin) { tenant = requested; return true; }
-            if (TryResolveTenantId(user, out var claimTenant) && requested == claimTenant)
+            if (RequestTenantResolver.TryResolveTenantId(user, out var claimTenant) && requested == claimTenant)
             {
                 tenant = claimTenant;
                 return true;
@@ -151,7 +151,7 @@ internal static class AnalyticsEndpointsHelpers
             return false;
         }
 
-        if (TryResolveTenantId(user, out var userTenant))
+        if (RequestTenantResolver.TryResolveTenantId(user, out var userTenant))
         {
             tenant = userTenant;
             return true;
@@ -162,11 +162,6 @@ internal static class AnalyticsEndpointsHelpers
         return false;
     }
 
-    private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId)
-    {
-        var claim = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        return Guid.TryParse(claim, out tenantId);
-    }
 
     public static IResult InvalidRange() =>
         Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",

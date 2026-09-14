@@ -16,6 +16,9 @@ using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
 using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
+using Flit.Admin.Application.Companies.TransitOffices.TransitBlocks.AddTransitBlock;
+using Flit.Admin.Application.Companies.TransitOffices.TransitBlocks.GetTransitBlocks;
+using Flit.Admin.Application.Companies.TransitOffices.TransitBlocks.RemoveTransitBlock;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.CreateTransitOffice;
 using Flit.Admin.Application.Companies.TransitOffices.GetOtBlockingPolicies;
@@ -121,6 +124,16 @@ public static class DependencyInjection
         // Editar compañía (botón "Editar" en el listado, #10118).
         services.AddScoped<UpdateCompanyHandler>();
 
+        // HU #12345 — gestión de clientes hijos por cabeza de grupo.
+        services.AddScoped<Companies.Children.CreateChildCompany.CreateChildCompanyHandler>();
+        services.AddScoped<Companies.Children.UpdateChildCompany.UpdateChildCompanyHandler>();
+        services.AddScoped<Companies.Children.SetChildCompanyStatus.SetChildCompanyStatusHandler>();
+        services.AddScoped<Companies.Children.ListChildCompanies.ListChildCompaniesHandler>();
+
+        // HU #12355 — vínculo/desvínculo SuperAdmin.
+        services.AddScoped<Companies.Hierarchy.LinkTenantParent.LinkTenantParentHandler>();
+        services.AddScoped<Companies.Hierarchy.UnlinkTenantParent.UnlinkTenantParentHandler>();
+
         // HU #10190 — configuración operativa + audit log.
         services.AddScoped<GetTenantSettingsHandler>();
         services.AddScoped<UpdateTenantSettingsHandler>();
@@ -146,6 +159,9 @@ public static class DependencyInjection
         services.AddScoped<UpdateTransitOfficeQuipuxSettingsHandler>();
         services.AddScoped<AddTransitGrantHandler>();
         services.AddScoped<RemoveTransitGrantHandler>();
+        services.AddScoped<GetTransitBlocksHandler>();
+        services.AddScoped<AddTransitBlockHandler>();
+        services.AddScoped<RemoveTransitBlockHandler>();
 
         // Refactor adminOT — alta/listado de tenants OT.
         // ITransitOfficeTenantWriteRepository se registra en AddAdminInfrastructure.

@@ -80,6 +80,94 @@ public sealed class GetProcedureInstanceTests
         result.StatusHistory.Should().ContainSingle(h => h.ToStatus == TramiteEstado.Borrador);
     }
 
+    // Bug #12526 — la Línea de tiempo del trámite mostraba gestor/correo/empresa fijos en vacío aunque
+    // el backend tuviera el dato de quién ejecutó cada transición (changed_by).
+    [Fact]
+    public async Task HandleAsync_StatusHistoryConChangedBy_ResuelveGestorCorreoYCompania()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var ejecutor = Guid.NewGuid();
+
+        var instance = new ProcedureInstance
+        {
+            ProcedureType = ProcedureTypeFixture.Matricula,
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000007",
+            Status = TramiteEstado.Entregado,
+            CreatedAt = DateTimeOffset.UtcNow,
+            StatusHistory =
+            {
+                new ProcedureInstanceStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    FromStatus = TramiteEstado.Preparado,
+                    ToStatus = TramiteEstado.Entregado,
+                    ChangedAt = DateTimeOffset.UtcNow,
+                    ChangedBy = ejecutor,
+                },
+            },
+        };
+
+        _repo.GetByIdWithDetailsAsync(instance.Id, tenantId, ct).Returns(instance);
+        _repo.GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [ejecutor] = "Laura Restrepo" });
+        _repo.GetUserEmailsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [ejecutor] = "laura.restrepo@renting.com" });
+        _repo.GetUserCompaniasAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [ejecutor] = "Renting Colombia S.A.S" });
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
+
+        error.Should().BeNull();
+        var entry = result!.StatusHistory.Should().ContainSingle().Subject;
+        entry.ChangedByName.Should().Be("Laura Restrepo");
+        entry.ChangedByEmail.Should().Be("laura.restrepo@renting.com");
+        entry.ChangedByCompania.Should().Be("Renting Colombia S.A.S");
+    }
+
+    [Fact]
+    public async Task HandleAsync_StatusHistorySinChangedBy_NoConsultaUsuarios()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+
+        var instance = new ProcedureInstance
+        {
+            ProcedureType = ProcedureTypeFixture.Matricula,
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000008",
+            Status = TramiteEstado.Borrador,
+            CreatedAt = DateTimeOffset.UtcNow,
+            StatusHistory =
+            {
+                new ProcedureInstanceStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    ToStatus = TramiteEstado.Borrador,
+                    ChangedAt = DateTimeOffset.UtcNow,
+                    ChangedBy = null,
+                },
+            },
+        };
+
+        _repo.GetByIdWithDetailsAsync(instance.Id, tenantId, ct).Returns(instance);
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
+
+        error.Should().BeNull();
+        var entry = result!.StatusHistory.Should().ContainSingle().Subject;
+        entry.ChangedByName.Should().BeNull();
+        entry.ChangedByEmail.Should().BeNull();
+        entry.ChangedByCompania.Should().BeNull();
+        await _repo.DidNotReceive().GetUserEmailsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().GetUserCompaniasAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+    }
+
     // HU #10871 — el detalle de instancia expone motivo+items de la observación de subsanación,
     // RECORTADOS del metadata jsonb (sin fieldSnapshot ni ot_tenant_id/approver_tenant_id).
     [Fact]
@@ -241,6 +329,13 @@ public sealed class GetProcedureInstanceTests
                 [gestorAnterior] = "Carlos Anterior",
                 [gestorNuevo] = "Diana Nueva",
             });
+        // Hallazgo posterior al Bug #12526: el mismo vacío de Correo/Empresa ocurría en la tarjeta de
+        // "Reasignación de gestor" — correo/empresa son del gestor NUEVO, la misma persona ya resuelta
+        // arriba como "Diana Nueva".
+        _repo.GetUserEmailsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [gestorNuevo] = "diana.nueva@renting.com" });
+        _repo.GetUserCompaniasAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [gestorNuevo] = "Renting Colombia S.A.S" });
 
         var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
 
@@ -250,6 +345,8 @@ public sealed class GetProcedureInstanceTests
         evento.CreatedByName.Should().Be("Ana Ejecutora");
         evento.PreviousAssignedToName.Should().Be("Carlos Anterior");
         evento.NewAssignedToName.Should().Be("Diana Nueva");
+        evento.NewAssignedToEmail.Should().Be("diana.nueva@renting.com");
+        evento.NewAssignedToCompania.Should().Be("Renting Colombia S.A.S");
         evento.CreatedAt.Should().Be(cuando);
     }
 
@@ -281,7 +378,7 @@ public sealed class GetProcedureInstanceTests
                         validation_id = Guid.NewGuid(),
                         party_role = "comprador",
                         email_actualizado = true,
-                        correo_destino = "n***@dominio.com",
+                        correo_destino = "nueva@dominio.com",
                         encolado = false,
                     }),
                     CreatedAt = DateTimeOffset.UtcNow,
@@ -293,6 +390,10 @@ public sealed class GetProcedureInstanceTests
         _repo.GetByIdWithDetailsAsync(instance.Id, tenantId, ct).Returns(instance);
         _repo.GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
             .Returns(new Dictionary<Guid, string> { [ejecutor] = "Ana Ejecutora" });
+        // Sin gestor propio del evento (el correo ya es el destino del reenvío): la empresa que aporta
+        // información es la de quien lo ejecutó, ya nombrado en Rol.
+        _repo.GetUserCompaniasAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [ejecutor] = "Renting Colombia S.A.S" });
 
         var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
 
@@ -302,7 +403,8 @@ public sealed class GetProcedureInstanceTests
         evento.CreatedByName.Should().Be("Ana Ejecutora");
         evento.PartyRole.Should().Be("comprador");
         evento.EmailActualizado.Should().BeTrue();
-        evento.CorreoDestinoEnmascarado.Should().Be("n***@dominio.com");
+        evento.CorreoDestino.Should().Be("nueva@dominio.com");
+        evento.CreatedByCompania.Should().Be("Renting Colombia S.A.S");
     }
 
     // Bug #12376 — solo reenvío/reasignación se exponen en Events; el resto de tipos (p.ej.

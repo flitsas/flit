@@ -529,7 +529,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -564,7 +564,7 @@ public static class AdminOtEndpoints
         UpdateOtProfileHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -673,7 +673,7 @@ public static class AdminOtEndpoints
         UpdateOtFeatureFlagHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -695,11 +695,6 @@ public static class AdminOtEndpoints
         };
     }
 
-    private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId)
-    {
-        var claim = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        return Guid.TryParse(claim, out tenantId);
-    }
 
     private static bool IsSuperAdmin(ClaimsPrincipal user) =>
         user.IsInRole(AdminAuthorization.SuperAdminRole);
@@ -975,7 +970,7 @@ public static class AdminOtEndpoints
         ListOtWebhooksHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -995,7 +990,7 @@ public static class AdminOtEndpoints
         CreateOtWebhookHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1025,7 +1020,7 @@ public static class AdminOtEndpoints
         UpdateOtWebhookHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1061,7 +1056,7 @@ public static class AdminOtEndpoints
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1095,7 +1090,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1132,7 +1127,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1189,7 +1184,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1241,7 +1236,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1274,7 +1269,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1308,7 +1303,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1357,7 +1352,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1485,7 +1480,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1534,7 +1529,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1588,7 +1583,7 @@ public static class AdminOtEndpoints
         Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return (null, Guid.Empty, Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1933,7 +1928,7 @@ public static class AdminOtEndpoints
         CreateOtRuleHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1961,7 +1956,7 @@ public static class AdminOtEndpoints
         ListOtRulesHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1982,7 +1977,7 @@ public static class AdminOtEndpoints
         UpdateOtRuleHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2013,7 +2008,7 @@ public static class AdminOtEndpoints
         Guid? procedureTypeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2042,7 +2037,7 @@ public static class AdminOtEndpoints
         UpdateOtDocumentPrecedenceHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2071,7 +2066,7 @@ public static class AdminOtEndpoints
         CreateOtDocumentTagHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2100,7 +2095,7 @@ public static class AdminOtEndpoints
         ListOtDocumentTagsHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2120,7 +2115,7 @@ public static class AdminOtEndpoints
         DeleteOtDocumentTagHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2832,7 +2827,7 @@ public static class AdminOtEndpoints
         FlitDbContext db,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(user, out var callerTenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(user, out var callerTenantId))
         {
             return (Guid.Empty, Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },

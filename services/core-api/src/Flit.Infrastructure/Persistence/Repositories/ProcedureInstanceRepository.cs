@@ -348,6 +348,30 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ToDictionary(r => r.Id, r => r.DisplayName);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetUserEmailsAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct)
+    {
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = userIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (distinct.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var rows = await db.Users
+            .Where(u => distinct.Contains(u.Id))
+            .Select(u => new { u.Id, u.Email })
+            .ToListAsync(ct);
+
+        return rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.Email))
+            .ToDictionary(r => r.Id, r => r.Email);
+    }
+
+    public Task<IReadOnlyDictionary<Guid, string>> GetUserCompaniasAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct) =>
+        ResolveCompaniasDeUsuariosAsync(userIds.Where(id => id != Guid.Empty).Distinct().ToList(), ct);
+
     public async Task<IReadOnlyDictionary<string, bool>> ListFirmaBaulVigenciaKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateOnly hoy, CancellationToken ct)
     {
@@ -1455,6 +1479,12 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public async Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, CancellationToken ct)
     {
+        // HU #12406 — el trámite conserva el padre que tenía la compañía radicadora al crearse. Se
+        // lee de identity.tenants.parent_tenant_id en este mismo DbContext y viaja en el MISMO INSERT
+        // que el trámite y su historial (un solo SaveChanges = una sola transacción); nunca se
+        // recalcula después (AfterSaveBehavior.Throw + trigger de inmutabilidad en la base).
+        instance.ParentTenantIdAtCreation = await ParentTenantIdOfAsync(db, instance.TenantId, ct);
+
         await db.ProcedureInstances.AddAsync(instance, ct);
 
         try
@@ -1482,6 +1512,18 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         }
     }
 
+
+    /// <summary>
+    /// HU #12406 — padre actual de la compañía radicadora (<c>null</c> si no tiene o no existe; la
+    /// FK de <c>tenant_id</c> se encarga del tenant inexistente). Compartido con
+    /// <see cref="AdminProcedureInstanceRepository"/> para que los dos puntos de creación escriban lo mismo.
+    /// </summary>
+    internal static Task<Guid?> ParentTenantIdOfAsync(FlitDbContext db, Guid tenantId, CancellationToken ct) =>
+        db.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => t.ParentTenantId)
+            .FirstOrDefaultAsync(ct);
 
     private static bool IsReferenceUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg

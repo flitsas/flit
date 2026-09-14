@@ -852,8 +852,10 @@ public sealed class OtClientProcedureHandlerTests
         result.PageSize.Should().Be(20);
     }
 
+    // HU #12350 AC7 — lo ya entregado al organismo sigue en la bandeja aunque el grant esté
+    // deshabilitado o retirado: deshabilitar un convenio no oculta trámites ya recibidos.
     [Fact]
-    public async Task AC1_ExcludesProceduresWhenGrantDisabled()
+    public async Task AC1_KeepsDeliveredProceduresWhenGrantDisabled()
     {
         var db = NewDbName();
         var procedureId = Guid.NewGuid();
@@ -869,7 +871,7 @@ public sealed class OtClientProcedureHandlerTests
         var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
         var result = await handler.HandleAsync(new ListOtClientProceduresQuery { OtTenantId = OtTenant }, TestContext.Current.CancellationToken);
 
-        result.Data.Should().BeEmpty();
+        result.Data.Should().ContainSingle(p => p.Id == procedureId);
     }
 
     [Fact] // HU #10432 AC1 — transición manual: source=ot_admin + changed_by sellado

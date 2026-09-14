@@ -166,7 +166,7 @@ public static class AdminDocumentRequirementOverridesEndpoints
             return null;
         }
 
-        if (Guid.TryParse(user.FindFirstValue(AdminAuthorization.TenantIdClaimType), out var tenantId))
+        if (RequestTenantResolver.TryResolveTenantId(user, out var tenantId))
         {
             var profile = await otProfileRepository
                 .GetByTenantAsync(tenantId, cancellationToken)

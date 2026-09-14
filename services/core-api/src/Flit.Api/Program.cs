@@ -95,6 +95,9 @@ builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHand
 // Handler para la policy AdminCompany (roles de empresa + SuperAdmin bypass).
 builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHandler>();
 
+// HU #12345 — cabeza de grupo (AdminCompany + is_group_parent en BD).
+builder.Services.AddScoped<IAuthorizationHandler, GroupHeadCompanyAuthorizationHandler>();
+
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
 builder.Services.AddFlitSwagger();
@@ -220,6 +223,9 @@ app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
 app.MapUserUiPreferencesEndpoints();
 app.MapAdminCompaniesEndpoints();
+app.MapAdminCompanyChildrenEndpoints();
+app.MapAdminCompanyChildrenConfigEndpoints();
+app.MapAdminCompanyChildrenInvitationsEndpoints();
 app.MapAdminOtEndpoints();
 app.MapAdminOtMetricsEndpoints();
 app.MapAdminOtQueriesEndpoints();
@@ -232,6 +238,7 @@ app.MapAdminIctJobCatalogEndpoints();
 app.MapAdminPlataformaMandatosEndpoints();
 app.MapAdminOtMandatosEndpoints();
 app.MapAdminPlataformaFurEndpoints();
+app.MapAdminHierarchySwitchesEndpoints(); // HU #12323 — interruptores globales de jerarquía (SuperAdmin)
 app.MapAdminPlataformaNotificacionesEndpoints();
 app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
 app.MapAdminRuntConfirmationEndpoints();

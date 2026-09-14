@@ -186,6 +186,18 @@ public sealed class ProcedureInstance
     public string? ExternalRef { get; set; }
 
     /// <summary>
+    /// HU #12406 — cabeza de grupo (<c>identity.tenants.id</c>) de la que colgaba la compañía
+    /// radicadora (<see cref="TenantId"/>) en el momento de crear el trámite. <c>null</c> = la
+    /// compañía no tenía padre. Es TRAZABILIDAD, no integridad referencial: sin FK a propósito, para
+    /// que sobreviva al desvínculo, al cambio de cabeza y al borrado del padre. Lo fija el punto de
+    /// persistencia del comando de creación en el mismo INSERT que el trámite, leyendo
+    /// <c>tenants.parent_tenant_id</c>; después es inmutable (EF: <c>AfterSaveBehavior.Throw</c>;
+    /// base: <c>tr_procedure_instances_parent_snapshot_immutable</c>). Ninguna ruta de escritura
+    /// posterior debe tocarlo. Columna agregada por migración SQL cruda (tabla ExcludeFromMigrations).
+    /// </summary>
+    public Guid? ParentTenantIdAtCreation { get; set; }
+
+    /// <summary>
     /// Pausa del trámite (ICT — servicio v1 <c>pauseDraftProcess</c> y bandera <c>starts_procedure_in_paused</c>
     /// del register). En <c>true</c> el trámite NO avanza: la radicación/preparación se bloquean
     /// (<see cref="UseCases.ProcedureInstances.SubmitProcedureInstanceHandler"/> devuelve

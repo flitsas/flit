@@ -54,5 +54,18 @@ public sealed class UserAuthSnapshot
     /// </summary>
     public string EntityType { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Tipo de compañía del tenant (<c>identity.tenants.tenant_type</c>, HU #12406).
+    /// Se emite como claim <c>tenant_type</c> en el JWT para que el frontend determine
+    /// el rol de cabeza de red sin llamadas adicionales.
+    /// </summary>
+    public string TenantType { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Indica si el tenant es cabeza de grupo (<c>identity.tenants.is_group_parent</c>, HU #12345).
+    /// Se emite como claim <c>is_group_parent</c> en el JWT.
+    /// </summary>
+    public bool IsGroupParent { get; init; }
+
     public bool IsTemporarilySuspended { get; init; }
 }

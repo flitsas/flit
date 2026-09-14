@@ -56,4 +56,13 @@ public static class AdminAuthorization
 
     /// <summary>Claim JWT del tenant autenticado.</summary>
     public const string TenantIdClaimType = "tenant_id";
+
+    /// <summary>
+    /// HU #12345 AC4 — AdminCompany con marca de cabeza de grupo (<c>is_group_parent</c> en BD).
+    /// </summary>
+    public const string GroupHeadCompanyPolicy = "GroupHeadCompany";
+
+    /// <summary>Mensaje 403 cuando el caller no es cabeza de grupo (HU #12345 AC5).</summary>
+    public const string GroupHeadForbiddenMessage =
+        "Acceso restringido: se requiere ser administrador de una cabeza de grupo.";
 }

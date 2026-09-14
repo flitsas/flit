@@ -86,10 +86,11 @@ public sealed class OtBandejaContadoresTests
         counters.SinAsignarPlaca.Should().Be(1);
     }
 
-    // El conteo tiene que mirar el MISMO universo que la lista: si contara más ancho, la tarjeta
-    // prometería filas que al pulsarla no aparecerían.
+    // El conteo tiene que mirar el MISMO universo que la lista: si contara distinto, la tarjeta
+    // prometería filas que al pulsarla no aparecerían. Desde HU #12350 AC7 ese universo incluye lo
+    // ya recibido por el organismo aunque la empresa no tenga convenio vigente.
     [Fact]
-    public async Task NoCuentaLosTramitesDeUnaEmpresaSinConvenio()
+    public async Task CuentaLosTramitesEntregadosAunqueLaEmpresaNoTengaConvenio()
     {
         var db = NewDbName();
 
@@ -98,7 +99,8 @@ public sealed class OtBandejaContadoresTests
             SeedEscenarioBase(seed);
             SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-CON", plateFlowStatus: null);
 
-            // Empresa dirigida al mismo organismo pero SIN grant: invisible para la bandeja.
+            // Empresa dirigida al mismo organismo pero SIN grant: su trámite ya entregado sigue
+            // visible y contado (HU #12350 AC7) junto al de la empresa con convenio.
             seed.Tenants.Add(new Tenant
             {
                 Id = OtroTenant,
@@ -124,7 +126,7 @@ public sealed class OtBandejaContadoresTests
 
         var counters = await Contar(db);
 
-        counters.SinGestion.Should().Be(1);
+        counters.SinGestion.Should().Be(2, "R-CON (con convenio) y R-SIN (entregado sin convenio) cuentan por igual");
     }
 
     [Fact]

@@ -1,3 +1,5 @@
+using Flit.Admin.Domain.Companies.TransitOffices;
+
 namespace Flit.Infrastructure.Persistence.Entities.Admin;
 
 /// <summary>
@@ -14,6 +16,9 @@ public sealed class TenantTransitOfficeGrant
     public Guid TransitOfficeId { get; set; }
 
     public bool IsEnabled { get; set; } = true;
+
+    /// <summary>HU #12346 — <see cref="TransitGrantSources.Client"/> | <see cref="TransitGrantSources.System"/>.</summary>
+    public string Source { get; set; } = TransitGrantSources.Client;
 
     public DateTimeOffset CreatedAt { get; set; }
 

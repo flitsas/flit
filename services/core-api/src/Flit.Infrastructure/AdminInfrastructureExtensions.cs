@@ -30,6 +30,7 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Infrastructure.Tramites;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -65,7 +66,19 @@ public static class AdminInfrastructureExtensions
 
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
+        services.AddScoped<ICompanyHierarchyRepository, CompanyHierarchyRepository>();
+        services.AddScoped<Flit.Admin.Application.Companies.Invitations.IGroupHeadInvitationRolePolicy,
+            Flit.Infrastructure.Security.GroupHeadInvitationRolePolicy>();
         services.AddScoped<ITenantSettingsRepository, TenantSettingsRepository>();
+
+        // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
+        // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
+        services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();
+
+        // HU #12323 (Feature #12254) — interruptores globales de la jerarquía leídos por petición,
+        // sin caché y fail-closed (fila ausente/error ⇒ apagado). El resolver los consulta antes que
+        // la jerarquía: apagar group_read_scope degrada a Single sin desplegar ni tocar tenants.
+        services.AddScoped<IHierarchySwitches, DbHierarchySwitches>();
 
         // HU #10191 — lista blanca + checker de propiedad vehicular (stub transitorio).
         services.AddScoped<IWhitelistRepository, WhitelistRepository>();
@@ -285,8 +298,17 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IOtRuleRepository, OtRuleRepository>();
         services.AddScoped<IOtRuleGate, OtRuleGateService>();
 
+        // HU #12407 — bloqueos de OT para cabezas Marca Blanca.
+        services.AddScoped<ITenantTransitOfficeBlockRepository, TenantTransitOfficeBlockRepository>();
+
+        // HU #12347 — lista efectiva de OT según jerarquía.
+        services.AddScoped<IEffectiveTransitOfficeListResolver, EffectiveTransitOfficeListResolver>();
+
         // #2 — validación de OT habilitado por empresa en el submit de trámites.
         services.AddScoped<ITransitOfficeGrantGate, TransitOfficeGrantGate>();
+
+        // HU #12348 / #12409 — gate de radicación (OT permitido + compañía/red activa).
+        services.AddScoped<IProcedureRadicationGate, ProcedureRadicationGate>();
 
         // HU #10518 — enforcement runtime del ciclo de vida OT: el OT elegido debe estar
         // OPERATIVO (catálogo activo + perfil/tenant OT + tenant activo), no solo con grant.

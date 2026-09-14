@@ -25,7 +25,7 @@ internal static class AdminOtSchedulingTenantResolver
         IOtMetricsReadRepository otMetrics,
         CancellationToken ct)
     {
-        if (!TryResolveTenantId(user, out var jwtTenant))
+        if (!RequestTenantResolver.TryResolveTenantId(user, out var jwtTenant))
         {
             return (Guid.Empty, Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -71,8 +71,6 @@ internal static class AdminOtSchedulingTenantResolver
         Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Not Found",
             detail: "El disparo de alerta no existe.");
 
-    private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId) =>
-        Guid.TryParse(user.FindFirstValue(AdminAuthorization.TenantIdClaimType), out tenantId);
 
     private static bool IsSuperAdmin(ClaimsPrincipal user) =>
         user.IsInRole(AdminAuthorization.SuperAdminRole)

@@ -183,8 +183,8 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
             ct).ConfigureAwait(false);
 
         // Evento PROPIO — historial visible del trámite (dashboard admin, AC1/AC2), distinto de la
-        // bitácora técnica de identidad. Correo SIEMPRE enmascarado (Habeas Data), mismo criterio que el
-        // resto de este lote de HUs administrativas (#12159/#12160).
+        // bitácora técnica de identidad. Correo en claro (a pedido del producto): el admin que reenvía
+        // necesita ver a qué dirección exacta se mandó, no una versión enmascarada.
         await repo.AddEventAsync(new ProcedureInstanceEvent
         {
             Id = Guid.NewGuid(),
@@ -196,14 +196,24 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
                 validation_id = validation.Id,
                 party_role = validation.PartyRole,
                 email_actualizado = emailActualizado,
-                correo_destino = EditarPrevalidacionHandler.MaskEmail(emailDestino),
+                correo_destino = emailDestino,
                 encolado = queued,
             }),
             CreatedAt = now,
             CreatedBy = command.ChangedByUserId,
         }, ct).ConfigureAwait(false);
 
-        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        // HU #11266 (D12) — mismo guard que el reenvío standalone (ver comentario en
+        // EditarPrevalidacionCommand.cs): el reenvío puede colisionar con OTRA fila en vuelo del mismo
+        // (tenant, documento normalizado).
+        try
+        {
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (Flit.Tramites.Domain.Identity.IdentityInFlightConflictException)
+        {
+            return (null, "validacion_en_curso", null, null);
+        }
 
         var dto = IniciarBiometriaHandler.ToDto(validation, now);
         return (new AdminReenviarValidacionIdentidadResult(dto, captureUrl, emailActualizado, queued), null, null, null);

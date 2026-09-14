@@ -112,8 +112,7 @@ public static class AuthEndpoints
             AdminResetPasswordHandler handler,
             CancellationToken cancellationToken) =>
         {
-            var tenantClaim = caller.FindFirstValue("tenant_id");
-            var callerTenantId = Guid.TryParse(tenantClaim, out var tid) ? tid : (Guid?)null;
+            var callerTenantId = RequestTenantResolver.ResolveTenantIdOrNull(caller);
             // Multi-rol (HU #10506): FindFirstValue puede no ver SuperAdmin/AdminCompany si no es el primer claim.
             var roleCode = ResolveCallerRoleCode(caller);
             var permissions = ExtractPermissionSlugs(caller);

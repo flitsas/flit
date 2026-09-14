@@ -18,6 +18,10 @@ internal sealed class TenantTransitOfficeGrantConfiguration
         builder.Property(x => x.TenantId).IsRequired();
         builder.Property(x => x.TransitOfficeId).IsRequired();
         builder.Property(x => x.IsEnabled).IsRequired().HasDefaultValue(true);
+        builder.Property(x => x.Source)
+            .IsRequired()
+            .HasMaxLength(20)
+            .HasDefaultValue("CLIENT");
         builder.Property(x => x.CreatedAt).IsRequired();
 
         builder.HasIndex(x => new { x.TenantId, x.TransitOfficeId })

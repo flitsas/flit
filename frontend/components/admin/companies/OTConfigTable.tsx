@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Check, Search, Settings2 } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import type { TransitOffice } from "@/lib/api/types";
 import { ApiValidationError } from "@/lib/api/types";
@@ -41,6 +42,8 @@ export interface OTConfigTableProps {
   onOpenConfig: (office: TransitOffice) => void;
   /** Notificación opcional de error de persistencia (toast). */
   onError?: (message: string) => void;
+  /** HU #12357 AC7 — deshabilita switches y menú de configuración. */
+  readOnly?: boolean;
 }
 
 /** Deriva si un OT es operable y, si no, la razón para el badge. */
@@ -68,6 +71,7 @@ export function OTConfigTable({
   onToggleGrant,
   onOpenConfig,
   onError,
+  readOnly = false,
 }: OTConfigTableProps) {
   const [search, setSearch] = useState("");
   const [granted, setGranted] = useState<Set<string>>(() => new Set(grantedIds));
@@ -108,12 +112,13 @@ export function OTConfigTable({
   };
 
   const filtered = useMemo(() => {
+    const base = readOnly ? offices.filter((o) => granted.has(o.id)) : offices;
     const term = fold(search);
     if (!term) {
-      return offices;
+      return base;
     }
-    return offices.filter((o) => fold(o.name).includes(term) || fold(o.code).includes(term));
-  }, [offices, search]);
+    return base.filter((o) => fold(o.name).includes(term) || fold(o.code).includes(term));
+  }, [offices, search, readOnly, granted]);
 
   const handleToggleGrant = async (office: TransitOffice) => {
     const enable = !granted.has(office.id);
@@ -183,6 +188,13 @@ export function OTConfigTable({
       header: "Estado",
       render: (office) => {
         const checked = granted.has(office.id);
+        if (readOnly) {
+          return checked ? (
+            <StatusBadge label="Habilitado" tone="success" />
+          ) : (
+            <StatusBadge label="No habilitado" tone="neutral" />
+          );
+        }
         const { operable, reason } = operability(operationalById?.[office.id]);
         // No se puede habilitar un OT no operable; si ya está habilitado, sí se permite
         // desmarcar (quitar el grant no tiene restricción — HU #10518).
@@ -248,32 +260,33 @@ export function OTConfigTable({
           } satisfies DataTableColumn<TransitOffice>,
         ]
       : []),
-    {
-      key: "acciones",
-      header: "Acciones",
-      align: "right",
-      render: (office) => {
-        // Bloqueos y restricciones de consulta solo aplican a OT habilitados (mismo
-        // criterio que antes: las matrices de bloqueos/restricciones solo listaban OT
-        // habilitados; ahora se refleja como acción deshabilitada con motivo).
-        const enabledForConfig = granted.has(office.id);
-        return (
-          <ActionsMenu
-            ariaLabel={`Acciones para ${office.name}`}
-            items={[
-              {
-                key: "config",
-                label: "Configurar",
-                icon: Settings2,
-                onSelect: () => onOpenConfig(office),
-                disabled: !enabledForConfig,
-                disabledReason: "Habilita este organismo para configurar bloqueos y restricciones.",
-              },
-            ]}
-          />
-        );
-      },
-    },
+    ...(readOnly
+      ? []
+      : [
+          {
+            key: "acciones",
+            header: "Acciones",
+            align: "right" as const,
+            render: (office: TransitOffice) => {
+              const enabledForConfig = granted.has(office.id);
+              return (
+                <ActionsMenu
+                  ariaLabel={`Acciones para ${office.name}`}
+                  items={[
+                    {
+                      key: "config",
+                      label: "Configurar",
+                      icon: Settings2,
+                      onSelect: () => onOpenConfig(office),
+                      disabled: !enabledForConfig,
+                      disabledReason: "Habilita este organismo para configurar bloqueos y restricciones.",
+                    },
+                  ]}
+                />
+              );
+            },
+          } satisfies DataTableColumn<TransitOffice>,
+        ]),
   ];
 
   return (
@@ -281,8 +294,9 @@ export function OTConfigTable({
       <div>
         <h4 className="text-sm font-semibold">Organismos de Tránsito</h4>
         <p className="mt-0.5 text-[11px] opacity-60">
-          Habilita cada organismo y, desde «⋯ Acciones», configura sus bloqueos y restricciones de
-          consulta. Los cambios se guardan al instante; no requieren «Guardar todo».
+          {readOnly
+            ? "Organismos habilitados para esta compañía. Solo lectura."
+            : "Habilita cada organismo y, desde «⋯ Acciones», configura sus bloqueos y restricciones de consulta. Los cambios se guardan al instante; no requieren «Guardar todo»."}
         </p>
       </div>
 
