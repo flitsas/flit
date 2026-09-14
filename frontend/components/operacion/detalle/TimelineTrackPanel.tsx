@@ -40,8 +40,10 @@ export interface TimelineTrackPanelProps {
  * justo el dato que este panel existe para mostrar (quién, qué correo, qué empresa). El patrón de
  * carril vertical con una tarjeta por evento ya está probado en FLIT —el Historial de
  * `TramiteTrackingModal`— y no tiene techo: cada evento es su propia tarjeta, nunca compite por
- * ancho con el de al lado, y la lista simplemente crece hacia abajo (con scroll interno pasado
- * cierto alto, para no descuadrar el modal).</p>
+ * ancho con el de al lado, y la lista simplemente crece hacia abajo. Sin scroll interno propio a
+ * propósito: el modal contenedor (`DETALLE_SHEET_CLASS`) ya scrollea de punta a punta, y un
+ * `max-h` + `overflow-y-auto` aquí dentro solo agregaba una SEGUNDA barra de scroll superpuesta a
+ * la del modal — confuso, no una mejora.</p>
  *
  * <p><b>Por qué ya no hay selección máster/detalle.</b> El track horizontal mostraba el detalle de
  * UN hito a la vez (el que estuviera enfocado); los demás quedaban reducidos a un punto mudo. Con
@@ -66,10 +68,7 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
       <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: DETALLE_BLUE }}>
         {title}
       </h4>
-      <ol
-        aria-label={title}
-        className="relative max-h-[26rem] space-y-4 overflow-y-auto py-1 pl-5 pr-1"
-      >
+      <ol aria-label={title} className="relative space-y-4 py-1 pl-5">
         {nodes.map((n, i) => (
           <li key={`${n.label}-${i}`} className="relative">
             {/* Carril: punto de color propio del hito + línea de conexión hacia el siguiente. El
