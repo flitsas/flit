@@ -103,6 +103,10 @@ internal static class CoveredQueries
         // HU #12361 — auditoria del acceso consolidado (NetworkAccessAuditTests).
         new("Q31", "ProcedureInstanceRepository.ListTenantIdsWithMatchesAsync (TenantScope, hijos alcanzados por las estadisticas)", "TenantScope", 1, SupportsGlobal: false),
         new("Q32", "NetworkAccessAuditReader.SearchAsync (auditoria del hijo / SuperAdmin)", "NetworkAccessAuditQuery.TenantId", 0, SupportsGlobal: true),
+        // HU #12359 — estadisticas de red con conjunto explicito = ANY(@tenants) (NetworkAnalyticsTests). Sin modo global.
+        new("Q33", "AnalyticsNetworkReadRepository.GetNetworkOverviewAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 2, SupportsGlobal: false),
+        new("Q34", "AnalyticsNetworkReadRepository.GetNetworkTopProducersAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 1, SupportsGlobal: false),
+        new("Q35", "AnalyticsNetworkReadRepository.GetNetworkMonthlyTrendAsync (red, uuid[])", "IReadOnlySet<Guid> tenantIds", 2, SupportsGlobal: false),
     ];
 
     public static CoveredQuery Get(string id) =>

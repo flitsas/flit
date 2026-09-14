@@ -1,4 +1,4 @@
-using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Queries.Domain.Tenancy;
 
 namespace Flit.Api.Authorization;
 

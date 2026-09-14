@@ -3896,6 +3896,129 @@ paths:
         "404":
           description: El trámite no existe o no está en el conjunto de lectura de la cabeza.
 
+  /api/v1/tramites/network/stats/overview:
+    get:
+      operationId: tramitesNetworkStatsOverview
+      tags: [Tramites, Red]
+      summary: Métricas por categoría/estado del universo consolidado de la red (cabeza de grupo)
+      description: >
+        HU #12359 — la MISMA forma que `GET /api/v1/analytics/overview` (`tenantId`, `from`, `to`,
+        `categories`) sobre el conjunto de lectura de la cabeza (padre y sus hijos) resuelto en el servidor,
+        más `scope.tenantIds` (los clientes efectivamente consultados). `childTenantId` acota a UN cliente
+        de la red (puede ser la propia cabeza); uno fuera del conjunto de lectura responde 403
+        `network_child_out_of_scope` SIN ejecutar la consulta (AC5). El conjunto viaja a la base como un
+        único parámetro de arreglo (`tenant_id = ANY(@tenants)`, AC3); un conjunto vacío no devuelve
+        filas (AC4). Las rutas de `/api/v1/analytics` no cambian (AC6/AC7). Cada petición deja un
+        registro en la auditoría de acceso consolidado (`network.stats.overview`, HU #12361).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - $ref: "#/components/parameters/NetworkStatsChildTenantId"
+      responses:
+        "200":
+          description: Métricas agregadas de la red en el periodo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkAnalyticsOverviewResponse"
+        "400":
+          description: Rango inválido (`from` posterior a `to`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin) o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/stats/productivity/top:
+    get:
+      operationId: tramitesNetworkStatsTopProducers
+      tags: [Tramites, Red]
+      summary: Top de radicadores de la red por trámites enviados (cabeza de grupo)
+      description: >
+        HU #12359 — la MISMA forma que `GET /api/v1/analytics/productivity/top` (`items`) sobre el
+        conjunto de lectura de la cabeza, más `scope.tenantIds`. Ranking único por usuario sobre toda la
+        red (un gestor que radique en varios clientes del conjunto es una sola fila). Mismo `limit`
+        (por defecto 5, máximo 50) y mismas reglas de `childTenantId` que `/network/stats/overview`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 5, minimum: 1, maximum: 50 }
+          description: Tamaño del ranking (por defecto 5; por encima de 50 cae al tope).
+        - $ref: "#/components/parameters/NetworkStatsChildTenantId"
+      responses:
+        "200":
+          description: Ranking de productividad de la red en el periodo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkTopProducersResponse"
+        "400":
+          description: Rango inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required` o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/stats/monthly-trend:
+    get:
+      operationId: tramitesNetworkStatsMonthlyTrend
+      tags: [Tramites, Red]
+      summary: Tendencia mensual de trámites por categoría del universo consolidado de la red
+      description: >
+        HU #12359 — la MISMA forma que `GET /api/v1/analytics/monthly-trend` (`items` con
+        `year`, `month`, `category`, `total`) sobre el conjunto de lectura de la cabeza, más
+        `scope.tenantIds`. Un punto por (año, mes, categoría) sumando los clientes del conjunto.
+        Mismas reglas de `childTenantId` que `/network/stats/overview`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - $ref: "#/components/parameters/NetworkStatsChildTenantId"
+      responses:
+        "200":
+          description: Tendencia mensual de la red en el periodo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkMonthlyTrendResponse"
+        "400":
+          description: Rango inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required` o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/network-access-audit/mine:
     get:
       operationId: tramitesNetworkAccessAuditMine
@@ -8940,6 +9063,27 @@ components:
       bearerFormat: JWT
 
   parameters:
+    NetworkStatsFrom:
+      name: from
+      in: query
+      required: true
+      schema: { type: string, format: date }
+      description: Fecha inicial inclusiva (YYYY-MM-DD) — HU #12359.
+    NetworkStatsTo:
+      name: to
+      in: query
+      required: true
+      schema: { type: string, format: date }
+      description: Fecha final inclusiva (YYYY-MM-DD) — HU #12359.
+    NetworkStatsChildTenantId:
+      name: childTenantId
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+      description: >
+        Cliente de la red al que acotar (puede ser la propia cabeza). Siempre subconjunto del alcance
+        resuelto en el servidor; uno fuera del conjunto de lectura responde 403 `network_child_out_of_scope`
+        sin ejecutar la consulta (HU #12359, AC5).
     NetworkAccessAuditFrom:
       name: from
       in: query
@@ -11888,6 +12032,65 @@ components:
           minimum: 1
           maximum: 200
           description: Fuera del rango cae al tope de 200; ausente ⇒ primera página con el tope.
+
+    NetworkScope:
+      type: object
+      description: Alcance efectivo de una consulta de red (HU #12359) — los clientes que sí se consultaron.
+      properties:
+        tenantIds:
+          type: array
+          items: { type: string, format: uuid }
+      required: [tenantIds]
+
+    NetworkAnalyticsOverviewResponse:
+      type: object
+      description: >
+        Respuesta de `GET /api/v1/tramites/network/stats/overview` (HU #12359): `AnalyticsOverviewResponse`
+        más `scope`. `tenantId` es la cabeza o el hijo acotado por `childTenantId`.
+      properties:
+        tenantId: { type: string, format: uuid }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryMetrics"
+        scope:
+          $ref: "#/components/schemas/NetworkScope"
+      required: [tenantId, from, to, categories, scope]
+
+    NetworkTopProducersResponse:
+      type: object
+      description: Respuesta de `GET /api/v1/tramites/network/stats/productivity/top` (HU #12359).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TopProducer"
+        scope:
+          $ref: "#/components/schemas/NetworkScope"
+      required: [items, scope]
+
+    NetworkMonthlyTrendPoint:
+      type: object
+      properties:
+        year: { type: integer, example: 2026 }
+        month: { type: integer, minimum: 1, maximum: 12, example: 9 }
+        category: { type: string, enum: [matriculas, traspasos, otros] }
+        total: { type: integer, example: 42 }
+      required: [year, month, category, total]
+
+    NetworkMonthlyTrendResponse:
+      type: object
+      description: Respuesta de `GET /api/v1/tramites/network/stats/monthly-trend` (HU #12359).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkMonthlyTrendPoint"
+        scope:
+          $ref: "#/components/schemas/NetworkScope"
+      required: [items, scope]
 
     PlateHistoryResponse:
       type: object

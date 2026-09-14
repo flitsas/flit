@@ -142,6 +142,9 @@ debe ser del lector; C2 es simétrico a C1 y actúa como dueño de las filas que
 | Q30 | `ProcedureInstanceRepository.GetByIdWithDetailsAsync` (`TenantScope`, detalle de red — HU #12358) | `TenantScope` | ✔ (X ⇒ not_found; vacío ⇒ null; desvínculo ⇒ not_found) | ✔ (≡ detalle propio del hijo) | — |
 | Q31 | `ProcedureInstanceRepository.ListTenantIdsWithMatchesAsync` (`TenantScope`, hijos alcanzados por las estadísticas — HU #12361, `NetworkAccessAuditTests`) | `TenantScope` | ✔ (Group(P) ⇒ P, C1, C2; acotado a C2 ⇒ solo C2) | — | — |
 | Q32 | `NetworkAccessAuditReader.SearchAsync` (auditoría del acceso consolidado: consulta del hijo y del SuperAdmin — HU #12361) | `NetworkAccessAuditQuery.TenantId` | ✔ (C1 solo ve accesos que lo alcanzaron; C2 y X no ven los de C1; sobrevive al desvínculo) | — | ✔ (`TenantId = null` ⇒ toda la plataforma, paginado y acotado a 200) |
+| Q33 | `AnalyticsNetworkReadRepository.GetNetworkOverviewAsync` (red, `= ANY(@tenants)` `uuid[]` — HU #12359, `NetworkAnalyticsTests`) | `IReadOnlySet<Guid> tenantIds` | ✔ (Group(P) = P+C1+C2 exacto, nunca X/S; {C1} = solo C1; vacío ⇒ 0 sin ir a la base) | ✔ ({S} ≡ `Guid?` S) | — (sin modo global por diseño) |
+| Q34 | `AnalyticsNetworkReadRepository.GetNetworkTopProducersAsync` (red, `uuid[]` — HU #12359) | `IReadOnlySet<Guid> tenantIds` | ✔ (Group(P) = gestores de P, C1, C2; {C1} = solo C1; vacío ⇒ 0) | ✔ ({S} ≡ `Guid?` S) | — |
+| Q35 | `AnalyticsNetworkReadRepository.GetNetworkMonthlyTrendAsync` (red, `uuid[]` — HU #12359) | `IReadOnlySet<Guid> tenantIds` | ✔ (Group(P) = suma por año/mes/categoría, un punto por clave; {C1} = solo C1; vacío ⇒ 0) | ✔ ({S} ≡ `Guid?` S) | — |
 
 **Demostración de que la suite detecta fugas:** `TenantLeakTests.El_helper_de_fuga_detecta_filas_ajenas` ejecuta
 `WhereTenantInScope(TenantScope.All)` sobre el escenario (10 filas de 5 clientes) y afirma que `LeakAssert` lanza

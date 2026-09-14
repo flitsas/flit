@@ -1,5 +1,6 @@
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Auditing;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.Auditing;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
@@ -23,6 +24,8 @@ namespace Flit.Api.Endpoints.Tramites;
 ///   <item><c>GET /instances/{id}</c>: detalle en solo lectura, mismos campos que el detalle propio
 ///   más <c>tenantId</c>/<c>tenantName</c> del dueño. Sin <c>preview-url</c> ni contenido de
 ///   documentos (AC5): el único canal de contenido es la descarga proxeada de la HU #12410.</item>
+///   <item><c>GET /stats/overview</c>, <c>GET /stats/productivity/top</c>, <c>GET /stats/monthly-trend</c>
+///   (HU #12359, <see cref="NetworkAnalyticsEndpoints"/>): estadísticas agregadas del universo consolidado.</item>
 /// </list>
 /// Policy de cabeza (<see cref="GroupHeadReadFilter"/>) sobre todo el grupo: sin alcance de grupo ⇒ 403.
 /// HU #12361: <see cref="NetworkAccessAuditFilter"/> (más externo) escribe UN registro por petición en
@@ -187,6 +190,10 @@ internal static class NetworkProcedureEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
+
+        // HU #12359 — estadísticas agregadas de la red (/stats/overview, /stats/productivity/top,
+        // /stats/monthly-trend) sobre el MISMO grupo: heredan policy de cabeza y auditoría.
+        group.MapNetworkStats();
 
         return app;
     }

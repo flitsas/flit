@@ -14,8 +14,17 @@ public static class NetworkAccessVocabulary
         /// <summary>Detalle de un trámite de un hijo (<c>GET /network/instances/{id}</c>).</summary>
         public const string InstancesDetail = "network.instances.detail";
 
-        /// <summary>Estadísticas / conteos del universo consolidado (<c>POST /network/instances/estado-counts</c>).</summary>
+        /// <summary>
+        /// Estadísticas / conteos del universo consolidado (<c>POST /network/instances/estado-counts</c> y
+        /// <c>GET /network/stats/overview</c>, HU #12359).
+        /// </summary>
         public const string StatsOverview = "network.stats.overview";
+
+        /// <summary>Top de productividad de la red (<c>GET /network/stats/productivity/top</c>, HU #12359).</summary>
+        public const string StatsProductivityTop = "network.stats.productivity_top";
+
+        /// <summary>Tendencia mensual de la red (<c>GET /network/stats/monthly-trend</c>, HU #12359).</summary>
+        public const string StatsMonthlyTrend = "network.stats.monthly_trend";
 
         /// <summary>Listado de documentos de un trámite de un hijo (HU #12410).</summary>
         public const string AttachmentsList = "network.attachments.list";
