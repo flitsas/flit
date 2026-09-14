@@ -103,9 +103,9 @@ public static class ProcedureInstanceSortFields
             ["tipo_tramite"] = ProcedureInstanceSortBy.TipoTramite,
             ["tipoTramite"] = ProcedureInstanceSortBy.TipoTramite,
             ["fuente"] = ProcedureInstanceSortBy.Fuente,
-        ["vendedor"] = ProcedureInstanceSortBy.Vendedor,
-        ["organismo"] = ProcedureInstanceSortBy.Organismo,
-        ["compania"] = ProcedureInstanceSortBy.Compania,
+            ["vendedor"] = ProcedureInstanceSortBy.Vendedor,
+            ["organismo"] = ProcedureInstanceSortBy.Organismo,
+            ["compania"] = ProcedureInstanceSortBy.Compania,
         };
 
     /// <summary>

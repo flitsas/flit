@@ -33,22 +33,22 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
         string? vendedor = null, string? comprador = null, Guid? createdBy = null,
         DateTimeOffset? createdAt = null, DateTimeOffset? updatedAt = null, bool prioritario = false,
         string modalidad = "traspaso") => new()
-    {
-        ProcedureType = ProcedureTypeFixture.For(modalidad),
-        Id = Guid.NewGuid(),
-        TenantId = tenantId,
-        ProcedureTypeId = Guid.NewGuid(),
-        ReferenceNumber = reference,
-        Consecutivo = RadicadoFixture.ConsecutivoDe(reference),
-        Vin = vin,
-        Plate = plate,
-        VendedorNombre = vendedor,
-        CompradorNombre = comprador,
-        CreatedByUserId = createdBy ?? Guid.NewGuid(),
-        CreatedAt = createdAt ?? Base,
-        UpdatedAt = updatedAt,
-        Prioritario = prioritario,
-    };
+        {
+            ProcedureType = ProcedureTypeFixture.For(modalidad),
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = reference,
+            Consecutivo = RadicadoFixture.ConsecutivoDe(reference),
+            Vin = vin,
+            Plate = plate,
+            VendedorNombre = vendedor,
+            CompradorNombre = comprador,
+            CreatedByUserId = createdBy ?? Guid.NewGuid(),
+            CreatedAt = createdAt ?? Base,
+            UpdatedAt = updatedAt,
+            Prioritario = prioritario,
+        };
 
     private static ProcedureInstanceSignature FirmaCompraventa(string parte, string estado) => new()
     {
