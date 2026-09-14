@@ -288,6 +288,9 @@ public static class DependencyInjection
         services.AddScoped<UseCases.Consultations.ExternalQueryCacheService>();
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
 
+        // Epic #12543 — aceptación de Términos y Condiciones antes de crear un trámite.
+        services.AddScoped<UseCases.TermsAcceptance.RecordProcedureTermsAcceptanceHandler>();
+
         // Confirmación RUNT (Epic #12234, Feature #12276): configuración global (HU #12277).
         services.AddScoped<UseCases.RuntConfirmation.GetRuntConfirmationSettingsHandler>();
         services.AddScoped<UseCases.RuntConfirmation.UpdateRuntConfirmationSettingsHandler>();

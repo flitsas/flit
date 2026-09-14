@@ -194,6 +194,10 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // compañía), lotes y resultados son de UNA compañía. El tenant se impone desde el JWT igual
         // que el resto del runtime; el SuperAdmin acota con X-Tenant-Id como en /instances.
         new("/api/v1/tramites/carga-masiva", RouteMatch.Prefix),
+        // Epic #12543 — aceptación de T&C antes de crear trámite: la evidencia lleva el tenant desde
+        // el que se radicaba, y ese tenant sale del JWT (el SuperAdmin acota con X-Tenant-Id). Prefix
+        // para cubrir también GET /current.
+        new("/api/v1/tramites/terms-acceptances", RouteMatch.Prefix),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

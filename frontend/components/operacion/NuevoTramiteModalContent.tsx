@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Info } from 'lucide-react';
+import { ChevronDown, Info, Loader2 } from 'lucide-react';
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
 import { useTiposHabilitados } from '@/hooks/useTiposHabilitados';
+import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   TIPOS_UI_MOCKUP,
   infoTextNuevoTramite,
@@ -15,6 +16,7 @@ import {
 } from '@/lib/tramites/nuevo-tramite-resolver';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { OperacionLoadingState } from './states';
+import { TerminosCondicionesCheckbox } from './TerminosCondicionesCheckbox';
 
 const BLUE = '#557EFF';
 const BORDER = '#DFE5ED';
@@ -210,6 +212,9 @@ export function NuevoTramiteModalContent({
   const [modalidad, setModalidad] = useState<ModalidadTraspasoUi>('bilateral');
   const [subtipoOtros, setSubtipoOtros] = useState('');
   const [resolveError, setResolveError] = useState<string | null>(null);
+  // Epic #12543 — T&C: en memoria del modal, se vuelve a pedir en cada apertura (RN-05).
+  const [terminosAceptados, setTerminosAceptados] = useState(false);
+  const [registrandoTerminos, setRegistrandoTerminos] = useState(false);
 
   const tiposPlanos: ProcedureTypeSummary[] = useMemo(
     () => familias.flatMap((f) => f.tipos),
@@ -273,11 +278,19 @@ export function NuevoTramiteModalContent({
     tiposPlanos,
   );
 
-  const puedeIniciar =
+  const tipoCompleto =
     tipo !== null && !estaBloqueada(tipo) && (tipo !== 'OTROS' || subtipoOtros.length > 0);
 
-  const iniciar = () => {
-    if (!tipo) return;
+  // RN-06: sin el checkbox marcado, «Iniciar trámite» no es clicable aunque el tipo esté completo.
+  const puedeIniciar = tipoCompleto && terminosAceptados && !registrandoTerminos;
+
+  /**
+   * Resuelve el code y, ANTES de abrir el asistente, deja registrada la aceptación de T&C en el
+   * backend (RN-03): solo con 201 se navega. Si el registro falla, el modal se queda donde está y
+   * lo dice; el gestor puede reintentar.
+   */
+  const iniciar = async () => {
+    if (!tipo || !terminosAceptados) return;
     const result = resolveNuevoTramiteCode(
       {
         tipo,
@@ -293,6 +306,14 @@ export function NuevoTramiteModalContent({
       return;
     }
     setResolveError(null);
+    setRegistrandoTerminos(true);
+    try {
+      await tramitesClient.acceptProcedureTerms(result.procedureTypeCode);
+    } catch {
+      setResolveError('No pudimos registrar tu aceptación de los Términos y Condiciones. Inténtalo de nuevo.');
+      setRegistrandoTerminos(false);
+      return;
+    }
     onElegir(result.procedureTypeCode);
   };
 
@@ -391,19 +412,33 @@ export function NuevoTramiteModalContent({
       </div>
 
       {/*
-        La franja se reserva SIEMPRE, con `invisible` cuando no hay nada que decir: si se montara y
-        desmontara, el modal daría un salto de 56px justo al elegir una tarjeta — el momento en que
-        el gestor está mirando.
+        La franja solo se monta cuando hay algo que decir. Antes se reservaba SIEMPRE (con
+        `invisible`) para que el modal no diera un salto al elegir tarjeta; con el bloque de T&C
+        debajo (Epic #12543) ese hueco vacío se veía peor que el salto, así que ahora el checkbox
+        queda pegado a las tarjetas y baja cuando aparece la descripción (decisión de Samuel).
       */}
-      <div
-        className={`mt-4 flex min-h-[56px] w-full items-start gap-2.5 rounded-lg bg-[#F4F7FF] p-3.5 dark:bg-white/5 ${
-          infoText ? '' : 'invisible'
-        }`}
-        role="status"
-        aria-live="polite"
-      >
-        <Info className="mt-0.5 h-5 w-5 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
-        <p className="text-[13.5px] leading-snug text-[#59677D] dark:text-white/70">{infoText}</p>
+      {infoText ? (
+        <div
+          className="mt-4 flex w-full items-start gap-2.5 rounded-lg bg-[#F4F7FF] p-3.5 dark:bg-white/5"
+          role="status"
+          aria-live="polite"
+        >
+          <Info className="mt-0.5 h-5 w-5 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
+          <p className="text-[13.5px] leading-snug text-[#59677D] dark:text-white/70">{infoText}</p>
+        </div>
+      ) : null}
+
+      {/* Epic #12543 — aceptación de T&C, en el mismo modal y antes del botón: el tipo elegido y la
+          casilla marcada son las dos condiciones de «Iniciar trámite». */}
+      <div className="mt-4">
+        <TerminosCondicionesCheckbox
+          checked={terminosAceptados}
+          onChange={(v) => {
+            setTerminosAceptados(v);
+            setResolveError(null);
+          }}
+          disabled={registrandoTerminos}
+        />
       </div>
 
       {resolveError ? (
@@ -417,7 +452,8 @@ export function NuevoTramiteModalContent({
           <button
             type="button"
             onClick={onCancelar}
-            className="min-w-[160px] rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2"
+            disabled={registrandoTerminos}
+            className="min-w-[160px] rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             style={{ background: ALERT }}
           >
             Cancelar
@@ -425,12 +461,13 @@ export function NuevoTramiteModalContent({
         ) : null}
         <button
           type="button"
-          onClick={iniciar}
+          onClick={() => void iniciar()}
           disabled={!puedeIniciar}
-          className="min-w-[160px] rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white shadow-md transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white shadow-md transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
           style={{ background: WIZARD_CTA_GRADIENT }}
         >
-          Iniciar trámite
+          {registrandoTerminos ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+          {registrandoTerminos ? 'Registrando…' : 'Iniciar trámite'}
         </button>
       </div>
     </div>
