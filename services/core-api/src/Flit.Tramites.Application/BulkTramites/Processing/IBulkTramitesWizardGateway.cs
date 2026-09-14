@@ -41,6 +41,20 @@ public interface IBulkTramitesWizardGateway
         CancellationToken ct);
 
     /// <summary>
+    /// Consulta de persona JURÍDICA por NIT (HU #12538): RUES para la razón social y el directorio
+    /// de representantes legales de la empresa para el firmante, igual que el botón «Consultar» del
+    /// paso de actores cuando el documento es NIT. Devuelve la empresa resuelta, o el código de
+    /// error: <c>empresa_no_encontrada</c> cuando RUES responde pero no conoce el NIT, o
+    /// <c>consulta_empresa_fallida</c> si la consulta se cae. El directorio va en el resultado (puede
+    /// venir null): decidir qué hacer sin representante es del procesador, no de este puerto.
+    /// </summary>
+    Task<(BulkTramitesCompanyLookup? Company, string? Error)> LookupCompanyAsync(
+        Guid procedureInstanceId,
+        Guid tenantId,
+        string nit,
+        CancellationToken ct);
+
+    /// <summary>
     /// Paso de actores: guarda las partes con el MISMO caso de uso del wizard, de modo que el envío
     /// de validación de identidad se dispara solo, sin lógica propia de la carga masiva. Devuelve el
     /// código de error, o null si guardó.
@@ -51,3 +65,12 @@ public interface IBulkTramitesWizardGateway
         IReadOnlyList<ActorInput> actors,
         CancellationToken ct);
 }
+
+/// <summary>
+/// Empresa resuelta para un actor con NIT: la razón social tal como la entrega RUES (el recorte de
+/// cláusulas societarias lo hace el procesador, igual que el wizard) y, si el tenant la tiene en su
+/// directorio, la entrada con sus representantes.
+/// </summary>
+public sealed record BulkTramitesCompanyLookup(
+    string RazonSocial,
+    BulkTramitesCompanyDirectoryEntry? Directorio);

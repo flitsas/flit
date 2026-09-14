@@ -224,6 +224,17 @@ export function mensajeMotivo(motivo: string): string {
       'La consulta de la persona al RUNT falló. Retoma el trámite y vuelve a consultarla.',
     unsupported_document_type:
       'Ese tipo de documento no se consulta en el RUNT (personas jurídicas): complétalo en el trámite.',
+    // HU #12538 — actor con NIT: la empresa sale de RUES y su firmante del directorio de
+    // representantes legales de la compañía.
+    empresa_no_encontrada: 'RUES no encontró una empresa con ese NIT. Revísalo y complétalo en el trámite.',
+    consulta_empresa_fallida:
+      'La consulta de la empresa a RUES falló. Retoma el trámite y vuelve a consultarla.',
+    persona_juridica_sin_representante_registrado:
+      'La empresa no tiene representante legal registrado en tu directorio. Regístralo en Representantes legales o complétalo en el trámite.',
+    representante_no_registrado:
+      'La cédula del representante no corresponde a ninguno registrado para esa empresa. Revísala o deja la columna vacía para usar el principal.',
+    rl_email_requerido:
+      'El representante legal registrado no tiene correo: agrégalo en Representantes legales o complétalo en el trámite.',
     error_inesperado: 'Ocurrió un error inesperado al procesar la fila.',
     // Códigos del paso 1 del wizard que una fila puede heredar. Son los mismos que el wizard
     // muestra con su propio texto; aquí se traducen para que el motivo no sea una constante.

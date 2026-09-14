@@ -163,6 +163,12 @@ public static class BulkTramitesRowMapper
         // El nombre sale VACÍO a propósito: la plantilla no lo pide y lo rellena el procesador con
         // el resultado de la consulta de persona al RUNT (ver BulkTramitesBatchProcessor). Un actor
         // que llegue al guardado con el nombre vacío es un error de flujo, no un dato faltante.
+        //
+        // El representante legal (HU #12538) también llega a medias: aquí solo se transcribe la
+        // cédula que el usuario eligió, si la escribió; nombre, correo y teléfono los pone el
+        // procesador desde el directorio de la empresa.
+        var representanteDocumento = Value(values, $"{prefijo}_{BulkTramitesTemplateCatalog.RepresentanteDocumentoSuffix}");
+
         return new ActorInput(
             rol.Trim().ToLowerInvariant(),
             Value(values, $"{prefijo}_tipo_documento") ?? "CC",
@@ -172,6 +178,9 @@ public static class BulkTramitesRowMapper
             Value(values, $"{prefijo}_celular"),
             Ciudad: Value(values, $"{prefijo}_ciudad"),
             Direccion: Value(values, $"{prefijo}_direccion"),
+            RepresentanteLegal: representanteDocumento is null
+                ? null
+                : new ActorRepresentanteLegal(null, representanteDocumento, null, null, null),
             Ordinal: ordinal,
             Porcentaje: porcentaje);
     }

@@ -14,6 +14,8 @@ public sealed class BulkTramitesWizardGateway(
     CreateProcedureInstanceFromConsultaHandler createHandler,
     PutActorsHandler actorsHandler,
     RuntPersonLookupHandler personLookupHandler,
+    RuesPersonLookupHandler companyLookupHandler,
+    IBulkTramitesLegalRepresentativeDirectory representativeDirectory,
     ITransitOfficeResolver transitOfficeResolver) : IBulkTramitesWizardGateway
 {
     /// <summary>El proveedor respondió pero no conoce el documento: dato mal escrito o persona sin registro RUNT.</summary>
@@ -21,6 +23,19 @@ public sealed class BulkTramitesWizardGateway(
 
     /// <summary>La consulta al proveedor se cayó (red, 5xx, timeout). Distinto de «no existe».</summary>
     public const string ConsultaConductorFallida = "consulta_conductor_fallida";
+
+    /// <summary>RUES respondió pero no conoce el NIT (HU #12538).</summary>
+    public const string EmpresaNoEncontrada = "empresa_no_encontrada";
+
+    /// <summary>La consulta a RUES se cayó (HU #12538). Distinto de «no existe», igual que en conductor.</summary>
+    public const string ConsultaEmpresaFallida = "consulta_empresa_fallida";
+
+    /// <summary>
+    /// Lo que <see cref="RuesPersonLookupHandler"/> devuelve como error cuando el proveedor no
+    /// responde (ver <c>RuesActorJuridicalLookup.ConsultAsync</c>): es el único error suyo que
+    /// merece reintento.
+    /// </summary>
+    private const string RuesProviderUnavailable = "provider_unavailable";
 
     /// <summary>
     /// Motivo de fila cuando el organismo escrito en el Excel no es uno de los habilitados de la
@@ -153,6 +168,46 @@ public sealed class BulkTramitesWizardGateway(
         return persona is { Found: true } && !string.IsNullOrWhiteSpace(persona.FullName)
             ? (persona.FullName.Trim(), null)
             : (null, ConductorNoEncontrado);
+    }
+
+    public async Task<(BulkTramitesCompanyLookup? Company, string? Error)> LookupCompanyAsync(
+        Guid procedureInstanceId,
+        Guid tenantId,
+        string nit,
+        CancellationToken ct)
+    {
+        RuesPersonDto? empresa;
+        string? error;
+        try
+        {
+            (empresa, error) = await companyLookupHandler
+                .HandleAsync(procedureInstanceId, tenantId, nit, ct)
+                .ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // La caída del proveedor es un resultado de la fila, no un fallo del lote.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning restore CA1031
+        {
+            return (null, ConsultaEmpresaFallida);
+        }
+
+        if (error is not null)
+        {
+            return (null, error == RuesProviderUnavailable ? ConsultaEmpresaFallida : error);
+        }
+
+        if (empresa is not { Found: true } || string.IsNullOrWhiteSpace(empresa.RazonSocial))
+        {
+            return (null, EmpresaNoEncontrada);
+        }
+
+        // El directorio se consulta DESPUÉS de saber que la empresa existe: sin RUES no hay razón
+        // social y el wizard tampoco precarga nada en ese caso.
+        var directorio = await representativeDirectory
+            .FindByNitAsync(tenantId, nit, ct)
+            .ConfigureAwait(false);
+
+        return (new BulkTramitesCompanyLookup(empresa.RazonSocial.Trim(), directorio), null);
     }
 
     public async Task<string?> SaveActorsAsync(

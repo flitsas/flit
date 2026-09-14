@@ -132,6 +132,25 @@ public sealed class BulkTramitesXlsxTemplateTests
     }
 
     [Fact]
+    public void LasTresPlantillas_PidenLaCedulaDelRepresentante_JustoDespuesDelDocumentoDelActor()
+    {
+        // HU #12538: un actor con NIT es una empresa y firma su representante legal. La columna es
+        // opcional (solo cuando hay varios registrados), pero tiene que existir en las tres.
+        foreach (var (columnas, prefijo) in new[]
+                 {
+                     (BulkTramitesTemplateCatalog.MatriculaColumns(), "propietario_1"),
+                     (BulkTramitesTemplateCatalog.TraspasoColumns(), "vendedor_2"),
+                     (BulkTramitesTemplateCatalog.OtrosColumns([]), "actor_1"),
+                 })
+        {
+            var headers = columnas.Select(c => c.Header).ToList();
+            var documento = headers.IndexOf($"{prefijo}_numero_documento");
+            documento.Should().BeGreaterThan(0);
+            headers[documento + 1].Should().Be($"{prefijo}_representante_documento");
+        }
+    }
+
+    [Fact]
     public async Task Build_Otros_ElDesplegableDeTipoTramite_ExcluyeMatriculaYTraspaso_YSoloTraeActivos()
     {
         _procedureTypeRepository

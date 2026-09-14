@@ -344,4 +344,190 @@ public sealed class BulkTramitesBatchProcessorTests
         fila.OutcomeReason.Should().Be("error_inesperado");
         batch.Status.Should().Be(BulkTramitesBatchStatus.Completed);
     }
+
+    // ----- HU #12538: actores persona jurídica (NIT) -----
+
+    private static BulkTramitesBatchRow FilaConEmpresa(string? representanteDocumento = null, string? email = "empresa@example.com") => new()
+    {
+        Id = Guid.NewGuid(),
+        RowNumber = 1,
+        ValuesJson = JsonSerializer.Serialize(new Dictionary<string, string?>
+        {
+            ["vin"] = "9BWZZZ377VT004259",
+            ["propietario_1_tipo_documento"] = "NIT",
+            ["propietario_1_numero_documento"] = "900123456",
+            ["propietario_1_representante_documento"] = representanteDocumento,
+            ["propietario_1_email"] = email,
+            ["propietario_1_celular"] = "3000000000",
+        }),
+        CreatedAt = DateTimeOffset.UtcNow,
+    };
+
+    private static readonly BulkTramitesLegalRepresentative RlPrimario =
+        new("CC", "1020304050", "HECTOR CARDENAS", "hector@example.com", "3111111111");
+
+    private static readonly BulkTramitesLegalRepresentative RlSecundario =
+        new("CC", "52000111", "MARIA LOPEZ", "maria@example.com", "3222222222");
+
+    private void EmpresaOk(params BulkTramitesLegalRepresentative[] representantes) => _gateway
+        .LookupCompanyAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), "900123456", Arg.Any<CancellationToken>())
+        .Returns((new BulkTramitesCompanyLookup(
+            "TRANSPORTES DEMO S.A.S., ADEMÁS PODRÁ GIRAR BAJO LA SIGLA TDEMO",
+            representantes.Length == 0
+                ? null
+                : new BulkTramitesCompanyDirectoryEntry("contacto@demo.com", "Cra 1 # 2-3", "Medellín", "6041234567", representantes)),
+            (string?)null));
+
+    [Fact]
+    public async Task NitConRepresentanteRegistrado_SeGuardaComoJuridica_ConElRlPrimarioYSinMecanismoDeFirma()
+    {
+        VehiculoOk();
+        CreacionOk();
+        EmpresaOk(RlPrimario, RlSecundario);
+        IReadOnlyList<ActorInput>? guardados = null;
+        _gateway.SaveActorsAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Do<IReadOnlyList<ActorInput>>(a => guardados = a), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        var batch = Batch("matricula", FilaConEmpresa());
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        batch.Rows.Single().Outcome.Should().Be(BulkTramitesRowOutcome.Created);
+        var actor = guardados.Should().ContainSingle().Subject;
+        actor.PersonType.Should().Be("juridical");
+        // La razón social se recorta en la primera coma, igual que en el wizard.
+        actor.NombreCompleto.Should().Be("TRANSPORTES DEMO S.A.S.");
+        // Lo escrito en la fila manda; el directorio rellena lo que falta.
+        actor.Email.Should().Be("empresa@example.com");
+        actor.Telefono.Should().Be("3000000000");
+        actor.Ciudad.Should().Be("Medellín");
+        actor.Direccion.Should().Be("Cra 1 # 2-3");
+        var rl = actor.RepresentanteLegal.Should().NotBeNull().And.Subject.As<ActorRepresentanteLegal>();
+        rl.NumeroDocumento.Should().Be("1020304050");
+        rl.NombreCompleto.Should().Be("HECTOR CARDENAS");
+        rl.Email.Should().Be("hector@example.com");
+        rl.Telefono.Should().Be("3111111111");
+        rl.MecanismoFirma.Should().BeNull("sin elección aplica la precedencia del baúl al guardar");
+        // La persona jurídica NO pasa por la consulta de conductor.
+        await _gateway.DidNotReceive().LookupPersonAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task NitSinRepresentanteRegistrado_ElTramiteSeCrea_YQuedaPorRetomarConElNit()
+    {
+        VehiculoOk();
+        CreacionOk();
+        EmpresaOk();
+
+        var batch = Batch("matricula", FilaConEmpresa());
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        var fila = batch.Rows.Single();
+        fila.Outcome.Should().Be(BulkTramitesRowOutcome.CreatedPending);
+        fila.OutcomeReason.Should().Be("persona_juridica_sin_representante_registrado:NIT 900123456");
+        fila.ProcedureInstanceId.Should().Be(InstanceId);
+        await _gateway.DidNotReceive().SaveActorsAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<IReadOnlyList<ActorInput>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task NitQueRuesNoConoce_ElTramiteSeCrea_YNingunActorSeGuarda()
+    {
+        VehiculoOk();
+        CreacionOk();
+        _gateway.LookupCompanyAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(((BulkTramitesCompanyLookup?)null, "empresa_no_encontrada"));
+
+        var batch = Batch("matricula", FilaConEmpresa());
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        var fila = batch.Rows.Single();
+        fila.Outcome.Should().Be(BulkTramitesRowOutcome.CreatedPending);
+        fila.OutcomeReason.Should().Be("empresa_no_encontrada:NIT 900123456");
+        await _gateway.DidNotReceive().SaveActorsAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<IReadOnlyList<ActorInput>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CedulaDeRepresentanteEnLaFila_EligeEseRepresentante_AunqueNoSeaElPrimario()
+    {
+        VehiculoOk();
+        CreacionOk();
+        EmpresaOk(RlPrimario, RlSecundario);
+        IReadOnlyList<ActorInput>? guardados = null;
+        _gateway.SaveActorsAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Do<IReadOnlyList<ActorInput>>(a => guardados = a), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        // Con puntos y cero a la izquierda a propósito: se empata por dígitos, como en el wizard.
+        var batch = Batch("matricula", FilaConEmpresa(representanteDocumento: "052.000.111"));
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        batch.Rows.Single().Outcome.Should().Be(BulkTramitesRowOutcome.Created);
+        guardados.Should().ContainSingle().Which.RepresentanteLegal!.NombreCompleto.Should().Be("MARIA LOPEZ");
+    }
+
+    [Fact]
+    public async Task CedulaDeRepresentanteQueNoEstaRegistrada_LaFilaQuedaPorRetomar()
+    {
+        VehiculoOk();
+        CreacionOk();
+        EmpresaOk(RlPrimario);
+
+        var batch = Batch("matricula", FilaConEmpresa(representanteDocumento: "99999999"));
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        var fila = batch.Rows.Single();
+        fila.Outcome.Should().Be(BulkTramitesRowOutcome.CreatedPending);
+        fila.OutcomeReason.Should().Be("representante_no_registrado:NIT 900123456");
+    }
+
+    [Fact]
+    public async Task RuesCaido_SeReintentaUnaVez_YSiRespondeLaFilaSeCrea()
+    {
+        VehiculoOk();
+        CreacionOk();
+        _gateway.LookupCompanyAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(
+                ((BulkTramitesCompanyLookup?)null, "consulta_empresa_fallida"),
+                (new BulkTramitesCompanyLookup(
+                    "TRANSPORTES DEMO S.A.S.",
+                    new BulkTramitesCompanyDirectoryEntry(null, null, null, null, [RlPrimario])), (string?)null));
+        _gateway.SaveActorsAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<IReadOnlyList<ActorInput>>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        var batch = Batch("matricula", FilaConEmpresa());
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        batch.Rows.Single().Outcome.Should().Be(BulkTramitesRowOutcome.Created);
+        await _gateway.Received(2).LookupCompanyAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RuesCaidoDosVeces_LaFilaQuedaPorRetomar_ConMotivoDistintoDeNoEncontrada()
+    {
+        VehiculoOk();
+        CreacionOk();
+        _gateway.LookupCompanyAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(((BulkTramitesCompanyLookup?)null, "consulta_empresa_fallida"));
+
+        var batch = Batch("matricula", FilaConEmpresa());
+
+        await _processor.ProcessAsync(batch.Id, TestContext.Current.CancellationToken);
+
+        var fila = batch.Rows.Single();
+        fila.Outcome.Should().Be(BulkTramitesRowOutcome.CreatedPending);
+        fila.OutcomeReason.Should().Be("consulta_empresa_fallida:NIT 900123456");
+        await _gateway.Received(2).LookupCompanyAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
 }

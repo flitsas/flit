@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { CargaMasivaResultados } from '@/components/operacion/CargaMasivaResultados';
+import { CargaMasivaResultados, mensajeMotivo } from '@/components/operacion/CargaMasivaResultados';
 import type {
   BulkTramitesBatchDetail,
   BulkTramitesBatchSummary,
@@ -161,5 +161,15 @@ describe('CargaMasivaResultados (HU #12524)', () => {
     await user.selectOptions(screen.getByTestId('carga-masiva-selector-lote'), 'b-2');
 
     await waitFor(() => expect(detallar).toHaveBeenLastCalledWith('b-2'));
+  });
+
+  // HU #12538 — motivos de la persona jurídica: el cliente lee qué le falta a la empresa, con el NIT.
+  it('traduce los motivos de persona jurídica y conserva el NIT como detalle', () => {
+    expect(mensajeMotivo('persona_juridica_sin_representante_registrado:NIT 900123456')).toMatch(
+      /representante legal registrado.*\(NIT 900123456\)/i,
+    );
+    expect(mensajeMotivo('empresa_no_encontrada:NIT 900123456')).toMatch(/RUES no encontró.*\(NIT 900123456\)/i);
+    expect(mensajeMotivo('representante_no_registrado:NIT 900123456')).toMatch(/cédula del representante/i);
+    expect(mensajeMotivo('consulta_empresa_fallida:NIT 900123456')).toMatch(/consulta de la empresa a RUES falló/i);
   });
 });

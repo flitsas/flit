@@ -18,12 +18,14 @@ export const BULK_TRAMITES_TEMPLATES: readonly BulkTramitesTemplateOption[] = [
   {
     tipo: 'matricula',
     titulo: 'Matrícula inicial',
-    descripcion: 'Vehículo por VIN y propietarios (hasta 4, con porcentaje).',
+    descripcion:
+      'Vehículo por VIN y propietarios (hasta 4, con porcentaje). Las empresas van por NIT y firma su representante legal registrado.',
   },
   {
     tipo: 'traspaso',
     titulo: 'Traspaso',
-    descripcion: 'Vehículo por placa, comprador y vendedor (hasta 4 propietarios por lado).',
+    descripcion:
+      'Vehículo por placa, comprador y vendedor (hasta 4 propietarios por lado). Las empresas van por NIT y firma su representante legal registrado.',
   },
   {
     tipo: 'otros',

@@ -148,4 +148,41 @@ public sealed class BulkTramitesRowMapperTests
         ctx.Actors[1].Ordinal.Should().Be(2);
         ctx.Actors[1].Porcentaje.Should().Be(40m);
     }
+
+    [Fact]
+    public void ActorConNit_LaCedulaDelRepresentante_ViajaSoloComoDocumento_ParaQueElProcesadorLaResuelva()
+    {
+        var fila = Fila(
+            ("vin", "9BWZZZ377VT004251"),
+            ("propietario_1_tipo_documento", "NIT"),
+            ("propietario_1_numero_documento", "900123456"),
+            ("propietario_1_representante_documento", " 1020304050 "),
+            ("propietario_1_email", "empresa@example.com"));
+
+        var ctx = BulkTramitesRowMapper.Map(BulkTramitesTemplateType.Matricula, Tenant, Usuario, fila);
+
+        var actor = ctx.Actors.Should().ContainSingle().Subject;
+        actor.TipoDocumento.Should().Be("NIT");
+        actor.RepresentanteLegal.Should().NotBeNull();
+        actor.RepresentanteLegal!.NumeroDocumento.Should().Be("1020304050");
+        // Nombre, correo y teléfono del representante salen del directorio, no del Excel.
+        actor.RepresentanteLegal.NombreCompleto.Should().BeNull();
+        actor.RepresentanteLegal.Email.Should().BeNull();
+        // La naturaleza NO se declara aquí: la fija el documento (NIT ⇒ jurídica) al resolver.
+        actor.PersonType.Should().BeNull();
+    }
+
+    [Fact]
+    public void ActorSinCedulaDeRepresentante_NoLlevaRepresentante()
+    {
+        var fila = Fila(
+            ("vin", "9BWZZZ377VT004251"),
+            ("propietario_1_tipo_documento", "NIT"),
+            ("propietario_1_numero_documento", "900123456"),
+            ("propietario_1_representante_documento", "   "));
+
+        var ctx = BulkTramitesRowMapper.Map(BulkTramitesTemplateType.Matricula, Tenant, Usuario, fila);
+
+        ctx.Actors.Should().ContainSingle().Which.RepresentanteLegal.Should().BeNull();
+    }
 }

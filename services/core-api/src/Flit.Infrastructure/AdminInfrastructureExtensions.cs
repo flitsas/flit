@@ -318,6 +318,12 @@ public static class AdminInfrastructureExtensions
         // empresa por nombre (grants + catálogo) para poblar transit_office_id en el preflight.
         services.AddScoped<ITransitOfficeResolver, TransitOfficeResolver>();
 
+        // HU #12538 (Feature #12519) — la carga masiva resuelve el representante legal de un actor
+        // con NIT contra el directorio de la empresa, con el mismo caso de uso de la precarga del wizard.
+        services.AddScoped<
+            Flit.Tramites.Application.BulkTramites.Processing.IBulkTramitesLegalRepresentativeDirectory,
+            Tramites.BulkTramitesLegalRepresentativeDirectory>();
+
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
         services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();

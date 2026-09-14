@@ -22,6 +22,10 @@ namespace Flit.Tramites.Application.BulkTramites;
 /// actores del wizard. Pedirlo en el Excel era redundante y, peor, permitía guardar un actor sin
 /// haberlo consultado. Sí piden celular, ciudad y dirección: son datos de contacto que el RUNT no
 /// entrega y el PO los exige en el trámite.</para>
+///
+/// <para>Un actor con NIT es una empresa (HU #12538): su razón social sale de RUES y su firmante
+/// del directorio de representantes legales de la compañía. La única columna extra es la cédula
+/// del representante, y solo hace falta cuando hay varios registrados.</para>
 /// </summary>
 public static class BulkTramitesTemplateCatalog
 {
@@ -40,6 +44,12 @@ public static class BulkTramitesTemplateCatalog
     /// Lleva el NOMBRE del organismo, no su id: nadie escribe un GUID en un Excel.
     /// </summary>
     public const string OrganismoTransitoHeader = "organismo_transito";
+
+    /// <summary>
+    /// Sufijo de la columna opcional <c>{actor}_representante_documento</c> (HU #12538): cédula del
+    /// representante legal elegido cuando el actor es una empresa con varios en el directorio.
+    /// </summary>
+    public const string RepresentanteDocumentoSuffix = "representante_documento";
 
     /// <summary>Catálogo cerrado de tipos de documento admitidos en las columnas de actor.</summary>
     public static readonly IReadOnlyList<string> TiposDocumento = ["CC", "CE", "NIT", "TI", "PPT", "PAS"];
@@ -72,6 +82,14 @@ public static class BulkTramitesTemplateCatalog
             "numero_documento",
             $"Número de documento del {rol}, sin puntos ni guiones. El nombre NO se pide: se toma "
                 + "de la consulta al RUNT con este documento, igual que en el paso de actores.");
+        yield return ActorColumn(
+            prefijo,
+            RepresentanteDocumentoSuffix,
+            $"Solo si el {rol} es una empresa (NIT): cédula del representante legal que debe "
+                + "firmar, cuando la empresa tiene varios registrados en el directorio. Si se deja "
+                + "vacío, se toma el representante principal. La empresa y su representante deben "
+                + "estar registrados en el directorio de representantes legales; si no, el trámite "
+                + "queda por retomar.");
         yield return ActorColumn(prefijo, "email", $"Correo electrónico del {rol}, para el envío de la validación de identidad.");
         yield return ActorColumn(prefijo, "celular", $"Celular del {rol}.");
         yield return ActorColumn(prefijo, "ciudad", $"Ciudad de residencia del {rol}.");
