@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { useConsultaMode } from '@/components/operacion/ConsultaModeContext';
-import { describirErrorDeSeccion } from '@/lib/tramites/network-scope';
+import {
+  COPY_SECCION_FUERA_DE_ALCANCE,
+  describirErrorDeSeccion,
+} from '@/lib/tramites/network-scope';
 import { formatCOP } from '@/lib/format/currency';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import {
@@ -79,24 +82,32 @@ interface CargaEstado<T> {
   fueraDeAlcance?: boolean;
 }
 
+/**
+ * HU #12362 — en consulta las rutas `GET .../commercial` y `GET .../prenda` no existen para un
+ * trámite de un hijo (404 por diseño): la sección arranca YA en «fuera de tu alcance», sin pedir.
+ */
+const FUERA_DE_ALCANCE: CargaEstado<never> = {
+  loading: false,
+  error: COPY_SECCION_FUERA_DE_ALCANCE,
+  fueraDeAlcance: true,
+  data: null,
+};
+
 export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalleProps) {
-  // HU #12362 — en modo consulta un 403/404 es «fuera de tu alcance», no un error técnico.
+  // HU #12362 — en modo consulta no se llama a las rutas propias; ver `FUERA_DE_ALCANCE`.
   const consultaMode = useConsultaMode();
-  const [comercial, setComercial] = useState<CargaEstado<CommercialData>>({
-    loading: true,
-    error: null,
-    data: null,
-  });
-  const [prenda, setPrenda] = useState<CargaEstado<PrendaData>>({
-    loading: true,
-    error: null,
-    data: null,
-  });
+  const [comercial, setComercial] = useState<CargaEstado<CommercialData>>(() =>
+    consultaMode ? FUERA_DE_ALCANCE : { loading: true, error: null, data: null },
+  );
+  const [prenda, setPrenda] = useState<CargaEstado<PrendaData>>(() =>
+    consultaMode ? FUERA_DE_ALCANCE : { loading: true, error: null, data: null },
+  );
   // Incrementa para forzar un nuevo intento de carga desde "Reintentar" sin duplicar el efecto.
   const [comercialIntento, setComercialIntento] = useState(0);
   const [prendaIntento, setPrendaIntento] = useState(0);
 
   useEffect(() => {
+    if (consultaMode) return;
     let active = true;
     // setState dentro de la función async (no en el cuerpo síncrono del effect), mismo patrón que
     // CommercialForm/PrendaForm, para no disparar react-hooks/set-state-in-effect.
@@ -128,6 +139,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
   }, [instanceId, tenantId, comercialIntento, consultaMode]);
 
   useEffect(() => {
+    if (consultaMode) return;
     let active = true;
     const load = async () => {
       setPrenda((s) => ({ ...s, loading: true, error: null }));

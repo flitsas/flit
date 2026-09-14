@@ -60,10 +60,11 @@ const SCOPE = 'tramites.scope';
  * localStorage: dos usuarios del mismo cliente comparten navegador con más frecuencia de la que
  * parece y la preferencia de uno no puede afectar al otro (AC5).
  *
- * TODO(#12358): la lista de hijos sale de `GET /api/v1/admin/companies/{head}/children` (contexto
- * admin). Si el backend expone una ruta no-admin para el gestor (p. ej. bajo
- * `/api/v1/tramites/network/children`), cambiar aquí la fuente; mientras tanto un 403 degrada a
- * «Propio | Red» sin lista.
+ * Deuda: endpoint no-admin de hijas de la cabeza — ver
+ * `.claude/state/pending-work-items/2026-09-14-endpoint-hijas-no-admin.md`. Hoy la lista de hijos
+ * sale de `GET /api/v1/admin/companies/{head}/children` (contexto admin). Cuando el backend exponga
+ * una ruta no-admin para el gestor (p. ej. bajo `/api/v1/tramites/network/children`), cambiar aquí
+ * la fuente; mientras tanto un 403 degrada a «Propio | Red» sin lista.
  */
 export function useNetworkScope(): UseNetworkScopeResult {
   const { isGroupParent, tenantId, isSuperAdmin } = usePermissions();
@@ -105,7 +106,7 @@ export function useNetworkScope(): UseNetworkScopeResult {
     };
   }, [esCabeza]);
 
-  // Hijos de la red — solo para la cabeza. Fuente admin (ver TODO arriba); si no responde, el
+  // Hijos de la red — solo para la cabeza. Fuente admin (ver deuda arriba); si no responde, el
   // selector sigue existiendo con sus dos opciones fijas.
   useEffect(() => {
     if (!esCabeza || !tenantId) return;

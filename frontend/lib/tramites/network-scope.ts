@@ -1,4 +1,11 @@
-import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
+import type {
+  Actor,
+  ActorDocumentType,
+  ActorRol,
+  InstanceSummary,
+  ProcedureActor,
+  ProcedureInstanceDetail,
+} from '@/lib/api/types/procedure-runtime';
 
 /**
  * HU #12362 — modo consulta transversal (Feature #12257, épica Concesión).
@@ -97,6 +104,42 @@ export function describirErrorDeSeccion(
     return { mensaje: copyFueraDeAlcance, fueraDeAlcance: true };
   }
   return { mensaje: err instanceof Error ? err.message : fallback, fueraDeAlcance: false };
+}
+
+const ROLES_ACTOR: ReadonlySet<string> = new Set<ActorRol>(['comprador', 'vendedor', 'locatario']);
+
+/**
+ * HU #12362 — actores del DETALLE CONSOLIDADO (`NetworkProcedureDetailResponse.instance.actors`,
+ * el `Actor` embebido: `actorType`/`documentType`/`documentNumber`/`fullName`/`email`) al shape
+ * `ProcedureActor` que pinta la sección «Actores» del modal. Se usa SOLO en consulta: para un
+ * trámite de un hijo, `GET .../actors` responde 404 por diseño y el detalle consolidado es la única
+ * fuente. Lo que el embebido NO trae (teléfono, dirección, ciudad, representante legal, porcentaje)
+ * simplemente no se pinta — los campos son opcionales en la tarjeta.
+ *
+ * `ordinal` no viaja en el embebido: se asigna por posición dentro de cada rol (1..n) respetando
+ * el orden del servidor, que ya lista al principal primero. Los `actorType` fuera del vocabulario
+ * (`comprador` | `vendedor` | `locatario`) se descartan, igual que hace el backend al leerlos.
+ */
+export function actoresDesdeDetalleConsolidado(
+  actors: readonly Actor[] | null | undefined,
+): ProcedureActor[] {
+  const siguienteOrdinal = new Map<string, number>();
+  const out: ProcedureActor[] = [];
+  for (const a of actors ?? []) {
+    const rol = (a.actorType ?? '').trim().toLowerCase();
+    if (!ROLES_ACTOR.has(rol)) continue;
+    const ordinal = siguienteOrdinal.get(rol) ?? 1;
+    siguienteOrdinal.set(rol, ordinal + 1);
+    out.push({
+      rol: rol as ActorRol,
+      tipoDocumento: (a.documentType ?? '') as ActorDocumentType,
+      numeroDocumento: a.documentNumber ?? '',
+      nombreCompleto: a.fullName ?? '',
+      email: a.email ?? '',
+      ordinal,
+    });
+  }
+  return out;
 }
 
 /**

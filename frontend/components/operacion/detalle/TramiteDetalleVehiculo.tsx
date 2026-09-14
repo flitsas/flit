@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { useConsultaMode } from '@/components/operacion/ConsultaModeContext';
-import { describirErrorDeSeccion } from '@/lib/tramites/network-scope';
+import {
+  COPY_SECCION_FUERA_DE_ALCANCE,
+  describirErrorDeSeccion,
+} from '@/lib/tramites/network-scope';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { FineDetailList, preflightOverall, statusPillWord } from '@/components/operacion/PreflightPanel';
 import {
@@ -105,11 +108,14 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
     error: null,
     data: null,
   });
-  const [preflight, setPreflight] = useState<CargaEstado<PreflightSnapshot | null>>({
-    loading: true,
-    error: null,
-    data: null,
-  });
+  // HU #12362 — las especificaciones SÍ se leen por la ruta consolidada; el preflight
+  // (`GET .../preflight`) no existe para un trámite de un hijo (404 por diseño), así que en consulta
+  // arranca YA en «fuera de tu alcance», sin pedir.
+  const [preflight, setPreflight] = useState<CargaEstado<PreflightSnapshot | null>>(() =>
+    consultaMode
+      ? { loading: false, error: COPY_SECCION_FUERA_DE_ALCANCE, fueraDeAlcance: true, data: null }
+      : { loading: true, error: null, data: null },
+  );
   // Incrementan para forzar un nuevo intento de carga desde "Reintentar" sin duplicar el efecto.
   const [especificacionesIntento, setEspecificacionesIntento] = useState(0);
   const [preflightIntento, setPreflightIntento] = useState(0);
@@ -148,6 +154,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
   }, [instanceId, tenantId, especificacionesIntento, consultaMode]);
 
   useEffect(() => {
+    if (consultaMode) return;
     let active = true;
     const load = async () => {
       setPreflight((s) => ({ ...s, loading: true, error: null }));

@@ -6,7 +6,10 @@ import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { useConsultaMode } from '@/components/operacion/ConsultaModeContext';
-import { describirErrorDeSeccion } from '@/lib/tramites/network-scope';
+import {
+  COPY_SECCION_FUERA_DE_ALCANCE,
+  describirErrorDeSeccion,
+} from '@/lib/tramites/network-scope';
 import { formatFecha } from '@/lib/format/date';
 import type {
   BiometricEstado,
@@ -189,15 +192,19 @@ export function TramiteDetalleIdentidad({ instanceId, tenantId, item }: SeccionD
   const [validations, setValidations] = useState<BiometricValidation[]>([]);
   const [firmaBaulPartes, setFirmaBaulPartes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fueraDeAlcance, setFueraDeAlcance] = useState(false);
+  // HU #12362 — el expediente biométrico (`GET .../biometric/expediente`) no existe para un trámite
+  // de un hijo (404 por diseño): en consulta la sección arranca YA en «fuera de tu alcance», sin pedir.
+  const consultaMode = useConsultaMode();
+  const [error, setError] = useState<string | null>(() =>
+    consultaMode ? COPY_SECCION_FUERA_DE_ALCANCE : null,
+  );
+  const [fueraDeAlcance, setFueraDeAlcance] = useState(consultaMode);
   const [reloadKey, setReloadKey] = useState(0);
   const [descargandoId, setDescargandoId] = useState<string | null>(null);
   const [descargaError, setDescargaError] = useState<string | null>(null);
-  // HU #12362 — en modo consulta un 403/404 es «fuera de tu alcance», no un error técnico.
-  const consultaMode = useConsultaMode();
 
   useEffect(() => {
+    if (consultaMode) return;
     let cancelled = false;
     const load = async () => {
       setLoading(true);

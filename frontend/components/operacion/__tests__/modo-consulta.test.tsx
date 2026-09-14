@@ -406,6 +406,26 @@ describe('HU #12362 — AC1/AC2/AC8: listado, un caso por punto de escritura', (
       },
       interactuar: async () => abrirAcciones('TR-RED'),
     },
+    {
+      // Code review PR #370 — un borrador finalizado con identidad aprobada y `canSubmit` promueve
+      // la acción a «Radicar» (icono FileCheck) en una fila propia; en la red es SIEMPRE «Ver».
+      accion: 'radicar (borrador listo para radicar)',
+      fila: makeRed({
+        estado: 'borrador',
+        draftFinalizedAt: '2026-06-18T00:00:00Z',
+        identityValidationStatus: 'aprobado',
+        signaturePending: false,
+        canSubmit: true,
+      }),
+      noDebeExistir: () => {
+        expect(screen.queryByRole('menuitem', { name: 'Radicar' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('menuitem', { name: 'Continuar' })).not.toBeInTheDocument();
+        const ver = screen.getByRole('menuitem', { name: 'Ver' });
+        expect(ver.querySelector('svg.lucide-eye')).not.toBeNull();
+        expect(ver.querySelector('svg.lucide-file-check')).toBeNull();
+      },
+      interactuar: async () => abrirAcciones('TR-RED'),
+    },
   ];
 
   for (const caso of casos) {

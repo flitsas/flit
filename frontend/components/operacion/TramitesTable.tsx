@@ -2213,8 +2213,16 @@ function TramiteRow({
   // "Re-radicar" como "Cancelar la subsanación" solo existen dentro del asistente.
   const abreAsistente =
     !consultaMode && (isDraft || !!item.subsanacionActiva || item.estado === 'subsanacion');
-  const actionLabel = async?.ready ? 'Radicar' : abreAsistente ? 'Continuar' : 'Ver';
-  const actionIcon = async?.ready ? FileCheck : abreAsistente ? Play : Eye;
+  // HU #12362 — en consulta la acción es SIEMPRE «Ver»: aunque el borrador del hijo tenga la
+  // identidad aprobada y `canSubmit`, la cabeza no radica por él (eso es escritura).
+  const actionLabel = consultaMode
+    ? 'Ver'
+    : async?.ready
+      ? 'Radicar'
+      : abreAsistente
+        ? 'Continuar'
+        : 'Ver';
+  const actionIcon = consultaMode ? Eye : async?.ready ? FileCheck : abreAsistente ? Play : Eye;
   const plateHint = plateFlowHint(item.plateFlowStatus);
   const puedeProcesar =
     !consultaMode && item.estado === 'entregado' && item.plateFlowStatus === 'asignado';

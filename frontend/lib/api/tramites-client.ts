@@ -149,6 +149,34 @@ import type {
 
 export { DEV_TENANT_ID, DEV_USER_ID };
 
+/** Sobre de `GET /api/v1/tramites/network/instances/{id}` (`NetworkProcedureDetailResponse`). */
+interface NetworkProcedureDetailResponse {
+  tenantId: string;
+  tenantName?: string | null;
+  instance: ProcedureInstanceDetail;
+}
+
+/**
+ * Aplana el sobre del detalle de red al shape del detalle propio. Tolera una respuesta ya plana
+ * (sin `instance`) para no romper a un backend que aún no envuelva — el sobre es la forma canónica.
+ */
+export function desenvolverDetalleDeRed(
+  res: NetworkProcedureDetailResponse | (ProcedureInstanceDetail & { tenantName?: string | null }),
+): NetworkInstanceDetail {
+  const sobre = res as Partial<NetworkProcedureDetailResponse>;
+  const instance: ProcedureInstanceDetail =
+    sobre.instance && typeof sobre.instance === 'object'
+      ? sobre.instance
+      : (res as ProcedureInstanceDetail);
+  const tenantId = sobre.tenantId ?? instance.tenantId;
+  return {
+    ...instance,
+    tenantId,
+    tenantName: sobre.tenantName ?? '',
+    fromNetwork: true,
+  };
+}
+
 // La API vive en otro origen (api.<env>.flitsas.online); el CD inyecta
 // NEXT_PUBLIC_API_BASE_URL (la MISMA variable que usa lib/api/client.ts). Sin variable
 // en dev local, las peticiones van al origen del frontend (localhost:3000) y Next.js
@@ -740,12 +768,21 @@ export const tramitesClient = {
     }
   },
 
-  /** Detalle de un trámite de la red. `GET /api/v1/tramites/network/instances/{id}`. */
+  /**
+   * Detalle de un trámite de la red. `GET /api/v1/tramites/network/instances/{id}`.
+   *
+   * El contrato (`NetworkProcedureDetailResponse`, #12358) ENVUELVE el detalle:
+   * `{ tenantId, tenantName, instance }`, donde `instance` es el mismo objeto que devuelve
+   * `GET /instances/{id}` al propio cliente (actors, fieldValues, statusHistory, events…). Aquí se
+   * aplana a `ProcedureInstanceDetail & NetworkOwned` para que el modal y sus secciones lean el
+   * MISMO shape en consulta y en propio. Los `tenantId`/`tenantName` del sobre mandan sobre los de
+   * `instance` (son el dueño del trámite tal como lo resolvió la cabeza).
+   */
   getNetworkInstance: async (id: string): Promise<NetworkInstanceDetail> => {
-    const res = await request<NetworkInstanceDetail>(
+    const res = await request<NetworkProcedureDetailResponse>(
       `/api/v1/tramites/network/instances/${id}`,
     );
-    return { ...res, fromNetwork: true };
+    return desenvolverDetalleDeRed(res);
   },
 
   /**

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Coins,
@@ -46,6 +46,7 @@ import { ConsultaModeProvider } from './ConsultaModeContext';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import {
   COPY_DOCUMENTOS_FUERA_DE_ALCANCE,
+  COPY_SECCION_FUERA_DE_ALCANCE,
   ETIQUETA_SOLO_CONSULTA,
   describirErrorDeSeccion,
 } from '@/lib/tramites/network-scope';
@@ -290,6 +291,9 @@ export function TramiteDetalleModal({
 
   useEffect(() => {
     if (!open || !instanceId || panelTracking !== 'identidad') return;
+    // HU #12362 — el expediente biométrico solo existe por la ruta propia; para un trámite de un
+    // hijo el servidor responde 404 por diseño. No se pide: el panel pinta el copy del AC3.
+    if (consultaMode) return;
     let cancelled = false;
     const load = async () => {
       setIdentidadLoading(true);
@@ -316,7 +320,9 @@ export function TramiteDetalleModal({
     return () => {
       cancelled = true;
     };
-  }, [open, instanceId, tenantId, panelTracking, identidadReloadKey]);
+  }, [open, instanceId, tenantId, panelTracking, identidadReloadKey, consultaMode]);
+
+  const reintentarDetalle = useCallback(() => setDetailReloadKey((k) => k + 1), []);
 
   const title = item ? resolveTitle(item) : 'Detalle del trámite';
   /** HU #12362 — razón social del hijo dueño del trámite, si viaja en la fila o en el detalle. */
@@ -463,7 +469,15 @@ export function TramiteDetalleModal({
     : undefined;
 
   return (
-    <ConsultaModeProvider consultaMode={consultaMode}>
+    <ConsultaModeProvider
+      consultaMode={consultaMode}
+      // HU #12362 — en consulta las secciones leen del detalle consolidado (actores, campos) en
+      // vez de pedir por rutas propias que el servidor rechaza para un trámite de un hijo.
+      detalle={detail}
+      detalleLoading={loading}
+      detalleError={error}
+      reintentarDetalle={reintentarDetalle}
+    >
       <DetalleTramiteShell open={open} onClose={onClose} title={title} header={header}>
         {!item ? (
           <p className="py-6 text-center text-xs opacity-70">No se encontró información del trámite.</p>
@@ -588,7 +602,12 @@ export function TramiteDetalleModal({
                 </div>
               ) : panelTracking === 'identidad' ? (
                 <div className="lg:col-span-12">
-                  {identidadLoading ? (
+                  {consultaMode ? (
+                    // HU #12362 (AC3) — sin petición, sin error técnico ni reintento.
+                    <p className="text-xs text-[#162744]/70 dark:text-white/70" role="status">
+                      {COPY_SECCION_FUERA_DE_ALCANCE}
+                    </p>
+                  ) : identidadLoading ? (
                     <SeccionCargando etiqueta="Cargando trazabilidad de identidad" filas={3} />
                   ) : identidadError ? (
                     <SeccionError
