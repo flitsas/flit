@@ -73,8 +73,9 @@ public sealed class BulkTramitesXlsxTemplateTests
     {
         var columnas = BulkTramitesTemplateCatalog.MatriculaColumns();
 
-        columnas.Select(c => c.Header).Should().Contain(["fila", "placa", "vin", "propietario_numero_documento"]);
-        columnas.Select(c => c.Header).Should().NotContain(h => h.EndsWith("_porcentaje", StringComparison.Ordinal));
+        columnas.Select(c => c.Header).Should().Contain(["fila", "placa", "vin", "propietario_1_numero_documento", "propietario_4_porcentaje"]);
+        // Copropiedad: hasta 4 propietarios con porcentaje, igual que en el wizard de matrícula.
+        columnas.Count(c => c.Header.EndsWith("_porcentaje", StringComparison.Ordinal)).Should().Be(4);
 
         var archivo = await _plantilla.BuildAsync(BulkTramitesTemplateType.Matricula, Tenant, TestContext.Current.CancellationToken);
         archivo.Filename.Should().Contain("matricula");

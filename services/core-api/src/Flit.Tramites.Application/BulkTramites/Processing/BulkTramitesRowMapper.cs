@@ -54,8 +54,18 @@ public static class BulkTramitesRowMapper
     private static BulkTramitesRowContext MapMatricula(
         Guid tenantId, Guid createdByUserId, IReadOnlyDictionary<string, string?> values)
     {
-        // Matrícula inicial entra por VIN: el vehículo aún no tiene placa asignada.
-        var propietario = Actor(values, "propietario", "comprador", ordinal: 1, porcentaje: null);
+        // Matrícula inicial entra por VIN: el vehículo aún no tiene placa asignada. Hasta 4
+        // propietarios (copropiedad, ADR-0053), todos con el rol con el que el dominio persiste al
+        // titular en matrícula.
+        var propietarios = new List<ActorInput>();
+        for (var i = 1; i <= 4; i++)
+        {
+            var propietario = Actor(values, $"propietario_{i}", "comprador", i, Porcentaje(values, $"propietario_{i}"));
+            if (propietario is not null)
+            {
+                propietarios.Add(propietario);
+            }
+        }
 
         return new BulkTramitesRowContext(
             tenantId,
@@ -66,7 +76,7 @@ public static class BulkTramitesRowMapper
             Value(values, "placa"),
             OwnerDocumentType: null,
             OwnerDocumentNumber: null,
-            propietario is null ? [] : [propietario],
+            propietarios,
             Value(values, BulkTramitesTemplateCatalog.OrganismoTransitoHeader));
     }
 

@@ -18,7 +18,7 @@ export const BULK_TRAMITES_TEMPLATES: readonly BulkTramitesTemplateOption[] = [
   {
     tipo: 'matricula',
     titulo: 'Matrícula inicial',
-    descripcion: 'Vehículo por VIN y datos del propietario.',
+    descripcion: 'Vehículo por VIN y propietarios (hasta 4, con porcentaje).',
   },
   {
     tipo: 'traspaso',

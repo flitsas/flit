@@ -23,12 +23,12 @@ public sealed class BulkTramitesRowMapperTests
     {
         var fila = Fila(
             ("vin", "9BWZZZ377VT004251"),
-            ("propietario_tipo_documento", "CC"),
-            ("propietario_numero_documento", "123456789"),
-            ("propietario_email", "juan@example.com"),
-            ("propietario_celular", "3001112233"),
-            ("propietario_ciudad", "Bogotá"),
-            ("propietario_direccion", "Calle 1 # 2-3"));
+            ("propietario_1_tipo_documento", "CC"),
+            ("propietario_1_numero_documento", "123456789"),
+            ("propietario_1_email", "juan@example.com"),
+            ("propietario_1_celular", "3001112233"),
+            ("propietario_1_ciudad", "Bogotá"),
+            ("propietario_1_direccion", "Calle 1 # 2-3"));
 
         var ctx = BulkTramitesRowMapper.Map(BulkTramitesTemplateType.Matricula, Tenant, Usuario, fila);
 
@@ -131,5 +131,21 @@ public sealed class BulkTramitesRowMapperTests
         var ctx = BulkTramitesRowMapper.Map(BulkTramitesTemplateType.Otros, Tenant, Usuario, fila);
 
         ctx.Actors[0].Rol.Should().Be("comprador");
+    }
+
+    [Fact]
+    public void Matricula_ConDosPropietarios_MapeaAmbosComoCompradoresConSuPorcentaje()
+    {
+        var fila = Fila(
+            ("vin", "9BWZZZ377VT004251"),
+            ("propietario_1_numero_documento", "111"), ("propietario_1_porcentaje", "60"),
+            ("propietario_2_numero_documento", "222"), ("propietario_2_porcentaje", "40"));
+
+        var ctx = BulkTramitesRowMapper.Map(BulkTramitesTemplateType.Matricula, Tenant, Usuario, fila);
+
+        ctx.Actors.Should().HaveCount(2);
+        ctx.Actors.Should().AllSatisfy(a => a.Rol.Should().Be("comprador"));
+        ctx.Actors[1].Ordinal.Should().Be(2);
+        ctx.Actors[1].Porcentaje.Should().Be(40m);
     }
 }

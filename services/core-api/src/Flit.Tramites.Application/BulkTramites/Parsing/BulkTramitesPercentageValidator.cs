@@ -7,19 +7,29 @@ namespace Flit.Tramites.Application.BulkTramites.Parsing;
 /// reglas de reparto de propiedad que <c>PutActorsHandler</c> aplica al guardar actores
 /// (ADR-0053, AC3 de HU #12522): con un solo actor por lado el porcentaje se ignora; con 2 o más,
 /// los porcentajes son obligatorios, deben sumar 100 entre los del mismo lado y ninguno puede
-/// quedar en 0. Solo aplica a la plantilla de Traspaso — Matrícula y Otros no tienen múltiples
-/// actores por lado.
+/// quedar en 0. Aplica a Traspaso (comprador/vendedor) y a Matrícula (propietario): el wizard de
+/// matrícula admite copropiedad igual que el traspaso. Otros trámites no tiene múltiples actores
+/// por lado.
 /// </summary>
 public static class BulkTramitesPercentageValidator
 {
     public const string PorcentajesNoSuman100 = "porcentajes_no_suman_100";
     public const string PorcentajeEnCero = "porcentaje_en_cero";
 
-    private static readonly string[] Lados = ["comprador", "vendedor"];
+    private static readonly string[] LadosTraspaso = ["comprador", "vendedor"];
+    private static readonly string[] LadosMatricula = ["propietario"];
 
-    public static string? Validate(IReadOnlyDictionary<string, string?> values)
+    /// <summary>Lados con reparto de propiedad según la plantilla; vacío cuando no aplica.</summary>
+    public static IReadOnlyList<string> LadosDe(BulkTramitesTemplateType tipo) => tipo switch
     {
-        foreach (var lado in Lados)
+        BulkTramitesTemplateType.Traspaso => LadosTraspaso,
+        BulkTramitesTemplateType.Matricula => LadosMatricula,
+        _ => [],
+    };
+
+    public static string? Validate(BulkTramitesTemplateType tipo, IReadOnlyDictionary<string, string?> values)
+    {
+        foreach (var lado in LadosDe(tipo))
         {
             var error = ValidateLado(values, lado);
             if (error is not null)

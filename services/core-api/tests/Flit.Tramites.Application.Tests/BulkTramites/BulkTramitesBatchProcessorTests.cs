@@ -53,12 +53,12 @@ public sealed class BulkTramitesBatchProcessorTests
         ValuesJson = JsonSerializer.Serialize(new Dictionary<string, string?>
         {
             ["vin"] = "9BWZZZ377VT00425" + numero.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["propietario_tipo_documento"] = "CC",
-            ["propietario_numero_documento"] = "1000" + numero.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["propietario_email"] = $"t{numero.ToString(System.Globalization.CultureInfo.InvariantCulture)}@example.com",
-            ["propietario_celular"] = "3000000000",
-            ["propietario_ciudad"] = "Bogotá",
-            ["propietario_direccion"] = "Calle 1 # 2-3",
+            ["propietario_1_tipo_documento"] = "CC",
+            ["propietario_1_numero_documento"] = "1000" + numero.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["propietario_1_email"] = $"t{numero.ToString(System.Globalization.CultureInfo.InvariantCulture)}@example.com",
+            ["propietario_1_celular"] = "3000000000",
+            ["propietario_1_ciudad"] = "Bogotá",
+            ["propietario_1_direccion"] = "Calle 1 # 2-3",
         }),
         StructuralErrorCode = structuralError,
         CreatedAt = DateTimeOffset.UtcNow,

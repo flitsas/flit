@@ -284,9 +284,7 @@ internal sealed class BulkTramitesXlsxParser : IBulkTramitesXlsxParser
             valores[columnas[i].Header] = valor;
         }
 
-        var error = tipo == BulkTramitesTemplateType.Traspaso
-            ? BulkTramitesPercentageValidator.Validate(valores)
-            : null;
+        var error = BulkTramitesPercentageValidator.Validate(tipo, valores);
 
         return new BulkTramitesParsedRow(numero, valores, error);
     }

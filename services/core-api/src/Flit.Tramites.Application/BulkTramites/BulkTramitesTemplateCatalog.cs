@@ -6,9 +6,11 @@ namespace Flit.Tramites.Application.BulkTramites;
 /// exige no pueden divergir (mismo principio que <c>StandaloneBatchTemplate</c> en Generación
 /// Documental).
 ///
-/// <para>Traspaso soporta hasta 4 propietarios por lado (comprador/vendedor) porque el trámite ya
-/// admite múltiples propietarios con reparto de porcentaje (ADR-0053, <c>PutActorsHandler</c>);
-/// Matrícula no, porque el PO no pidió esa variante para matrícula.</para>
+/// <para>Traspaso soporta hasta 4 propietarios por lado (comprador/vendedor) y Matrícula hasta 4
+/// propietarios, porque ambos wizards admiten copropiedad con reparto de porcentaje (ADR-0053,
+/// <c>PutActorsHandler</c>). La primera versión dejó la matrícula con un solo propietario por una
+/// suposición que Samuel Cardenas corrigió en las pruebas: el paso de actores de matrícula ofrece
+/// «Agregar propietario» igual que el traspaso.</para>
 ///
 /// <para>Otros trámites es una plantilla única para el resto del catálogo canónico (cambio de
 /// color, inscripción de prenda, etc.): trae un selector de tipo de trámite en vez de una
@@ -87,13 +89,16 @@ public static class BulkTramitesTemplateCatalog
     }
 
     /// <summary>
-    /// Columnas de la plantilla de Matrícula: organismo de tránsito + vehículo + un único
-    /// propietario. El organismo va PRIMERO entre los datos porque sin él la fila no se puede
-    /// procesar: es el dato que el wizard exige antes de consultar el VIN.
+    /// Columnas de la plantilla de Matrícula: organismo de tránsito + vehículo + hasta 4
+    /// propietarios con su porcentaje cuando hay más de uno. El organismo va PRIMERO entre los
+    /// datos porque sin él la fila no se puede procesar: es el dato que el wizard exige antes de
+    /// consultar el VIN.
     /// </summary>
     public static IReadOnlyList<BulkTramitesColumnSpec> MatriculaColumns(
-        IReadOnlyList<string>? organismosHabilitados = null) =>
-        [
+        IReadOnlyList<string>? organismosHabilitados = null)
+    {
+        var columnas = new List<BulkTramitesColumnSpec>
+        {
             Fila,
             new(
                 OrganismoTransitoHeader,
@@ -102,8 +107,15 @@ public static class BulkTramitesTemplateCatalog
                 organismosHabilitados),
             Placa,
             Vin,
-            .. ActorColumns("propietario", "propietario", conPorcentaje: false),
-        ];
+        };
+
+        for (var i = 1; i <= 4; i++)
+        {
+            columnas.AddRange(ActorColumns($"propietario_{i}", "propietario", conPorcentaje: true));
+        }
+
+        return columnas;
+    }
 
     /// <summary>
     /// Columnas de la plantilla de Traspaso: vehículo + hasta 4 compradores y 4 vendedores, cada
