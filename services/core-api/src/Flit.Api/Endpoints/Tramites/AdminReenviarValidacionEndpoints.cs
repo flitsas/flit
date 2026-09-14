@@ -42,7 +42,7 @@ internal static class AdminReenviarValidacionEndpoints
 
             var command = new AdminReenviarValidacionIdentidadCommand(
                 id, validationId, tenantId.Value, request?.Email, ResolveUserId(http.User));
-            var (result, error, errorDetail, cooldownMinutos) = await handler.HandleAsync(command, ct);
+            var (result, error, errorDetail, _) = await handler.HandleAsync(command, ct);
 
             return error switch
             {
@@ -54,12 +54,9 @@ internal static class AdminReenviarValidacionEndpoints
                 AdminReenviarValidacionIdentidadHandler.IdentidadAprobada => Results.Problem(
                     statusCode: 409, title: error,
                     detail: "La identidad ya está aprobada. Para revalidar, inicia una validación nueva."),
-                "reenvio_en_cooldown" => Results.Problem(
-                    statusCode: 429, title: error,
-                    detail: $"Espera {cooldownMinutos} minuto(s) antes de reenviar de nuevo."),
-                "tope_reenvios" => Results.Problem(
-                    statusCode: 429, title: error,
-                    detail: "Se agotaron los reenvíos disponibles para esta validación."),
+                "validacion_en_curso" => Results.Problem(
+                    statusCode: 409, title: error,
+                    detail: "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
                 "proveedor_error" => Results.Problem(
                     statusCode: 502, title: "Bad Gateway",
                     detail: "El proveedor de validación de identidad rechazó la solicitud."),

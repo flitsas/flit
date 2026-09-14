@@ -203,7 +203,17 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
             CreatedBy = command.ChangedByUserId,
         }, ct).ConfigureAwait(false);
 
-        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        // HU #11266 (D12) — mismo guard que el reenvío standalone (ver comentario en
+        // EditarPrevalidacionCommand.cs): el reenvío puede colisionar con OTRA fila en vuelo del mismo
+        // (tenant, documento normalizado).
+        try
+        {
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (Flit.Tramites.Domain.Identity.IdentityInFlightConflictException)
+        {
+            return (null, "validacion_en_curso", null, null);
+        }
 
         var dto = IniciarBiometriaHandler.ToDto(validation, now);
         return (new AdminReenviarValidacionIdentidadResult(dto, captureUrl, emailActualizado, queued), null, null, null);
