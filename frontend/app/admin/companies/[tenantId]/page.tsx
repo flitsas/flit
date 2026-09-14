@@ -1,27 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, Network } from "lucide-react";
+import Link from "next/link";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ToastProvider } from "@/components/admin/Toast";
 import { CompanyConfigTabs } from "@/components/admin/companies/CompanyConfigTabs";
+import { AdminChildContextBanner } from "@/components/admin/companies/AdminChildContextBanner";
+import { CompanyChildrenSection } from "@/components/admin/companies/CompanyChildrenSection";
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
 import { OTConfigTablePanel } from "@/components/admin/companies/panels/OTConfigTablePanel";
+import { TransitBlocksPanel } from "@/components/admin/companies/panels/TransitBlocksPanel";
+import {
+  resolveOtConfigPanelMode,
+  showSuperAdminTransitBlocksPanel,
+} from "@/lib/companies/ot-config-mode";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
 import { PlatePreassignViewer } from "@/components/admin/companies/panels/PlatePreassignViewer";
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
 import { RepresentativesAndVaultTab } from "@/components/admin/companies/legal-representatives/RepresentativesAndVaultTab";
 import { CompanyMandatariosPanel } from "@/components/admin/companies/mandate-signers/CompanyMandatariosPanel";
 import { CompanyUsersPanel } from "@/components/admin/companies/panels/CompanyUsersPanel";
-import { fetchCompany, fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
+import { fetchCompany, fetchCompanyChildren, fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
+import { isHeadTenantType } from "@/lib/api/types";
 import type { CompanyListItem, TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
 
-// Consola admin — detalle de compañía (HU #10194, AC2–AC5/AC7). Carga la
-// configuración y orquesta las pestañas con guardado atómico + slots de whitelist,
-// matriz OT e historial.
 export default function AdminCompanyDetailPage() {
   return (
     <ToastProvider>
@@ -32,41 +38,124 @@ export default function AdminCompanyDetailPage() {
 
 function CompanyDetail() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const params = useParams<{ tenantId: string }>();
   const tenantId = params.tenantId;
-  const { isAdminCompany, isSuperAdmin, tenantId: callerTenantId } = usePermissions();
+  const networkHeadId = searchParams.get("networkHead");
+  const { isAdminCompany, isSuperAdmin, isGroupParent, tenantId: callerTenantId } = usePermissions();
 
   const [status, setStatus] = useState<UiStatus>("loading");
   const [settings, setSettings] = useState<TenantSettings | null>(null);
   const [isNew, setIsNew] = useState(false);
-  // HU #11062 — identidad de la compañía para el encabezado. Se pide APARTE de la configuración: la
-  // de configuración devuelve 404 en una compañía sin parametrizar, que es justo cuando más importa
-  // saber sobre qué compañía se está escribiendo.
   const [company, setCompany] = useState<CompanyListItem | null>(null);
+  const [activeChildrenCount, setActiveChildrenCount] = useState(0);
+  const [parentCompany, setParentCompany] = useState<CompanyListItem | null>(null);
+  const [accessChecked, setAccessChecked] = useState(false);
 
-  // HU #11228 — AdminCompany no puede abrir la ficha de otro tenant.
+  const managingChild =
+    Boolean(networkHeadId) &&
+    isAdminCompany &&
+    !isSuperAdmin &&
+    callerTenantId === networkHeadId &&
+    tenantId !== callerTenantId;
+
+  const otPanelMode = resolveOtConfigPanelMode({
+    company,
+    parentTenantType: parentCompany?.tenantType ?? null,
+    isSuperAdmin,
+    isAdminCompany,
+  });
+
+  const showTransitBlocksPanel = showSuperAdminTransitBlocksPanel(company, isSuperAdmin);
+
+  const blocksTenantId =
+    company?.parentTenantId && parentCompany?.tenantType === "MARCA_BLANCA"
+      ? parentCompany.id
+      : tenantId;
+
+  const showChildrenSection = isSuperAdmin && company && isHeadTenantType(company.tenantType);
+
+  const showNetworkLink =
+    (isGroupParent && callerTenantId === tenantId && isAdminCompany && !isSuperAdmin) ||
+    (isSuperAdmin && company && isHeadTenantType(company.tenantType));
+
   useEffect(() => {
-    if (isAdminCompany && !isSuperAdmin && callerTenantId && tenantId !== callerTenantId) {
+    let cancelled = false;
+
+    async function verifyAccess() {
+      if (isSuperAdmin) {
+        setAccessChecked(true);
+        return;
+      }
+      if (!isAdminCompany || !callerTenantId) {
+        router.replace("/403");
+        return;
+      }
+      if (tenantId === callerTenantId) {
+        setAccessChecked(true);
+        return;
+      }
+      if (networkHeadId === callerTenantId) {
+        try {
+          const child = await fetchCompany(tenantId, undefined, networkHeadId);
+          if (cancelled) return;
+          if (child) {
+            setAccessChecked(true);
+            return;
+          }
+        } catch {
+          /* fallthrough */
+        }
+      }
       router.replace(`/admin/companies/${callerTenantId}`);
     }
-  }, [isAdminCompany, isSuperAdmin, callerTenantId, tenantId, router]);
+
+    void verifyAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdminCompany, isSuperAdmin, callerTenantId, tenantId, networkHeadId, router]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
+      if (!accessChecked) return;
       setStatus("loading");
       try {
+        const childScope =
+          networkHeadId && tenantId !== callerTenantId && networkHeadId === callerTenantId
+            ? networkHeadId
+            : null;
         const [data, identity] = await Promise.all([
-          fetchTenantSettings(tenantId, signal),
-          fetchCompany(tenantId, signal),
+          fetchTenantSettings(tenantId, signal, childScope),
+          fetchCompany(tenantId, signal, childScope),
         ]);
         if (signal?.aborted) {
           return;
         }
         setCompany(identity);
-        // 404 → compañía sin configurar: se muestra el formulario en blanco para
-        // que el SuperAdmin defina y guarde (el PUT hace upsert).
         setIsNew(data === null);
         setSettings(data ?? defaultSettings(tenantId));
+
+        if (identity?.parentTenantId) {
+          const parent = await fetchCompany(identity.parentTenantId, signal);
+          if (!signal?.aborted) {
+            setParentCompany(parent);
+          }
+        } else if (!signal?.aborted) {
+          setParentCompany(null);
+        }
+
+        if (identity && isSuperAdmin && isHeadTenantType(identity.tenantType)) {
+          try {
+            const children = await fetchCompanyChildren(identity.id, signal);
+            if (!signal?.aborted) {
+              setActiveChildrenCount(children.filter((c) => c.estadoActivo).length);
+            }
+          } catch {
+            if (!signal?.aborted) setActiveChildrenCount(0);
+          }
+        }
+
         setStatus("ready");
       } catch {
         if (!signal?.aborted) {
@@ -74,40 +163,75 @@ function CompanyDetail() {
         }
       }
     },
-    [tenantId],
+    [tenantId, accessChecked, isSuperAdmin, networkHeadId, callerTenantId],
   );
 
   useEffect(() => {
     const controller = new AbortController();
-    // Carga inicial de datos al montar: el skeleton (setStatus loading) es intencional.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
 
   const handleSaveSettings = async (update: TenantSettingsUpdate) => {
-    // Propaga ApiValidationError (422) para que CompanyConfigTabs marque campos.
-    const updated = await updateTenantSettings(tenantId, update);
+    const updated = await updateTenantSettings(
+      tenantId,
+      update,
+      managingChild ? networkHeadId : undefined,
+    );
     setSettings(updated);
     setIsNew(false);
   };
+
+  const backHref = useMemo(() => {
+    if (managingChild && networkHeadId) {
+      return `/admin/companies/${networkHeadId}/children`;
+    }
+    if (isAdminCompany && !isSuperAdmin) {
+      return isGroupParent ? `/admin/companies/${callerTenantId}/children` : "/";
+    }
+    return "/admin/companies";
+  }, [managingChild, networkHeadId, isAdminCompany, isSuperAdmin, isGroupParent, callerTenantId]);
+
+  const backLabel = managingChild
+    ? "Volver al panel de red"
+    : isAdminCompany && !isSuperAdmin
+      ? "Volver al inicio"
+      : "Volver al listado";
+
+  if (!accessChecked) {
+    return null;
+  }
 
   return (
     <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
       <button
         type="button"
-        onClick={() => router.push(isAdminCompany && !isSuperAdmin ? "/" : "/admin/companies")}
+        onClick={() => router.push(backHref)}
         className="flex w-fit items-center gap-1.5 text-xs font-semibold"
         style={{ color: "#557EFF" }}
       >
-        <ArrowLeft className="h-3.5 w-3.5" />{" "}
-        {isAdminCompany && !isSuperAdmin ? "Volver al inicio" : "Volver al listado"}
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> {backLabel}
       </button>
 
-      <ModuleTitle
-        title="Configuración de compañía"
-        subtitle="Edita las políticas operativas y revisa el historial de cambios."
-      />
+      {managingChild && company && <AdminChildContextBanner childName={company.razonSocial} />}
+
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <ModuleTitle
+          title="Configuración de compañía"
+          subtitle="Edita las políticas operativas y revisa el historial de cambios."
+        />
+        {showNetworkLink && (
+          <Link
+            href={`/admin/companies/${tenantId}/children`}
+            className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold"
+            style={{ color: "#557EFF", borderColor: "#557EFF" }}
+          >
+            <Network className="h-3.5 w-3.5" aria-hidden />
+            Panel de red
+          </Link>
+        )}
+      </div>
 
       <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
         <UiStateBoundary
@@ -131,29 +255,69 @@ function CompanyDetail() {
                 settings={settings}
                 company={company}
                 onSaveSettings={handleSaveSettings}
-                whitelistSlot={<WhitelistPanel tenantId={tenantId} />}
-                otSlot={<OTConfigTablePanel tenantId={tenantId} />}
-                auditSlot={<AuditLogPanel tenantId={tenantId} />}
-                documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
+                whitelistSlot={<WhitelistPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
+                otSlot={
+                  <>
+                    {showTransitBlocksPanel && (
+                      <div className="mb-4 rounded-2xl border p-4">
+                        <TransitBlocksPanel
+                          tenantId={tenantId}
+                          activeChildrenCount={activeChildrenCount}
+                        />
+                      </div>
+                    )}
+                    <OTConfigTablePanel
+                      tenantId={tenantId}
+                      mode={otPanelMode}
+                      grantScopeWarningCount={
+                        otPanelMode === "superadmin-concession" ? activeChildrenCount : 0
+                      }
+                      blocksTenantId={blocksTenantId}
+                      grantsTenantId={
+                        managingChild && networkHeadId ? networkHeadId : tenantId
+                      }
+                    />
+                  </>
+                }
+                auditSlot={<AuditLogPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
+                documentosSlot={
+                  <CompanyDocumentParamsPanel
+                    tenantId={tenantId}
+                    networkHeadId={managingChild ? networkHeadId : null}
+                  />
+                }
                 platesSlot={<PlatePreassignViewer tenantId={tenantId} />}
                 legalRepresentativesSlot={
-                  <RepresentativesAndVaultTab tenantId={tenantId} />
+                  <RepresentativesAndVaultTab
+                    tenantId={tenantId}
+                    networkHeadId={managingChild ? networkHeadId : null}
+                  />
                 }
-                mandatariosSlot={<CompanyMandatariosPanel tenantId={tenantId} />}
+                mandatariosSlot={
+                  <CompanyMandatariosPanel
+                    tenantId={tenantId}
+                    networkHeadId={managingChild ? networkHeadId : null}
+                  />
+                }
                 usuariosSlot={
-                  isSuperAdmin ? <CompanyUsersPanel tenantId={tenantId} /> : undefined
+                  isSuperAdmin || managingChild ? (
+                    <CompanyUsersPanel
+                      tenantId={tenantId}
+                      networkHeadId={managingChild ? networkHeadId : null}
+                    />
+                  ) : undefined
                 }
               />
             </>
           )}
         </UiStateBoundary>
       </div>
+
+      {showChildrenSection && company && <CompanyChildrenSection company={company} />}
     </main>
   );
 }
 
-// Configuración por defecto para una compañía aún sin parametrizar (404 en GET).
-// Todos los switches apagados, sin métodos de recaudo; el SuperAdmin ajusta y guarda.
 function defaultSettings(tenantId: string): TenantSettings {
   return {
     tenantId,

@@ -359,7 +359,7 @@ public static class AdminOtMetricsEndpoints
     {
         var empty = new MetricsContext(Guid.Empty, new OtMetricsFilter(default, default), null);
 
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return (empty, Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -410,8 +410,6 @@ public static class AdminOtMetricsEndpoints
                 + "Configure el perfil OT del tenant para ver sus reportes.",
         });
 
-    private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId) =>
-        Guid.TryParse(user.FindFirstValue("tenant_id"), out tenantId);
 
     private static bool IsSuperAdmin(ClaimsPrincipal user) =>
         user.IsInRole(AdminAuthorization.SuperAdminRole)

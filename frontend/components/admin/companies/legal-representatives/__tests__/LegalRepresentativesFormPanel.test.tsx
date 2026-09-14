@@ -255,7 +255,12 @@ describe("LegalRepresentativesFormPanel — modo view (AC1)", () => {
   it("carga el detalle desde GET /{id} al abrir (AC3)", async () => {
     renderPanel("view");
     await waitFor(() =>
-      expect(fetchLegalRepresentative).toHaveBeenCalledWith(TENANT, "rep-1", expect.anything()),
+      expect(fetchLegalRepresentative).toHaveBeenCalledWith(
+        TENANT,
+        "rep-1",
+        expect.anything(),
+        undefined,
+      ),
     );
   });
 
@@ -349,7 +354,12 @@ describe("LegalRepresentativesFormPanel — modo edit (AC3)", () => {
   it("carga el detalle desde GET /{id} para precargar el formulario", async () => {
     renderPanel("edit");
     await waitFor(() =>
-      expect(fetchLegalRepresentative).toHaveBeenCalledWith(TENANT, "rep-1", expect.anything()),
+      expect(fetchLegalRepresentative).toHaveBeenCalledWith(
+        TENANT,
+        "rep-1",
+        expect.anything(),
+        undefined,
+      ),
     );
   });
 
@@ -551,7 +561,9 @@ describe("RepresentativeCompaniesAccordion — grid de compañías", () => {
     renderPanel("view");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
     await userEvent.click((await screen.findAllByRole("button", { name: /ver pdf/i }))[0]);
-    await waitFor(() => expect(fetchDeedDetail).toHaveBeenCalledWith(TENANT, "deed-1"));
+    await waitFor(() =>
+      expect(fetchDeedDetail).toHaveBeenCalledWith(TENANT, "deed-1", undefined, undefined),
+    );
     expect(openSpy).toHaveBeenCalledWith(
       "https://example.com/deed.pdf",
       "_blank",

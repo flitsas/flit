@@ -79,6 +79,10 @@ internal sealed class AdminProcedureInstanceRepository : IProcedureInstanceRepos
             TransitOfficeId = instance.TransitOfficeId,
             CreatedByUserId = instance.CreatedByUserId,
             CreatedAt = now,
+            // HU #12406 — padre de la compañía radicadora al crear; mismo INSERT, nunca se recalcula.
+            ParentTenantIdAtCreation = await ProcedureInstanceRepository
+                .ParentTenantIdOfAsync(_context, instance.TenantId, cancellationToken)
+                .ConfigureAwait(false),
         };
 
         var snapshot = new ProcedureDocumentSnapshot

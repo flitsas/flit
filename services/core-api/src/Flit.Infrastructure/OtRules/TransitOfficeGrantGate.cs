@@ -9,11 +9,11 @@ namespace Flit.Infrastructure.OtRules;
 /// </summary>
 internal sealed class TransitOfficeGrantGate : ITransitOfficeGrantGate
 {
-    private readonly ITransitGrantRepository _grants;
+    private readonly IEffectiveTransitOfficeListResolver _effectiveList;
 
-    public TransitOfficeGrantGate(ITransitGrantRepository grants)
+    public TransitOfficeGrantGate(IEffectiveTransitOfficeListResolver effectiveList)
     {
-        _grants = grants ?? throw new ArgumentNullException(nameof(grants));
+        _effectiveList = effectiveList ?? throw new ArgumentNullException(nameof(effectiveList));
     }
 
     public async Task<bool> IsEnabledForTenantAsync(
@@ -21,8 +21,8 @@ internal sealed class TransitOfficeGrantGate : ITransitOfficeGrantGate
         Guid transitOfficeId,
         CancellationToken cancellationToken = default)
     {
-        var enabled = await _grants
-            .ListEnabledOfficeIdsAsync(tenantId, cancellationToken)
+        var enabled = await _effectiveList
+            .ListEffectiveOfficeIdsAsync(tenantId, cancellationToken)
             .ConfigureAwait(false);
 
         return enabled.Contains(transitOfficeId);

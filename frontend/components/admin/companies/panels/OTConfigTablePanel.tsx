@@ -1,17 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Lock } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { Pagination } from "@/components/atom/Pagination";
 import { useToast } from "@/components/admin/Toast";
 import { OTConfigTable, type OtOperationalInfo } from "@/components/admin/companies/OTConfigTable";
 import { OTConfigModal } from "@/components/admin/companies/OTConfigModal";
+import { OtScopeConfirmDialog } from "@/components/admin/companies/OtScopeConfirmDialog";
+import { TransitBlocksReadOnlySection } from "@/components/admin/companies/panels/TransitBlocksReadOnlySection";
 import {
   addTransitGrant,
   fetchOtBlockingPolicies,
   fetchOtConsultationRestrictions,
   fetchOtPrendaDocumentPolicies,
   fetchTransitAgreements,
+  fetchTransitBlocks,
   fetchTransitGrants,
   fetchTransitOffices,
   removeTransitGrant,
@@ -24,6 +28,11 @@ import {
   fetchTransitOfficesOperationalStatus,
   type TransitOfficeOperationalStatus,
 } from "@/lib/api/admin-transit-office-tenants";
+import {
+  otConfigPanelLegend,
+  otConfigPanelReadOnly,
+  type OtConfigPanelMode,
+} from "@/lib/companies/ot-config-mode";
 import type {
   BlockingCriterion,
   ConsultationRestrictionKind,
@@ -33,22 +42,43 @@ import type {
   TransitOffice,
 } from "@/lib/api/types";
 
-// Panel único de configuración de Organismos de Tránsito (HU #10194 — consolidación).
-// Reemplaza los 3 slots que antes se apilaban en "Configuración Empresa" (matriz de
-// grants, restricciones de consulta y políticas de bloqueo) por UNA tabla con switch de
-// habilitación y un menú "⋯ Acciones" → "Configurar" que abre, por OT, UN solo modal con
-// las dos secciones (bloqueos + restricciones de consulta). Carga todo lo que antes
-// cargaban los 3 paneles (catálogo, grants, estado operativo, políticas de bloqueo y
-// restricciones de consulta) para poder abrir el modal sin una petición adicional por fila.
-/** Filas por página del listado de OT. */
 const OT_PAGE_SIZE = 10;
 
-export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
+type PendingGrantAction = {
+  officeId: string;
+  officeName: string;
+  enabled: boolean;
+};
+
+export function OTConfigTablePanel({
+  tenantId,
+  mode = "editable",
+  grantScopeWarningCount = 0,
+  blocksTenantId,
+  grantsTenantId,
+}: {
+  tenantId: string;
+  /** HUs #12351 / #12408 — condiciona lectura, leyenda y confirmaciones de alcance. */
+  mode?: OtConfigPanelMode;
+  /** SuperAdmin en Concesión: hijos vigentes afectados por cambios de grants (AC5). */
+  grantScopeWarningCount?: number;
+  /** Tenant whose blocks are listed (head, when the ficha is a Marca Blanca child). */
+  blocksTenantId?: string;
+  /** Tenant whose grants are listed (head, when the ficha is a concession child). */
+  grantsTenantId?: string;
+}) {
   const { show } = useToast();
+  const readOnly = otConfigPanelReadOnly(mode);
+  const legend = otConfigPanelLegend(mode);
+  const showMarcaBlocks = mode === "readonly-marca-blanca";
+  const inheritedOnly = mode === "readonly-concession-inherited";
+  const effectiveBlocksTenantId = blocksTenantId ?? tenantId;
+  const effectiveGrantsTenantId = grantsTenantId ?? tenantId;
+
   const [status, setStatus] = useState<UiStatus>("loading");
   const [offices, setOffices] = useState<TransitOffice[]>([]);
   const [grantedIds, setGrantedIds] = useState<string[]>([]);
-  // Convenio comercial: distinto del grant. Se carga aparte porque no depende de él.
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
   const [agreementIds, setAgreementIds] = useState<string[]>([]);
   const [operationalById, setOperationalById] = useState<Record<string, OtOperationalInfo>>({});
   const [policies, setPolicies] = useState<OtBlockingPolicy[]>([]);
@@ -56,32 +86,45 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
   const [prendaOptionalPolicies, setPrendaOptionalPolicies] = useState<OtPrendaDocumentPolicy[]>([]);
   const [configOffice, setConfigOffice] = useState<TransitOffice | null>(null);
   const [page, setPage] = useState(1);
+  const [pendingGrant, setPendingGrant] = useState<PendingGrantAction | null>(null);
+  const [grantBusy, setGrantBusy] = useState(false);
+  const [grantConfirmResolver, setGrantConfirmResolver] = useState<{
+    resolve: () => void;
+    reject: () => void;
+  } | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const [catalog, grants, agreements, opStatus, blockingRows, restrictionRows, prendaRows] =
+        const needsBlocks = showMarcaBlocks;
+        const needsPolicies = !readOnly;
+
+        const [catalog, grants, agreements, opStatus, blockingRows, restrictionRows, prendaRows, blocks] =
           await Promise.all([
-          fetchTransitOffices(undefined, signal),
-          fetchTransitGrants(tenantId, signal),
-          // Best-effort como el estado operativo: si falla, la tabla sigue funcionando sin la
-          // columna poblada en vez de dejar al gestor sin pantalla.
-          fetchTransitAgreements(tenantId, signal).catch(() => ({ transitOfficeIds: [] })),
-          // HU #10518 — estado operativo por OT para bloquear habilitación. Best-effort:
-          // si falla (p. ej. permisos), la tabla sigue y el backend hace de árbitro (422).
-          fetchTransitOfficesOperationalStatus(signal).catch(
-            () => [] as TransitOfficeOperationalStatus[],
-          ),
-          fetchOtBlockingPolicies(tenantId, signal),
-          fetchOtConsultationRestrictions(tenantId, signal),
-          fetchOtPrendaDocumentPolicies(tenantId, signal).catch(() => [] as OtPrendaDocumentPolicy[]),
-        ]);
-        if (signal?.aborted) {
-          return;
-        }
+            fetchTransitOffices(undefined, signal),
+            fetchTransitGrants(effectiveGrantsTenantId, signal),
+            needsPolicies
+              ? fetchTransitAgreements(tenantId, signal).catch(() => ({ transitOfficeIds: [] }))
+              : Promise.resolve({ transitOfficeIds: [] }),
+            fetchTransitOfficesOperationalStatus(signal).catch(
+              () => [] as TransitOfficeOperationalStatus[],
+            ),
+            needsPolicies ? fetchOtBlockingPolicies(tenantId, signal) : Promise.resolve([]),
+            needsPolicies ? fetchOtConsultationRestrictions(tenantId, signal) : Promise.resolve([]),
+            needsPolicies
+              ? fetchOtPrendaDocumentPolicies(tenantId, signal).catch(() => [] as OtPrendaDocumentPolicy[])
+              : Promise.resolve([]),
+            needsBlocks
+              ? fetchTransitBlocks(effectiveBlocksTenantId, signal).catch(() => ({ transitOfficeIds: [] }))
+              : Promise.resolve({ transitOfficeIds: [] }),
+          ]);
+
+        if (signal?.aborted) return;
+
         setOffices(catalog);
         setGrantedIds(grants.transitOfficeIds);
+        setBlockedIds(blocks.transitOfficeIds);
         setAgreementIds(agreements.transitOfficeIds);
         setOperationalById(
           Object.fromEntries(
@@ -93,17 +136,14 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
         setPrendaOptionalPolicies(prendaRows);
         setStatus(catalog.length === 0 ? "empty" : "ready");
       } catch {
-        if (!signal?.aborted) {
-          setStatus("error");
-        }
+        if (!signal?.aborted) setStatus("error");
       }
     },
-    [tenantId],
+    [tenantId, readOnly, showMarcaBlocks, effectiveBlocksTenantId, effectiveGrantsTenantId],
   );
 
   useEffect(() => {
     const controller = new AbortController();
-    // Carga inicial de datos al montar: el skeleton (setStatus loading) es intencional.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(controller.signal);
     return () => controller.abort();
@@ -116,7 +156,7 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
     );
   };
 
-  const handleToggleGrant = async (officeId: string, enabled: boolean) => {
+  const persistGrantToggle = async (officeId: string, enabled: boolean) => {
     if (enabled) {
       await addTransitGrant(tenantId, officeId);
     } else {
@@ -127,25 +167,70 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
     );
   };
 
-  /**
-   * Solo los OT dados de alta y activos. El catálogo trae también los que nunca se dieron de alta y
-   * los desactivados, que no se pueden habilitar y solo alargaban la lista.
-   *
-   * <p>Un OT ya habilitado para la compañía se sigue mostrando aunque haya dejado de estar activo:
-   * si se ocultara, su grant quedaría vigente sin forma de revocarlo desde la consola.</p>
-   */
-  const visibleOffices = useMemo(
-    () =>
-      offices.filter((office) => {
-        if (grantedIds.includes(office.id)) return true;
+  const requestGrantToggle = async (officeId: string, enabled: boolean) => {
+    const office = offices.find((o) => o.id === officeId);
+    const officeName = office?.name ?? "organismo";
+    if (mode === "superadmin-concession" && grantScopeWarningCount > 0) {
+      await new Promise<void>((resolve, reject) => {
+        setGrantConfirmResolver({ resolve, reject });
+        setPendingGrant({ officeId, officeName, enabled });
+      });
+      await persistGrantToggle(officeId, enabled);
+      return;
+    }
+    await persistGrantToggle(officeId, enabled);
+  };
+
+  const confirmPendingGrant = async () => {
+    if (!pendingGrant) return;
+    setGrantBusy(true);
+    try {
+      grantConfirmResolver?.resolve();
+    } finally {
+      setGrantBusy(false);
+      setPendingGrant(null);
+      setGrantConfirmResolver(null);
+    }
+  };
+
+  const cancelPendingGrant = () => {
+    if (grantBusy) return;
+    grantConfirmResolver?.reject();
+    setPendingGrant(null);
+    setGrantConfirmResolver(null);
+  };
+
+  const visibleOffices = useMemo(() => {
+    if (inheritedOnly) {
+      return offices.filter((office) => grantedIds.includes(office.id));
+    }
+
+    if (showMarcaBlocks) {
+      const blocked = new Set(blockedIds);
+      return offices.filter((office) => {
+        if (blocked.has(office.id)) return false;
         const op = operationalById[office.id];
         return Boolean(op?.hasTenant && op.estadoActivo);
-      }),
-    [offices, grantedIds, operationalById],
-  );
+      });
+    }
 
-  // La página se acota al render en vez de corregirse con setState: si al revocar un grant la lista
-  // se encoge, un índice guardado dejaría la tabla en blanco en una página que ya no existe.
+    return offices.filter((office) => {
+      if (grantedIds.includes(office.id)) return true;
+      const op = operationalById[office.id];
+      return Boolean(op?.hasTenant && op.estadoActivo);
+    });
+  }, [offices, grantedIds, operationalById, inheritedOnly, showMarcaBlocks, blockedIds]);
+
+  const displayGrantedIds = useMemo(() => {
+    if (showMarcaBlocks) {
+      return visibleOffices.map((o) => o.id);
+    }
+    if (inheritedOnly) {
+      return grantedIds;
+    }
+    return grantedIds;
+  }, [showMarcaBlocks, visibleOffices, inheritedOnly, grantedIds]);
+
   const lastPage = Math.max(1, Math.ceil(visibleOffices.length / OT_PAGE_SIZE));
   const safePage = Math.min(page, lastPage);
 
@@ -160,7 +245,6 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
     blocks: boolean,
   ) => {
     await setOtBlockingPolicy(tenantId, transitOfficeId, criterion, blocks);
-    // Mantiene la línea base actualizada: si se reabre el modal, refleja el último valor.
     setPolicies((current) => [
       ...current.filter((p) => !(p.transitOfficeId === transitOfficeId && p.criterion === criterion)),
       { transitOfficeId, criterion, blocks },
@@ -187,24 +271,43 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
     });
   };
 
+  const emptyMessage = inheritedOnly
+    ? "Tu Concesión no tiene organismos de tránsito habilitados."
+    : showMarcaBlocks
+      ? "No hay organismos disponibles (todos están bloqueados o inactivos)."
+      : "No hay organismos de tránsito activos.";
+
   return (
     <>
+      {legend && (
+        <div
+          className="mb-3 flex items-start gap-2 rounded-xl border px-3 py-2 text-xs"
+          style={{ borderColor: "#DFE5ED", background: "rgba(85,126,255,0.04)" }}
+          role="note"
+          aria-live="polite"
+        >
+          <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+          <span>{legend}</span>
+        </div>
+      )}
+
       <UiStateBoundary
         status={status === "ready" && visibleOffices.length === 0 ? "empty" : status}
         onRetry={() => void load()}
-        emptyMessage="No hay organismos de tránsito activos."
+        emptyMessage={emptyMessage}
         errorMessage="No se pudieron cargar los organismos de tránsito."
         skeletonRows={4}
       >
         <OTConfigTable
           offices={pageOffices}
-          grantedIds={grantedIds}
-          agreementIds={agreementIds}
-          onToggleAgreement={handleToggleAgreement}
+          grantedIds={displayGrantedIds}
+          agreementIds={readOnly ? [] : agreementIds}
+          onToggleAgreement={readOnly ? undefined : handleToggleAgreement}
           operationalById={operationalById}
-          onToggleGrant={handleToggleGrant}
-          onOpenConfig={(office) => setConfigOffice(office)}
+          onToggleGrant={readOnly ? async () => {} : requestGrantToggle}
+          onOpenConfig={readOnly ? () => {} : (office) => setConfigOffice(office)}
           onError={(message) => show(message, "error")}
+          readOnly={readOnly}
         />
         <Pagination
           page={safePage}
@@ -214,7 +317,13 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
         />
       </UiStateBoundary>
 
-      {configOffice && (
+      {showMarcaBlocks && (
+        <div className="mt-4 border-t pt-4">
+          <TransitBlocksReadOnlySection tenantId={effectiveBlocksTenantId} />
+        </div>
+      )}
+
+      {configOffice && !readOnly && (
         <OTConfigModal
           office={configOffice}
           policies={policies}
@@ -225,6 +334,18 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
           onTogglePrendaOptional={handleTogglePrendaOptional}
           onClose={() => setConfigOffice(null)}
           onError={(message) => show(message, "error")}
+        />
+      )}
+
+      {pendingGrant && (
+        <OtScopeConfirmDialog
+          open
+          action={pendingGrant.enabled ? "habilitar" : "deshabilitar"}
+          officeName={pendingGrant.officeName}
+          affectedChildrenCount={grantScopeWarningCount}
+          busy={grantBusy}
+          onConfirm={() => void confirmPendingGrant()}
+          onCancel={cancelPendingGrant}
         />
       )}
     </>

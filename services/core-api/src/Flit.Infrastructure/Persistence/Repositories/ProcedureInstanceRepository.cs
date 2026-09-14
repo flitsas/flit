@@ -1455,6 +1455,12 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public async Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, CancellationToken ct)
     {
+        // HU #12406 — el trámite conserva el padre que tenía la compañía radicadora al crearse. Se
+        // lee de identity.tenants.parent_tenant_id en este mismo DbContext y viaja en el MISMO INSERT
+        // que el trámite y su historial (un solo SaveChanges = una sola transacción); nunca se
+        // recalcula después (AfterSaveBehavior.Throw + trigger de inmutabilidad en la base).
+        instance.ParentTenantIdAtCreation = await ParentTenantIdOfAsync(db, instance.TenantId, ct);
+
         await db.ProcedureInstances.AddAsync(instance, ct);
 
         try
@@ -1482,6 +1488,18 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         }
     }
 
+
+    /// <summary>
+    /// HU #12406 — padre actual de la compañía radicadora (<c>null</c> si no tiene o no existe; la
+    /// FK de <c>tenant_id</c> se encarga del tenant inexistente). Compartido con
+    /// <see cref="AdminProcedureInstanceRepository"/> para que los dos puntos de creación escriban lo mismo.
+    /// </summary>
+    internal static Task<Guid?> ParentTenantIdOfAsync(FlitDbContext db, Guid tenantId, CancellationToken ct) =>
+        db.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => t.ParentTenantId)
+            .FirstOrDefaultAsync(ct);
 
     private static bool IsReferenceUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg

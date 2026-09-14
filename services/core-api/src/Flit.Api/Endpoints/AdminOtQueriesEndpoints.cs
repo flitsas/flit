@@ -241,7 +241,7 @@ public static class AdminOtQueriesEndpoints
     {
         var empty = new QueryContext(Guid.Empty, null, null);
 
-        if (!Guid.TryParse(httpContext.User.FindFirstValue("tenant_id"), out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return (empty, Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },

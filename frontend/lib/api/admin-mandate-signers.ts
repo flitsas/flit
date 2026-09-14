@@ -2,6 +2,7 @@
 // Módulo Admin OT (SuperAdmin u ot_admin). Endpoints acotados por transitOfficeId en la ruta.
 // El número de documento y el correo son PII (Ley 1581): se reciben solo para precargar el formulario.
 import { apiFetch, API_BASE_URL, getToken, friendlyErrorMessage } from "./client";
+import { companyScopedPath } from "./company-scoped-path";
 import { ApiError } from "./types";
 
 /** Un mandatario asignado a una compañía (ADR-0036: multiplicidad ⇒ una compañía puede tener varios). */
@@ -244,9 +245,10 @@ export interface MandateSignerOfficeCompanies {
 export async function fetchRepresentedCompanies(
   tenantId: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<RepresentedCompanyOption[]> {
   const r = await apiFetch<{ items: RepresentedCompanyOption[] }>(
-    `${companyBase(tenantId)}/represented-companies`,
+    `${companyBase(tenantId, networkHeadId)}/represented-companies`,
     { signal },
   );
   return r?.items ?? [];
@@ -257,16 +259,19 @@ export async function fetchRepresentedCompanies(
 // El módulo Identidad es la única fuente que puede originar una validación; esa ruta también
 // responderá 410 Gone (HU #11758).
 
-function companyBase(tenantId: string): string {
-  return `/api/v1/admin/companies/${tenantId}/mandate-signers`;
+function companyBase(tenantId: string, networkHeadId?: string | null): string {
+  return companyScopedPath(tenantId, "/mandate-signers", networkHeadId);
 }
 
 /** GET — mandatarios de la compañía, con sus organismos. */
 export async function fetchCompanyMandateSigners(
   tenantId: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<MandateSigner[]> {
-  const result = await apiFetch<{ data: MandateSigner[] }>(companyBase(tenantId), { signal });
+  const result = await apiFetch<{ data: MandateSigner[] }>(companyBase(tenantId, networkHeadId), {
+    signal,
+  });
   return result.data;
 }
 
@@ -274,9 +279,10 @@ export async function fetchCompanyMandateSigners(
 export async function fetchCompanyTransitOffices(
   tenantId: string,
   signal?: AbortSignal,
+  networkHeadId?: string | null,
 ): Promise<CompanyTransitOfficeOption[]> {
   const result = await apiFetch<{ data: CompanyTransitOfficeOption[] }>(
-    `${companyBase(tenantId)}/transit-offices`,
+    `${companyBase(tenantId, networkHeadId)}/transit-offices`,
     { signal },
   );
   return result.data;
@@ -286,8 +292,9 @@ export async function fetchCompanyTransitOffices(
 export function createCompanyMandateSigner(
   tenantId: string,
   body: CompanyMandateSignerInput,
+  networkHeadId?: string | null,
 ): Promise<MandateSignerSaved> {
-  return apiFetch<MandateSignerSaved>(companyBase(tenantId), { method: "POST", body });
+  return apiFetch<MandateSignerSaved>(companyBase(tenantId, networkHeadId), { method: "POST", body });
 }
 
 /** PUT /{signerId} — edición de datos y organismos. */
@@ -295,8 +302,9 @@ export function updateCompanyMandateSigner(
   tenantId: string,
   mandateSignerId: string,
   body: CompanyMandateSignerInput,
+  networkHeadId?: string | null,
 ): Promise<MandateSignerSaved> {
-  return apiFetch<MandateSignerSaved>(`${companyBase(tenantId)}/${mandateSignerId}`, {
+  return apiFetch<MandateSignerSaved>(`${companyBase(tenantId, networkHeadId)}/${mandateSignerId}`, {
     method: "PUT",
     body,
   });
@@ -306,14 +314,20 @@ export function updateCompanyMandateSigner(
 export function inactivateCompanyMandateSigner(
   tenantId: string,
   mandateSignerId: string,
+  networkHeadId?: string | null,
 ): Promise<void> {
-  return apiFetch<void>(`${companyBase(tenantId)}/${mandateSignerId}/inactivate`, { method: "POST" });
+  return apiFetch<void>(`${companyBase(tenantId, networkHeadId)}/${mandateSignerId}/inactivate`, {
+    method: "POST",
+  });
 }
 
 /** POST /{signerId}/reactivate — reactiva un mandatario inactivado. */
 export function reactivateCompanyMandateSigner(
   tenantId: string,
   mandateSignerId: string,
+  networkHeadId?: string | null,
 ): Promise<void> {
-  return apiFetch<void>(`${companyBase(tenantId)}/${mandateSignerId}/reactivate`, { method: "POST" });
+  return apiFetch<void>(`${companyBase(tenantId, networkHeadId)}/${mandateSignerId}/reactivate`, {
+    method: "POST",
+  });
 }

@@ -111,7 +111,7 @@ public sealed class UpdateCompanyHandler
             {
                 effectiveType = string.Empty;
                 errors.Add(new CompanyValidationError(
-                    "tenantType", "El tipo de compañía debe ser RENTING, CONCESIONARIO o FLIT."));
+                    "tenantType", $"El tipo de compañía debe ser {CompanyTenantTypes.DisplayList}."));
             }
         }
 
@@ -120,16 +120,32 @@ public sealed class UpdateCompanyHandler
             return UpdateCompanyResult.Invalid(errors);
         }
 
-        var company = await _repository
-            .UpdateAsync(
-                command.TenantId,
-                razonSocial,
-                nit,
-                effectiveType,
-                request.EstadoActivo ?? true,
-                command.ChangedBy,
-                cancellationToken)
-            .ConfigureAwait(false);
+        CompanyListItem? company;
+        try
+        {
+            company = await _repository
+                .UpdateAsync(
+                    command.TenantId,
+                    razonSocial,
+                    nit,
+                    effectiveType,
+                    request.EstadoActivo ?? true,
+                    command.ChangedBy,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (CompanyHierarchyRejectedException ex)
+        {
+            // HU #12406 — la base rechazó el cambio de tipo por la jerarquía (cabeza con hijos
+            // vigentes). 422 con mensaje explícito sobre el campo, nunca un 500.
+            return UpdateCompanyResult.Invalid(
+            [
+                new CompanyValidationError(
+                    "tenantType",
+                    "No se puede cambiar el tipo de una cabeza de grupo mientras tenga compañías hijas vinculadas. "
+                    + $"Desvincula primero a sus hijas. ({ex.Detail})"),
+            ]);
+        }
 
         return company is null
             ? UpdateCompanyResult.NotFound()

@@ -2,8 +2,10 @@ using Flit.Admin.Application.Auditing;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
+using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Tests.TestDoubles;
+using NSubstitute;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -45,7 +47,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new AddTransitGrantHandler(Catalog, OperableReader, new TransitGrantRepository(act, NullAuditContextAccessor.Instance));
+            var handler = NewAddHandler(act, tenantId);
             var result = await handler.HandleAsync(new AddTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -82,7 +84,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new AddTransitGrantHandler(Catalog, OperableReader, new TransitGrantRepository(act, NullAuditContextAccessor.Instance));
+            var handler = NewAddHandler(act, tenantId);
             var result = await handler.HandleAsync(new AddTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -107,7 +109,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var first = NewContext(db))
         {
-            var handler = new AddTransitGrantHandler(Catalog, OperableReader, new TransitGrantRepository(first, NullAuditContextAccessor.Instance));
+            var handler = NewAddHandler(first, tenantId);
             (await handler.HandleAsync(new AddTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -118,7 +120,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var second = NewContext(db))
         {
-            var handler = new AddTransitGrantHandler(Catalog, OperableReader, new TransitGrantRepository(second, NullAuditContextAccessor.Instance));
+            var handler = NewAddHandler(second, tenantId);
             var result = await handler.HandleAsync(new AddTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -147,7 +149,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new AddTransitGrantHandler(Catalog, reader, new TransitGrantRepository(act, NullAuditContextAccessor.Instance));
+            var handler = NewAddHandler(act, tenantId, reader);
             var result = await handler.HandleAsync(new AddTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -175,7 +177,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new AddTransitGrantHandler(Catalog, reader, new TransitGrantRepository(act, NullAuditContextAccessor.Instance));
+            var handler = NewAddHandler(act, tenantId, reader);
             var result = await handler.HandleAsync(new AddTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -202,7 +204,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new AddTransitGrantHandler(Catalog, reader, new TransitGrantRepository(act, NullAuditContextAccessor.Instance));
+            var handler = NewAddHandler(act, tenantId, reader);
             var result = await handler.HandleAsync(new AddTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -241,7 +243,7 @@ public sealed class TransitGrantHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new RemoveTransitGrantHandler(new TransitGrantRepository(act, NullAuditContextAccessor.Instance));
+            var handler = NewRemoveHandler(act, tenantId);
             var removed = await handler.HandleAsync(new RemoveTransitGrantCommand
             {
                 TenantId = tenantId,
@@ -249,7 +251,7 @@ public sealed class TransitGrantHandlerTests
                 ChangedBy = ChangedBy,
             }, TestContext.Current.CancellationToken);
 
-            removed.Should().BeTrue();
+            removed.Removed.Should().BeTrue();
         }
 
         await using var verify = NewContext(db);
@@ -269,7 +271,7 @@ public sealed class TransitGrantHandlerTests
         var tenantId = Guid.NewGuid();
 
         await using var act = NewContext(db);
-        var handler = new RemoveTransitGrantHandler(new TransitGrantRepository(act, NullAuditContextAccessor.Instance));
+        var handler = NewRemoveHandler(act, tenantId);
 
         var removed = await handler.HandleAsync(new RemoveTransitGrantCommand
         {
@@ -278,7 +280,7 @@ public sealed class TransitGrantHandlerTests
             ChangedBy = ChangedBy,
         }, TestContext.Current.CancellationToken);
 
-        removed.Should().BeFalse(); // → 404, sin auditoría
+        removed.Removed.Should().BeFalse(); // → 404, sin auditoría
         (await act.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
@@ -314,7 +316,10 @@ public sealed class TransitGrantHandlerTests
         }
 
         await using var ctx = NewContext(db);
-        var handler = new GetTransitGrantsHandler(new TransitGrantRepository(ctx, NullAuditContextAccessor.Instance));
+        var effective = Substitute.For<IEffectiveTransitOfficeListResolver>();
+        effective.ListEffectiveOfficeIdsAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns([enabledId]);
+        var handler = new GetTransitGrantsHandler(effective);
 
         var result = await handler.HandleAsync(new GetTransitGrantsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
 
@@ -325,7 +330,10 @@ public sealed class TransitGrantHandlerTests
     public async Task AC5_Get_ReturnsEmpty_WhenNoGrants()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new GetTransitGrantsHandler(new TransitGrantRepository(ctx, NullAuditContextAccessor.Instance));
+        var effective = Substitute.For<IEffectiveTransitOfficeListResolver>();
+        effective.ListEffectiveOfficeIdsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<Guid>());
+        var handler = new GetTransitGrantsHandler(effective);
 
         var result = await handler.HandleAsync(new GetTransitGrantsQuery { TenantId = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
@@ -333,6 +341,27 @@ public sealed class TransitGrantHandlerTests
     }
 
     // ---------- Helpers ----------
+
+    private static ICompanyHierarchyRepository StandaloneHierarchy(Guid tenantId)
+    {
+        var hierarchy = Substitute.For<ICompanyHierarchyRepository>();
+        hierarchy.GetHierarchyInfoAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns(new CompanyHierarchyInfo(tenantId, "RENTING", false, null));
+        return hierarchy;
+    }
+
+    private static AddTransitGrantHandler NewAddHandler(
+        FlitDbContext ctx,
+        Guid tenantId,
+        ITransitOfficeOperationalStatusReader? reader = null) =>
+        new(
+            StandaloneHierarchy(tenantId),
+            Catalog,
+            reader ?? OperableReader,
+            new TransitGrantRepository(ctx, NullAuditContextAccessor.Instance));
+
+    private static RemoveTransitGrantHandler NewRemoveHandler(FlitDbContext ctx, Guid tenantId) =>
+        new(StandaloneHierarchy(tenantId), new TransitGrantRepository(ctx, NullAuditContextAccessor.Instance));
 
     private static string NewDbName() => $"flit-transit-grants-{Guid.NewGuid()}";
 

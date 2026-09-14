@@ -33,6 +33,8 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
         string tenantName,
         string companyNit,
         string entityType,
+        string tenantType,
+        bool isGroupParent,
         IReadOnlyList<UserRoleSnapshot> roles,
         IReadOnlyList<string> permissionSlugs)
     {
@@ -53,6 +55,10 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
             new("company_name", tenantName),
             new("company_nit", companyNit),
             new("entity_type", entityType),
+            // HU #12345/#12406 — cabeza de red: el frontend lee estos claims para mostrar
+            // "Red de clientes" sin consultar la API de compañías.
+            new("tenant_type", tenantType),
+            new("is_group_parent", isGroupParent ? "true" : "false", JsonClaimValueTypes.Json),
         };
 
         // HU #10506 — multi-rol: un claim POR CADA rol activo (no uno solo), para que

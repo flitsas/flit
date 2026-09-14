@@ -80,7 +80,7 @@ internal sealed class AdminAuditFilter : IEndpointFilter
         var auditContext = httpContext.RequestServices.GetRequiredService<IAuditContextAccessor>();
 
         var entry = new AdminAuditEntry(
-            TenantId: ResolveTenantId(httpContext.User),
+            TenantId: RequestTenantResolver.ResolveTenantIdOrNull(httpContext.User),
             TenantType: null,
             Module: _module,
             EntityName: _entityName,
@@ -122,10 +122,6 @@ internal sealed class AdminAuditFilter : IEndpointFilter
             _ => "error",
         };
 
-    private static Guid? ResolveTenantId(ClaimsPrincipal user) =>
-        Guid.TryParse(user.FindFirstValue(AdminAuthorization.TenantIdClaimType), out var tenantId)
-            ? tenantId
-            : null;
 
     private static Guid? ResolveUserId(ClaimsPrincipal user) =>
         Guid.TryParse(user.FindFirstValue("sub"), out var userId) ? userId : null;
