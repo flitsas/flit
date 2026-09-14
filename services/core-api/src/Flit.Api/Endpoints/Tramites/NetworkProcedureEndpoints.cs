@@ -28,6 +28,9 @@ namespace Flit.Api.Endpoints.Tramites;
 ///   (HU #12359, <see cref="NetworkAnalyticsEndpoints"/>): estadísticas agregadas del universo consolidado.</item>
 ///   <item><c>GET /reports/procedures</c> y <c>GET /reports/procedures/export</c> (HU #12360,
 ///   <see cref="NetworkReportsEndpoints"/>): reporte detallado de la red, filtrable por hijo o agregado.</item>
+///   <item><c>GET /instances/{id}/attachments</c> y <c>GET /instances/{id}/attachments/{attachmentId}/download</c>
+///   (HU #12410, <see cref="NetworkAttachmentEndpoints"/>): metadatos y descarga proxeada de los documentos
+///   de un trámite de la red, con interruptor de clase para CONCESION.</item>
 /// </list>
 /// Policy de cabeza (<see cref="GroupHeadReadFilter"/>) sobre todo el grupo: sin alcance de grupo ⇒ 403.
 /// HU #12361: <see cref="NetworkAccessAuditFilter"/> (más externo) escribe UN registro por petición en
@@ -198,6 +201,8 @@ internal static class NetworkProcedureEndpoints
         group.MapNetworkStats();
         // HU #12360 — reporte detallado de la red (listado + exportación) bajo /reports/*.
         group.MapNetworkReports();
+        // HU #12410 — documentos de un trámite de la red: metadatos + descarga proxeada (sin preview-url).
+        group.MapNetworkAttachments();
 
         return app;
     }

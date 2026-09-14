@@ -3896,6 +3896,105 @@ paths:
         "404":
           description: El trámite no existe o no está en el conjunto de lectura de la cabeza.
 
+  /api/v1/tramites/network/instances/{id}/attachments:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: tramitesNetworkListInstanceAttachments
+      tags: [Tramites, Red]
+      summary: Metadatos de los documentos de un trámite de la red (solo lectura, sin direcciones)
+      description: >
+        HU #12410 — el MISMO `AttachmentDto` que ve el propio hijo por `GET /api/v1/tramites/instances/{id}/attachments`
+        (id, tipo, filename, mimetype, sizeBytes, sha256, source, uploadedAt, provider, digitallySigned), para un
+        trámite de un cliente hijo del conjunto de lectura de la cabeza. Nunca incluye `storagePath`, direcciones
+        prefirmadas ni previsualización: el único canal de contenido es `…/attachments/{attachmentId}/download`.
+        El modelo de anexos no tiene «versión» (no se expone). El tenant del trámite se resuelve en el servidor
+        (dueño real del trámite) y jamás se toma de `X-Tenant-Id`. Clase CONCESION: 403 `network_documents_disabled`
+        mientras el interruptor `network_documents_concesion` esté apagado (valor por defecto). Un trámite
+        inexistente, ajeno o fuera del conjunto de lectura responde 404 escueto `{ "error": "not_found" }`, idéntico
+        en los tres casos (anti-enumeración). Cada listado deja UN registro `network.attachments.list` en la
+        auditoría de acceso consolidado (HU #12361) con trámite, hijo y resultado (`ok` / `forbidden` / `not_found`).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Documentos del trámite (metadatos). Mismo shape que el listado propio.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attachments:
+                    type: array
+                    items: { $ref: "#/components/schemas/AttachmentDto" }
+        "401":
+          description: Sin token válido.
+        "403":
+          description: >
+            `network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin o interruptor
+            `group_read_scope` apagado) o `network_documents_disabled` (cabeza CONCESION con
+            `network_documents_concesion` apagado).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "`{ \"error\": \"not_found\" }` — trámite inexistente, ajeno o fuera del conjunto de lectura."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/instances/{id}/attachments/{attachmentId}/download:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: attachmentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: tramitesNetworkDownloadInstanceAttachment
+      tags: [Tramites, Red]
+      summary: Descarga proxeada (por transmisión) de un documento de un trámite de la red
+      description: >
+        HU #12410 — la API abre el binario con el tenant DUEÑO del trámite (comprobado contra el conjunto de
+        lectura de la cabeza) y lo sirve por transmisión con `Content-Disposition: attachment; filename=…` y el
+        `Content-Type` del documento; el cliente nunca recibe una dirección de almacenamiento. No existe
+        `preview-url` de red (la URL prefirmada de S3 es un portador anónimo). Mismas reglas de clase e
+        interruptores que el listado. Trámite inexistente/ajeno, documento inexistente o binario perdido
+        responden el MISMO 404 escueto `{ "error": "not_found" }`. Cada descarga (servida o rechazada) deja UN
+        registro `network.attachments.download` con `attachmentId` en la auditoría de acceso consolidado.
+        Las rutas propias `GET /api/v1/tramites/instances/{id}/attachments/{attachmentId}/download` y `…/preview-url`
+        no cambian.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Binario del documento.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required` o `network_documents_disabled`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "`{ \"error\": \"not_found\" }` — trámite inexistente/ajeno, documento inexistente o binario perdido."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/network/stats/overview:
     get:
       operationId: tramitesNetworkStatsOverview
@@ -9112,9 +9211,10 @@ paths:
         - bearerAuth: []
       summary: "Lista los interruptores globales de la jerarquía de clientes"
       description: >
-        Devuelve el estado de `group_read_scope` (cabeza de grupo lee a sus hijos) e
-        `inherited_configuration` (hijos heredan configuración del padre). Se leen por petición y sin
-        caché: conmutar uno surte efecto en la siguiente petición sin despliegue ni nuevo token.
+        Devuelve el estado de `group_read_scope` (cabeza de grupo lee a sus hijos), `inherited_configuration`
+        (hijos heredan configuración del padre) y `network_documents_concesion` (HU #12410: una cabeza de
+        clase CONCESION puede listar y descargar documentos de la red; nace APAGADO). Se leen por petición y
+        sin caché: conmutar uno surte efecto en la siguiente petición sin despliegue ni nuevo token.
         Ninguno reutiliza `is_group_parent`. Solo rol SuperAdmin.
       responses:
         "200":
@@ -9133,7 +9233,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [group_read_scope, inherited_configuration]
+          enum: [group_read_scope, inherited_configuration, network_documents_concesion]
         description: "Clave del interruptor. Cualquier otra clave responde 404."
     put:
       operationId: adminHierarchySwitchesSet
@@ -9144,8 +9244,11 @@ paths:
       description: >
         Apagar `group_read_scope` hace que toda cabeza de grupo resuelva alcance propio (`Single`) en la
         siguiente petición, dejando intactos `is_group_parent` y `parent_tenant_id`; reencenderlo devuelve
-        `Group` sin nuevo token. Los interruptores son independientes entre sí. La operación queda en el
-        rastro de auditoría administrativo (`module=config`, `operation=update`, `entity=hierarchy_switch`).
+        `Group` sin nuevo token. Encender `network_documents_concesion` (HU #12410, apagado por defecto) abre
+        `GET /api/v1/tramites/network/instances/{id}/attachments[/{attachmentId}/download]` a las cabezas de
+        clase CONCESION (MARCA_BLANCA no lo necesita). Los interruptores son independientes entre sí. La
+        operación queda en el rastro de auditoría administrativo (`module=config`, `operation=update`,
+        `entity=hierarchy_switch`).
       requestBody:
         required: true
         content:
@@ -14064,7 +14167,7 @@ components:
       properties:
         key:
           type: string
-          enum: [group_read_scope, inherited_configuration]
+          enum: [group_read_scope, inherited_configuration, network_documents_concesion]
         isEnabled: { type: boolean }
         updatedAt: { type: string, format: date-time }
         updatedBy:

@@ -110,6 +110,9 @@ internal static class CoveredQueries
         // HU #12360 — reporte detallado de red con conjunto explicito = ANY(@tenants) sobre la vista (NetworkReportsTests). Sin modo global.
         new("Q36", "DetailedReportNetworkReadRepository.GetNetworkProceduresAsync (red, uuid[])", "NetworkDetailedReportFilter.TenantIds", 2, SupportsGlobal: false),
         new("Q37", "DetailedReportNetworkReadRepository.ExportNetworkProceduresAsync (red, uuid[], mismo predicado que Q36)", "NetworkDetailedReportFilter.TenantIds", 2, SupportsGlobal: false),
+        // HU #12410 — documentos de la red: dueño por IProcedureInstanceOwnerLookup + CanRead, luego los handlers de anexos con ese tenant (NetworkAttachmentsTests). Sin modo global.
+        new("Q38", "NetworkAttachmentsHandler.ListAsync (red: ProcedureInstanceOwnerLookup + ListAttachmentsHandler con el tenant del dueno)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q39", "NetworkAttachmentsHandler.DownloadAsync (red: ProcedureInstanceOwnerLookup + DownloadAttachmentHandler con el tenant del dueno)", "TenantScope", 2, SupportsGlobal: false),
     ];
 
     public static CoveredQuery Get(string id) =>

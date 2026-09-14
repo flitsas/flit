@@ -46,6 +46,8 @@ public static class DependencyInjection
         services.AddScoped<NetworkListProcedureInstancesHandler>();
         services.AddScoped<NetworkCountProcedureInstancesByStatusHandler>();
         services.AddScoped<NetworkGetProcedureInstanceHandler>();
+        // HU #12410 (Feature #12257) - documentos de un tramite de la red: metadatos + descarga proxeada.
+        services.AddScoped<NetworkAttachmentsHandler>();
         services.AddScoped<GetTramitesQueryFieldsHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
         // HU #10975 (Feature #10972) — persiste en field_values lo que el OCR semántico ya extrae.
