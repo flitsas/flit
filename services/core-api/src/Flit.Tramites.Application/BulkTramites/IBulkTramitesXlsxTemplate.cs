@@ -8,6 +8,10 @@ namespace Flit.Tramites.Application.BulkTramites;
 /// </summary>
 public interface IBulkTramitesXlsxTemplate
 {
+    /// <param name="tenantId">
+    /// Empresa que descarga la plantilla. Hace falta para el desplegable de organismos de tránsito
+    /// de Matrícula: solo se ofrecen los que esa empresa tiene habilitados.
+    /// </param>
     Task<RenderedBulkTramitesTemplate> BuildAsync(
-        BulkTramitesTemplateType tipo, CancellationToken ct = default);
+        BulkTramitesTemplateType tipo, Guid tenantId, CancellationToken ct = default);
 }

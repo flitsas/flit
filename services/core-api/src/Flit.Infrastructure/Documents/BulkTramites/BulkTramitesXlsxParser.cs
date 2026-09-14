@@ -63,7 +63,9 @@ internal sealed class BulkTramitesXlsxParser : IBulkTramitesXlsxParser
 
     private static BulkTramitesParseResult Read(BulkTramitesTemplateType tipo, SpreadsheetDocument document)
     {
-        var columnas = BulkTramitesTemplateCatalog.ColumnsFor(tipo, tiposTramiteVigentes: []);
+        // Sin catálogos: los encabezados no dependen de ellos (solo los desplegables), así que el
+        // parser no necesita tocar la base para saber qué columnas exigir.
+        var columnas = BulkTramitesTemplateCatalog.ColumnsFor(tipo);
         var encabezadoEsperado = columnas.Select(c => c.Header).ToList();
 
         var workbookPart = document.WorkbookPart;

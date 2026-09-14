@@ -17,7 +17,13 @@ public sealed record BulkTramitesRowContext(
     string? Plate,
     string? OwnerDocumentType,
     string? OwnerDocumentNumber,
-    IReadOnlyList<ActorInput> Actors);
+    IReadOnlyList<ActorInput> Actors,
+    /// <summary>
+    /// NOMBRE del organismo de tránsito escrito en el Excel (solo matrícula). Se resuelve a id
+    /// contra los habilitados de la empresa al procesar la fila; null en el resto de plantillas,
+    /// donde el organismo lo impone el RUNT.
+    /// </summary>
+    string? TransitOfficeName = null);
 
 /// <summary>
 /// Traduce una fila del Excel a <see cref="BulkTramitesRowContext"/>. Es lógica pura y sin
@@ -60,7 +66,8 @@ public static class BulkTramitesRowMapper
             Value(values, "placa"),
             OwnerDocumentType: null,
             OwnerDocumentNumber: null,
-            propietario is null ? [] : [propietario]);
+            propietario is null ? [] : [propietario],
+            Value(values, BulkTramitesTemplateCatalog.OrganismoTransitoHeader));
     }
 
     private static BulkTramitesRowContext MapTraspaso(

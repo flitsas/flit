@@ -10,3 +10,12 @@ public sealed record BulkTramitesColumnSpec(
     string Header,
     string Guia,
     IReadOnlyList<string>? Opciones = null);
+
+/// <summary>
+/// Catálogos que solo se conocen en tiempo de generación, porque salen de la base y del tenant:
+/// los tipos de trámite vigentes (plantilla «Otros») y los organismos de tránsito que la empresa
+/// tiene habilitados (plantilla «Matrícula»). Alimentan únicamente los desplegables.
+/// </summary>
+public sealed record BulkTramitesDynamicCatalogs(
+    IReadOnlyList<string>? TiposTramite = null,
+    IReadOnlyList<string>? OrganismosTransito = null);

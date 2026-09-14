@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Integration;
 
 namespace Flit.Tramites.Application.BulkTramites.Processing;
 
@@ -10,12 +11,27 @@ namespace Flit.Tramites.Application.BulkTramites.Processing;
 public sealed class BulkTramitesWizardGateway(
     RunPreflightPreviewHandler previewHandler,
     CreateProcedureInstanceFromConsultaHandler createHandler,
-    PutActorsHandler actorsHandler) : IBulkTramitesWizardGateway
+    PutActorsHandler actorsHandler,
+    ITransitOfficeResolver transitOfficeResolver) : IBulkTramitesWizardGateway
 {
+    /// <summary>
+    /// Motivo de fila cuando el organismo escrito en el Excel no es uno de los habilitados de la
+    /// empresa. Se distingue del error del wizard a propósito: el usuario tiene que saber que el
+    /// dato malo es ESE, no el vehículo.
+    /// </summary>
+    public const string OrganismoNoHabilitado = "organismo_transito_no_habilitado";
+
     public async Task<(string? PreviewToken, string? Error)> PreviewVehicleAsync(
         BulkTramitesRowContext context, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
+
+        var (transitOfficeId, resolveError) = await ResolveTransitOfficeAsync(context, ct)
+            .ConfigureAwait(false);
+        if (resolveError is not null)
+        {
+            return (null, resolveError);
+        }
 
         var (result, error, _, _) = await previewHandler.HandleAsync(
             new PreflightPreviewRequest(
@@ -25,17 +41,44 @@ public sealed class BulkTramitesWizardGateway(
                 context.Plate,
                 context.OwnerDocumentType,
                 context.OwnerDocumentNumber,
-                TransitOfficeId: null,
+                transitOfficeId,
                 context.ProcedureTypeCode),
             ct).ConfigureAwait(false);
 
         return (result?.PreviewToken, error);
     }
 
+    /// <summary>
+    /// Traduce el NOMBRE del organismo escrito en el Excel al id que exige el wizard. Solo aplica
+    /// donde la plantilla lo pide (matrícula); en el resto no hay nombre que resolver y el
+    /// organismo lo fija el RUNT.
+    /// </summary>
+    private async Task<(Guid? Id, string? Error)> ResolveTransitOfficeAsync(
+        BulkTramitesRowContext context, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(context.TransitOfficeName))
+        {
+            return (null, null);
+        }
+
+        var resuelto = await transitOfficeResolver
+            .ResolveEnabledByNameAsync(context.TenantId, context.TransitOfficeName.Trim(), ct)
+            .ConfigureAwait(false);
+
+        return resuelto is null ? (null, OrganismoNoHabilitado) : (resuelto.Id, null);
+    }
+
     public async Task<(Guid? ProcedureInstanceId, string? Error)> CreateTramiteAsync(
         BulkTramitesRowContext context, string? previewToken, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
+
+        var (transitOfficeId, resolveError) = await ResolveTransitOfficeAsync(context, ct)
+            .ConfigureAwait(false);
+        if (resolveError is not null)
+        {
+            return (null, resolveError);
+        }
 
         var (result, error, existingId, _) = await createHandler.HandleAsync(
             new CreateFromConsultaRequest(
@@ -47,7 +90,7 @@ public sealed class BulkTramitesWizardGateway(
                 context.OwnerDocumentType,
                 context.OwnerDocumentNumber,
                 previewToken,
-                TransitOfficeId: null,
+                transitOfficeId,
                 ProcedureTypeCode: context.ProcedureTypeCode),
             ct).ConfigureAwait(false);
 

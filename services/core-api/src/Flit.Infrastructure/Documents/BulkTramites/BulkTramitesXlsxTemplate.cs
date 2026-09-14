@@ -2,6 +2,7 @@ using System.Globalization;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Tramites.Application.BulkTramites;
 using Flit.Tramites.Domain.Repositories;
 
@@ -17,7 +18,10 @@ namespace Flit.Infrastructure.Documents.BulkTramites;
 /// <para>Los códigos de tipo de trámite de la plantilla «Otros» se excluyen de MATRICULA_NUEVA y
 /// TRASPASO_STANDARD porque esos dos tienen su propia plantilla dedicada.</para>
 /// </summary>
-public sealed class BulkTramitesXlsxTemplate(IProcedureTypeRepository procedureTypeRepository)
+public sealed class BulkTramitesXlsxTemplate(
+    IProcedureTypeRepository procedureTypeRepository,
+    ITransitGrantRepository transitGrantRepository,
+    ITransitOfficeCatalog transitOfficeCatalog)
     : IBulkTramitesXlsxTemplate
 {
     private const string Mimetype =
@@ -34,11 +38,18 @@ public sealed class BulkTramitesXlsxTemplate(IProcedureTypeRepository procedureT
     private const string PromptTitle = "Cómo se llena";
 
     public async Task<RenderedBulkTramitesTemplate> BuildAsync(
-        BulkTramitesTemplateType tipo, CancellationToken ct = default)
+        BulkTramitesTemplateType tipo, Guid tenantId, CancellationToken ct = default)
     {
-        var columnas = tipo == BulkTramitesTemplateType.Otros
-            ? BulkTramitesTemplateCatalog.ColumnsFor(tipo, await ResolveTiposTramiteVigentesAsync(ct).ConfigureAwait(false))
-            : BulkTramitesTemplateCatalog.ColumnsFor(tipo);
+        var catalogosDinamicos = tipo switch
+        {
+            BulkTramitesTemplateType.Otros => new BulkTramitesDynamicCatalogs(
+                TiposTramite: await ResolveTiposTramiteVigentesAsync(ct).ConfigureAwait(false)),
+            BulkTramitesTemplateType.Matricula => new BulkTramitesDynamicCatalogs(
+                OrganismosTransito: await ResolveOrganismosHabilitadosAsync(tenantId, ct).ConfigureAwait(false)),
+            _ => null,
+        };
+
+        var columnas = BulkTramitesTemplateCatalog.ColumnsFor(tipo, catalogosDinamicos);
 
         using var buffer = new MemoryStream();
 
@@ -101,6 +112,26 @@ public sealed class BulkTramitesXlsxTemplate(IProcedureTypeRepository procedureT
             $"plantilla-carga-masiva-{slug}-{BulkTramitesTemplateCatalog.Version}.xlsx",
             Mimetype,
             buffer.ToArray());
+    }
+
+    /// <summary>
+    /// Organismos que la empresa tiene HABILITADOS, por nombre. Se ofrecen por nombre —y no por
+    /// código— porque es lo que el operador reconoce y lo que resuelve
+    /// <c>ITransitOfficeResolver.ResolveEnabledByNameAsync</c> al procesar la fila.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ResolveOrganismosHabilitadosAsync(
+        Guid tenantId, CancellationToken ct)
+    {
+        var ids = await transitGrantRepository.ListEnabledOfficeIdsAsync(tenantId, ct).ConfigureAwait(false);
+
+        return
+        [
+            .. ids
+                .Select(transitOfficeCatalog.GetById)
+                .Where(o => o is not null)
+                .Select(o => o!.Name)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase),
+        ];
     }
 
     private async Task<IReadOnlyList<string>> ResolveTiposTramiteVigentesAsync(CancellationToken ct)

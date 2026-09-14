@@ -1,5 +1,6 @@
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Documents.BulkTramites;
 using Flit.Tramites.Application.BulkTramites;
 using Flit.Tramites.Domain.Entities;
@@ -19,11 +20,21 @@ namespace Flit.Infrastructure.Tests.Documents.BulkTramites;
 public sealed class BulkTramitesXlsxTemplateTests
 {
     private readonly IProcedureTypeRepository _procedureTypeRepository = Substitute.For<IProcedureTypeRepository>();
+    private readonly ITransitGrantRepository _transitGrants = Substitute.For<ITransitGrantRepository>();
+    private readonly ITransitOfficeCatalog _transitOffices = Substitute.For<ITransitOfficeCatalog>();
     private readonly BulkTramitesXlsxTemplate _plantilla;
+
+    private static readonly Guid Tenant = Guid.NewGuid();
+    private static readonly Guid OficinaId = Guid.NewGuid();
 
     public BulkTramitesXlsxTemplateTests()
     {
-        _plantilla = new BulkTramitesXlsxTemplate(_procedureTypeRepository);
+        _transitGrants.ListEnabledOfficeIdsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns([OficinaId]);
+        _transitOffices.GetById(OficinaId)
+            .Returns(new TransitOfficeEntry(OficinaId, "SDM-BOG", "Secretaría de Movilidad de Bogotá", "11", "11001"));
+
+        _plantilla = new BulkTramitesXlsxTemplate(_procedureTypeRepository, _transitGrants, _transitOffices);
     }
 
     private static ProcedureType Tipo(string code, bool isActive = true) => new()
@@ -45,7 +56,7 @@ public sealed class BulkTramitesXlsxTemplateTests
             .ListAsync(null, null, Arg.Any<CancellationToken>())
             .Returns([Tipo("CAMBIO_COLOR")]);
 
-        var archivo = await _plantilla.BuildAsync(tipo, TestContext.Current.CancellationToken);
+        var archivo = await _plantilla.BuildAsync(tipo, Tenant, TestContext.Current.CancellationToken);
 
         using var libro = SpreadsheetDocument.Open(new MemoryStream(archivo.Content), false);
         var hojas = libro.WorkbookPart!.Workbook.Sheets!.Elements<Sheet>().ToList();
@@ -65,8 +76,46 @@ public sealed class BulkTramitesXlsxTemplateTests
         columnas.Select(c => c.Header).Should().Contain(["fila", "placa", "vin", "propietario_numero_documento"]);
         columnas.Select(c => c.Header).Should().NotContain(h => h.EndsWith("_porcentaje", StringComparison.Ordinal));
 
-        var archivo = await _plantilla.BuildAsync(BulkTramitesTemplateType.Matricula, TestContext.Current.CancellationToken);
+        var archivo = await _plantilla.BuildAsync(BulkTramitesTemplateType.Matricula, Tenant, TestContext.Current.CancellationToken);
         archivo.Filename.Should().Contain("matricula");
+    }
+
+    [Fact]
+    public async Task Build_Matricula_TraeElOrganismoDeTransito_ConLosHabilitadosDeLaEmpresa()
+    {
+        // Sin esta columna la matrícula NO se puede cargar masivamente: el paso 1 exige la
+        // secretaría antes de consultar el VIN (HU #11199) y la fila muere en
+        // TRANSIT_OFFICE_REQUIRED. Se detectó probando el flujo completo contra la API.
+        BulkTramitesTemplateCatalog.MatriculaColumns().Select(c => c.Header)
+            .Should().Contain(BulkTramitesTemplateCatalog.OrganismoTransitoHeader);
+
+        var archivo = await _plantilla.BuildAsync(
+            BulkTramitesTemplateType.Matricula, Tenant, TestContext.Current.CancellationToken);
+
+        using var libro = SpreadsheetDocument.Open(new MemoryStream(archivo.Content), false);
+        var hojaListas = libro.WorkbookPart!.WorksheetParts.Last().Worksheet;
+        var valores = hojaListas.Descendants<Cell>()
+            .Select(c => c.InlineString?.Text?.Text)
+            .Where(v => v is not null)
+            .ToList();
+
+        // El desplegable ofrece el NOMBRE, que es lo que el procesador resuelve contra los
+        // organismos habilitados de esa empresa.
+        valores.Should().Contain("Secretaría de Movilidad de Bogotá");
+    }
+
+    [Fact]
+    public async Task Build_Traspaso_NoPideOrganismo_PorqueLoImponeElRunt()
+    {
+        BulkTramitesTemplateCatalog.TraspasoColumns().Select(c => c.Header)
+            .Should().NotContain(BulkTramitesTemplateCatalog.OrganismoTransitoHeader);
+
+        await _plantilla.BuildAsync(
+            BulkTramitesTemplateType.Traspaso, Tenant, TestContext.Current.CancellationToken);
+
+        // Ni siquiera se consultan los grants: no hay desplegable que alimentar.
+        await _transitGrants.DidNotReceive()
+            .ListEnabledOfficeIdsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -95,7 +144,7 @@ public sealed class BulkTramitesXlsxTemplateTests
                 Tipo("BLINDAJE", isActive: false),
             ]);
 
-        var archivo = await _plantilla.BuildAsync(BulkTramitesTemplateType.Otros, TestContext.Current.CancellationToken);
+        var archivo = await _plantilla.BuildAsync(BulkTramitesTemplateType.Otros, Tenant, TestContext.Current.CancellationToken);
 
         using var libro = SpreadsheetDocument.Open(new MemoryStream(archivo.Content), false);
         // Columna A de «Listas»: el primer catálogo distinto que aparece recorriendo las columnas

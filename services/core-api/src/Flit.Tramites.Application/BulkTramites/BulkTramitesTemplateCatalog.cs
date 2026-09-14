@@ -26,6 +26,13 @@ public static class BulkTramitesTemplateCatalog
     public const string FilaHeader = "fila";
     public const string TipoTramiteHeader = "tipo_tramite";
 
+    /// <summary>
+    /// Organismo de tránsito (secretaría). Solo en Matrícula: ahí es OBLIGATORIO —sin él no se
+    /// consulta el VIN (HU #11199)— mientras que en traspaso y en el resto lo impone el RUNT.
+    /// Lleva el NOMBRE del organismo, no su id: nadie escribe un GUID en un Excel.
+    /// </summary>
+    public const string OrganismoTransitoHeader = "organismo_transito";
+
     /// <summary>Catálogo cerrado de tipos de documento admitidos en las columnas de actor.</summary>
     public static readonly IReadOnlyList<string> TiposDocumento = ["CC", "CE", "NIT", "TI", "PPT", "PAS"];
 
@@ -68,10 +75,20 @@ public static class BulkTramitesTemplateCatalog
         }
     }
 
-    /// <summary>Columnas de la plantilla de Matrícula: vehículo + un único propietario.</summary>
-    public static IReadOnlyList<BulkTramitesColumnSpec> MatriculaColumns() =>
+    /// <summary>
+    /// Columnas de la plantilla de Matrícula: organismo de tránsito + vehículo + un único
+    /// propietario. El organismo va PRIMERO entre los datos porque sin él la fila no se puede
+    /// procesar: es el dato que el wizard exige antes de consultar el VIN.
+    /// </summary>
+    public static IReadOnlyList<BulkTramitesColumnSpec> MatriculaColumns(
+        IReadOnlyList<string>? organismosHabilitados = null) =>
         [
             Fila,
+            new(
+                OrganismoTransitoHeader,
+                "Organismo de tránsito (secretaría) donde se matricula. Obligatorio: elige uno de "
+                    + "los que tu empresa tiene habilitados. Escríbelo tal cual aparece en la lista.",
+                organismosHabilitados),
             Placa,
             Vin,
             .. ActorColumns("propietario", "propietario", conPorcentaje: false),
@@ -126,12 +143,17 @@ public static class BulkTramitesTemplateCatalog
         return columnas;
     }
 
+    /// <summary>
+    /// Columnas de la plantilla. Los catálogos dinámicos solo alimentan los DESPLEGABLES: los
+    /// encabezados —que son el contrato con el parser— no dependen de ellos, así que el parser
+    /// puede pedir las columnas sin resolver nada contra la base.
+    /// </summary>
     public static IReadOnlyList<BulkTramitesColumnSpec> ColumnsFor(
-        BulkTramitesTemplateType tipo, IReadOnlyList<string>? tiposTramiteVigentes = null) => tipo switch
+        BulkTramitesTemplateType tipo, BulkTramitesDynamicCatalogs? catalogos = null) => tipo switch
     {
-        BulkTramitesTemplateType.Matricula => MatriculaColumns(),
+        BulkTramitesTemplateType.Matricula => MatriculaColumns(catalogos?.OrganismosTransito),
         BulkTramitesTemplateType.Traspaso => TraspasoColumns(),
-        BulkTramitesTemplateType.Otros => OtrosColumns(tiposTramiteVigentes ?? []),
+        BulkTramitesTemplateType.Otros => OtrosColumns(catalogos?.TiposTramite ?? []),
         _ => throw new ArgumentOutOfRangeException(nameof(tipo), tipo, "Tipo de plantilla no soportado."),
     };
 

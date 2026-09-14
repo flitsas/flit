@@ -96,6 +96,7 @@ public static class BulkTramitesEndpoints
 
     private static async Task<IResult> DescargarPlantillaAsync(
         [FromQuery] string? tipo,
+        HttpContext httpContext,
         [FromServices] IBulkTramitesXlsxTemplate template,
         CancellationToken cancellationToken)
     {
@@ -109,7 +110,18 @@ public static class BulkTramitesEndpoints
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var archivo = await template.BuildAsync(tipoResuelto.Value, cancellationToken).ConfigureAwait(false);
+        // El tenant decide qué organismos de tránsito ofrece el desplegable de Matrícula.
+        var tenantId = ResolveTenantId(httpContext.User);
+        if (tenantId is null)
+        {
+            return Results.Json(
+                new ErrorResponse("No fue posible resolver el cliente del token."),
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var archivo = await template
+            .BuildAsync(tipoResuelto.Value, tenantId.Value, cancellationToken)
+            .ConfigureAwait(false);
         return Results.File(archivo.Content, archivo.Mimetype, archivo.Filename);
     }
 

@@ -13,7 +13,7 @@ internal static class BulkTramitesXlsxBuilder
     public static byte[] ConPlantilla(
         BulkTramitesTemplateType tipo, params IReadOnlyDictionary<string, string>[] filas)
     {
-        var headers = BulkTramitesTemplateCatalog.ColumnsFor(tipo, []).Select(c => c.Header).ToList();
+        var headers = BulkTramitesTemplateCatalog.ColumnsFor(tipo).Select(c => c.Header).ToList();
         return Build(headers, filas);
     }
 
