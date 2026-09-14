@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { InlineAlert } from '@/components/atom/InlineAlert';
-import { formatFecha } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 import {
   BULK_TRAMITES_TEMPLATES,
   bulkTramitesClient,
@@ -112,9 +112,10 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
             data-testid="carga-masiva-selector-lote"
             className="h-9 min-w-0 flex-1 rounded-xl border border-[#DFE5ED] bg-white px-2 text-xs dark:border-white/15 dark:bg-[#0B0F14] dark:text-white"
           >
+            {/* Con hora: dos cargas del mismo archivo el mismo día eran indistinguibles. */}
             {lotes.map((lote) => (
               <option key={lote.id} value={lote.id}>
-                {`${TITULO_TIPO.get(lote.templateType) ?? lote.templateType} · ${formatFecha(lote.createdAt)} · ${lote.sourceFilename}`}
+                {`${TITULO_TIPO.get(lote.templateType) ?? lote.templateType} · ${formatFechaHora(lote.createdAt)} · ${lote.sourceFilename}`}
               </option>
             ))}
           </select>
