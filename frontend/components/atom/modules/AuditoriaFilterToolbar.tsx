@@ -80,6 +80,8 @@ const MODULE_OPTIONS: { value: '' | AdminAuditModule; label: string }[] = [
   { value: 'authentication', label: 'Autenticación' },
   { value: 'security', label: 'Seguridad' },
   { value: 'config', label: 'Configuración' },
+  // Epic #12543 — aceptación de Términos y Condiciones al crear trámite.
+  { value: 'tramites', label: 'Trámites' },
 ];
 
 const RESULT_OPTIONS: { value: '' | AdminAuditResult; label: string }[] = [

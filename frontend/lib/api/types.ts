@@ -414,7 +414,15 @@ export interface AuditLogPageResponse {
 // `AdminAuditLogEntry` / `AdminAuditLogPageResponse`). Config + operaciones sobre
 // usuarios/roles/permisos/autenticación.
 export type AdminAuditTenantType = "COMPANY" | "TRANSIT_OFFICE";
-export type AdminAuditModule = "users" | "roles" | "permissions" | "authentication" | "security" | "config";
+export type AdminAuditModule =
+  | "users"
+  | "roles"
+  | "permissions"
+  | "authentication"
+  | "security"
+  | "config"
+  // Epic #12543 — aceptación de Términos y Condiciones al crear trámite (operation `accept_terms`).
+  | "tramites";
 export type AdminAuditResult = "success" | "failure";
 
 export interface AdminAuditLogEntry {
