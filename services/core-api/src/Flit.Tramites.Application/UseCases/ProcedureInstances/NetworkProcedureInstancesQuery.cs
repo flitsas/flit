@@ -91,6 +91,22 @@ public sealed class NetworkCountProcedureInstancesByStatusHandler(IProcedureInst
         ProcedureInstanceListRequest request,
         CancellationToken ct = default)
     {
+        var (result, error) = await HandleWithReachAsync(scope, childTenantId, request, ct);
+        return (result?.Counts, error);
+    }
+
+    /// <summary>
+    /// HU #12361 — igual que <see cref="HandleAsync"/> pero devuelve además los clientes DISTINTOS del
+    /// alcance con al menos un trámite bajo el filtro (<see cref="NetworkStatusCountsResult.ReachedTenantIds"/>):
+    /// los conteos por estado no dicen a qué hijos alcanzan y la auditoría de acceso consolidado lo
+    /// necesita para registrar (o no, AC5) la petición.
+    /// </summary>
+    public async Task<(NetworkStatusCountsResult? Result, string? Error)> HandleWithReachAsync(
+        TenantScope? scope,
+        Guid? childTenantId,
+        ProcedureInstanceListRequest request,
+        CancellationToken ct = default)
+    {
         if (NetworkScopePolicy.Validate(scope) is { } scopeError)
             return (null, scopeError);
 
@@ -100,15 +116,21 @@ public sealed class NetworkCountProcedureInstancesByStatusHandler(IProcedureInst
 
         var filter = ListProcedureInstancesFilteredHandler.BuildFilter(request) with { Estados = null };
         var conteos = await repo.CountByStatusFilteredAsync(effective!, filter, ct);
+        var alcanzados = await repo.ListTenantIdsWithMatchesAsync(effective!, filter, ct);
 
         var resultado = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var estado in TramiteEstado.Todos)
             resultado[estado] = conteos.GetValueOrDefault(estado);
         resultado[TramiteEstado.Subsanacion] = conteos.GetValueOrDefault(TramiteEstado.Subsanacion);
 
-        return (resultado, null);
+        return (new NetworkStatusCountsResult(resultado, alcanzados), null);
     }
 }
+
+/// <summary>Conteos por estado del universo consolidado + clientes alcanzados por el filtro (HU #12361).</summary>
+public sealed record NetworkStatusCountsResult(
+    IReadOnlyDictionary<string, int> Counts,
+    IReadOnlyList<Guid> ReachedTenantIds);
 
 /// <summary>
 /// Detalle consolidado en solo lectura (HU #12358, AC1/AC5): el cliente dueño (<c>TenantId</c> +

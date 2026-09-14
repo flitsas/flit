@@ -551,6 +551,16 @@ public interface IProcedureInstanceRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// HU #12361 (Feature #12257) — clientes DISTINTOS del alcance que tienen al menos un trámite que
+    /// cumple el filtro (<c>SELECT DISTINCT tenant_id</c>, sin cargar entidades). Alimenta la auditoría
+    /// de acceso consolidado de las estadísticas: los conteos por estado no dicen a qué hijos alcanzan.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListTenantIdsWithMatchesAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Las opciones de los filtros que dependen de los datos del tenant: los organismos con los que
     /// esta empresa tramita de verdad y los tipos de trámite que usa (HU #12106).
     ///

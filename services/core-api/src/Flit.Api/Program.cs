@@ -287,6 +287,8 @@ app.MapPublicBannersEndpoints();
 app.MapTramitesInstanceEndpoints();
 // HU #12358 (Feature #12257) — vista consolidada de la red (solo lectura) bajo /api/v1/tramites/network.
 app.MapTramitesNetworkEndpoints();
+// HU #12361 (Feature #12257) — consulta de la auditoría de accesos consolidados (hijo + SuperAdmin).
+app.MapNetworkAccessAuditEndpoints();
 app.MapTramitesActorEndpoints();
 // HU #11196 / #11197 — firma a posteriori: marcar el trámite y consultar si la opción aplica.
 app.MapTramitesFirmaPosteriorEndpoints();

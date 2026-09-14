@@ -3896,6 +3896,43 @@ paths:
         "404":
           description: El trámite no existe o no está en el conjunto de lectura de la cabeza.
 
+  /api/v1/tramites/network-access-audit/mine:
+    get:
+      operationId: tramitesNetworkAccessAuditMine
+      tags: [Tramites, Red]
+      summary: Quién de la cabeza de red accedió a los datos de mi cliente (cliente hijo)
+      description: >
+        HU #12361 — el cliente HIJO consulta la auditoría del acceso consolidado sobre SUS datos
+        (`tramites.network_access_audit`): cada listado, estadística, detalle o descarga de una cabeza de
+        red que alcanzó alguno de sus trámites, con el usuario, la cabeza, el recurso, el instante y el
+        resultado (incluidos los intentos rechazados). El tenant sale del token (ruta runtime tenant-scoped),
+        nunca del header. Solo identificadores: ninguna respuesta lleva placa, documento ni nombre.
+        Paginación acotada en servidor (`take` máximo 200). Un SuperAdmin sin `X-Tenant-Id` responde 403
+        `tenant_required` (usa `/api/v1/admin/platform/network-access-audit`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkAccessAuditFrom"
+        - $ref: "#/components/parameters/NetworkAccessAuditTo"
+        - $ref: "#/components/parameters/NetworkAccessAuditResource"
+        - $ref: "#/components/parameters/NetworkAccessAuditPage"
+        - $ref: "#/components/parameters/NetworkAccessAuditTake"
+      responses:
+        "200":
+          description: Página de accesos consolidados sobre los datos del cliente autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkAccessAuditPage"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`tenant_required`: la petición no tiene un cliente resuelto."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/instances/{id}/actors:
     get:
       operationId: tramitesGetActors
@@ -8793,6 +8830,41 @@ paths:
           description: No autenticado.
 
   # ── Admin · Plataforma · Jerarquía de clientes (HU #12323, Feature #12254, ADR-0057) ──
+  /api/v1/admin/platform/network-access-audit:
+    get:
+      operationId: adminNetworkAccessAuditSearch
+      tags: ["Admin · Plataforma · Jerarquía de clientes"]
+      security:
+        - bearerAuth: []
+      summary: "Auditoría de accesos consolidados de una cabeza de red a los datos de un cliente"
+      description: >
+        HU #12361 — para responder el reclamo de un cliente hijo: qué usuarios de la Concesión accedieron
+        a sus datos (listados, estadísticas, detalle, listado y descarga de documentos), con el recurso,
+        el instante y el resultado de cada acceso (los intentos rechazados también quedan). `tenantId`
+        acota al cliente alcanzado (dueño del trámite o presente en `reachedTenantIds`); sin él se lista
+        toda la plataforma. Un registro por petición, nunca por trámite; solo identificadores. Solo rol
+        SuperAdmin. Paginación acotada en servidor (`take` máximo 200).
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Cliente hijo cuyos datos fueron alcanzados. Vacío = toda la plataforma.
+        - $ref: "#/components/parameters/NetworkAccessAuditFrom"
+        - $ref: "#/components/parameters/NetworkAccessAuditTo"
+        - $ref: "#/components/parameters/NetworkAccessAuditResource"
+        - $ref: "#/components/parameters/NetworkAccessAuditPage"
+        - $ref: "#/components/parameters/NetworkAccessAuditTake"
+      responses:
+        "200":
+          description: "Página de accesos consolidados, más reciente primero."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkAccessAuditPage"
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+
   /api/v1/admin/platform/hierarchy-switches:
     get:
       operationId: adminHierarchySwitchesList
@@ -8868,6 +8940,37 @@ components:
       bearerFormat: JWT
 
   parameters:
+    NetworkAccessAuditFrom:
+      name: from
+      in: query
+      required: false
+      schema: { type: string, format: date-time }
+      description: Instante mínimo (inclusive) del acceso.
+    NetworkAccessAuditTo:
+      name: to
+      in: query
+      required: false
+      schema: { type: string, format: date-time }
+      description: Instante máximo (inclusive) del acceso.
+    NetworkAccessAuditResource:
+      name: resource
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [network.instances.search, network.instances.detail, network.stats.overview, network.attachments.list, network.attachments.download]
+      description: Acota a un recurso de la vista consolidada.
+    NetworkAccessAuditPage:
+      name: page
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, default: 1 }
+    NetworkAccessAuditTake:
+      name: take
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      description: Tamaño de página; se acota a 200 en servidor.
     # HU #10520 (RNF01) — header de tenant reutilizable por los endpoints operativos de documentos.
     TenantIdHeader:
       name: X-Tenant-Id
@@ -13514,6 +13617,44 @@ components:
           nullable: true
           description: Usuario (claim sub) que conmutó el interruptor por última vez; null = seed de la migración.
       required: [key, isEnabled, updatedAt, updatedBy]
+
+    NetworkAccessAuditRow:
+      type: object
+      description: >
+        HU #12361 — un acceso consolidado (una petición) de una cabeza de red a datos de sus hijos.
+        Solo identificadores: nunca placa, documento ni nombre.
+      properties:
+        id: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time, description: Instante en que se entregó la respuesta auditada. }
+        actorUserId: { type: string, format: uuid, nullable: true, description: Usuario de la cabeza que ejecutó la petición. }
+        actorTenantId: { type: string, format: uuid, description: Cliente cabeza de red del actor. }
+        reachedTenantIds:
+          type: array
+          items: { type: string, format: uuid }
+          description: Clientes hijos DISTINTOS alcanzados por el resultado (nunca vacío; nunca la cabeza).
+        resource:
+          type: string
+          enum: [network.instances.search, network.instances.detail, network.stats.overview, network.attachments.list, network.attachments.download]
+        procedureId: { type: string, format: uuid, nullable: true, description: Trámite consultado o del documento descargado; null en listados. }
+        procedureTenantId: { type: string, format: uuid, nullable: true, description: Hijo dueño del trámite; null en listados. }
+        attachmentId: { type: string, format: uuid, nullable: true, description: Documento descargado; null salvo en descargas. }
+        result:
+          type: string
+          enum: [ok, forbidden, not_found]
+          description: forbidden = intento rechazado por autorización (también queda registrado).
+      required: [id, occurredAt, actorUserId, actorTenantId, reachedTenantIds, resource, procedureId, procedureTenantId, attachmentId, result]
+
+    NetworkAccessAuditPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkAccessAuditRow"
+        total: { type: integer }
+        page: { type: integer }
+        take: { type: integer, description: Tamaño efectivo de página (acotado a 200). }
+      required: [items, total, page, take]
 
     HierarchySwitchesListResponse:
       type: object

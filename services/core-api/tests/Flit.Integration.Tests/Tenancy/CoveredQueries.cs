@@ -100,6 +100,9 @@ internal static class CoveredQueries
         new("Q28", "ProcedureInstanceRepository.ListWithSummaryGraphFilteredAsync (TenantScope, red)", "TenantScope", 2, SupportsGlobal: false),
         new("Q29", "ProcedureInstanceRepository.CountByStatusFilteredAsync (TenantScope, red)", "TenantScope", 2, SupportsGlobal: false),
         new("Q30", "ProcedureInstanceRepository.GetByIdWithDetailsAsync (TenantScope, detalle de red)", "TenantScope", 2, SupportsGlobal: false),
+        // HU #12361 — auditoria del acceso consolidado (NetworkAccessAuditTests).
+        new("Q31", "ProcedureInstanceRepository.ListTenantIdsWithMatchesAsync (TenantScope, hijos alcanzados por las estadisticas)", "TenantScope", 1, SupportsGlobal: false),
+        new("Q32", "NetworkAccessAuditReader.SearchAsync (auditoria del hijo / SuperAdmin)", "NetworkAccessAuditQuery.TenantId", 0, SupportsGlobal: true),
     ];
 
     public static CoveredQuery Get(string id) =>

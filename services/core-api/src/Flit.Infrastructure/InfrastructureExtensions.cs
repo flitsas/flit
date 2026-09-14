@@ -104,6 +104,10 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
         // HU #12358 — dueño de un trámite por id, solo para el guard de escritura de la red (TenantWriteGuard).
         services.AddScoped<IProcedureInstanceOwnerLookup, ProcedureInstanceOwnerLookup>();
+        // HU #12361 - auditoria del acceso consolidado (tramites.network_access_audit): escritura
+        // best-effort con scope propio y lectura para el hijo / SuperAdmin.
+        services.AddScoped<Flit.Tramites.Application.Auditing.INetworkAccessAuditWriter, Auditing.NetworkAccessAuditWriter>();
+        services.AddScoped<Flit.Tramites.Application.Auditing.INetworkAccessAuditReader, Auditing.NetworkAccessAuditReader>();
         // HU #11196 — marcas de firma a posteriori (el lote que se firma cuando el representante valida).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IDeferredSignatureMarkRepository,
             DeferredSignatureMarkRepository>();

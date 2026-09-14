@@ -186,6 +186,10 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // de arquitectura las cubre. Fuera de aquí ScopeFromItems sería null y la policy de cabeza
         // (GroupHeadReadFilter) respondería 403 siempre — un olvido produce «no ve», nunca una fuga.
         new("/api/v1/tramites/network", RouteMatch.Prefix),
+        // HU #12361 (Feature #12257) — el cliente HIJO consulta quién accedió a sus datos
+        // (/network-access-audit/mine): el tenant sale de aquí (tramites.tenantId), nunca del caller.
+        // Prefijo distinto de /network (StartsWithSegments compara segmentos completos): entrada propia.
+        new("/api/v1/tramites/network-access-audit", RouteMatch.Prefix),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

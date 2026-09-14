@@ -1915,6 +1915,22 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return await CountByStatusAsync(query, filter, ct);
     }
 
+    // HU #12361 — hijos alcanzados por las estadísticas de la red (DISTINCT tenant_id bajo el filtro).
+    public async Task<IReadOnlyList<Guid>> ListTenantIdsWithMatchesAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct)
+    {
+        var query = db.ProcedureInstances.AsNoTracking()
+            .Where(x => x.DeletedAt == null)
+            .WhereTenantInScope(scope, x => x.TenantId);
+
+        return await ApplyListFilters(query, filter)
+            .Select(x => x.TenantId)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
     /// <summary>Núcleo compartido de las dos sobrecargas de <c>CountByStatusFilteredAsync</c>.</summary>
     private async Task<IReadOnlyDictionary<string, int>> CountByStatusAsync(
         IQueryable<ProcedureInstance> query,
