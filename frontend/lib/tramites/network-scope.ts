@@ -186,3 +186,28 @@ export const ETIQUETA_GRUPO_HIJOS = 'Clientes de la red';
 /** Texto de la celda «Cliente» para una fila propia dentro del alcance de red (AC3). */
 export const ETIQUETA_CLIENTE_PROPIO = 'Mi compañía';
 export const ETIQUETA_CLIENTE_HIJO = 'Cliente de la red';
+
+// ── HU #12364 — alcance de red en estadísticas y reportes ───────────────────────────────────────
+
+/** Distintivo de cada indicador/reporte calculado sobre la red (AC1): texto, nunca solo color. */
+export const ETIQUETA_DISTINTIVO_RED = 'Red';
+/** Copy de lo que en alcance de red no existe (exportaciones analíticas, pestañas sin ruta de red). */
+export const COPY_SOLO_COMPANIA_PROPIA = 'Disponible solo para tu compañía';
+export const COPY_CAMBIA_A_COMPANIA_PROPIA =
+  'Cambia el alcance a «Mi compañía» para usar esta opción.';
+/** Rótulo de lo que sigue siendo del cliente propio aunque el alcance sea la red (biometría). */
+export const ETIQUETA_SOLO_COMPANIA_PROPIA = 'Solo mi compañía';
+
+/**
+ * Nombre legible del alcance de red vigente: «Toda la red» o el nombre del hijo elegido. Si el
+ * hijo no está en la lista (lista no disponible), se muestra su id acortado para no ocultarlo.
+ */
+export function describirAlcanceRed(
+  scope: NetworkScopePreference,
+  hijos: ReadonlyArray<{ id: string; nombre: string }>,
+): string {
+  if (scope.mode !== 'network') return ETIQUETA_ALCANCE_PROPIO;
+  if (!scope.childTenantId) return ETIQUETA_ALCANCE_RED;
+  const hijo = hijos.find((h) => h.id === scope.childTenantId);
+  return hijo ? hijo.nombre : `${ETIQUETA_CLIENTE_HIJO} ${scope.childTenantId.slice(0, 8)}`;
+}
