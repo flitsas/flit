@@ -44,11 +44,11 @@ public static class BulkTramitesEndpoints
         [FromServices] GetBulkTramitesBatchesHandler handler,
         CancellationToken cancellationToken)
     {
-        var tenantId = ResolveTenantId(httpContext.User);
+        var tenantId = TenantDeLaPeticion(httpContext);
         if (tenantId is null)
         {
             return Results.Json(
-                new ErrorResponse("No fue posible resolver el cliente del token."),
+                new ErrorResponse("Indique la compañía (header X-Tenant-Id)."),
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
@@ -62,11 +62,11 @@ public static class BulkTramitesEndpoints
         [FromServices] GetBulkTramitesBatchesHandler handler,
         CancellationToken cancellationToken)
     {
-        var tenantId = ResolveTenantId(httpContext.User);
+        var tenantId = TenantDeLaPeticion(httpContext);
         if (tenantId is null)
         {
             return Results.Json(
-                new ErrorResponse("No fue posible resolver el cliente del token."),
+                new ErrorResponse("Indique la compañía (header X-Tenant-Id)."),
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
@@ -100,12 +100,12 @@ public static class BulkTramitesEndpoints
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var tenantId = ResolveTenantId(httpContext.User);
+        var tenantId = TenantDeLaPeticion(httpContext);
         var userId = ResolveUserId(httpContext.User);
         if (tenantId is null || userId is null)
         {
             return Results.Json(
-                new ErrorResponse("No fue posible resolver el cliente o el usuario del token."),
+                new ErrorResponse("Indique la compañía (header X-Tenant-Id) o no fue posible resolver el usuario del token."),
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
@@ -125,10 +125,12 @@ public static class BulkTramitesEndpoints
         };
     }
 
-    private static Guid? ResolveTenantId(ClaimsPrincipal user) =>
-        Guid.TryParse(user.FindFirstValue(AdminAuthorization.TenantIdClaimType), out var tenantId)
-            ? tenantId
-            : null;
+    /// <summary>
+    /// Tenant que dejó el <c>TenantEnforcementMiddleware</c> en <c>HttpContext.Items</c> (HU #12320): la
+    /// ruta está en <c>RuntimeScopedRoutes</c>, así que a un usuario de compañía se le impone su
+    /// tenant desde el JWT y el SuperAdmin acota con X-Tenant-Id. <c>null</c> = SuperAdmin sin acotar.
+    /// </summary>
+    private static Guid? TenantDeLaPeticion(HttpContext http) => RequestTenantResolver.FromItems(http).TenantId;
 
     private static Guid? ResolveUserId(ClaimsPrincipal user)
     {
@@ -155,11 +157,11 @@ public static class BulkTramitesEndpoints
         }
 
         // El tenant decide qué organismos de tránsito ofrece el desplegable de Matrícula.
-        var tenantId = ResolveTenantId(httpContext.User);
+        var tenantId = TenantDeLaPeticion(httpContext);
         if (tenantId is null)
         {
             return Results.Json(
-                new ErrorResponse("No fue posible resolver el cliente del token."),
+                new ErrorResponse("Indique la compañía (header X-Tenant-Id)."),
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
