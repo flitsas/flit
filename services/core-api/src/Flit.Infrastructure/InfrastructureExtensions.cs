@@ -102,6 +102,8 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.ISoatRuntValidationPolicy,
             OtRules.SoatRuntValidationPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // HU #12358 — dueño de un trámite por id, solo para el guard de escritura de la red (TenantWriteGuard).
+        services.AddScoped<IProcedureInstanceOwnerLookup, ProcedureInstanceOwnerLookup>();
         // HU #11196 — marcas de firma a posteriori (el lote que se firma cuando el representante valida).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IDeferredSignatureMarkRepository,
             DeferredSignatureMarkRepository>();

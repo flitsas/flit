@@ -3672,6 +3672,230 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/network/instances:
+    get:
+      operationId: tramitesNetworkListInstances
+      tags: [Tramites, Red]
+      summary: Listado consolidado de trámites de la red (cabeza de grupo)
+      description: >
+        Feature #12257 / HU #12358 — vista consolidada de la red de una cabeza de grupo (Concesión o
+        Marca Blanca). Ruta NUEVA y separada del listado propio: `/api/v1/tramites/instances` no
+        cambia ni recibe parámetros para ampliar el alcance.
+
+
+        El alcance lo calcula el servidor desde la base de datos (`TenantScope`): la cabeza obtiene
+        sus trámites y los de sus clientes hijos vigentes, cada fila con `tenantId` y `companiaNombre`
+        del cliente dueño. Un cliente ajeno a la red nunca aparece. Desvincular a un hijo surte efecto
+        en la siguiente petición, sin renovar el token.
+
+
+        Solo una cabeza de grupo con hijos puede llamarla: un cliente sin jerarquía o un SuperAdmin
+        reciben 403 `network_scope_required` (el SuperAdmin ya tiene el listado global por sus rutas).
+        `childTenantId` fuera del conjunto de lectura responde 403 `network_child_out_of_scope` sin
+        ejecutar la consulta.
+
+
+        SIEMPRE paginada: sin `skip`/`take` responde la primera página con el tope del servidor (200);
+        un `take` mayor cae al tope. Mismos filtros, orden y fila que el listado propio. Nunca entrega
+        contenido de documentos ni direcciones prefirmadas.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: childTenantId
+          in: query
+          required: false
+          description: Acota a un cliente de la red (puede ser la propia cabeza). Fuera del alcance ⇒ 403.
+          schema: { type: string, format: uuid }
+        - name: estado
+          in: query
+          required: false
+          description: Estados separados por coma (OR). Valores fuera del vocabulario se descartan.
+          schema: { type: string }
+        - name: modalidad
+          in: query
+          required: false
+          schema: { type: string }
+        - name: organismoTransito
+          in: query
+          required: false
+          description: Nombre del organismo de tránsito, por subcadena.
+          schema: { type: string }
+        - name: tipoCodigo
+          in: query
+          required: false
+          schema: { type: string }
+        - name: busqueda
+          in: query
+          required: false
+          schema: { type: string }
+        - name: prioritario
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: createdFrom
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: createdTo
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: updatedFrom
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: updatedTo
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: sortBy
+          in: query
+          required: false
+          description: Misma lista blanca que el listado propio; un valor no reconocido cae al orden por defecto.
+          schema: { type: string }
+        - name: sortDir
+          in: query
+          required: false
+          schema: { type: string, enum: [asc, desc], default: desc }
+        - name: skip
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: take
+          in: query
+          required: false
+          description: Tamaño de página. Fuera del rango 1..200 cae al tope de 200.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 200 }
+      responses:
+        "200":
+          description: Página del listado consolidado dentro del alcance de la cabeza (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkProcedureListResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: >
+            `network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin) o
+            `network_child_out_of_scope` (`childTenantId` fuera del conjunto de lectura).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/instances/search:
+    post:
+      operationId: tramitesNetworkSearchInstances
+      tags: [Tramites, Red]
+      summary: Listado consolidado de la red filtrado con la gramática de consultas
+      description: >
+        HU #12358 — mismo cuerpo que `POST /api/v1/tramites/instances/search` (condiciones del catálogo
+        de trámites + filtros sueltos + orden + paginación) más `childTenantId`. Misma policy,
+        paginación y respuesta que `GET /api/v1/tramites/network/instances`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NetworkTramitesSearchRequest"
+      responses:
+        "200":
+          description: Página del listado consolidado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkProcedureListResponse"
+        "400":
+          description: Campo u operador fuera del catálogo de condiciones.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required` o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/instances/estado-counts:
+    post:
+      operationId: tramitesNetworkInstanceEstadoCounts
+      tags: [Tramites, Red]
+      summary: Conteo por estado del universo consolidado de la red
+      description: >
+        HU #12358 — tira de KPIs del universo consolidado bajo las mismas condiciones que
+        `/network/instances/search`. `estado` se ignora (las tarjetas dicen cuántos hay de CADA estado).
+        Devuelve siempre las siete claves del vocabulario más `subsanacion`, con cero donde no hay filas.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NetworkTramitesSearchRequest"
+      responses:
+        "200":
+          description: Conteo por estado (clave = estado, valor = total).
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: { type: integer }
+        "400":
+          description: Campo u operador fuera del catálogo de condiciones.
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required` o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/instances/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: tramitesNetworkGetInstance
+      tags: [Tramites, Red]
+      summary: Detalle consolidado (solo lectura) de un trámite de la red
+      description: >
+        HU #12358 — el cliente dueño (`tenantId`, `tenantName`) y EXACTAMENTE el mismo detalle que ve
+        el propio hijo por `GET /api/v1/tramites/instances/{id}` (`instance`: campos, valores, actores,
+        historial de estado y eventos administrativos), en solo lectura. Nunca incluye contenido de
+        documentos ni direcciones prefirmadas de almacenamiento (AC5): el único canal de contenido es
+        la descarga proxeada de la HU #12410. Un id fuera del conjunto de lectura responde 404 escueto
+        (no se distingue «ajeno» de «no existe»).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Detalle consolidado del trámite.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkProcedureDetailResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required`: la petición no tiene alcance de grupo."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El trámite no existe o no está en el conjunto de lectura de la cabeza.
+
   /api/v1/tramites/instances/{id}/actors:
     get:
       operationId: tramitesGetActors
@@ -8507,7 +8731,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [tramites.columns, ot.procedures.columns]
+          enum: [tramites.columns, ot.procedures.columns, tramites.scope]
         description: >
           Lista blanca fija de scopes soportados. Cualquier otro valor responde 400.
       - in: header
@@ -9279,7 +9503,7 @@ components:
       properties:
         scope:
           type: string
-          enum: [tramites.columns, ot.procedures.columns]
+          enum: [tramites.columns, ot.procedures.columns, tramites.scope]
         value:
           type: object
           additionalProperties: true
@@ -11476,6 +11700,91 @@ components:
         snapshotAt: { type: string, format: date-time }
         documentCount: { type: integer, description: Documentos congelados en el snapshot. }
       required: [id, referenceNumber, status, snapshotAt, documentCount]
+
+    NetworkProcedureListResponse:
+      type: object
+      description: >
+        Página del listado consolidado de la red (HU #12358). Misma forma que el listado propio
+        (`items` + `total`); cada fila es la MISMA proyección de resumen del listado, y `tenantId` /
+        `companiaNombre` identifican al cliente dueño.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlateHistoryItem"
+        total:
+          type: integer
+          description: Total de trámites del universo consolidado que cumplen los filtros (para paginar).
+      required: [items, total]
+
+    NetworkProcedureDetailResponse:
+      type: object
+      description: Detalle consolidado en solo lectura de un trámite de la red (HU #12358).
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+          description: Cliente dueño del trámite.
+        tenantName:
+          type: string
+          nullable: true
+          description: Razón social del cliente dueño.
+        instance:
+          type: object
+          description: >
+            El mismo objeto que devuelve `GET /api/v1/tramites/instances/{id}` al propio cliente
+            (id, referenceNumber, status, procedureTypeId, tenantId, createdAt, submittedAt,
+            completedAt, fieldValues, statusHistory, actors, draftFinalizedAt, plateFlowStatus,
+            currentStep, subsanacionActiva, subsanacionCount, prioritario, events).
+          additionalProperties: true
+      required: [tenantId, instance]
+
+    NetworkTramitesSearchRequest:
+      type: object
+      description: >
+        Cuerpo de `POST /api/v1/tramites/network/instances/search` y `/estado-counts` (HU #12358):
+        el mismo de `POST /api/v1/tramites/instances/search` más `childTenantId`.
+      properties:
+        childTenantId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Acota a un cliente de la red (puede ser la propia cabeza). Fuera del alcance ⇒ 403.
+        condiciones:
+          type: array
+          nullable: true
+          description: Condiciones con la gramática de Consultas (campo, operador, valor). Fuera del catálogo ⇒ 400.
+          items:
+            type: object
+            additionalProperties: true
+        vin: { type: string, nullable: true }
+        placa: { type: string, nullable: true }
+        vendedor: { type: string, nullable: true }
+        comprador: { type: string, nullable: true }
+        gestor: { type: string, nullable: true }
+        firmado: { type: boolean, nullable: true }
+        estado:
+          type: string
+          nullable: true
+          description: Estados separados por coma. Se ignora en `estado-counts`.
+        modalidad: { type: string, nullable: true }
+        organismoTransito: { type: string, nullable: true }
+        tipoCodigo: { type: string, nullable: true }
+        busqueda: { type: string, nullable: true }
+        prioritario: { type: boolean, nullable: true }
+        createdFrom: { type: string, format: date-time, nullable: true }
+        createdTo: { type: string, format: date-time, nullable: true }
+        updatedFrom: { type: string, format: date-time, nullable: true }
+        updatedTo: { type: string, format: date-time, nullable: true }
+        sortBy: { type: string, nullable: true }
+        sortDir: { type: string, nullable: true, enum: [asc, desc] }
+        skip: { type: integer, nullable: true, minimum: 0 }
+        take:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 200
+          description: Fuera del rango cae al tope de 200; ausente ⇒ primera página con el tope.
 
     PlateHistoryResponse:
       type: object

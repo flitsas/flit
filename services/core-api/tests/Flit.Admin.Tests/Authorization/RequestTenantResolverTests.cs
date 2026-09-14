@@ -306,7 +306,7 @@ public sealed class RequestTenantResolverTests
     }
 
     [Fact]
-    public void RuntimeScopedRoutes_ConservaLos10PrefijosYSusComparaciones()
+    public void RuntimeScopedRoutes_ConservaLos10PrefijosHistoricosMasLaRedYSusComparaciones()
     {
         var routes = TenantEnforcementMiddleware.RuntimeScopedRoutes;
 
@@ -322,6 +322,8 @@ public sealed class RequestTenantResolverTests
             ("/api/v1/tramites/deeds", TenantEnforcementMiddleware.RouteMatch.Prefix),
             ("/api/v1/tramites/legal-representatives", TenantEnforcementMiddleware.RouteMatch.Prefix),
             ("/api/v1/tramites/actors", TenantEnforcementMiddleware.RouteMatch.Prefix),
+            // HU #12358 (Feature #12257) — prefijo único de la vista consolidada de la red.
+            ("/api/v1/tramites/network", TenantEnforcementMiddleware.RouteMatch.Prefix),
         });
         routes.Should().OnlyContain(r => r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal));
     }

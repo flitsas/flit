@@ -733,6 +733,11 @@ internal static class ProcedureInstanceEndpoints
             if (body.Ids is null || body.Ids.Count == 0)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique al menos un trámite.");
 
+            // HU #12358 (AC4) — los ids viajan en el body, fuera del alcance del TenantWriteGuardMiddleware:
+            // una cabeza de grupo no puede pausar/reanudar trámites de sus hijos (CanWrite, nunca CanRead).
+            if (await TenantWriteGuard.RejectIfAnyCannotWriteAsync(http, body.Ids, ct) is { } forbidden)
+                return forbidden;
+
             var results = await handler.HandleBulkAsync(
                 body.Ids, tenantId.Value, body.Paused, body.Observation, ResolveUserId(http.User), ct);
             return Results.Ok(new
@@ -1340,7 +1345,8 @@ internal sealed record CreateFromConsultaBody(
 /// pestañas de familia y la tarjeta de estado —que son navegación, no filtros— siguen viajando como
 /// hasta ahora sin tener que expresarse como condición.</para>
 /// </summary>
-internal sealed record TramitesSearchRequest
+// HU #12358 — no sellado: NetworkTramitesSearchRequest lo extiende con childTenantId (mismo contrato + 1 campo).
+internal record TramitesSearchRequest
 {
     public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
 

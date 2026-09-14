@@ -731,8 +731,10 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
         await db.SaveChangesAsync(ct);
         var repo = new ProcedureInstanceRepository(db);
 
+        // HU #12358 añadió la sobrecarga con TenantScope: el `null` literal se tipa explícitamente
+        // como Guid? (= TODOS los tenants, semántica intacta) para que la llamada no sea ambigua.
         var (items, total) = await repo.ListWithSummaryGraphFilteredAsync(
-            null, 0, 20, new ProcedureInstanceListFilter(), ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+            (Guid?)null, 0, 20, new ProcedureInstanceListFilter(), ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
 
         total.Should().Be(2);
         items.Select(i => i.ReferenceNumber).Should().BeEquivalentTo(["DeTenantA", "DeTenantB"]);

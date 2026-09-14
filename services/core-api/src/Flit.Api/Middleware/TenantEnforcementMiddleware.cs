@@ -180,6 +180,12 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // quedara fuera: el operador podría leer el contacto de una persona capturado por OTRA
         // compañía cambiando X-Tenant-Id). El tenant se impone desde el JWT, no del header crudo.
         new("/api/v1/tramites/actors", RouteMatch.Prefix),
+        // HU #12358 (Feature #12257) — vista consolidada de la red: TODAS las rutas de lectura ancha
+        // (listado, detalle, conteos y las que sumen las HUs hermanas: documentos, estadísticas,
+        // reportes) viven bajo este único prefijo, así una sola entrada puebla el TenantScope y el test
+        // de arquitectura las cubre. Fuera de aquí ScopeFromItems sería null y la policy de cabeza
+        // (GroupHeadReadFilter) respondería 403 siempre — un olvido produce «no ve», nunca una fuga.
+        new("/api/v1/tramites/network", RouteMatch.Prefix),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

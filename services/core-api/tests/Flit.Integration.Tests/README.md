@@ -137,6 +137,9 @@ debe ser del lector; C2 es simétrico a C1 y actúa como dueño de las filas que
 | Q25 | `OtMetricsReadRepository.ListClientCompaniesAsync` (grants) | `Guid otTenantId` | ✔ | — | — |
 | Q26 | `DbTenantScopeResolver.ResolveAsync` | `Guid tenantId` | ✔ (C1→Single; P→Group / Single con interruptor apagado; X→Single; inexistente→fail-closed) | — | — |
 | Q27 | `TenantScopeQueryableExtensions.WhereTenantInScope` (ruta nueva) | `TenantScope` | ✔ (Single, Group, inexistente ⇒ 0 filas) | ✔ (≡ Q01) | ✔ (≡ `null`) |
+| Q28 | `ProcedureInstanceRepository.ListWithSummaryGraphFilteredAsync` (`TenantScope`, red — HU #12358, `NetworkProceduresReadTests`) | `TenantScope` | ✔ (Group(P) nunca X/S; Single(C1) nunca C2; vacío ⇒ 0; desvínculo ⇒ sin C1) | ✔ (Single(S) ≡ `Guid?` S) | — |
+| Q29 | `ProcedureInstanceRepository.CountByStatusFilteredAsync` (`TenantScope`, red — HU #12358) | `TenantScope` | ✔ (vacío ⇒ 0) | — | — |
+| Q30 | `ProcedureInstanceRepository.GetByIdWithDetailsAsync` (`TenantScope`, detalle de red — HU #12358) | `TenantScope` | ✔ (X ⇒ not_found; vacío ⇒ null; desvínculo ⇒ not_found) | ✔ (≡ detalle propio del hijo) | — |
 
 **Demostración de que la suite detecta fugas:** `TenantLeakTests.El_helper_de_fuga_detecta_filas_ajenas` ejecuta
 `WhereTenantInScope(TenantScope.All)` sobre el escenario (10 filas de 5 clientes) y afirma que `LeakAssert` lanza

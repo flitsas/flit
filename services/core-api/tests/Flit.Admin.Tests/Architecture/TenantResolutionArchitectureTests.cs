@@ -222,6 +222,40 @@ public sealed class TenantResolutionArchitectureTests : IClassFixture<WebApplica
         stale.Should().BeEmpty("cada entrada de LegacyUncoveredRoutes debe corresponder a una ruta registrada (exacta)");
     }
 
+    // ── HU #12358 AC7 — toda ruta de red está declarada en el middleware ────────────────
+
+    /// <summary>Prefijo único de la vista consolidada de la red (Feature #12257, decisión 1 del plan).</summary>
+    private const string NetworkRoutePrefix = "/api/v1/tramites/network";
+
+    [Fact]
+    public void AC7_TodaRutaDeRedEstaCubiertaPorRuntimeScopedRoutes()
+    {
+        // Más estricto que AC3: una ruta de red NO puede declararse «no scopeada» ni «legacy». Si alguien
+        // registra /network/algo fuera de la lista del middleware, ScopeFromItems sería null y la policy
+        // de cabeza respondería 403 siempre; esta prueba lo nombra antes.
+        var network = RegisteredTramitesRoutes()
+            .Where(r => r.StartsWith(NetworkRoutePrefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        network.Should().NotBeEmpty($"deben existir rutas registradas bajo {NetworkRoutePrefix} (HU #12358)");
+        network.Should().Contain(
+        [
+            NetworkRoutePrefix + "/instances",
+            NetworkRoutePrefix + "/instances/search",
+            NetworkRoutePrefix + "/instances/estado-counts",
+            NetworkRoutePrefix + "/instances/{id:guid}",
+        ]);
+
+        var uncovered = network.Where(route => !IsCoveredByMiddleware(route)).ToList();
+        uncovered.Should().BeEmpty(
+            "toda ruta bajo /api/v1/tramites/network debe estar en TenantEnforcementMiddleware.RuntimeScopedRoutes (HU #12358 AC7). "
+            + "Rutas sin declarar: {0}", string.Join(", ", uncovered));
+
+        TenantEnforcementMiddleware.RuntimeScopedRoutes.Should().Contain(
+            r => r.Path.Equals(NetworkRoutePrefix, StringComparison.OrdinalIgnoreCase) && r.Match == TenantEnforcementMiddleware.RouteMatch.Prefix,
+            "la cobertura de la red es UNA entrada Prefix, no una por ruta");
+    }
+
     private List<string> RegisteredTramitesRoutes()
     {
         var prefix = TenantEnforcementMiddleware.RuntimeRoutePrefix;

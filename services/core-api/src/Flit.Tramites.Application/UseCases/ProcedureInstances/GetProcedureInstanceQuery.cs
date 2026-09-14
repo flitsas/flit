@@ -123,7 +123,7 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
     /// (mismo criterio que la columna "Gestor" del listado, <see cref="IProcedureInstanceRepository
     /// .GetUserDisplayNamesAsync"/>) en vez de una consulta por evento.
     /// </summary>
-    private static async Task<IReadOnlyList<ProcedureInstanceEventDto>> BuildEventsAsync(
+    internal static async Task<IReadOnlyList<ProcedureInstanceEventDto>> BuildEventsAsync(
         IProcedureInstanceRepository repo, IEnumerable<ProcedureInstanceEvent> events, CancellationToken ct)
     {
         var relevant = events

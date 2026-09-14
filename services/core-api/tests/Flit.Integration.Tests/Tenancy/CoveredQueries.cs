@@ -96,6 +96,10 @@ internal static class CoveredQueries
         new("Q25", "OtMetricsReadRepository.ListClientCompaniesAsync (grants)", "Guid otTenantId", 1, SupportsGlobal: false),
         new("Q26", "DbTenantScopeResolver.ResolveAsync", "Guid tenantId", 0, SupportsGlobal: false),
         new("Q27", "TenantScopeQueryableExtensions.WhereTenantInScope (ruta nueva)", "TenantScope", 2, SupportsGlobal: true),
+        // HU #12358 — sobrecargas con TenantScope de la vista consolidada de la red (NetworkProceduresReadTests).
+        new("Q28", "ProcedureInstanceRepository.ListWithSummaryGraphFilteredAsync (TenantScope, red)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q29", "ProcedureInstanceRepository.CountByStatusFilteredAsync (TenantScope, red)", "TenantScope", 2, SupportsGlobal: false),
+        new("Q30", "ProcedureInstanceRepository.GetByIdWithDetailsAsync (TenantScope, detalle de red)", "TenantScope", 2, SupportsGlobal: false),
     ];
 
     public static CoveredQuery Get(string id) =>
