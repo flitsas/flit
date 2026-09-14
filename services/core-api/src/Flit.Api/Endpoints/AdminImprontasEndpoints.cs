@@ -76,7 +76,7 @@ public static class AdminImprontasEndpoints
         GenerarImprontaHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -128,11 +128,6 @@ public static class AdminImprontasEndpoints
         }
     }
 
-    private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId)
-    {
-        var claim = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        return Guid.TryParse(claim, out tenantId);
-    }
 
     private static Guid? ResolveUserId(ClaimsPrincipal user)
     {

@@ -190,6 +190,7 @@ describe("HU #11180 — AC1: selector de firma lista solo las firmas vigentes de
         "1098765432",
         true,
         expect.anything(),
+        undefined,
       ),
     );
 

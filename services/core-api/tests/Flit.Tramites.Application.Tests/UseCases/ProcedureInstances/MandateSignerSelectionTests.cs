@@ -85,6 +85,30 @@ public sealed class MandateSignerSelectionTests
     }
 
     [Fact]
+    public async Task ElTramiteDeUnaHijaNoOfreceMandatariosDeLaCabeza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var hija = Guid.Parse("dddddddd-1111-4000-8000-000000000001");
+        var instance = Instancia();
+        instance.TenantId = hija;
+        _repo.GetByIdWithDetailsAsync(instance.Id, hija, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var dir = Substitute.For<IMandateSignerDirectory>();
+        dir.GetCandidatesAsync(Ot, hija, Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns([Candidato(Ana, "Ana de la hija")]);
+        dir.GetCandidatesAsync(Ot, Tenant, Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns([Candidato(Carlos, "Carlos de la concesión")]);
+
+        var handler = new ListMandateSignerOptionsHandler(_repo, dir);
+        var (result, error) = await handler.HandleAsync(instance.Id, hija, ct);
+
+        error.Should().BeNull();
+        result!.Opciones.Should().ContainSingle(o => o.Id == Ana);
+        await dir.DidNotReceive().GetCandidatesAsync(
+            Ot, Tenant, Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task AC2_CadaMandatarioTraeNombreDocumentoYVigenciaDeSuIdentidad()
     {
         var ct = TestContext.Current.CancellationToken;

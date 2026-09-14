@@ -16,8 +16,13 @@ import { CompanyStatusDialog } from "@/components/admin/companies/CompanyStatusD
 import { CreateCompanyDialog } from "@/components/admin/companies/CreateCompanyDialog";
 import { EditCompanyDialog } from "@/components/admin/companies/EditCompanyDialog";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
-import { createCompany, fetchCompaniesIndex, updateCompany } from "@/lib/api/admin-companies";
-import type { CompanyListItem, CompanyPagedResult } from "@/lib/api/types";
+import {
+  createCompany,
+  fetchCompaniesIndex,
+  fetchCompanyChildren,
+  updateCompany,
+} from "@/lib/api/admin-companies";
+import { isHeadTenantType, type CompanyListItem, type CompanyPagedResult } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const PAGE_SIZE = 20;
@@ -45,6 +50,7 @@ function CompaniesList() {
   const [result, setResult] = useState<CompanyPagedResult | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CompanyListItem | null>(null);
+  const [editActiveChildrenCount, setEditActiveChildrenCount] = useState(0);
   const [toggleTarget, setToggleTarget] = useState<CompanyListItem | null>(null);
 
   // HU #11228 — AdminCompany no ve el listado multi-compañía: va al configurador de su tenant.
@@ -92,6 +98,17 @@ function CompaniesList() {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  const openEdit = (company: CompanyListItem) => {
+    setEditTarget(company);
+    if (isHeadTenantType(company.tenantType)) {
+      void fetchCompanyChildren(company.id)
+        .then((children) => setEditActiveChildrenCount(children.filter((c) => c.estadoActivo).length))
+        .catch(() => setEditActiveChildrenCount(0));
+    } else {
+      setEditActiveChildrenCount(0);
+    }
+  };
 
   const handleApplyFilters = (next: CompanyFilters) => {
     setPage(1);
@@ -182,7 +199,7 @@ function CompaniesList() {
               pageSize={result.pageSize}
               onPageChange={setPage}
               onConfigure={(tenantId) => router.push(`/admin/companies/${tenantId}`)}
-              onEdit={setEditTarget}
+              onEdit={openEdit}
               onToggleStatus={setToggleTarget}
             />
           )}
@@ -194,6 +211,7 @@ function CompaniesList() {
         onClose={() => setCreateOpen(false)}
         onCreate={createCompany}
         onCreated={(company) => handleCreated(company.razonSocial)}
+        isSuperAdmin={isSuperAdmin}
       />
 
       {editTarget && (
@@ -203,6 +221,8 @@ function CompaniesList() {
           onClose={() => setEditTarget(null)}
           onUpdate={updateCompany}
           onUpdated={handleEdited}
+          isSuperAdmin={isSuperAdmin}
+          activeChildrenCount={editActiveChildrenCount}
         />
       )}
 

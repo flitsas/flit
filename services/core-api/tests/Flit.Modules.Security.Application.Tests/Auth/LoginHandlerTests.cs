@@ -49,6 +49,8 @@ public sealed class LoginHandlerTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<bool>(),
                 Arg.Any<IReadOnlyList<UserRoleSnapshot>>(),
                 Arg.Any<IReadOnlyList<string>>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
@@ -67,6 +69,8 @@ public sealed class LoginHandlerTests
             "Acme Renting SAS",
             "900123456-7",
             "COMPANY",
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
             Arg.Is<IReadOnlyList<UserRoleSnapshot>>(r => r.Count == 1 && r[0].Id == roleId),
             Arg.Is<IReadOnlyList<string>>(p => p.Single() == "auth.me.read"));
     }
@@ -93,7 +97,7 @@ public sealed class LoginHandlerTests
         _passwordHasher.Verify("DemoPass1!", "hash").Returns(true);
         _jwtTokenIssuer.IssueToken(
                 Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(),
                 Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 
@@ -102,6 +106,7 @@ public sealed class LoginHandlerTests
         _jwtTokenIssuer.Received(1).IssueToken(
             userId, "ot@flit.local", tenantId, "Organismo de Tránsito Norte",
             "800987654-1", "TRANSIT_OFFICE",
+            Arg.Any<string>(), Arg.Any<bool>(),
             Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>());
     }
 
@@ -127,7 +132,7 @@ public sealed class LoginHandlerTests
         _passwordHasher.Verify("DemoPass1!", "hash").Returns(true);
         _jwtTokenIssuer.IssueToken(
                 Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(),
                 Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 
@@ -137,6 +142,7 @@ public sealed class LoginHandlerTests
         _jwtTokenIssuer.Received(1).IssueToken(
             userId, "sinnit@flit.local", tenantId, "Tenant Legacy Sin NIT",
             string.Empty, "COMPANY",
+            Arg.Any<string>(), Arg.Any<bool>(),
             Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>());
     }
 

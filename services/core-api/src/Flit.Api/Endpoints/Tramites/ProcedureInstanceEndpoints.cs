@@ -1213,15 +1213,8 @@ internal static class ProcedureInstanceEndpoints
         return validos.Count > 0 ? validos : null;
     }
 
-    private static (Guid? TenantId, bool IsSuperAdmin) ResolveTenantContext(HttpContext http)
-    {
-        var isSuperAdmin = http.Items.TryGetValue(TenantEnforcementMiddleware.SuperAdminItemKey, out var sa)
-            && sa is true;
-        Guid? tenantId = http.Items.TryGetValue(TenantEnforcementMiddleware.TenantItemKey, out var t) && t is Guid g
-            ? g
-            : null;
-        return (tenantId, isSuperAdmin);
-    }
+    private static (Guid? TenantId, bool IsSuperAdmin) ResolveTenantContext(HttpContext http) =>
+        RequestTenantResolver.FromItems(http);
 
     /// <summary>Id del usuario autenticado (claim <c>sub</c>/NameIdentifier), o null si no resuelve.</summary>
     private static Guid? ResolveUserId(ClaimsPrincipal user)

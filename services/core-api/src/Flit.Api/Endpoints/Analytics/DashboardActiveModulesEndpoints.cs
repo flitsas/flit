@@ -56,8 +56,8 @@ public static class DashboardActiveModulesEndpoints
     }
 
     /// <summary>
-    /// Copia LOCAL del patrón <c>AnalyticsEndpoints.TryResolveEffectiveTenant</c> (archivo ajeno,
-    /// no se toca), sin vista global: el SuperAdmin sin <c>tenantId</c> recibe 400 en vez de un
+    /// Mismo patrón que <c>AnalyticsEndpoints.TryResolveEffectiveTenant</c> (lectura del claim vía
+    /// <see cref="RequestTenantResolver.TryResolveTenantId"/>, HU #12320), sin vista global: el SuperAdmin sin <c>tenantId</c> recibe 400 en vez de un
     /// centinela "todas las compañías" (no aplica aquí, los flags son de UN tenant).
     /// Tenant Admin/otro rol pidiendo un tenant ajeno → 403 (AC4).
     /// </summary>
@@ -74,7 +74,7 @@ public static class DashboardActiveModulesEndpoints
             // Tenant explícito: SuperAdmin puede acceder a cualquiera; otros solo al propio.
             if (isSuperAdmin) { tenant = requested; return true; }
 
-            if (TryResolveTenantId(user, out var claimTenant) && requested == claimTenant)
+            if (RequestTenantResolver.TryResolveTenantId(user, out var claimTenant) && requested == claimTenant)
             {
                 tenant = claimTenant;
                 return true;
@@ -94,16 +94,10 @@ public static class DashboardActiveModulesEndpoints
         }
 
         // Usuario normal → usa el tenant del JWT.
-        if (TryResolveTenantId(user, out var userTenant)) { tenant = userTenant; return true; }
+        if (RequestTenantResolver.TryResolveTenantId(user, out var userTenant)) { tenant = userTenant; return true; }
 
         error = Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
             detail: "Falta el tenant: el token no incluye tenant_id y no se indicó tenantId.");
         return false;
-    }
-
-    private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId)
-    {
-        var claim = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        return Guid.TryParse(claim, out tenantId);
     }
 }

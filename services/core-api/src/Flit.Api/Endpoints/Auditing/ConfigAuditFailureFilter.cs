@@ -60,7 +60,7 @@ internal sealed class ConfigAuditFailureFilter : IEndpointFilter
 
     private async Task AuditFailureAsync(HttpContext httpContext, string errorCode)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             // Sin tenant (p. ej. 401) no hay configuración a la que atribuir el fallo.
             return;
@@ -92,11 +92,6 @@ internal sealed class ConfigAuditFailureFilter : IEndpointFilter
             _ => "error",
         };
 
-    private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId)
-    {
-        var claim = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        return Guid.TryParse(claim, out tenantId);
-    }
 
     private static Guid? ResolveUserId(ClaimsPrincipal user) =>
         Guid.TryParse(user.FindFirstValue("sub"), out var userId) ? userId : null;

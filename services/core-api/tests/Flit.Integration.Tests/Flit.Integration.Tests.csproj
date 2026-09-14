@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    HU #12319 (Feature #12254, Épica #12235) — arnés de pruebas de integración contra PostgreSQL REAL.
+
+    A diferencia de los demás proyectos de tests (InMemory), este habla con un motor Postgres 16
+    alcanzable por connection string (sin Testcontainers ni Docker, decisión del orquestador):
+    crea una base efímera propia, aplica TODAS las migraciones EF y la borra al terminar.
+    Sin motor alcanzable la colección se omite (skip) en local y FALLA en CI. Ver README.md.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Flit.Integration.Tests</RootNamespace>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+    <NuGetAuditMode>direct</NuGetAuditMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Flit.Infrastructure\Flit.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+</Project>

@@ -18,6 +18,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
+    // HU #12323 (ADR-0057) — interruptores globales de la jerarquía y bitácora append-only del
+    // vínculo padre-hija. La bitácora la escribe solo el trigger tr_tenants_hierarchy_audit.
+    public DbSet<HierarchySwitch> HierarchySwitches => Set<HierarchySwitch>();
+
+    public DbSet<TenantHierarchyAuditEntry> TenantHierarchyAuditEntries => Set<TenantHierarchyAuditEntry>();
+
     // Keyring de ASP.NET Data Protection persistido en Postgres (HU #10233): compartido entre
     // réplicas y estable entre reinicios, para poder descifrar el secreto HMAC del webhook Kyverum.
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
@@ -53,6 +59,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TenantWhitelistUser> TenantWhitelistUsers => Set<TenantWhitelistUser>();
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
+
+    /// <summary>HU #12407 — bloqueos de OT para cabezas Marca Blanca.</summary>
+    public DbSet<TenantTransitOfficeBlock> TenantTransitOfficeBlocks => Set<TenantTransitOfficeBlock>();
+
+    /// <summary>HU #12348 — rechazos auditados al crear trámite.</summary>
+    public DbSet<ProcedureRadicationGateDenial> ProcedureRadicationGateDenials =>
+        Set<ProcedureRadicationGateDenial>();
 
     /// <summary>
     /// Convenio comercial compañía ↔ organismo. Distinto del grant de arriba, que es el permiso para
