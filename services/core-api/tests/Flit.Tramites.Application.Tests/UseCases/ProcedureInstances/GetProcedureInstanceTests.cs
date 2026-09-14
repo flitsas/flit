@@ -80,6 +80,94 @@ public sealed class GetProcedureInstanceTests
         result.StatusHistory.Should().ContainSingle(h => h.ToStatus == TramiteEstado.Borrador);
     }
 
+    // Bug #12526 — la Línea de tiempo del trámite mostraba gestor/correo/empresa fijos en vacío aunque
+    // el backend tuviera el dato de quién ejecutó cada transición (changed_by).
+    [Fact]
+    public async Task HandleAsync_StatusHistoryConChangedBy_ResuelveGestorCorreoYCompania()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var ejecutor = Guid.NewGuid();
+
+        var instance = new ProcedureInstance
+        {
+            ProcedureType = ProcedureTypeFixture.Matricula,
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000007",
+            Status = TramiteEstado.Entregado,
+            CreatedAt = DateTimeOffset.UtcNow,
+            StatusHistory =
+            {
+                new ProcedureInstanceStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    FromStatus = TramiteEstado.Preparado,
+                    ToStatus = TramiteEstado.Entregado,
+                    ChangedAt = DateTimeOffset.UtcNow,
+                    ChangedBy = ejecutor,
+                },
+            },
+        };
+
+        _repo.GetByIdWithDetailsAsync(instance.Id, tenantId, ct).Returns(instance);
+        _repo.GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [ejecutor] = "Laura Restrepo" });
+        _repo.GetUserEmailsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [ejecutor] = "laura.restrepo@renting.com" });
+        _repo.GetUserCompaniasAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [ejecutor] = "Renting Colombia S.A.S" });
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
+
+        error.Should().BeNull();
+        var entry = result!.StatusHistory.Should().ContainSingle().Subject;
+        entry.ChangedByName.Should().Be("Laura Restrepo");
+        entry.ChangedByEmail.Should().Be("laura.restrepo@renting.com");
+        entry.ChangedByCompania.Should().Be("Renting Colombia S.A.S");
+    }
+
+    [Fact]
+    public async Task HandleAsync_StatusHistorySinChangedBy_NoConsultaUsuarios()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+
+        var instance = new ProcedureInstance
+        {
+            ProcedureType = ProcedureTypeFixture.Matricula,
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000008",
+            Status = TramiteEstado.Borrador,
+            CreatedAt = DateTimeOffset.UtcNow,
+            StatusHistory =
+            {
+                new ProcedureInstanceStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    ToStatus = TramiteEstado.Borrador,
+                    ChangedAt = DateTimeOffset.UtcNow,
+                    ChangedBy = null,
+                },
+            },
+        };
+
+        _repo.GetByIdWithDetailsAsync(instance.Id, tenantId, ct).Returns(instance);
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
+
+        error.Should().BeNull();
+        var entry = result!.StatusHistory.Should().ContainSingle().Subject;
+        entry.ChangedByName.Should().BeNull();
+        entry.ChangedByEmail.Should().BeNull();
+        entry.ChangedByCompania.Should().BeNull();
+        await _repo.DidNotReceive().GetUserEmailsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().GetUserCompaniasAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+    }
+
     // HU #10871 — el detalle de instancia expone motivo+items de la observación de subsanación,
     // RECORTADOS del metadata jsonb (sin fieldSnapshot ni ot_tenant_id/approver_tenant_id).
     [Fact]

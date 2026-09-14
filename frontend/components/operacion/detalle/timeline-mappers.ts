@@ -57,10 +57,12 @@ export function mapStatusHistoryToTimelineNodes(history: StatusHistory[]): Timel
     label: estadoLabel(e.toStatus),
     color: estadoChipStyle(e.toStatus).accent,
     info: {
-      gestor: '—',
-      correo: '—',
-      empresa: '—',
-      rol: 'Sistema',
+      // Bug #12526 — antes venían fijos en '—'/'Sistema' aunque el backend tuviera el dato: cada
+      // transición manual sí tiene quién la ejecutó, y la tarjeta debe mostrarlo.
+      gestor: e.changedByName || '—',
+      correo: e.changedByEmail || '—',
+      empresa: e.changedByCompania || '—',
+      rol: e.changedByName ? 'Gestor' : 'Sistema',
       fecha: formatFecha(e.changedAt),
       extra: hitoLabel(e),
     },

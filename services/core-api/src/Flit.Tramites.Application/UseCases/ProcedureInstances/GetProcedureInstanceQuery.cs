@@ -24,7 +24,13 @@ public sealed record ProcedureInstanceStatusHistoryDto(
     // `{"motivo":...,"items":[{"campo":...,"detalle":...}]}` — mismo shape que
     // `frontend/lib/tramites/subsanacion.ts` (`parseSubsanacionObservation`) espera en `metadata`. Null
     // si la entrada no trae observación (transición sin checklist, p. ej. aprobar/rechazar).
-    string? Metadata = null);
+    string? Metadata = null,
+    // Bug #12526 — quién ejecutó la transición: nombre, correo y compañía (mismo criterio de resolución
+    // que GetStatusHistoryHandler/HU #12184). Null cuando fue un proceso automático o el usuario ya no
+    // existe/no tiene esos datos — la tarjeta cae al guion en vez de inventarlos.
+    string? ChangedByName = null,
+    string? ChangedByEmail = null,
+    string? ChangedByCompania = null);
 
 /// <summary>
 /// Bug #12376, defectos 3/4 — evento administrativo del historial del trámite (bitácora
@@ -115,8 +121,39 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
             return (null, "not_found");
 
         var events = await BuildEventsAsync(repo, instance.Events, ct).ConfigureAwait(false);
-        return (ToDetail(instance, events), null);
+        var actorInfo = await BuildStatusHistoryActorInfoAsync(repo, instance.StatusHistory, ct).ConfigureAwait(false);
+        return (ToDetail(instance, events, actorInfo), null);
     }
+
+    /// <summary>
+    /// Bug #12526 — nombre/correo/compañía de quien ejecutó cada transición de la Línea de tiempo, en
+    /// TRES consultas batch para toda la página (no una por fila): mismo criterio que
+    /// <see cref="BuildEventsAsync"/> y que <c>GetStatusHistoryHandler</c> (HU #12184).
+    /// </summary>
+    private static async Task<StatusHistoryActorInfo> BuildStatusHistoryActorInfoAsync(
+        IProcedureInstanceRepository repo,
+        IEnumerable<ProcedureInstanceStatusHistory> history,
+        CancellationToken ct)
+    {
+        var userIds = history
+            .Where(h => h.ChangedBy is not null)
+            .Select(h => h.ChangedBy!.Value)
+            .Distinct()
+            .ToList();
+        if (userIds.Count == 0)
+            return new StatusHistoryActorInfo(
+                new Dictionary<Guid, string>(), new Dictionary<Guid, string>(), new Dictionary<Guid, string>());
+
+        var names = await repo.GetUserDisplayNamesAsync(userIds, ct).ConfigureAwait(false);
+        var emails = await repo.GetUserEmailsAsync(userIds, ct).ConfigureAwait(false);
+        var companias = await repo.GetUserCompaniasAsync(userIds, ct).ConfigureAwait(false);
+        return new StatusHistoryActorInfo(names, emails, companias);
+    }
+
+    internal sealed record StatusHistoryActorInfo(
+        IReadOnlyDictionary<Guid, string> Names,
+        IReadOnlyDictionary<Guid, string> Emails,
+        IReadOnlyDictionary<Guid, string> Companias);
 
     /// <summary>
     /// Bug #12376, defectos 3/4 — resuelve los eventos administrativos relevantes a DTOs "anchos", con
@@ -201,8 +238,15 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
     }
 
     internal static ProcedureInstanceDetailDto ToDetail(
-        ProcedureInstance e, IReadOnlyList<ProcedureInstanceEventDto>? events = null) =>
-        new(
+        ProcedureInstance e,
+        IReadOnlyList<ProcedureInstanceEventDto>? events = null,
+        StatusHistoryActorInfo? actorInfo = null)
+    {
+        var names = actorInfo?.Names ?? EmptyActorMap;
+        var emails = actorInfo?.Emails ?? EmptyActorMap;
+        var companias = actorInfo?.Companias ?? EmptyActorMap;
+
+        return new ProcedureInstanceDetailDto(
             e.Id,
             e.ReferenceNumber,
             e.Status,
@@ -221,7 +265,10 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
                 .OrderBy(h => h.ChangedAt)
                 .ThenBy(h => h.Id)
                 .Select(h => new ProcedureInstanceStatusHistoryDto(
-                    h.FromStatus, h.ToStatus, h.ChangedAt, h.Reason, BuildObservationMetadata(h.Metadata)))
+                    h.FromStatus, h.ToStatus, h.ChangedAt, h.Reason, BuildObservationMetadata(h.Metadata),
+                    ChangedByName: h.ChangedBy is { } cb1 && names.TryGetValue(cb1, out var n) ? n : null,
+                    ChangedByEmail: h.ChangedBy is { } cb2 && emails.TryGetValue(cb2, out var em) ? em : null,
+                    ChangedByCompania: h.ChangedBy is { } cb3 && companias.TryGetValue(cb3, out var co) ? co : null))
                 .ToList(),
             e.Actors
                 .Select(a => new ProcedureInstanceActorDto(a.ActorType, a.DocumentType, a.DocumentNumber, a.FullName, a.Email))
@@ -233,6 +280,9 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
             e.SubsanacionCount,
             e.Prioritario,
             events ?? []);
+    }
+
+    private static readonly Dictionary<Guid, string> EmptyActorMap = [];
 
     /// <summary>
     /// HU #10871 — recorta el metadata jsonb persistido en <c>procedure_instance_status_history</c> al
