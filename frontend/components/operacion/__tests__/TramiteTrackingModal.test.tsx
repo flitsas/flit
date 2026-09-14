@@ -6,10 +6,12 @@ import { TramiteTrackingModal } from '@/components/operacion/TramiteTrackingModa
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
 const getStatusHistory = vi.fn();
+const getInstance = vi.fn();
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     getStatusHistory: (...args: unknown[]) => getStatusHistory(...args),
+    getInstance: (...args: unknown[]) => getInstance(...args),
   },
 }));
 
@@ -75,6 +77,9 @@ describe('TramiteTrackingModal', () => {
       page: 1,
       pageSize: 50,
     });
+
+    getInstance.mockReset();
+    getInstance.mockResolvedValue({ events: [] });
   });
 
   // ── La ficha ─────────────────────────────────────────────────────────────────────────────
@@ -91,12 +96,14 @@ describe('TramiteTrackingModal', () => {
     expect(within(ficha).getByText('6 de 6 · Entrega al organismo')).toBeInTheDocument();
   });
 
-  it('la ficha no cuesta ninguna consulta: solo se pide el historial', async () => {
+  it('la ficha no cuesta ninguna consulta: solo se piden el historial y los eventos administrativos', async () => {
     render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
 
     await screen.findByRole('region', { name: 'Resumen del trámite' });
     await waitFor(() => expect(getStatusHistory).toHaveBeenCalledTimes(1));
     expect(getStatusHistory).toHaveBeenCalledWith('inst-1', 1, 50, undefined);
+    await waitFor(() => expect(getInstance).toHaveBeenCalledTimes(1));
+    expect(getInstance).toHaveBeenCalledWith('inst-1', undefined);
   });
 
   it('en traspaso nombra vendedor y comprador, con su documento', async () => {
@@ -196,9 +203,66 @@ describe('TramiteTrackingModal', () => {
     expect(await screen.findByText(/sin red/)).toBeInTheDocument();
   });
 
+  it('si los eventos administrativos fallan, el historial de estados se sigue pintando', async () => {
+    // getInstance solo alimenta los eventos administrativos: si falla, degrada a [] sin tocar el
+    // historial de estados, que tiene su propio manejo de error independiente.
+    getInstance.mockRejectedValue(new Error('sin red'));
+    render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
+
+    const historial = await screen.findByRole('list', { name: 'Historial de estados del trámite' });
+    expect(within(historial).getByText(/Preparado desde Borrador/)).toBeInTheDocument();
+    expect(within(historial).getByText('Borrador')).toBeInTheDocument();
+    // No debe quedar visible el error de historial (ese solo aplica si falla getStatusHistory).
+    expect(screen.queryByText(/sin red/)).not.toBeInTheDocument();
+  });
+
+  it('un evento de reasignación de gestor aparece mezclado en el historial', async () => {
+    getInstance.mockResolvedValue({
+      events: [
+        {
+          tipo: 'reasignar_gestor_admin',
+          createdAt: '2026-08-27T16:10:00Z',
+          createdByName: 'Carlos Admin',
+          previousAssignedToName: 'Laura Restrepo',
+          newAssignedToName: 'Mario Gómez',
+        },
+      ],
+    });
+    render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
+
+    const historial = await screen.findByRole('list', { name: 'Historial de estados del trámite' });
+    expect(within(historial).getByText('Reasignación de gestor')).toBeInTheDocument();
+    expect(within(historial).getByText('Ejecutado por Carlos Admin')).toBeInTheDocument();
+    expect(within(historial).getByText('De Laura Restrepo a Mario Gómez')).toBeInTheDocument();
+  });
+
+  it('un evento de reenvío de validación aparece con el correo enmascarado', async () => {
+    getInstance.mockResolvedValue({
+      events: [
+        {
+          tipo: 'reenvio_validacion_admin',
+          createdAt: '2026-08-27T16:20:00Z',
+          createdByName: 'Carlos Admin',
+          partyRole: 'comprador',
+          emailActualizado: true,
+          correoDestino: 'laura.gomez@example.com',
+        },
+      ],
+    });
+    render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
+
+    const historial = await screen.findByRole('list', { name: 'Historial de estados del trámite' });
+    expect(within(historial).getByText('Reenvío de validación · Comprador')).toBeInTheDocument();
+    expect(within(historial).getByText('Ejecutado por Carlos Admin')).toBeInTheDocument();
+    expect(
+      within(historial).getByText('Correo: laura.gomez@example.com · Reenviado a un correo distinto del registrado'),
+    ).toBeInTheDocument();
+  });
+
   it('cerrado no consulta nada', async () => {
     render(<TramiteTrackingModal open={false} item={fila()} onClose={() => undefined} />);
     await waitFor(() => expect(getStatusHistory).not.toHaveBeenCalled());
+    expect(getInstance).not.toHaveBeenCalled();
   });
 
   it('sin fila no pinta nada', () => {

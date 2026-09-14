@@ -133,15 +133,14 @@ public sealed class ProcedureInstanceBiometricValidation
 
     /// <summary>
     /// HU #10943 (CF-03) — cuántas veces se reenvió esta validación (manual o automático por cambio de
-    /// correo). Tope de <see cref="BiometricRules.MaxReenvios"/>; al alcanzarlo, editar/reenviar responde
-    /// <c>tope_reenvios</c> (429).
+    /// correo). Solo bitácora: ya no limita el reenvío (el tope D10 se eliminó a pedido del producto).
     /// </summary>
     public int ResendCount { get; set; }
 
     /// <summary>
-    /// HU #10943 (CF-03) — momento del ÚLTIMO reenvío (manual o por cambio de correo). Alimenta el
-    /// cooldown de <see cref="BiometricRules.ReenvioCooldownMinutos"/> minutos entre reenvíos. Null si
-    /// nunca se ha reenviado.
+    /// HU #10943 (CF-03) — momento del ÚLTIMO reenvío (manual o por cambio de correo). Solo bitácora:
+    /// ya no alimenta ningún cooldown (el cooldown D10 se eliminó a pedido del producto). Null si nunca
+    /// se ha reenviado.
     /// </summary>
     public DateTimeOffset? LastResentAt { get; set; }
 
@@ -252,20 +251,6 @@ public static class BiometricRules
 
     public const int ThresholdAprobacion = 60;
     public const int TokenTtlHoras = 24;
-
-    /// <summary>
-    /// HU #10943 (CF-03, D10) — máximo de reenvíos (manuales o por cambio de correo) por prevalidación
-    /// standalone. Al alcanzarlo, editar/reenviar responde <c>tope_reenvios</c> (429); el operador debe
-    /// anular el registro y crear una prevalidación nueva.
-    /// </summary>
-    public const int MaxReenvios = 3;
-
-    /// <summary>
-    /// HU #10943 (CF-03, D10) — minutos de espera obligatorios entre dos reenvíos consecutivos de la
-    /// misma prevalidación standalone. Antes de cumplirse, editar (con cambio de correo) o reenviar
-    /// responde <c>reenvio_en_cooldown</c> (429).
-    /// </summary>
-    public const int ReenvioCooldownMinutos = 5;
 
     public const string ParteComprador = "comprador";
     public const string ParteVendedor = "vendedor";
