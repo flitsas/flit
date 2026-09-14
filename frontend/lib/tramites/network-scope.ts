@@ -123,3 +123,66 @@ export function textoExcluidosRed(excluidos: number): string | null {
   if (excluidos <= 0) return null;
   return `${excluidos} excluido${excluidos === 1 ? '' : 's'}: trámites de la red (solo consulta)`;
 }
+
+// ── HU #12363 — alcance de lectura del listado (selector «Mi compañía | Toda la red | hijo») ────
+
+/** `own` = solo mi compañía (llamadas idénticas a hoy); `network` = rutas `network/**`. */
+export type NetworkScopeMode = 'own' | 'network';
+
+/**
+ * Preferencia por USUARIO (scope `tramites.scope` de `/api/v1/me/ui-preferences`): nunca en
+ * localStorage, que es por navegador y lo compartirían dos usuarios del mismo cliente (AC5).
+ */
+export interface NetworkScopePreference {
+  mode: NetworkScopeMode;
+  /** Un cliente hijo concreto dentro de la red. Solo tiene sentido con `mode: 'network'`. */
+  childTenantId?: string;
+}
+
+/** AC2 — el alcance por defecto es el propio: la red no se muestra hasta que el usuario la pide. */
+export const DEFAULT_NETWORK_SCOPE: NetworkScopePreference = { mode: 'own' };
+
+/** Parámetros de las rutas `network/**`: los del listado propio más el filtro por hijo (#12358). */
+export interface NetworkChildFilter {
+  /** El servidor lo INTERSECTA con el alcance del JWT: un id ajeno a la red devuelve cero filas. */
+  childTenantId?: string;
+}
+
+/**
+ * Lee la preferencia tal como llega del servidor (`value` es `{}` sin preferencia guardada, o lo
+ * que un cliente viejo dejó). Cualquier cosa que no sea exactamente `{ mode, childTenantId? }`
+ * válida cae al default: una preferencia corrupta no puede abrir un alcance que el usuario no pidió.
+ */
+export function parseNetworkScopePreference(raw: unknown): NetworkScopePreference {
+  if (!raw || typeof raw !== 'object') return DEFAULT_NETWORK_SCOPE;
+  const { mode, childTenantId } = raw as { mode?: unknown; childTenantId?: unknown };
+  if (mode !== 'network') return DEFAULT_NETWORK_SCOPE;
+  const child = typeof childTenantId === 'string' ? childTenantId.trim() : '';
+  return child ? { mode: 'network', childTenantId: child } : { mode: 'network' };
+}
+
+/** Valor del `<select>` del selector: `own` | `network` | `child:<tenantId>`. */
+export type NetworkScopeOptionValue = 'own' | 'network' | `child:${string}`;
+
+export function scopeToOptionValue(scope: NetworkScopePreference): NetworkScopeOptionValue {
+  if (scope.mode !== 'network') return 'own';
+  return scope.childTenantId ? `child:${scope.childTenantId}` : 'network';
+}
+
+export function optionValueToScope(value: string): NetworkScopePreference {
+  if (value === 'network') return { mode: 'network' };
+  if (value.startsWith('child:')) {
+    const id = value.slice('child:'.length).trim();
+    return id ? { mode: 'network', childTenantId: id } : { mode: 'network' };
+  }
+  return DEFAULT_NETWORK_SCOPE;
+}
+
+/** Rótulos únicos del selector (los reutiliza #12364 en analítica y reportes). */
+export const ETIQUETA_ALCANCE = 'Alcance';
+export const ETIQUETA_ALCANCE_PROPIO = 'Mi compañía';
+export const ETIQUETA_ALCANCE_RED = 'Toda la red';
+export const ETIQUETA_GRUPO_HIJOS = 'Clientes de la red';
+/** Texto de la celda «Cliente» para una fila propia dentro del alcance de red (AC3). */
+export const ETIQUETA_CLIENTE_PROPIO = 'Mi compañía';
+export const ETIQUETA_CLIENTE_HIJO = 'Cliente de la red';

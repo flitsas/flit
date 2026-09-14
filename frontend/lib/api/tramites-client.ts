@@ -142,6 +142,7 @@ import { getToken } from './client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
 import type {
+  NetworkChildFilter,
   NetworkInstanceDetail,
   NetworkInstanceSummary,
 } from '@/lib/tramites/network-scope';
@@ -651,10 +652,14 @@ export const tramitesClient = {
   // de tenant aquí sería una forma de pedir «otra compañía», que es justo lo que estas rutas no
   // admiten. Cada ítem sale marcado `fromNetwork: true` para que `isNetworkReadOnly` lo reconozca
   // por PROCEDENCIA aunque coincida el tenant. Sin tipos OpenAPI regenerados (encargo).
+  //
+  // HU #12363 — `childTenantId` (un hijo concreto) viaja en el CUERPO y es lo único de alcance que
+  // el cliente manda: el servidor lo intersecta con la red del JWT, así que un id ajeno devuelve
+  // cero filas, nunca datos de otra compañía (AC7). No se manda lista de tenants ni cabecera.
 
   /** Listado consolidado de la red. `POST /api/v1/tramites/network/instances/search`. */
   searchNetworkInstances: async (
-    params: ListInstancesParams = {},
+    params: ListInstancesParams & NetworkChildFilter = {},
   ): Promise<{ items: NetworkInstanceSummary[]; total: number }> => {
     const { filterTenantId: _tenant, ...body } = params;
     const res = await request<{ items?: NetworkInstanceSummary[]; total?: number }>(
@@ -671,7 +676,7 @@ export const tramitesClient = {
 
   /** Conteo por estado del universo consolidado. Vacío ante fallo, como su gemelo propio. */
   searchNetworkEstadoCounts: async (
-    params: ListInstancesParams = {},
+    params: ListInstancesParams & NetworkChildFilter = {},
   ): Promise<Record<string, number>> => {
     const { filterTenantId: _tenant, ...body } = params;
     try {

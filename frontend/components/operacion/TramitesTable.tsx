@@ -25,6 +25,8 @@ import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
+  ETIQUETA_CLIENTE_HIJO,
+  ETIQUETA_CLIENTE_PROPIO,
   ETIQUETA_SOLO_CONSULTA,
   isNetworkReadOnly,
   partirSeleccionPorAlcance,
@@ -42,6 +44,8 @@ import {
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
 import {
   TRAMITES_COLUMNS,
+  TRAMITES_SELECTABLE_COLUMNS,
+  applyNetworkScopeColumns,
   TRAMITES_COLUMN_KEYS,
   TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
@@ -66,6 +70,8 @@ import {
   vehiculo,
 } from '@/lib/tramites/tramites-row-labels';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
+import { useNetworkScope } from '@/hooks/useNetworkScope';
+import { NetworkScopeSelector } from './NetworkScopeSelector';
 import { useNavigableModules } from '@/hooks/useNavigableModules';
 import { controlCls } from './tramites-control-styles';
 import { StatusBadge } from '@/components/atom/StatusBadge';
@@ -404,14 +410,21 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
    * Es un cálculo derivado: NO se toca la preferencia guardada, así que al volver a "Todos" o a
    * "Traspaso" la columna reaparece sin que el usuario tenga que reactivarla.
    */
-  const effectiveColumns = useMemo(
-    () =>
-      // En matrículas el titular es el comprador y la columna 'propietario' sale vacía.
-      modalidad === 'MATRICULAS'
-        ? visibleColumns.filter((k) => k !== 'propietario')
-        : visibleColumns,
-    [visibleColumns, modalidad],
-  );
+  /**
+   * HU #12363 — alcance de lectura de la cabeza de red (propio | toda la red | un hijo). Para quien
+   * no es cabeza el hook no hace ninguna llamada y `networkActive` es siempre falso: la tabla hace
+   * exactamente las mismas llamadas que hoy (AC1).
+   */
+  const red = useNetworkScope();
+  const { networkActive, ready: alcanceListo } = red;
+  const childTenantId = networkActive ? red.scope.childTenantId : undefined;
+  const effectiveColumns = useMemo(() => {
+    // HU #12363 — «Cliente» entra SOLO con el alcance de red y sale con cualquier otro (aunque una
+    // preferencia guardada la trajera): la manda el alcance, no el selector de columnas.
+    const conAlcance = applyNetworkScopeColumns(visibleColumns, networkActive);
+    // En matrículas el titular es el comprador y la columna 'propietario' sale vacía.
+    return modalidad === 'MATRICULAS' ? conAlcance.filter((k) => k !== 'propietario') : conAlcance;
+  }, [visibleColumns, modalidad, networkActive]);
   /**
    * ¿El gestor cambió las columnas respecto al default? Es lo que marca "Columnas" en azul, con el
    * mismo criterio que "Periodo" y "+ Filtro": el azul dice "aquí hay algo aplicado". Antes el
@@ -679,7 +692,30 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     sortDir,
   ]);
 
+  /**
+   * HU #12363 — una página del listado según el ALCANCE. Con la red activa se usan las rutas
+   * `network/**` (mismo cuerpo más `childTenantId`); con el alcance propio la llamada es idéntica a
+   * la de siempre. Es un único punto de decisión para que la tabla y el export no puedan divergir.
+   */
+  const buscarPagina = useCallback(
+    (query: ListInstancesParams) =>
+      networkActive
+        ? tramitesClient.searchNetworkInstances({ ...query, childTenantId })
+        : tramitesClient.searchInstances(query),
+    [networkActive, childTenantId],
+  );
+  const contarEstados = useCallback(
+    (query: ListInstancesParams) =>
+      networkActive
+        ? tramitesClient.searchNetworkEstadoCounts({ ...query, childTenantId })
+        : tramitesClient.searchEstadoCounts(query),
+    [networkActive, childTenantId],
+  );
+
   const load = useCallback(async () => {
+    // HU #12363 — la cabeza espera a conocer su alcance guardado: si no, pediría primero «lo propio»
+    // y acto seguido «la red», y la primera respuesta se pintaría para desaparecer al instante.
+    if (!alcanceListo) return;
     setLoading(true);
     setError(null);
     try {
@@ -690,10 +726,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
       // Las dos llamadas van en paralelo: la tabla y la tira de KPIs son independientes y
       // encadenarlas solo sumaría latencia. Los conteos no pueden salir de `data` — esa es la
       // PÁGINA, y la tira habla del universo entero.
-      const [page1, counts] = await Promise.all([
-        tramitesClient.searchInstances(query),
-        tramitesClient.searchEstadoCounts(query),
-      ]);
+      const [page1, counts] = await Promise.all([buscarPagina(query), contarEstados(query)]);
       setItems(page1.items);
       setTotal(page1.total);
       setEstadoCounts(counts);
@@ -709,7 +742,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     } finally {
       setLoading(false);
     }
-  }, [buildListQuery, page, pageSize]);
+  }, [alcanceListo, buildListQuery, buscarPagina, contarEstados, page, pageSize]);
 
   useEffect(() => {
     // Carga/refresca al montar y al cambiar refreshKey: los setState de `load`
@@ -789,7 +822,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 
       // La primera página se pide aparte porque de ella sale el `total` con el que se sabe cuántas
       // quedan. Se guarda para reusarla como página 1 del recorrido en vez de volver a pedirla.
-      const primeraPagina = await tramitesClient.searchInstances({
+      const primeraPagina = await buscarPagina({
         ...base,
         skip: 0,
         take: SERVER_LIST_TAKE,
@@ -806,7 +839,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
             pagina === 1
               ? primeraPagina.items
               : (
-                  await tramitesClient.searchInstances({
+                  await buscarPagina({
                     ...base,
                     skip: (pagina - 1) * pageSize,
                     take: pageSize,
@@ -839,7 +872,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     } finally {
       setExporting(false);
     }
-  }, [buildListQuery, effectiveColumns]);
+  }, [buildListQuery, buscarPagina, effectiveColumns]);
 
 
   // HU #10536 — sin orden explicito por columna, el backend devuelve los prioritarios primero. Al
@@ -1158,6 +1191,22 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           soloPrioritarios={soloPrioritarios}
           onPrioritariosChange={handlePrioritariosChange}
           actions={
+            <>
+              {/* HU #12363 — solo existe para una cabeza de grupo (AC1). Va delante de la búsqueda:
+                  el alcance acota TODO lo demás. Al cambiarlo se vuelve a la página 1, como con
+                  cualquier otro criterio; el resto de filtros se conserva. */}
+              {red.isGroupParent ? (
+                <NetworkScopeSelector
+                  scope={red.scope}
+                  onChange={(next) => {
+                    red.setScope(next);
+                    setPage(1);
+                  }}
+                  hijos={red.children}
+                  childrenStatus={red.childrenStatus}
+                  disabled={red.saving}
+                />
+              ) : null}
             <TramitesFiltrosBar
               rangoSobre={rangoSobre}
               onRangoSobreChange={setRangoSobre}
@@ -1196,7 +1245,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
               empezarDeCeroDisabled={!hasActiveFilters && !hasDraftFilters}
               columnSelector={
                 <ColumnSelector
-                  columns={TRAMITES_COLUMNS}
+                  // HU #12363 — sin «Cliente»: esa la enciende el alcance de red, no el usuario.
+                  columns={TRAMITES_SELECTABLE_COLUMNS}
                   visible={visibleColumns}
                   onChange={setVisibleColumns}
                   label="Columnas"
@@ -1219,6 +1269,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                 </button>
               }
             />
+            </>
           }
         />
 
@@ -2135,6 +2186,12 @@ function TramiteRow({
   // Ninguna acción de escritura se monta (ni deshabilitada) y la apertura va SIEMPRE al detalle.
   const consultaMode = isNetworkReadOnly(item, currentTenantId);
   const tenantNameRed = (item as { tenantName?: string | null }).tenantName ?? item.companiaNombre;
+  // HU #12363 — «propio» por TENANT (no por procedencia): en el alcance de red la cabeza también
+  // recibe sus propios trámites, y la celda «Cliente» tiene que decirle cuáles son suyos.
+  const esFilaPropia =
+    !!currentTenantId &&
+    !!item.tenantId &&
+    item.tenantId.trim().toLowerCase() === currentTenantId.trim().toLowerCase();
   // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
   // trae el id del adjunto): el botón NUNCA dispara una generación.
   const consolidadoDisponible = !!item.consolidadoAttachmentId;
@@ -2670,6 +2727,22 @@ function TramiteRow({
     fuente: (
       <span className="block truncate text-xs text-[#162744]/90 dark:text-white/80">
         {FUENTE_LABEL[item.fuente ?? 'dashboard']}
+      </span>
+    ),
+    // HU #12363 (AC3) — solo se pinta con el alcance de red. Nombre del cliente dueño del trámite
+    // y, debajo, si es propio o de la red: la distinción va en TEXTO, no solo en el color ni en el
+    // distintivo «Solo consulta» de la celda de radicado.
+    cliente: (
+      <span className="block min-w-0" data-testid={`tramite-cliente-${item.id}`}>
+        <span
+          className="block break-words leading-snug text-xs font-semibold text-[#162744] dark:text-white"
+          title={tenantNameRed ?? undefined}
+        >
+          {tenantNameRed ?? '—'}
+        </span>
+        <span className="block truncate text-[10px] opacity-55">
+          {esFilaPropia ? ETIQUETA_CLIENTE_PROPIO : ETIQUETA_CLIENTE_HIJO}
+        </span>
       </span>
     ),
     // HU #12183 — marcas de prenda y transformación. INFORMATIVAS: no son botones, no filtran y no
