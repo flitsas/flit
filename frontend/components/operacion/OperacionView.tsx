@@ -12,12 +12,16 @@ import { TramitesTable } from './TramitesTable';
  */
 interface OperacionViewProps {
   onNewTramite: () => void;
+  /** HU #12521 — abre el modal de carga masiva por Excel. */
+  onBulkUpload?: () => void;
+  /** Fuerza el recargue del listado (p. ej. tras encolar un lote). */
+  refreshKey?: number;
 }
 
-export function OperacionView({ onNewTramite }: OperacionViewProps) {
+export function OperacionView({ onNewTramite, onBulkUpload, refreshKey }: OperacionViewProps) {
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <TramitesTable onNewTramite={onNewTramite} />
+      <TramitesTable refreshKey={refreshKey} onNewTramite={onNewTramite} onBulkUpload={onBulkUpload} />
     </div>
   );
 }

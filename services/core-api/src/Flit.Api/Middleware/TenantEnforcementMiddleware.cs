@@ -190,6 +190,10 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // (/network-access-audit/mine): el tenant sale de aquí (tramites.tenantId), nunca del caller.
         // Prefijo distinto de /network (StartsWithSegments compara segmentos completos): entrada propia.
         new("/api/v1/tramites/network-access-audit", RouteMatch.Prefix),
+        // Feature #12519 — carga masiva de trámites: plantilla (organismos habilitados de la
+        // compañía), lotes y resultados son de UNA compañía. El tenant se impone desde el JWT igual
+        // que el resto del runtime; el SuperAdmin acota con X-Tenant-Id como en /instances.
+        new("/api/v1/tramites/carga-masiva", RouteMatch.Prefix),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>
