@@ -70,7 +70,9 @@ public sealed class GetBulkTramitesBatchesHandler(IBulkTramitesBatchRepository r
             .Select(r => new BulkTramitesBatchRowDto(
                 r.RowNumber,
                 Identificador(r),
-                r.Outcome,
+                // Una fila rechazada al subir el archivo nunca entra a la cola: para el usuario ES
+                // «no creado» (así la cuenta el resumen); sin esto se rotulaba «En cola» para siempre.
+                r.Outcome ?? (r.StructuralErrorCode is not null ? BulkTramitesRowOutcome.NotCreated : null),
                 r.OutcomeReason ?? r.StructuralErrorCode,
                 r.ProcedureInstanceId))
             .ToList();

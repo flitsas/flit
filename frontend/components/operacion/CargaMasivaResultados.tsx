@@ -212,6 +212,9 @@ export function mensajeMotivo(motivo: string): string {
     porcentajes_no_suman_100: 'Los porcentajes de propiedad no suman 100.',
     porcentaje_en_cero: 'Hay un propietario con porcentaje en 0.',
     sin_actores_en_la_fila: 'La fila no traía ningún actor: complétalo en el trámite.',
+    vehiculo_no_encontrado: 'El RUNT no encontró el vehículo. Revisa la placa o el VIN.',
+    consulta_vehiculo_fallida:
+      'La consulta del vehículo al RUNT falló. Vuelve a cargar la fila más tarde.',
     conductor_no_encontrado:
       'El RUNT no encontró a la persona con ese documento. Revísalo y complétalo en el trámite.',
     consulta_conductor_fallida:

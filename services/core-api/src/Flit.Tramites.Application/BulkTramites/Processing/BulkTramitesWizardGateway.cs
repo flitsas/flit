@@ -53,7 +53,14 @@ public sealed class BulkTramitesWizardGateway(
                 context.ProcedureTypeCode),
             ct).ConfigureAwait(false);
 
-        return (result?.PreviewToken, error);
+        if (error is not null || result is null)
+        {
+            return (null, error);
+        }
+
+        // El handler responde OK con el semáforo en rojo: la decisión de crear o no vive en los checks.
+        var gate = BulkTramitesVehicleGate.Evaluate(result.Checks);
+        return gate is null ? (result.PreviewToken, null) : (null, gate);
     }
 
     /// <summary>
@@ -134,6 +141,11 @@ public sealed class BulkTramitesWizardGateway(
         if (error is not null)
         {
             return (null, error);
+        }
+
+        if (persona is { ProviderUnavailable: true })
+        {
+            return (null, ConsultaConductorFallida);
         }
 
         // El handler responde Found=false con el mismo shape que un hallazgo: aquí se vuelve un
