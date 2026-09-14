@@ -343,7 +343,7 @@ correspondiente. Reglas actuales:
 | `/api/**` | core-api `:4003` | passthrough `/api/**` | `JwtRequired` |
 | `/hubs/**` | core-api `:4003` | — (WebSocket/SignalR) | `JwtRequired` |
 | `/ml/**` | python-ml `:4012` | quita el prefijo `/ml` → `/**` | `JwtRequired` |
-| `/api/v1/migracion/**` | migracion-api `:4030` | — | cabecera `X-Migration-Key` |
+| `/api/v1/migracion/**` | migracion-api `:4030` (`MIGRACION_API_PORT`: QA `:5030`, PDN `:6030`) | — | cabecera `X-Migration-Key` |
 
 > Las rutas más específicas (`/api/v1/auth`, `/api/public/idsecure`) se evalúan antes
 > que la genérica `/api/**`, por eso los endpoints públicos no caen bajo `JwtRequired`.
@@ -404,7 +404,7 @@ Basado en la plantilla [.env.prod.example](../.env.prod.example). Variables a te
 | `VERIFIK_API_TOKEN` | ✅ | Token Verifik (RUNT). Secreto. |
 | `VERIFIK_BASE_URL` | ⛔ opc. | Default `https://api.verifik.co`. |
 | `VERIFIK_TIMEOUT_SECONDS` | ⛔ opc. | Default `30`. |
-| `FRONTEND_PORT` / `GATEWAY_PORT` / `CORE_API_PORT` / `PYTHON_ML_PORT` | ⛔ opc.* | Puertos del ambiente (DEV 40xx / QA 50xx / PDN 60xx). *El **CD los inyecta** automáticamente; defínelos en el `.env` solo para operación manual. Defaults DEV. |
+| `FRONTEND_PORT` / `GATEWAY_PORT` / `CORE_API_PORT` / `PYTHON_ML_PORT` / `MIGRACION_API_PORT` | ⛔ opc.* | Puertos del ambiente (DEV 40xx / QA 50xx / PDN 60xx). *El **CD los inyecta** automáticamente; defínelos en el `.env` solo para operación manual. Defaults DEV. `MIGRACION_API_PORT` (4030/5030/6030) no se publica en el host, pero lo leen **dos** servicios (migracion-api y el destino del gateway): si falta o diverge, `/admin/migracion` responde 502 sin cuerpo. |
 | `CORE_API_TAG` / `FRONTEND_TAG` / `PYTHON_ML_TAG` | ⛔ opc.* | Default `latest`. El **CD los inyecta**: tag móvil (`dev`/`qa`) en DEV/QA y `sha-<commit>` inmutable en PDN. **Para rollback manual**, fija el `sha-<commit>` deseado. |
 | `COMPOSE_PROJECT_NAME` | ⛔ opc. | El compose ya fija `name: flitdev`. Solo defínela si necesitas aislar varias instancias en el mismo VPS (evita que `up --remove-orphans` borre contenedores de otro stack). |
 

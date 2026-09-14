@@ -10,6 +10,7 @@
 #   core-api   CORE_API_PORT     4003   5003   6003   (Flit.Api interno/debug, detras de YARP)
 #   core-ict   CORE_ICT_PORT     4020   5020   6020   (Flit.Ict.Api interno, detras de YARP)
 #   python-ml  PYTHON_ML_PORT    4012   5012   6012   (FastAPI OCR/ML, detras de YARP)
+#   migracion  MIGRACION_API_PORT 4030  5030   6030   (Flit.DataMigration.Api, SOLO red interna)
 #
 # gRPC este-oeste (interno, NO publicado): core-ict -> core-api en CORE_API_GRPC_PORT (default 8082);
 # el callback de estados va core-api -> core-ict en CORE_ICT_PORT (h2c en el mismo puerto REST).
@@ -387,8 +388,15 @@ services:
   #        ?instancias=todas&dryRun=true   +   cabecera X-Migration-Key
   #
   # NO publica puerto en el host: el gateway lo alcanza por la red interna del compose
-  # (migracion-api:4030). Por eso el puerto interno es FIJO y no necesita variable —
-  # no puede chocar con nada aunque los tres ambientes compartan VPS.
+  # (migracion-api:${MIGRACION_API_PORT}). El puerto sigue la convencion del ambiente
+  # (DEV 4030 / QA 5030 / PDN 6030) y lo exporta el CD como las demas *_PORT.
+  #
+  # El puerto vive en DOS sitios de este archivo y TIENEN que coincidir: el
+  # ASPNETCORE_URLS de este servicio y el destino de `migracion-cluster` que se le
+  # inyecta al gateway mas abajo. Por eso ambos leen la MISMA variable. Cuando
+  # divergieron (2026-07 -> 2026-09: el servicio escuchaba en 5030 y el gateway
+  # seguia apuntando al 4030 de su appsettings.json) el sintoma fue un 502 pelado en
+  # /admin/migracion, sin ninguna pista de que era un puerto.
   #
   # El gateway lo enruta por un cluster PROPIO (`migracion-cluster`, ActivityTimeout
   # 00:30:00). No usar core-api-cluster: sus 30 s convertirian en 504 migraciones de
@@ -413,8 +421,8 @@ services:
       # El MISMO bloque que el migrador de consola: si divergieran, el comando subiria
       # los adjuntos a un file-manager y el endpoint leeria de otro. Falla en silencio.
       <<: *flitmig-env
-      # Puerto interno fijo: tiene que coincidir con migracion-cluster del gateway.
-      ASPNETCORE_URLS: http://+:4030
+      # Misma variable que el destino de migracion-cluster en el gateway (ver abajo).
+      ASPNETCORE_URLS: http://+:${MIGRACION_API_PORT:-4030}
       # Con false las rutas ni se registran: responden 404, no 403. Cambiarlo NO exige
       # desplegar, solo recrear el contenedor.
       FLITMIG_MigracionApi__Enabled: ${FLITMIG_MIGRACION_API_ENABLED:-false}
@@ -424,7 +432,7 @@ services:
     # Healthcheck propio: el HEALTHCHECK de la imagen trae el puerto 8081 en duro y se
     # heredaria roto.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4030/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${MIGRACION_API_PORT:-4030}/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -447,9 +455,10 @@ services:
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
       ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
       ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
-      # migracion-cluster NO se sobrescribe: migracion-api escucha en el 4030 fijo en
-      # los tres ambientes (no publica puerto en el host, no hay nada con que chocar),
-      # asi que vale el destino que ya trae appsettings.json.
+      # MISMA variable que el ASPNETCORE_URLS de migracion-api. appsettings.json trae
+      # el 4030 de DEV/local; sin este override, en QA/PDN el gateway apunta a un
+      # puerto donde nadie escucha y responde 502 sin cuerpo.
+      ReverseProxy__Clusters__migracion-cluster__Destinations__migracion-api-1__Address: http://migracion-api:${MIGRACION_API_PORT:-4030}/
       # Login deshabilitado temporalmente: sin llave JWT el gateway no valida firma
       # ni exige autenticación (ver Flit.Gateway/Program.cs).
     ports:
