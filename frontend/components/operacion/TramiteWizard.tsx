@@ -122,6 +122,7 @@ import type {
   PreflightSnapshot,
   ProcedureConfiguration,
   ProcedureInstanceSummary,
+  RevocationEligibility,
   StatusHistory,
   TransitOfficeOption,
   WizardModalidad,
@@ -139,6 +140,7 @@ import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
 import { WizardHelpRail } from './WizardHelpRail';
 import { WizardModal } from './WizardModal';
 import { NuevoTramiteSelector } from './NuevoTramiteSelector';
+import { RevocationRequestButton } from './RevocationRequestButton';
 import { estadoLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
@@ -490,6 +492,10 @@ export function TramiteWizard(props: Props) {
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
   const [draftFinalizedAt, setDraftFinalizedAt] = useState<string | null>(null);
+  // HU #12573 — gates del botón "Solicitar revocatoria" (AC1-AC3), ya resueltos por el backend. Se lee
+  // UNA vez con el resto del detalle inicial (no cambia dentro de la sesión de visualización de un
+  // trámite ya `aprobado`, y esta HU no exige refresco en vivo tras la acción — eso es HU #12574).
+  const [revocationEligibility, setRevocationEligibility] = useState<RevocationEligibility | null>(null);
   // HU #10874 (AC1) — historial de estados de la instancia: fuente única de datos del panel de
   // subsanación (motivo/checklist de la última transición a `subsanacion`). Loading/error propios
   // (no el `.catch` silencioso de arriba) porque sin ellos el panel no podría distinguir "cargando"
@@ -521,6 +527,7 @@ export function TramiteWizard(props: Props) {
         setDraftFinalizedAt(d.draftFinalizedAt ?? null);
         setStatusHistory(d.statusHistory ?? []);
         setReferenceNumber(d.referenceNumber ?? null);
+        setRevocationEligibility(d.revocationEligibility ?? null);
         setInstanceDetailError(null);
       })
       .catch((err) => {
@@ -1797,6 +1804,10 @@ export function TramiteWizard(props: Props) {
                     </p>
                   ) : null}
                 </>
+              ) : estadoTramite === 'aprobado' && instanceId ? (
+                // HU #12573 (Feature #12565) — AC1-AC3: gate del botón, sin flujo de envío todavía
+                // (HU #12574).
+                <RevocationRequestButton instanceId={instanceId} eligibility={revocationEligibility} />
               ) : undefined
             }
           />

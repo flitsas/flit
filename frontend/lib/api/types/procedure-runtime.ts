@@ -31,6 +31,23 @@ export type InstanceStatus =
  */
 export type PlateFlowStatus = 'preasignado' | 'asignado' | 'terminado';
 
+/**
+ * HU #12573 (Feature #12565) — gates del botón "Solicitar revocatoria" (AC1-AC3), YA RESUELTOS por el
+ * backend con la MISMA regla de negocio que el gate de creación de la solicitud (`RevocationRequestGate`,
+ * HU #12571/#12572): fuente FLIT (no ICT/migrado) + ventana en días hábiles desde la aprobación
+ * ORIGINAL. Evita reimplementar el cálculo de días hábiles en el cliente. Solo viene poblado cuando
+ * `status === 'aprobado'` — en cualquier otro estado (o en la vista de red, que no la calcula) llega
+ * `null`/`undefined`.
+ */
+export interface RevocationEligibility {
+  /** AC1/AC3 — el trámite fue creado en FLIT (no integración ICT ni foto migrada de V1). */
+  sourceSupported: boolean;
+  /** Fecha límite de la ventana, ya calculada en días hábiles. `null` = sin ventana configurada = sin límite. */
+  windowExpiresAt: string | null;
+  /** AC3 — `true` si hay ventana configurada y ya venció (motivo "Ventana de revocatoria vencida"). */
+  windowExpired: boolean;
+}
+
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {
   id: string;
@@ -450,6 +467,8 @@ export interface ProcedureInstanceDetail {
    * está cubierto por `statusHistory`. `undefined`/vacío en consumidores previos a este campo.
    */
   events?: ProcedureInstanceEvent[];
+  /** Ver {@link RevocationEligibility}. */
+  revocationEligibility?: RevocationEligibility | null;
 }
 
 /** Ver `ProcedureInstanceDetail.events`. */

@@ -1,6 +1,9 @@
 using System.Text.Json;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.RevocationRequests;
+using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -62,6 +65,27 @@ public sealed record ProcedureInstanceEventDto(
     // Empresa en reenvio_validacion_admin, donde no hay un "gestor" propio del evento.
     string? CreatedByCompania = null);
 
+/// <summary>
+/// HU #12573 (Feature #12565) — gates de habilitación del botón "Solicitar revocatoria" (AC1-AC3) que el
+/// frontend NO puede evaluar sin duplicar reglas de negocio ya resueltas por el dominio: fuente FLIT
+/// (<see cref="TramiteFuente"/>, HU #11056) y ventana en días hábiles (<see cref="IBusinessDayCalculator"/>,
+/// misma base que <see cref="RevocationRequestGate"/> de HU #12571/#12572). Solo se calcula sobre un
+/// trámite <see cref="TramiteEstado.Aprobado"/> (único estado donde la acción aplica); en cualquier otro
+/// caso este campo es <c>null</c> y el frontend NO ofrece la habilitación (fuera de alcance de esta HU:
+/// el rol Administrador/Operario se resuelve en el cliente con el claim de rol del JWT, no aquí — ese dato
+/// no pertenece al trámite).
+/// </summary>
+public sealed record ProcedureInstanceRevocationEligibilityDto(
+    /// <summary>AC1/AC3 — el trámite fue creado en FLIT (fuente "dashboard"): ni integración ICT
+    /// (<c>origin='ict'</c>) ni foto migrada de V1 (<c>is_migrated</c>).</summary>
+    bool SourceSupported,
+    /// <summary>Fecha límite de la ventana (AC1/AC3), ya calculada en días hábiles desde la aprobación
+    /// ORIGINAL del trámite. <c>null</c> = sin ventana configurada para el OT = sin límite.</summary>
+    DateTimeOffset? WindowExpiresAt,
+    /// <summary>AC3 — <c>true</c> si hay ventana configurada y ya venció (motivo "Ventana de revocatoria
+    /// vencida" en la UI).</summary>
+    bool WindowExpired);
+
 public sealed record ProcedureInstanceActorDto(
     string ActorType,
     string DocumentType,
@@ -107,9 +131,20 @@ public sealed record ProcedureInstanceDetailDto(
     // Bug #12376, defectos 3/4 — eventos administrativos (reenvío de validación, reasignación de
     // gestor) para el tracking del dashboard. Opcional (default vacío) para no romper consumidores
     // existentes del contrato.
-    IReadOnlyList<ProcedureInstanceEventDto>? Events = null);
+    IReadOnlyList<ProcedureInstanceEventDto>? Events = null,
+    // HU #12573 — gates del botón "Solicitar revocatoria" (ver XML doc de
+    // ProcedureInstanceRevocationEligibilityDto). Null fuera de 'aprobado' o si el trámite se ve desde
+    // la vista de red (NetworkGetProcedureInstanceHandler no la calcula a propósito: la revocatoria es
+    // una acción del Administrador sobre SU PROPIO trámite, no de la cabeza de grupo en modo consulta).
+    ProcedureInstanceRevocationEligibilityDto? RevocationEligibility = null);
 
-public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository repo)
+public sealed class GetProcedureInstanceHandler(
+    IProcedureInstanceRepository repo,
+    // Opcionales (default null) para no romper la construcción manual `new GetProcedureInstanceHandler(repo)`
+    // que ya usan varios tests existentes (Integration.Tests, Application.Tests): sin ellos, el handler
+    // sigue funcionando igual, solo que RevocationEligibility queda null (degradación segura).
+    IProcedureRevocationRequestRepository? revocationRepo = null,
+    IBusinessDayCalculator? businessDayCalculator = null)
 {
     /// <summary>Tipos de <see cref="ProcedureInstanceEvent"/> que el dashboard muestra en el tracking
     /// (ver XML doc de <see cref="ProcedureInstanceEventDto"/> sobre por qué solo estos dos).</summary>
@@ -128,7 +163,43 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
         if (instance is null)
             return (null, "not_found");
 
-        return (await BuildDetailAsync(repo, instance, ct).ConfigureAwait(false), null);
+        var revocationEligibility = await BuildRevocationEligibilityAsync(instance, tenantId, ct).ConfigureAwait(false);
+        return (await BuildDetailAsync(repo, instance, ct, revocationEligibility).ConfigureAwait(false), null);
+    }
+
+    /// <summary>
+    /// HU #12573 — ver XML doc de <see cref="ProcedureInstanceRevocationEligibilityDto"/>. PRIVADO de este
+    /// handler (no de <see cref="BuildDetailAsync"/>) a propósito: <see cref="NetworkGetProcedureInstanceHandler"/>
+    /// nunca lo invoca, así que la vista de red nunca trae este campo (ver comentario en el DTO).
+    /// </summary>
+    private async Task<ProcedureInstanceRevocationEligibilityDto?> BuildRevocationEligibilityAsync(
+        ProcedureInstance instance, Guid tenantId, CancellationToken ct)
+    {
+        if (revocationRepo is null || businessDayCalculator is null)
+            return null;
+        if (!string.Equals(instance.Status, TramiteEstado.Aprobado, StringComparison.Ordinal))
+            return null;
+
+        // Misma derivación que TramiteFuente (HU #11056) y RevocationRequestGate (HU #12571) — AC1/AC3.
+        var sourceSupported = string.Equals(
+            TramiteFuente.Desde(instance.Origin, instance.IsMigrated),
+            TramiteFuente.Dashboard,
+            StringComparison.Ordinal);
+
+        // Misma base fija que RequestRevocationHandler (AC2/AC5 de HU #12571/#12572): la aprobación
+        // ORIGINAL, no la más reciente; un reintento tras un rechazo no reinicia la ventana.
+        var approvedAt = await revocationRepo.GetFirstApprovedAtAsync(tenantId, instance.Id, ct).ConfigureAwait(false)
+            ?? instance.UpdatedAt ?? instance.CreatedAt;
+        var windowDays = instance.TransitOfficeId is Guid transitOfficeId
+            ? await revocationRepo.GetRevocationWindowBusinessDaysAsync(transitOfficeId, ct).ConfigureAwait(false)
+            : null;
+
+        DateTimeOffset? windowExpiresAt = windowDays is { } dias
+            ? businessDayCalculator.AddBusinessDays(approvedAt, dias)
+            : null;
+        var windowExpired = windowExpiresAt is { } vence && DateTimeOffset.UtcNow > vence;
+
+        return new ProcedureInstanceRevocationEligibilityDto(sourceSupported, windowExpiresAt, windowExpired);
     }
 
     /// <summary>
@@ -139,13 +210,23 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
     /// autores del historial, …) va AQUÍ y nunca solo en <see cref="HandleAsync"/>: si se añade en el
     /// handler propio y no aquí, la vista de red deja de ser equivalente sin que compile nada distinto
     /// (fallo de CI del PR #370 al integrar el Bug #12526).
+    /// <para>
+    /// Excepción deliberada (HU #12573): <paramref name="revocationEligibility"/> NO se calcula aquí
+    /// adentro, sino que lo resuelve el caller (solo <see cref="HandleAsync"/>) y se recibe ya armado —
+    /// la revocatoria es una acción del Administrador sobre SU PROPIO trámite; en la vista de red
+    /// (<c>NetworkGetProcedureInstanceHandler</c>) nadie la invoca, así que ese campo queda <c>null</c>
+    /// sin necesidad de una query cross-tenant adicional que ahí no hace falta.
+    /// </para>
     /// </summary>
     internal static async Task<ProcedureInstanceDetailDto> BuildDetailAsync(
-        IProcedureInstanceRepository repo, ProcedureInstance instance, CancellationToken ct)
+        IProcedureInstanceRepository repo,
+        ProcedureInstance instance,
+        CancellationToken ct,
+        ProcedureInstanceRevocationEligibilityDto? revocationEligibility = null)
     {
         var events = await BuildEventsAsync(repo, instance.Events, ct).ConfigureAwait(false);
         var actorInfo = await BuildStatusHistoryActorInfoAsync(repo, instance.StatusHistory, ct).ConfigureAwait(false);
-        return ToDetail(instance, events, actorInfo);
+        return ToDetail(instance, events, actorInfo, revocationEligibility);
     }
 
     /// <summary>
@@ -275,7 +356,8 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
     internal static ProcedureInstanceDetailDto ToDetail(
         ProcedureInstance e,
         IReadOnlyList<ProcedureInstanceEventDto>? events = null,
-        StatusHistoryActorInfo? actorInfo = null)
+        StatusHistoryActorInfo? actorInfo = null,
+        ProcedureInstanceRevocationEligibilityDto? revocationEligibility = null)
     {
         var names = actorInfo?.Names ?? EmptyActorMap;
         var emails = actorInfo?.Emails ?? EmptyActorMap;
@@ -314,7 +396,8 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
             e.SubsanacionActiva,
             e.SubsanacionCount,
             e.Prioritario,
-            events ?? []);
+            events ?? [],
+            revocationEligibility);
     }
 
     private static readonly Dictionary<Guid, string> EmptyActorMap = [];
