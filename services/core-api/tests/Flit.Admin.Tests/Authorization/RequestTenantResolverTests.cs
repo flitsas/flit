@@ -290,6 +290,11 @@ public sealed class RequestTenantResolverTests
     [InlineData("/api/v1/tramites/preflight-preview", true)]
     [InlineData("/api/v1/tramites/preflight-preview/x", false)]
     [InlineData("/api/v1/tramites/rues-preview", true)]
+    // Bug #12564 — Exact tolera la barra final (el routing la sirve), pero no sufijos ni hijas.
+    [InlineData("/api/v1/tramites/consultation-config", true)]
+    [InlineData("/api/v1/tramites/consultation-config/", true)]
+    [InlineData("/api/v1/tramites/consultation-configx", false)]
+    [InlineData("/api/v1/tramites/consultation-config/otra", false)]
     [InlineData("/api/v1/tramites/biometric-validations/22222222-2222-2222-2222-222222222222/resend", true)]
     [InlineData("/api/v1/tramites/plate-preassign/available", true)]
     [InlineData("/api/v1/tramites/identity-validation/stuck", true)]
@@ -335,6 +340,8 @@ public sealed class RequestTenantResolverTests
             ("/api/v1/admin/tramites", TenantEnforcementMiddleware.RouteMatch.Prefix),
             // Bug #12558 — preferencias de UI del usuario autenticado, FUERA de /api/v1/tramites.
             ("/api/v1/me/ui-preferences", TenantEnforcementMiddleware.RouteMatch.Prefix),
+            // Bug #12564 — configuración de consulta del tenant (proveedor primario y flags), bajo /api/v1/tramites.
+            ("/api/v1/tramites/consultation-config", TenantEnforcementMiddleware.RouteMatch.Exact),
         });
         routes.Should().OnlyContain(r =>
             r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal)
