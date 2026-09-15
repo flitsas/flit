@@ -47,6 +47,9 @@ public static class AuditVocabulary
         public const string Confirm = "confirm";
         public const string Activate = "activate";
         public const string Deactivate = "deactivate";
+
+        // Epic #12543 — aceptación de Términos y Condiciones antes de crear un trámite.
+        public const string AcceptTerms = "accept_terms";
     }
 
     /// <summary>Categoría transversal de la operación auditada (HU #10678).</summary>
@@ -64,5 +67,8 @@ public static class AuditVocabulary
 
         // HU #11366 — buzón de pruebas de notificaciones (Feature #11349).
         public const string Notifications = "notifications";
+
+        // Epic #12543 — aceptación de T&C al crear trámite (reflejo del registro de evidencia).
+        public const string Tramites = "tramites";
     }
 }

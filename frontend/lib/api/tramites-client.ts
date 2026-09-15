@@ -509,6 +509,19 @@ function jwtTenantId(): string | undefined {
   return decodeJwtPayload(getToken())?.tenant_id ?? undefined;
 }
 
+/** Epic #12543 — documento de T&C vigente (GET /terms-acceptances/current). */
+export interface ProcedureTermsInfo {
+  url: string;
+}
+
+/** Epic #12543 — aceptación registrada (POST /terms-acceptances → 201). */
+export interface ProcedureTermsAcceptance {
+  id: string;
+  procedureTypeCode: string;
+  termsUrl: string;
+  acceptedAt: string;
+}
+
 /**
  * Headers de runtime: Bearer del JWT + X-Tenant-Id resuelto. La resolución del tenant es:
  * explícito → tenant activo (superadmin abriendo otra compañía) → tenant del JWT (company-user).
@@ -1150,6 +1163,22 @@ export const tramitesClient = {
   // HU #10478 — proveedor primario de consulta resuelto para el tenant (por tipo). El wizard lo
   // consulta para adaptar la UI (ocultar el tipo de documento del propietario si el proveedor de
   // placa es Kyverum RUNT, que lo resuelve solo).
+  // Epic #12543 — Términos y Condiciones antes de abrir el asistente. El GET dice qué documento
+  // enlazar (la URL vive en el backend para que la evidencia y el enlace no diverjan); el POST
+  // deja la aceptación registrada (usuario, fecha UTC, tipo de trámite, IP) y SOLO su 201 habilita
+  // el formulario (RN-03). Lleva el tenant activo: el SuperAdmin acota la compañía en la que actúa.
+  getCurrentProcedureTerms: () =>
+    request<ProcedureTermsInfo>('/api/v1/tramites/terms-acceptances/current', {
+      headers: tenantHeader(),
+    }),
+
+  acceptProcedureTerms: (procedureTypeCode: string) =>
+    request<ProcedureTermsAcceptance>('/api/v1/tramites/terms-acceptances', {
+      method: 'POST',
+      headers: tenantHeader(),
+      body: JSON.stringify({ procedureTypeCode }),
+    }),
+
   getConsultationConfig: (tenantId?: string) =>
     request<ConsultationProvidersConfig>(
       `/api/v1/tramites/consultation-config`,
