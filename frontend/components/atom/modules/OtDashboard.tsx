@@ -416,16 +416,18 @@ function Bienvenida({
             <button
               type="button"
               onClick={() => setActual((i) => (i - 1 + mensajes.length) % mensajes.length)}
+              disabled={mensajes.length <= 1}
               aria-label="Mensaje anterior"
-              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
             >
               <ChevronLeft className="h-3 w-3" aria-hidden="true" />
             </button>
             <button
               type="button"
               onClick={() => setActual((i) => (i + 1) % mensajes.length)}
+              disabled={mensajes.length <= 1}
               aria-label="Mensaje siguiente"
-              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
             >
               <ChevronRight className="h-3 w-3" aria-hidden="true" />
             </button>

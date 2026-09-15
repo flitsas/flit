@@ -1,7 +1,7 @@
 // HU #12241 AC2/AC4 — formulario de alta/edición con vista previa en vivo (blob local antes de
 // guardar, endpoint público tras guardar) y guía de tamaño recomendado junto al campo de imagen.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BannerFormPanel } from "../BannerFormPanel";
 import type { Banner, BannerFormInput } from "@/lib/api/admin-banners";
@@ -113,7 +113,7 @@ describe("BannerFormPanel — validación y envío", () => {
     const user = userEvent.setup();
     const { onSubmit } = renderPanel({ editing: banner() });
 
-    await user.type(screen.getByLabelText(/fecha inicio/i), "2026-09-01");
+    fireEvent.change(screen.getByLabelText(/fecha inicio/i), { target: { value: "2026-09-01T08:00" } });
     await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     expect(await screen.findByText("Indica ambas fechas de vigencia, o ninguna.")).toBeInTheDocument();

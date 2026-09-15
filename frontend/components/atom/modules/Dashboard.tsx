@@ -585,7 +585,13 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           ) : (
             <span className="sr-only">{s.name}</span>
           )}
-          <div className="flex items-center justify-between mt-3 relative px-6 pb-5">
+          {/* Fijos al fondo del contenedor (`absolute inset-x-0 bottom-0`), no distribuidos por
+              flex: con `flex flex-col justify-between` estos controles eran el único hijo "en
+              flujo" cuando el slide es un banner (el enlace de arriba es `absolute inset-0`, o no
+              hay nada más que un `sr-only`), así que `justify-between` los anclaba arriba en vez
+              de abajo (Bug #12584, defecto 2). Al posicionarlos de forma absoluta dejan de
+              depender del alto del contenido vecino. */}
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-6 pb-5">
             <div className="flex gap-1">
               {slides.map((_, i) => (
                 <button
@@ -603,15 +609,17 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setSlide((v) => (v - 1 + slides.length) % slides.length)}
+                disabled={slides.length <= 1}
                 aria-label="Anterior"
-                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25"
+                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
               >
                 <ChevronLeft className="h-3 w-3" />
               </button>
               <button
                 onClick={() => setSlide((v) => (v + 1) % slides.length)}
+                disabled={slides.length <= 1}
                 aria-label="Siguiente"
-                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25"
+                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
               >
                 <ChevronRight className="h-3 w-3" />
               </button>

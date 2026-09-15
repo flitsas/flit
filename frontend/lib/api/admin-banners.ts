@@ -46,6 +46,27 @@ export interface BannerListParams {
 const base = "/api/v1/admin/banners";
 
 /**
+ * FLIT opera en hora Colombia (UTC-5, sin horario de verano) — fijo, sin selector de zona
+ * horaria (Bug #12584, defecto 1: el formulario solo permitía elegir día, nunca hora de
+ * inicio/fin de vigencia). La conversión es aritmética pura (no usa el huso horario del
+ * navegador de quien administra el banner, que puede no estar en Colombia).
+ */
+const COLOMBIA_UTC_OFFSET_HOURS = 5;
+
+/** `yyyy-MM-ddTHH:mm` (hora Colombia, valor nativo de `<input type="datetime-local">`) a ISO UTC. */
+function colombiaLocalToUtcIso(value: string): string {
+  const utcMs = Date.parse(`${value}:00.000Z`) + COLOMBIA_UTC_OFFSET_HOURS * 3_600_000;
+  return new Date(utcMs).toISOString();
+}
+
+/** ISO UTC del backend a `yyyy-MM-ddTHH:mm` en hora Colombia, para precargar el `<input>`. */
+export function bannerDateTimeInputValue(iso: string | null): string {
+  if (!iso) return "";
+  const localMs = Date.parse(iso) - COLOMBIA_UTC_OFFSET_HOURS * 3_600_000;
+  return new Date(localMs).toISOString().slice(0, 16);
+}
+
+/**
  * URL pública de la imagen del banner, construida SIEMPRE a partir del `id` (nunca desde
  * `Banner.imageUrl` crudo — ver el aviso en el campo). Coincide con la ruta montada en
  * `PublicBannersEndpoints.cs`: `GET /api/v1/public/banners/{id}/image`.
@@ -75,9 +96,10 @@ export interface BannerFormInput {
   name: string;
   /** Enlace opcional; cadena vacía = sin enlace. */
   linkUrl: string;
-  /** `yyyy-mm-dd` (valor nativo de `<input type="date">`) o cadena vacía = sin vigencia. */
+  /** `yyyy-MM-ddTHH:mm` en hora Colombia (valor nativo de `<input type="datetime-local">`) o
+   * cadena vacía = sin vigencia. */
   validFrom: string;
-  /** `yyyy-mm-dd` o cadena vacía = sin vigencia. */
+  /** `yyyy-MM-ddTHH:mm` en hora Colombia o cadena vacía = sin vigencia. */
   validUntil: string;
   file: File | null;
   /**
@@ -91,10 +113,9 @@ export interface BannerFormInput {
 }
 
 /**
- * Arma el `FormData` multipart. Las fechas se normalizan a inicio/fin de día en UTC: el backend
- * compara `now` (UTC) contra `validFrom`/`validUntil` para calcular `estado`
- * (`BannerEstadoCalculator`), y un `validUntil` a medianoche dejaría el banner "expirado" durante
- * todo su último día de vigencia.
+ * Arma el `FormData` multipart. Las fechas llegan como hora Colombia (`datetime-local`) y se
+ * convierten a ISO UTC (`colombiaLocalToUtcIso`) antes de enviarlas: el backend compara `now`
+ * (UTC) contra `validFrom`/`validUntil` para calcular `estado` (`BannerEstadoCalculator`).
  */
 function buildFormData(input: BannerFormInput): FormData {
   const form = new FormData();
@@ -103,10 +124,10 @@ function buildFormData(input: BannerFormInput): FormData {
     form.append("linkUrl", input.linkUrl.trim());
   }
   if (input.validFrom) {
-    form.append("validFrom", `${input.validFrom}T00:00:00.000Z`);
+    form.append("validFrom", colombiaLocalToUtcIso(input.validFrom));
   }
   if (input.validUntil) {
-    form.append("validUntil", `${input.validUntil}T23:59:59.999Z`);
+    form.append("validUntil", colombiaLocalToUtcIso(input.validUntil));
   }
   if (input.file) {
     form.append("file", input.file);
@@ -156,19 +177,24 @@ export function setBannerActive(id: string, isActive: boolean): Promise<void> {
   return apiFetch<void>(`${base}/${id}/active`, { method: "PATCH", body: { isActive } });
 }
 
-/** Aplica el PATCH de estado y refleja el resultado en el objeto ya devuelto por create/update,
- * para no forzar un segundo GET solo para refrescar `isActive` en la UI. */
+/**
+ * Aplica el PATCH de estado y refleja el resultado en el objeto ya devuelto por create/update,
+ * para no forzar un segundo GET solo para refrescar `isActive` en la UI.
+ *
+ * El `estado` que trae `banner` se calculó en el backend ANTES de este PATCH (con el `isActive`
+ * viejo) — mergear solo `isActive` sin tocar `estado` dejaba la tabla desincronizada hasta F5
+ * (Bug #12584, defecto 4). Con vigencia programada `estado` no depende de `isActive`
+ * (`BannerEstadoCalculator`), así que ese valor ya es correcto y se conserva tal cual; sin
+ * vigencia, `estado` es un espejo directo de `isActive` (activo/inactivo) y se recalcula aquí.
+ */
 async function applyActiveState(banner: Banner, isActive: boolean): Promise<Banner> {
   await setBannerActive(banner.id, isActive);
-  return { ...banner, isActive };
+  const hasVigencia = banner.validFrom !== null || banner.validUntil !== null;
+  const estado: BannerEstado = hasVigencia ? banner.estado : isActive ? "activo" : "inactivo";
+  return { ...banner, isActive, estado };
 }
 
 /** DELETE "/{id}?confirm=true" — baja con confirmación explícita obligatoria (AC3). */
 export function deleteBanner(id: string): Promise<void> {
   return apiFetch<void>(`${base}/${id}`, { method: "DELETE", query: { confirm: true } });
-}
-
-/** `yyyy-mm-dd` para precargar `<input type="date">` al editar, o cadena vacía si no hay fecha. */
-export function bannerDateInputValue(iso: string | null): string {
-  return iso ? iso.slice(0, 10) : "";
 }

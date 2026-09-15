@@ -5,7 +5,7 @@ import { AlertTriangle, Loader2, UploadCloud } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import {
-  bannerDateInputValue,
+  bannerDateTimeInputValue,
   bannerImageUrl,
   type Banner,
   type BannerFormInput,
@@ -48,19 +48,20 @@ function fromEditing(b: Banner): FormState {
   return {
     name: b.name,
     linkUrl: b.linkUrl ?? "",
-    validFrom: bannerDateInputValue(b.validFrom),
-    validUntil: bannerDateInputValue(b.validUntil),
+    validFrom: bannerDateTimeInputValue(b.validFrom),
+    validUntil: bannerDateTimeInputValue(b.validUntil),
     file: null,
     isActive: b.isActive,
   };
 }
 
 /**
- * Panel de alta/edición de un banner (HU #12241 AC2/AC4): nombre, enlace opcional, vigencia
- * (DD/MM/AAAA, opcional) e imagen con vista previa en vivo. La vista previa usa
- * `URL.createObjectURL` sobre el archivo local ANTES de guardar (AC2); tras guardar/editar sin
- * archivo nuevo, cae al endpoint público de imagen (`bannerImageUrl`). AC4: guía de tamaño
- * recomendado visible junto al campo de imagen — puramente informativa, no bloquea el envío.
+ * Panel de alta/edición de un banner (HU #12241 AC2/AC4): nombre, enlace opcional, vigencia con
+ * fecha y hora en Colombia (opcional, Bug #12584 defecto 1) e imagen con vista previa en vivo. La
+ * vista previa usa `URL.createObjectURL` sobre el archivo local ANTES de guardar (AC2); tras
+ * guardar/editar sin archivo nuevo, cae al endpoint público de imagen (`bannerImageUrl`). AC4:
+ * guía de tamaño recomendado visible junto al campo de imagen — puramente informativa, no bloquea
+ * el envío.
  */
 export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: BannerFormPanelProps) {
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -196,7 +197,11 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
         <ToggleSwitch
           id="banner-activo"
           label="Banner activo"
-          description="Si lo desactivas, no aparece en los carruseles aunque esté dentro de su rango de vigencia."
+          description={
+            form.validFrom || form.validUntil
+              ? "Con vigencia programada, este interruptor no aplica: la fecha y hora de inicio/fin mandan sobre él (Activo/Programado/Expirado según corresponda)."
+              : "Si lo desactivas, no aparece en los carruseles."
+          }
           checked={form.isActive}
           onChange={(checked) => patch({ isActive: checked })}
         />
@@ -204,18 +209,18 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field
             id="banner-desde"
-            label="Fecha inicio (opcional)"
+            label="Fecha inicio — hora Colombia (opcional)"
             error={
               missingDatePair
                 ? "Indica ambas fechas de vigencia, o ninguna."
                 : invalidDateRange
-                  ? "La fecha de fin debe ser posterior a la de inicio."
+                  ? "La fecha/hora de fin debe ser posterior a la de inicio."
                   : undefined
             }
           >
             <input
               id="banner-desde"
-              type="date"
+              type="datetime-local"
               value={form.validFrom}
               onChange={(e) => patch({ validFrom: e.target.value })}
               className={INPUT_CLS}
@@ -225,10 +230,10 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
               aria-invalid={missingDatePair || invalidDateRange}
             />
           </Field>
-          <Field id="banner-hasta" label="Fecha fin (opcional)">
+          <Field id="banner-hasta" label="Fecha fin — hora Colombia (opcional)">
             <input
               id="banner-hasta"
-              type="date"
+              type="datetime-local"
               value={form.validUntil}
               onChange={(e) => patch({ validUntil: e.target.value })}
               className={INPUT_CLS}
@@ -240,8 +245,9 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
           </Field>
         </div>
         <p className="text-[11px] opacity-60">
-          Si no defines fechas, el banner queda vigente desde ya y sin fecha de expiración
-          (&ldquo;Sin fecha programada&rdquo; en el listado).
+          Hora Colombia (UTC-5). Si no defines fechas, el banner queda vigente desde ya y sin
+          fecha de expiración (&ldquo;Sin fecha programada&rdquo; en el listado); con vigencia
+          programada, ella manda sobre el interruptor &ldquo;Banner activo&rdquo;.
         </p>
 
         <div>
