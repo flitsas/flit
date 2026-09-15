@@ -117,6 +117,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
       quipuxReadOnly: false,
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
+      revocationWindowBusinessDays: null,
     });
     vi.mocked(fetchOtBandejaHealth).mockResolvedValue({
       transitOfficeResolved: true,
@@ -251,6 +252,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
       quipuxReadOnly: true,
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
+      revocationWindowBusinessDays: null,
     });
     const user = userEvent.setup();
     renderSection();

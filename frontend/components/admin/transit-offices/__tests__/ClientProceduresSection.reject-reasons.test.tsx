@@ -108,6 +108,7 @@ describe("ClientProceduresSection — rechazo con causales del catálogo", () =>
       quipuxReadOnly: false,
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
+      revocationWindowBusinessDays: null,
     });
     vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
     vi.mocked(searchOtClientProcedures).mockResolvedValue({

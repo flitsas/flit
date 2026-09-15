@@ -42,6 +42,7 @@ const dashboardProfile: OtProfile = {
   quipuxReadOnly: false,
   transitOfficeId: OT_ID,
   featureFlags: [],
+  revocationWindowBusinessDays: null,
 };
 
 const quipuxReadOnlyProfile: OtProfile = {
@@ -49,6 +50,7 @@ const quipuxReadOnlyProfile: OtProfile = {
   quipuxReadOnly: true,
   transitOfficeId: OT_ID,
   featureFlags: [],
+  revocationWindowBusinessDays: null,
 };
 
 const sampleProcedure: OtClientProcedure = {

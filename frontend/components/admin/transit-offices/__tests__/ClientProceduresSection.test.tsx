@@ -109,6 +109,7 @@ describe("ClientProceduresSection — HU #10220", () => {
       quipuxReadOnly: false,
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
+      revocationWindowBusinessDays: null,
     });
     vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
     vi.mocked(searchOtClientProcedures).mockResolvedValue({
@@ -601,6 +602,7 @@ describe("ClientProceduresSection — cotejo en la modal (HU #12043)", () => {
       quipuxReadOnly: false,
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
+      revocationWindowBusinessDays: null,
     });
     vi.mocked(fetchOtBandejaHealth).mockResolvedValue({
       transitOfficeResolved: true,

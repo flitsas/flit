@@ -94,6 +94,7 @@ describe("ClientProceduresSection — error al asignar placa", () => {
       quipuxReadOnly: false,
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
+      revocationWindowBusinessDays: null,
     });
     vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
     vi.mocked(searchOtClientProcedures).mockResolvedValue({

@@ -109,6 +109,7 @@ beforeEach(() => {
     quipuxReadOnly: false,
     transitOfficeId: OT_ID,
     featureFlags: [],
+    revocationWindowBusinessDays: null,
   });
   vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
   vi.mocked(fetchOtBandejaHealth).mockResolvedValue({

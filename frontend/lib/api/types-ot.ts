@@ -16,10 +16,17 @@ export interface OtProfile {
   quipuxReadOnly: boolean;
   transitOfficeId: string;
   featureFlags: OtFeatureFlag[];
+  /**
+   * HU #12568/#12569 — ventana de revocatoria en días hábiles. `null` = sin configurar = sin
+   * límite (nunca se sustituye por un default numérico).
+   */
+  revocationWindowBusinessDays: number | null;
 }
 
 export interface UpdateOtProfileRequest {
   operationMode?: OtOperationMode;
+  /** Enviar `null` deja la ventana sin límite (HU #12569). Entero ≥ 1 en cualquier otro caso. */
+  revocationWindowBusinessDays?: number | null;
 }
 
 /** Requisitos configurables por OT (HU #10545 / #10546). */
