@@ -339,3 +339,95 @@ describe('TramiteDetalleModal — subsanación', () => {
     expect(screen.queryByText('Rechazo de prueba: expediente completo.')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * HU #12575 (Feature #12565) — sub-estado visual de revocatoria: AC1 (badge secundario junto al chip
+ * principal, que sigue "Aprobado") y AC2 (evento en el timeline general, sin romper TimelineTrackPanel).
+ */
+describe('TramiteDetalleModal — sub-estado de revocatoria (HU #12575)', () => {
+  const APROBADO = { ...ITEM, estado: 'aprobado' } satisfies InstanceSummary;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(tramitesClient.getAttachments).mockResolvedValue([]);
+    vi.mocked(tramitesClient.listBiometricExpediente).mockResolvedValue({
+      validations: [],
+      firmaBaulPartes: [],
+      firmaBaulActores: [],
+    });
+  });
+
+  it('AC1 — con solicitud activa, el chip principal sigue "Aprobado" y aparece el badge secundario', async () => {
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [],
+      fieldValues: [],
+      actors: [],
+      activeRevocationRequest: { status: 'solicitada', attemptNumber: 1, requestedAt: '2026-05-01T10:00:00Z' },
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Aprobado')).toBeInTheDocument();
+    expect(await within(dialog).findByText('Revocatoria solicitada')).toBeInTheDocument();
+  });
+
+  it('AC1 — en revisión, el badge secundario refleja ese sub-estado', async () => {
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [],
+      fieldValues: [],
+      actors: [],
+      activeRevocationRequest: { status: 'en_revision', attemptNumber: 1, requestedAt: '2026-05-01T10:00:00Z' },
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
+    );
+
+    expect(await screen.findByText('Revocatoria en revisión')).toBeInTheDocument();
+  });
+
+  it('AC1 — sin solicitud activa, no aparece el badge secundario', async () => {
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [],
+      fieldValues: [],
+      actors: [],
+      activeRevocationRequest: null,
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
+    );
+
+    await screen.findByText('Aprobado');
+    expect(screen.queryByText(/Revocatoria/)).not.toBeInTheDocument();
+  });
+
+  it('AC2 — la línea de tiempo general incluye la solicitud de revocatoria sin romper el panel', async () => {
+    const user = userEvent.setup();
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [
+        { fromStatus: 'entregado', toStatus: 'aprobado', changedAt: '2026-04-20T11:00:00Z', reason: null },
+      ],
+      fieldValues: [],
+      actors: [],
+      events: [
+        {
+          tipo: 'revocatoria_solicitada',
+          createdAt: '2026-05-01T10:00:00Z',
+          createdByName: 'Ana Administradora',
+          createdByEmail: 'ana.administradora@renting.com',
+          revocationAttemptNumber: 1,
+          revocationReason: 'Placa entregada con datos incorrectos',
+        },
+      ],
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Línea de Tiempo del Trámite/i }));
+    expect(await screen.findByText('Solicitud de revocatoria · Intento 1')).toBeInTheDocument();
+    // El hito de estado "Aprobado" del historial sigue pintándose: el evento se AGREGA, no reemplaza.
+    expect(screen.getAllByText('Aprobado').length).toBeGreaterThan(0);
+  });
+});

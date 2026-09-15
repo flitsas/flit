@@ -259,6 +259,29 @@ describe('TramiteTrackingModal', () => {
     ).toBeInTheDocument();
   });
 
+  // HU #12575 (Feature #12565, AC2) — la solicitud de revocatoria aparece mezclada en el historial,
+  // sin caer en el default de "reenvío de validación" (el bug que este branch explícito evita).
+  it('un evento de solicitud de revocatoria aparece mezclado en el historial', async () => {
+    getInstance.mockResolvedValue({
+      events: [
+        {
+          tipo: 'revocatoria_solicitada',
+          createdAt: '2026-08-27T16:30:00Z',
+          createdByName: 'Ana Administradora',
+          createdByEmail: 'ana.administradora@renting.com',
+          revocationAttemptNumber: 1,
+          revocationReason: 'Placa entregada con datos incorrectos',
+        },
+      ],
+    });
+    render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
+
+    const historial = await screen.findByRole('list', { name: 'Historial de estados del trámite' });
+    expect(within(historial).getByText('Solicitud de revocatoria · Intento 1')).toBeInTheDocument();
+    expect(within(historial).getByText('Solicitado por Ana Administradora')).toBeInTheDocument();
+    expect(within(historial).getByText('Placa entregada con datos incorrectos')).toBeInTheDocument();
+  });
+
   it('cerrado no consulta nada', async () => {
     render(<TramiteTrackingModal open={false} item={fila()} onClose={() => undefined} />);
     await waitFor(() => expect(getStatusHistory).not.toHaveBeenCalled());

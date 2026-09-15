@@ -190,6 +190,46 @@ describe('timeline-mappers', () => {
     expect(nodes[0]!.info.extra).toBe('Reenviado a un correo distinto del registrado');
   });
 
+  // HU #12575 (Feature #12565, AC2) — la solicitud de revocatoria se pinta como nodo ADICIONAL, con
+  // el número de intento en la etiqueta y el motivo/correo del SOLICITANTE (no de un tercero).
+  it('mapEventsToTimelineNodes pinta revocatoria_solicitada con intento, motivo y solicitante', () => {
+    const events: ProcedureInstanceEvent[] = [
+      {
+        tipo: 'revocatoria_solicitada',
+        createdAt: '2026-06-03T10:00:00Z',
+        createdByName: 'Ana Administradora',
+        createdByEmail: 'ana.administradora@renting.com',
+        createdByCompania: 'Renting Colombia S.A.S',
+        revocationAttemptNumber: 1,
+        revocationReason: 'Placa entregada con datos incorrectos',
+      },
+    ];
+    const nodes = mapEventsToTimelineNodes(events);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0]!.label).toBe('Solicitud de revocatoria · Intento 1');
+    expect(nodes[0]!.info.gestor).toBe('Ana Administradora');
+    expect(nodes[0]!.info.correo).toBe('ana.administradora@renting.com');
+    expect(nodes[0]!.info.empresa).toBe('Renting Colombia S.A.S');
+    expect(nodes[0]!.info.rol).toBe('Solicitado por Ana Administradora');
+    expect(nodes[0]!.info.extra).toBe('Placa entregada con datos incorrectos');
+  });
+
+  it('mapEventsToTimelineNodes revocatoria_solicitada cae a valores por defecto sin datos opcionales', () => {
+    const events: ProcedureInstanceEvent[] = [
+      {
+        tipo: 'revocatoria_solicitada',
+        createdAt: '2026-06-03T10:00:00Z',
+        createdByName: null,
+      },
+    ];
+    const nodes = mapEventsToTimelineNodes(events);
+    expect(nodes[0]!.label).toBe('Solicitud de revocatoria');
+    expect(nodes[0]!.info.gestor).toBe('—');
+    expect(nodes[0]!.info.correo).toBe('—');
+    expect(nodes[0]!.info.rol).toBe('Solicitado por administrador');
+    expect(nodes[0]!.info.extra).toBe('Sin motivo adicional registrado');
+  });
+
   it('mapEventsToTimelineNodes ordena por fecha ascendente', () => {
     const events: ProcedureInstanceEvent[] = [
       {

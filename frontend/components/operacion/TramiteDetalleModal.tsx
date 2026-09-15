@@ -50,6 +50,7 @@ import {
   ETIQUETA_SOLO_CONSULTA,
   describirErrorDeSeccion,
 } from '@/lib/tramites/network-scope';
+import { revocationRequestLabel, revocationRequestTone } from '@/lib/tramites/estados';
 import type {
   BiometricValidation,
   InstanceSummary,
@@ -410,6 +411,20 @@ export function TramiteDetalleModal({
                   {estadoHdr.label}
                 </span>
               ) : null}
+              {/* HU #12575 (Feature #12565, AC1) — badge SECUNDARIO de sub-estado de revocatoria:
+                  ortogonal al chip principal de arriba (que sigue "Aprobado", ADR-0022). Reutiliza
+                  StatusBadge (mismo componente que el distintivo de "Solo consulta" de abajo) en vez de
+                  un sistema de color nuevo, justo para que se lea como secundario/distinto del chip
+                  sólido de estado. */}
+              {detail?.activeRevocationRequest ? (
+                <StatusBadge
+                  tone={revocationRequestTone(detail.activeRevocationRequest.status) ?? 'neutral'}
+                  label={revocationRequestLabel(detail.activeRevocationRequest.status) ?? 'Revocatoria en curso'}
+                  ariaLabel={`Sub-estado de revocatoria: ${
+                    revocationRequestLabel(detail.activeRevocationRequest.status) ?? 'en curso'
+                  }`}
+                />
+              ) : null}
               {/* HU #12362 — distintivo del modo consulta: texto + icono, no solo color. */}
               {consultaMode ? (
                 <StatusBadge
@@ -591,9 +606,13 @@ export function TramiteDetalleModal({
                       nodes={[
                         ...mapStatusHistoryToTimelineNodes(detail?.statusHistory ?? []),
                         // Bug #12376, defecto 4 — la reasignación de gestor no es un cambio de estado,
-                        // pero sí pertenece al historial general del trámite.
+                        // pero sí pertenece al historial general del trámite. HU #12575 (AC2) — la
+                        // solicitud de revocatoria tampoco cambia el status principal (ADR-0022) y se
+                        // agrega aquí por la misma razón.
                         ...mapEventsToTimelineNodes(
-                          (detail?.events ?? []).filter((e) => e.tipo === 'reasignar_gestor_admin'),
+                          (detail?.events ?? []).filter(
+                            (e) => e.tipo === 'reasignar_gestor_admin' || e.tipo === 'revocatoria_solicitada',
+                          ),
                         ),
                       ]}
                       emptyMessage="Sin eventos registrados todavía."

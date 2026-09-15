@@ -49,6 +49,27 @@ export interface RevocationEligibility {
 }
 
 /**
+ * HU #12575 (Feature #12565, AC1) — los dos únicos valores que el backend considera ACTIVOS
+ * (`ProcedureRevocationRequestStatus.EsActivo`, HU #12571): una fila `aprobada`/`rechazada` ya no es
+ * "activa" y por tanto nunca llega en {@link ActiveRevocationRequest} (decisión que resuelve la
+ * HU #12576, todavía no implementada).
+ */
+export type ActiveRevocationRequestStatus = 'solicitada' | 'en_revision';
+
+/**
+ * HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria sobre un trámite `aprobado`,
+ * ORTOGONAL al `status` del trámite (que permanece 'aprobado' durante todo el sub-flujo, ADR-0022):
+ * mismo precedente que `PlateFlowStatus` para la ruta de placa. Gobierna el badge secundario del
+ * detalle. `null`/ausente en `ProcedureInstanceDetail.activeRevocationRequest` = no hay solicitud
+ * activa ahora mismo.
+ */
+export interface ActiveRevocationRequest {
+  status: ActiveRevocationRequestStatus;
+  attemptNumber: number;
+  requestedAt: string;
+}
+
+/**
  * HU #12574 (Feature #12565) — payload del Paso 2 del modal de revocatoria: motivo + los 2 checks
  * de confirmación (AC1/AC2 del texto de copy) + el documento de soporte (PDF, "el certificado" es
  * el mismo adjunto obligatorio, no un segundo documento). Viaja como multipart/form-data
@@ -491,11 +512,13 @@ export interface ProcedureInstanceDetail {
   events?: ProcedureInstanceEvent[];
   /** Ver {@link RevocationEligibility}. */
   revocationEligibility?: RevocationEligibility | null;
+  /** Ver {@link ActiveRevocationRequest}. */
+  activeRevocationRequest?: ActiveRevocationRequest | null;
 }
 
 /** Ver `ProcedureInstanceDetail.events`. */
 export interface ProcedureInstanceEvent {
-  tipo: 'reasignar_gestor_admin' | 'reenvio_validacion_admin';
+  tipo: 'reasignar_gestor_admin' | 'reenvio_validacion_admin' | 'revocatoria_solicitada';
   createdAt: string;
   createdByName: string | null;
   // reasignar_gestor_admin
@@ -511,6 +534,16 @@ export interface ProcedureInstanceEvent {
   correoDestino?: string | null;
   /** Compañía de quien ejecutó el evento (ya nombrado en `createdByName`). */
   createdByCompania?: string | null;
+  // revocatoria_solicitada (HU #12575, Feature #12565) — payload de RequestRevocationHandler
+  // (HU #12572): número de intento y motivo escrito por el Administrador.
+  revocationAttemptNumber?: number | null;
+  revocationReason?: string | null;
+  /**
+   * Correo de quien EJECUTÓ el evento — a diferencia de `reasignar_gestor_admin`/
+   * `reenvio_validacion_admin` (que hablan de un TERCERO), aquí el ejecutor ES el Administrador que
+   * solicitó la revocatoria, así que su correo es el dato relevante de "Correo" en la tarjeta.
+   */
+  createdByEmail?: string | null;
 }
 
 /** Item del body de PATCH /instances/{id}/field-values. */

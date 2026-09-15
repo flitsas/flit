@@ -180,6 +180,23 @@ export function mapEventsToTimelineNodes(events: ProcedureInstanceEvent[]): Time
       };
     }
 
+    if (e.tipo === 'revocatoria_solicitada') {
+      return {
+        label: `Solicitud de revocatoria${e.revocationAttemptNumber ? ` · Intento ${e.revocationAttemptNumber}` : ''}`,
+        color: WARN,
+        info: {
+          // El ejecutor ES el Administrador que solicitó (a diferencia de reasignar/reenvío, que
+          // hablan de un TERCERO): su nombre/correo van directo en "Gestor"/"Correo".
+          gestor: e.createdByName || '—',
+          correo: e.createdByEmail || '—',
+          empresa: e.createdByCompania || '—',
+          rol: e.createdByName ? `Solicitado por ${e.createdByName}` : 'Solicitado por administrador',
+          fecha: formatFechaHora(e.createdAt),
+          extra: e.revocationReason?.trim() || 'Sin motivo adicional registrado',
+        },
+      };
+    }
+
     // reenvio_validacion_admin
     const parte = e.partyRole ? PARTY_LABEL[e.partyRole] ?? e.partyRole : null;
     return {

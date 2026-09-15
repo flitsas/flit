@@ -233,3 +233,49 @@ export function esperandoSoatDelGestor(
 ): boolean {
   return esperandoProcesoDelGestor(plateFlowStatus);
 }
+
+/**
+ * HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria (`ProcedureInstanceDetail
+ * .activeRevocationRequest`), ORTOGONAL al `EstadoTramite` (que permanece 'aprobado' durante todo el
+ * sub-flujo, ADR-0022): mismo precedente de badge secundario que `PlateFlowStatus` arriba. Solo los
+ * dos valores ACTIVOS que el backend puede devolver hoy (HU #12571) — `aprobada`/`rechazada` cierran
+ * el sub-flujo y dejan de ser "activos" (decisión que resuelve la HU #12576, todavía no implementada).
+ */
+export type RevocationRequestStatus = 'solicitada' | 'en_revision';
+
+export const REVOCATION_REQUEST_STATUSES: readonly RevocationRequestStatus[] = [
+  'solicitada',
+  'en_revision',
+] as const;
+
+/** Etiqueta del badge secundario de revocatoria. */
+export const REVOCATION_REQUEST_LABELS: Record<RevocationRequestStatus, string> = {
+  solicitada: 'Revocatoria solicitada',
+  en_revision: 'Revocatoria en revisión',
+};
+
+/**
+ * Tone semántico (`StatusBadge`, `@/components/atom/StatusBadge`) del badge secundario: reutiliza la
+ * paleta unificada de tones en vez de tintes propios, para que el badge se lea claramente como
+ * SECUNDARIO/distinto del chip sólido de estado (`estadoChipStyle`/`detalleEstadoHeader`).
+ */
+export const REVOCATION_REQUEST_TONES: Record<RevocationRequestStatus, 'warning' | 'info'> = {
+  solicitada: 'warning',
+  en_revision: 'info',
+};
+
+export function esRevocationRequestStatus(
+  value: string | null | undefined,
+): value is RevocationRequestStatus {
+  return !!value && (REVOCATION_REQUEST_STATUSES as readonly string[]).includes(value);
+}
+
+/** Label del badge de sub-estado de revocatoria; `null` si no hay solicitud activa. */
+export function revocationRequestLabel(value: string | null | undefined): string | null {
+  return esRevocationRequestStatus(value) ? REVOCATION_REQUEST_LABELS[value] : null;
+}
+
+/** Tone del badge de sub-estado de revocatoria; `null` si no hay solicitud activa. */
+export function revocationRequestTone(value: string | null | undefined): 'warning' | 'info' | null {
+  return esRevocationRequestStatus(value) ? REVOCATION_REQUEST_TONES[value] : null;
+}

@@ -320,6 +320,19 @@ function eventoALinea(e: ProcedureInstanceEvent, index: number): ItemLinea {
     };
   }
 
+  if (e.tipo === 'revocatoria_solicitada') {
+    // El ejecutor ES quien solicitó (a diferencia de los otros dos tipos, que hablan de un tercero).
+    const solicitadoPor = e.createdByName ? `Solicitado por ${e.createdByName}` : 'Solicitado por administrador';
+    return {
+      key,
+      kind: 'evento',
+      fecha: e.createdAt,
+      titulo: `Solicitud de revocatoria${e.revocationAttemptNumber ? ` · Intento ${e.revocationAttemptNumber}` : ''}`,
+      quien: solicitadoPor,
+      motivo: e.revocationReason?.trim() || 'Sin motivo adicional registrado',
+    };
+  }
+
   // reenvio_validacion_admin
   const parte = e.partyRole ? PARTE_LABEL[e.partyRole] ?? e.partyRole : null;
   // Correo en claro (a pedido del producto): el admin necesita ver la dirección exacta reenviada.
