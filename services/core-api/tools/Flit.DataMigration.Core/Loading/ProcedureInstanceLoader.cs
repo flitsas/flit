@@ -43,6 +43,11 @@ public sealed class LoadResult
 /// primero como borrador, cargarles todo, y solo entonces subirlos a su estado real. Invertir
 /// este orden hace fallar la migración con <c>check_violation</c>.
 /// </para>
+/// <para>
+/// Y entre cargar los campos y subir el estado hay que <b>recargar la instancia</b>: los
+/// triggers de desnormalización de V2 la actualizan por su cuenta y mueven <c>row_version</c>,
+/// el token de concurrencia de EF. Ver el comentario en el paso 4.
+/// </para>
 /// </summary>
 public sealed class ProcedureInstanceLoader(
     FlitDbContext db,
@@ -99,6 +104,14 @@ public sealed class ProcedureInstanceLoader(
                 db.ProcedureInstanceCommercials.Add(mapped.Commercial);
             }
             await db.SaveChangesAsync(cancellationToken);
+
+            // Los triggers *_denorm de V2 (DDL 47) copian placa/VIN y vendedor/comprador a la
+            // instancia con un UPDATE propio, y trg_row_version le sube row_version a espaldas
+            // de EF. Sin este refresco, el paso 4 iría con `WHERE row_version = 0`, afectaría
+            // 0 filas y EF lo reportaría como concurrencia: el trámite caería en cuarentena
+            // sin que exista ningún conflicto real. Solo pasa si hay placa/VIN o esos actores,
+            // por eso unos trámites migraban y otros no.
+            await db.Entry(mapped.Instance).ReloadAsync(cancellationToken);
 
             // ---- Paso 4: recién ahora el estado real. La máquina de estados de V2 se valida
             // en la capa de aplicación, no en la base, así que un histórico puede quedar
