@@ -494,7 +494,8 @@ export function TramiteWizard(props: Props) {
   const [draftFinalizedAt, setDraftFinalizedAt] = useState<string | null>(null);
   // HU #12573 — gates del botón "Solicitar revocatoria" (AC1-AC3), ya resueltos por el backend. Se lee
   // UNA vez con el resto del detalle inicial (no cambia dentro de la sesión de visualización de un
-  // trámite ya `aprobado`, y esta HU no exige refresco en vivo tras la acción — eso es HU #12574).
+  // trámite ya `aprobado`); HU #12574 la releé explícitamente tras un envío exitoso vía
+  // `refreshInstanceDetail` (mismo patrón que `activarSubsanacion`/`cancelarSubsanacion`, más abajo).
   const [revocationEligibility, setRevocationEligibility] = useState<RevocationEligibility | null>(null);
   // HU #10874 (AC1) — historial de estados de la instancia: fuente única de datos del panel de
   // subsanación (motivo/checklist de la última transición a `subsanacion`). Loading/error propios
@@ -542,6 +543,31 @@ export function TramiteWizard(props: Props) {
     return () => {
       active = false;
     };
+  }, [existingInstanceId]);
+
+  /**
+   * HU #12574 (Feature #12565, AC3) — releé el detalle (`GET /instances/{id}`) tras un envío exitoso
+   * de la solicitud de revocatoria, mismo request y mismos setters que el efecto de montaje de
+   * arriba. `revocationEligibility`/`statusHistory` NO viven en `GET /wizard` (lo que releé
+   * `refresh()`), así que sin esta llamada aparte el detalle seguiría mostrando el snapshot de antes
+   * de la solicitud. Mismo patrón de "recargar tras la acción" que `activarSubsanacion`/
+   * `cancelarSubsanacion` (arriba, con `refresh()`).
+   */
+  const refreshInstanceDetail = useCallback(async () => {
+    if (!existingInstanceId) return;
+    try {
+      const d = await tramitesClient.getInstance(existingInstanceId);
+      setInstanceStatus(d.status ?? null);
+      setDraftFinalizedAt(d.draftFinalizedAt ?? null);
+      setStatusHistory(d.statusHistory ?? []);
+      setReferenceNumber(d.referenceNumber ?? null);
+      setRevocationEligibility(d.revocationEligibility ?? null);
+      setInstanceDetailError(null);
+    } catch (err) {
+      setInstanceDetailError(
+        err instanceof Error ? err.message : 'No se pudo recargar el detalle del trámite.',
+      );
+    }
   }, [existingInstanceId]);
 
   // Los modos del wizard se derivan más abajo (tras useWizard): el estado de negocio autoritativo
@@ -1805,9 +1831,18 @@ export function TramiteWizard(props: Props) {
                   ) : null}
                 </>
               ) : estadoTramite === 'aprobado' && instanceId ? (
-                // HU #12573 (Feature #12565) — AC1-AC3: gate del botón, sin flujo de envío todavía
-                // (HU #12574).
-                <RevocationRequestButton instanceId={instanceId} eligibility={revocationEligibility} />
+                // HU #12573 (Feature #12565) — AC1-AC3: gate del botón. HU #12574 — modal de envío
+                // (Paso 1 advertencia / Paso 2 motivo+PDF+checks); `onRequested` releé wizard + detalle
+                // (AC3) igual que activarSubsanacion/cancelarSubsanacion.
+                <RevocationRequestButton
+                  instanceId={instanceId}
+                  eligibility={revocationEligibility}
+                  onRequested={() => {
+                    show('Solicitud de revocatoria enviada. Queda en revisión.', 'success');
+                    void refresh();
+                    void refreshInstanceDetail();
+                  }}
+                />
               ) : undefined
             }
           />

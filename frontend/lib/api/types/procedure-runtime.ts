@@ -48,6 +48,28 @@ export interface RevocationEligibility {
   windowExpired: boolean;
 }
 
+/**
+ * HU #12574 (Feature #12565) — payload del Paso 2 del modal de revocatoria: motivo + los 2 checks
+ * de confirmación (AC1/AC2 del texto de copy) + el documento de soporte (PDF, "el certificado" es
+ * el mismo adjunto obligatorio, no un segundo documento). Viaja como multipart/form-data
+ * (POST /instances/{id}/revocation-requests, HU #12572 — el archivo no cabe en JSON).
+ */
+export interface RequestRevocationInput {
+  reason: string;
+  confirmAccuracy: boolean;
+  confirmConsequences: boolean;
+  file: File;
+}
+
+/** Cuerpo 201 de POST /instances/{id}/revocation-requests (espejo de `RequestRevocationResult` backend). */
+export interface RequestRevocationResult {
+  id: string;
+  procedureInstanceId: string;
+  attemptNumber: number;
+  status: string;
+  requestedAt: string;
+}
+
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {
   id: string;

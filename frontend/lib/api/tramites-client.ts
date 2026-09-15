@@ -40,6 +40,8 @@ import type {
   IniciarPrevalidacionResult,
   PrendaData,
   PrendaInput,
+  RequestRevocationInput,
+  RequestRevocationResult,
   InstanceSummary,
   InstanceEstadoCountsResponse,
   InstancesResponse,
@@ -2401,6 +2403,41 @@ export const tramitesClient = {
       `/api/v1/tramites/instances/${instanceId}/cancelar-subsanacion`,
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
+
+  /**
+   * HU #12574 (Feature #12565) — envía la solicitud de revocatoria del Paso 2 del modal: motivo +
+   * documento de soporte (PDF) + los 2 checks de confirmación (AC1/AC2). Multipart (campo `file`):
+   * NO usa `request()` (fija Content-Type: application/json) — mismo patrón que
+   * `adminCargarConsolidado`/`analyzeDocument` de este archivo. Los checks viajan como texto
+   * "true"/"false" (mismo binding `[FromForm] bool` que exige el backend, ver
+   * RevocationRequestEndpoints.ParseBool).
+   *
+   * Errores llegan como `TramitesApiError` con `.status`/`.problem.title` — el código de negocio
+   * viaja en `title`: 404 not_found | 409 tramite_no_aprobado | 409 solicitud_activa_existente |
+   * 422 motivo_requerido | confirmacion_exactitud_requerida | confirmacion_consecuencias_requerida |
+   * documento_requerido | documento_formato_invalido | documento_muy_grande | ventana_vencida |
+   * origen_no_soportado.
+   */
+  requestRevocation: async (
+    instanceId: string,
+    input: RequestRevocationInput,
+    tenantId?: string,
+  ): Promise<RequestRevocationResult> => {
+    const form = new FormData();
+    form.append('reason', input.reason);
+    form.append('confirmAccuracy', input.confirmAccuracy ? 'true' : 'false');
+    form.append('confirmConsequences', input.confirmConsequences ? 'true' : 'false');
+    form.append('file', input.file);
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/instances/${instanceId}/revocation-requests`),
+      { method: 'POST', headers: tenantHeader(tenantId), body: form },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
+    }
+    return (await res.json()) as RequestRevocationResult;
+  },
 
   // ── Admin · Trámites · Gestión avanzada (Feature #12155, HU #12163) ──────────────────
   // Los 6 endpoints administrativos de HU #12158-#12162, todos gateados por permiso en el
