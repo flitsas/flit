@@ -172,4 +172,10 @@ describe('CargaMasivaResultados (HU #12524)', () => {
     expect(mensajeMotivo('representante_no_registrado:NIT 900123456')).toMatch(/cédula del representante/i);
     expect(mensajeMotivo('consulta_empresa_fallida:NIT 900123456')).toMatch(/consulta de la empresa a RUES falló/i);
   });
+
+  it('traduce el error estructural de datos de contacto y dice a qué actor le faltan', () => {
+    expect(mensajeMotivo('datos_contacto_incompletos:vendedor_1')).toMatch(
+      /faltan datos de contacto.*\(vendedor_1\)/i,
+    );
+  });
 });

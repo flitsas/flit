@@ -284,7 +284,10 @@ internal sealed class BulkTramitesXlsxParser : IBulkTramitesXlsxParser
             valores[columnas[i].Header] = valor;
         }
 
-        var error = BulkTramitesPercentageValidator.Validate(tipo, valores);
+        // Ambas reglas replican lo que el wizard exige al guardar actores; la primera que falle
+        // marca la fila (una fila con error estructural no se procesa, así que basta con uno).
+        var error = BulkTramitesPercentageValidator.Validate(tipo, valores)
+            ?? BulkTramitesContactValidator.Validate(tipo, valores);
 
         return new BulkTramitesParsedRow(numero, valores, error);
     }

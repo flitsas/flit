@@ -27,7 +27,9 @@ public sealed class BulkTramitesXlsxParserTests
                 ["placa"] = "ABC123",
                 ["propietario_1_numero_documento"] = "123456789",
                 ["propietario_1_email"] = "juan@example.com",
+                ["propietario_1_celular"] = "3001234567",
                 ["propietario_1_ciudad"] = "Bogotá",
+                ["propietario_1_direccion"] = "Calle 1 # 2-3",
             });
 
         var resultado = _parser.Parse(BulkTramitesTemplateType.Matricula, new MemoryStream(archivo));
@@ -96,7 +98,15 @@ public sealed class BulkTramitesXlsxParserTests
             ["fila"] = "2",
             ["placa"] = "DEF456",
             ["comprador_1_numero_documento"] = "3",
+            ["comprador_1_email"] = "c@example.com",
+            ["comprador_1_celular"] = "3001234567",
+            ["comprador_1_ciudad"] = "Bogotá",
+            ["comprador_1_direccion"] = "Calle 1 # 2-3",
             ["vendedor_1_numero_documento"] = "8",
+            ["vendedor_1_email"] = "v@example.com",
+            ["vendedor_1_celular"] = "3007654321",
+            ["vendedor_1_ciudad"] = "Medellín",
+            ["vendedor_1_direccion"] = "Carrera 43 # 5-15",
         };
 
         var archivo = BulkTramitesXlsxBuilder.ConPlantilla(BulkTramitesTemplateType.Traspaso, filaMala, filaBuena);
@@ -107,5 +117,37 @@ public sealed class BulkTramitesXlsxParserTests
         resultado.Rows.Should().HaveCount(2);
         resultado.Rows[0].StructuralErrorCode.Should().Be(BulkTramitesPercentageValidator.PorcentajesNoSuman100);
         resultado.Rows[1].StructuralErrorCode.Should().BeNull();
+    }
+
+    /// <summary>
+    /// Salió de las pruebas en DEV de la Feature #12519: una empresa (NIT) sin ciudad ni dirección
+    /// se creaba «a medias» y el wizard la devolvía a Actores. Ahora la fila queda en error
+    /// estructural, con el prefijo del actor al que le faltan datos.
+    /// </summary>
+    [Fact]
+    public void Parse_Traspaso_EmpresaSinCiudadNiDireccion_MarcaLaFilaConElActor()
+    {
+        var fila = new Dictionary<string, string>
+        {
+            ["fila"] = "1",
+            ["placa"] = "WQM281",
+            ["comprador_1_numero_documento"] = "3",
+            ["comprador_1_email"] = "c@example.com",
+            ["comprador_1_celular"] = "3001234567",
+            ["comprador_1_ciudad"] = "Bogotá",
+            ["comprador_1_direccion"] = "Calle 1 # 2-3",
+            ["vendedor_1_tipo_documento"] = "NIT",
+            ["vendedor_1_numero_documento"] = "890903938",
+            ["vendedor_1_email"] = "v@example.com",
+            ["vendedor_1_celular"] = "3007654321",
+        };
+
+        var archivo = BulkTramitesXlsxBuilder.ConPlantilla(BulkTramitesTemplateType.Traspaso, fila);
+
+        var resultado = _parser.Parse(BulkTramitesTemplateType.Traspaso, new MemoryStream(archivo));
+
+        resultado.FileError.Should().BeNull();
+        resultado.Rows.Should().ContainSingle()
+            .Which.StructuralErrorCode.Should().Be($"{BulkTramitesContactValidator.DatosContactoIncompletos}:vendedor_1");
     }
 }
