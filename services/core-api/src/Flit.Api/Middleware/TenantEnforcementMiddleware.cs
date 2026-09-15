@@ -198,6 +198,15 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // el que se radicaba, y ese tenant sale del JWT (el SuperAdmin acota con X-Tenant-Id). Prefix
         // para cubrir también GET /current.
         new("/api/v1/tramites/terms-acceptances", RouteMatch.Prefix),
+        // Bug #12554 — gestión avanzada del admin sobre trámites (Feature #12155: cambiar estado,
+        // anular, reasignar gestor, reenviar validación de identidad, limpiar/cargar consolidado y el
+        // selector de gestores disponibles): los 6 endpoints leían [FromHeader(Name = "X-Tenant-Id")]
+        // SIN pasar por este middleware (prefijo /api/v1/admin/tramites, fuera de RuntimeRoutePrefix),
+        // así que un usuario NO-SuperAdmin con el permiso RBAC de la acción pero SIN jerarquía (alcance
+        // Single — TenantWriteGuard solo protege cabezas de grupo, HU #12358) podía mandar el
+        // X-Tenant-Id de OTRA compañía y operar sobre su trámite. Prefix para cubrir también
+        // /gestores-disponibles.
+        new("/api/v1/admin/tramites", RouteMatch.Prefix),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

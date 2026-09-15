@@ -256,6 +256,43 @@ public sealed class TenantResolutionArchitectureTests : IClassFixture<WebApplica
             "la cobertura de la red es UNA entrada Prefix, no una por ruta");
     }
 
+    // ── Bug #12554 — toda ruta de gestión avanzada (/api/v1/admin/tramites) está declarada ──────
+
+    /// <summary>Prefijo de gestión avanzada del admin sobre trámites (Feature #12155), FUERA de
+    /// <see cref="TenantEnforcementMiddleware.RuntimeRoutePrefix"/> — por eso <see
+    /// cref="AC3_TodaRutaRegistradaBajoTramitesEstaCubiertaPorLaDeclaracionDelMiddleware"/> nunca lo
+    /// vio: <see cref="RegisteredTramitesRoutes"/> solo barre lo que empieza por
+    /// <c>/api/v1/tramites</c>. Este test barre TODOS los endpoints registrados (sin ese filtro) y
+    /// exige que los de <c>/api/v1/admin/tramites</c> también estén en
+    /// <see cref="TenantEnforcementMiddleware.RuntimeScopedRoutes"/>.</summary>
+    private const string AdminTramitesRoutePrefix = "/api/v1/admin/tramites";
+
+    [Fact]
+    public void AC8_TodaRutaAdminTramitesEstaCubiertaPorRuntimeScopedRoutes()
+    {
+        var adminRoutes = _factory.Services.GetServices<EndpointDataSource>()
+            .SelectMany(ds => ds.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Select(e => e.RoutePattern.RawText)
+            .Where(raw => raw is not null && ("/" + raw.TrimStart('/')).StartsWith(AdminTramitesRoutePrefix, StringComparison.OrdinalIgnoreCase))
+            .Select(raw => "/" + raw!.TrimStart('/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(r => r, StringComparer.Ordinal)
+            .ToList();
+
+        adminRoutes.Should().NotBeEmpty($"deben existir endpoints registrados bajo {AdminTramitesRoutePrefix} (Bug #12554)");
+
+        var uncovered = adminRoutes.Where(route => !IsCoveredByMiddleware(route)).ToList();
+        uncovered.Should().BeEmpty(
+            "toda ruta bajo /api/v1/admin/tramites debe estar en TenantEnforcementMiddleware.RuntimeScopedRoutes (Bug #12554): "
+            + "sin esto, el endpoint confía en el X-Tenant-Id crudo del cliente en vez del tenant del JWT. Rutas sin declarar: {0}",
+            string.Join(", ", uncovered));
+
+        TenantEnforcementMiddleware.RuntimeScopedRoutes.Should().Contain(
+            r => r.Path.Equals(AdminTramitesRoutePrefix, StringComparison.OrdinalIgnoreCase) && r.Match == TenantEnforcementMiddleware.RouteMatch.Prefix,
+            "la cobertura de gestión avanzada es UNA entrada Prefix, no una por ruta (Bug #12554)");
+    }
+
     private List<string> RegisteredTramitesRoutes()
     {
         var prefix = TenantEnforcementMiddleware.RuntimeRoutePrefix;
