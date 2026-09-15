@@ -28,8 +28,16 @@ public sealed class TenantResolution
 public sealed class TenantResolver
 {
     private readonly Dictionary<string, List<Tenant>> _byKey = new(StringComparer.Ordinal);
+    private readonly Dictionary<Guid, Tenant> _byId = [];
 
     private TenantResolver() { }
+
+    /// <summary>
+    /// Cabeza de grupo de la que cuelga el tenant (<c>parent_tenant_id</c>, HU #12318), o
+    /// <c>null</c> si no tiene padre o el tenant se creó en esta corrida (modo laboratorio).
+    /// </summary>
+    public Guid? ParentOf(Guid tenantId) =>
+        _byId.TryGetValue(tenantId, out var tenant) ? tenant.ParentTenantId : null;
 
     public static async Task<TenantResolver> LoadAsync(FlitDbContext db, CancellationToken cancellationToken)
     {
@@ -58,6 +66,8 @@ public sealed class TenantResolver
     public void Register(Tenant tenant)
     {
         ArgumentNullException.ThrowIfNull(tenant);
+
+        _byId[tenant.Id] = tenant;
 
         foreach (var key in NitNormalizer.Keys(tenant.TaxId))
         {

@@ -46,6 +46,7 @@ public sealed class MigrationRunner(
         }
 
         var tenants = await TenantResolver.LoadAsync(db, cancellationToken);
+        var transitOffices = await TransitOfficeResolver.LoadAsync(db, cancellationToken);
         var provisioner = new TenantProvisioner(db, settings.V1Connection);
         var loader = new ProcedureInstanceLoader(db, context!.MigrationMap, request.BatchId);
         var results = new List<LoadResult>();
@@ -63,7 +64,7 @@ public sealed class MigrationRunner(
         foreach (var record in context.Records)
         {
             results.Add(await MigrateOneAsync(
-                record, tenants, provisioner, loader, context.Target, request, cancellationToken));
+                record, tenants, transitOffices, provisioner, loader, context.Target, request, cancellationToken));
         }
 
         // Provisioned se copia AL FINAL: lo escriben dos sitios (ResolveAsync y el bucle de arriba).
@@ -237,6 +238,7 @@ public sealed class MigrationRunner(
     private async Task<LoadResult> MigrateOneAsync(
         V1SourceRecord record,
         TenantResolver tenants,
+        TransitOfficeResolver transitOffices,
         TenantProvisioner provisioner,
         ProcedureInstanceLoader loader,
         TargetEnvironment target,
@@ -277,6 +279,10 @@ public sealed class MigrationRunner(
             SystemUserId = target.SystemUserId,
             OwnerEntityId = target.OwnerEntityId,
             BuyerEntityId = target.BuyerEntityId,
+            // Las dos columnas de V2 que no son texto y que gobiernan quién VE el trámite: el
+            // organismo (bandeja del OT) y la cabeza de grupo (vista consolidada de la red).
+            TransitOffice = transitOffices.Resolve(record.Column("traffic_secretary_code")),
+            ParentTenantId = tenants.ParentOf(tenantId),
         };
 
         var mapped = request.Kind.Map(record, context);

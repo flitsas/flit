@@ -40,9 +40,10 @@ public sealed class RegistrationStateMap : IV1StateMap
     /// <summary>
     /// Estados sin equivalente exacto en V2. Se migran igual —el migrador es indiferente a lo que
     /// le manden— pero se reportan como decisión pendiente de negocio. En producción son pocos:
-    /// Sent 1, Assigned 5, Revoked 7, Archived 0.
+    /// Sent 1, Assigned 5, Archived 0. (Revoked dejó de ser ambiguo: V2 tiene 'revocado' desde
+    /// HU #12165.)
     /// </summary>
-    private static readonly HashSet<int> Ambiguous = [4, 5, 9, 10];
+    private static readonly HashSet<int> Ambiguous = [4, 5, 10];
 
     public string V1Name(int processStatus) =>
         V1Names.TryGetValue(processStatus, out var name) ? name : $"desconocido({processStatus})";
@@ -68,10 +69,10 @@ public sealed class RegistrationStateMap : IV1StateMap
         7 => TramiteEstado.Aprobado,
         8 => TramiteEstado.Rechazado,
 
-        // "Revoked": matrícula que se revocó DESPUÉS de aprobarse. No es lo mismo que anular un
-        // trámite en curso, pero 'anulado' es lo más cercano y preserva que quedó sin efecto.
-        // Son 7 trámites en producción; el original queda en legacy_process_status.
-        9 => TramiteEstado.Anulado,
+        // "Revoked": matrícula que se revocó DESPUÉS de aprobarse. V2 modela exactamente eso desde
+        // HU #12165/#12166 ('revocado': final, solo alcanzable desde aprobado, visible para el
+        // organismo que la revocó y libera la placa). Antes se mapeaba a 'anulado' por no existir.
+        9 => TramiteEstado.Revocado,
 
         // "Archived" es un trámite cerrado y archivado, no uno cancelado: 'entregado' preserva
         // mejor el hecho de que terminó. Mismo criterio que en traspaso.
