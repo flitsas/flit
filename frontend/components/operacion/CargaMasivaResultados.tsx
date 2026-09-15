@@ -215,6 +215,10 @@ export function mensajeMotivo(motivo: string): string {
     porcentajes_no_suman_100: 'Los porcentajes de propiedad no suman 100.',
     porcentaje_en_cero: 'Hay un propietario con porcentaje en 0.',
     sin_actores_en_la_fila: 'La fila no traía ningún actor: complétalo en el trámite.',
+    // Salió de las pruebas en DEV (Feature #12519): el wizard exige correo, celular, ciudad y
+    // dirección de cada actor; sin ellos el trámite se creaba «a medias». Ahora la fila ni se procesa.
+    datos_contacto_incompletos:
+      'Faltan datos de contacto de un actor (correo, celular, ciudad y dirección son obligatorios). Corrige la fila y vuelve a cargarla.',
     vehiculo_no_encontrado: 'El RUNT no encontró el vehículo. Revisa la placa o el VIN.',
     consulta_vehiculo_fallida:
       'La consulta del vehículo al RUNT falló. Vuelve a cargar la fila más tarde.',

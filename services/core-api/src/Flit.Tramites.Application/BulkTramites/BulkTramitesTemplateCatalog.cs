@@ -90,10 +90,10 @@ public static class BulkTramitesTemplateCatalog
                 + "vacío, se toma el representante principal. La empresa y su representante deben "
                 + "estar registrados en el directorio de representantes legales; si no, el trámite "
                 + "queda por retomar.");
-        yield return ActorColumn(prefijo, "email", $"Correo electrónico del {rol}, para el envío de la validación de identidad.");
-        yield return ActorColumn(prefijo, "celular", $"Celular del {rol}.");
-        yield return ActorColumn(prefijo, "ciudad", $"Ciudad de residencia del {rol}.");
-        yield return ActorColumn(prefijo, "direccion", $"Dirección de residencia del {rol}.");
+        yield return ActorColumn(prefijo, "email", $"Correo electrónico del {rol}, para el envío de la validación de identidad. Obligatorio.");
+        yield return ActorColumn(prefijo, "celular", $"Celular del {rol}. Obligatorio.");
+        yield return ActorColumn(prefijo, "ciudad", $"Ciudad de residencia del {rol}. Obligatoria.");
+        yield return ActorColumn(prefijo, "direccion", $"Dirección de residencia del {rol}. Obligatoria.");
 
         if (conPorcentaje)
         {
