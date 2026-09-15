@@ -32,12 +32,9 @@ public sealed class TenantResolver
 
     private TenantResolver() { }
 
-    /// <summary>
-    /// Cabeza de grupo de la que cuelga el tenant (<c>parent_tenant_id</c>, HU #12318), o
-    /// <c>null</c> si no tiene padre o el tenant se creó en esta corrida (modo laboratorio).
-    /// </summary>
-    public Guid? ParentOf(Guid tenantId) =>
-        _byId.TryGetValue(tenantId, out var tenant) ? tenant.ParentTenantId : null;
+    // NOTA release: en esta rama todavia no existe la jerarquia de companias (HU #12318,
+    // tenants.parent_tenant_id). ParentOf(...) llega con el merge de develop; _byId se deja
+    // preparado para no reabrir el archivo entonces.
 
     public static async Task<TenantResolver> LoadAsync(FlitDbContext db, CancellationToken cancellationToken)
     {

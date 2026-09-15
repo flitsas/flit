@@ -24,13 +24,8 @@ public sealed class MappingContext
     /// </summary>
     public TransitOfficeRef? TransitOffice { get; init; }
 
-    /// <summary>
-    /// Cabeza de grupo de la que cuelga hoy la compañía radicadora (<c>tenants.parent_tenant_id</c>),
-    /// para <c>ParentTenantIdAtCreation</c> (HU #12406). Es lo que la vista consolidada de la red usa
-    /// para que la cabeza vea los trámites de sus hijas. Para un trámite migrado "al crear" es
-    /// "al migrar": la jerarquía no existía en V1.
-    /// </summary>
-    public Guid? ParentTenantId { get; init; }
+    // NOTA release: ParentTenantId / ParentTenantIdAtCreation (HU #12406, jerarquia de companias)
+    // todavia no existen en esta rama; llegan con el merge de develop.
 }
 
 /// <summary>
@@ -81,11 +76,9 @@ public static class TransferMapper
             // aplica al final (ver ProcedureInstanceLoader).
             Status = TramiteEstado.Borrador,
             ChecklistEstado = "{}",
-            // Organismo y cabeza de grupo: las dos columnas que deciden quién VE el trámite (bandeja
-            // del OT y vista consolidada de la red). En el flujo nativo las fija la app al crear y
-            // al entregar; un trámite migrado nunca pasa por ahí, así que van desde el contexto.
+            // Organismo: la columna que decide si el OT VE el trámite en su bandeja. En el flujo
+            // nativo la fija la app al entregar; un trámite migrado nunca pasa por ahí.
             TransitOfficeId = context.TransitOffice?.Id,
-            ParentTenantIdAtCreation = context.ParentTenantId,
             CreatedByUserId = context.SystemUserId,
             CreatedAt = createdAt,
             UpdatedAt = V1MapperShared.ParseDate(record.Column("updated_at")),

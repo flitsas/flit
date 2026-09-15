@@ -74,10 +74,8 @@ public static class RegistrationMapper
             // field_values mientras el padre esté en borrador. El estado real se aplica al final.
             Status = TramiteEstado.Borrador,
             ChecklistEstado = "{}",
-            // Organismo y cabeza de grupo: las dos columnas que deciden quién VE el trámite (bandeja
-            // del OT y vista consolidada de la red). Ver el mismo bloque en TransferMapper.
+            // Organismo: la columna que decide si el OT VE el trámite. Ver TransferMapper.
             TransitOfficeId = context.TransitOffice?.Id,
-            ParentTenantIdAtCreation = context.ParentTenantId,
             CreatedByUserId = context.SystemUserId,
             CreatedAt = createdAt,
             UpdatedAt = V1MapperShared.ParseDate(record.Column("updated_at")),
