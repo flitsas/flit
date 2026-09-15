@@ -10,6 +10,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 import { CompanyConfigTabs } from "@/components/admin/companies/CompanyConfigTabs";
 import { AdminChildContextBanner } from "@/components/admin/companies/AdminChildContextBanner";
 import { CompanyChildrenSection } from "@/components/admin/companies/CompanyChildrenSection";
+import { BrandingConfigurator } from "@/components/admin/branding/BrandingConfigurator";
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
 import { OTConfigTablePanel } from "@/components/admin/companies/panels/OTConfigTablePanel";
 import { TransitBlocksPanel } from "@/components/admin/companies/panels/TransitBlocksPanel";
@@ -314,6 +315,15 @@ function CompanyDetail() {
       </div>
 
       {showChildrenSection && company && <CompanyChildrenSection company={company} />}
+
+      {/* HU #12414 AC1/AC6 — configurador de marca embebido en la ficha SuperAdmin, solo para
+          cabezas de clase MARCA_BLANCA. La cabeza autogestiona la misma identidad desde su
+          propio panel de red (app/admin/companies/[tenantId]/children/page.tsx). */}
+      {isSuperAdmin && company?.tenantType === "MARCA_BLANCA" && (
+        <div className="mt-6">
+          <BrandingConfigurator source="admin" tenantId={tenantId} />
+        </div>
+      )}
     </main>
   );
 }

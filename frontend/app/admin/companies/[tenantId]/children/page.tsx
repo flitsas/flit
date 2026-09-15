@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { NetworkChildrenPanel } from "@/components/admin/companies/NetworkChildrenPanel";
+import { BrandingConfigurator } from "@/components/admin/branding/BrandingConfigurator";
 import { fetchCompany } from "@/lib/api/admin-companies";
 import { isHeadTenantType } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
@@ -73,6 +74,13 @@ export default function NetworkChildrenPage() {
           )}
         </UiStateBoundary>
       </div>
+
+      {/* HU #12414 AC1/AC6 — la cabeza de red Marca Blanca autogestiona su identidad de marca
+          desde su propio panel; el SuperAdmin la gestiona embebida en la ficha de compañía
+          (app/admin/companies/[tenantId]/page.tsx), no aquí. */}
+      {head && !isSuperAdmin && head.tenantType === "MARCA_BLANCA" && (
+        <BrandingConfigurator source="company" />
+      )}
     </main>
   );
 }
