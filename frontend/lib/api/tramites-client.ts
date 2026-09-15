@@ -177,6 +177,25 @@ export function desenvolverDetalleDeRed(
   };
 }
 
+/** Hijo de la red visible para el selector de alcance (id + nombre; HU #12555/#12556). */
+export interface NetworkChildItem {
+  id: string;
+  nombre: string;
+}
+
+/**
+ * Hijos de la red para el selector de alcance — ruta no-admin (HU #12555/#12556).
+ *
+ * `GET /api/v1/tramites/network/children`: mismo grupo `network/**` que el resto de esta capa
+ * (`GroupHeadReadFilter` + `NetworkAccessAuditFilter`), así que NO manda tenant en la ruta ni
+ * `X-Tenant-Id` — el servidor resuelve la cabeza desde el JWT. `200 []` si la cabeza no tiene hijos;
+ * `403` (`network_scope_required`) si quien llama no es cabeza de grupo. Ese 403 ya NO es un fallo
+ * de red — es responsabilidad del llamador (ver `useNetworkScope`) decidir qué hacer con él.
+ */
+export function fetchNetworkChildren(signal?: AbortSignal): Promise<NetworkChildItem[]> {
+  return request<NetworkChildItem[]>('/api/v1/tramites/network/children', { signal });
+}
+
 // La API vive en otro origen (api.<env>.flitsas.online); el CD inyecta
 // NEXT_PUBLIC_API_BASE_URL (la MISMA variable que usa lib/api/client.ts). Sin variable
 // en dev local, las peticiones van al origen del frontend (localhost:3000) y Next.js

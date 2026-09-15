@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { uiPreferencesClient } from '@/lib/api/ui-preferences';
-import { fetchCompanyChildren } from '@/lib/api/admin-companies';
+import { fetchNetworkChildren, TramitesApiError } from '@/lib/api/tramites-client';
 import {
   DEFAULT_NETWORK_SCOPE,
   parseNetworkScopePreference,
@@ -18,8 +18,10 @@ export interface NetworkChildOption {
 
 /**
  * `idle`: no aplica (no es cabeza). `loading`: pidiendo la lista. `ready`: lista disponible.
- * `unavailable`: el endpoint no respondió (p. ej. 403 para un gestor sin permisos admin) — el
- * selector degrada a «Mi compañía | Toda la red» sin lista de hijos, NO a un error.
+ * `unavailable`: el endpoint falló por 5xx o error de red — el selector degrada a
+ * «Mi compañía | Toda la red» sin lista de hijos, NO a un error visible. Un 403
+ * (`network_scope_required`) NO cae aquí: significa que el caller no es cabeza de grupo pese al
+ * claim del JWT, y en ese caso el selector completo se oculta (ver `scopeDenied` más abajo).
  */
 export type NetworkChildrenStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 
@@ -60,11 +62,10 @@ const SCOPE = 'tramites.scope';
  * localStorage: dos usuarios del mismo cliente comparten navegador con más frecuencia de la que
  * parece y la preferencia de uno no puede afectar al otro (AC5).
  *
- * Deuda: endpoint no-admin de hijas de la cabeza — ver
- * `.claude/state/pending-work-items/2026-09-14-endpoint-hijas-no-admin.md`. Hoy la lista de hijos
- * sale de `GET /api/v1/admin/companies/{head}/children` (contexto admin). Cuando el backend exponga
- * una ruta no-admin para el gestor (p. ej. bajo `/api/v1/tramites/network/children`), cambiar aquí
- * la fuente; mientras tanto un 403 degrada a «Propio | Red» sin lista.
+ * HU #12555/#12556 — la lista de hijos sale de `GET /api/v1/tramites/network/children` (ruta
+ * no-admin, mismo `GroupHeadReadFilter` que el resto de `network/**`). Un 5xx/error de red degrada a
+ * «Propio | Red» sin lista (`childrenStatus='unavailable'`); un 403 (`network_scope_required`)
+ * significa que el caller no es cabeza pese al claim del JWT y oculta el selector entero.
  */
 export function useNetworkScope(): UseNetworkScopeResult {
   const { isGroupParent, tenantId, isSuperAdmin } = usePermissions();
@@ -80,6 +81,13 @@ export function useNetworkScope(): UseNetworkScopeResult {
   const [childrenStatus, setChildrenStatus] = useState<NetworkChildrenStatus>(() =>
     esCabeza ? 'loading' : 'idle',
   );
+  // AC2 — 403 (`network_scope_required`) del endpoint de hijos: el claim `is_group_parent` del JWT
+  // dijo que sí, pero el servidor dice que no. No es una degradación de "lista no disponible": el
+  // selector entero deja de tener sentido, así que `isGroupParent` devuelto pasa a `false`.
+  const [scopeDenied, setScopeDenied] = useState(false);
+  // AC2 — un 403 del endpoint de hijos anula la cabeza efectiva: el claim del JWT quedó desfasado
+  // frente a lo que decide el servidor, y ese servidor manda.
+  const esCabezaEfectiva = esCabeza && !scopeDenied;
   const scopeRef = useRef(scope);
   useEffect(() => {
     scopeRef.current = scope;
@@ -106,25 +114,28 @@ export function useNetworkScope(): UseNetworkScopeResult {
     };
   }, [esCabeza]);
 
-  // Hijos de la red — solo para la cabeza. Fuente admin (ver deuda arriba); si no responde, el
-  // selector sigue existiendo con sus dos opciones fijas.
+  // Hijos de la red — solo para la cabeza. Un 5xx/error de red degrada el selector a sus dos
+  // opciones fijas; un 403 (`network_scope_required`) oculta el selector entero (ver `scopeDenied`).
   useEffect(() => {
     if (!esCabeza || !tenantId) return;
     let active = true;
     (async () => {
       try {
-        const lista = await fetchCompanyChildren(tenantId);
+        const lista = await fetchNetworkChildren();
         if (!active) return;
         setChildren(
-          (lista ?? [])
-            .map((c) => ({ id: c.id, nombre: c.razonSocial }))
-            .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+          (lista ?? []).slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
         );
         setChildrenStatus('ready');
-      } catch {
+      } catch (err) {
         if (!active) return;
         setChildren([]);
-        setChildrenStatus('unavailable');
+        if (err instanceof TramitesApiError && err.status === 403) {
+          setScopeDenied(true);
+          setChildrenStatus('idle');
+        } else {
+          setChildrenStatus('unavailable');
+        }
       }
     })();
     return () => {
@@ -134,7 +145,7 @@ export function useNetworkScope(): UseNetworkScopeResult {
 
   const setScope = useCallback(
     (next: NetworkScopePreference) => {
-      if (!esCabeza) return;
+      if (!esCabezaEfectiva) return;
       const previous = scopeRef.current;
       setScopeState(next);
       setSaving(true);
@@ -151,7 +162,7 @@ export function useNetworkScope(): UseNetworkScopeResult {
         }
       })();
     },
-    [esCabeza],
+    [esCabezaEfectiva],
   );
 
   /**
@@ -160,7 +171,7 @@ export function useNetworkScope(): UseNetworkScopeResult {
    * Con la lista no disponible no se puede comprobar y se respeta lo guardado.
    */
   const scopeEfectivo = useMemo<NetworkScopePreference>(() => {
-    if (!esCabeza) return DEFAULT_NETWORK_SCOPE;
+    if (!esCabezaEfectiva) return DEFAULT_NETWORK_SCOPE;
     if (
       scope.mode === 'network' &&
       scope.childTenantId &&
@@ -170,13 +181,13 @@ export function useNetworkScope(): UseNetworkScopeResult {
       return { mode: 'network' };
     }
     return scope;
-  }, [esCabeza, scope, children, childrenStatus]);
+  }, [esCabezaEfectiva, scope, children, childrenStatus]);
 
   return {
-    isGroupParent: esCabeza,
+    isGroupParent: esCabezaEfectiva,
     scope: scopeEfectivo,
     setScope,
-    networkActive: esCabeza && scopeEfectivo.mode === 'network',
+    networkActive: esCabezaEfectiva && scopeEfectivo.mode === 'network',
     children,
     childrenStatus,
     ready,
