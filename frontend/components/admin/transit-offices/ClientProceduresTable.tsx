@@ -11,6 +11,7 @@ import {
   FolderOpen,
   Paperclip,
   Pencil,
+  Scale,
   Star,
   Tag,
   Undo2,
@@ -68,6 +69,13 @@ export interface ClientProceduresTableProps {
    * el menú porque nunca coinciden en la misma fila (aprobar limpia plateFlowStatus).
    */
   onRevokeAprobacion?: (row: OtClientProcedure) => void;
+  /**
+   * HU #12577 (Feature #12565) — decidir (aprobar/rechazar) la solicitud de revocatoria que el
+   * gestor haya radicado sobre este trámite Aprobado (HU #12572). Distinto de `onRevokeAprobacion`
+   * (acción UNILATERAL del OT, sin solicitud previa, HU #12166): las dos conviven en Aprobado
+   * hasta que la Feature #12566 retire la unilateral.
+   */
+  onDecideRevocation?: (row: OtClientProcedure) => void;
   /** HU #12167 (Feature #12156) — corregir la placa dentro de la ventana de 1 hora (una única vez). */
   onUpdatePlate?: (row: OtClientProcedure) => void;
   /** Id de la fila con accion de consolidado en curso (deshabilita sus botones). */
@@ -378,6 +386,7 @@ export function ClientProceduresTable({
   onAssignPlate,
   onRevoke,
   onRevokeAprobacion,
+  onDecideRevocation,
   onUpdatePlate,
   consolidadoActingId = null,
   onVerDocumentos,
@@ -442,6 +451,21 @@ export function ClientProceduresTable({
     // la máquina de estados permite desde ahí (aprobado→revocado), y solo el OT puede dispararla.
     if (row.status === "aprobado" && onRevokeAprobacion) {
       items.push({ key: "revocar-aprobacion", label: "Revocar", icon: Undo2, onSelect: () => onRevokeAprobacion(row) });
+    }
+
+    // HU #12577 (Feature #12565) AC1 — decidir la solicitud de revocatoria del gestor. La bandeja
+    // OT (`OtClientProcedureResponse`) NO expone hoy si el trámite tiene una solicitud ACTIVA
+    // (solo lo hace `GetProcedureInstanceQuery`, del lado del gestor, HU #12575): por eso la
+    // opción se ofrece en todo trámite Aprobado y no solo en los que tienen una pendiente. Si no
+    // hay una activa, el backend responde 404 y el modal lo muestra tal cual — no se inventa un
+    // indicador que el backend no puede confirmar desde esta lista.
+    if (row.status === "aprobado" && onDecideRevocation) {
+      items.push({
+        key: "decidir-revocatoria",
+        label: "Decidir revocatoria",
+        icon: Scale,
+        onSelect: () => onDecideRevocation(row),
+      });
     }
 
     // HU #12168 AC2/AC3 — "Actualizar placa" existe mientras haya una placa asignada por este flujo

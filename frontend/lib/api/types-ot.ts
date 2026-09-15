@@ -291,6 +291,28 @@ export interface OtApiLogsParams {
   pageSize?: number;
 }
 
+/**
+ * HU #12577 (Feature #12565) — body de POST .../revocation-requests/approve|reject.
+ * Aprobar: motivo OPCIONAL. Rechazar: OBLIGATORIO (422 `motivo_requerido` si falta — el
+ * formulario ya bloquea el envío en cliente antes de llegar aquí, AC2).
+ */
+export interface DecideOtRevocationRequestBody {
+  reason?: string;
+}
+
+/**
+ * HU #12577 (Feature #12565) — respuesta de decidir la solicitud de revocatoria ACTIVA de un
+ * trámite Aprobado. `procedure` solo viene al aprobar (el trámite queda `revocado`, reutiliza
+ * HU #12166); al rechazar es `null` porque el trámite permanece `aprobado` sin cambios.
+ */
+export interface OtRevocationRequestDecision {
+  procedure: OtClientProcedure | null;
+  revocationRequestId: string;
+  attemptNumber: number;
+  /** 'aprobada' | 'rechazada' */
+  status: string;
+}
+
 export interface RejectOtClientProcedureRequest {
   /**
    * Observación general del rechazo, obligatoria. No la sustituyen las causales: la causal dice

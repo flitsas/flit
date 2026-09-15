@@ -20,6 +20,7 @@ import type {
   OtFeatureFlag,
   OtProfile,
   OtRequirements,
+  OtRevocationRequestDecision,
   OtRule,
   OtRulesListResult,
   OtWebhook,
@@ -217,6 +218,49 @@ export function revokeOtClientProcedure(
     body: reason?.trim() ? { reason: reason.trim() } : undefined,
     query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
   });
+}
+
+/**
+ * HU #12577 (Feature #12565) — aprueba la solicitud de revocatoria ACTIVA del trámite (reutiliza
+ * íntegro el Aprobado→Revocado de HU #12166 en el backend). Motivo OPCIONAL (auditoría, mismo
+ * criterio que `revokeOtClientProcedure`). 404 si el trámite no existe o si no hay una solicitud
+ * activa (`solicitada`/`en_revision`) para decidir; 409 `INVALID_STATE` si el trámite ya no está
+ * Aprobado.
+ */
+export function approveOtRevocationRequest(
+  id: string,
+  reason?: string,
+  scope?: OtApiScope,
+): Promise<OtRevocationRequestDecision> {
+  return apiFetch<OtRevocationRequestDecision>(
+    `${base}/client-procedures/${id}/revocation-requests/approve`,
+    {
+      method: "POST",
+      body: reason?.trim() ? { reason: reason.trim() } : undefined,
+      query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    },
+  );
+}
+
+/**
+ * HU #12577 (Feature #12565) — rechaza la solicitud de revocatoria ACTIVA del trámite; este
+ * permanece Aprobado y el gestor puede reintentar (HU #12572). Motivo OBLIGATORIO — el backend
+ * responde 422 `motivo_requerido` sin él (AC2), pero el formulario ya bloquea el envío en cliente
+ * antes de llamar aquí.
+ */
+export function rejectOtRevocationRequest(
+  id: string,
+  reason: string,
+  scope?: OtApiScope,
+): Promise<OtRevocationRequestDecision> {
+  return apiFetch<OtRevocationRequestDecision>(
+    `${base}/client-procedures/${id}/revocation-requests/reject`,
+    {
+      method: "POST",
+      body: { reason: reason.trim() },
+      query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    },
+  );
 }
 
 /** Adjunto devuelto por los endpoints de expediente OT (shape del AttachmentDto de trámites). */
