@@ -260,8 +260,10 @@ public sealed class TenantBrandingsSchemaTests
         var migraciones = db.Database.GetMigrations().OrderBy(id => id, StringComparer.Ordinal).ToList();
 
         migraciones.Should().Contain("20260916100000_E12412_TenantBrandings");
-        migraciones.Last().Should().Be("20260916100000_E12412_TenantBrandings");
         migraciones.Should().Contain("20260914200000_E12543_ProcedureTermsAcceptances");
+        // La sucesora inmediata es la de #12416 (DDL 116 reutiliza la función compartida de este DDL).
+        migraciones[migraciones.IndexOf("20260916100000_E12412_TenantBrandings") + 1]
+            .Should().Be("20260916110000_E12416_TenantDomains");
     }
 
     // ── Modelo EF: mapeo explícito, ExcludeFromMigrations, concurrencia ──────────────────────

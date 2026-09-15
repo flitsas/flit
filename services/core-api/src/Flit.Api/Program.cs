@@ -87,7 +87,9 @@ builder.Services.PostConfigure<JwtBearerOptions>(
 
 // Módulo Admin (HU #10189, RF02).
 builder.Services.AddAdminApplication();
-builder.Services.AddAdminInfrastructure();
+// HU #12416 — AddAdminInfrastructure necesita builder.Configuration para ligar DomainOptions
+// (sección Domains: reservados y CNAME del borde).
+builder.Services.AddAdminInfrastructure(builder.Configuration);
 
 // Handler de autorización por permisos del JWT (HU #10165).
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
@@ -230,6 +232,8 @@ app.MapUserUiPreferencesEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminCompaniesBrandingEndpoints();
 app.MapCompanyBrandingEndpoints();
+app.MapAdminCompaniesDomainEndpoints();
+app.MapCompanyDomainEndpoints();
 app.MapAdminCompanyChildrenEndpoints();
 app.MapAdminCompanyChildrenConfigEndpoints();
 app.MapAdminCompanyChildrenInvitationsEndpoints();

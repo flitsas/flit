@@ -975,6 +975,86 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  /api/v1/admin/companies/{tenantId}/domain:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (cabeza de grupo MARCA_BLANCA).
+    get:
+      tags: [Admin · Dominio de la red]
+      operationId: adminDomainGet
+      summary: Dominio registrado de una cabeza MARCA_BLANCA (HU #12416 AC1)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dominio registrado (con instrucciones DNS).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantDomainResponse" }
+        "401": { description: No autenticado. }
+        "403": { description: Autenticado pero sin rol SuperAdmin. }
+        "404": { description: El tenant no tiene un dominio registrado. }
+    put:
+      tags: [Admin · Dominio de la red]
+      operationId: adminDomainRegister
+      summary: Registra o cambia el dominio de una cabeza MARCA_BLANCA (HU #12416 AC1, AC5)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterDomainRequest" }
+      responses:
+        "200":
+          description: Dominio registrado o cambiado (reinicia el ciclo a pending con token nuevo si cambió el host).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantDomainResponse" }
+        "400":
+          description: Formato inválido, IDN mal formado o dominio reservado (HU #12416 AC1/AC3).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401": { description: No autenticado. }
+        "403": { description: Autenticado pero sin rol SuperAdmin. }
+        "409":
+          description: Conflicto de concurrencia, host ya registrado por otra red o tenant no MARCA_BLANCA (HU #12416 AC2).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      tags: [Admin · Dominio de la red]
+      operationId: adminDomainRemove
+      summary: Retira el dominio vigente; el dato se conserva (HU #12416 AC5)
+      security:
+        - bearerAuth: []
+      responses:
+        "204": { description: Dominio retirado. }
+        "401": { description: No autenticado. }
+        "403": { description: Autenticado pero sin rol SuperAdmin. }
+        "404": { description: El tenant no tiene un dominio registrado. }
+
+  /api/v1/company/domain:
+    get:
+      tags: [Compañía · Dominio de la red]
+      operationId: companyDomainGet
+      summary: Dominio registrado de la propia cabeza de grupo, solo lectura (HU #12416, #12427 AC1/AC2)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dominio registrado de la propia cabeza.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantDomainResponse" }
+        "401": { description: No autenticado. }
+        "403": { description: No es cabeza de grupo (respuesta uniforme, sin revelar nada). }
+        "404": { description: La red no tiene un dominio registrado. }
+
   /api/v1/admin/companies/{tenantId}/whitelist:
     parameters:
       - name: tenantId
@@ -9729,6 +9809,43 @@ components:
         sizeBytes: { type: integer, format: int64 }
         sha256: { type: string }
         logoUrl: { type: string }
+
+    # ── Admin · Dominio dedicado de la red (HU #12416, Feature #12368, ADR-0060) ───────────────
+    RegisterDomainRequest:
+      type: object
+      required: [host]
+      properties:
+        host:
+          type: string
+          description: Sin esquema, puerto ni ruta. Se normaliza a minúsculas y punycode (IDN) antes de persistir.
+        rowVersion: { type: integer, format: int64, nullable: true, description: Ausente en el primer registro. }
+    TenantDomainResponse:
+      type: object
+      required: [host, status, statusChangedAt, verification, certificate, rowVersion]
+      properties:
+        host: { type: string }
+        status: { type: string, enum: [pending, verified, active, failed] }
+        statusReason: { type: string, nullable: true }
+        statusChangedAt: { type: string, format: date-time }
+        verification:
+          type: object
+          required: [txtName, txtValue, cnameName, cnameTarget]
+          properties:
+            txtName: { type: string, description: "_flit-verify.<host>" }
+            txtValue: { type: string, description: "Token de comprobación (HU #12425)." }
+            cnameName: { type: string }
+            cnameTarget: { type: string, description: "Destino del borde (Domains:EdgeTarget, HU #12421)." }
+        verifiedAt: { type: string, format: date-time, nullable: true }
+        activatedAt: { type: string, format: date-time, nullable: true }
+        certificate:
+          type: object
+          properties:
+            issuedAt: { type: string, format: date-time, nullable: true }
+            expiresAt: { type: string, format: date-time, nullable: true }
+        lastCheckedAt: { type: string, format: date-time, nullable: true }
+        nextCheckAt: { type: string, format: date-time, nullable: true }
+        graceUntil: { type: string, format: date-time, nullable: true }
+        rowVersion: { type: integer, format: int64 }
 
     # ── Admin · Generación documental (Feature #12201, ADR-0056) ───────────────
     StandaloneRuesRequest:

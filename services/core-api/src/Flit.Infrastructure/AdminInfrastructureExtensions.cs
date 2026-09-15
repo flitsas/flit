@@ -32,7 +32,9 @@ using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Infrastructure.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure;
 
@@ -41,7 +43,14 @@ namespace Flit.Infrastructure;
 /// </summary>
 public static class AdminInfrastructureExtensions
 {
-    public static IServiceCollection AddAdminInfrastructure(this IServiceCollection services)
+    /// <summary>
+    /// <paramref name="configuration"/> es opcional (retrocompatible con el único call site anterior,
+    /// <c>Program.cs</c>): HU #12416 la necesita para ligar <c>DomainOptions</c> (sección
+    /// <c>Domains</c>); sin ella, los dominios reservados quedan vacíos y <c>EdgeTarget</c> en blanco
+    /// (falla cerrado: nada queda "reservado" por omisión, así que en ese caso el SuperAdmin debe
+    /// tener presente que la lista de reservados no está poblada).
+    /// </summary>
+    public static IServiceCollection AddAdminInfrastructure(this IServiceCollection services, IConfiguration? configuration = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -78,6 +87,27 @@ public static class AdminInfrastructureExtensions
         // Permisivo (fail-open) hasta que #12413 registre la implementación real de formato/contraste.
         services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandAssetValidator,
             Flit.Admin.Application.Companies.Branding.PermissiveBrandAssetValidator>();
+
+        // HU #12416 (Feature #12368, ADR-0060 D1/D2) — dominio dedicado de la red MARCA_BLANCA.
+        services.AddScoped<Flit.Admin.Domain.Companies.Domains.ITenantDomainRepository, TenantDomainRepository>();
+        // Resolutor por host con caché de 60 s (ADR-0060 D2): IMemoryCache es Singleton, la clase es
+        // Scoped (una FlitDbContext por resolución vía ITenantDomainRepository), el caché se comparte.
+        services.AddMemoryCache();
+        services.AddScoped<Flit.Admin.Application.Companies.Domains.ITenantDomainResolver,
+            Flit.Infrastructure.Domains.CachedTenantDomainResolver>();
+        // Reservados y CNAME del borde (Domains:Reserved, Domains:EdgeTarget). Igual que
+        // ImprontaValidationPolicyOptions: Application consume el POCO YA resuelto, sin IOptions.
+        if (configuration is not null)
+        {
+            services.Configure<Flit.Admin.Application.Companies.Domains.DomainOptions>(
+                configuration.GetSection(Flit.Admin.Application.Companies.Domains.DomainOptions.SectionName));
+            services.AddSingleton(sp =>
+                sp.GetRequiredService<IOptions<Flit.Admin.Application.Companies.Domains.DomainOptions>>().Value);
+        }
+        else
+        {
+            services.AddSingleton(new Flit.Admin.Application.Companies.Domains.DomainOptions());
+        }
 
         // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
         // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.

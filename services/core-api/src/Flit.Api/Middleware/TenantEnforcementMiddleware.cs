@@ -239,6 +239,9 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // (TenantResolutionArchitectureTests) confirmen que toda ruta nueva bajo /company está en la
         // lista blanca del middleware. Prefix: cubre /company/branding/logo y /publish.
         new("/api/v1/company/branding", RouteMatch.Prefix),
+        // HU #12416 (Feature #12368, ADR-0060 D1) — autogestión de dominio por la cabeza de grupo
+        // (solo lectura, AC7): mismo motivo que /company/branding arriba.
+        new("/api/v1/company/domain", RouteMatch.Prefix),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

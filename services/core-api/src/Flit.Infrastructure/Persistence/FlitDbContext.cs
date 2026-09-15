@@ -151,6 +151,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantBrandLogoEntity> TenantBrandLogos => Set<TenantBrandLogoEntity>();
 
+    // HU #12416 (Feature #12368, Épica #12237, ADR-0060 D1/D2) — dominio dedicado de la red MARCA_BLANCA
+    // y la vista de solo lectura con los dominios que resuelven red (resolutor por host, CORS).
+    public DbSet<TenantDomainEntity> TenantDomains => Set<TenantDomainEntity>();
+
+    public DbSet<ActiveNetworkDomainView> ActiveNetworkDomains => Set<ActiveNetworkDomainView>();
+
     // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
     public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
         Set<AdminIdentityValidationEntity>();
