@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { loginUser } from "@/lib/api/auth";
 import { rememberEmail, storeToken } from "@/lib/auth/session";
-
-const logo = "/assets/logo-flit-white.svg";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { ShieldAlert, Lock, Mail, User as UserIcon } from "lucide-react";
 
 function ParticlesCanvas() {
@@ -123,7 +122,7 @@ export function Login({
       >
         <ParticlesCanvas />
         <div className="relative z-10 flex flex-col items-center px-8 text-center">
-          <img src={logo} alt="FLIT 2.0" className="max-w-[280px] md:max-w-[360px] w-full h-auto object-contain" />
+          <BrandLogo variant="white" className="max-w-[280px] md:max-w-[360px] w-full h-auto object-contain" />
         </div>
         <a
           href="#"

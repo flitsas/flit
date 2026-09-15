@@ -1,4 +1,7 @@
 import { ActivateAccountForm } from "@/components/auth/ActivateAccountForm";
+import { BrandLogo } from "@/components/brand/BrandLogo";
+import { brandDisplayName } from "@/lib/brand/types";
+import { resolveBrand } from "@/lib/brand/resolve-brand.server";
 
 export const metadata = { title: "Activar cuenta — FLIT" };
 
@@ -8,6 +11,10 @@ interface PageProps {
 
 export default async function ActivateAccountPage({ searchParams }: PageProps) {
   const { token } = await searchParams;
+  // HU #12419 AC2 — logo y nombre de la red (o FLIT sin cambios, AC7). `resolveBrand()` está
+  // cacheado por request: no repite el fetch que ya hizo el layout raíz.
+  const brand = await resolveBrand();
+  const platformName = brandDisplayName(brand, "FLIT");
 
   return (
     <main className="min-h-screen flex">
@@ -19,9 +26,9 @@ export default async function ActivateAccountPage({ searchParams }: PageProps) {
         <div className="absolute top-[-80px] right-[-80px] w-[350px] h-[350px] rounded-full opacity-20 bg-white" />
         <div className="absolute bottom-[-60px] left-[-60px] w-[280px] h-[280px] rounded-full opacity-15 bg-white" />
         <div className="relative z-10 flex flex-col items-center gap-8 text-white px-12 text-center">
-          <img src="/assets/logo-flit-white.svg" alt="FLIT" className="h-12 w-auto" />
+          <BrandLogo brand={brand} variant="white" alt={platformName} className="h-12 w-auto" />
           <div>
-            <h2 className="text-3xl font-bold leading-tight">Bienvenido a FLIT</h2>
+            <h2 className="text-3xl font-bold leading-tight">Bienvenido a {platformName}</h2>
             <p className="mt-3 text-lg opacity-85">Activa tu cuenta para comenzar<br />a gestionar trámites de movilidad.</p>
           </div>
           <div className="flex flex-col gap-3 w-full max-w-xs">
@@ -50,7 +57,7 @@ export default async function ActivateAccountPage({ searchParams }: PageProps) {
           className="md:hidden w-12 h-12 rounded-2xl flex items-center justify-center mb-6"
           style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
         >
-          <img src="/assets/logo-flit-white.svg" alt="FLIT" className="h-7 w-auto" />
+          <BrandLogo brand={brand} variant="white" alt={platformName} className="h-7 w-auto" />
         </div>
 
         {/* Key icon */}

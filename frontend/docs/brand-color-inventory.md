@@ -1,6 +1,6 @@
 # Inventario de marca — HU #12415
 
-Generado: 2026-09-15T17:50:37.201Z · regenerar con `pnpm brand:inventory` (frontend/scripts/brand-color-inventory.mjs).
+Generado: 2026-09-15T22:27:40.830Z · regenerar con `pnpm brand:inventory` (frontend/scripts/brand-color-inventory.mjs).
 
 Inventario **cerrado**: script de solo lectura, no modifica ningún componente ni estilo de producto (AC5). El saneamiento es HU #12420.
 
@@ -9,8 +9,8 @@ Inventario **cerrado**: script de solo lectura, no modifica ningún componente n
 | Ámbito | Archivos con hex de marca | Apariciones de marca |
 |---|---|---|
 | Dentro del alcance | 8 | 74 |
-| Fuera del alcance | 373 | 2965 |
-| **Total** | — | **3039** |
+| Fuera del alcance | 379 | 3006 |
+| **Total** | — | **3080** |
 
 Metodología: directorios `app, components, lib`, extensiones `.ts, .tsx, .js, .jsx, .css, .svg`, excluyendo `node_modules, .next, __tests__`. Conteo repositorio-completo con metodología propia (ver comentario junto a SCAN_DIRS); no reproduce literalmente la cifra de referencia citada en el AC2 de la HU.
 
@@ -25,25 +25,25 @@ Marca: 19 · Neutro: 0 · Estado: 0
 
 | Archivo | Línea | Hex | Clasificación |
 |---|---|---|---|
-| `components/atom/Login.tsx` | 122 | `#00dbd5` | marca |
-| `components/atom/Login.tsx` | 122 | `#557eff` | marca |
-| `components/atom/Login.tsx` | 140 | `#00dbd5` | marca |
-| `components/atom/Login.tsx` | 143 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 121 | `#00dbd5` | marca |
+| `components/atom/Login.tsx` | 121 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 139 | `#00dbd5` | marca |
+| `components/atom/Login.tsx` | 142 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 148 | `#ff4e00` | marca |
 | `components/atom/Login.tsx` | 149 | `#ff4e00` | marca |
-| `components/atom/Login.tsx` | 150 | `#ff4e00` | marca |
-| `components/atom/Login.tsx` | 152 | `#ff4e00` | marca |
-| `components/atom/Login.tsx` | 158 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 151 | `#ff4e00` | marca |
+| `components/atom/Login.tsx` | 157 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 164 | `#ff4e00` | marca |
 | `components/atom/Login.tsx` | 165 | `#ff4e00` | marca |
-| `components/atom/Login.tsx` | 166 | `#ff4e00` | marca |
-| `components/atom/Login.tsx` | 168 | `#ff4e00` | marca |
-| `components/atom/Login.tsx` | 174 | `#557eff` | marca |
-| `components/atom/Login.tsx` | 194 | `#557eff` | marca |
-| `components/atom/Login.tsx` | 194 | `#557eff` | marca |
-| `components/atom/Login.tsx` | 210 | `#557eff` | marca |
-| `components/atom/Login.tsx` | 210 | `#557eff` | marca |
-| `components/atom/Login.tsx` | 213 | `#557eff` | marca |
-| `components/atom/Login.tsx` | 219 | `#ff4e00` | marca |
-| `components/atom/Login.tsx` | 228 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 167 | `#ff4e00` | marca |
+| `components/atom/Login.tsx` | 173 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 193 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 193 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 209 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 209 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 212 | `#557eff` | marca |
+| `components/atom/Login.tsx` | 218 | `#ff4e00` | marca |
+| `components/atom/Login.tsx` | 227 | `#557eff` | marca |
 
 ## Superficie: Activación de cuenta (`activacion`)
 
@@ -56,13 +56,13 @@ Marca: 19 · Neutro: 0 · Estado: 0
 
 | Archivo | Línea | Hex | Clasificación |
 |---|---|---|---|
-| `app/invite/activate/page.tsx` | 17 | `#00dbd5` | marca |
-| `app/invite/activate/page.tsx` | 17 | `#557eff` | marca |
-| `app/invite/activate/page.tsx` | 51 | `#557EFF` | marca |
-| `app/invite/activate/page.tsx` | 51 | `#00DBD5` | marca |
-| `app/invite/activate/page.tsx` | 57 | `#00dbd5` | marca |
-| `app/invite/activate/page.tsx` | 63 | `#162744` | marca |
-| `app/invite/activate/page.tsx` | 64 | `#162744` | marca |
+| `app/invite/activate/page.tsx` | 24 | `#00dbd5` | marca |
+| `app/invite/activate/page.tsx` | 24 | `#557eff` | marca |
+| `app/invite/activate/page.tsx` | 58 | `#557EFF` | marca |
+| `app/invite/activate/page.tsx` | 58 | `#00DBD5` | marca |
+| `app/invite/activate/page.tsx` | 64 | `#00dbd5` | marca |
+| `app/invite/activate/page.tsx` | 70 | `#162744` | marca |
+| `app/invite/activate/page.tsx` | 71 | `#162744` | marca |
 | `components/auth/ActivateAccountForm.tsx` | 12 | `#DFE5ED` | marca |
 | `components/auth/ActivateAccountForm.tsx` | 12 | `#557eff` | marca |
 | `components/auth/ActivateAccountForm.tsx` | 12 | `#557eff` | marca |
@@ -103,14 +103,14 @@ Marca: 20 · Neutro: 1 · Estado: 0
 | `components/auth/ResetPasswordForm.tsx` | 105 | `#162744` | marca |
 | `components/auth/ResetPasswordForm.tsx` | 118 | `#ff4e00` | marca |
 | `components/auth/ResetPasswordForm.tsx` | 126 | `#557eff` | marca |
-| `components/auth/AuthCard.tsx` | 28 | `#DFE5ED` | marca |
-| `components/auth/AuthCard.tsx` | 28 | `#162744` | marca |
-| `components/auth/AuthCard.tsx` | 28 | `#0B0F14` | neutro |
+| `components/auth/AuthCard.tsx` | 29 | `#DFE5ED` | marca |
 | `components/auth/AuthCard.tsx` | 29 | `#162744` | marca |
-| `components/auth/AuthCard.tsx` | 35 | `#557eff` | marca |
-| `components/auth/AuthCard.tsx` | 47 | `#eef5ff` | marca |
-| `components/auth/AuthCard.tsx` | 49 | `#162744` | marca |
-| `components/auth/AuthCard.tsx` | 55 | `#557eff` | marca |
+| `components/auth/AuthCard.tsx` | 29 | `#0B0F14` | neutro |
+| `components/auth/AuthCard.tsx` | 30 | `#162744` | marca |
+| `components/auth/AuthCard.tsx` | 36 | `#557eff` | marca |
+| `components/auth/AuthCard.tsx` | 48 | `#eef5ff` | marca |
+| `components/auth/AuthCard.tsx` | 52 | `#162744` | marca |
+| `components/auth/AuthCard.tsx` | 58 | `#557eff` | marca |
 
 ## Superficie: Cabecera y menú (`cabecera-menu`)
 
@@ -123,26 +123,26 @@ Marca: 14 · Neutro: 9 · Estado: 1
 
 | Archivo | Línea | Hex | Clasificación |
 |---|---|---|---|
-| `components/atom/Shell.tsx` | 590 | `#05060A` | neutro |
-| `components/atom/Shell.tsx` | 590 | `#EEF5FF` | marca |
-| `components/atom/Shell.tsx` | 591 | `#FFFFFF` | neutro |
-| `components/atom/Shell.tsx` | 591 | `#162744` | marca |
-| `components/atom/Shell.tsx` | 598 | `#DFE5ED` | marca |
-| `components/atom/Shell.tsx` | 609 | `#00DBD5` | marca |
-| `components/atom/Shell.tsx` | 609 | `#162744` | marca |
-| `components/atom/Shell.tsx` | 619 | `#557EFF` | marca |
-| `components/atom/Shell.tsx` | 634 | `#00DBD5` | marca |
-| `components/atom/Shell.tsx` | 635 | `#557EFF` | marca |
-| `components/atom/Shell.tsx` | 635 | `#00DBD5` | marca |
-| `components/atom/Shell.tsx` | 653 | `#0B0F14` | neutro |
-| `components/atom/Shell.tsx` | 653 | `#FFFFFF` | neutro |
-| `components/atom/Shell.tsx` | 654 | `#DFE5ED` | marca |
-| `components/atom/Shell.tsx` | 656 | `#FFFFFF` | neutro |
-| `components/atom/Shell.tsx` | 656 | `#162744` | marca |
-| `components/atom/Shell.tsx` | 667 | `#DFE5ED` | marca |
-| `components/atom/Shell.tsx` | 785 | `#ffffff` | neutro |
-| `components/atom/Shell.tsx` | 810 | `#DFE5ED` | marca |
-| `components/atom/Shell.tsx` | 835 | `#FF4E00` | marca |
+| `components/atom/Shell.tsx` | 588 | `#05060A` | neutro |
+| `components/atom/Shell.tsx` | 588 | `#EEF5FF` | marca |
+| `components/atom/Shell.tsx` | 589 | `#FFFFFF` | neutro |
+| `components/atom/Shell.tsx` | 589 | `#162744` | marca |
+| `components/atom/Shell.tsx` | 596 | `#DFE5ED` | marca |
+| `components/atom/Shell.tsx` | 607 | `#00DBD5` | marca |
+| `components/atom/Shell.tsx` | 607 | `#162744` | marca |
+| `components/atom/Shell.tsx` | 617 | `#557EFF` | marca |
+| `components/atom/Shell.tsx` | 632 | `#00DBD5` | marca |
+| `components/atom/Shell.tsx` | 633 | `#557EFF` | marca |
+| `components/atom/Shell.tsx` | 633 | `#00DBD5` | marca |
+| `components/atom/Shell.tsx` | 651 | `#0B0F14` | neutro |
+| `components/atom/Shell.tsx` | 651 | `#FFFFFF` | neutro |
+| `components/atom/Shell.tsx` | 652 | `#DFE5ED` | marca |
+| `components/atom/Shell.tsx` | 654 | `#FFFFFF` | neutro |
+| `components/atom/Shell.tsx` | 654 | `#162744` | marca |
+| `components/atom/Shell.tsx` | 665 | `#DFE5ED` | marca |
+| `components/atom/Shell.tsx` | 783 | `#ffffff` | neutro |
+| `components/atom/Shell.tsx` | 808 | `#DFE5ED` | marca |
+| `components/atom/Shell.tsx` | 833 | `#FF4E00` | marca |
 | `components/atom/dock/DockDesktop.tsx` | 135 | `#ffffff` | neutro |
 | `components/atom/dock/DockDesktop.tsx` | 156 | `#ffffff` | neutro |
 | `components/atom/dock/DockDesktop.tsx` | 180 | `#ffffff` | neutro |

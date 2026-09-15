@@ -32,9 +32,8 @@ import { useDockScrollCondense } from "./useDockScrollCondense";
 import { buildDockGroups, flattenDockEntries } from "./dock/dockGroups";
 import { DockDesktop } from "./dock/DockDesktop";
 import { DrFlitAssistant } from "@/components/dr-flit";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
-const logoWhite = "/assets/logo-flit-white.svg";
-const logoDark = "/assets/logo-flit-dark.svg";
 const fabIcon = "/assets/favicon.svg";
 import {
   LayoutGrid,
@@ -191,7 +190,6 @@ export function Shell({
   visibleModuleCodes?: string[];
 }) {
   const { dark, toggle } = useTheme();
-  const logoSrc = dark ? logoWhite : logoDark;
   const currentUser = useCurrentUser();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -598,7 +596,7 @@ export function Shell({
         style={{ borderColor: dark ? "rgba(255,255,255,0.08)" : "#DFE5ED" }}
       >
         <div className="flex items-center gap-3">
-          <img src={logoSrc} alt="FLIT 2.0" className="h-10 w-auto" />
+          <BrandLogo variant={dark ? "white" : "dark"} className="h-10 w-auto" />
         </div>
         <div className="flex items-center gap-3">
           {/* Theme toggle */}
