@@ -1,5 +1,7 @@
 using Flit.Admin.Application.Auditing;
+using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using NSubstitute;
@@ -14,11 +16,15 @@ public sealed class LoginHandlerSuspensionTests
     private readonly IJwtTokenIssuer _jwtTokenIssuer = Substitute.For<IJwtTokenIssuer>();
     private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
     private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
+    private readonly ITenantNetworkMembership _networkMembership = Substitute.For<ITenantNetworkMembership>();
+    private readonly IDomainContextAccessor _domainContext = Substitute.For<IDomainContextAccessor>();
     private readonly LoginHandler _handler;
 
     public LoginHandlerSuspensionTests()
     {
-        _handler = new LoginHandler(_repository, _passwordHasher, _jwtTokenIssuer, _auditWriter, _auditContext);
+        _handler = new LoginHandler(
+            _repository, _passwordHasher, _jwtTokenIssuer, _auditWriter, _auditContext,
+            _networkMembership, _domainContext);
     }
 
     [Fact]
@@ -41,6 +47,6 @@ public sealed class LoginHandlerSuspensionTests
             .Should().ThrowAsync<AccountSuspendedException>();
 
         _jwtTokenIssuer.DidNotReceiveWithAnyArgs().IssueToken(
-            default, default!, default, default!, default!, default!, default!, default, default!, default!);
+            default, default!, default, default!, default!, default!, default!, default, default!, default!, default!);
     }
 }

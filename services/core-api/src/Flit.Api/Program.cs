@@ -222,6 +222,12 @@ app.UseRateLimiter();
 app.UseMiddleware<Flit.Api.Middleware.DomainContextMiddleware>();
 
 app.UseAuthentication();
+
+// HU #12422 (Feature #12369, ADR-0060 D3) — liga la sesión al dominio de emisión (claim "dom").
+// Va DESPUÉS de auth (necesita HttpContext.User) y ANTES de authorization: una petición anónima
+// (sin usuario autenticado) la atraviesa sin cambios.
+app.UseMiddleware<Flit.Api.Authorization.DomainBindingMiddleware>();
+
 app.UseAuthorization();
 
 // Enforcement multi-tenant de los endpoints runtime de trámites (#1): resuelve el tenant desde el

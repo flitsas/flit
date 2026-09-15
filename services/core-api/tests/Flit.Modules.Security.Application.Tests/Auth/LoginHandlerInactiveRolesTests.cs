@@ -1,5 +1,7 @@
 using Flit.Admin.Application.Auditing;
+using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using NSubstitute;
@@ -20,11 +22,15 @@ public sealed class LoginHandlerInactiveRolesTests
     private readonly IJwtTokenIssuer _jwtTokenIssuer = Substitute.For<IJwtTokenIssuer>();
     private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
     private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
+    private readonly ITenantNetworkMembership _networkMembership = Substitute.For<ITenantNetworkMembership>();
+    private readonly IDomainContextAccessor _domainContext = Substitute.For<IDomainContextAccessor>();
     private readonly LoginHandler _handler;
 
     public LoginHandlerInactiveRolesTests()
     {
-        _handler = new LoginHandler(_repository, _passwordHasher, _jwtTokenIssuer, _auditWriter, _auditContext);
+        _handler = new LoginHandler(
+            _repository, _passwordHasher, _jwtTokenIssuer, _auditWriter, _auditContext,
+            _networkMembership, _domainContext);
     }
 
     [Fact]
@@ -55,7 +61,8 @@ public sealed class LoginHandlerInactiveRolesTests
                 Arg.Any<string>(),
                 Arg.Any<bool>(),
                 Arg.Any<IReadOnlyList<UserRoleSnapshot>>(),
-                Arg.Any<IReadOnlyList<string>>())
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<string>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 
         var result = await _handler.HandleAsync(new LoginCommand("demo@flit.local", "DemoPass1!"), CancellationToken.None);
@@ -71,7 +78,8 @@ public sealed class LoginHandlerInactiveRolesTests
             Arg.Any<string>(),
             Arg.Any<bool>(),
             Arg.Is<IReadOnlyList<UserRoleSnapshot>>(roles => roles.Count == 1 && roles[0].Id == activeRoleId),
-            Arg.Is<IReadOnlyList<string>>(perms => perms.Count == 1 && perms[0] == "procedures.read"));
+            Arg.Is<IReadOnlyList<string>>(perms => perms.Count == 1 && perms[0] == "procedures.read"),
+            Arg.Any<string>());
     }
 
     [Fact]
@@ -96,7 +104,7 @@ public sealed class LoginHandlerInactiveRolesTests
 
         await act.Should().ThrowAsync<AllRolesInactiveException>();
         _jwtTokenIssuer.DidNotReceiveWithAnyArgs().IssueToken(
-            default, default!, default, default!, default!, default!, default!, default, default!, default!);
+            default, default!, default, default!, default!, default!, default!, default, default!, default!, default!);
     }
 
     [Fact]
@@ -126,7 +134,8 @@ public sealed class LoginHandlerInactiveRolesTests
                 Arg.Any<string>(),
                 Arg.Any<bool>(),
                 Arg.Any<IReadOnlyList<UserRoleSnapshot>>(),
-                Arg.Any<IReadOnlyList<string>>())
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<string>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 
         var result = await _handler.HandleAsync(new LoginCommand("demo@flit.local", "DemoPass1!"), CancellationToken.None);

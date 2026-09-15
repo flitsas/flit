@@ -1,5 +1,7 @@
 using Flit.Admin.Application.Auditing;
+using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using NSubstitute;
@@ -14,11 +16,18 @@ public sealed class LoginHandlerTests
     private readonly IJwtTokenIssuer _jwtTokenIssuer = Substitute.For<IJwtTokenIssuer>();
     private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
     private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
+    // HU #12422 — por defecto dominio de FLIT (DomainKind.Flit == default) y sin pertenencia a
+    // ninguna red (default(NetworkMembership) == NetworkMembership.None): paridad con el login de
+    // hoy (AC6), igual que hacía el handler antes de esta HU.
+    private readonly ITenantNetworkMembership _networkMembership = Substitute.For<ITenantNetworkMembership>();
+    private readonly IDomainContextAccessor _domainContext = Substitute.For<IDomainContextAccessor>();
     private readonly LoginHandler _handler;
 
     public LoginHandlerTests()
     {
-        _handler = new LoginHandler(_repository, _passwordHasher, _jwtTokenIssuer, _auditWriter, _auditContext);
+        _handler = new LoginHandler(
+            _repository, _passwordHasher, _jwtTokenIssuer, _auditWriter, _auditContext,
+            _networkMembership, _domainContext);
     }
 
     [Fact]
@@ -52,7 +61,8 @@ public sealed class LoginHandlerTests
                 Arg.Any<string>(),
                 Arg.Any<bool>(),
                 Arg.Any<IReadOnlyList<UserRoleSnapshot>>(),
-                Arg.Any<IReadOnlyList<string>>())
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<string>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 
         var result = await _handler.HandleAsync(new LoginCommand("demo@flit.local", "DemoPass1!"), CancellationToken.None);
@@ -72,7 +82,8 @@ public sealed class LoginHandlerTests
             Arg.Any<string>(),
             Arg.Any<bool>(),
             Arg.Is<IReadOnlyList<UserRoleSnapshot>>(r => r.Count == 1 && r[0].Id == roleId),
-            Arg.Is<IReadOnlyList<string>>(p => p.Single() == "auth.me.read"));
+            Arg.Is<IReadOnlyList<string>>(p => p.Single() == "auth.me.read"),
+            Arg.Any<string>());
     }
 
     [Fact]
@@ -98,7 +109,7 @@ public sealed class LoginHandlerTests
         _jwtTokenIssuer.IssueToken(
                 Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(),
-                Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>())
+                Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 
         await _handler.HandleAsync(new LoginCommand("ot@flit.local", "DemoPass1!"), CancellationToken.None);
@@ -107,7 +118,7 @@ public sealed class LoginHandlerTests
             userId, "ot@flit.local", tenantId, "Organismo de Tránsito Norte",
             "800987654-1", "TRANSIT_OFFICE",
             Arg.Any<string>(), Arg.Any<bool>(),
-            Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>());
+            Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>());
     }
 
     [Fact]
@@ -133,7 +144,7 @@ public sealed class LoginHandlerTests
         _jwtTokenIssuer.IssueToken(
                 Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(),
-                Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>())
+                Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 
         var result = await _handler.HandleAsync(new LoginCommand("sinnit@flit.local", "DemoPass1!"), CancellationToken.None);
@@ -143,7 +154,7 @@ public sealed class LoginHandlerTests
             userId, "sinnit@flit.local", tenantId, "Tenant Legacy Sin NIT",
             string.Empty, "COMPANY",
             Arg.Any<string>(), Arg.Any<bool>(),
-            Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>());
+            Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>());
     }
 
     [Fact]

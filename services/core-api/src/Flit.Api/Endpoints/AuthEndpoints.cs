@@ -6,6 +6,7 @@ using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.AspNetCore.Mvc;
@@ -32,13 +33,24 @@ public static class AuthEndpoints
                 return Results.Ok(new LoginResponse(
                     result.AccessToken,
                     result.ExpiresInSeconds,
-                    result.TokenType));
+                    result.TokenType,
+                    result.NetworkHost is { } host ? new NetworkInfoResponse(host) : null));
             }
             catch (InvalidCredentialsException)
             {
                 return Results.Json(
                     new ErrorResponse("INVALID_CREDENTIALS", "Invalid credentials."),
                     statusCode: StatusCodes.Status401Unauthorized);
+            }
+            // HU #12422 AC3 (ADR-0060 D3) — credencial válida de un usuario de una red MARCA_BLANCA
+            // con dominio activo, presentada por el dominio de FLIT: no abre sesión, redirige a su
+            // dominio (aditivo, ruta/verbo intactos — AC7).
+            catch (NetworkDomainRequiredException ex)
+            {
+                return Results.Json(
+                    new NetworkDomainRequiredResponse(
+                        "NETWORK_DOMAIN_REQUIRED", ex.NetworkDomain, $"https://{ex.NetworkDomain}/login"),
+                    statusCode: StatusCodes.Status403Forbidden);
             }
             catch (AccountSuspendedException)
             {
@@ -355,7 +367,15 @@ public static class AuthEndpoints
 
     private sealed record MessageResponse(string Message);
 
-    private sealed record LoginResponse(string AccessToken, int ExpiresInSeconds, string TokenType);
+    // HU #12422 AC1/AC7 (ADR-0060 D3) — "Network" es aditivo y opcional: solo viene con valor
+    // cuando el login se hizo por el dominio de una red MARCA_BLANCA.
+    private sealed record LoginResponse(
+        string AccessToken, int ExpiresInSeconds, string TokenType, NetworkInfoResponse? Network = null);
+
+    private sealed record NetworkInfoResponse(string Host);
+
+    /// <summary>HU #12422 AC3 — 403 aditivo de <c>POST /auth/login</c> (ruta/verbo intactos).</summary>
+    private sealed record NetworkDomainRequiredResponse(string Error, string NetworkDomain, string LoginUrl);
 
     private sealed record CurrentUserResponse(
         Guid UserId,

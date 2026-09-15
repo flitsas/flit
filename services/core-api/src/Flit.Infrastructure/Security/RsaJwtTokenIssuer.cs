@@ -36,7 +36,8 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
         string tenantType,
         bool isGroupParent,
         IReadOnlyList<UserRoleSnapshot> roles,
-        IReadOnlyList<string> permissionSlugs)
+        IReadOnlyList<string> permissionSlugs,
+        string domain)
     {
         var credentials = new SigningCredentials(keyMaterial.SigningKey, SecurityAlgorithms.RsaSha256);
         var expires = DateTime.UtcNow.AddHours(_settings.TokenLifetimeHours);
@@ -59,6 +60,9 @@ public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSe
             // "Red de clientes" sin consultar la API de compañías.
             new("tenant_type", tenantType),
             new("is_group_parent", isGroupParent ? "true" : "false", JsonClaimValueTypes.Json),
+            // HU #12422 (ADR-0060 D3) — dominio de EMISIÓN de la sesión ("flit" | host de la red).
+            // DomainBindingMiddleware (Flit.Api) lo compara contra el sello de cada petición.
+            new("dom", domain),
         };
 
         // HU #10506 — multi-rol: un claim POR CADA rol activo (no uno solo), para que

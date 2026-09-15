@@ -1,4 +1,6 @@
 using Flit.Admin.Application.Auditing;
+using Flit.Modules.Security.Application.Auth;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +14,10 @@ namespace Flit.Modules.Security.Application.Auth.ForgotPassword;
 /// HU #11358 AC3 — un fallo del transporte de correo (resultado tipado, no excepción) NO
 /// interrumpe el flujo: el token ya quedó persistido y el endpoint sigue respondiendo el mismo
 /// 202 genérico sin importar si el correo salió o no (mismo comportamiento anti-enumeración).
+/// HU #12422 AC4 (ADR-0060 D3) — la respuesta es SIEMPRE la misma (arriba, en el endpoint); el
+/// correo solo se envía cuando el usuario pertenece al dominio de la petición: (red R ∧ usuario ∈
+/// R) ∨ (FLIT ∧ usuario ∉ red MARCA_BLANCA con dominio activo). El enlace en sí (URL base por red)
+/// es alcance de HU #12423 — aquí solo se decide SI se envía.
 /// </summary>
 public sealed partial class ForgotPasswordHandler(
     IUserAccountRepository userAccountRepository,
@@ -21,6 +27,8 @@ public sealed partial class ForgotPasswordHandler(
     PasswordRecoveryOptions options,
     IAdminAuditWriter auditWriter,
     IAuditContextAccessor auditContext,
+    ITenantNetworkMembership networkMembership,
+    IDomainContextAccessor domainContext,
     ILogger<ForgotPasswordHandler> logger)
 {
     private const string Purpose = "password_reset";
@@ -33,6 +41,9 @@ public sealed partial class ForgotPasswordHandler(
 
         var user = await userAccountRepository.FindActiveByEmailAsync(email, cancellationToken);
         if (user is null)
+            return;
+
+        if (!await ShouldSendForDomainAsync(user.TenantId, cancellationToken).ConfigureAwait(false))
             return;
 
         var token = tokenGenerator.Generate();
@@ -73,4 +84,30 @@ public sealed partial class ForgotPasswordHandler(
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No fue posible enviar el correo de recuperación de contraseña para el usuario {UserId}. Cause: {Outcome}.")]
     private static partial void LogEmailFailed(ILogger logger, Guid userId, EmailSendOutcome outcome);
+
+    /// <summary>
+    /// HU #12422 AC4 — decide SI se envía el correo (la respuesta HTTP es siempre la misma).
+    /// Dominio de red R: solo el usuario de R (cabeza o hija de R). Dominio FLIT: cualquiera
+    /// EXCEPTO un usuario de una red MARCA_BLANCA con dominio activo (debe recuperar por su propio
+    /// dominio — el enlace correspondiente es alcance de HU #12423).
+    /// </summary>
+    private async Task<bool> ShouldSendForDomainAsync(Guid? tenantId, CancellationToken cancellationToken)
+    {
+        if (domainContext.Kind == DomainKind.Network)
+        {
+            if (tenantId is not { } networkTenantId)
+                return false;
+
+            var membership = await networkMembership.ResolveAsync(networkTenantId, cancellationToken)
+                .ConfigureAwait(false);
+            return membership.HeadTenantId == domainContext.HeadTenantId;
+        }
+
+        if (tenantId is not { } flitTenantId)
+            return true;
+
+        var flitMembership = await networkMembership.ResolveAsync(flitTenantId, cancellationToken)
+            .ConfigureAwait(false);
+        return flitMembership is not { IsMarcaBlancaNetwork: true, ActiveHost: not null };
+    }
 }

@@ -142,6 +142,12 @@ public static class AdminInfrastructureExtensions
         // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
         services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();
 
+        // HU #12422 (Feature #12369, ADR-0060 D3) — pertenencia a una red MARCA_BLANCA (cabeza o hija)
+        // + dominio activo de esa cabeza, sobre el mismo dato estructural que ITenantScopeResolver.
+        // Sin caché propia: se invoca solo en login/recuperación, no en cada petición runtime.
+        services.AddScoped<Flit.Modules.Security.Application.Auth.Network.ITenantNetworkMembership,
+            Flit.Infrastructure.Persistence.DbTenantNetworkMembership>();
+
         // HU #12323 (Feature #12254) — interruptores globales de la jerarquía leídos por petición,
         // sin caché y fail-closed (fila ausente/error ⇒ apagado). El resolver los consulta antes que
         // la jerarquía: apagar group_read_scope degrada a Single sin desplegar ni tocar tenants.

@@ -43,7 +43,7 @@ public sealed class RsaJwtTokenIssuerTests
             Guid.NewGuid(), "admin@empresa.com", Guid.NewGuid(),
             "Acme Renting SAS", "900123456-7", "COMPANY",
             "RENTING", false,
-            roles, ["companies.read"]);
+            roles, ["companies.read"], "flit");
 
         var token = Decode(issued.Token);
         token.Claims.Single(c => c.Type == "company_name").Value.Should().Be("Acme Renting SAS");
@@ -62,7 +62,7 @@ public sealed class RsaJwtTokenIssuerTests
             Guid.NewGuid(), "admin@ot.gov.co", Guid.NewGuid(),
             "Organismo de Tránsito Norte", "800987654-1", "TRANSIT_OFFICE",
             "RENTING", false,
-            roles, ["ot.read"]);
+            roles, ["ot.read"], "flit");
 
         var token = Decode(issued.Token);
         token.Claims.Single(c => c.Type == "company_name").Value.Should().Be("Organismo de Tránsito Norte");
@@ -81,7 +81,7 @@ public sealed class RsaJwtTokenIssuerTests
             Guid.NewGuid(), "admin@sinnit.com", Guid.NewGuid(),
             "Tenant Legacy Sin NIT", string.Empty, "COMPANY",
             "RENTING", false,
-            roles, []);
+            roles, [], "flit");
 
         var issued = act.Should().NotThrow().Subject;
         var token = Decode(issued.Token);
@@ -102,7 +102,7 @@ public sealed class RsaJwtTokenIssuerTests
             Guid.NewGuid(), "multi@empresa.com", Guid.NewGuid(),
             "Acme Renting SAS", "900123456-7", "COMPANY",
             "RENTING", false,
-            roles, ["procedures.read", "procedures.write"]);
+            roles, ["procedures.read", "procedures.write"], "flit");
 
         var token = Decode(issued.Token);
         token.Claims.Where(c => c.Type == "role_id").Select(c => c.Value)
@@ -121,10 +121,30 @@ public sealed class RsaJwtTokenIssuerTests
             Guid.NewGuid(), "admin@concesion.com", Guid.NewGuid(),
             "Concesión Norte SAS", "901000111-2", "COMPANY",
             "CONCESION", true,
-            roles, ["companies.read"]);
+            roles, ["companies.read"], "flit");
 
         var token = Decode(issued.Token);
         token.Claims.Single(c => c.Type == "tenant_type").Value.Should().Be("CONCESION");
         token.Claims.Single(c => c.Type == "is_group_parent").Value.Should().Be("true");
+    }
+
+    // HU #12422 (ADR-0060 D3) — el emisor añade el claim "dom" con el dominio de EMISIÓN de la
+    // sesión ("flit" o el host de la red), sin lista de compañías ni alcance (AC5).
+    [Theory]
+    [InlineData("flit")]
+    [InlineData("app.movilidadandina.com")]
+    public void IssueToken_EmitsDomClaimWithIssuingDomainOnly(string domain)
+    {
+        var issuer = CreateIssuer();
+        var roles = new List<UserRoleSnapshot> { new(Guid.NewGuid(), "AdminCompany") };
+
+        var issued = issuer.IssueToken(
+            Guid.NewGuid(), "admin@empresa.com", Guid.NewGuid(),
+            "Acme Renting SAS", "900123456-7", "COMPANY",
+            "RENTING", false,
+            roles, ["companies.read"], domain);
+
+        var token = Decode(issued.Token);
+        token.Claims.Single(c => c.Type == "dom").Value.Should().Be(domain);
     }
 }

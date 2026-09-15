@@ -100,6 +100,8 @@ public sealed class SecurityEmailGoldenTests
             new PasswordRecoveryOptions { ResetUrlBase = ResetUrlBase, TokenLifetimeMinutes = 30 },
             Substitute.For<IAdminAuditWriter>(),
             NullAuditContextAccessor.Instance,
+            Substitute.For<Flit.Modules.Security.Application.Auth.Network.ITenantNetworkMembership>(),
+            Substitute.For<IDomainContextAccessor>(),
             NullLogger<ForgotPasswordHandler>.Instance);
 
         await handler.HandleAsync(new ForgotPasswordCommand("destinatario@flit.test"), Ct);
