@@ -16,13 +16,13 @@ public class NotificationTemplateCatalogTests
     }
 
     [Fact]
-    public void All_DebeTenerExactamenteNueveEntradas()
+    public void All_DebeTenerExactamenteDoceEntradas()
     {
-        NotificationTemplateCatalog.All.Should().HaveCount(9);
+        NotificationTemplateCatalog.All.Should().HaveCount(12);
     }
 
     [Fact]
-    public void All_DebeCubrirLosNueveIdsEsperados()
+    public void All_DebeCubrirLosDoceIdsEsperados()
     {
         NotificationTemplateCatalog.All.Select(t => t.Id).Should().BeEquivalentTo(
         [
@@ -35,6 +35,9 @@ public class NotificationTemplateCatalogTests
             "tramites.aprobado",
             "tramites.rechazado",
             "tramites.asignacion-placa",
+            "tramites.revocatoria-solicitada",
+            "tramites.revocatoria-aprobada",
+            "tramites.revocatoria-rechazada",
         ]);
     }
 
@@ -113,11 +116,38 @@ public class NotificationTemplateCatalogTests
     }
 
     [Fact]
-    public void All_SonDiezDisparadoresEnTotalParaNuevePlantillas()
+    public void RevocatoriaSolicitada_DeclaraRevocationRequestSolicitada()
     {
-        // Invitación declara 2; el resto 1 cada una → 10.
+        NotificationTemplateCatalog.TryResolve("tramites.revocatoria-solicitada", out var descriptor).Should().BeTrue();
+        descriptor.Name.Should().Be("Revocatoria solicitada");
+        descriptor.Module.Should().Be(NotificationModule.Tramites);
+        descriptor.Triggers.Should().BeEquivalentTo([NotificationTrigger.RevocationRequestSolicitada]);
+    }
+
+    [Fact]
+    public void RevocatoriaAprobada_DeclaraRevocationRequestAprobada()
+    {
+        NotificationTemplateCatalog.TryResolve("tramites.revocatoria-aprobada", out var descriptor).Should().BeTrue();
+        descriptor.Name.Should().Be("Revocatoria aprobada");
+        descriptor.Module.Should().Be(NotificationModule.Tramites);
+        descriptor.Triggers.Should().BeEquivalentTo([NotificationTrigger.RevocationRequestAprobada]);
+    }
+
+    [Fact]
+    public void RevocatoriaRechazada_DeclaraRevocationRequestRechazada()
+    {
+        NotificationTemplateCatalog.TryResolve("tramites.revocatoria-rechazada", out var descriptor).Should().BeTrue();
+        descriptor.Name.Should().Be("Revocatoria rechazada");
+        descriptor.Module.Should().Be(NotificationModule.Tramites);
+        descriptor.Triggers.Should().BeEquivalentTo([NotificationTrigger.RevocationRequestRechazada]);
+    }
+
+    [Fact]
+    public void All_SonTreceDisparadoresEnTotalParaDocePlantillas()
+    {
+        // Invitación declara 2; el resto 1 cada una → 13.
         var totalTriggers = NotificationTemplateCatalog.All.Sum(t => t.Triggers.Count);
-        totalTriggers.Should().Be(10);
+        totalTriggers.Should().Be(13);
     }
 
     [Fact]

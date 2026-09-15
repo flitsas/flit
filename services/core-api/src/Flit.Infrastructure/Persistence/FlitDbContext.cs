@@ -297,6 +297,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // una fila por intento (attempt_number), ortogonal a TramiteEstado/TramiteStateMachine (ADR-0022).
     public DbSet<ProcedureRevocationRequest> ProcedureRevocationRequests => Set<ProcedureRevocationRequest>();
 
+    // Trámites — cola de despachos de correo por hito del sub-flujo de revocatoria (HU #12579,
+    // Feature #12565, ADR-0046 Opción B extendido).
+    public DbSet<RevocationRequestEmailDispatch> RevocationRequestEmailDispatches =>
+        Set<RevocationRequestEmailDispatch>();
+
     // Trámites — avalúo comercial (Feature #10707): valores de referencia por VIN/placa y fuente.
     public DbSet<AvaluoMockValue> AvaluoMockValues => Set<AvaluoMockValue>();
 
