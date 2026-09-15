@@ -550,6 +550,12 @@ services:
       # peticion publica (via nginx) el Gateway ignora X-Flit-Domain entrante y usa
       # siempre Request.Host.Host (hecho 20/21).
       BRANDING_INTERNAL_API_URL: http://gateway:${GATEWAY_PORT:-4002}
+      # Follow-up de seguridad de #12417 (delta-hechos-post-adr.md hecho 24): el CIDR interno solo
+      # NO basta (docker-proxy/DNAT puede hacer que una conexion externa llegue con IP del gateway
+      # del bridge). resolve-brand.server.ts manda esta clave como X-Internal-Key junto con
+      # X-Flit-Domain (#12419); server-only, SIN prefijo NEXT_PUBLIC_. MISMA clave que
+      # Internal__ApiKey de gateway y core-api (ver mas abajo).
+      FLIT_INTERNAL_API_KEY: ${FLIT_INTERNAL_API_KEY:-}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-4001}:${FRONTEND_PORT:-4001}"
     depends_on:

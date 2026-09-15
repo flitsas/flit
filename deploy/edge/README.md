@@ -187,21 +187,24 @@ márcalo explícitamente al ejecutar, no antes.
 
 ## Riesgos y límites conocidos
 
-- **Docker NAT y `X-Flit-Domain`:** las conexiones publicadas por puerto (`127.0.0.1:<puerto>`,
-  el camino de nginx hacia `gateway`/`frontend`) llegan al contenedor con la IP de origen NAT'eada
-  por Docker, que normalmente es la IP *gateway* de la red interna (el `.1` de
-  `FLIT_INTERNAL_SUBNET`) — una dirección que cae DENTRO del CIDR configurado en
-  `DomainSeal__InternalAllowedNetworks__0`. Si un cliente público mandara `X-Flit-Domain` a
-  través de nginx (que a propósito no lo toca, ver comentario del `.conf.example`) y esa conexión
-  se viera como originada en la IP gateway de la red Docker, el Gateway podría, en teoría, tratarla
-  como interna. **Mitigación aplicada en el código (fuera de este HU, ver DomainSealTransform.cs):
-  no aplica aquí porque nginx corre en el HOST, no dentro de la red Docker — las conexiones desde
-  el host hacia un puerto publicado NO se NATean con la IP gateway del bridge, se ven con la IP
-  real del proceso en el host (127.0.0.1) o la del contenedor `docker-proxy`, típicamente fuera
-  del CIDR interno si éste se define como una subred no-loopback** (`172.28.x.0/24`, no
-  `127.0.0.0/8`). Aun así, queda como riesgo a verificar en el VPS real con
-  `docker network inspect` + una petición de prueba con `X-Flit-Domain` falso vía nginx (paso
-  incluido en §Prueba de humo AC3) antes de dar esto por cerrado en producción.
+- **Docker NAT y `X-Flit-Domain` (mitigado):** las conexiones publicadas por puerto
+  (`127.0.0.1:<puerto>`, el camino de nginx hacia `gateway`/`frontend`) pueden llegar al contenedor
+  con la IP de origen NAT'eada por `docker-proxy`, que en varios escenarios es la IP *gateway* de
+  la red interna (el `.1` de `FLIT_INTERNAL_SUBNET`) — una dirección que cae DENTRO del CIDR
+  configurado en `DomainSeal__InternalAllowedNetworks__0`. Confiar solo en el CIDR permitiría, en
+  teoría, que un cliente público forjara `X-Flit-Domain` si su conexión se viera originada en esa
+  IP. **Mitigación aplicada:** `DomainSealTransform.ResolveSealedHost` (`src/Flit.Gateway/Transforms/DomainSealTransform.cs`)
+  ahora exige **CIDR interno Y `X-Internal-Key`** (comparación en tiempo constante contra
+  `Internal__ApiKey`, con guard de longitud; clave vacía ⇒ nunca se confía) para conservar el sello
+  entrante — cualquier otro caso se descarta y se sella con `Request.Host.Host`. El frontend
+  server-side (`resolve-brand.server.ts`, #12419) manda esa cabecera junto con `X-Flit-Domain` en
+  la llamada por `BRANDING_INTERNAL_API_URL`; el compose (`docker-compose.prod.yml`, servicio
+  `frontend`) declara `FLIT_INTERNAL_API_KEY` con el mismo valor que `Internal__ApiKey` de
+  `gateway`/`core-api`. **Verificación en el VPS:** `docker network inspect
+  <nombre-del-stack>_default` para confirmar el CIDR real de la red `default`, y revisar el log del
+  Gateway (nivel `Information`/`Warning` de `DomainSealTransform`/`Program.cs`) ante una petición de
+  prueba con `X-Flit-Domain` falso y sin `X-Internal-Key` vía nginx (paso incluido en §Prueba de
+  humo AC3): debe reflejar siempre el host real, nunca el forjado.
 - **`default_server` duplicado:** si el nginx real del VPS ya tiene otro `default_server` para
   80/443 (por ejemplo, uno genérico preexistente), instalar este archivo tal cual rompe el
   arranque de nginx. Ver paso 4 de §Instalación.
