@@ -585,15 +585,15 @@ export function Shell({
     <div
       className="h-screen w-full overflow-hidden flex flex-col"
       style={{
-        background: dark ? "#05060A" : "#EEF5FF",
-        color: dark ? "#FFFFFF" : "#162744",
+        background: dark ? "#05060A" : "var(--color-flit-bg)",
+        color: dark ? "#FFFFFF" : "var(--color-flit-primary)",
         fontFamily: "Poppins, sans-serif",
       }}
     >
       {/* Header */}
       <header
         className="shrink-0 flex items-center justify-between px-4 md:px-6 py-3 border-b"
-        style={{ borderColor: dark ? "rgba(255,255,255,0.08)" : "#DFE5ED" }}
+        style={{ borderColor: dark ? "rgba(255,255,255,0.08)" : "var(--color-flit-gray)" }}
       >
         <div className="flex items-center gap-3">
           <BrandLogo variant={dark ? "white" : "dark"} className="h-10 w-auto" />
@@ -604,7 +604,7 @@ export function Shell({
             onClick={toggle}
             aria-label="Cambiar tema"
             className="flex items-center gap-1 rounded-full px-1 py-1 transition"
-            style={{ background: "#00DBD5", color: "#162744" }}
+            style={{ background: "var(--color-flit-tech)", color: "var(--color-flit-primary)" }}
           >
             <span className={`h-7 w-7 grid place-items-center rounded-full ${dark ? "" : "bg-white"}`}>
               <Sun className="h-3.5 w-3.5" />
@@ -614,7 +614,7 @@ export function Shell({
             </span>
           </button>
           <div className="hidden sm:flex flex-col items-end leading-tight">
-            <span className="text-[10px] font-medium" style={{ color: "#557EFF" }}>
+            <span className="text-[10px] font-medium" style={{ color: "var(--color-flit-brand)" }}>
               {currentUser?.roleLabel ?? "—"}
             </span>
             {currentUser?.tenantName && (
@@ -629,8 +629,8 @@ export function Shell({
           <div
             className="h-9 w-9 rounded-full grid place-items-center border-2 text-xs font-bold text-white select-none"
             style={{
-              borderColor: "#00DBD5",
-              background: "linear-gradient(135deg,#557EFF,#00DBD5)",
+              borderColor: "var(--color-flit-tech)",
+              background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))",
             }}
             aria-label="Avatar"
           >
@@ -649,9 +649,9 @@ export function Shell({
                 className="absolute right-0 top-full mt-2 w-60 rounded-xl py-1.5 z-50 text-xs"
                 style={{
                   background: dark ? "#0B0F14" : "#FFFFFF",
-                  border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "#DFE5ED"}`,
+                  border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "var(--color-flit-gray)"}`,
                   boxShadow: "0 18px 40px -10px rgba(22,39,68,0.25)",
-                  color: dark ? "#FFFFFF" : "#162744",
+                  color: dark ? "#FFFFFF" : "var(--color-flit-primary)",
                 }}
               >
                 <MenuItem
@@ -662,7 +662,7 @@ export function Shell({
                     router.push("/profile/change-password");
                   }}
                 />
-                <div className="h-px my-1" style={{ background: dark ? "rgba(255,255,255,0.08)" : "#DFE5ED" }} />
+                <div className="h-px my-1" style={{ background: dark ? "rgba(255,255,255,0.08)" : "var(--color-flit-gray)" }} />
                 <MenuItem
                   icon={LogOut}
                   label="Salir de la plataforma"
@@ -805,7 +805,7 @@ export function Shell({
       <footer
         className="shrink-0 px-4 md:px-6 py-2 border-t text-[10px] text-center"
         style={{
-          borderColor: dark ? "rgba(255,255,255,0.08)" : "#DFE5ED",
+          borderColor: dark ? "rgba(255,255,255,0.08)" : "var(--color-flit-gray)",
           color: dark ? "rgba(255,255,255,0.55)" : "rgba(22,39,68,0.6)",
         }}
       >
@@ -830,7 +830,7 @@ function MenuItem({
     <button
       onClick={onClick}
       className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-black/5 dark:hover:bg-white/10 transition"
-      style={{ color: danger ? "#FF4E00" : undefined }}
+      style={{ color: danger ? "var(--color-flit-alert)" : undefined }}
     >
       <Icon className="h-4 w-4" />
       <span className="font-medium">{label}</span>

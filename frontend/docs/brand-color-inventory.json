@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-15T22:27:40.830Z",
+  "generatedAt": "2026-09-15T23:06:45.540Z",
   "hu": 12415,
   "methodology": {
     "scanDirs": [
@@ -38,141 +38,7 @@
         {
           "relPath": "components/atom/Login.tsx",
           "exists": true,
-          "occurrences": [
-            {
-              "line": 121,
-              "hex": "#00dbd5",
-              "hexNormalized": "#00dbd5",
-              "classification": "marca",
-              "snippet": "style={{ background: \"linear-gradient(120deg,#00dbd5 0%,#557eff 100%)\" }}"
-            },
-            {
-              "line": 121,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "style={{ background: \"linear-gradient(120deg,#00dbd5 0%,#557eff 100%)\" }}"
-            },
-            {
-              "line": 139,
-              "hex": "#00dbd5",
-              "hexNormalized": "#00dbd5",
-              "classification": "marca",
-              "snippet": "<div className=\"h-16 w-16 rounded-full flex items-center justify-center\" style={{ background: \"#00dbd5\" }}>"
-            },
-            {
-              "line": 142,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "<h1 className=\"text-2xl font-bold\" style={{ color: \"#557eff\", fontFamily: \"Poppins, sans-serif\" }}>"
-            },
-            {
-              "line": 148,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<div className=\"rounded-xl border p-5 flex gap-3 animate-fade-in\" style={{ borderColor: \"#ff4e00\", background: \"rgba(255,78,0,0.06)\" }} role=\"alert\">"
-            },
-            {
-              "line": 149,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<ShieldAlert className=\"h-5 w-5 mt-0.5 shrink-0\" style={{ color: \"#ff4e00\" }} />"
-            },
-            {
-              "line": 151,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<p className=\"font-semibold\" style={{ color: \"#ff4e00\" }}>Acceso Restringido</p>"
-            },
-            {
-              "line": 157,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "style={{ color: \"#557eff\" }}"
-            },
-            {
-              "line": 164,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<div className=\"rounded-xl border p-5 flex gap-3 animate-fade-in\" style={{ borderColor: \"#ff4e00\", background: \"rgba(255,78,0,0.06)\" }} role=\"alert\">"
-            },
-            {
-              "line": 165,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<ShieldAlert className=\"h-5 w-5 mt-0.5 shrink-0\" style={{ color: \"#ff4e00\" }} />"
-            },
-            {
-              "line": 167,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<p className=\"font-semibold\" style={{ color: \"#ff4e00\" }}>Acceso Restringido</p>"
-            },
-            {
-              "line": 173,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "style={{ color: \"#557eff\" }}"
-            },
-            {
-              "line": 193,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "className=\"w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-["
-            },
-            {
-              "line": 193,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "className=\"w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-["
-            },
-            {
-              "line": 209,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "className=\"w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-["
-            },
-            {
-              "line": 209,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "className=\"w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-["
-            },
-            {
-              "line": 212,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "<Link href=\"/auth/forgot-password\" className=\"inline-block text-xs mt-2 text-slate-500 hover:text-[#557eff] transition\">"
-            },
-            {
-              "line": 218,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<p role=\"alert\" className=\"text-xs flex items-center gap-2\" style={{ color: \"#ff4e00\" }}>"
-            },
-            {
-              "line": 227,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "style={{ background: \"#557eff\" }}"
-            }
-          ]
+          "occurrences": []
         },
         {
           "relPath": "app/login/page.tsx",
@@ -181,7 +47,7 @@
         }
       ],
       "totals": {
-        "marca": 19,
+        "marca": 0,
         "neutro": 0,
         "estado": 0
       }
@@ -193,151 +59,16 @@
         {
           "relPath": "app/invite/activate/page.tsx",
           "exists": true,
-          "occurrences": [
-            {
-              "line": 24,
-              "hex": "#00dbd5",
-              "hexNormalized": "#00dbd5",
-              "classification": "marca",
-              "snippet": "style={{ background: \"linear-gradient(120deg,#00dbd5 0%,#557eff 100%)\" }}"
-            },
-            {
-              "line": 24,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "style={{ background: \"linear-gradient(120deg,#00dbd5 0%,#557eff 100%)\" }}"
-            },
-            {
-              "line": 58,
-              "hex": "#557EFF",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "style={{ background: \"linear-gradient(135deg,#557EFF,#00DBD5)\" }}"
-            },
-            {
-              "line": 58,
-              "hex": "#00DBD5",
-              "hexNormalized": "#00dbd5",
-              "classification": "marca",
-              "snippet": "style={{ background: \"linear-gradient(135deg,#557EFF,#00DBD5)\" }}"
-            },
-            {
-              "line": 64,
-              "hex": "#00dbd5",
-              "hexNormalized": "#00dbd5",
-              "classification": "marca",
-              "snippet": "<div className=\"w-12 h-12 rounded-2xl mb-6 hidden md:flex items-center justify-center\" style={{ background: \"#00dbd5\" }}>"
-            },
-            {
-              "line": 70,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<h1 className=\"text-2xl font-bold mb-1\" style={{ color: \"#162744\" }}>Activa tu cuenta</h1>"
-            },
-            {
-              "line": 71,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<p className=\"text-sm mb-8 opacity-60\" style={{ color: \"#162744\" }}>"
-            }
-          ]
+          "occurrences": []
         },
         {
           "relPath": "components/auth/ActivateAccountForm.tsx",
           "exists": true,
-          "occurrences": [
-            {
-              "line": 12,
-              "hex": "#DFE5ED",
-              "hexNormalized": "#dfe5ed",
-              "classification": "marca",
-              "snippet": "\"w-full bg-white border border-[#DFE5ED] rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20\";"
-            },
-            {
-              "line": 12,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "\"w-full bg-white border border-[#DFE5ED] rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20\";"
-            },
-            {
-              "line": 12,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "\"w-full bg-white border border-[#DFE5ED] rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20\";"
-            },
-            {
-              "line": 24,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<p role=\"alert\" className=\"text-sm text-[#ff4e00]\">"
-            },
-            {
-              "line": 33,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<p className=\"text-sm\" style={{ color: \"#162744\" }}>Tu cuenta fue activada correctamente.</p>"
-            },
-            {
-              "line": 35,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<p className=\"text-xs opacity-50\" style={{ color: \"#162744\" }}>"
-            },
-            {
-              "line": 42,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "style={{ background: \"#557eff\" }}"
-            },
-            {
-              "line": 85,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<label htmlFor=\"ac-password\" className=\"block text-sm font-medium text-[#162744] mb-1\">"
-            },
-            {
-              "line": 96,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<p className=\"mt-1 text-xs opacity-50\" style={{ color: \"#162744\" }}>{PASSWORD_POLICY_HINT}</p>"
-            },
-            {
-              "line": 99,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<label htmlFor=\"ac-confirm\" className=\"block text-sm font-medium text-[#162744] mb-1\">"
-            },
-            {
-              "line": 112,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<p role=\"alert\" className=\"text-sm text-[#ff4e00]\">"
-            },
-            {
-              "line": 120,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "style={{ background: \"#557eff\" }}"
-            }
-          ]
+          "occurrences": []
         }
       ],
       "totals": {
-        "marca": 19,
+        "marca": 0,
         "neutro": 0,
         "estado": 0
       }
@@ -359,105 +90,12 @@
         {
           "relPath": "components/auth/ForgotPasswordForm.tsx",
           "exists": true,
-          "occurrences": [
-            {
-              "line": 9,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "\"w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20\";"
-            },
-            {
-              "line": 9,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "\"w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20\";"
-            },
-            {
-              "line": 46,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<label htmlFor=\"fp-email\" className=\"block text-sm font-medium text-[#162744] mb-1\">"
-            },
-            {
-              "line": 59,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<p role=\"alert\" className=\"text-sm text-[#ff4e00]\">"
-            },
-            {
-              "line": 67,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "style={{ background: \"#557eff\" }}"
-            }
-          ]
+          "occurrences": []
         },
         {
           "relPath": "components/auth/ResetPasswordForm.tsx",
           "exists": true,
-          "occurrences": [
-            {
-              "line": 15,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "\"w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20\";"
-            },
-            {
-              "line": 15,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "\"w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20\";"
-            },
-            {
-              "line": 27,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<p role=\"alert\" className=\"text-sm text-[#ff4e00]\">"
-            },
-            {
-              "line": 45,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "style={{ background: \"#557eff\" }}"
-            },
-            {
-              "line": 91,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<label htmlFor=\"rp-password\" className=\"block text-sm font-medium text-[#162744] mb-1\">"
-            },
-            {
-              "line": 105,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<label htmlFor=\"rp-confirm\" className=\"block text-sm font-medium text-[#162744] mb-1\">"
-            },
-            {
-              "line": 118,
-              "hex": "#ff4e00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "<p role=\"alert\" className=\"text-sm text-[#ff4e00]\">"
-            },
-            {
-              "line": 126,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "style={{ background: \"#557eff\" }}"
-            }
-          ]
+          "occurrences": []
         },
         {
           "relPath": "components/auth/AuthCard.tsx",
@@ -465,65 +103,16 @@
           "occurrences": [
             {
               "line": 29,
-              "hex": "#DFE5ED",
-              "hexNormalized": "#dfe5ed",
-              "classification": "marca",
-              "snippet": "<div className=\"w-full max-w-md rounded-2xl border border-[#DFE5ED] bg-white p-8 text-[#162744] shadow-2xl dark:border-white/10 dark:bg-[#0B0F14] dark:text-whit"
-            },
-            {
-              "line": 29,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<div className=\"w-full max-w-md rounded-2xl border border-[#DFE5ED] bg-white p-8 text-[#162744] shadow-2xl dark:border-white/10 dark:bg-[#0B0F14] dark:text-whit"
-            },
-            {
-              "line": 29,
               "hex": "#0B0F14",
               "hexNormalized": "#0b0f14",
               "classification": "neutro",
-              "snippet": "<div className=\"w-full max-w-md rounded-2xl border border-[#DFE5ED] bg-white p-8 text-[#162744] shadow-2xl dark:border-white/10 dark:bg-[#0B0F14] dark:text-whit"
-            },
-            {
-              "line": 30,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<h1 className=\"mb-1 text-2xl font-bold text-[#162744] dark:text-white\">{title}</h1>"
-            },
-            {
-              "line": 36,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "className=\"mt-6 inline-block text-sm text-[#557eff] hover:underline\""
-            },
-            {
-              "line": 48,
-              "hex": "#eef5ff",
-              "hexNormalized": "#eef5ff",
-              "classification": "marca",
-              "snippet": "<main className=\"min-h-screen flex items-center justify-center bg-[#eef5ff] px-4\">"
-            },
-            {
-              "line": 52,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "<h1 className=\"text-2xl font-bold text-[#162744] mb-1\">{title}</h1>"
-            },
-            {
-              "line": 58,
-              "hex": "#557eff",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "className=\"mt-6 inline-block text-sm text-[#557eff] hover:underline\""
+              "snippet": "<div className=\"w-full max-w-md rounded-2xl border border-flit-gray bg-white p-8 text-flit-primary shadow-2xl dark:border-white/10 dark:bg-[#0B0F14] dark:text-w"
             }
           ]
         }
       ],
       "totals": {
-        "marca": 20,
+        "marca": 0,
         "neutro": 1,
         "estado": 0
       }
@@ -541,77 +130,14 @@
               "hex": "#05060A",
               "hexNormalized": "#05060a",
               "classification": "neutro",
-              "snippet": "background: dark ? \"#05060A\" : \"#EEF5FF\","
-            },
-            {
-              "line": 588,
-              "hex": "#EEF5FF",
-              "hexNormalized": "#eef5ff",
-              "classification": "marca",
-              "snippet": "background: dark ? \"#05060A\" : \"#EEF5FF\","
+              "snippet": "background: dark ? \"#05060A\" : \"var(--color-flit-bg)\","
             },
             {
               "line": 589,
               "hex": "#FFFFFF",
               "hexNormalized": "#ffffff",
               "classification": "neutro",
-              "snippet": "color: dark ? \"#FFFFFF\" : \"#162744\","
-            },
-            {
-              "line": 589,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "color: dark ? \"#FFFFFF\" : \"#162744\","
-            },
-            {
-              "line": 596,
-              "hex": "#DFE5ED",
-              "hexNormalized": "#dfe5ed",
-              "classification": "marca",
-              "snippet": "style={{ borderColor: dark ? \"rgba(255,255,255,0.08)\" : \"#DFE5ED\" }}"
-            },
-            {
-              "line": 607,
-              "hex": "#00DBD5",
-              "hexNormalized": "#00dbd5",
-              "classification": "marca",
-              "snippet": "style={{ background: \"#00DBD5\", color: \"#162744\" }}"
-            },
-            {
-              "line": 607,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "style={{ background: \"#00DBD5\", color: \"#162744\" }}"
-            },
-            {
-              "line": 617,
-              "hex": "#557EFF",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "<span className=\"text-[10px] font-medium\" style={{ color: \"#557EFF\" }}>"
-            },
-            {
-              "line": 632,
-              "hex": "#00DBD5",
-              "hexNormalized": "#00dbd5",
-              "classification": "marca",
-              "snippet": "borderColor: \"#00DBD5\","
-            },
-            {
-              "line": 633,
-              "hex": "#557EFF",
-              "hexNormalized": "#557eff",
-              "classification": "marca",
-              "snippet": "background: \"linear-gradient(135deg,#557EFF,#00DBD5)\","
-            },
-            {
-              "line": 633,
-              "hex": "#00DBD5",
-              "hexNormalized": "#00dbd5",
-              "classification": "marca",
-              "snippet": "background: \"linear-gradient(135deg,#557EFF,#00DBD5)\","
+              "snippet": "color: dark ? \"#FFFFFF\" : \"var(--color-flit-primary)\","
             },
             {
               "line": 651,
@@ -628,32 +154,11 @@
               "snippet": "background: dark ? \"#0B0F14\" : \"#FFFFFF\","
             },
             {
-              "line": 652,
-              "hex": "#DFE5ED",
-              "hexNormalized": "#dfe5ed",
-              "classification": "marca",
-              "snippet": "border: `1px solid ${dark ? \"rgba(255,255,255,0.1)\" : \"#DFE5ED\"}`,"
-            },
-            {
               "line": 654,
               "hex": "#FFFFFF",
               "hexNormalized": "#ffffff",
               "classification": "neutro",
-              "snippet": "color: dark ? \"#FFFFFF\" : \"#162744\","
-            },
-            {
-              "line": 654,
-              "hex": "#162744",
-              "hexNormalized": "#162744",
-              "classification": "marca",
-              "snippet": "color: dark ? \"#FFFFFF\" : \"#162744\","
-            },
-            {
-              "line": 665,
-              "hex": "#DFE5ED",
-              "hexNormalized": "#dfe5ed",
-              "classification": "marca",
-              "snippet": "<div className=\"h-px my-1\" style={{ background: dark ? \"rgba(255,255,255,0.08)\" : \"#DFE5ED\" }} />"
+              "snippet": "color: dark ? \"#FFFFFF\" : \"var(--color-flit-primary)\","
             },
             {
               "line": 783,
@@ -661,20 +166,6 @@
               "hexNormalized": "#ffffff",
               "classification": "neutro",
               "snippet": "color: \"#ffffff\","
-            },
-            {
-              "line": 808,
-              "hex": "#DFE5ED",
-              "hexNormalized": "#dfe5ed",
-              "classification": "marca",
-              "snippet": "borderColor: dark ? \"rgba(255,255,255,0.08)\" : \"#DFE5ED\","
-            },
-            {
-              "line": 833,
-              "hex": "#FF4E00",
-              "hexNormalized": "#ff4e00",
-              "classification": "marca",
-              "snippet": "style={{ color: danger ? \"#FF4E00\" : undefined }}"
             }
           ]
         },
@@ -714,7 +205,7 @@
         }
       ],
       "totals": {
-        "marca": 14,
+        "marca": 0,
         "neutro": 9,
         "estado": 1
       }
@@ -784,14 +275,14 @@
     "totalFilesScanned": 700,
     "brandHexOccurrences": {
       "insideScope": {
-        "files": 8,
-        "occurrences": 74
+        "files": 1,
+        "occurrences": 2
       },
       "outsideScope": {
         "files": 379,
         "occurrences": 3006
       },
-      "total": 3080
+      "total": 3008
     }
   }
 }

@@ -118,7 +118,7 @@ export function Login({
       {/* LEFT — Visual panel */}
       <div
         className="relative w-full md:w-7/12 min-h-[260px] md:min-h-0 flex flex-col items-center justify-center overflow-hidden order-1"
-        style={{ background: "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)" }}
+        style={{ background: "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)" }}
       >
         <ParticlesCanvas />
         <div className="relative z-10 flex flex-col items-center px-8 text-center">
@@ -136,41 +136,41 @@ export function Login({
       <div className="w-full md:w-5/12 bg-white flex flex-col justify-center px-6 sm:px-12 lg:px-16 py-10 order-2 overflow-y-auto">
         <div className="max-w-sm w-full mx-auto">
           <div className="flex flex-col items-center gap-3 mb-8">
-            <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: "#00dbd5" }}>
+            <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: "var(--color-flit-tech)" }}>
               <UserIcon className="h-8 w-8 text-white" strokeWidth={2.2} />
             </div>
-            <h1 className="text-2xl font-bold" style={{ color: "#557eff", fontFamily: "Poppins, sans-serif" }}>
+            <h1 className="text-2xl font-bold" style={{ color: "var(--color-flit-brand)", fontFamily: "Poppins, sans-serif" }}>
               Iniciar Sesión
             </h1>
           </div>
 
           {blocked ? (
-            <div className="rounded-xl border p-5 flex gap-3 animate-fade-in" style={{ borderColor: "#ff4e00", background: "rgba(255,78,0,0.06)" }} role="alert">
-              <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "#ff4e00" }} />
+            <div className="rounded-xl border p-5 flex gap-3 animate-fade-in" style={{ borderColor: "var(--color-flit-alert)", background: "rgba(255,78,0,0.06)" }} role="alert">
+              <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--color-flit-alert)" }} />
               <div className="text-sm">
-                <p className="font-semibold" style={{ color: "#ff4e00" }}>Acceso Restringido</p>
+                <p className="font-semibold" style={{ color: "var(--color-flit-alert)" }}>Acceso Restringido</p>
                 <p className="text-slate-600 text-xs mt-1">Tu cuenta está bloqueada temporalmente. Contacta a tu administrador para restablecer el acceso.</p>
                 <button
                   type="button"
                   onClick={() => setBlocked(false)}
                   className="text-xs mt-3 font-semibold transition hover:opacity-80"
-                  style={{ color: "#557eff" }}
+                  style={{ color: "var(--color-flit-brand)" }}
                 >
                   ← Volver a intentar
                 </button>
               </div>
             </div>
           ) : roleDeactivated ? (
-            <div className="rounded-xl border p-5 flex gap-3 animate-fade-in" style={{ borderColor: "#ff4e00", background: "rgba(255,78,0,0.06)" }} role="alert">
-              <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "#ff4e00" }} />
+            <div className="rounded-xl border p-5 flex gap-3 animate-fade-in" style={{ borderColor: "var(--color-flit-alert)", background: "rgba(255,78,0,0.06)" }} role="alert">
+              <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--color-flit-alert)" }} />
               <div className="text-sm">
-                <p className="font-semibold" style={{ color: "#ff4e00" }}>Acceso Restringido</p>
+                <p className="font-semibold" style={{ color: "var(--color-flit-alert)" }}>Acceso Restringido</p>
                 <p className="text-slate-600 text-xs mt-1">Tu rol ha sido desactivado y no puedes ingresar al sistema. Contacta a tu administrador para resolver este problema.</p>
                 <button
                   type="button"
                   onClick={() => setRoleDeactivated(false)}
                   className="text-xs mt-3 font-semibold transition hover:opacity-80"
-                  style={{ color: "#557eff" }}
+                  style={{ color: "var(--color-flit-brand)" }}
                 >
                   ← Volver a intentar
                 </button>
@@ -190,7 +190,7 @@ export function Login({
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="usuario@flit.io"
                     aria-invalid={error ? true : undefined}
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20"
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                   />
                 </div>
               </div>
@@ -206,16 +206,16 @@ export function Login({
                     onChange={(e) => setPass(e.target.value)}
                     placeholder="••••••••"
                     aria-invalid={error ? true : undefined}
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20"
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                   />
                 </div>
-                <Link href="/auth/forgot-password" className="inline-block text-xs mt-2 text-slate-500 hover:text-[#557eff] transition">
+                <Link href="/auth/forgot-password" className="inline-block text-xs mt-2 text-slate-500 hover:text-flit-brand transition">
                   ¿Olvidó su contraseña?
                 </Link>
               </div>
 
               {error && (
-                <p role="alert" className="text-xs flex items-center gap-2" style={{ color: "#ff4e00" }}>
+                <p role="alert" className="text-xs flex items-center gap-2" style={{ color: "var(--color-flit-alert)" }}>
                   <ShieldAlert className="h-3.5 w-3.5" /> {error}
                 </p>
               )}
@@ -224,7 +224,7 @@ export function Login({
                 type="submit"
                 disabled={loading}
                 className="w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-                style={{ background: "#557eff" }}
+                style={{ background: "var(--color-flit-brand)" }}
               >
                 {loading ? "Ingresando…" : "Iniciar Sesión"}
               </button>

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { forgotPassword } from "@/lib/api/auth";
 
 const INPUT_CLASS =
-  "w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20";
+  "w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
@@ -43,7 +43,7 @@ export function ForgotPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4" aria-label="Recuperar contraseña" noValidate>
       <div>
-        <label htmlFor="fp-email" className="block text-sm font-medium text-[#162744] mb-1">
+        <label htmlFor="fp-email" className="block text-sm font-medium text-flit-primary mb-1">
           Correo electrónico
         </label>
         <input
@@ -56,7 +56,7 @@ export function ForgotPasswordForm() {
         />
       </div>
       {error && (
-        <p role="alert" className="text-sm text-[#ff4e00]">
+        <p role="alert" className="text-sm text-flit-alert">
           {error}
         </p>
       )}
@@ -64,7 +64,7 @@ export function ForgotPasswordForm() {
         type="submit"
         disabled={loading}
         className="w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-        style={{ background: "#557eff" }}
+        style={{ background: "var(--color-flit-brand)" }}
       >
         {loading ? "Enviando…" : "Enviar instrucciones"}
       </button>
