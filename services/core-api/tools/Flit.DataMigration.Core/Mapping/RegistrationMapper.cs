@@ -3,6 +3,7 @@ using System.Text.Json;
 using Flit.DataMigration.V1.Source;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.DataMigration.V1.Mapping;
 
@@ -16,7 +17,9 @@ namespace Flit.DataMigration.V1.Mapping;
 /// </para>
 /// <list type="bullet">
 ///   <item>Otro catálogo de estados (<see cref="RegistrationStateMap"/>) — <b>no</b> el de traspaso.</item>
-///   <item>Un solo titular (<c>vehicle_owner_*</c>) → actor <c>comprador</c> / entidad BUYER.</item>
+///   <item>El titular (<c>vehicle_owner_*</c>) → actor <c>comprador</c> / entidad BUYER, ordinal 1; y
+///   si la matrícula es multipropietario, sus copropietarios (<c>vehicle_registration_master_actors</c>)
+///   → mismos rol y entidad, ordinales 2..4 con porcentaje (ADR-0053).</item>
 ///   <item>Sin datos comerciales: una matrícula inicial no es una compraventa, y el wizard de
 ///   matrícula de V2 (5 pasos) tampoco los pide.</item>
 /// </list>
@@ -71,11 +74,17 @@ public static class RegistrationMapper
             // field_values mientras el padre esté en borrador. El estado real se aplica al final.
             Status = TramiteEstado.Borrador,
             ChecklistEstado = "{}",
+            // Organismo y cabeza de grupo: las dos columnas que deciden quién VE el trámite (bandeja
+            // del OT y vista consolidada de la red). Ver el mismo bloque en TransferMapper.
+            TransitOfficeId = context.TransitOffice?.Id,
+            ParentTenantIdAtCreation = context.ParentTenantId,
             CreatedByUserId = context.SystemUserId,
             CreatedAt = createdAt,
             UpdatedAt = V1MapperShared.ParseDate(record.Column("updated_at")),
             DeletedAt = V1MapperShared.ParseDate(record.Column("deleted_at")),
             SubmittedAt = V1MapperShared.FirstTransitionTo(history, TramiteEstado.Preparado, TramiteEstado.Entregado),
+            // Revocado es final en V2 (HU #12166) y solo se llega desde aprobado: el cierre real del
+            // trámite sigue siendo la aprobación, por eso no entra aquí.
             CompletedAt = V1MapperShared.FirstTransitionTo(history, TramiteEstado.Aprobado, TramiteEstado.Anulado),
             RowVersion = 0,
             IsMigrated = true,
@@ -128,19 +137,160 @@ public static class RegistrationMapper
             actors.Add(titular);
         }
 
-        // Multipropietario: V1 lo guarda en vehicle_registration_master_actors, una tabla que hoy
-        // NO existe en la copia de producción (es de develop). Cuando llegue una copia fresca hay
-        // que decidir cómo se modela en V2, que espera un único adquirente por matrícula.
-        if (string.Equals(record.Column("has_multiple_owners"), "true", StringComparison.OrdinalIgnoreCase))
-        {
-            warnings.Add(
-                "El trámite está marcado como MULTIPROPIETARIO en V1 (has_multiple_owners). Solo se "
-                + "migró el titular principal: los copropietarios viven en "
-                + "vehicle_registration_master_actors y su modelo en V2 está pendiente de definir.");
-        }
+        MapCoOwners(record, context, instanceId, titular, actors, warnings);
 
         return actors;
     }
+
+    /// <summary>
+    /// Copropietarios (ADR-0053): V2 admite hasta <see cref="MaxActorsPerRole"/> personas por rol,
+    /// con <c>ordinal</c> (1 = titular principal) y <c>ownership_percentage</c>. V1 los guarda en
+    /// <c>vehicle_registration_master_actors</c>, repitiendo ahí al titular del master con
+    /// <c>is_solidarity_buyer = true</c> y su porcentaje (verificado en la copia de pdn del
+    /// 2026-09-14: 408 matrículas, todas con exactamente 2 filas y el titular incluido).
+    /// <para>
+    /// El titular sigue saliendo del master (es la fuente de verdad de la identidad); de su fila
+    /// en actors solo se toma el porcentaje. Los demás entran como <c>comprador</c> ordinal 2.. en
+    /// el orden de inserción de V1. Sus imágenes de identidad (<c>id_attach_*</c> por actor) NO se
+    /// migran en esta instancia: se avisa para que no pase por sorpresa.
+    /// </para>
+    /// </summary>
+    private static void MapCoOwners(
+        V1SourceRecord record,
+        MappingContext context,
+        Guid instanceId,
+        ProcedureInstanceActor? titular,
+        List<ProcedureInstanceActor> actors,
+        List<string> warnings)
+    {
+        var multiOwner = string.Equals(record.Column("has_multiple_owners"), "true", StringComparison.OrdinalIgnoreCase);
+        if (!multiOwner && record.CoOwners.Count == 0)
+        {
+            return;
+        }
+
+        if (record.CoOwners.Count == 0)
+        {
+            warnings.Add(
+                "El trámite está marcado como MULTIPROPIETARIO en V1 (has_multiple_owners) pero la copia "
+                + "de V1 no trae filas en vehicle_registration_master_actors: solo se migró el titular.");
+            return;
+        }
+
+        var titularDoc = NormalizeDocument(record.Column("vehicle_owner_document_number"));
+        var ordinal = 1;
+
+        foreach (var row in record.CoOwners)
+        {
+            string? Col(string name) => row.TryGetValue(name, out var v) ? v : null;
+
+            var documento = NormalizeDocument(Col("document_number"));
+            var esTitular = string.Equals(Col("is_solidarity_buyer"), "true", StringComparison.OrdinalIgnoreCase)
+                || (documento.Length > 0 && string.Equals(documento, titularDoc, StringComparison.Ordinal));
+
+            if (esTitular)
+            {
+                if (titular is not null)
+                {
+                    titular.OwnershipPercentage ??= V1MapperShared.ParseDecimal(Col("ownership_percentage"));
+                }
+
+                continue;
+            }
+
+            if (documento.Length == 0)
+            {
+                warnings.Add("Copropietario sin documento en V1: no se migra (V2 lo exige).");
+                continue;
+            }
+
+            ordinal++;
+            if (ordinal > MaxActorsPerRole)
+            {
+                warnings.Add(
+                    $"Copropietario '{documento}' descartado: V2 admite máximo {MaxActorsPerRole} personas por rol "
+                    + "(ck_procedure_instance_actors_ordinal). Queda en V1 para revisión manual.");
+                continue;
+            }
+
+            var rawDocumentType = Col("document_type");
+            var documentType = DocumentTypeMap.ToV2(rawDocumentType, out var unknownDocumentType);
+            if (unknownDocumentType)
+            {
+                warnings.Add(
+                    $"Copropietario '{documento}': tipo de documento '{rawDocumentType ?? "(vacío)"}' "
+                    + "no reconocido en V1; se asumió 'CC'.");
+            }
+
+            var metadata = new Dictionary<string, object>(StringComparer.Ordinal);
+            V1MapperShared.AddIfPresent(metadata, "ciudad", Col("city"));
+            V1MapperShared.AddIfPresent(metadata, "direccion", Col("address"));
+            V1MapperShared.AddIfPresent(metadata, "legacy_document_type", unknownDocumentType ? null : rawDocumentType);
+            V1MapperShared.AddIfPresent(metadata, "legacy_v1_actor_id", Col("id"));
+
+            var representanteDoc = Col("legal_representative_document_number");
+            if (!string.IsNullOrWhiteSpace(representanteDoc))
+            {
+                var representante = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["numeroDocumento"] = representanteDoc,
+                    ["tipoDocumento"] = DocumentTypeMap.ToV2(Col("legal_representative_document_type"), out _),
+                };
+                V1MapperShared.AddIfPresent(representante, "nombreCompleto", V1MapperShared.ComposeName(
+                    Col("legal_representative_name"),
+                    Col("legal_representative_first_last_name"),
+                    Col("legal_representative_second_last_name")));
+                V1MapperShared.AddIfPresent(representante, "email", Col("legal_representative_email"));
+                V1MapperShared.AddIfPresent(representante, "telefono", Col("legal_representative_phone"));
+                metadata["representanteLegal"] = representante;
+            }
+
+            var fullName = V1MapperShared.ComposeName(Col("name"), Col("first_last_name"), Col("second_last_name"));
+            if (fullName.Length == 0)
+            {
+                warnings.Add($"Copropietario '{documento}' sin nombre en V1.");
+            }
+
+            actors.Add(new ProcedureInstanceActor
+            {
+                Id = DeterministicGuid.ForV1Child(
+                    record.SourceTable, record.Id, $"actor:{ActorTitular}:{ordinal.ToString(CultureInfo.InvariantCulture)}"),
+                TenantId = context.TenantId,
+                ProcedureInstanceId = instanceId,
+                ProcedureEntityId = context.BuyerEntityId,
+                ActorType = ActorTitular,
+                Ordinal = ordinal,
+                OwnershipPercentage = V1MapperShared.ParseDecimal(Col("ownership_percentage")),
+                DocumentType = documentType,
+                DocumentNumber = V1MapperShared.Truncate(documento, 20),
+                FullName = V1MapperShared.Truncate(fullName, 200),
+                Email = Col("email"),
+                Phone = Col("phone"),
+                PersonType = string.Equals(documentType, "NIT", StringComparison.Ordinal)
+                    ? ActorPersonTypes.Juridical
+                    : ActorPersonTypes.Natural,
+                EsRepresentanteLegal = false,
+                Metadata = JsonSerializer.Serialize(metadata),
+                CreatedAt = V1MapperShared.ParseDate(Col("created_at"))
+                    ?? V1MapperShared.ParseDate(record.Column("created_at"))
+                    ?? DateTimeOffset.UtcNow,
+            });
+        }
+
+        var agregados = actors.Count(a => a.Ordinal > 1);
+        if (agregados > 0)
+        {
+            warnings.Add(
+                $"Matrícula MULTIPROPIETARIO: se migraron {agregados} copropietario(s) además del titular "
+                + "(ordinal y porcentaje de V1). Sus imágenes de identidad por actor no se migran.");
+        }
+    }
+
+    /// <summary>V2 admite hasta 4 personas por rol (ck_procedure_instance_actors_ordinal).</summary>
+    private const int MaxActorsPerRole = 4;
+
+    /// <summary>V1 guarda documentos con espacios (" 32143812"); sin esto el titular no se reconoce.</summary>
+    private static string NormalizeDocument(string? value) => (value ?? string.Empty).Trim();
 
     // ---------------------------------------------------------------- campos (EAV)
 
@@ -174,14 +324,30 @@ public static class RegistrationMapper
             });
         }
 
+        // El organismo resuelto contra el catálogo de V2 tiene prioridad sobre el texto de V1 (ver
+        // V1MapperShared.TransitOfficeFields): se calcula antes para que el bucle no escriba dos
+        // veces la misma clave (el id del field_value es determinístico por clave).
+        var transitOffice = V1MapperShared.TransitOfficeFields(record, context, warnings);
+        var overridden = transitOffice.Select(t => t.FieldKey).ToHashSet(StringComparer.Ordinal);
+
         foreach (var (column, fieldKey) in RegistrationFieldMap.FieldKeys)
         {
+            if (overridden.Contains(fieldKey))
+            {
+                continue;
+            }
+
             var value = record.Column(column);
             if (value is not null)
             {
                 value = DecodeFieldValue(fieldKey, value, warnings);
             }
 
+            Add(fieldKey, value);
+        }
+
+        foreach (var (fieldKey, value) in transitOffice)
+        {
             Add(fieldKey, value);
         }
 

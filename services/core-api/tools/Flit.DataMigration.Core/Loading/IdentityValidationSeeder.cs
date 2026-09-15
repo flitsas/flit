@@ -150,6 +150,9 @@ public sealed class IdentityValidationSeeder(V1ProcedureKind kind, FlitDbContext
                 // V1 no siempre tiene correo de la parte, y aquí no se envía nada: no hay enlace de
                 // captura que mandar. La columna es NOT NULL, así que va vacía antes que inventada.
                 Email = Truncar(subject.Email ?? string.Empty, 320),
+                // Bug #12376 — correo con el que nació el registro, inmutable. Mismo criterio que el
+                // backfill de la migración de esquema: igual al de envío, aunque aquí no se envíe nada.
+                RegisteredEmail = Truncar(subject.Email ?? string.Empty, 320),
                 Status = BiometricEstados.Aprobado,
                 Provider = BiometricProviders.MigracionV1,
                 // No hubo magic-link. El hash es determinístico sobre el origen para no chocar con el
