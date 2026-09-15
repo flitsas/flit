@@ -1055,6 +1055,39 @@ paths:
         "403": { description: No es cabeza de grupo (respuesta uniforme, sin revelar nada). }
         "404": { description: La red no tiene un dominio registrado. }
 
+  /api/v1/internal/domains/active:
+    get:
+      tags: [Internal]
+      operationId: internalActiveDomains
+      summary: >-
+        USO INTERNO (HU #12417) — dominios activos de cabezas MARCA_BLANCA, consumido por
+        Flit.Gateway para derivar CORS dinámico (ADR-0060 D2). YARP NO publica esta ruta;
+        el Gateway la llama directo (mismo proceso interno), nunca a través del proxy.
+      description: >
+        No forma parte de la superficie pública ni del contrato del frontend. Autenticado con la
+        cabecera X-Internal-Key (clave compartida Internal:ApiKey), no con JWT. Sin la clave
+        configurada o con una clave incorrecta responde 401 de forma uniforme.
+      security: []
+      parameters:
+        - name: X-Internal-Key
+          in: header
+          required: true
+          schema: { type: string }
+          description: Clave compartida servicio a servicio (Gateway → API).
+      responses:
+        "200":
+          description: Hosts activos (status=active) de cabezas MARCA_BLANCA.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hosts:
+                    type: array
+                    items: { type: string }
+                required: [hosts]
+        "401": { description: Clave interna ausente o incorrecta. }
+
   /api/v1/admin/companies/{tenantId}/whitelist:
     parameters:
       - name: tenantId

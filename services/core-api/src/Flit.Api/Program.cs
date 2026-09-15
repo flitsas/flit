@@ -4,6 +4,7 @@ using Flit.Analytics.Application;
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Analytics;
 using Flit.Api.Endpoints;
+using Flit.Api.Endpoints.Internal;
 using Flit.Api.Endpoints.Public;
 using Flit.Api.Endpoints.SuperAdmin;
 using Flit.Api.Endpoints.Tramites;
@@ -99,6 +100,12 @@ builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHa
 
 // HU #12345 — cabeza de grupo (AdminCompany + is_group_parent en BD).
 builder.Services.AddScoped<IAuthorizationHandler, GroupHeadCompanyAuthorizationHandler>();
+
+// HU #12417 (Feature #12368, ADR-0060 D2) — DomainContext por petición (DomainContextMiddleware
+// más abajo puebla HttpContext.Items; este accessor lo expone a Application sin acoplarla a HTTP).
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<Flit.Modules.Security.Application.Auth.IDomainContextAccessor,
+    Flit.Api.Authorization.HttpDomainContextAccessor>();
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
@@ -197,6 +204,11 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors(FrontendCorsPolicy);
 
+// HU #12417 (Feature #12368, ADR-0060 D2) — puebla DomainContext leyendo EXCLUSIVAMENTE el sello
+// X-Flit-Domain que fija Flit.Gateway. Va ANTES de auth: el login/recuperación (#12422) necesita
+// el dominio de la petición sin depender de un JWT (hoy sin validar — Bug diferido).
+app.UseMiddleware<Flit.Api.Middleware.DomainContextMiddleware>();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -234,6 +246,7 @@ app.MapAdminCompaniesBrandingEndpoints();
 app.MapCompanyBrandingEndpoints();
 app.MapAdminCompaniesDomainEndpoints();
 app.MapCompanyDomainEndpoints();
+app.MapInternalDomainsEndpoints();
 app.MapAdminCompanyChildrenEndpoints();
 app.MapAdminCompanyChildrenConfigEndpoints();
 app.MapAdminCompanyChildrenInvitationsEndpoints();
