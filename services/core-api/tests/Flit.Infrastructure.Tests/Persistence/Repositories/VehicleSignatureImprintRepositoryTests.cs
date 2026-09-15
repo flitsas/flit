@@ -100,6 +100,59 @@ public sealed class VehicleSignatureImprintRepositoryTests
     }
 
     [Fact]
+    public async Task ListByPlacaAsync_MatchesFieldValuesPlate_WhenProcedurePlateIsNull()
+    {
+        // Bug #12525: OT busca por placa del PDF (field_values) aunque Plate denormalizada sea null.
+        var dbName = Guid.NewGuid().ToString();
+        var imprintId = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+
+        await using (var seed = NewContext(dbName))
+        {
+            seed.ProcedureInstances.Add(new ProcedureInstance
+            {
+                Id = instanceId,
+                TenantId = TenantId,
+                ProcedureTypeId = Guid.NewGuid(),
+                ReferenceNumber = "FLIT-FV-PLATE",
+                Plate = null,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantId,
+                ProcedureInstanceId = instanceId,
+                FieldKey = "plate",
+                ValueText = "  abc123 ",
+            });
+            seed.VehicleSignatureImprints.Add(new VehicleSignatureImprint
+            {
+                Id = imprintId,
+                TenantId = TenantId,
+                ProcedureInstanceId = instanceId,
+                ModuleCode = "tramites",
+                PrivateKey = "pk",
+                PublicKey = "pub",
+                DocumentHash = "hash-fv",
+                Signature = "sig",
+                SignedAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(dbName);
+        var repo = new VehicleSignatureImprintRepository(ctx);
+
+        var rows = await repo.ListByPlacaAsync("ABC123", TestContext.Current.CancellationToken);
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(imprintId);
+        rows[0].Placa.Trim().ToUpperInvariant().Should().Be("ABC123");
+    }
+
+    [Fact]
     public async Task GetByIdAsync_IncludesSoftDeletedRow()
     {
         var dbName = Guid.NewGuid().ToString();

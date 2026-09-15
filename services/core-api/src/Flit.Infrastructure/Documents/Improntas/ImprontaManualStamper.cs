@@ -20,6 +20,8 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
     private static readonly XColor Blue = XColor.FromArgb(0x00, 0x55, 0xA5);
     private static readonly XColor LightGrey = XColor.FromArgb(0xB0, 0xB0, 0xB0);
     private static readonly Encoding Latin1 = Encoding.GetEncoding("ISO-8859-1");
+    // Colombia sin DST: UTC-5 fijo (paridad SignatureVaultPolicy / IdentidadSelloText).
+    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
     // 50% del tamaño FUR previo (field 48→24, ancho máx. 145→72.5).
     private const double SignatureFieldH = 24;
     private const double SignatureImageMaxWidth = 72.5;
@@ -28,6 +30,14 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
     private const double FooterLineH = 14;
     private const double BottomPad = 8;
     private const double GapAboveFooter = 4;
+
+    /// <summary>Sello vertical (EN-US legacy). Bug #12525: instante de firma en Colombia.</summary>
+    internal static string FormatSelloTiempoColombia(DateTimeOffset stampInstant) =>
+        stampInstant.ToOffset(ColombiaOffset).ToString("M/d/yyyy h:mm:ss tt");
+
+    /// <summary>Metadato de pie. Bug #12525: mismo instante de firma en Colombia (no TZ del host).</summary>
+    internal static string FormatFechaHoraOperacionColombia(DateTimeOffset stampInstant) =>
+        stampInstant.ToOffset(ColombiaOffset).ToString("dd-MM-yyyy HH:mm:ss");
 
     public bool AlreadyStamped(byte[] pdf)
     {
@@ -80,7 +90,7 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
             return new ImprontaManualStampResult(pdf, Applied: false);
 
         var page = document.Pages[document.PageCount - 1];
-        DrawAllZones(page, context, hashImpronta, crypto.SignatureBase64, documentHash);
+        DrawAllZones(page, context, hashImpronta, crypto.SignatureBase64, documentHash, signedAt);
 
         using var ms = new MemoryStream();
         document.Save(ms, false);
@@ -111,7 +121,8 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         ImprontaManualStampContext context,
         string hashImpronta,
         string firmaDigital,
-        string documentHash)
+        string documentHash,
+        DateTimeOffset stampInstant)
     {
         using var gfx = XGraphics.FromPdfPage(page, XGraphicsPdfPageOptions.Append);
         var titleFont = new XFont("Arial", 8, XFontStyle.Bold);
@@ -127,7 +138,8 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
             new XRect(24, 10, page.Width - 48, 14),
             XStringFormats.TopLeft);
 
-        var stampTime = context.FechaCargue.ToLocalTime().ToString("M/d/yyyy h:mm:ss tt");
+        // Bug #12525: instante de firma en Colombia, no FechaCargue.ToLocalTime() del host.
+        var stampTime = FormatSelloTiempoColombia(stampInstant);
         DrawVerticalText(gfx, $"Sello de tiempo: {stampTime}", metaFont, blueBrush, page.Width - 18, page.Height - 40);
 
         var signers = context.Signers.Count == 0
@@ -159,7 +171,7 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         {
             var (colX, colW) = cols[i];
             DrawSignerColumn(
-                gfx, signers[i], context, hashImpronta,
+                gfx, signers[i], context, hashImpronta, stampInstant,
                 colX, topY, colW, fourActor, compactLayout, sigFieldH,
                 signerIndex: i, signers.Count, metaFont, greyBrush);
         }
@@ -171,7 +183,7 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
             DrawOwnerHashesVertical(
                 gfx, signers, 24, ref cursor, leftWidth - 24, metaFont, greyBrush);
             DrawSharedMetadata(
-                gfx, context, hashImpronta, 24, cursor, leftWidth - 24, metaFont, greyBrush);
+                gfx, context, hashImpronta, stampInstant, 24, cursor, leftWidth - 24, metaFont, greyBrush);
         }
 
         // Zona 3 — título azul; cuerpo Base64 RSA (legacy wrap 50).
@@ -246,6 +258,7 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         ImprontaManualSigner signer,
         ImprontaManualStampContext context,
         string hashImpronta,
+        DateTimeOffset stampInstant,
         double x,
         double y,
         double width,
@@ -271,7 +284,7 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         var hashWrap = Math.Max(compactLayout ? 32 : 48, (int)(width / 3.2));
         var hashLabel = FormatOwnerHashLabel(signerIndex, totalSigners, signer.HashPropietario);
         DrawWrappedLines(gfx, metaFont, greyBrush, x, ref cursor, hashLabel, hashWrap);
-        DrawSharedMetadata(gfx, context, hashImpronta, x, cursor, width, metaFont, greyBrush);
+        DrawSharedMetadata(gfx, context, hashImpronta, stampInstant, x, cursor, width, metaFont, greyBrush);
     }
 
     private static void DrawOwnerHashesVertical(
@@ -295,6 +308,7 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         XGraphics gfx,
         ImprontaManualStampContext context,
         string hashImpronta,
+        DateTimeOffset stampInstant,
         double x,
         double y,
         double width,
@@ -302,7 +316,7 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         XBrush greyBrush)
     {
         var cursor = y;
-        var fecha = context.FechaCargue.ToLocalTime().ToString("dd-MM-yyyy HH:mm:ss");
+        var fecha = FormatFechaHoraOperacionColombia(stampInstant);
         var hashWrap = Math.Max(48, (int)(width / 3.2));
         var metaWrap = Math.Max(28, (int)(width / 4.2));
         DrawWrappedLines(gfx, metaFont, greyBrush, x, ref cursor,

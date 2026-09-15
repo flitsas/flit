@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   exportNetworkDetailedReport: vi.fn(),
   fetchCompaniesIndex: vi.fn(),
   fetchCompanyChildren: vi.fn(),
+  fetchNetworkChildren: vi.fn(),
   listTenantBiometricValidations: vi.fn(),
   listPublishedProcedureTypes: vi.fn(),
   listTransitOffices: vi.fn(),
@@ -88,6 +89,17 @@ vi.mock("@/lib/api/tramites-client", () => ({
     listPublishedProcedureTypes: mocks.listPublishedProcedureTypes,
     listTransitOffices: mocks.listTransitOffices,
   },
+  fetchNetworkChildren: mocks.fetchNetworkChildren,
+  TramitesApiError: class TramitesApiError extends Error {
+    status: number;
+    problem: Record<string, unknown> | null;
+    constructor(status: number, message: string, problem: Record<string, unknown> | null = null) {
+      super(message);
+      this.name = "TramitesApiError";
+      this.status = status;
+      this.problem = problem;
+    }
+  },
 }));
 vi.mock("@/lib/api/ui-preferences", () => ({
   uiPreferencesClient: { get: mocks.prefsGet, put: mocks.prefsPut },
@@ -127,9 +139,10 @@ function permisos(over: Record<string, unknown> = {}) {
   };
 }
 
+// HU #12555/#12556 — el endpoint no-admin (`/api/v1/tramites/network/children`) ya entrega id+nombre.
 const HIJOS = [
-  { id: HIJO, nit: "1", razonSocial: "Concesionario Hijo SAS", code: "H1", tenantType: "B2B", estadoActivo: true, fechaVinculacion: "2026-01-01", rowVersion: 1 },
-  { id: HIJO_2, nit: "2", razonSocial: "Agencia Norte SAS", code: "H2", tenantType: "B2B", estadoActivo: true, fechaVinculacion: "2026-01-01", rowVersion: 1 },
+  { id: HIJO, nombre: "Concesionario Hijo SAS" },
+  { id: HIJO_2, nombre: "Agencia Norte SAS" },
 ];
 
 const OVERVIEW: AnalyticsOverviewResponse = {
@@ -177,7 +190,7 @@ const PAGINA_RED: NetworkDetailedReportPage = {
 function cabeza(scope: unknown = { mode: "network" }) {
   mocks.usePermissions.mockReturnValue(permisos({ isGroupParent: true }));
   mocks.prefsGet.mockResolvedValue({ value: scope });
-  mocks.fetchCompanyChildren.mockResolvedValue(HIJOS);
+  mocks.fetchNetworkChildren.mockResolvedValue(HIJOS);
 }
 
 function sinJerarquia() {
@@ -385,7 +398,7 @@ describe("HU #12364 AC4 — un cliente sin jerarquía no percibe cambios", () =>
     expect(mocks.fetchNetworkAnalyticsOverview).not.toHaveBeenCalled();
     expect(mocks.fetchNetworkMonthlyTrend).not.toHaveBeenCalled();
     expect(mocks.prefsGet).not.toHaveBeenCalled();
-    expect(mocks.fetchCompanyChildren).not.toHaveBeenCalled();
+    expect(mocks.fetchNetworkChildren).not.toHaveBeenCalled();
     expect(screen.queryByLabelText(ETIQUETA_ALCANCE)).not.toBeInTheDocument();
     expect(screen.queryByTestId("kpi-red-Total Trámites")).not.toBeInTheDocument();
   });

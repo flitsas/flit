@@ -256,6 +256,161 @@ public sealed class TenantResolutionArchitectureTests : IClassFixture<WebApplica
             "la cobertura de la red es UNA entrada Prefix, no una por ruta");
     }
 
+    // ── Bug #12554 — toda ruta de gestión avanzada (/api/v1/admin/tramites) está declarada ──────
+
+    /// <summary>Prefijo de gestión avanzada del admin sobre trámites (Feature #12155), FUERA de
+    /// <see cref="TenantEnforcementMiddleware.RuntimeRoutePrefix"/> — por eso <see
+    /// cref="AC3_TodaRutaRegistradaBajoTramitesEstaCubiertaPorLaDeclaracionDelMiddleware"/> nunca lo
+    /// vio: <see cref="RegisteredTramitesRoutes"/> solo barre lo que empieza por
+    /// <c>/api/v1/tramites</c>. Este test barre TODOS los endpoints registrados (sin ese filtro) y
+    /// exige que los de <c>/api/v1/admin/tramites</c> también estén en
+    /// <see cref="TenantEnforcementMiddleware.RuntimeScopedRoutes"/>.</summary>
+    private const string AdminTramitesRoutePrefix = "/api/v1/admin/tramites";
+
+    [Fact]
+    public void AC8_TodaRutaAdminTramitesEstaCubiertaPorRuntimeScopedRoutes()
+    {
+        var adminRoutes = _factory.Services.GetServices<EndpointDataSource>()
+            .SelectMany(ds => ds.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Select(e => e.RoutePattern.RawText)
+            .Where(raw => raw is not null && ("/" + raw.TrimStart('/')).StartsWith(AdminTramitesRoutePrefix, StringComparison.OrdinalIgnoreCase))
+            .Select(raw => "/" + raw!.TrimStart('/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(r => r, StringComparer.Ordinal)
+            .ToList();
+
+        adminRoutes.Should().NotBeEmpty($"deben existir endpoints registrados bajo {AdminTramitesRoutePrefix} (Bug #12554)");
+
+        var uncovered = adminRoutes.Where(route => !IsCoveredByMiddleware(route)).ToList();
+        uncovered.Should().BeEmpty(
+            "toda ruta bajo /api/v1/admin/tramites debe estar en TenantEnforcementMiddleware.RuntimeScopedRoutes (Bug #12554): "
+            + "sin esto, el endpoint confía en el X-Tenant-Id crudo del cliente en vez del tenant del JWT. Rutas sin declarar: {0}",
+            string.Join(", ", uncovered));
+
+        TenantEnforcementMiddleware.RuntimeScopedRoutes.Should().Contain(
+            r => r.Path.Equals(AdminTramitesRoutePrefix, StringComparison.OrdinalIgnoreCase) && r.Match == TenantEnforcementMiddleware.RouteMatch.Prefix,
+            "la cobertura de gestión avanzada es UNA entrada Prefix, no una por ruta (Bug #12554)");
+    }
+
+    // ── Bug #12558 — toda ruta que lea [FromHeader(Name = "X-Tenant-Id")] está declarada ───────
+
+    /// <summary>
+    /// Rutas que leen el header <c>X-Tenant-Id</c> vía <c>[FromHeader]</c> pero NO están cubiertas por
+    /// <see cref="TenantEnforcementMiddleware.RuntimeScopedRoutes"/> por una razón documentada (no un
+    /// olvido). Cada entrada nueva aquí es una decisión explícita — igual que <see cref="NotTenantScopedRoutes"/>.
+    /// </summary>
+    private static readonly string[] HeaderReadingRoutesExcludedFromCoverage =
+    [
+        // Endpoints/Tramites/PublicProcedureTypeEndpoints.cs:28-40 — GET /api/v1/procedure-types exige
+        // X-Tenant-Id PRESENTE (400 si falta) pero es un catálogo GLOBAL (comentario "AC-04" del propio
+        // endpoint): el valor del tenant NUNCA se usa para filtrar resultados, solo se valida que venga.
+        // No hay dato de ninguna compañía que fugar; agregarlo al middleware no cambiaría el
+        // comportamiento del endpoint. Por diseño — no es el bug de esta HU.
+        "/api/v1/procedure-types",
+        // HALLAZGO (Bug #12558, fuera de alcance) — Endpoints/Tramites/OcrEndpoints.cs y
+        // PreflightEndpoints.cs: estas 3 rutas YA estaban congeladas como deuda en
+        // LegacyUncoveredRoutes (AC3, HU #10478/#12034: "proveedor de consulta del tenant" / OCR del
+        // paso 1, ambas con el tenant del header crudo). Mismo patrón de fondo que este bug, pero es
+        // deuda PRE-EXISTENTE y documentada, no algo que esta HU introduce. // TODO Bug pendiente:
+        // cubrir con RuntimeScopedRoutes cuando se aborde HU #10478/#12034.
+        "/api/v1/tramites/ocr/{tipo}",
+        "/api/v1/tramites/ocr/lote",
+        "/api/v1/tramites/consultation-config",
+    ];
+
+    private static readonly Regex FromHeaderTenantIdPattern = new(
+        @"\[FromHeader\(Name\s*=\s*""X-Tenant-Id""\)\]",
+        RegexOptions.Compiled);
+
+    private static readonly Regex MapGroupLiteralPattern = new(
+        @"\bMapGroup\(\s*""([^""]+)""",
+        RegexOptions.Compiled);
+
+    private static readonly Regex MapVerbLiteralPattern = new(
+        @"\b(?:app|group)\.Map(?:Get|Post|Put|Patch|Delete)\(\s*""([^""]*)""",
+        RegexOptions.Compiled);
+
+    /// <summary>Referencia a un handler nombrado: <c>group.MapGet("/{scope}", GetAsync)</c> — el
+    /// segundo argumento es un identificador simple, no una lambda inline.</summary>
+    private static readonly Regex NamedHandlerCalleePattern = new(
+        @",\s*([A-Za-z_]\w*)\s*\)",
+        RegexOptions.Compiled);
+
+    [Fact]
+    public void AC9_TodaRutaQueLeeXTenantIdEstaCubiertaPorRuntimeScopedRoutes()
+    {
+        var apiDir = LocateFlitApiSourceDirectory();
+        var files = Directory.EnumerateFiles(apiDir, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .ToList();
+
+        var candidateRoutes = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var file in files)
+        {
+            var content = File.ReadAllText(file);
+            if (!FromHeaderTenantIdPattern.IsMatch(content))
+                continue;
+
+            // A lo sumo un MapGroup relevante por archivo de endpoints (patrón del repo: `var group =
+            // app.MapGroup("/prefijo")...` una sola vez, antes de cualquier Map* que lo use).
+            var groupMatch = MapGroupLiteralPattern.Match(content);
+            var groupPrefix = groupMatch.Success && groupMatch.Groups[1].Value.StartsWith('/')
+                ? groupMatch.Groups[1].Value.TrimEnd('/')
+                : string.Empty;
+
+            var verbMatches = MapVerbLiteralPattern.Matches(content).Cast<Match>().ToList();
+            for (var i = 0; i < verbMatches.Count; i++)
+            {
+                var suffix = verbMatches[i].Groups[1].Value;
+                var combinedRoute = groupPrefix.Length > 0 && !suffix.StartsWith("/api", StringComparison.Ordinal)
+                    ? groupPrefix + suffix
+                    : suffix;
+
+                var start = verbMatches[i].Index;
+                var end = i + 1 < verbMatches.Count ? verbMatches[i + 1].Index : content.Length;
+                var segment = content[start..end];
+
+                if (FromHeaderTenantIdPattern.IsMatch(segment))
+                {
+                    // Lambda inline: la lectura del header está en el propio bloque de esta ruta.
+                    candidateRoutes.Add(combinedRoute);
+                    continue;
+                }
+
+                // Handler nombrado (p.ej. group.MapGet("/{scope}", GetAsync)): la lectura puede vivir en
+                // un método aparte del archivo — se localiza su firma y se revisa AHÍ.
+                var callee = NamedHandlerCalleePattern.Match(segment);
+                if (!callee.Success)
+                    continue;
+
+                var methodName = callee.Groups[1].Value;
+                var declPattern = new Regex(
+                    $@"static\s+async\s+Task<IResult>\s+{Regex.Escape(methodName)}\s*\(([\s\S]*?)\)\s*\r?\n\s*\{{",
+                    RegexOptions.Compiled);
+                var decl = declPattern.Match(content);
+                if (decl.Success && FromHeaderTenantIdPattern.IsMatch(decl.Value))
+                    candidateRoutes.Add(combinedRoute);
+            }
+        }
+
+        candidateRoutes.Should().NotBeEmpty(
+            "debe existir al menos un endpoint que lea [FromHeader(Name = \"X-Tenant-Id\")] en Flit.Api");
+
+        var uncovered = candidateRoutes
+            .Where(route => !IsCoveredByMiddleware(route)
+                && !HeaderReadingRoutesExcludedFromCoverage.Contains(route, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        uncovered.Should().BeEmpty(
+            "toda ruta que lea [FromHeader(Name = \"X-Tenant-Id\")] debe estar en "
+            + "TenantEnforcementMiddleware.RuntimeScopedRoutes o declararse explícitamente en "
+            + "HeaderReadingRoutesExcludedFromCoverage (Bug #12558). Rutas sin declarar: {0}",
+            string.Join(", ", uncovered));
+    }
+
     private List<string> RegisteredTramitesRoutes()
     {
         var prefix = TenantEnforcementMiddleware.RuntimeRoutePrefix;

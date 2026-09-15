@@ -198,6 +198,24 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // el que se radicaba, y ese tenant sale del JWT (el SuperAdmin acota con X-Tenant-Id). Prefix
         // para cubrir también GET /current.
         new("/api/v1/tramites/terms-acceptances", RouteMatch.Prefix),
+        // Bug #12554 — gestión avanzada del admin sobre trámites (Feature #12155: cambiar estado,
+        // anular, reasignar gestor, reenviar validación de identidad, limpiar/cargar consolidado y el
+        // selector de gestores disponibles): los 6 endpoints leían [FromHeader(Name = "X-Tenant-Id")]
+        // SIN pasar por este middleware (prefijo /api/v1/admin/tramites, fuera de RuntimeRoutePrefix),
+        // así que un usuario NO-SuperAdmin con el permiso RBAC de la acción pero SIN jerarquía (alcance
+        // Single — TenantWriteGuard solo protege cabezas de grupo, HU #12358) podía mandar el
+        // X-Tenant-Id de OTRA compañía y operar sobre su trámite. Prefix para cubrir también
+        // /gestores-disponibles.
+        new("/api/v1/admin/tramites", RouteMatch.Prefix),
+        // Bug #12558 — GET/PUT /api/v1/me/ui-preferences/{scope} leían [FromHeader(Name = "X-Tenant-Id")]
+        // SIN pasar por este middleware (prefijo fuera de RuntimeRoutePrefix, igual que el caso de
+        // /api/v1/admin/tramites arriba): cualquier usuario autenticado NO-SuperAdmin podía mandar el
+        // X-Tenant-Id de OTRA compañía y leer/sobrescribir la preferencia de UI guardada bajo ese tenant
+        // ajeno. El user_id ya salía del JWT (correcto); solo el tenant confiaba en el header crudo. Los
+        // endpoints NO cambiaron: siguen leyendo [FromHeader] — este middleware sobrescribe el propio
+        // header del request con el tenant del JWT para cualquier caller NO-SuperAdmin (línea de abajo),
+        // así que el binding del endpoint ve el valor correcto sin tocar el handler.
+        new("/api/v1/me/ui-preferences", RouteMatch.Prefix),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

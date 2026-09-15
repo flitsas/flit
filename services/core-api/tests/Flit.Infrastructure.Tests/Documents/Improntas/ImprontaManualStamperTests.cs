@@ -198,6 +198,60 @@ public sealed class ImprontaManualStamperTests
     }
 
     [Fact]
+    public void FormatSelloTiempoColombia_UsesFixedUtcMinus5_NotHostLocal()
+    {
+        // 2026-09-14 20:00 UTC → 15:00 Colombia.
+        var stampUtc = new DateTimeOffset(2026, 9, 14, 20, 0, 0, TimeSpan.Zero);
+
+        ImprontaManualStamper.FormatSelloTiempoColombia(stampUtc)
+            .Should().Be("9/14/2026 3:00:00 PM");
+        ImprontaManualStamper.FormatFechaHoraOperacionColombia(stampUtc)
+            .Should().Be("14-09-2026 15:00:00");
+    }
+
+    [Fact]
+    public void FormatSelloTiempoColombia_IgnoresUploadTimeSemantics_UsesStampInstant()
+    {
+        // Bug #12525: FechaCargue antigua no debe gobernar el sello; el formateo usa el instante de firma.
+        var oldUpload = new DateTimeOffset(2026, 9, 1, 8, 0, 0, TimeSpan.FromHours(-5));
+        var stampNow = new DateTimeOffset(2026, 9, 14, 17, 30, 45, TimeSpan.Zero);
+
+        var sello = ImprontaManualStamper.FormatSelloTiempoColombia(stampNow);
+        var cargue = ImprontaManualStamper.FormatFechaHoraOperacionColombia(stampNow);
+
+        sello.Should().Be("9/14/2026 12:30:45 PM");
+        cargue.Should().Be("14-09-2026 12:30:45");
+        sello.Should().NotContain("9/1/2026");
+        cargue.Should().NotContain("01-09-2026");
+        _ = oldUpload; // documenta el contraste con el bug (upload ≠ stamp)
+    }
+
+    [Fact]
+    public void Stamp_SignedAt_IsReturnedAndMatchesColombiaFormatHelpers()
+    {
+        var oldUpload = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.FromHours(-5));
+        var ctx = new ImprontaManualStampContext(
+            ReferenceNumber: "FLIT-0234659",
+            Placa: "POV420",
+            Vin: "9BGEA76C0SB252602",
+            NumMotor: "L4H250865053",
+            NumChasis: "9BGEA76C0SB252602",
+            FechaCargue: oldUpload,
+            Signers: [new ImprontaManualSigner("DANIEL", "h", null)]);
+
+        var before = DateTimeOffset.UtcNow;
+        var result = _sut.Stamp(MinimalPdf(), ctx);
+        var after = DateTimeOffset.UtcNow;
+
+        result.Applied.Should().BeTrue();
+        result.SignedAt.Should().NotBeNull();
+        result.SignedAt!.Value.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
+        // El formateo Colombia del SignedAt no puede coincidir con el upload antiguo.
+        ImprontaManualStamper.FormatFechaHoraOperacionColombia(result.SignedAt.Value)
+            .Should().NotBe(ImprontaManualStamper.FormatFechaHoraOperacionColombia(oldUpload));
+    }
+
+    [Fact]
     public void BuildFirmaDigital_IsRsa2048Base64LikeLegacy()
     {
         var hash = Convert.ToHexString(SHA256.HashData("doc"u8.ToArray())).ToLowerInvariant();
