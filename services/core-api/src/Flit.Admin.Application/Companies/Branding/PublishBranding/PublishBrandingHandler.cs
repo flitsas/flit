@@ -8,10 +8,14 @@ namespace Flit.Admin.Application.Companies.Branding.PublishBranding;
 /// nunca bloquea (validador permisivo), así que <see cref="PublishBrandingOutcome.Incomplete"/> queda
 /// cableado pero inalcanzable hasta que #12413 registre la implementación real.
 /// </summary>
-public sealed class PublishBrandingHandler(ITenantBrandingRepository repository, IBrandAssetValidator validator)
+public sealed class PublishBrandingHandler(
+    ITenantBrandingRepository repository,
+    IBrandAssetValidator validator,
+    IBrandingCacheInvalidator? cacheInvalidator = null)
 {
     private readonly ITenantBrandingRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     private readonly IBrandAssetValidator _validator = validator ?? throw new ArgumentNullException(nameof(validator));
+    private readonly IBrandingCacheInvalidator _cacheInvalidator = cacheInvalidator ?? NullBrandingCacheInvalidator.Instance;
 
     public async Task<PublishBrandingResult> HandleAsync(
         PublishBrandingCommand command,
@@ -41,6 +45,10 @@ public sealed class PublishBrandingHandler(ITenantBrandingRepository repository,
         var updated = await _repository
             .PublishAsync(command.TenantId, command.ChangedBy, cancellationToken)
             .ConfigureAwait(false);
+
+        // HU #12418 AC7 — la marca nueva debe verse en /public/branding y /me/branding sin esperar
+        // los 60 s de la caché de resolución.
+        _cacheInvalidator.InvalidateTenant(command.TenantId);
 
         return PublishBrandingResult.Success(updated);
     }

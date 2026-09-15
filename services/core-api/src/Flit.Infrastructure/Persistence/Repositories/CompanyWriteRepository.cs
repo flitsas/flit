@@ -33,11 +33,17 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
 
     private readonly FlitDbContext _context;
     private readonly IAuditContextAccessor _auditContext;
+    private readonly Flit.Admin.Application.Companies.Branding.IBrandingCacheInvalidator _brandingCacheInvalidator;
 
-    public CompanyWriteRepository(FlitDbContext context, IAuditContextAccessor? auditContext = null)
+    public CompanyWriteRepository(
+        FlitDbContext context,
+        IAuditContextAccessor? auditContext = null,
+        Flit.Admin.Application.Companies.Branding.IBrandingCacheInvalidator? brandingCacheInvalidator = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _auditContext = auditContext ?? NullAuditContextAccessor.Instance;
+        _brandingCacheInvalidator = brandingCacheInvalidator
+            ?? Flit.Admin.Application.Companies.Branding.NullBrandingCacheInvalidator.Instance;
     }
 
     public Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default) =>
@@ -153,6 +159,7 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
         {
             var now = DateTimeOffset.UtcNow;
             var previousType = entity.TenantType;
+            var previousActive = entity.IsActive;
 
             entity.LegalName = legalName;
             entity.TaxId = taxId;
@@ -202,6 +209,18 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
             // proyección devuelva la versión nueva (si no, una edición posterior del mismo
             // cliente daría un 409 falso al reenviar la versión vieja).
             await _context.Entry(entity).ReloadAsync(cancellationToken).ConfigureAwait(false);
+
+            // HU #12418 AC7 — apagar (o encender) la clase MARCA_BLANCA, o (des)activar la cabeza,
+            // debe invalidar la marca resuelta en /public/branding y /me/branding en el mismo plazo
+            // que publicar/retirar.
+            var tenantTypeChangedToOrFromMarcaBlanca = !string.Equals(previousType, tenantType, StringComparison.Ordinal)
+                && (previousType == CompanyTenantTypes.MarcaBlanca || tenantType == CompanyTenantTypes.MarcaBlanca);
+            var wasMarcaBlancaAndActiveFlagChanged = tenantType == CompanyTenantTypes.MarcaBlanca
+                && previousActive != isActive;
+            if (tenantTypeChangedToOrFromMarcaBlanca || wasMarcaBlancaAndActiveFlagChanged)
+            {
+                _brandingCacheInvalidator.InvalidateTenant(entity.Id);
+            }
         }
 
         return await ProjectAsync(entity, cancellationToken: cancellationToken).ConfigureAwait(false);

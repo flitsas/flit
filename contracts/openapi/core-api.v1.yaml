@@ -975,6 +975,86 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  /api/v1/public/branding:
+    get:
+      tags: [Público · Identidad de marca]
+      operationId: publicBrandingGet
+      summary: Identidad de marca del dominio de entrada, antes de sesión (HU #12418 AC1-AC3, AC6-AC9)
+      description: >-
+        El dominio SIEMPRE sale del sello X-Flit-Domain que fija Flit.Gateway (ADR-0060 D2), nunca de
+        un parámetro o cabecera del cliente. SIEMPRE 200: dominio de FLIT, desconocido, pendiente,
+        cabeza inactiva, marca sin publicar o cualquier fallo de BD/storage responden la MISMA forma
+        (BrandIdentityResponse de respaldo, version 0) — indistinguibles entre sí (AC2/AC3).
+      security: []
+      responses:
+        "200":
+          description: Identidad de marca publicada del dominio, o la identidad de FLIT de respaldo.
+          headers:
+            Cache-Control: { schema: { type: string, example: "public, max-age=60" } }
+            Vary: { schema: { type: string, example: "X-Flit-Domain" } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BrandIdentityResponse" }
+        "429":
+          description: Límite de tasa por IP excedido (policy public-branding). Sin cuerpo informativo.
+
+  /api/v1/public/branding/logos/{logoId}:
+    parameters:
+      - name: logoId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Id opaco de la versión del logotipo (admin.tenant_brand_logos.id) — no es un id de compañía.
+    get:
+      tags: [Público · Identidad de marca]
+      operationId: publicBrandLogoGet
+      summary: Logotipo de marca por versión, URL inmutable (HU #12418 AC4)
+      description: >-
+        Se sirve si la fila existe, no está borrada y su tenant sigue MARCA_BLANCA (las versiones
+        superseded también: la URL es inmutable). Publicar una versión nueva cambia logoId ⇒ cambia
+        la URL, así la caché anterior nunca se reutiliza.
+      security: []
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Binario del logotipo.
+          headers:
+            Cache-Control: { schema: { type: string, example: "public, max-age=31536000, immutable" } }
+            ETag: { schema: { type: string } }
+            X-Content-Type-Options: { schema: { type: string, example: "nosniff" } }
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "304": { description: If-None-Match coincide con el ETag actual. }
+        "404": { description: Id inexistente, borrado o de una cabeza que dejó de ser MARCA_BLANCA (indistinguibles). }
+        "429":
+          description: Límite de tasa por IP excedido (policy public-branding). Sin cuerpo informativo.
+
+  /api/v1/me/branding:
+    get:
+      tags: [Sesión · Identidad de marca]
+      operationId: meBrandingGet
+      summary: Identidad de marca heredada por el usuario autenticado (HU #12418 AC5/AC6)
+      description: >-
+        Sin parámetros de tenant: sale SIEMPRE de RequestTenantResolver (JWT). Cabeza MARCA_BLANCA
+        activa ⇒ su marca; hija de una cabeza MARCA_BLANCA activa (parent_tenant_id, nunca el token)
+        ⇒ la marca de su cabeza; Concesión, hija de Concesión, sin red, SuperAdmin o cabeza sin
+        publicar ⇒ identidad de FLIT.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Identidad de marca heredada, o la identidad de FLIT.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BrandIdentityResponse" }
+        "401": { description: No autenticado. }
+
   /api/v1/admin/companies/{tenantId}/domain:
     parameters:
       - name: tenantId
@@ -9842,6 +9922,21 @@ components:
         sizeBytes: { type: integer, format: int64 }
         sha256: { type: string }
         logoUrl: { type: string }
+
+    # ── Público/sesión · Identidad de marca (HU #12418, Feature #12366, ADR-0060 D2) ───────────
+    # PROHIBIDO agregar tenantId, NIT, correo, razón social, lista de hijos o isDefault/isNetwork
+    # (AC3): un dominio desconocido y uno configurado deben ser indistinguibles en este contrato.
+    BrandIdentityResponse:
+      type: object
+      required: [platformName, colors, version]
+      properties:
+        platformName: { type: string }
+        logoUrl:
+          type: string
+          nullable: true
+          description: Ruta pública por versión (/api/v1/public/branding/logos/{logoId}), o null (identidad FLIT).
+        colors: { $ref: "#/components/schemas/BrandColors" }
+        version: { type: integer, description: "0 = identidad FLIT de respaldo." }
 
     # ── Admin · Dominio dedicado de la red (HU #12416, Feature #12368, ADR-0060) ───────────────
     RegisterDomainRequest:

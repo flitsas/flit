@@ -242,6 +242,11 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // HU #12416 (Feature #12368, ADR-0060 D1) — autogestión de dominio por la cabeza de grupo
         // (solo lectura, AC7): mismo motivo que /company/branding arriba.
         new("/api/v1/company/domain", RouteMatch.Prefix),
+        // HU #12418 (Feature #12366, ADR-0060 D2) — herencia de marca YA autenticado: el tenant
+        // SIEMPRE sale de RequestTenantResolver/JWT dentro del propio handler (no de X-Tenant-Id),
+        // igual que /api/v1/company/branding; se declara aquí para que la enumeración de rutas de la
+        // épica Marca Blanca la reconozca como tenant-scoped. Exact: sin rutas hijas.
+        new("/api/v1/me/branding", RouteMatch.Exact),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

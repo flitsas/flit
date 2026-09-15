@@ -305,6 +305,11 @@ public sealed class RequestTenantResolverTests
     [InlineData("/api/v1/tramites/instancesx", false)]
     [InlineData("/api/v1/admin/companies", false)]
     [InlineData("/api/v1/public/tramites/instances", false)]
+    // HU #12418 — /me/branding es Exact (tolera barra final, no sufijos ni hijas).
+    [InlineData("/api/v1/me/branding", true)]
+    [InlineData("/api/v1/me/branding/", true)]
+    [InlineData("/api/v1/me/brandingx", false)]
+    [InlineData("/api/v1/me/branding/otra", false)]
     public void IsRuntimeScoped_MatchingIdenticoAlHistorico(string path, bool expected)
     {
         TenantEnforcementMiddleware.IsRuntimeScoped(new PathString(path)).Should().Be(expected);
@@ -347,15 +352,20 @@ public sealed class RequestTenantResolverTests
             // HU #12416 (Feature #12368, ADR-0060 D1) — autogestión (solo lectura) de dominio de la
             // cabeza, FUERA de /api/v1/tramites. Mismo motivo que /api/v1/company/branding arriba.
             ("/api/v1/company/domain", TenantEnforcementMiddleware.RouteMatch.Prefix),
+            // HU #12418 (Feature #12366, ADR-0060 D2) — herencia de marca ya autenticado, FUERA de
+            // /api/v1/tramites. Mismo motivo que /api/v1/company/branding arriba.
+            ("/api/v1/me/branding", TenantEnforcementMiddleware.RouteMatch.Exact),
         });
         routes.Should().OnlyContain(r =>
             r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal)
             || r.Path == "/api/v1/admin/tramites"
             || r.Path == "/api/v1/me/ui-preferences"
             || r.Path == "/api/v1/company/branding"
-            || r.Path == "/api/v1/company/domain",
+            || r.Path == "/api/v1/company/domain"
+            || r.Path == "/api/v1/me/branding",
             "las únicas excepciones fuera de /api/v1/tramites son gestión avanzada (Bug #12554), "
-            + "preferencias de UI (Bug #12558), autogestión de marca (HU #12412) y autogestión de "
-            + "dominio (HU #12416) — cualquier prefijo nuevo fuera de estos casos debe declararse aquí explícitamente");
+            + "preferencias de UI (Bug #12558), autogestión de marca (HU #12412), autogestión de "
+            + "dominio (HU #12416) y herencia de marca de sesión (HU #12418) — cualquier prefijo "
+            + "nuevo fuera de estos casos debe declararse aquí explícitamente");
     }
 }

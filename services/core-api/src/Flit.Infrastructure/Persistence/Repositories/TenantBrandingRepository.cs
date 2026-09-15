@@ -254,6 +254,18 @@ internal sealed class TenantBrandingRepository : ITenantBrandingRepository
         return entity is null ? null : MapLogo(entity);
     }
 
+    public async Task<TenantBrandLogoVersion?> GetLogoVersionByIdAsync(
+        Guid logoId,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.TenantBrandLogos
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == logoId && x.DeletedAt == null, cancellationToken)
+            .ConfigureAwait(false);
+
+        return entity is null ? null : MapLogo(entity);
+    }
+
     private void AddAudit(
         Guid tenantId,
         string entityName,

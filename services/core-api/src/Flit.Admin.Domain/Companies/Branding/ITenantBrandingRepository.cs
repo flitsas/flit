@@ -53,4 +53,13 @@ public interface ITenantBrandingRepository
         Guid tenantId,
         Guid logoId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #12418 AC4 — búsqueda SOLO por <paramref name="logoId"/> (uuidv7 opaco), sin tenant: el
+    /// endpoint público <c>GET /public/branding/logos/{logoId}</c> no conoce el tenant de antemano.
+    /// Incluye versiones <c>superseded</c> (URL inmutable); excluye borradas (<c>deleted_at</c>).
+    /// </summary>
+    Task<TenantBrandLogoVersion?> GetLogoVersionByIdAsync(
+        Guid logoId,
+        CancellationToken cancellationToken = default);
 }

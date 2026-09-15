@@ -9,6 +9,7 @@ using Flit.Api.Endpoints.Public;
 using Flit.Api.Endpoints.SuperAdmin;
 using Flit.Api.Endpoints.Tramites;
 using Flit.Api.OpenApi;
+using Flit.Api.RateLimiting;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Security;
@@ -107,6 +108,13 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Flit.Modules.Security.Application.Auth.IDomainContextAccessor,
     Flit.Api.Authorization.HttpDomainContextAccessor>();
 
+// HU #12418 (Feature #12366, ADR-0060 D2) — resolución pública/sesión de marca: sección
+// PublicBranding (relleno de tiempo opcional + límite de tasa) y la PRIMERA policy de
+// AddRateLimiter del repo (delta-hechos #1), solo para /public/branding y /public/branding/logos/*.
+builder.Services.Configure<Flit.Api.RateLimiting.PublicBrandingOptions>(
+    builder.Configuration.GetSection(Flit.Api.RateLimiting.PublicBrandingOptions.SectionName));
+builder.Services.AddPublicBrandingRateLimiter();
+
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
 builder.Services.AddFlitSwagger();
@@ -203,6 +211,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors(FrontendCorsPolicy);
+
+// HU #12418 (Feature #12366, ADR-0060 D2) — límite de tasa de /public/branding* (delta-hechos #1:
+// primera policy del repo). Tras CORS/routing, antes de auth/endpoints.
+app.UseRateLimiter();
 
 // HU #12417 (Feature #12368, ADR-0060 D2) — puebla DomainContext leyendo EXCLUSIVAMENTE el sello
 // X-Flit-Domain que fija Flit.Gateway. Va ANTES de auth: el login/recuperación (#12422) necesita
@@ -306,6 +318,9 @@ app.MapPublicKyverumWebhookEndpoints();
 app.MapPublicPortalEndpoints();
 // HU #12240 (Feature #12236) — banners promocionales: listado publico + imagen por streaming.
 app.MapPublicBannersEndpoints();
+// HU #12418 (Feature #12366, ADR-0060 D2) — identidad de marca pública (antes del login) + sesión.
+app.MapPublicBrandingEndpoints();
+app.MapMeBrandingEndpoints();
 app.MapTramitesInstanceEndpoints();
 // HU #12358 (Feature #12257) — vista consolidada de la red (solo lectura) bajo /api/v1/tramites/network.
 app.MapTramitesNetworkEndpoints();

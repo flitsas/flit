@@ -88,6 +88,20 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandAssetValidator,
             Flit.Admin.Application.Companies.Branding.PermissiveBrandAssetValidator>();
 
+        // HU #12418 (Feature #12366, ADR-0060 D2) — resolución pública/sesión de marca. Lectura
+        // directa del estado del tenant (sin caché propia) + caché de 60 s del resultado resuelto,
+        // sobre el MISMO IMemoryCache singleton (AddMemoryCache más abajo) que invalida
+        // Publish/RetireBrandingHandler y CompanyWriteRepository.
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandingTenantLookup, BrandingTenantLookupRepository>();
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.ResolvePublicBranding.ResolvePublicBrandingHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.ResolveSessionBranding.ResolveSessionBrandingHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.GetPublicBrandLogo.GetPublicBrandLogoHandler>();
+        services.AddSingleton<Flit.Infrastructure.Domains.MemoryPublicBrandingCache>();
+        services.AddSingleton<Flit.Admin.Application.Companies.Branding.ResolvePublicBranding.IPublicBrandingCache>(
+            sp => sp.GetRequiredService<Flit.Infrastructure.Domains.MemoryPublicBrandingCache>());
+        services.AddSingleton<Flit.Admin.Application.Companies.Branding.IBrandingCacheInvalidator>(
+            sp => sp.GetRequiredService<Flit.Infrastructure.Domains.MemoryPublicBrandingCache>());
+
         // HU #12416 (Feature #12368, ADR-0060 D1/D2) — dominio dedicado de la red MARCA_BLANCA.
         services.AddScoped<Flit.Admin.Domain.Companies.Domains.ITenantDomainRepository, TenantDomainRepository>();
         // Resolutor por host con caché de 60 s (ADR-0060 D2): IMemoryCache es Singleton, la clase es
