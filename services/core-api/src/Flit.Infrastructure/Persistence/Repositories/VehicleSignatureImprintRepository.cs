@@ -70,18 +70,27 @@ internal sealed class VehicleSignatureImprintRepository(FlitDbContext db) : IVeh
         var normalized = PlacaNormalizer.Normalize(placa);
 
         // Sin filtro de tenant: la firma digital es del documento; el OT consulta por placa.
+        // Bug #12525: además de procedure_instances.plate denormalizada, matchear field_values
+        // "plate" (misma fuente que ImprontaManualStampContextBuilder) — trámites no-matrícula
+        // pueden firmar sin columna Plate poblada.
         return await (
                 from imp in db.VehicleSignatureImprints.IgnoreQueryFilters().AsNoTracking()
                 join pi in db.ProcedureInstances.IgnoreQueryFilters().AsNoTracking()
                     on imp.ProcedureInstanceId equals pi.Id
-                where pi.Plate != null && pi.Plate.Trim().ToUpper() == normalized
+                where (pi.Plate != null && pi.Plate.Trim().ToUpper() == normalized)
+                      || pi.FieldValues.Any(f =>
+                          f.FieldKey == "plate"
+                          && f.ValueText != null
+                          && f.ValueText.Trim().ToUpper() == normalized)
                 orderby imp.SignedAt descending
                 select new VehicleSignatureImprintListRow
                 {
                     Id = imp.Id,
                     TenantId = imp.TenantId,
                     ProcedureInstanceId = imp.ProcedureInstanceId,
-                    Placa = pi.Plate!,
+                    Placa = pi.Plate != null && pi.Plate.Trim().Length > 0
+                        ? pi.Plate
+                        : normalized,
                     ModuleCode = imp.ModuleCode,
                     AttachmentId = imp.AttachmentId,
                     PublicKey = imp.PublicKey,
