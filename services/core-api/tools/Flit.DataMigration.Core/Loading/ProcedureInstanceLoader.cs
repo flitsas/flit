@@ -95,7 +95,20 @@ public sealed class ProcedureInstanceLoader(
             await db.SaveChangesAsync(cancellationToken);
 
             // ---- Paso 2 y 3: actores y campos, con el padre todavía en borrador.
-            db.ProcedureInstanceActors.AddRange(mapped.Actors);
+            //
+            // Los copropietarios (ordinal > 1) van en un SaveChanges APARTE y ANTES del titular:
+            // trg_procedure_instance_denorm_actor copia full_name a comprador_nombre/vendedor_nombre
+            // en cada INSERT sin mirar el ordinal, así que "gana" la última fila escrita — y EF no
+            // garantiza el orden dentro de un mismo batch (en pdn quedó el copropietario en el
+            // listado). Escribiendo al titular de último, el nombre desnormalizado es el suyo.
+            var agregados = mapped.Actors.Where(a => a.Ordinal > 1).ToList();
+            if (agregados.Count > 0)
+            {
+                db.ProcedureInstanceActors.AddRange(agregados);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
+            db.ProcedureInstanceActors.AddRange(mapped.Actors.Where(a => a.Ordinal == 1));
             db.ProcedureInstanceFieldValues.AddRange(mapped.FieldValues);
             // Datos comerciales (1:1), si V1 traía valor de venta. Va en la misma transacción para
             // que el paso "comercial" del wizard quede con contenido y no se cree a medias.
