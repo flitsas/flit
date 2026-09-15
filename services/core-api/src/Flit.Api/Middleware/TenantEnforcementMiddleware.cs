@@ -216,6 +216,15 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // header del request con el tenant del JWT para cualquier caller NO-SuperAdmin (línea de abajo),
         // así que el binding del endpoint ve el valor correcto sin tocar el handler.
         new("/api/v1/me/ui-preferences", RouteMatch.Prefix),
+        // Bug (registro diferido 2026-09-15, hallado en la revisión de seguridad del PR #374) — GET
+        // /api/v1/tramites/consultation-config (HU #10478) leía [FromHeader(Name = "X-Tenant-Id")] y
+        // estaba congelado como deuda en LegacyUncoveredRoutes desde HU #12320: cualquier usuario
+        // autenticado NO-SuperAdmin del tenant A podía mandar el X-Tenant-Id de OTRA compañía y ver su
+        // proveedor primario de consulta (VIN/placa/conductor) y sus flags OnlyOwnVehicles* /
+        // BlockProcedureFamily*. Mismo fix que /api/v1/me/ui-preferences: el endpoint NO cambia — este
+        // middleware sobrescribe el header con el tenant del JWT para cualquier caller NO-SuperAdmin y
+        // el SuperAdmin sigue acotando con el header. Exact: no hay rutas hijas.
+        new("/api/v1/tramites/consultation-config", RouteMatch.Exact),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

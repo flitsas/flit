@@ -95,8 +95,8 @@ public sealed class TenantResolutionArchitectureTests : IClassFixture<WebApplica
         // OCR del paso 1 sin instancia (tenant del header crudo).
         "/api/v1/tramites/ocr/{tipo}",
         "/api/v1/tramites/ocr/lote",
-        // HU #10478 — proveedor de consulta del tenant (tenant del header crudo).
-        "/api/v1/tramites/consultation-config",
+        // /api/v1/tramites/consultation-config (HU #10478) salió de esta lista el 2026-09-15: ya está en
+        // RuntimeScopedRoutes (bug de registro diferido, mismo patrón que Bug #12558).
     ];
 
     // ── AC2 — reflexión sobre el assembly Flit.Api ─────────────────────────────────
@@ -308,15 +308,16 @@ public sealed class TenantResolutionArchitectureTests : IClassFixture<WebApplica
         // No hay dato de ninguna compañía que fugar; agregarlo al middleware no cambiaría el
         // comportamiento del endpoint. Por diseño — no es el bug de esta HU.
         "/api/v1/procedure-types",
-        // HALLAZGO (Bug #12558, fuera de alcance) — Endpoints/Tramites/OcrEndpoints.cs y
-        // PreflightEndpoints.cs: estas 3 rutas YA estaban congeladas como deuda en
-        // LegacyUncoveredRoutes (AC3, HU #10478/#12034: "proveedor de consulta del tenant" / OCR del
-        // paso 1, ambas con el tenant del header crudo). Mismo patrón de fondo que este bug, pero es
-        // deuda PRE-EXISTENTE y documentada, no algo que esta HU introduce. // TODO Bug pendiente:
-        // cubrir con RuntimeScopedRoutes cuando se aborde HU #10478/#12034.
+        // HALLAZGO (Bug #12558, fuera de alcance) — Endpoints/Tramites/OcrEndpoints.cs: estas 2 rutas
+        // YA estaban congeladas como deuda en LegacyUncoveredRoutes (AC3, HU #12034: OCR del paso 1).
+        // Verificado 2026-09-15: el [FromHeader] es parámetro MUERTO (los handlers no reciben el tenant),
+        // así que no hay dato de ninguna compañía que fugar — queda como limpieza de código, no de
+        // seguridad. // TODO Bug pendiente: cubrir con RuntimeScopedRoutes o retirar el parámetro
+        // cuando se aborde HU #12034.
+        // /api/v1/tramites/consultation-config (HU #10478) salió de aquí el 2026-09-15 al cubrirse en
+        // RuntimeScopedRoutes (bug de registro diferido; prueba negativa en ConsultationConfigTenantScopeTests).
         "/api/v1/tramites/ocr/{tipo}",
         "/api/v1/tramites/ocr/lote",
-        "/api/v1/tramites/consultation-config",
     ];
 
     private static readonly Regex FromHeaderTenantIdPattern = new(
