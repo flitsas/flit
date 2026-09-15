@@ -1,3 +1,4 @@
+using System.Linq;
 using Flit.Admin.Application.OtProfile;
 using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
@@ -282,6 +283,104 @@ public sealed class OtProfileHandlerTests
 
         await using var verify = NewContext(db);
         (await verify.TransitOfficeProfiles.CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    // HU #12568 — [BACKEND] OtProfile: editar ventana de revocatoria.
+
+    [Fact]
+    public async Task HU12568_AC1_UpdateWithValidWindow_PersistsValueAndReturnsIt()
+    {
+        var db = NewDbName();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedProfile(seed, TenantA, OtOperationModes.Dashboard, quipuxReadOnly: false);
+        }
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateOtProfileHandler(new OtProfileRepository(act));
+            var result = await handler.HandleAsync(new UpdateOtProfileCommand
+            {
+                TenantId = TenantA,
+                ChangedBy = ChangedBy,
+                Request = new UpdateOtProfileRequest { RevocationWindowBusinessDays = 5 },
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeTrue();
+            result.Profile!.RevocationWindowBusinessDays.Should().Be(5);
+        }
+
+        await using var verify = NewContext(db);
+        (await verify.TransitOfficeProfiles.SingleAsync(p => p.TenantId == TenantA, cancellationToken: TestContext.Current.CancellationToken))
+            .RevocationWindowBusinessDays.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task HU12568_AC2_UpdateWithNull_ClearsPreviousValueToUnlimited()
+    {
+        var db = NewDbName();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedProfile(seed, TenantA, OtOperationModes.Dashboard, quipuxReadOnly: false);
+            seed.TransitOfficeProfiles.Single(p => p.TenantId == TenantA).RevocationWindowBusinessDays = 10;
+            seed.SaveChanges();
+        }
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateOtProfileHandler(new OtProfileRepository(act));
+            var result = await handler.HandleAsync(new UpdateOtProfileCommand
+            {
+                TenantId = TenantA,
+                ChangedBy = ChangedBy,
+                // RevocationWindowBusinessDays no se envía (queda en null): AC2 exige que se
+                // persista como "sin límite", NO que conserve el 10 previo.
+                Request = new UpdateOtProfileRequest(),
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeTrue();
+            result.Profile!.RevocationWindowBusinessDays.Should().BeNull();
+        }
+
+        await using var verify = NewContext(db);
+        (await verify.TransitOfficeProfiles.SingleAsync(p => p.TenantId == TenantA, cancellationToken: TestContext.Current.CancellationToken))
+            .RevocationWindowBusinessDays.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task HU12568_AC3_UpdateWithNonPositiveValue_Returns422AndDoesNotPersist(int invalidValue)
+    {
+        var db = NewDbName();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedProfile(seed, TenantA, OtOperationModes.Dashboard, quipuxReadOnly: false);
+            seed.TransitOfficeProfiles.Single(p => p.TenantId == TenantA).RevocationWindowBusinessDays = 7;
+            seed.SaveChanges();
+        }
+
+        await using (var act = NewContext(db))
+        {
+            var handler = new UpdateOtProfileHandler(new OtProfileRepository(act));
+            var result = await handler.HandleAsync(new UpdateOtProfileCommand
+            {
+                TenantId = TenantA,
+                ChangedBy = ChangedBy,
+                Request = new UpdateOtProfileRequest { RevocationWindowBusinessDays = invalidValue },
+            }, TestContext.Current.CancellationToken);
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().ContainSingle(e => e.Field == "revocation_window_business_days");
+        }
+
+        // El valor previo (7) no se toca cuando la validación falla.
+        await using var verify = NewContext(db);
+        (await verify.TransitOfficeProfiles.SingleAsync(p => p.TenantId == TenantA, cancellationToken: TestContext.Current.CancellationToken))
+            .RevocationWindowBusinessDays.Should().Be(7);
     }
 
     private static string NewDbName() => Guid.NewGuid().ToString();

@@ -13,5 +13,12 @@ public sealed class OtProfile
 
     public bool QuipuxReadOnly { get; init; }
 
+    /// <summary>
+    /// Ventana de revocatoria del trámite aprobado, en días hábiles (HU #12568,
+    /// admin.transit_office_profiles.revocation_window_business_days). <c>null</c> = sin
+    /// configurar = sin límite; no hay ningún default numérico implícito.
+    /// </summary>
+    public int? RevocationWindowBusinessDays { get; init; }
+
     public IReadOnlyList<OtFeatureFlag> FeatureFlags { get; init; } = [];
 }

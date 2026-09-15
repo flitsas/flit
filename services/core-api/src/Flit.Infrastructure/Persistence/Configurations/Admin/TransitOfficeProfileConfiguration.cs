@@ -31,6 +31,10 @@ internal sealed class TransitOfficeProfileConfiguration : IEntityTypeConfigurati
             .HasDefaultValue("dashboard")
             .IsRequired();
         builder.Property(x => x.QuipuxReadOnly).HasDefaultValue(false);
+        // HU #12567/#12568: nullable, SIN default numérico. null = sin configurar = sin límite;
+        // no confundir con 0. El check ck_transit_office_profiles_revocation_window_positive
+        // (revocation_window_business_days IS NULL OR > 0) vive en la migración, no aquí.
+        builder.Property(x => x.RevocationWindowBusinessDays);
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
     }
