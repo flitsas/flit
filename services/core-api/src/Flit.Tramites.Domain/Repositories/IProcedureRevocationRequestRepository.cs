@@ -64,4 +64,27 @@ public interface IProcedureRevocationRequestRepository
     /// </summary>
     Task<int?> GetRevocationWindowBusinessDaysAsync(
         Guid transitOfficeId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #12578 (Feature #12565) — listado paginado/filtrado de solicitudes de revocatoria del propio
+    /// <paramref name="tenantId"/> (lado gestor, Administrador de compañía dueño del trámite), UNA fila
+    /// por intento —igual que la tabla—, más recientes primero. Aislamiento por tenant en el
+    /// <c>WHERE</c> (mismo patrón que el resto del repositorio); la RLS de la tabla es defensa en
+    /// profundidad, no hace falta desactivarla (a diferencia de <see cref="ListForTransitOfficeAsync"/>).
+    /// </summary>
+    Task<RevocationRequestListPage> ListForTenantAsync(
+        Guid tenantId, RevocationRequestListFilter filter, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #12578 — misma consulta que <see cref="ListForTenantAsync"/> pero del lado OT: CROSS-TENANT
+    /// (todos los trámites del organismo <paramref name="transitOfficeId"/>, sin importar qué compañía
+    /// cliente los radicó — el <paramref name="transitOfficeId"/> ya viene resuelto por el caller, mismo
+    /// mecanismo que <c>OtClientProcedureRepository</c>). La RLS de
+    /// <c>tramites.procedure_revocation_requests</c> aísla por <c>tenant_id</c> del CLIENTE y el OT no
+    /// tiene uno propio en esa tabla, así que la implementación desactiva RLS localmente
+    /// (<c>SET LOCAL row_security = off</c> dentro de una transacción), igual que el resto de lecturas
+    /// cross-tenant de la bandeja OT.
+    /// </summary>
+    Task<RevocationRequestListPage> ListForTransitOfficeAsync(
+        Guid transitOfficeId, RevocationRequestListFilter filter, CancellationToken cancellationToken = default);
 }

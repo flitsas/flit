@@ -23,6 +23,14 @@ describe("ot-nav — refactor adminOT", () => {
     expect(tab?.segment).toBe("imprint-validation");
   });
 
+  // HU #12578 (Feature #12565, AC1) — vista dedicada "Revocatorias" del hub OT.
+  it("incluye el tab 'revocation-requests' en OT_HUB_TABS", () => {
+    const tab = OT_HUB_TABS.find((t) => t.id === "revocation-requests");
+    expect(tab).toBeDefined();
+    expect(tab?.label).toBe("Revocatorias");
+    expect(tab?.segment).toBe("revocation-requests");
+  });
+
   it("incluye el tab 'usuarios' en OT_HUB_TABS", () => {
     const tab = OT_HUB_TABS.find((t) => t.id === "usuarios");
     expect(tab).toBeDefined();

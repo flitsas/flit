@@ -72,6 +72,7 @@ import {
   Image as ImageIcon,
   BadgeCheck,
   Timer,
+  Undo2,
 } from "lucide-react";
 
 export type ModuleId =
@@ -495,6 +496,15 @@ export function Shell({
         icon: Fingerprint,
         active: isOtHubSegmentActive(pathname, "imprint-validation"),
         onClick: () => goOtHub("imprint-validation"),
+      },
+      {
+        // HU #12578 (Feature #12565, AC2) — visible solo para Admin OT (este bloque ya está
+        // gateado por `currentUser?.isOtAdmin`); cualquier otro rol no ve esta entrada.
+        key: OT_ADM_DOCK.revocationRequests,
+        label: "Revocatorias",
+        icon: Undo2,
+        active: isOtHubSegmentActive(pathname, "revocation-requests"),
+        onClick: () => goOtHub("revocation-requests"),
       },
     );
   }

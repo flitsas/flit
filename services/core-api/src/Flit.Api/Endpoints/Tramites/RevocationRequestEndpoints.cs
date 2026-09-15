@@ -80,7 +80,73 @@ internal static class RevocationRequestEndpoints
         .Produces(StatusCodes.Status422UnprocessableEntity)
         .DisableAntiforgery();
 
+        // HU #12578 (Feature #12565) — GET /api/v1/tramites/revocation-requests: listado dedicado
+        // "Revocatorias" del lado gestor (Administrador de compañía, dueño de los trámites). MISMO
+        // tenant-scoping que el POST de arriba (header X-Tenant-Id, 400 si falta) — la ruta está
+        // declarada en TenantEnforcementMiddleware.RuntimeScopedRoutes (Exact) para que el middleware
+        // imponga el tenant del JWT a cualquier caller NO-SuperAdmin (mismo mecanismo que el resto del
+        // runtime de trámites; sin esa entrada el endpoint confiaría en el header crudo del cliente).
+        group.MapGet("/revocation-requests", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromQuery] string? estado,
+            [FromQuery] DateTimeOffset? requestedFrom,
+            [FromQuery] DateTimeOffset? requestedTo,
+            [FromQuery] Guid? transitOfficeId,
+            [FromQuery] int? skip,
+            [FromQuery] int? take,
+            ListRevocationRequestsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var result = await handler.HandleAsync(new ListRevocationRequestsQuery(
+                tenantId.Value,
+                ParseStatuses(estado),
+                requestedFrom,
+                requestedTo,
+                transitOfficeId,
+                skip,
+                take), ct);
+
+            return Results.Ok(new
+            {
+                items = result.Items,
+                total = result.Total,
+                skip = result.Skip,
+                take = result.Take,
+            });
+        })
+        .WithName("ListProcedureInstanceRevocationRequests")
+        .WithSummary("Lista las solicitudes de revocatoria de la compañía (vista dedicada 'Revocatorias')")
+        .Produces(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status401Unauthorized);
+
         return app;
+    }
+
+    /// <summary>
+    /// Sub-estados de revocatoria pedidos, separados por coma — mismo criterio tolerante que
+    /// <c>ProcedureInstanceEndpoints.ParseEstados</c>: un token que no está en
+    /// <see cref="ProcedureRevocationRequestStatus"/> simplemente se descarta (nunca lanza), y si no
+    /// queda ninguno válido el filtro completo se ignora (equivale a "todos").
+    /// </summary>
+    private static List<string>? ParseStatuses(string? estado)
+    {
+        if (string.IsNullOrWhiteSpace(estado))
+            return null;
+
+        var validos = estado
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(e => e.ToLowerInvariant())
+            .Where(e => ProcedureRevocationRequestStatus.Activos.Contains(e, StringComparer.Ordinal)
+                || string.Equals(e, ProcedureRevocationRequestStatus.Aprobada, StringComparison.Ordinal)
+                || string.Equals(e, ProcedureRevocationRequestStatus.Rechazada, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return validos.Count > 0 ? validos : null;
     }
 
     /// <summary>

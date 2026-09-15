@@ -139,6 +139,11 @@ function mapPreflight(dto: PreflightSnapshotDto): PreflightSnapshot {
     createdAt: dto.createdAt,
   };
 }
+import type {
+  RevocationRequestListItem,
+  RevocationRequestListParams,
+  RevocationRequestListResponse,
+} from './types/revocation-requests';
 import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
@@ -644,6 +649,38 @@ async function listPlateHistory(params: {
   return { items, total: res?.total ?? items.length };
 }
 
+/**
+ * HU #12578 (Feature #12565) — vista dedicada "Revocatorias" del lado gestor.
+ * `GET /api/v1/tramites/revocation-requests`, tenant-scoped por `X-Tenant-Id` (mismo patrón que el
+ * resto de `/api/v1/tramites/...`). `statuses` viaja como `estado` separado por comas (mismo criterio
+ * tolerante que `ParseEstados` del backend); vacío/omitido = todos los sub-estados.
+ */
+async function listRevocationRequests(
+  params: RevocationRequestListParams = {},
+  tenantId?: string,
+): Promise<RevocationRequestListResponse> {
+  const qs = new URLSearchParams();
+  if (params.statuses?.length) qs.set('estado', params.statuses.join(','));
+  if (params.requestedFrom) qs.set('requestedFrom', params.requestedFrom);
+  if (params.requestedTo) qs.set('requestedTo', params.requestedTo);
+  if (params.transitOfficeId) qs.set('transitOfficeId', params.transitOfficeId);
+  if (params.skip !== undefined) qs.set('skip', String(params.skip));
+  if (params.take !== undefined) qs.set('take', String(params.take));
+  const query = qs.toString();
+
+  const res = await request<RevocationRequestListResponse>(
+    `/api/v1/tramites/revocation-requests${query ? `?${query}` : ''}`,
+    { headers: tenantHeader(tenantId) },
+  );
+  const items: RevocationRequestListItem[] = res?.items ?? [];
+  return {
+    items,
+    total: res?.total ?? items.length,
+    skip: res?.skip ?? params.skip ?? 0,
+    take: res?.take ?? params.take ?? 20,
+  };
+}
+
 async function listInstancesPage(
   params: ListInstancesParams,
 ): Promise<{ items: InstanceSummary[]; total: number }> {
@@ -755,6 +792,14 @@ export const tramitesClient = {
    * completa desde Excel, y unos cientos de valores no caben en una query string.</p>
    */
   searchInstances: (params: ListInstancesParams = {}) => searchInstances(params),
+
+  /**
+   * HU #12578 (Feature #12565) — vista dedicada "Revocatorias" del lado gestor: listado filtrado a
+   * trámites con solicitud de revocatoria en cualquier sub-estado (AC1), con los mismos filtros del
+   * listado general (fecha, OT, estado).
+   */
+  listRevocationRequests: (params: RevocationRequestListParams = {}, tenantId?: string) =>
+    listRevocationRequests(params, tenantId),
 
   // ── HU #12362 / #12358 — lectura consolidada de la red (cabeza de grupo) ──────────────────────
   //

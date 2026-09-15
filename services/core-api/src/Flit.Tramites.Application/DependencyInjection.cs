@@ -333,6 +333,9 @@ public static class DependencyInjection
         // HU #12572 (Feature #12565) — endpoint de solicitud de revocatoria.
         services.AddScoped<UseCases.RevocationRequests.RequestRevocationHandler>();
 
+        // HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado gestor.
+        services.AddScoped<UseCases.RevocationRequests.ListRevocationRequestsHandler>();
+
         // HU #12148 — validación OT de firma digital de impronta manual.
         services.AddScoped<ListImprintSignaturesByPlacaHandler>();
         services.AddScoped<ValidateImprintSignatureHandler>();

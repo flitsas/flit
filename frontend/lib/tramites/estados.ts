@@ -279,3 +279,62 @@ export function revocationRequestLabel(value: string | null | undefined): string
 export function revocationRequestTone(value: string | null | undefined): 'warning' | 'info' | null {
   return esRevocationRequestStatus(value) ? REVOCATION_REQUEST_TONES[value] : null;
 }
+
+/**
+ * HU #12578 (Feature #12565) — los CUATRO sub-estados que puede tener un intento de revocatoria a lo
+ * largo de su vida (activos + cerrados), para la vista dedicada "Revocatorias". Distinto de
+ * {@link RevocationRequestStatus} (solo los DOS activos, para el badge secundario del detalle del
+ * trámite — HU #12575): ese badge deja de pintarse cuando la solicitud se cierra (el trámite vuelve a
+ * hablar por su `EstadoTramite`), pero el LISTADO dedicado sí necesita mostrar también los intentos ya
+ * decididos (`aprobada`/`rechazada`), así que amplía el vocabulario en vez de reutilizar el tipo tal
+ * cual.
+ */
+export type RevocationRequestListStatus = RevocationRequestStatus | 'aprobada' | 'rechazada';
+
+export const REVOCATION_REQUEST_LIST_STATUSES: readonly RevocationRequestListStatus[] = [
+  'solicitada',
+  'en_revision',
+  'aprobada',
+  'rechazada',
+] as const;
+
+/** Reutiliza los labels de los dos activos ({@link REVOCATION_REQUEST_LABELS}); añade los cerrados. */
+export const REVOCATION_REQUEST_LIST_LABELS: Record<RevocationRequestListStatus, string> = {
+  ...REVOCATION_REQUEST_LABELS,
+  aprobada: 'Revocatoria aprobada',
+  rechazada: 'Revocatoria rechazada',
+};
+
+/**
+ * Tone semántico por sub-estado del listado. Reutiliza `warning`/`info` de los activos
+ * ({@link REVOCATION_REQUEST_TONES}); `aprobada` cierra en verde (éxito) y `rechazada` en rojo
+ * (el trámite queda Aprobado sin cambios, pero el INTENTO no prosperó).
+ */
+export const REVOCATION_REQUEST_LIST_TONES: Record<
+  RevocationRequestListStatus,
+  'success' | 'warning' | 'danger' | 'info'
+> = {
+  ...REVOCATION_REQUEST_TONES,
+  aprobada: 'success',
+  rechazada: 'danger',
+};
+
+function esRevocationRequestListStatus(
+  value: string | null | undefined,
+): value is RevocationRequestListStatus {
+  return !!value && (REVOCATION_REQUEST_LIST_STATUSES as readonly string[]).includes(value);
+}
+
+/** Label del listado dedicado; cae al fallback titlecase de {@link estadoLabel} si no reconoce el valor. */
+export function revocationRequestListLabel(value: string | null | undefined): string {
+  return esRevocationRequestListStatus(value)
+    ? REVOCATION_REQUEST_LIST_LABELS[value]
+    : estadoLabel(value);
+}
+
+/** Tone del listado dedicado; `neutral` (StatusBadge) si no reconoce el valor. */
+export function revocationRequestListTone(
+  value: string | null | undefined,
+): 'success' | 'warning' | 'danger' | 'info' | 'neutral' {
+  return esRevocationRequestListStatus(value) ? REVOCATION_REQUEST_LIST_TONES[value] : 'neutral';
+}

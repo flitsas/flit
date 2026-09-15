@@ -233,6 +233,13 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // el SuperAdmin sigue acotando con el header. Exact: no hay rutas hijas; Exact tolera solo la
         // barra final (/consultation-config/ también pasa por aquí, PR #377).
         new("/api/v1/tramites/consultation-config", RouteMatch.Exact),
+        // HU #12578 (Feature #12565) — GET .../revocation-requests: listado dedicado "Revocatorias"
+        // del lado gestor. Lee [FromHeader(Name = "X-Tenant-Id")] igual que el POST hermano de HU
+        // #12572 (ya cubierto por /instances, Prefix); esta ruta es TOP-LEVEL (no cuelga de
+        // /instances) así que necesita su propia entrada — sin ella el middleware no la intercepta y
+        // el endpoint confiaría en el X-Tenant-Id crudo del cliente (mismo defecto de fondo que Bug
+        // #12554/#12558/#12564).
+        new("/api/v1/tramites/revocation-requests", RouteMatch.Exact),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

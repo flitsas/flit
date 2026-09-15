@@ -10,7 +10,8 @@ export type OtHubTabId =
   | "usuarios"
   | "reportes"
   | "mandatos"
-  | "imprint-validation";
+  | "imprint-validation"
+  | "revocation-requests";
 
 export interface OtHubTab {
   id: OtHubTabId;
@@ -35,6 +36,9 @@ export const OT_HUB_TABS: OtHubTab[] = [
   { id: "reportes", label: "Reportes", segment: "reportes" },
   { id: "mandatos", label: "Mandatos", segment: "mandatos" },
   { id: "imprint-validation", label: "Validar impronta", segment: "imprint-validation" },
+  // HU #12578 (Feature #12565) — vista dedicada "Revocatorias": todos los intentos de solicitud de
+  // revocatoria de los trámites del organismo, en cualquier sub-estado.
+  { id: "revocation-requests", label: "Revocatorias", segment: "revocation-requests" },
 ];
 
 /** Keys del dock Admin OT (agrupación distinta a SuperAdmin). */
@@ -48,6 +52,7 @@ export const OT_ADM_DOCK = {
   reportes: "ot-adm-reportes",
   mandatos: "ot-adm-mandatos",
   imprintValidation: "ot-adm-imprint-validation",
+  revocationRequests: "ot-adm-revocation-requests",
 } as const;
 
 const OT_PROFILE_ID_KEY = "flit-ot-transit-office-id";

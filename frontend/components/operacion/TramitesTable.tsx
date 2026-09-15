@@ -18,6 +18,7 @@ import {
   Pause,
   Play,
   Star,
+  Undo2,
   Upload,
   X,
 } from 'lucide-react';
@@ -461,7 +462,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    * todas las compañías y ninguno es «de la red»; su alcance lo pone el servidor por rol. Un
    * cliente sin jerarquía solo recibe filas de su propio tenant, así que para él nunca se activa.
    */
-  const { tenantId: tenantDelUsuario, isSuperAdmin: esSuperAdmin } = usePermissions();
+  const { tenantId: tenantDelUsuario, isSuperAdmin: esSuperAdmin, isAdminCompany } = usePermissions();
   const currentTenantId = esSuperAdmin ? null : tenantDelUsuario;
 
   // HU #11054 / HU #11055 — consulta de documentos desde el listado, sin abrir el wizard. Se guarda
@@ -1289,6 +1290,25 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                   >
                     <Upload className="h-3.5 w-3.5" aria-hidden="true" />
                     Carga masiva
+                  </button>
+                ) : null
+              }
+              revocationRequestsLink={
+                // HU #12578 (Feature #12565, AC2) — entrada a la vista dedicada "Revocatorias",
+                // visible SOLO para el Administrador de compañía (mismo gate que
+                // `RevocationRequestButton` de HU #12573): un Operario o perfil interno FLIT no la
+                // ve en absoluto, no solo deshabilitada.
+                isAdminCompany ? (
+                  <button
+                    type="button"
+                    onClick={() => router.push('/tramites/revocatorias')}
+                    aria-label="Ver solicitudes de revocatoria"
+                    title="Revocatorias"
+                    className={controlCls(false)}
+                    data-testid="tramites-revocatorias-link"
+                  >
+                    <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    Revocatorias
                   </button>
                 ) : null
               }

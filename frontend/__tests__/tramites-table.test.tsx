@@ -57,6 +57,7 @@ import { TramitesTable } from '@/components/operacion/TramitesTable';
 // nuevas): la tabla ahora necesita `<ToastProvider>` en el árbol, igual que en producción
 // (`app/page.tsx` y `app/tramites/layout.tsx` ya envuelven la pantalla con él).
 import { ToastProvider } from '@/components/admin/Toast';
+import { TOKEN_STORAGE_KEY } from '@/lib/auth/jwt';
 
 /** Genera n instancias draft con placa única (P0001, P0002, …). */
 /**
@@ -1973,5 +1974,40 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
     await screen.findByAltText('Con prenda');
     const cabecera = screen.getByRole('columnheader', { name: /Marcas/i });
     expect(within(cabecera).queryByRole('button')).toBeNull();
+  });
+});
+
+// HU #12578 (Feature #12565, AC2) — la entrada a la vista dedicada "Revocatorias" solo la ve el
+// Administrador de compañía (mismo gate que RevocationRequestButton de HU #12573), no cualquier rol.
+describe('TramitesTable — HU #12578 entrada a "Revocatorias" (AC2)', () => {
+  function makeToken(payload: Record<string, unknown>): string {
+    const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    return `${header}.${body}.`;
+  }
+
+  afterEach(() => {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  });
+
+  it('un Administrador de compañía SÍ ve el enlace "Revocatorias"', async () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: 'u1', role: 'AdminCompany', email: 'admin@empresa.local' }),
+    );
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    expect(screen.getByTestId('tramites-revocatorias-link')).toBeInTheDocument();
+  });
+
+  it('sin rol de Administrador de compañía NO ve el enlace "Revocatorias"', async () => {
+    // Sin token en localStorage (default de este archivo): usePermissions().isAdminCompany = false.
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    expect(screen.queryByTestId('tramites-revocatorias-link')).not.toBeInTheDocument();
   });
 });

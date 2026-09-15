@@ -96,6 +96,10 @@ builder.Services.AddAdminInfrastructure();
 // inline de AdminOtEndpoints.ApproveClientProcedureAsync).
 builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.DecideRevocationRequestHandler>();
 
+// HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado OT: mismo criterio de
+// composición API-layer que la decisión de arriba (compone Admin + Tramites).
+builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.ListOtRevocationRequestsHandler>();
+
 // Handler de autorización por permisos del JWT (HU #10165).
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

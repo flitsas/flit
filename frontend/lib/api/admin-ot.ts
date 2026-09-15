@@ -21,6 +21,8 @@ import type {
   OtProfile,
   OtRequirements,
   OtRevocationRequestDecision,
+  OtRevocationRequestListParams,
+  OtRevocationRequestListResult,
   OtRule,
   OtRulesListResult,
   OtWebhook,
@@ -261,6 +263,30 @@ export function rejectOtRevocationRequest(
       query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     },
   );
+}
+
+/**
+ * HU #12578 (Feature #12565) — vista dedicada "Revocatorias" del lado OT: TODOS los intentos de
+ * solicitud de revocatoria de los trámites del organismo, en cualquier sub-estado. `scope` sigue el
+ * MISMO mecanismo que el resto de la bandeja (`?transitOfficeId=` para el override de SuperAdmin; para
+ * Admin OT el backend resuelve su organismo desde el perfil). `statuses` viaja como `estado`
+ * separado por comas — un solo valor de querystring, no repetido (a diferencia de `apiFetch` con
+ * arrays), porque el binding del backend es `[FromQuery] string? estado`.
+ */
+export function fetchOtRevocationRequests(
+  params: OtRevocationRequestListParams = {},
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtRevocationRequestListResult> {
+  const { statuses, ...rest } = params;
+  return apiFetch<OtRevocationRequestListResult>(`${base}/revocation-requests`, {
+    query: {
+      ...rest,
+      ...(statuses?.length ? { estado: statuses.join(",") } : {}),
+      ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
+    },
+    signal,
+  });
 }
 
 /** Adjunto devuelto por los endpoints de expediente OT (shape del AttachmentDto de trámites). */

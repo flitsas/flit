@@ -142,6 +142,20 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 cancellationToken),
             cancellationToken);
 
+    /// <summary>HU #12578 — ver XML doc de la interfaz. Reutiliza <see cref="ExecuteOtScopedAsync{T}(Guid,Guid?,Func{Guid,Task{T}},CancellationToken)"/>
+    /// (MISMA resolución que <see cref="ListAsync"/>/<see cref="GetByIdAsync(Guid,Guid,Guid?,CancellationToken)"/>): sin
+    /// organismo resoluble, <c>default(Guid?)</c> es exactamente <c>null</c>, así que no hace falta
+    /// ninguna rama especial aquí.</summary>
+    public Task<Guid?> ResolveTransitOfficeIdAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            transitOfficeId => Task.FromResult<Guid?>(transitOfficeId),
+            cancellationToken);
+
     public Task<OtBandejaHealth?> GetDeliveryHealthAsync(
         Guid otTenantId,
         Guid? transitOfficeIdOverride = null,

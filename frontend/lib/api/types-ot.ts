@@ -305,6 +305,42 @@ export interface DecideOtRevocationRequestBody {
  * trámite Aprobado. `procedure` solo viene al aprobar (el trámite queda `revocado`, reutiliza
  * HU #12166); al rechazar es `null` porque el trámite permanece `aprobado` sin cambios.
  */
+/**
+ * HU #12578 (Feature #12565) — fila del listado dedicado "Revocatorias" del lado OT. MISMA forma que
+ * `RevocationRequestListItem` del lado gestor (`lib/api/types/revocation-requests.ts`): el backend
+ * comparte el DTO entre las dos respuestas. Se declara aparte, siguiendo la misma convención
+ * `Ot*`/independiente de este archivo (sin acoplar el cliente OT al del gestor).
+ */
+export interface OtRevocationRequestListItem {
+  revocationRequestId: string;
+  procedureInstanceId: string;
+  referenceNumber: string;
+  placa: string | null;
+  transitOfficeId: string | null;
+  transitOfficeName: string | null;
+  /** 'solicitada' | 'en_revision' | 'aprobada' | 'rechazada'. */
+  status: string;
+  attemptNumber: number;
+  requestedAt: string;
+  decidedAt: string | null;
+}
+
+export interface OtRevocationRequestListResult {
+  items: OtRevocationRequestListItem[];
+  total: number;
+  skip: number;
+  take: number;
+}
+
+export interface OtRevocationRequestListParams {
+  /** Sub-estados a incluir (OR), separados por coma en el querystring. Vacío/omitido = todos. */
+  statuses?: string[];
+  requestedFrom?: string;
+  requestedTo?: string;
+  skip?: number;
+  take?: number;
+}
+
 export interface OtRevocationRequestDecision {
   procedure: OtClientProcedure | null;
   revocationRequestId: string;

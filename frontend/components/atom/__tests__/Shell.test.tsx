@@ -80,6 +80,33 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     expect(screen.getByRole("button", { name: "Documentos" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Requisitos" })).toBeInTheDocument();
   });
+
+  // HU #12578 (Feature #12565, AC2): la entrada de dock "Revocatorias" solo la ve un Admin OT,
+  // dentro del submenú "Administración" (mismo agrupador que Mandatos/Validar impronta).
+  it("HU #12578 — un Admin OT ve 'Revocatorias' dentro de Administración", async () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
+    );
+
+    renderShell();
+
+    expect(screen.queryByRole("button", { name: "Revocatorias" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Administración" }));
+    expect(screen.getByRole("button", { name: "Revocatorias" })).toBeInTheDocument();
+  });
+
+  it("HU #12578 — un AdminCompany (no OT) no tiene el hub OT y por tanto no ve 'Revocatorias'", () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: "u1", role: "AdminCompany", email: "admin@empresa.local" }),
+    );
+
+    renderShell();
+
+    // Su "Administración" es la consola de compañía (RL, baúl…), no el hub OT: no hay OT_ADM_DOCK.
+    expect(screen.queryByRole("button", { name: "Revocatorias" })).not.toBeInTheDocument();
+  });
 });
 
 describe("Shell — Administración gestora (AdminCompany)", () => {

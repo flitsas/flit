@@ -27,6 +27,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ImprintSignatures;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.RevocationRequests;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Application.OtRequirements.GetOtRequirements;
@@ -250,6 +251,18 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado OT: TODOS los intentos
+        // de solicitud de revocatoria de los trámites del organismo, en cualquier sub-estado (no solo
+        // la ACTIVA que approve/reject de arriba deciden). Mismo scoping de organismo (?transitOfficeId=
+        // para SuperAdmin, perfil propio para ot_admin) que el resto de la bandeja OT.
+        group.MapGet("/revocation-requests", ListOtRevocationRequestsAsync)
+            .WithName("AdminOtListRevocationRequests")
+            .WithSummary("Lista las solicitudes de revocatoria de los trámites del organismo (vista dedicada 'Revocatorias')")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         group.MapPost("/client-procedures/{id:guid}/consolidado", GenerateClientProcedureConsolidadoAsync)
             .WithName("AdminOtGenerateClientProcedureConsolidado")
@@ -1669,6 +1682,82 @@ public static class AdminOtEndpoints
                 status = result.RequestStatus,
             }),
         };
+    }
+
+    /// <summary>
+    /// HU #12578 (Feature #12565) — GET /api/v1/admin/ot/revocation-requests: MISMO scoping de
+    /// organismo que approve/reject de arriba (<see cref="TryResolveScopedTransitOfficeId"/>), pero de
+    /// SOLO LECTURA — a diferencia de <see cref="DecideRevocationRequestAsync"/>, esta ruta no exige una
+    /// solicitud ACTIVA: lista TODOS los intentos, en cualquier sub-estado.
+    /// </summary>
+    private static async Task<IResult> ListOtRevocationRequestsAsync(
+        HttpContext httpContext,
+        ListOtRevocationRequestsHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] string? estado,
+        [FromQuery] DateTimeOffset? requestedFrom,
+        [FromQuery] DateTimeOffset? requestedTo,
+        [FromQuery] int? skip,
+        [FromQuery] int? take,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var result = await handler.HandleAsync(new ListOtRevocationRequestsQuery(
+            tenantId,
+            scopedOfficeId,
+            ParseRevocationStatuses(estado),
+            requestedFrom,
+            requestedTo,
+            skip,
+            take), cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new
+        {
+            items = result.Items,
+            total = result.Total,
+            skip = result.Skip,
+            take = result.Take,
+        });
+    }
+
+    /// <summary>
+    /// Sub-estados de revocatoria pedidos, separados por coma — MISMO criterio tolerante que
+    /// <c>RevocationRequestEndpoints.ParseStatuses</c> (lado gestor, HU #12578): un token fuera de
+    /// <see cref="ProcedureRevocationRequestStatus"/> se descarta sin lanzar; sin ninguno válido el
+    /// filtro se ignora (equivale a "todos").
+    /// </summary>
+    private static List<string>? ParseRevocationStatuses(string? estado)
+    {
+        if (string.IsNullOrWhiteSpace(estado))
+            return null;
+
+        var validos = estado
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(e => e.ToLowerInvariant())
+            .Where(e => ProcedureRevocationRequestStatus.Activos.Contains(e, StringComparer.Ordinal)
+                || string.Equals(e, ProcedureRevocationRequestStatus.Aprobada, StringComparison.Ordinal)
+                || string.Equals(e, ProcedureRevocationRequestStatus.Rechazada, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return validos.Count > 0 ? validos : null;
     }
 
     // ── Expediente consolidado + Licencia de Tránsito desde el perfil OT ───────────
