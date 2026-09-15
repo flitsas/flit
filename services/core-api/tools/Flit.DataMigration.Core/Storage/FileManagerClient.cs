@@ -94,8 +94,17 @@ public sealed class FileManagerClient(HttpClient http, string filesPath, string?
 
     /// <summary>
     /// Sube unos bytes al file-manager destino: <c>POST {files}</c> crea el registro + presigned, y
-    /// luego un <c>POST</c> multipart a S3 con la POST policy (campos firmados primero, <c>file</c>
-    /// al final). Devuelve el id NUEVO, que será el <c>storage_path</c> en V2.
+    /// luego sube el binario al storage con el método que el file-manager DECIDE en
+    /// <c>presignedUrl.method</c> (ADR-0057): <c>PUT</c> con los bytes crudos, o <c>POST</c>
+    /// multipart con la POST policy (campos firmados primero, <c>file</c> al final) si viene
+    /// ausente, que es lo que hacían todos los backends antes. Devuelve el id NUEVO, que será el
+    /// <c>storage_path</c> en V2.
+    /// <para>
+    /// PUT existe porque el gateway de Contabo (Kong) rechaza el POST policy: sus credenciales
+    /// viajan dentro del multipart y el gateway no las ve, así que responde 403 con cuerpo JSON.
+    /// Es el mismo criterio que <c>FileManagerAttachmentStorage</c> de la app; este cliente lo
+    /// espeja y no deduce nada del proveedor, que no conoce.
+    /// </para>
     /// </summary>
     public async Task<UploadResult> UploadAsync(
         Guid procedureInstanceId,
@@ -143,9 +152,34 @@ public sealed class FileManagerClient(HttpClient http, string filesPath, string?
             throw new InvalidOperationException("file-manager destino: respuesta de creación inválida (sin id/presignedUrl).");
         }
 
-        using var form = new MultipartFormDataContent();
+        var usePut = ps.TryGetProperty("method", out var methodEl)
+            && string.Equals(methodEl.GetString(), "PUT", StringComparison.OrdinalIgnoreCase);
+
+        // URL absoluta del storage ⇒ ignora el BaseAddress del cliente. SIN auth del
+        // file-manager: la firma va en la URL (PUT) o en el cuerpo (POST policy).
+        using HttpContent content = usePut
+            ? BuildPutContent(bytes)
+            : BuildPostContent(ps, bytes, safeName);
+        using var uploadResp = usePut
+            ? await http.PutAsync(uploadUrl, content, ct)
+            : await http.PostAsync(uploadUrl, content, ct);
+        uploadResp.EnsureSuccessStatusCode();
+
+        return new UploadResult(newId, sha256, bytes.LongLength);
+    }
+
+    private static ByteArrayContent BuildPutContent(byte[] bytes)
+    {
+        var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        return content;
+    }
+
+    private static MultipartFormDataContent BuildPostContent(JsonElement presigned, byte[] bytes, string filename)
+    {
+        var form = new MultipartFormDataContent();
         // S3 POST policy: los campos firmados (key, policy, x-amz-*) van ANTES del 'file'.
-        if (ps.TryGetProperty("fields", out var fields) && fields.ValueKind == JsonValueKind.Object)
+        if (presigned.TryGetProperty("fields", out var fields) && fields.ValueKind == JsonValueKind.Object)
         {
             foreach (var field in fields.EnumerateObject())
             {
@@ -153,13 +187,10 @@ public sealed class FileManagerClient(HttpClient http, string filesPath, string?
             }
         }
 
-        form.Add(new ByteArrayContent(bytes), "file", safeName);
-
-        // URL absoluta de S3 ⇒ ignora el BaseAddress del cliente. SIN auth del file-manager.
-        using var uploadResp = await http.PostAsync(uploadUrl, form, ct);
-        uploadResp.EnsureSuccessStatusCode();
-
-        return new UploadResult(newId, sha256, bytes.LongLength);
+        var fileContent = new ByteArrayContent(bytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        form.Add(fileContent, "file", filename);
+        return form;
     }
 
     private void ApplyAuth(HttpRequestMessage req)
