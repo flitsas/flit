@@ -71,4 +71,54 @@ public sealed class PublishBrandingHandlerTests
         result.Outcome.Should().Be(PublishBrandingOutcome.Conflict);
         await repo.DidNotReceiveWithAnyArgs().PublishAsync(default, default, default);
     }
+
+    // ---- HU #12413 AC6 — publicar exige marca completa ----
+
+    [Fact]
+    public async Task AC6_BorradorIncompleto_SeRechazaConDetalleDeQueFalta()
+    {
+        var draft = new BrandingDraft("Movilidad Andina", Colors, null); // falta el logo
+        var current = new TenantBranding { TenantId = TenantId, Draft = draft, RowVersion = 1 };
+
+        var repo = Substitute.For<ITenantBrandingRepository>();
+        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(current);
+
+        var handler = new PublishBrandingHandler(repo, new BrandAssetValidator(new BrandingOptions()));
+        var result = await handler.HandleAsync(new PublishBrandingCommand { TenantId = TenantId }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(PublishBrandingOutcome.Incomplete);
+        result.Missing.Should().BeEquivalentTo(["logo"]);
+        await repo.DidNotReceiveWithAnyArgs().PublishAsync(default, default, default);
+    }
+
+    [Fact]
+    public async Task AC6_BorradorVacio_ReportaTodosLosCamposFaltantes()
+    {
+        var current = new TenantBranding { TenantId = TenantId, Draft = BrandingDraft.Empty, RowVersion = 1 };
+        var repo = Substitute.For<ITenantBrandingRepository>();
+        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(current);
+
+        var handler = new PublishBrandingHandler(repo, new BrandAssetValidator(new BrandingOptions()));
+        var result = await handler.HandleAsync(new PublishBrandingCommand { TenantId = TenantId }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(PublishBrandingOutcome.Incomplete);
+        result.Missing.Should().BeEquivalentTo(
+            ["platformName", "colors.primary", "colors.secondary", "colors.onPrimary", "logo"]);
+    }
+
+    [Fact]
+    public async Task AC6_GuardarBorradorIncompletoSiguePermitido_SoloPublicarLoRechaza()
+    {
+        // Nota funcional (AC6, segunda mitad): UpsertBrandingDraftHandler no exige completitud
+        // (cubierto en UpsertBrandingDraftHandlerTests); aquí solo se confirma que publicar SÍ la exige.
+        var draft = new BrandingDraft(null, null, null);
+        var current = new TenantBranding { TenantId = TenantId, Draft = draft, RowVersion = 1 };
+        var repo = Substitute.For<ITenantBrandingRepository>();
+        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(current);
+
+        var handler = new PublishBrandingHandler(repo, new BrandAssetValidator(new BrandingOptions()));
+        var result = await handler.HandleAsync(new PublishBrandingCommand { TenantId = TenantId }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(PublishBrandingOutcome.Incomplete);
+    }
 }

@@ -77,4 +77,98 @@ public sealed class UploadBrandLogoHandlerTests
 
         result.Outcome.Should().Be(UploadBrandLogoOutcome.TenantNotMarcaBlanca);
     }
+
+    // ---- HU #12413 AC1/AC2 — validador real (no PermissiveBrandAssetValidator) ----
+
+    private static readonly byte[] FakeSvgDeclaredAsPng =
+        System.Text.Encoding.UTF8.GetBytes("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+
+    [Fact]
+    public async Task AC1_SvgDisfrazadoDePng_SeRechazaPorFirmaBinariaNoPorExtension()
+    {
+        var repo = Substitute.For<ITenantBrandingRepository>();
+        var storage = Substitute.For<IBrandLogoStorage>();
+        var handler = new UploadBrandLogoHandler(repo, storage, new BrandAssetValidator(new BrandingOptions()));
+        using var content = new MemoryStream(FakeSvgDeclaredAsPng);
+
+        var result = await handler.HandleAsync(new UploadBrandLogoCommand
+        {
+            TenantId = TenantId,
+            Filename = "logo.png", // extensión declarada PNG — pero la firma binaria es SVG/texto
+            Content = content,
+        }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(UploadBrandLogoOutcome.Invalid);
+        result.Errors.Should().ContainSingle(e => e.Code == BrandingErrors.LogoFormat);
+        await storage.DidNotReceiveWithAnyArgs().SaveAsync(default, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task AC2_PesoMayorAlMaximoConfigurado_SeRechazaConLogoTooLarge()
+    {
+        var options = new BrandingOptions();
+        options.Logo.MaxBytes = OnePixelPng.Length - 1; // fuerza el rechazo con un PNG válido pequeño
+        var repo = Substitute.For<ITenantBrandingRepository>();
+        var storage = Substitute.For<IBrandLogoStorage>();
+        var handler = new UploadBrandLogoHandler(repo, storage, new BrandAssetValidator(options));
+        using var content = new MemoryStream(OnePixelPng);
+
+        var result = await handler.HandleAsync(new UploadBrandLogoCommand
+        {
+            TenantId = TenantId,
+            Filename = "logo.png",
+            Content = content,
+        }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(UploadBrandLogoOutcome.Invalid);
+        result.Errors.Should().ContainSingle(e => e.Code == BrandingErrors.LogoTooLarge);
+    }
+
+    [Fact]
+    public async Task AC2_DimensionesFueraDeRango_100x30_SeRechazaConLogoDimensions()
+    {
+        // El PNG 1x1 de fixture reporta 1x1 → fuerza min 120x40 via BrandingOptions estrictos
+        // simulando el caso 100x30 mediante límites que lo excluyan (min real 120x40).
+        var errors = new BrandAssetValidator(new BrandingOptions())
+            .ValidateLogo("image/png", 1000, 100, 30);
+
+        errors.Should().ContainSingle(e => e.Code == BrandingErrors.LogoDimensions);
+    }
+
+    [Fact]
+    public void AC2_DimensionesFueraDeRango_2001x100_SeRechazaConLogoDimensions()
+    {
+        var errors = new BrandAssetValidator(new BrandingOptions())
+            .ValidateLogo("image/png", 1000, 2001, 100);
+
+        errors.Should().ContainSingle(e => e.Code == BrandingErrors.LogoDimensions);
+    }
+
+    [Fact]
+    public async Task AC2_PngValidoPeroMenorAlMinimo_SeRechazaConElValidadorReal()
+    {
+        var repo = Substitute.For<ITenantBrandingRepository>();
+        var storage = Substitute.For<IBrandLogoStorage>();
+        storage.SaveAsync(TenantId, "logo.png", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(new StoredBrandLogo("brand-logo/1", "a".PadLeft(64, '0'), OnePixelPng.Length));
+        repo.AddLogoVersionAsync(TenantId, Arg.Any<NewBrandLogo>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(ci => new TenantBrandLogoVersion(
+                Guid.NewGuid(), TenantId, 1, TenantBrandLogoVersion.StatusActive,
+                ci.Arg<NewBrandLogo>().ContentType, "logo.png", "brand-logo/1", "a".PadLeft(64, '0'), OnePixelPng.Length, 1, 1));
+
+        var handler = new UploadBrandLogoHandler(repo, storage, new BrandAssetValidator(new BrandingOptions()));
+        using var content = new MemoryStream(OnePixelPng);
+
+        var result = await handler.HandleAsync(new UploadBrandLogoCommand
+        {
+            TenantId = TenantId,
+            Filename = "logo.png",
+            Content = content,
+        }, TestContext.Current.CancellationToken);
+
+        // El PNG 1x1 real está por debajo del mínimo 120x40 (AC2): se rechaza con LogoDimensions,
+        // no se sube. Confirma que el validador real SÍ se aplica (a diferencia del permisivo).
+        result.Outcome.Should().Be(UploadBrandLogoOutcome.Invalid);
+        result.Errors.Should().ContainSingle(e => e.Code == BrandingErrors.LogoDimensions);
+    }
 }

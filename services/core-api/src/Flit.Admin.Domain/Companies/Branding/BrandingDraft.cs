@@ -22,16 +22,11 @@ public sealed record BrandingDraft(string? PlatformName, BrandColors? Colors, Gu
             missing.Add("platformName");
         }
 
-        if (Colors is null)
-        {
-            missing.Add("colors");
-        }
-        else
-        {
-            if (string.IsNullOrWhiteSpace(Colors.Primary)) missing.Add("colors.primary");
-            if (string.IsNullOrWhiteSpace(Colors.Secondary)) missing.Add("colors.secondary");
-            if (string.IsNullOrWhiteSpace(Colors.OnPrimary)) missing.Add("colors.onPrimary");
-        }
+        // Vocabulario estable del contrato (#12413 AC6): siempre los TRES sub-campos, nunca un
+        // "colors" genérico — también cuando Colors es null (borrador sin paleta alguna).
+        if (Colors is null || string.IsNullOrWhiteSpace(Colors.Primary)) missing.Add("colors.primary");
+        if (Colors is null || string.IsNullOrWhiteSpace(Colors.Secondary)) missing.Add("colors.secondary");
+        if (Colors is null || string.IsNullOrWhiteSpace(Colors.OnPrimary)) missing.Add("colors.onPrimary");
 
         if (LogoId is null)
         {

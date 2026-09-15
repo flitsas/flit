@@ -764,7 +764,7 @@ paths:
           description: Payload inválido (HU #12413).
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              schema: { $ref: "#/components/schemas/BrandAssetValidationErrorResponse" }
 
   /api/v1/admin/companies/{tenantId}/branding/logo:
     parameters:
@@ -800,7 +800,7 @@ paths:
           description: Formato/peso/dimensiones inválidos (HU #12413).
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              schema: { $ref: "#/components/schemas/BrandAssetValidationErrorResponse" }
 
   /api/v1/admin/companies/{tenantId}/branding/publish:
     parameters:
@@ -840,7 +840,7 @@ paths:
           description: Borrador incompleto (HU #12413 AC6).
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              schema: { $ref: "#/components/schemas/BrandingIncompleteResponse" }
 
   /api/v1/admin/companies/{tenantId}/branding/retire:
     parameters:
@@ -909,7 +909,7 @@ paths:
           description: Payload inválido (HU #12413).
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              schema: { $ref: "#/components/schemas/BrandAssetValidationErrorResponse" }
 
   /api/v1/company/branding/logo:
     post:
@@ -939,7 +939,7 @@ paths:
           description: Formato/peso/dimensiones inválidos (HU #12413).
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              schema: { $ref: "#/components/schemas/BrandAssetValidationErrorResponse" }
 
   /api/v1/company/branding/publish:
     post:
@@ -973,7 +973,7 @@ paths:
           description: Borrador incompleto (HU #12413 AC6).
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              schema: { $ref: "#/components/schemas/BrandingIncompleteResponse" }
 
   /api/v1/public/branding:
     get:
@@ -11223,6 +11223,61 @@ components:
       properties:
         error: { type: string }
       required: [error]
+
+    BrandAssetValidationError:
+      type: object
+      description: >-
+        Error de validación de un activo de marca (HU #12413). `field` es opcional (p. ej. ausente
+        en BRANDING_CONTRAST_TOO_LOW, que reporta el par en `details.pair`). `details` varía por
+        código: BRANDING_CONTRAST_TOO_LOW → { pair, ratio, min }; BRANDING_LOGO_TOO_LARGE →
+        { maxBytes }; BRANDING_LOGO_DIMENSIONS → { min, max, actual }.
+      required: [code]
+      properties:
+        code:
+          type: string
+          enum:
+            - BRANDING_NAME_LENGTH
+            - BRANDING_NAME_MARKUP
+            - BRANDING_COLOR_FORMAT
+            - BRANDING_CONTRAST_TOO_LOW
+            - BRANDING_LOGO_FORMAT
+            - BRANDING_LOGO_TOO_LARGE
+            - BRANDING_LOGO_DIMENSIONS
+        field:
+          type: string
+          nullable: true
+          example: "colors.primary"
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    BrandAssetValidationErrorResponse:
+      type: object
+      description: Cuerpo del 422 de los endpoints de marca (HU #12413) — lista de errores de validación.
+      required: [errors]
+      properties:
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/BrandAssetValidationError" }
+
+    BrandingIncompleteResponse:
+      type: object
+      description: Cuerpo del 422 de `.../branding/publish` cuando el borrador no está completo (HU #12413 AC6).
+      required: [error, details]
+      properties:
+        error:
+          type: string
+          enum: [BRANDING_INCOMPLETE]
+        details:
+          type: object
+          required: [missing]
+          properties:
+            missing:
+              type: array
+              items:
+                type: string
+                enum: [platformName, "colors.primary", "colors.secondary", "colors.onPrimary", logo]
 
     IctJobSettingsView:
       type: object

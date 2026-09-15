@@ -34,10 +34,12 @@ public sealed class PublishBrandingHandler(
             return PublishBrandingResult.Conflict();
         }
 
-        // Presencia estructural del borrador (no formato/contraste, eso es #12413 AC1-AC5). El
-        // validador permisivo no aporta reglas adicionales de completitud en esta HU.
-        var missing = current.Draft.MissingFields();
-        if (missing.Count > 0 && _validator.ValidateDraft(current.Draft).Count > 0)
+        // Presencia estructural del borrador (AC6, #12413): campo faltante ⇒ rechazo directo. El
+        // formato/contraste de los campos SÍ presentes ya lo exigió UpsertBrandingDraftHandler al
+        // guardar (no se persiste un borrador con formato inválido), así que aquí basta la
+        // completitud estructural — sin volver a depender de que el validador reporte errores.
+        var missing = BrandingCompleteness.MissingFields(current.Draft);
+        if (missing.Count > 0)
         {
             return PublishBrandingResult.Incomplete(missing);
         }

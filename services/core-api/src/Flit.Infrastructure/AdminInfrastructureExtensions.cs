@@ -84,9 +84,24 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Domain.Companies.Branding.ITenantBrandingRepository, TenantBrandingRepository>();
         services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandLogoStorage,
             Flit.Infrastructure.Storage.BrandLogoStorage>();
-        // Permisivo (fail-open) hasta que #12413 registre la implementación real de formato/contraste.
+        // HU #12413 (Feature #12366, ADR-0060 D1) — formato/peso/dimensiones/contraste reales.
+        // Mismo patrón que DomainOptions/ImprontaValidationPolicyOptions: Application consume el
+        // POCO YA resuelto, sin IOptions. PermissiveBrandAssetValidator queda como respaldo
+        // fail-open documentado (no se borra, solo se deja de registrar).
+        if (configuration is not null)
+        {
+            services.Configure<Flit.Admin.Application.Companies.Branding.BrandingOptions>(
+                configuration.GetSection(Flit.Admin.Application.Companies.Branding.BrandingOptions.SectionName));
+            services.AddSingleton(sp =>
+                sp.GetRequiredService<IOptions<Flit.Admin.Application.Companies.Branding.BrandingOptions>>().Value);
+        }
+        else
+        {
+            services.AddSingleton(new Flit.Admin.Application.Companies.Branding.BrandingOptions());
+        }
+
         services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandAssetValidator,
-            Flit.Admin.Application.Companies.Branding.PermissiveBrandAssetValidator>();
+            Flit.Admin.Application.Companies.Branding.BrandAssetValidator>();
 
         // HU #12418 (Feature #12366, ADR-0060 D2) — resolución pública/sesión de marca. Lectura
         // directa del estado del tenant (sin caché propia) + caché de 60 s del resultado resuelto,
