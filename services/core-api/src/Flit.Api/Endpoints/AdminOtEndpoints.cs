@@ -22,9 +22,11 @@ using Flit.Admin.Application.OtRules.ListOtRules;
 using Flit.Admin.Application.OtRules.UpdateOtRule;
 using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Domain.OtClientProcedures;
+using Flit.Api.UseCases.RevocationRequests;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ImprintSignatures;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Application.OtRequirements.GetOtRequirements;
@@ -228,6 +230,26 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
+
+        // HU #12576 (Feature #12565) — decisión del OT sobre la solicitud de revocatoria ACTIVA del
+        // trámite (sub-flujo ORTOGONAL de HU #12570/#12571/#12572, ADR-0022: no toca TramiteStateMachine).
+        group.MapPost("/client-procedures/{id:guid}/revocation-requests/approve", ApproveRevocationRequestAsync)
+            .WithName("AdminOtApproveRevocationRequest")
+            .WithSummary("Aprueba la solicitud de revocatoria activa de un trámite Aprobado (HU #12576): ejecuta Aprobado→Revocado reutilizando el handler de HU #12166")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        group.MapPost("/client-procedures/{id:guid}/revocation-requests/reject", RejectRevocationRequestAsync)
+            .WithName("AdminOtRejectRevocationRequest")
+            .WithSummary("Rechaza la solicitud de revocatoria activa de un trámite Aprobado (HU #12576): el trámite permanece Aprobado y el gestor puede reintentar")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         group.MapPost("/client-procedures/{id:guid}/consolidado", GenerateClientProcedureConsolidadoAsync)
             .WithName("AdminOtGenerateClientProcedureConsolidado")
@@ -1563,6 +1585,89 @@ public static class AdminOtEndpoints
                 new { error = "QUIPUX_READONLY" },
                 statusCode: StatusCodes.Status403Forbidden),
             _ => Results.Ok(result.Procedure),
+        };
+    }
+
+    private static Task<IResult> ApproveRevocationRequestAsync(
+        Guid id,
+        HttpContext httpContext,
+        DecideRevocationRequestApiRequest? request,
+        DecideRevocationRequestHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken) =>
+        DecideRevocationRequestAsync(
+            id, httpContext, request, handler, transitOfficeCatalog, transitOfficeId, approve: true, cancellationToken);
+
+    private static Task<IResult> RejectRevocationRequestAsync(
+        Guid id,
+        HttpContext httpContext,
+        DecideRevocationRequestApiRequest? request,
+        DecideRevocationRequestHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken) =>
+        DecideRevocationRequestAsync(
+            id, httpContext, request, handler, transitOfficeCatalog, transitOfficeId, approve: false, cancellationToken);
+
+    /// <summary>
+    /// HU #12576 (Feature #12565) — común a approve/reject: resuelve tenant/organismo (mismo patrón que
+    /// approve/reject/revoke de client-procedures) y traduce el resultado del handler a HTTP.
+    /// </summary>
+    private static async Task<IResult> DecideRevocationRequestAsync(
+        Guid id,
+        HttpContext httpContext,
+        DecideRevocationRequestApiRequest? request,
+        DecideRevocationRequestHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Guid? transitOfficeId,
+        bool approve,
+        CancellationToken cancellationToken)
+    {
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var result = await handler.HandleAsync(new DecideRevocationRequestCommand(
+            tenantId,
+            id,
+            approve,
+            request?.Reason,
+            ResolveUserId(httpContext.User),
+            scopedOfficeId), cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            DecideRevocationRequestStatus.ProcedureNotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
+            DecideRevocationRequestStatus.RequestNotFound => Results.NotFound(
+                new { error = "No hay una solicitud de revocatoria activa para este trámite" }),
+            DecideRevocationRequestStatus.InvalidState => Results.Conflict(new { error = "INVALID_STATE" }),
+            DecideRevocationRequestStatus.QuipuxReadOnly => Results.Json(
+                new { error = "QUIPUX_READONLY" },
+                statusCode: StatusCodes.Status403Forbidden),
+            DecideRevocationRequestStatus.MotivoRequerido => Results.Json(
+                new { error = TramiteEstadoErrores.MotivoRequerido, message = "Debe indicar el motivo del rechazo." },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.Ok(new
+            {
+                procedure = result.Procedure,
+                revocationRequestId = result.RevocationRequestId,
+                attemptNumber = result.AttemptNumber,
+                status = result.RequestStatus,
+            }),
         };
     }
 

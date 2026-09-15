@@ -44,6 +44,15 @@ internal sealed class RevocationRequestNotificationEnqueuer(
     /// <summary>Placeholder del template key hasta que exista la plantilla real (ver XML doc de la clase).</summary>
     public const string TemplateKey = "tramites.revocatoria-solicitada";
 
+    /// <summary>HU #12576 (AC4) — evento propio de bitácora para la DECISIÓN (aprobada/rechazada).</summary>
+    public const string DecisionEventoTipo = "revocatoria_decision_notificacion_encolada";
+
+    /// <summary>Placeholder del template key de la decisión "aprobada" (mismo motivo que <see cref="TemplateKey"/>).</summary>
+    public const string DecisionTemplateKeyAprobada = "tramites.revocatoria-aprobada";
+
+    /// <summary>Placeholder del template key de la decisión "rechazada" (mismo motivo que <see cref="TemplateKey"/>).</summary>
+    public const string DecisionTemplateKeyRechazada = "tramites.revocatoria-rechazada";
+
     public async Task NotifyAsync(RevocationRequestSolicitadaEvent evt, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(evt);
@@ -112,6 +121,86 @@ internal sealed class RevocationRequestNotificationEnqueuer(
 
         // SaveChanges PROPIO: corre DESPUÉS del commit de la solicitud, en su propia unidad de trabajo
         // (el caller ya envuelve esta llamada en try/catch — ver IRevocationRequestNotifier).
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #12576 (Feature #12565, AC4) — sink de "decisión de revocatoria registrada". MISMO patrón que
+    /// <see cref="NotifyAsync"/> (radicador de la solicitud, no comprador/vendedor: es un acuse de la
+    /// decisión a quien la pidió), mismo motivo documentado en el XML doc de la clase para no tener
+    /// todavía una cola de despacho de correo propia.
+    /// </summary>
+    public async Task NotifyDecisionAsync(RevocationRequestDecidedEvent evt, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(evt);
+
+        var instance = await db.ProcedureInstances
+            .AsNoTracking()
+            .Include(i => i.Actors)
+            .Include(i => i.Participants)
+            .FirstOrDefaultAsync(
+                i => i.Id == evt.ProcedureInstanceId && i.TenantId == evt.TenantId,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (instance is null)
+        {
+            RevocationNotificationLog.InstanceMissing(logger, evt.ProcedureInstanceId, evt.TenantId);
+            return;
+        }
+
+        var requester = await db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == evt.RequestedByUserId)
+            .Select(u => new { u.Email, u.DisplayName })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // Solo el radicador de la SOLICITUD (no de la decisión): el acuse de "tu solicitud fue
+        // aprobada/rechazada" va a quien la pidió, no a quien decidió (el propio OT).
+        var policy = new TramiteStateEmailRecipientPolicy(
+            Comprador: false, VendedorOPropietario: false, Radicador: true, ExtraEmail: null);
+
+        TramiteEmailRecipient? radicador = null;
+        if (requester is not null && !string.IsNullOrWhiteSpace(requester.Email))
+        {
+            var email = requester.Email.Trim();
+            radicador = new TramiteEmailRecipient(
+                TramiteNotificationRecipientResolver.RoleRadicador,
+                TramiteRecipientKind.Persona,
+                email,
+                string.IsNullOrWhiteSpace(requester.DisplayName) ? email : requester.DisplayName.Trim());
+        }
+
+        var actors = instance.Actors?.ToList() ?? [];
+        var participants = instance.Participants?.ToList() ?? [];
+        var resolution = recipientResolver.Resolve(instance, actors, participants, policy, radicador);
+
+        var templateKey = evt.Approved ? DecisionTemplateKeyAprobada : DecisionTemplateKeyRechazada;
+        var payload = JsonSerializer.Serialize(new
+        {
+            revocation_request_id = evt.RevocationRequestId,
+            attempt_number = evt.AttemptNumber,
+            approved = evt.Approved,
+            decided_by = evt.DecidedBy,
+            decided_at = evt.DecidedAt,
+            template_key = templateKey,
+            recipients = resolution.Recipients.Select(r => new { r.Role, kind = r.Kind.ToString(), r.Email }),
+            gaps = resolution.Gaps.Select(g => new { g.Role, kind = g.Kind.ToString() }),
+        });
+
+        db.ProcedureInstanceEvents.Add(new ProcedureInstanceEvent
+        {
+            Id = Guid.NewGuid(),
+            TenantId = evt.TenantId,
+            ProcedureInstanceId = evt.ProcedureInstanceId,
+            Tipo = DecisionEventoTipo,
+            Payload = payload,
+            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedBy = evt.DecidedBy,
+        });
+
+        // SaveChanges PROPIO — mismo criterio que NotifyAsync (el caller envuelve en try/catch).
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }
