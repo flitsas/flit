@@ -16,8 +16,7 @@ using Xunit;
 namespace Flit.Admin.Tests.Tramites;
 
 /// <summary>
-/// Bug (registro diferido 2026-09-15, ver <c>.claude/state/pending-work-items/2026-09-15-consultation-config-x-tenant-id-crudo.md</c>)
-/// — <c>GET /api/v1/tramites/consultation-config</c> confiaba en el <c>X-Tenant-Id</c> crudo del cliente:
+/// Bug #12564 — <c>GET /api/v1/tramites/consultation-config</c> confiaba en el <c>X-Tenant-Id</c> crudo del cliente:
 /// la ruta estaba congelada como deuda en <c>LegacyUncoveredRoutes</c> (HU #12320) y excluida del
 /// barrido AC9 (Bug #12558), fuera de
 /// <see cref="Flit.Api.Middleware.TenantEnforcementMiddleware.RuntimeScopedRoutes"/>. Un usuario
@@ -67,12 +66,18 @@ public sealed class ConsultationConfigTenantScopeTests : IClassFixture<Consultat
 
     // ── No-SuperAdmin: el tenant SIEMPRE sale del JWT, nunca del header ──────────────────────
 
-    [Fact]
-    public async Task Get_NoSuperAdmin_ConHeaderDeOtroTenant_InvocaElProveedorConElTenantDelJwt()
+    /// <summary>Con y SIN barra final: el routing de ASP.NET Core sirve <c>/consultation-config/</c>
+    /// igual que la ruta canónica, así que el middleware debe interceptar ambas (revisión de seguridad
+    /// del PR #377: <c>RouteMatch.Exact</c> comparaba con <c>PathString.Equals</c> y la barra final
+    /// saltaba el enforcement, dejando pasar el <c>X-Tenant-Id</c> crudo).</summary>
+    [Theory]
+    [InlineData(Route)]
+    [InlineData(Route + "/")]
+    public async Task Get_NoSuperAdmin_ConHeaderDeOtroTenant_InvocaElProveedorConElTenantDelJwt(string route)
     {
         var client = ClientFor(TenantA, headerTenant: TenantB, role: "AdminCompany");
 
-        var response = await client.GetAsync(Route, TestContext.Current.CancellationToken);
+        var response = await client.GetAsync(route, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         await _factory.Provider.Received(1).GetAsync(TenantA, Arg.Any<CancellationToken>());

@@ -293,6 +293,42 @@ public sealed class TenantResolutionArchitectureTests : IClassFixture<WebApplica
             "la cobertura de gestión avanzada es UNA entrada Prefix, no una por ruta (Bug #12554)");
     }
 
+    // ── Bug #12564 — toda entrada de RuntimeScopedRoutes tolera la barra final ────────────────
+
+    /// <summary>
+    /// El routing de ASP.NET Core sirve <c>/ruta/</c> igual que <c>/ruta</c>, pero
+    /// <c>PathString.Equals</c> (comparación histórica de <see cref="TenantEnforcementMiddleware.RouteMatch.Exact"/>)
+    /// no las iguala: <c>GET /api/v1/tramites/consultation-config/</c> saltaba el middleware y el
+    /// handler leía el <c>X-Tenant-Id</c> crudo (revisión de seguridad del PR #377). Mismo defecto en
+    /// <c>transit-offices</c>, <c>preflight-preview</c> y <c>rues-preview</c>. Exact tolera SOLO la
+    /// barra final: ni un sufijo pegado (<c>…configX</c>) ni un segmento hijo (<c>…config/otra</c>).
+    /// </summary>
+    [Fact]
+    public void AC10_TodaRutaRuntimeScopedSigueCubiertaConBarraFinal()
+    {
+        var routes = TenantEnforcementMiddleware.RuntimeScopedRoutes;
+        routes.Should().NotBeEmpty();
+
+        var sinBarraFinal = routes
+            .Where(r => !TenantEnforcementMiddleware.IsRuntimeScoped(new Microsoft.AspNetCore.Http.PathString(r.Path + "/")))
+            .Select(r => r.Path)
+            .ToList();
+        sinBarraFinal.Should().BeEmpty(
+            "toda entrada de RuntimeScopedRoutes debe interceptar también la petición con barra final (Bug #12564): "
+            + "el routing la sirve igual y sin middleware el handler lee X-Tenant-Id crudo. Rutas que la dejan pasar: {0}",
+            string.Join(", ", sinBarraFinal));
+
+        var exact = routes.Where(r => r.Match == TenantEnforcementMiddleware.RouteMatch.Exact).ToList();
+        exact.Should().NotBeEmpty();
+        foreach (var route in exact)
+        {
+            TenantEnforcementMiddleware.IsRuntimeScoped(new Microsoft.AspNetCore.Http.PathString(route.Path + "x"))
+                .Should().BeFalse($"Exact no debe matchear un sufijo pegado ({route.Path}x)");
+            TenantEnforcementMiddleware.IsRuntimeScoped(new Microsoft.AspNetCore.Http.PathString(route.Path + "/otra"))
+                .Should().BeFalse($"Exact no debe matchear un segmento hijo ({route.Path}/otra)");
+        }
+    }
+
     // ── Bug #12558 — toda ruta que lea [FromHeader(Name = "X-Tenant-Id")] está declarada ───────
 
     /// <summary>
