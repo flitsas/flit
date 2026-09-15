@@ -31,6 +31,8 @@ namespace Flit.Api.Endpoints.Tramites;
 ///   <item><c>GET /instances/{id}/attachments</c> y <c>GET /instances/{id}/attachments/{attachmentId}/download</c>
 ///   (HU #12410, <see cref="NetworkAttachmentEndpoints"/>): metadatos y descarga proxeada de los documentos
 ///   de un trámite de la red, con interruptor de clase para CONCESION.</item>
+///   <item><c>GET /children</c> (HU #12555, <see cref="NetworkChildrenEndpoints"/>): clientes hijos
+///   vigentes de la cabeza (id + nombre), sin la policy admin de <see cref="AdminCompanyChildrenEndpoints"/>.</item>
 /// </list>
 /// Policy de cabeza (<see cref="GroupHeadReadFilter"/>) sobre todo el grupo: sin alcance de grupo ⇒ 403.
 /// HU #12361: <see cref="NetworkAccessAuditFilter"/> (más externo) escribe UN registro por petición en
@@ -203,6 +205,8 @@ internal static class NetworkProcedureEndpoints
         group.MapNetworkReports();
         // HU #12410 — documentos de un trámite de la red: metadatos + descarga proxeada (sin preview-url).
         group.MapNetworkAttachments();
+        // HU #12555 — GET /children: clientes hijos vigentes de la cabeza (id + nombre), sin policy admin.
+        group.MapNetworkChildren();
 
         return app;
     }
