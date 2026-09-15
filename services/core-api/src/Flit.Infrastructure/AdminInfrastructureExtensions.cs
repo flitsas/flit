@@ -71,6 +71,14 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Security.GroupHeadInvitationRolePolicy>();
         services.AddScoped<ITenantSettingsRepository, TenantSettingsRepository>();
 
+        // HU #12412 (Feature #12366, ADR-0060 D1) — identidad de marca de la cabeza MARCA_BLANCA.
+        services.AddScoped<Flit.Admin.Domain.Companies.Branding.ITenantBrandingRepository, TenantBrandingRepository>();
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandLogoStorage,
+            Flit.Infrastructure.Storage.BrandLogoStorage>();
+        // Permisivo (fail-open) hasta que #12413 registre la implementación real de formato/contraste.
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandAssetValidator,
+            Flit.Admin.Application.Companies.Branding.PermissiveBrandAssetValidator>();
+
         // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
         // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
         services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();

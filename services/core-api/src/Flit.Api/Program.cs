@@ -228,6 +228,8 @@ app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
 app.MapUserUiPreferencesEndpoints();
 app.MapAdminCompaniesEndpoints();
+app.MapAdminCompaniesBrandingEndpoints();
+app.MapCompanyBrandingEndpoints();
 app.MapAdminCompanyChildrenEndpoints();
 app.MapAdminCompanyChildrenConfigEndpoints();
 app.MapAdminCompanyChildrenInvitationsEndpoints();

@@ -342,13 +342,16 @@ public sealed class RequestTenantResolverTests
             ("/api/v1/me/ui-preferences", TenantEnforcementMiddleware.RouteMatch.Prefix),
             // Bug #12564 — configuración de consulta del tenant (proveedor primario y flags), bajo /api/v1/tramites.
             ("/api/v1/tramites/consultation-config", TenantEnforcementMiddleware.RouteMatch.Exact),
+            // HU #12412 (Feature #12366, ADR-0060 D1) — autogestión de marca de la cabeza, FUERA de /api/v1/tramites.
+            ("/api/v1/company/branding", TenantEnforcementMiddleware.RouteMatch.Prefix),
         });
         routes.Should().OnlyContain(r =>
             r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal)
             || r.Path == "/api/v1/admin/tramites"
-            || r.Path == "/api/v1/me/ui-preferences",
-            "las únicas excepciones fuera de /api/v1/tramites son gestión avanzada (Bug #12554) "
-            + "y preferencias de UI (Bug #12558) — cualquier prefijo nuevo fuera de ambos casos debe "
-            + "declararse aquí explícitamente");
+            || r.Path == "/api/v1/me/ui-preferences"
+            || r.Path == "/api/v1/company/branding",
+            "las únicas excepciones fuera de /api/v1/tramites son gestión avanzada (Bug #12554), "
+            + "preferencias de UI (Bug #12558) y autogestión de marca (HU #12412) — cualquier prefijo "
+            + "nuevo fuera de estos casos debe declararse aquí explícitamente");
     }
 }

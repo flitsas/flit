@@ -233,6 +233,12 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // el SuperAdmin sigue acotando con el header. Exact: no hay rutas hijas; Exact tolera solo la
         // barra final (/consultation-config/ también pasa por aquí, PR #377).
         new("/api/v1/tramites/consultation-config", RouteMatch.Exact),
+        // HU #12412 (Feature #12366, ADR-0060 D1) — autogestión de marca por la cabeza de grupo:
+        // /api/v1/company/branding resuelve el tenant SIEMPRE por RequestTenantResolver/JWT (nunca por
+        // header), pero se declara aquí para que los tests de arquitectura de la épica Marca Blanca
+        // (TenantResolutionArchitectureTests) confirmen que toda ruta nueva bajo /company está en la
+        // lista blanca del middleware. Prefix: cubre /company/branding/logo y /publish.
+        new("/api/v1/company/branding", RouteMatch.Prefix),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>
