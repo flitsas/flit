@@ -295,6 +295,59 @@ public static class V1MapperShared
         }
     }
 
+    // ---------------------------------------------------------------- organismo de tránsito
+
+    /// <summary>
+    /// Field_values del organismo que NO salen del texto de V1 sino del catálogo de V2, con las
+    /// mismas claves que escribe el flujo nativo (<c>CreateFromConsultaCommand</c>): el id, el código
+    /// de ciudad y su nombre legible. El mapper debe darles prioridad sobre el mapa columna → clave
+    /// (V1 guarda en <c>traffic_secretary_city</c> el NOMBRE de la ciudad; V2 espera el código en
+    /// <c>transit_office_city</c> y el nombre en <c>transit_office_city_name</c>).
+    /// <para>
+    /// Sin organismo resuelto no se inventa nada: se conservan los textos de V1 y se avisa, porque
+    /// ese trámite no va a aparecer en la bandeja de ningún organismo hasta que alguien lo arregle.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<(string FieldKey, string? Value)> TransitOfficeFields(
+        V1SourceRecord record,
+        MappingContext context,
+        List<string> warnings)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(warnings);
+
+        var v1Code = record.Column("traffic_secretary_code");
+        var office = context.TransitOffice;
+
+        if (office is null)
+        {
+            if (v1Code is not null)
+            {
+                warnings.Add(
+                    $"Organismo de tránsito '{v1Code}' ({record.Column("traffic_secretary_name") ?? "sin nombre"}) " +
+                    "no existe en catalogs.transit_offices de V2: se migra solo como texto y el trámite " +
+                    "NO aparecerá en la bandeja de ningún organismo (transit_office_id vacío).");
+            }
+
+            return [];
+        }
+
+        if (!office.IsActive)
+        {
+            warnings.Add(
+                $"El organismo de tránsito {office.Code} ({office.Name}) está INACTIVO en V2; el trámite " +
+                "queda asociado a él igualmente por fidelidad histórica.");
+        }
+
+        return
+        [
+            (TransitOfficeFieldKeys.Id, office.Id.ToString()),
+            (TransitOfficeFieldKeys.City, office.CityCode),
+            (TransitOfficeFieldKeys.CityName, office.CityName ?? record.Column("traffic_secretary_city")),
+        ];
+    }
+
     // ---------------------------------------------------------------- utilidades
 
     public static DateTimeOffset? FirstTransitionTo(

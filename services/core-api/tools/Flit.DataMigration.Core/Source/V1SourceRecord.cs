@@ -33,6 +33,14 @@ public sealed class V1SourceRecord
     /// <summary>Historial de estados reconstruible, ordenado cronológicamente.</summary>
     public required IReadOnlyList<V1StatusEvent> StatusHistory { get; init; }
 
+    /// <summary>
+    /// Copropietarios de una matrícula multipropietario (<c>vehicle_registration_master_actors</c>),
+    /// una fila por persona y con las mismas normalizaciones que <see cref="Columns"/>. Vacío en
+    /// traspaso (V1 no tiene la tabla equivalente) y en matrículas de un solo titular. Incluye al
+    /// titular principal cuando V1 lo repite ahí con su porcentaje (<c>is_solidarity_buyer</c>).
+    /// </summary>
+    public IReadOnlyList<IReadOnlyDictionary<string, string?>> CoOwners { get; init; } = [];
+
     /// <summary>Devuelve el valor de una columna, o <c>null</c> si no existe o está vacía.</summary>
     public string? Column(string name) =>
         Columns.TryGetValue(name, out var value) ? value : null;

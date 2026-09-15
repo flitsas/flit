@@ -15,6 +15,22 @@ public sealed class MappingContext
     public required Guid SystemUserId { get; init; }
     public required Guid OwnerEntityId { get; init; }
     public required Guid BuyerEntityId { get; init; }
+
+    /// <summary>
+    /// Organismo de tránsito de V2 que corresponde al <c>traffic_secretary_code</c> del trámite, o
+    /// <c>null</c> si el catálogo no lo conoce. Con él el mapper fija <c>TransitOfficeId</c> y el
+    /// field_value <c>transit_office_id</c>, que es lo que la bandeja del organismo y el grant
+    /// OT↔empresa miran; sin él el trámite migrado no aparece en ninguna bandeja.
+    /// </summary>
+    public TransitOfficeRef? TransitOffice { get; init; }
+
+    /// <summary>
+    /// Cabeza de grupo de la que cuelga hoy la compañía radicadora (<c>tenants.parent_tenant_id</c>),
+    /// para <c>ParentTenantIdAtCreation</c> (HU #12406). Es lo que la vista consolidada de la red usa
+    /// para que la cabeza vea los trámites de sus hijas. Para un trámite migrado "al crear" es
+    /// "al migrar": la jerarquía no existía en V1.
+    /// </summary>
+    public Guid? ParentTenantId { get; init; }
 }
 
 /// <summary>
@@ -65,6 +81,11 @@ public static class TransferMapper
             // aplica al final (ver ProcedureInstanceLoader).
             Status = TramiteEstado.Borrador,
             ChecklistEstado = "{}",
+            // Organismo y cabeza de grupo: las dos columnas que deciden quién VE el trámite (bandeja
+            // del OT y vista consolidada de la red). En el flujo nativo las fija la app al crear y
+            // al entregar; un trámite migrado nunca pasa por ahí, así que van desde el contexto.
+            TransitOfficeId = context.TransitOffice?.Id,
+            ParentTenantIdAtCreation = context.ParentTenantId,
             CreatedByUserId = context.SystemUserId,
             CreatedAt = createdAt,
             UpdatedAt = V1MapperShared.ParseDate(record.Column("updated_at")),
@@ -123,14 +144,30 @@ public static class TransferMapper
             });
         }
 
+        // El organismo resuelto contra el catálogo de V2 tiene prioridad sobre el texto de V1 (ver
+        // V1MapperShared.TransitOfficeFields): se calcula antes para que el bucle no escriba dos
+        // veces la misma clave (el id del field_value es determinístico por clave).
+        var transitOffice = V1MapperShared.TransitOfficeFields(record, context, warnings);
+        var overridden = transitOffice.Select(t => t.FieldKey).ToHashSet(StringComparer.Ordinal);
+
         foreach (var (column, fieldKey) in TransferFieldMap.FieldKeys)
         {
+            if (overridden.Contains(fieldKey))
+            {
+                continue;
+            }
+
             var value = record.Column(column);
             if (value is not null)
             {
                 value = DecodeFieldValue(fieldKey, value, warnings);
             }
 
+            Add(fieldKey, value);
+        }
+
+        foreach (var (fieldKey, value) in transitOffice)
+        {
             Add(fieldKey, value);
         }
 

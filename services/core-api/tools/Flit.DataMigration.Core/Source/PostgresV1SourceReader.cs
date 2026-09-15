@@ -11,13 +11,18 @@ namespace Flit.DataMigration.V1.Source;
 /// mismo lector sirve para ambos con solo cambiarle los nombres.
 /// </para>
 /// </summary>
-public sealed record V1SourceTables(string Master, string History)
+public sealed record V1SourceTables(string Master, string History, string? Actors = null)
 {
     public static readonly V1SourceTables Transfer =
         new("vehicle_transfer_master", "vehicle_transfer_process_status");
 
+    /// <summary>
+    /// Matrícula trae además la tabla de copropietarios: V2 ya modela hasta 4 personas por rol
+    /// (ADR-0053, <c>ordinal</c> + <c>ownership_percentage</c>), así que se leen para migrarlas.
+    /// </summary>
     public static readonly V1SourceTables Registration =
-        new("vehicle_registration_master", "vehicle_registration_process_status");
+        new("vehicle_registration_master", "vehicle_registration_process_status",
+            "vehicle_registration_master_actors");
 }
 
 /// <summary>
@@ -44,6 +49,7 @@ public sealed class PostgresV1SourceReader(string connectionString, V1SourceTabl
 
         var idArray = ids.ToArray();
         var history = await ReadHistoryAsync(connection, idArray, cancellationToken);
+        var coOwners = await ReadCoOwnersAsync(connection, idArray, cancellationToken);
         var records = new List<V1SourceRecord>(ids.Count);
 
         // SELECT * a propósito: el mapeo es data-driven (ver TransferFieldMap) y así una
@@ -70,6 +76,7 @@ public sealed class PostgresV1SourceReader(string connectionString, V1SourceTabl
                 ProcessStatus = int.Parse(columns["process_status"]!, CultureInfo.InvariantCulture),
                 Columns = columns,
                 StatusHistory = history.GetValueOrDefault(id, []),
+                CoOwners = coOwners.GetValueOrDefault(id, []),
             });
         }
 
@@ -137,6 +144,64 @@ public sealed class PostgresV1SourceReader(string connectionString, V1SourceTabl
                 SourceId = reader.GetInt64(7),
                 LegacyRegistrationDate = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
             });
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Copropietarios por trámite (solo matrícula). Cada fila viaja como diccionario de columnas,
+    /// igual que el master, para que el mapper no dependa del shape exacto de V1.
+    /// <para>
+    /// La tabla no existe en todas las copias de V1 (las anteriores a mediados de 2026 no la
+    /// traen): si falta, se devuelve vacío en vez de reventar toda la lectura. El mapper avisa
+    /// igualmente cuando el master dice <c>has_multiple_owners</c> y no llegó ningún copropietario.
+    /// </para>
+    /// </summary>
+    private async Task<Dictionary<long, List<IReadOnlyDictionary<string, string?>>>> ReadCoOwnersAsync(
+        NpgsqlConnection connection,
+        long[] ids,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<long, List<IReadOnlyDictionary<string, string?>>>();
+        if (_tables.Actors is null)
+        {
+            return result;
+        }
+
+        await using (var exists = new NpgsqlCommand("SELECT to_regclass(@t) IS NOT NULL", connection))
+        {
+            exists.Parameters.AddWithValue("t", _tables.Actors);
+            if (await exists.ExecuteScalarAsync(cancellationToken) is not true)
+            {
+                return result;
+            }
+        }
+
+        // ORDER BY id: el orden de inserción es el que V1 mostraba, y es el que fija el ordinal
+        // de los copropietarios agregados (el titular principal siempre es el 1).
+        await using var command = new NpgsqlCommand(
+            $"SELECT * FROM {_tables.Actors} WHERE {MasterTable}_id = ANY(@ids) AND deleted_at IS NULL ORDER BY id",
+            connection);
+        command.Parameters.AddWithValue("ids", ids);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var columns = new Dictionary<string, string?>(reader.FieldCount, StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                columns[reader.GetName(i)] = reader.IsDBNull(i) ? null : Stringify(reader.GetValue(i));
+            }
+
+            var masterId = long.Parse(columns[$"{MasterTable}_id"]!, CultureInfo.InvariantCulture);
+            if (!result.TryGetValue(masterId, out var rows))
+            {
+                rows = [];
+                result[masterId] = rows;
+            }
+
+            rows.Add(columns);
         }
 
         return result;
