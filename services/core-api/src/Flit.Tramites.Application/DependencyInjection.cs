@@ -330,6 +330,9 @@ public static class DependencyInjection
         services.AddScoped<Notifications.ITramiteNotificationRecipientResolver,
             Notifications.TramiteNotificationRecipientResolver>();
 
+        // HU #12572 (Feature #12565) — endpoint de solicitud de revocatoria.
+        services.AddScoped<UseCases.RevocationRequests.RequestRevocationHandler>();
+
         // HU #12148 — validación OT de firma digital de impronta manual.
         services.AddScoped<ListImprintSignaturesByPlacaHandler>();
         services.AddScoped<ValidateImprintSignatureHandler>();

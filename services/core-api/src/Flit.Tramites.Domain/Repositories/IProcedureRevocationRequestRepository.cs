@@ -41,4 +41,27 @@ public interface IProcedureRevocationRequestRepository
     /// unicidad en memoria, la BD es la fuente de verdad ante una carrera concurrente).
     /// </summary>
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #12572 — fecha/hora en que el trámite llegó a <c>aprobado</c> por PRIMERA VEZ (la más
+    /// ANTIGUA fila de <c>procedure_instance_status_history</c> con <c>to_status='aprobado'</c>, no la
+    /// más reciente): es la base fija que <see cref="RevocationRequests.RevocationRequestGate"/> exige
+    /// para <c>approvedAt</c> (AC2/AC5 — un reintento tras un rechazo del trámite no reinicia la
+    /// ventana). <c>null</c> si no hay ninguna fila (el caller decide el fallback; no debería ocurrir
+    /// para un trámite ya <c>aprobado</c>, pero esta consulta no lo asume).
+    /// </summary>
+    Task<DateTimeOffset?> GetFirstApprovedAtAsync(
+        Guid tenantId, Guid procedureInstanceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #12572 — ventana de revocatoria configurada para el organismo de tránsito
+    /// (<c>admin.transit_office_profiles.revocation_window_business_days</c>, HU #12567/#12568).
+    /// Lectura CROSS-TENANT por <paramref name="transitOfficeId"/> (mismo criterio que
+    /// <c>OtProfileRepository.GetByTransitOfficeAsync</c>: el perfil es del organismo, no del tenant
+    /// cliente que lo consulta). <c>null</c> si el organismo no tiene perfil configurado = sin límite
+    /// (mismo significado que "sin configurar" para <see cref="RevocationRequestGate"/>,
+    /// AC1/AC5).
+    /// </summary>
+    Task<int?> GetRevocationWindowBusinessDaysAsync(
+        Guid transitOfficeId, CancellationToken cancellationToken = default);
 }

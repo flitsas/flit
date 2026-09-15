@@ -119,6 +119,10 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         // HU #12571 (Feature #12565) — persistencia de solicitudes de revocatoria de trámite Aprobado.
         services.AddScoped<IProcedureRevocationRequestRepository, ProcedureRevocationRequestRepository>();
+        // HU #12572 (Feature #12565, AC3) — sink "solicitud de revocatoria recibida" (ver XML doc de
+        // la clase sobre por qué todavía no hay una cola de despacho de correo propia).
+        services.AddScoped<Flit.Tramites.Domain.Integration.IRevocationRequestNotifier,
+            RevocationRequestNotificationEnqueuer>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
         // HU #12520 (Feature #12519) — plantillas XLSX de carga masiva de trámites.

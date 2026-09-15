@@ -296,6 +296,7 @@ app.MapTramitesActorEndpoints();
 // HU #11196 / #11197 — firma a posteriori: marcar el trámite y consultar si la opción aplica.
 app.MapTramitesFirmaPosteriorEndpoints();
 app.MapTramitesAttachmentEndpoints();
+app.MapTramitesRevocationRequestEndpoints(); // HU #12572 (Feature #12565) — solicitud de revocatoria de trámite Aprobado
 app.MapTramitesOcrEndpoints();
 app.MapTramitesParticipantEndpoints();
 app.MapTramitesBiometricaEndpoints();

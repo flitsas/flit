@@ -1,5 +1,6 @@
 using Flit.Tramites.Domain.RevocationRequests;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -61,4 +62,28 @@ internal sealed class ProcedureRevocationRequestRepository(FlitDbContext db) : I
     private static bool IsActiveRequestUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg
         && string.Equals(pg.ConstraintName, ActiveUniqueIndex, StringComparison.Ordinal);
+
+    /// <summary>HU #12572 — ver XML doc de la interfaz.</summary>
+    public Task<DateTimeOffset?> GetFirstApprovedAtAsync(
+        Guid tenantId, Guid procedureInstanceId, CancellationToken cancellationToken = default) =>
+        db.ProcedureInstanceStatusHistories
+            .Where(h => h.TenantId == tenantId
+                && h.ProcedureInstanceId == procedureInstanceId
+                && h.ToStatus == TramiteEstado.Aprobado)
+            .OrderBy(h => h.ChangedAt)
+            .Select(h => (DateTimeOffset?)h.ChangedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>
+    /// HU #12572 — ver XML doc de la interfaz. Lectura CROSS-TENANT (sin filtrar por
+    /// <c>tenant_id</c>): mismo criterio que <c>OtProfileRepository.GetByTransitOfficeAsync</c>, el
+    /// perfil pertenece al organismo, no al tenant cliente que lo consulta.
+    /// </summary>
+    public Task<int?> GetRevocationWindowBusinessDaysAsync(
+        Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+        db.TransitOfficeProfiles
+            .AsNoTracking()
+            .Where(p => p.TransitOfficeId == transitOfficeId)
+            .Select(p => p.RevocationWindowBusinessDays)
+            .FirstOrDefaultAsync(cancellationToken);
 }
