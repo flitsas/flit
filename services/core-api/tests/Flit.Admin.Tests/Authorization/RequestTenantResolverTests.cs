@@ -306,7 +306,7 @@ public sealed class RequestTenantResolverTests
     }
 
     [Fact]
-    public void RuntimeScopedRoutes_ConservaLos13PrefijosYSusComparaciones()
+    public void RuntimeScopedRoutes_ConservaLosPrefijosYSusComparaciones()
     {
         var routes = TenantEnforcementMiddleware.RuntimeScopedRoutes;
 
@@ -331,7 +331,17 @@ public sealed class RequestTenantResolverTests
             ("/api/v1/tramites/carga-masiva", TenantEnforcementMiddleware.RouteMatch.Prefix),
             // Epic #12543 — aceptación de T&C: evidencia con el tenant del JWT.
             ("/api/v1/tramites/terms-acceptances", TenantEnforcementMiddleware.RouteMatch.Prefix),
+            // Bug #12554 — gestión avanzada del admin sobre trámites, FUERA de /api/v1/tramites.
+            ("/api/v1/admin/tramites", TenantEnforcementMiddleware.RouteMatch.Prefix),
+            // Bug #12558 — preferencias de UI del usuario autenticado, FUERA de /api/v1/tramites.
+            ("/api/v1/me/ui-preferences", TenantEnforcementMiddleware.RouteMatch.Prefix),
         });
-        routes.Should().OnlyContain(r => r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal));
+        routes.Should().OnlyContain(r =>
+            r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal)
+            || r.Path == "/api/v1/admin/tramites"
+            || r.Path == "/api/v1/me/ui-preferences",
+            "las únicas excepciones fuera de /api/v1/tramites son gestión avanzada (Bug #12554) "
+            + "y preferencias de UI (Bug #12558) — cualquier prefijo nuevo fuera de ambos casos debe "
+            + "declararse aquí explícitamente");
     }
 }

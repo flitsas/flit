@@ -49,9 +49,28 @@ const mocks = vi.hoisted(() => ({
   adminListGestoresDisponibles: vi.fn(),
 }));
 
+/** Hijos de la red no-admin — HU #12555/#12556 (`GET /api/v1/tramites/network/children`). */
+const fetchNetworkChildren = vi.hoisted(() => vi.fn());
+
+const MockTramitesApiError = vi.hoisted(
+  () =>
+    class MockTramitesApiError extends Error {
+      status: number;
+      problem: Record<string, unknown> | null;
+      constructor(status: number, message: string, problem: Record<string, unknown> | null = null) {
+        super(message);
+        this.name = 'TramitesApiError';
+        this.status = status;
+        this.problem = problem;
+      }
+    },
+);
+
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: mocks,
   setActiveTramitesTenant: vi.fn(),
+  fetchNetworkChildren,
+  TramitesApiError: MockTramitesApiError,
   DEV_TENANT_ID: 'tenant-dev',
   DEV_USER_ID: 'user-dev',
 }));
@@ -62,9 +81,6 @@ const prefs = vi.hoisted(() => ({
   put: vi.fn(),
 }));
 vi.mock('@/lib/api/ui-preferences', () => ({ uiPreferencesClient: prefs }));
-
-const fetchCompanyChildren = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/api/admin-companies', () => ({ fetchCompanyChildren }));
 
 vi.mock('@/hooks/useAccessibleModules', () => ({
   useAccessibleModules: () => ({ modules: [], loading: false, ready: true, error: null }),
@@ -196,9 +212,10 @@ function makePropiaEnRed(): InstanceSummary {
   return makeInstance({ tenantName: 'Cabeza SAS', fromNetwork: true });
 }
 
+// HU #12555/#12556 — `GET /api/v1/tramites/network/children` ya entrega id+nombre directamente.
 const HIJOS = [
-  { id: HIJO, nit: '1', razonSocial: 'Concesionario Hijo SAS', code: 'H1', tenantType: 'B2B', estadoActivo: true, fechaVinculacion: '2026-01-01', rowVersion: 1 },
-  { id: HIJO_2, nit: '2', razonSocial: 'Autos del Norte SAS', code: 'H2', tenantType: 'B2B', estadoActivo: true, fechaVinculacion: '2026-01-01', rowVersion: 1 },
+  { id: HIJO, nombre: 'Concesionario Hijo SAS' },
+  { id: HIJO_2, nombre: 'Autos del Norte SAS' },
 ];
 
 function prefScope(value: Record<string, unknown>): void {
@@ -271,7 +288,7 @@ beforeEach(() => {
   });
   prefScope({});
   prefs.put.mockImplementation(async (scope: string, value: unknown) => ({ scope, value }));
-  fetchCompanyChildren.mockResolvedValue(HIJOS);
+  fetchNetworkChildren.mockResolvedValue(HIJOS);
 });
 
 afterEach(() => {
@@ -355,7 +372,7 @@ describe('HU #12363 — AC1: el selector solo existe para una cabeza de grupo', 
       'searchEstadoCounts',
       'searchInstances',
     ]);
-    expect(fetchCompanyChildren).not.toHaveBeenCalled();
+    expect(fetchNetworkChildren).not.toHaveBeenCalled();
     expect(prefs.get.mock.calls.map(([s]) => s)).not.toContain('tramites.scope');
     expect(prefs.get.mock.calls.map(([s]) => s)).toContain('tramites.columns');
   });
@@ -457,7 +474,7 @@ describe('HU #12363 — AC4: filtrar por un cliente hijo concreto', () => {
     tokenCabeza();
     renderTable();
     await screen.findByText('AAA111');
-    await waitFor(() => expect(fetchCompanyChildren).toHaveBeenCalledWith(CABEZA));
+    await waitFor(() => expect(fetchNetworkChildren).toHaveBeenCalled());
     await waitFor(() =>
       expect(within(selector()).getAllByRole('option').map((o) => (o as HTMLOptionElement).value)).toEqual([
         'own',
@@ -482,17 +499,33 @@ describe('HU #12363 — AC4: filtrar por un cliente hijo concreto', () => {
     );
   });
 
-  it('si la lista de hijos no está disponible (403) el selector degrada a «Propio | Red» sin error', async () => {
+  it('si la lista de hijos no está disponible por un 5xx/error de red el selector degrada a «Propio | Red» sin error', async () => {
     tokenCabeza();
-    fetchCompanyChildren.mockRejectedValue(Object.assign(new Error('Forbidden'), { status: 403 }));
+    fetchNetworkChildren.mockRejectedValue(new MockTramitesApiError(500, '500 Internal Server Error', null));
     renderTable();
     await screen.findByText('AAA111');
-    await waitFor(() => expect(fetchCompanyChildren).toHaveBeenCalled());
+    await waitFor(() => expect(fetchNetworkChildren).toHaveBeenCalled());
     expect(within(selector()).getAllByRole('option')).toHaveLength(2);
-    expect(screen.queryByText(/Forbidden/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Internal Server Error/)).not.toBeInTheDocument();
     // Y la red sigue pudiéndose pedir.
     await userEvent.selectOptions(selector(), 'network');
     await screen.findByText('BBB222');
+  });
+
+  it('HU #12556 AC2 — un 403 (`network_scope_required`) del endpoint de hijos oculta el selector entero, no lo degrada', async () => {
+    tokenCabeza();
+    fetchNetworkChildren.mockRejectedValue(
+      new MockTramitesApiError(403, '403 Forbidden', { error: 'network_scope_required' }),
+    );
+    renderTable();
+    await screen.findByText('AAA111');
+    await waitFor(() => expect(fetchNetworkChildren).toHaveBeenCalled());
+    // El claim del JWT decía cabeza de grupo, pero el servidor lo desmiente: nada de selector ni
+    // columna «Cliente», y las llamadas quedan idénticas a las de un usuario sin jerarquía (AC1).
+    await waitFor(() => expect(screen.queryByTestId('network-scope-select')).not.toBeInTheDocument());
+    expect(cabeceras()).not.toContain('Cliente');
+    expect(mocks.searchNetworkInstances).not.toHaveBeenCalled();
+    expect(screen.queryByText(/network_scope_required|Forbidden/)).not.toBeInTheDocument();
   });
 });
 
