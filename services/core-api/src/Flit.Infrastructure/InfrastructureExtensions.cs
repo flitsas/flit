@@ -117,6 +117,8 @@ public static class InfrastructureExtensions
             ImprintSignatureValidationRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
+        // HU #12571 (Feature #12565) — persistencia de solicitudes de revocatoria de trámite Aprobado.
+        services.AddScoped<IProcedureRevocationRequestRepository, ProcedureRevocationRequestRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
         // HU #12520 (Feature #12519) — plantillas XLSX de carga masiva de trámites.

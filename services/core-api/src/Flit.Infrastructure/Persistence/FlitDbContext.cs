@@ -8,6 +8,7 @@ using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Modules.Quipux.Domain.Envios;
 using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.RevocationRequests;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -291,6 +292,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Trámites — prenda / gravamen (IT-3, Feature #10585): agregado compañero con versionado por estado.
     public DbSet<ProcedureInstancePrenda> ProcedureInstancePrendas => Set<ProcedureInstancePrenda>();
+
+    // Trámites — solicitudes de revocatoria de un trámite Aprobado (HU #12570/#12571, Feature #12565):
+    // una fila por intento (attempt_number), ortogonal a TramiteEstado/TramiteStateMachine (ADR-0022).
+    public DbSet<ProcedureRevocationRequest> ProcedureRevocationRequests => Set<ProcedureRevocationRequest>();
 
     // Trámites — avalúo comercial (Feature #10707): valores de referencia por VIN/placa y fuente.
     public DbSet<AvaluoMockValue> AvaluoMockValues => Set<AvaluoMockValue>();
