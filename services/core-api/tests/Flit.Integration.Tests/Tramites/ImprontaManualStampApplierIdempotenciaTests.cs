@@ -240,8 +240,8 @@ public sealed class ImprontaManualStampApplierIdempotenciaTests(PostgresDatabase
                 Applied: true,
                 DocumentHash: hash,
                 SignatureBase64: "c2ln",
-                PrivateKeyPem: "-----BEGIN PRIVATE KEY----- it -----END PRIVATE KEY-----",
-                PublicKeyPem: "-----BEGIN PUBLIC KEY----- it -----END PUBLIC KEY-----",
+                PrivateKeyPem: "pem-privada-de-prueba",
+                PublicKeyPem: "pem-publica-de-prueba",
                 SignedAt: DateTimeOffset.UtcNow);
         }
     }
