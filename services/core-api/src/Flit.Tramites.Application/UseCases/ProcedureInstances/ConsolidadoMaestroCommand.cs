@@ -26,7 +26,8 @@ public sealed class GenerarConsolidadoMaestroHandler(
     Domain.Integration.ICompaniaRadicadoraDirectory? companiaRadicadoraDirectory = null,
     IImprontaManualStamper? improntaManualStamper = null,
     Domain.Integration.ISignatureVaultPolicy? signatureVaultPolicy = null,
-    IVehicleSignatureImprintRepository? vehicleSignatureImprintRepository = null)
+    IVehicleSignatureImprintRepository? vehicleSignatureImprintRepository = null,
+    Microsoft.Extensions.Logging.ILogger<GenerarConsolidadoMaestroHandler>? logger = null)
 {
     // Bug #11612 — nombre de la compañía radicadora para la portada, resuelto desde el tenant dueño
     // del trámite. Default inerte (NUNCA resuelve) en tests/composiciones que no lo cablean ⇒ la
@@ -126,7 +127,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
                 pdf = await ImprontaManualStampApplier
                     .MaybeStampAsync(
                         pdf, attachment, instance, storage, improntaManualStamper, ct,
-                        _signatureVaultPolicy, repo, vehicleSignatureImprintRepository)
+                        _signatureVaultPolicy, repo, vehicleSignatureImprintRepository, logger)
                     .ConfigureAwait(false);
                 pdfParts.Add(pdf);
             }

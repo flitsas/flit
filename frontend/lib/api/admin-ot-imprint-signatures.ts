@@ -36,6 +36,12 @@ export interface ImprintSignatureDto {
   signedFilename: string | null;
   deletedAt: string | null;
   lastValidation?: ImprintSignatureValidationSummary | null;
+  /**
+   * `true` cuando esta fila corresponde a una impronta reemplazada/borrada por el gestor
+   * (soft-delete: `attachmentId` null, conserva `signedStoragePath` histórico). Opcional por
+   * compatibilidad con backends que aún no lo emiten (Bug #12594, hallazgo H2).
+   */
+  reemplazada?: boolean;
 }
 
 export interface ImprintSignatureValidationResult {
@@ -102,6 +108,14 @@ export function fetchImprintSignatureValidations(
 /** Indica si la fila tiene PDF firmado (snapshot o adjunto vigente). */
 export function imprintHasPdf(row: Pick<ImprintSignatureDto, "attachmentId" | "signedStoragePath">): boolean {
   return Boolean(row.signedStoragePath?.trim() || row.attachmentId);
+}
+
+/**
+ * Indica si la fila corresponde a una impronta reemplazada/borrada por el gestor (Bug #12594,
+ * hallazgo H2). Campo ausente (backend viejo) se trata como `false`.
+ */
+export function imprintEsReemplazada(row: Pick<ImprintSignatureDto, "reemplazada">): boolean {
+  return row.reemplazada === true;
 }
 
 /** URL presignada inline del PDF firmado de la impronta (HU #12173 / #12174). */

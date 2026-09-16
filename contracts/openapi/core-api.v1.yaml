@@ -11536,6 +11536,12 @@ components:
             - $ref: "#/components/schemas/ImprintSignatureValidationSummary"
           nullable: true
           description: Última fila de bitácora (HU #12176); null si nunca se validó.
+        reemplazada:
+          type: boolean
+          default: false
+          description: >
+            true cuando la fila corresponde a una impronta reemplazada/borrada por el gestor
+            (soft-delete: attachmentId null, conserva signedStoragePath histórico) — Bug #12594.
       required:
         [id, tenantId, procedureInstanceId, placa, moduleCode, publicKey, documentHash,
          signature, signedAt, wasSignedWithoutOwnerSignature]
