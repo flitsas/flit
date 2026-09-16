@@ -6948,6 +6948,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/improntas/firmas/backfill:
+    post:
+      tags: [Admin · Improntas]
+      operationId: adminImprontasFirmasBackfill
+      summary: Firma la impronta manual de trámites que quedaron sin firmar (HU #12116)
+      description: >
+        Procesa hasta `limit` trámites entregados/aprobados (no eliminados) con adjunto activo
+        tipo "impronta" no-Kyverum sin fila vigente en vehicle_signature_imprints, e intenta
+        firmarlos con la misma lógica que el disparo automático al radicar/asignar placa.
+        Idempotente y re-ejecutable. Requiere rol SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+      responses:
+        "200":
+          description: Resumen del backfill.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackfillFirmaImprontaManualResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Admin · Generación documental (Feature #12201, ADR-0056) ──
   # Emisión SIN trámite: ninguna ruta crea ni referencia una procedure_instance.
   /api/v1/admin/generacion-documental/rues/preview:
@@ -11616,6 +11649,25 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
       required: [data, totalCount, page, pageSize]
+
+    BackfillFirmaImprontaManualResult:
+      type: object
+      description: >-
+        HU #12116 — resultado del backfill de firma automática de impronta manual.
+        `noListas` es un mapa motivo→cantidad (claves de ImprontaManualStampReadiness,
+        p. ej. "placa_pendiente", "propietarios_sin_identidad").
+      properties:
+        total: { type: integer }
+        firmadas: { type: integer }
+        yaFirmadas: { type: integer }
+        sinImprontaManual: { type: integer }
+        noListas:
+          type: object
+          additionalProperties: { type: integer }
+        fallidas: { type: integer }
+        limit: { type: integer }
+      required:
+        [total, firmadas, yaFirmadas, sinImprontaManual, noListas, fallidas, limit]
 
     CreateTransitOfficeRequest:
       type: object

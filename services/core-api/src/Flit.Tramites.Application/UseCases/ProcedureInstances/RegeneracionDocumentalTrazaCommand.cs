@@ -48,6 +48,21 @@ public interface IRegeneracionDocumentalTrazaWriter
         string codigoError,
         string? detalle,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Igual que <see cref="EscribirFalloAsync(Guid, Guid, string, string, string?, CancellationToken)"/>
+    /// pero con <paramref name="tipoEvento"/> propio, para llamadores best-effort que necesitan su
+    /// propio tipo de evento en vez del histórico de regeneración documental (HU #12116 — firma
+    /// automática de impronta: <c>impronta_firma_automatica_fallida</c>).
+    /// </summary>
+    Task<bool> EscribirFalloAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string origen,
+        string codigoError,
+        string? detalle,
+        string tipoEvento,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -64,6 +79,15 @@ public sealed class NullRegeneracionDocumentalTrazaWriter : IRegeneracionDocumen
         string origen,
         string codigoError,
         string? detalle,
+        CancellationToken cancellationToken = default) => Task.FromResult(false);
+
+    public Task<bool> EscribirFalloAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string origen,
+        string codigoError,
+        string? detalle,
+        string tipoEvento,
         CancellationToken cancellationToken = default) => Task.FromResult(false);
 }
 
