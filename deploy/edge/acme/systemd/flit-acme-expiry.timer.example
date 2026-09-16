@@ -1,0 +1,18 @@
+# deploy/edge/acme/systemd/flit-acme-expiry.timer.example
+#
+# Instalar como /etc/systemd/system/flit-acme-expiry.timer, junto con
+# flit-acme-expiry.service.example. Diario -- la alerta se repite hasta que
+# la renovacion tenga exito (AC3), no hace falta mas frecuencia que 1/dia
+# para un umbral de 14 dias.
+
+[Unit]
+Description=FLIT - timer de alerta de vencimiento de certificados (HU #12426)
+
+[Timer]
+OnBootSec=10min
+OnCalendar=daily
+AccuracySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,15 @@
+# deploy/edge/acme/systemd/flit-acme-expiry.service.example
+#
+# Instalar como /etc/systemd/system/flit-acme-expiry.service en el VPS.
+
+[Unit]
+Description=FLIT - alerta de vencimiento de certificados de dominios de cliente (HU #12426)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/flit-acme/env
+ExecStart=/opt/flit/deploy/edge/acme/alert-expiry.sh
+User=flit-acme
+Group=flit-acme

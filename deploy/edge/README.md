@@ -3,7 +3,8 @@
 > HU #12421 · Feature #12368 · ADR-0060 D2 · Estado de esta HU: enrutamiento + configuración
 > versionable + este runbook. **El nginx real del VPS y sus certificados TLS NO viven en este
 > repositorio** — este directorio es la plantilla y el procedimiento, no la instalación.
-> Certificados automáticos por dominio: HU #12426 (pendiente, NEW-28).
+> Certificados automáticos por dominio: HU #12426 → diseño, scripts `.example` y runbook en
+> [`deploy/edge/acme/README.md`](acme/README.md) y [`deploy/edge/acme/RUNBOOK.md`](acme/RUNBOOK.md).
 
 ## Qué resuelve
 
@@ -39,12 +40,14 @@ CORS dinámico del Gateway (caché 60 s sobre `GET /internal/domains/active`) ha
 3. **Verificación** — HU #12425 (pendiente): comprobación por TXT DNS, ciclo
    `pending → verified → active`. Hasta que #12425 esté desplegada, la activación es manual
    (Líder Técnico/SuperAdmin, fuera de este runbook).
-4. **Certificado** — HU #12426 (pendiente): emisión automática por dominio. **Hasta entonces**,
-   el ÚNICO dominio servible con TLS válido es el dominio de PRUEBA controlado del equipo, con un
-   certificado emitido A MANO (ver §Certificados). Un dominio de cliente real sin certificado NO
-   puede activarse con TLS — el CHECK de base de datos `ck_tenant_domains_active_requires_verified`
-   exige `certificate_issued_at` para pasar a `active` (delta-hechos-post-adr.md hecho 13);
-   relajarlo es un cambio de diseño que vuelve al architecture-agent, no un ajuste de este runbook.
+4. **Certificado** — HU #12426: diseño, scripts `.example` y runbook ya entregados
+   (`deploy/edge/acme/`); operación real en el VPS pendiente de instalación/AC7. Hasta que el
+   poller esté instalado y corriendo en un ambiente, el ÚNICO dominio servible con TLS válido
+   sigue siendo el dominio de PRUEBA controlado del equipo con certificado A MANO (ver
+   §Certificados). Un dominio de cliente real sin certificado NO puede activarse con TLS — el
+   CHECK de base de datos `ck_tenant_domains_active_requires_verified` exige
+   `certificate_issued_at` para pasar a `active` (delta-hechos-post-adr.md hecho 13); relajarlo es
+   un cambio de diseño que vuelve al architecture-agent, no un ajuste de este runbook.
 5. **Activación ⇒ servido sin reiniciar (AC2)** — por qué funciona sin tocar nada:
    - nginx ya tiene el catch-all instalado (una sola vez, ver §Instalación) — el dominio nuevo
      cae ahí porque no calza en ningún `server_name` explícito (AC3, ver comentario del
@@ -168,14 +171,23 @@ márcalo explícitamente al ejecutar, no antes.
 8. `docker compose -f docker-compose.prod.yml up -d --remove-orphans` — recrea la red interna con
    el CIDR explícito y los servicios `gateway`/`core-api`/`frontend` con las variables nuevas.
 
-## Certificados (hasta #12426)
+## Certificados
 
-- Certificado MANUAL por dominio, emitido con la herramienta que ya use el VPS
-  (`certbot certonly --webroot -w /var/www/acme-challenge -d <dominio>` o equivalente).
+- **Antes de #12426:** certificado MANUAL por dominio, emitido con la herramienta que ya use el
+  VPS (`certbot certonly --webroot -w /var/www/acme-challenge -d <dominio>` o equivalente).
+- **Desde #12426:** emisión y renovación automáticas por host (poller + `acme.sh` + hook al
+  backend), alerta de vencimiento y runbook de alta/baja/reversión — ver
+  [`deploy/edge/acme/README.md`](acme/README.md) (diseño, opciones evaluadas) y
+  [`deploy/edge/acme/RUNBOOK.md`](acme/RUNBOOK.md) (procedimiento operativo). El `.conf.example`
+  de este directorio no cambia: el catch-all sigue siendo el mismo, la automatización de
+  certificados corre por encima sin tocar el enrutamiento.
 - **Sin secretos en el repo**: las claves privadas del certificado viven únicamente en el VPS
-  (`/etc/letsencrypt/...` o la ruta que use esa instalación), nunca en este repositorio.
-- Renovación: manual hasta #12426 (que además añade alerta de expiración ≤ 14 días).
-- Un dominio de cliente real, sin este paso, no puede activarse con TLS (ver §Alta, paso 4).
+  (`/etc/letsencrypt/...`/`~/.acme.sh/...` o la ruta que use esa instalación), nunca en este
+  repositorio. `FLIT_INTERNAL_API_KEY` y `OPS_ALERT_WEBHOOK_URL` salen del `.env`/gestor de
+  secretos del VPS (ver `deploy/edge/acme/flit-acme.env.example`).
+- Un dominio de cliente real, sin certificado, no puede activarse con TLS (ver §Alta, paso 4) —
+  con #12426 ese paso deja de ser manual, salvo el límite de nginx clásico por SNI documentado en
+  `deploy/edge/acme/README.md §Límite conocido de nginx clásico`.
 
 ## Variables nuevas — resumen
 
@@ -208,7 +220,10 @@ márcalo explícitamente al ejecutar, no antes.
 - **`default_server` duplicado:** si el nginx real del VPS ya tiene otro `default_server` para
   80/443 (por ejemplo, uno genérico preexistente), instalar este archivo tal cual rompe el
   arranque de nginx. Ver paso 4 de §Instalación.
-- **TLS real pendiente de #12426:** hasta entonces, un dominio de cliente real solo puede
-  activarse con certificado manual — no es un flujo de autoservicio completo todavía.
+- **TLS automático diseñado, instalación en el VPS pendiente (#12426):** el diseño, los scripts
+  `.example` y el runbook ya existen (`deploy/edge/acme/`); hasta que se instalen en un ambiente
+  real, un dominio de cliente sigue activándose con certificado manual. Gap declarado en
+  `deploy/edge/acme/README.md`: el endpoint que lista dominios `verified` sin certificado
+  (`.../internal/domains/pending-certificate`) es una propuesta, no un contrato confirmado.
 - **`FLIT_HOSTS`/`NEXT_PUBLIC_FLIT_HOSTS` sin cablear:** el nombre está reservado y documentado
   (`.env.prod.example`), pero ningún servicio lo consume todavía — corresponde a #12418/#12419.
