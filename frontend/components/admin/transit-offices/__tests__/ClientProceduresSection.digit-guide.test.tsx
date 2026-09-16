@@ -26,7 +26,7 @@ const plateMocks = vi.hoisted(() => ({ listPlateDetails: vi.fn() }));
 vi.mock("@/lib/api/admin-plate-ranges", () => ({
   listPlateDetails: plateMocks.listPlateDetails,
   assignPlateToProcedure: vi.fn(),
-  revokeProcedurePlate: vi.fn(),
+  releaseProcedurePlate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/jwt", async (importOriginal) => {
@@ -62,8 +62,7 @@ const preasignado: OtClientProcedure = {
   procedureTypeId: "matricula_inicial-type-id",
   procedureTypeName: "Matrícula inicial",
   referenceNumber: "RAD-2026-777",
-  status: "entregado",
-  plateFlowStatus: "preasignado",
+  status: "preasignacion",
   platePreferredLastDigit: "5",
   createdAt: "2026-06-23T09:00:00Z",
 };

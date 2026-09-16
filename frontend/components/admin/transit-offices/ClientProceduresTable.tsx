@@ -29,10 +29,6 @@ import { ActionsMenu, type ActionsMenuItem } from "@/components/atom/ActionsMenu
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusTone } from "./ot-utils";
 import {
-  esperandoProcesoDelGestor,
-  plateFlowChipStyle,
-  plateFlowLabel,
-  puedeDecidirOt,
 } from "@/lib/tramites/estados";
 import {
   OT_PROCEDURES_COLUMNS,
@@ -58,14 +54,13 @@ export interface ClientProceduresTableProps {
   onConsolidado?: (row: OtClientProcedure) => void;
   /** Adjunta la Licencia de Transito a un tramite ya aprobado (solo OT admin). */
   onAdjuntarLt?: (row: OtClientProcedure) => void;
-  /** Feature #10587 — asignar placa a un trámite en preasignado (Flujo B). */
+  /** ADR-0059 — asignar placa a un trámite en `preasignacion`. */
   onAssignPlate?: (row: OtClientProcedure) => void;
-  /** Feature #10587 — revocar la preasignación de un trámite. */
+  /** ADR-0059 — «Liberar placa»: devuelve un trámite `asignado` a `preasignacion`. */
   onRevoke?: (row: OtClientProcedure) => void;
   /**
    * HU #12166 (Feature #12156) — el OT deshace su propia aprobación (aprobado→revocado). Distinto
-   * de `onRevoke` (revoca una PREASIGNACIÓN antes de aprobar, HU #10655): mismo rótulo "Revocar" en
-   * el menú porque nunca coinciden en la misma fila (aprobar limpia plateFlowStatus).
+   * de `onRevoke` (libera la placa de un `asignado`): nunca coinciden en la misma fila.
    */
   onRevokeAprobacion?: (row: OtClientProcedure) => void;
   /** HU #12167 (Feature #12156) — corregir la placa dentro de la ventana de 1 hora (una única vez). */
@@ -341,19 +336,6 @@ function renderCelda(columnKey: string, row: OtClientProcedure) {
             label={formatOtProcedureStatus(row.status)}
             tone={procedureStatusTone(row.status)}
           />
-          {plateFlowChipStyle(row.plateFlowStatus) && (
-            <span
-              title="Progreso de la placa (sub-estado interno; el trámite sigue en Entregado)"
-              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-              style={{
-                background: plateFlowChipStyle(row.plateFlowStatus)!.bg,
-                color: plateFlowChipStyle(row.plateFlowStatus)!.color,
-                border: `1px solid ${plateFlowChipStyle(row.plateFlowStatus)!.border}`,
-              }}
-            >
-              {plateFlowLabel(row.plateFlowStatus)}
-            </span>
-          )}
         </div>
       );
     case "fechaRadicacion":
@@ -396,15 +378,15 @@ export function ClientProceduresTable({
 
   /**
    * Acciones disponibles para una fila, en el orden en que el operador las necesita: primero
-   * decidir, luego la placa, luego consultar. Cada una aparece bajo la MISMA condición con la que
-   * se pintaba su botón — el menú cambia dónde viven, no cuándo existen.
+   * decidir, luego la placa, luego consultar. ADR-0059 — cada estado ofrece SOLO lo que aplica:
+   *  · entregado: Aprobar / Rechazar (la decisión solo existe aquí).
+   *  · preasignacion: Asignar placa / Rechazar (la cola de placa también se puede rechazar).
+   *  · asignado: Actualizar placa (ventana de 1 h) / Liberar placa. Ni aprobar, ni rechazar.
    */
   const buildRowActions = (row: OtClientProcedure): ActionsMenuItem[] => {
     const items: ActionsMenuItem[] = [];
-    const decidible =
-      row.status === "entregado" &&
-      puedeDecidirOt(row.plateFlowStatus, row.soatEstado) &&
-      showApprovalActions;
+    const decidible = row.status === "entregado" && showApprovalActions;
+    const enColaDePlaca = row.status === "preasignacion" && showApprovalActions;
 
     if (decidible) {
       items.push({
@@ -413,15 +395,9 @@ export function ClientProceduresTable({
         icon: Check,
         onSelect: () => onApprove(row),
       });
-      items.push({
-        key: "rechazar",
-        label: "Rechazar",
-        icon: X,
-        onSelect: () => onReject(row),
-      });
     }
 
-    if (row.plateFlowStatus === "preasignado" && showApprovalActions && onAssignPlate) {
+    if (enColaDePlaca && onAssignPlate) {
       items.push({
         key: "asignar-placa",
         label: "Asignar placa",
@@ -430,12 +406,17 @@ export function ClientProceduresTable({
       });
     }
 
-    if (
-      (row.plateFlowStatus === "preasignado" || row.plateFlowStatus === "asignado") &&
-      showApprovalActions &&
-      onRevoke
-    ) {
-      items.push({ key: "revocar", label: "Revocar", icon: Undo2, onSelect: () => onRevoke(row) });
+    if (decidible || enColaDePlaca) {
+      items.push({
+        key: "rechazar",
+        label: "Rechazar",
+        icon: X,
+        onSelect: () => onReject(row),
+      });
+    }
+
+    if (row.status === "asignado" && showApprovalActions && onRevoke) {
+      items.push({ key: "liberar-placa", label: "Liberar placa", icon: Undo2, onSelect: () => onRevoke(row) });
     }
 
     // HU #12168 AC1 — "Revocar" (la aprobación) solo existe en Aprobado: es la única transición que
@@ -445,10 +426,11 @@ export function ClientProceduresTable({
     }
 
     // HU #12168 AC2/AC3 — "Actualizar placa" existe mientras haya una placa asignada por este flujo
-    // (plateAssignedAt), y se autodeshabilita con motivo cuando la ventana cerró o ya se usó la
-    // única corrección — igual que "Ver consolidado" arriba, nunca se OMITE la opción: verla
+    // (plateAssignedAt) y el trámite siga en `asignado` (ADR-0059: liberar o enviar al OT cierran la
+    // corrección), y se autodeshabilita con motivo cuando la ventana cerró o ya se usó la única
+    // corrección — igual que "Ver consolidado" arriba, nunca se OMITE la opción: verla
     // deshabilitada con el motivo es lo que le dice al OT por qué ya no puede corregirla.
-    if (row.plateAssignedAt && onUpdatePlate) {
+    if (row.status === "asignado" && row.plateAssignedAt && onUpdatePlate) {
       const ventana = plateUpdateWindow(row.plateAssignedAt, row.plateUpdatedAt);
       items.push({
         key: "actualizar-placa",
@@ -571,18 +553,8 @@ export function ClientProceduresTable({
                 onKeyDown={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-end gap-2">
-                  {row.status === "entregado" &&
-                    esperandoProcesoDelGestor(row.plateFlowStatus) &&
-                    showApprovalActions && (
-                      <span
-                        className="text-[10px] font-medium italic"
-                        style={{ color: "#b45309" }}
-                        title="El gestor debe procesar el trámite (Asignado → Terminado) antes de que el OT apruebe o rechace."
-                      >
-                        Esperando proceso del gestor
-                      </span>
-                    )}
-                  {row.plateFlowStatus === "terminado" && (
+                  {/* ADR-0059 — los checks del gestor se ven cuando ya envió el trámite (entregado). */}
+                  {row.status === "entregado" && (
                     <span className="flex flex-wrap justify-end gap-1">
                       {row.soatPagado && (
                         <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">

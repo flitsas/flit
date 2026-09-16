@@ -10,7 +10,6 @@ import {
   type OtProcedureAttachment,
 } from "@/lib/api/admin-ot";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
-import { puedeDecidirOt } from "@/lib/tramites/estados";
 import { OtDetalleAcordeon } from "./detalle/OtDetalleAcordeon";
 import { OtDetalleActores } from "./detalle/OtDetalleActores";
 import { OtDetalleShell } from "./detalle/OtDetalleShell";
@@ -178,9 +177,10 @@ export function ClientProcedureDetailModal({
       ? null
       : `El trámite está en «${formatOtProcedureStatus(row.status)}»: el organismo solo decide sobre los que tiene entregados.`;
 
-  const decidible = bloqueo === null && puedeDecidirOt(row.plateFlowStatus, row.soatEstado);
+  // ADR-0059 — la decisión solo existe en entregado; asignar placa, solo en preasignacion.
+  const decidible = bloqueo === null;
   const puedeAsignarPlaca =
-    showApprovalActions && Boolean(onAssignPlate) && row.plateFlowStatus === "preasignado";
+    showApprovalActions && Boolean(onAssignPlate) && row.status === "preasignacion";
   const hayPie = showApprovalActions && Boolean(onApprove || onReject);
 
   const avisos = [bloqueo, ...pendientesDelTramite(row, docs.length)].filter(

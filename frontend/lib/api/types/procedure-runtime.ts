@@ -37,12 +37,7 @@ export type InstanceStatus =
  */
 export type RejectedFrom = 'entregado' | 'preasignacion';
 
-/**
- * @deprecated LEGACY (ADR-0059) — el sub-estado de placa se promovió a {@link InstanceStatus}
- * (`preasignacion` / `asignado`; `terminado` ES `entregado`). El backend ya no lo escribe; el campo se
- * retira del contrato en HU #12603 y los últimos consumidores migran en HU #12601 / #12602.
- */
-export type PlateFlowStatus = 'preasignado' | 'asignado' | 'terminado';
+
 
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {
@@ -118,8 +113,6 @@ export interface ProcedureInstanceSummary {
   id: string;
   referenceNumber: string;
   status: InstanceStatus;
-  /** @deprecated LEGACY (ADR-0059) — ver {@link PlateFlowStatus}. */
-  plateFlowStatus?: PlateFlowStatus | null;
   procedureTypeId: string;
   tenantId: string;
   createdAt: string;
@@ -180,8 +173,6 @@ export interface InstanceSummary {
    */
   runtConfirmed?: RuntConfirmedValue | null;
   estado: InstanceStatus;
-  /** @deprecated LEGACY (ADR-0059) — ver {@link PlateFlowStatus}. */
-  plateFlowStatus?: PlateFlowStatus | null;
   /** ADR-0059 — origen del último rechazo; `preasignacion` pinta «Rechazado preasignación». */
   rejectedFrom?: RejectedFrom | null;
   placa: string | null;
@@ -433,8 +424,6 @@ export interface ProcedureInstanceDetail {
   id: string;
   referenceNumber: string;
   status: InstanceStatus;
-  /** @deprecated LEGACY (ADR-0059) — ver {@link PlateFlowStatus}. */
-  plateFlowStatus?: PlateFlowStatus | null;
   /** ADR-0059 — origen del último rechazo; `preasignacion` pinta «Rechazado preasignación». */
   rejectedFrom?: RejectedFrom | null;
   procedureTypeId: string;

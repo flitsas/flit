@@ -1,6 +1,7 @@
 "use client";
 
 import { formatFecha } from "@/lib/format/date";
+import { estadoLabel } from "@/lib/tramites/estados";
 
 /** Muestra los últimos 6 caracteres visibles de una URL (HU #10219 AC1). */
 export function maskTargetUrl(url: string): string {
@@ -15,23 +16,23 @@ export const OT_WEBHOOK_EVENT_TYPES = [
   { value: "procedure_state_changed", label: "Cambio estado trámite" },
 ] as const;
 
-// N 03 (ADR-0022) — vocabulario de estados de negocio: `entregado` = en cola de decisión OT.
-export const OT_PROCEDURE_STATUS_LABELS: Record<string, string> = {
-  entregado: "Pendiente OT",
-  aprobado: "Aprobado OT",
-  rechazado: "Rechazado OT",
-  // HU #12166 (Feature #12156) — el OT deshizo su propia aprobación.
-  revocado: "Revocado OT",
-};
-
+/**
+ * ADR-0059 (decisión del PO) — el organismo ve los estados con su nombre real, sin sufijo «OT»:
+ * la misma fuente única que el gestor (`lib/tramites/estados.ts`), así un estado se llama igual
+ * en las dos pantallas.
+ */
 export function formatOtProcedureStatus(status: string): string {
-  return OT_PROCEDURE_STATUS_LABELS[status] ?? status;
+  return estadoLabel(status);
 }
 
-export function procedureStatusTone(status: string): "success" | "warning" | "danger" | "neutral" {
+export function procedureStatusTone(
+  status: string,
+): "success" | "warning" | "danger" | "info" | "neutral" {
   if (status === "aprobado") return "success";
   if (status === "rechazado" || status === "revocado") return "danger";
   if (status === "entregado") return "warning";
+  // ADR-0059 — cola de placa: el organismo asigna (preasignacion) o espera al gestor (asignado).
+  if (status === "preasignacion" || status === "asignado") return "info";
   return "neutral";
 }
 
