@@ -120,6 +120,18 @@ describe("BannerFormPanel — validación y envío", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("Bug #12584 — permite guardar con la fecha fin anterior a la de inicio (sin validación de orden)", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderPanel({ editing: banner() });
+
+    fireEvent.change(screen.getByLabelText(/fecha inicio/i), { target: { value: "2026-09-15T19:14" } });
+    fireEvent.change(screen.getByLabelText(/fecha fin/i), { target: { value: "2026-09-15T18:20" } });
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    expect(screen.queryByText(/debe ser posterior a la de inicio/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+  });
+
   it("envía los datos completos y llama a onSaved con la respuesta", async () => {
     const user = userEvent.setup();
     const { onSubmit, onSaved } = renderPanel();
@@ -161,5 +173,20 @@ describe("BannerFormPanel — activar/inhabilitar", () => {
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect((onSubmit.mock.calls[0][0] as BannerFormInput).isActive).toBe(false);
+  });
+
+  it("Bug #12584 — con vigencia programada, el interruptor queda deshabilitado (la fecha manda)", () => {
+    renderPanel({
+      editing: banner({ validFrom: "2026-09-10T19:00:00Z", validUntil: "2026-09-12T18:59:00Z" }),
+    });
+
+    expect(screen.getByRole("switch", { name: /banner activo/i })).toBeDisabled();
+    expect(screen.getByText(/programaste una vigencia/i)).toBeInTheDocument();
+  });
+
+  it("sin vigencia programada, el interruptor permanece habilitado", () => {
+    renderPanel({ editing: banner() });
+
+    expect(screen.getByRole("switch", { name: /banner activo/i })).not.toBeDisabled();
   });
 });
