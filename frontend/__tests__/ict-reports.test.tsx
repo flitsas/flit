@@ -18,12 +18,12 @@ const mocks = vi.hoisted(() => ({
   exportIctAtascadosReport: vi.fn(),
   exportIctJobsReport: vi.fn(),
   exportIctWebhooksReport: vi.fn(),
-  fetchCompaniesIndex: vi.fn(),
+  fetchAllCompanies: vi.fn(),
 }));
 
 vi.mock("@/lib/api/admin-companies", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/admin-companies")>();
-  return { ...actual, fetchCompaniesIndex: mocks.fetchCompaniesIndex };
+  return { ...actual, fetchAllCompanies: mocks.fetchAllCompanies };
 });
 
 vi.mock("@/lib/auth/jwt", async (importOriginal) => {
@@ -118,7 +118,7 @@ describe("IctReports — pestañas en vivo, Consultas y Programación (HU #11619
     });
     mocks.exportIctNovedadesReport.mockResolvedValue(undefined);
     mocks.exportIctJobsReport.mockResolvedValue(undefined);
-    mocks.fetchCompaniesIndex.mockResolvedValue({ data: [{ id: "t1", razonSocial: "Compañía Uno", nit: "900" }] });
+    mocks.fetchAllCompanies.mockResolvedValue([{ id: "t1", razonSocial: "Compañía Uno", nit: "900" }]);
     window.history.replaceState({}, "", "/");
   });
 

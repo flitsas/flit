@@ -15,7 +15,7 @@ import {
   COPY_SOLO_COMPANIA_PROPIA,
   type NetworkScopePreference,
 } from "@/lib/tramites/network-scope";
-import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import type { AnalyticsCategory, CompanyListItem } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
 import { ExportButtons } from "./_reportes/ExportButtons";
@@ -158,9 +158,9 @@ export function Reportes() {
   useEffect(() => {
     if (!isSuper) return;
     const controller = new AbortController();
-    fetchCompaniesIndex({ pageSize: 100, estadoActivo: true }, controller.signal)
-      .then((res) => {
-        if (!controller.signal.aborted) setCompanies(res.data);
+    fetchAllCompanies({ estadoActivo: true }, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setCompanies(data);
       })
       .catch(() => {
         /* silencioso */

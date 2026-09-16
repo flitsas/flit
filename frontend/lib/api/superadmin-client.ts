@@ -14,6 +14,7 @@ import type {
   UpdateProcedureTypeRequest,
 } from './types/procedure-parametrization';
 import { getToken } from './client';
+import { fetchAllCompanies } from './admin-companies';
 
 export interface RbacModule {
   id: string;
@@ -306,7 +307,8 @@ export const superadminClient = {
   deactivateRole: (id: string) =>
     request<void>(`/api/v1/superadmin/roles/${id}/deactivate`, { method: 'PATCH' }),
 
-  // Compañías (para el picker de tenant en gestión de roles)
-  listCompanies: () =>
-    request<{ data: CompanyItem[] }>('/api/v1/admin/companies/index'),
+  // Compañías (para el picker de tenant en gestión de roles). Catálogo COMPLETO, paginado
+  // internamente: pedir sin `page`/`pageSize` caía al default del backend (20 por página) y el
+  // picker se quedaba solo con las 20 compañías más recientes.
+  listCompanies: async () => ({ data: await fetchAllCompanies() as CompanyItem[] }),
 };

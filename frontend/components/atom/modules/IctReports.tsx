@@ -25,7 +25,7 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
-import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import { variationPct } from "@/lib/api/analytics-v2";
 import type { ReportType } from "@/lib/api/analytics-scheduling";
 import {
@@ -207,9 +207,9 @@ export function IctReports() {
   useEffect(() => {
     if (!isSuper) return;
     const controller = new AbortController();
-    fetchCompaniesIndex({ pageSize: 100, estadoActivo: true }, controller.signal)
-      .then((res) => {
-        if (!controller.signal.aborted) setCompanies(res.data);
+    fetchAllCompanies({ estadoActivo: true }, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setCompanies(data);
       })
       .catch(() => {
         /* silencioso */

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link2, Loader2, Search } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
-import { fetchCompaniesIndex, linkCompanyToParent } from "@/lib/api/admin-companies";
+import { fetchAllCompanies, linkCompanyToParent } from "@/lib/api/admin-companies";
 import { ApiValidationError, isHeadTenantType, tenantTypeLabel } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
 
@@ -38,9 +38,9 @@ export function LinkCompanyDialog({
     setLoading(true);
     setLoadError(null);
     try {
-      const result = await fetchCompaniesIndex({ pageSize: 500, excludeTransitOffices: true }, signal);
+      const data = await fetchAllCompanies({ excludeTransitOffices: true }, signal);
       if (!signal?.aborted) {
-        setCandidates(result.data);
+        setCandidates(data);
       }
     } catch {
       if (!signal?.aborted) {
