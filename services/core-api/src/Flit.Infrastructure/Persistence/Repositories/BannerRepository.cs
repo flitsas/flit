@@ -194,14 +194,17 @@ internal sealed class BannerRepository : IBannerRepository
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken = default)
     {
-        // Sin fechas programadas (ambas NULL) => siempre visible mientras is_active. Con
-        // fechas, solo dentro de [valid_from, valid_until]: excluye Programado (aun no llega
-        // valid_from) y Expirado (valid_until ya paso), aunque is_active siga en true.
+        // Sin fechas programadas (ambas NULL) => visible solo mientras is_active (interruptor
+        // manual). Con fechas, la vigencia manda sobre is_active (Bug #12584, cambio de criterio
+        // sobre HU #12239 AC2 documentado en BannerEstado.cs): visible dentro de
+        // [valid_from, valid_until] sin mirar is_active, y NO visible fuera de ese rango aunque
+        // is_active siga en true.
         var items = await _context.Banners
             .AsNoTracking()
-            .Where(b => b.DeletedAt == null && b.IsActive)
+            .Where(b => b.DeletedAt == null)
             .Where(b => (b.ValidFrom == null && b.ValidUntil == null)
-                || (b.ValidFrom <= nowUtc && b.ValidUntil >= nowUtc))
+                ? b.IsActive
+                : (b.ValidFrom == null || b.ValidFrom <= nowUtc) && (b.ValidUntil == null || b.ValidUntil >= nowUtc))
             .OrderBy(b => b.CreatedAt)
             .ThenBy(b => b.Id)
             .Select(b => new ActiveBannerItem(b.Id, b.Name, b.LinkUrl))

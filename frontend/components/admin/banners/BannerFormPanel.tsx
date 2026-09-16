@@ -5,7 +5,7 @@ import { AlertTriangle, Loader2, UploadCloud } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import {
-  bannerDateInputValue,
+  bannerDateTimeInputValue,
   bannerImageUrl,
   type Banner,
   type BannerFormInput,
@@ -48,19 +48,20 @@ function fromEditing(b: Banner): FormState {
   return {
     name: b.name,
     linkUrl: b.linkUrl ?? "",
-    validFrom: bannerDateInputValue(b.validFrom),
-    validUntil: bannerDateInputValue(b.validUntil),
+    validFrom: bannerDateTimeInputValue(b.validFrom),
+    validUntil: bannerDateTimeInputValue(b.validUntil),
     file: null,
     isActive: b.isActive,
   };
 }
 
 /**
- * Panel de alta/edición de un banner (HU #12241 AC2/AC4): nombre, enlace opcional, vigencia
- * (DD/MM/AAAA, opcional) e imagen con vista previa en vivo. La vista previa usa
- * `URL.createObjectURL` sobre el archivo local ANTES de guardar (AC2); tras guardar/editar sin
- * archivo nuevo, cae al endpoint público de imagen (`bannerImageUrl`). AC4: guía de tamaño
- * recomendado visible junto al campo de imagen — puramente informativa, no bloquea el envío.
+ * Panel de alta/edición de un banner (HU #12241 AC2/AC4): nombre, enlace opcional, vigencia con
+ * fecha y hora en Colombia (opcional, Bug #12584 defecto 1) e imagen con vista previa en vivo. La
+ * vista previa usa `URL.createObjectURL` sobre el archivo local ANTES de guardar (AC2); tras
+ * guardar/editar sin archivo nuevo, cae al endpoint público de imagen (`bannerImageUrl`). AC4:
+ * guía de tamaño recomendado visible junto al campo de imagen — puramente informativa, no bloquea
+ * el envío.
  */
 export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: BannerFormPanelProps) {
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -100,11 +101,6 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
   const missingFile = attempted && fileRequired && form.file === null;
   const missingDatePair =
     attempted && (form.validFrom !== "") !== (form.validUntil !== "");
-  const invalidDateRange =
-    attempted &&
-    form.validFrom !== "" &&
-    form.validUntil !== "" &&
-    form.validUntil <= form.validFrom;
   const invalidImageType =
     attempted && form.file !== null && !ALLOWED_IMAGE_TYPES.includes(form.file.type);
   const invalidImageSize =
@@ -114,7 +110,6 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
     form.name.trim() !== "" &&
     (!fileRequired || form.file !== null) &&
     (form.validFrom !== "") === (form.validUntil !== "") &&
-    !(form.validFrom !== "" && form.validUntil !== "" && form.validUntil <= form.validFrom) &&
     (form.file === null || (ALLOWED_IMAGE_TYPES.includes(form.file.type) && form.file.size <= MAX_IMAGE_BYTES));
 
   const handleSubmit = async () => {
@@ -196,52 +191,49 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
         <ToggleSwitch
           id="banner-activo"
           label="Banner activo"
-          description="Si lo desactivas, no aparece en los carruseles aunque esté dentro de su rango de vigencia."
+          description={
+            form.validFrom || form.validUntil
+              ? "Programaste una vigencia: el banner se muestra y se oculta automáticamente según esas fechas, por eso este interruptor queda bloqueado. Para controlarlo tú mismo, borra la fecha de inicio y fin."
+              : "Si lo desactivas, no aparece en los carruseles."
+          }
           checked={form.isActive}
+          disabled={Boolean(form.validFrom || form.validUntil)}
           onChange={(checked) => patch({ isActive: checked })}
         />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field
             id="banner-desde"
-            label="Fecha inicio (opcional)"
-            error={
-              missingDatePair
-                ? "Indica ambas fechas de vigencia, o ninguna."
-                : invalidDateRange
-                  ? "La fecha de fin debe ser posterior a la de inicio."
-                  : undefined
-            }
+            label="Fecha inicio — hora Colombia (opcional)"
+            error={missingDatePair ? "Indica ambas fechas de vigencia, o ninguna." : undefined}
           >
             <input
               id="banner-desde"
-              type="date"
+              type="datetime-local"
               value={form.validFrom}
               onChange={(e) => patch({ validFrom: e.target.value })}
               className={INPUT_CLS}
-              style={
-                missingDatePair || invalidDateRange ? { borderColor: "#FF4E00" } : { borderColor: "#DFE5ED" }
-              }
-              aria-invalid={missingDatePair || invalidDateRange}
+              style={missingDatePair ? { borderColor: "#FF4E00" } : { borderColor: "#DFE5ED" }}
+              aria-invalid={missingDatePair}
             />
           </Field>
-          <Field id="banner-hasta" label="Fecha fin (opcional)">
+          <Field id="banner-hasta" label="Fecha fin — hora Colombia (opcional)">
             <input
               id="banner-hasta"
-              type="date"
+              type="datetime-local"
               value={form.validUntil}
               onChange={(e) => patch({ validUntil: e.target.value })}
               className={INPUT_CLS}
-              style={
-                missingDatePair || invalidDateRange ? { borderColor: "#FF4E00" } : { borderColor: "#DFE5ED" }
-              }
-              aria-invalid={missingDatePair || invalidDateRange}
+              style={missingDatePair ? { borderColor: "#FF4E00" } : { borderColor: "#DFE5ED" }}
+              aria-invalid={missingDatePair}
             />
           </Field>
         </div>
         <p className="text-[11px] opacity-60">
-          Si no defines fechas, el banner queda vigente desde ya y sin fecha de expiración
-          (&ldquo;Sin fecha programada&rdquo; en el listado).
+          Hora Colombia (UTC-5). Si no defines fechas, el banner queda vigente desde ya y sin
+          fecha de expiración (&ldquo;Sin fecha programada&rdquo; en el listado). Si defines
+          fechas, ellas controlan solas cuándo se muestra el banner y el interruptor &ldquo;Banner
+          activo&rdquo; se bloquea mientras tanto.
         </p>
 
         <div>

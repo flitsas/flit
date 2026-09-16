@@ -269,6 +269,10 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
     // Un solo punto de navegación: no hay más slides detrás del fijo.
     expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(1);
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    // Bug #12584 defecto 3: sin banners (un solo slide navegable), Anterior/Siguiente deben
+    // quedar deshabilitados — no hay a dónde moverse.
+    expect(screen.getByRole("button", { name: "Anterior" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Siguiente" })).toBeDisabled();
   });
 
   it("AC1 — los banners activos se agregan como slides después del fijo", async () => {
@@ -282,6 +286,8 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
     await waitFor(() =>
       expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(3),
     );
+    expect(screen.getByRole("button", { name: "Anterior" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Siguiente" })).toBeEnabled();
 
     // Avanza al primer banner (slide 2 de 3): sin enlace, no hay ningún <a> envolviendo el banner
     // ni título visible — el nombre solo viaja como texto accesible de la imagen (alt).
