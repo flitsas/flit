@@ -88,9 +88,7 @@ public sealed record ProcedureInstanceDetailDto(
     // frontend lo usa para el modo "readOnly parcial" del wizard (datos bloqueados, identidad
     // operable). Opcional (default null) para compat con consumidores que no lo lean.
     DateTimeOffset? DraftFinalizedAt = null,
-    // Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al Status global
-    // (que permanece en 'entregado'): null (sin ruta de placa) | 'preasignado' | 'asignado'. El frontend
-    // lo usa para el badge secundario, el panel de SOAT y las acciones del OT. Opcional (default null).
+    // LEGACY (ADR-0059): sub-estado de placa, se retira en HU #12603. La ruta de placa ya vive en Status.
     string? PlateFlowStatus = null,
     // HU #10879 — paso actual persistido del wizard (Key del paso). Prima como punto de retoma al
     // reabrir el borrador (AC2); null = el frontend cae al paso derivado de los gates. Opcional (default null).
@@ -107,7 +105,9 @@ public sealed record ProcedureInstanceDetailDto(
     // Bug #12376, defectos 3/4 — eventos administrativos (reenvío de validación, reasignación de
     // gestor) para el tracking del dashboard. Opcional (default vacío) para no romper consumidores
     // existentes del contrato.
-    IReadOnlyList<ProcedureInstanceEventDto>? Events = null);
+    IReadOnlyList<ProcedureInstanceEventDto>? Events = null,
+    /// <summary>ADR-0059 — estado desde el que el OT rechazó por última vez (entregado | preasignacion); null si no aplica.</summary>
+    string? RejectedFrom = null);
 
 public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository repo)
 {
@@ -314,7 +314,8 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
             e.SubsanacionActiva,
             e.SubsanacionCount,
             e.Prioritario,
-            events ?? []);
+            events ?? [],
+            RejectedFrom: e.RejectedFrom);
     }
 
     private static readonly Dictionary<Guid, string> EmptyActorMap = [];

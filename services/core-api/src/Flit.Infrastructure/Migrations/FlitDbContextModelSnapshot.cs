@@ -7784,6 +7784,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("reference_number");
 
+                    b.Property<string>("RejectedFrom")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("rejected_from");
+
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()

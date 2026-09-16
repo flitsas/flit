@@ -27,6 +27,18 @@ public sealed record TramiteTransitionVerdict(string? ErrorCode, string? Detail)
 /// </summary>
 public static class TramiteTransitionPolicy
 {
+    /// <summary>
+    /// Estado al que aterriza una RADICACIÓN (desde <c>preparado</c> o re-radicación desde
+    /// <c>rechazado</c>): la Ruta Larga (tipo pide placa y no la tiene) entra por
+    /// <see cref="TramiteEstado.Preasignacion"/>; todo lo demás por <see cref="TramiteEstado.Entregado"/>.
+    /// Es el mismo predicado que <see cref="Evaluate"/> usa para vetar el destino contrario.
+    /// </summary>
+    public static string DestinoDeRadicacion(TransitionContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return RadicaSinPlaca(context) ? TramiteEstado.Preasignacion : TramiteEstado.Entregado;
+    }
+
     public static TramiteTransitionVerdict Evaluate(string? from, string? to, TransitionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -63,6 +75,9 @@ public static class TramiteTransitionPolicy
     private static bool EsReRadicacion(string? to) =>
         to is TramiteEstado.Entregado or TramiteEstado.Preasignacion;
 
+    private static bool RadicaSinPlaca(TransitionContext context) =>
+        context.RequiresPlateRequest && !context.HasPlate;
+
     private static TramiteTransitionVerdict EvaluarRadicacionSinPlaca(TransitionContext context)
     {
         var actor = SoloGestor(context, "radicar");
@@ -82,7 +97,7 @@ public static class TramiteTransitionPolicy
         if (context.Actor == TramiteActor.Quipux)
             return TramiteTransitionVerdict.Permitida;
 
-        return context.RequiresPlateRequest && !context.HasPlate
+        return RadicaSinPlaca(context)
             ? Denegar(
                 TramiteEstadoErrores.TransicionRequierePreasignacion,
                 "El tipo pide placa y el trámite no la tiene: debe radicarse a 'preasignacion'.")

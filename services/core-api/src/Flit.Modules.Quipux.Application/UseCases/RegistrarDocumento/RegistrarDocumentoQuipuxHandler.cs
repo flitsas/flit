@@ -611,7 +611,9 @@ public sealed class RegistrarDocumentoQuipuxHandler
         }
 
         var outcome = await _lifecycle.TransitionAsync(
-            new TramiteTransitionCommand(instanceId, tenantId, destino, reason, ChangedByUserId: null),
+            // ADR-0051/ADR-0059 — Quipux entrega en un solo salto aunque el tipo pida placa: el actor lo exime
+            // de la Ruta Larga en TramiteTransitionPolicy.
+            new TramiteTransitionCommand(instanceId, tenantId, destino, reason, ChangedByUserId: null, Actor: TramiteActor.Quipux),
             cancellationToken);
 
         return outcome.Success ? (true, null) : (false, outcome.ErrorCode);

@@ -118,6 +118,13 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .IsRequired()
             .HasDefaultValue(0);
 
+        // ADR-0059 (HU #12597) — origen del último rechazo (entregado | preasignacion). Columna agregada
+        // por migración SQL cruda (115-HU12597-rejected-from.sql; la tabla está ExcludeFromMigrations);
+        // aquí solo se mapea. La escribe el ciclo de vida al entrar a 'rechazado'.
+        builder.Property(x => x.RejectedFrom)
+            .HasColumnName("rejected_from")
+            .HasMaxLength(20);
+
         // Baseline del diff de re-radicación. Antes viajaba en el metadata de una fila
         // rechazado→rechazado del historial, que el timeline pintaba como un rechazo repetido.
         builder.Property(x => x.SubsanacionBaseline)

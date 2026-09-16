@@ -72,7 +72,8 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
         ("PATCH", "/api/v1/tramites/instances/{id}/current-step"),
         ("POST", "/api/v1/tramites/instances/{id}/submit"),
         ("PUT", "/api/v1/tramites/instances/{id}/pause"),
-        ("POST", "/api/v1/tramites/instances/{id}/plate-flow/complete"),
+        ("POST", "/api/v1/tramites/instances/{id}/enviar-al-ot"),
+        ("POST", "/api/v1/tramites/instances/{id}/plate-flow/complete"), // alias legado de enviar-al-ot (ADR-0059)
         ("POST", "/api/v1/tramites/instances/{id}/subsanar"),
         ("POST", "/api/v1/tramites/instances/{id}/cancelar-subsanacion"),
         ("POST", "/api/v1/tramites/instances/{id}/transition"),

@@ -1,5 +1,4 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
-using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.Extensions.Logging;
@@ -9,12 +8,18 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <summary>
 /// Radicar (N 03, ADR-0022): orquestador delgado sobre <see cref="ITramiteLifecycleService"/>.
 /// Desde <c>borrador</c> encadena <c>borrador→preparado</c> (gate RF03: identidad + documentos)
-/// y <c>preparado→entregado</c> (gates OT: organismo habilitado + reglas); desde <c>preparado</c>
-/// solo la entrega. Cada transición registra su fila de historial y su notificación. Si la
-/// preparación pasa pero la entrega falla (p.ej. organismo_no_habilitado), el trámite queda en
-/// <c>preparado</c>: corregida la causa, un nuevo submit solo reintenta la entrega.
+/// y la radicación (gates OT: organismo habilitado + reglas); desde <c>preparado</c> solo la
+/// radicación. Cada transición registra su fila de historial y su notificación. Si la preparación
+/// pasa pero la radicación falla (p.ej. organismo_no_habilitado), el trámite queda en
+/// <c>preparado</c>: corregida la causa, un nuevo submit solo reintenta la radicación.
 /// <para>
-/// Desde <c>subsanacion</c> (HU #10870) este MISMO handler re-radica directo a <c>entregado</c>
+/// ADR-0059 (HU #12597) — el destino de la radicación lo decide
+/// <see cref="TramiteTransitionPolicy.DestinoDeRadicacion"/>: la Ruta Larga (tipo que pide placa y
+/// no la tiene) entra por <c>preasignacion</c>; con placa (RUNT o digitada) o en tipos sin placa entra
+/// por <c>entregado</c>. Los flags de preasignación de compañía/OT ya NO deciden la ruta.
+/// </para>
+/// <para>
+/// Desde <c>rechazado</c> con subsanación activa (HU #10870) este MISMO handler re-radica directo
 /// (sin encadenar preparado): <see cref="ITramiteLifecycleService"/> re-evalúa SOLO los gates de
 /// negocio afectados por los campos corregidos desde el snapshot capturado al entrar a
 /// subsanación (HU #10872, AC1) — más el gate final de entrega al OT, que siempre corre. La
@@ -24,10 +29,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public sealed class SubmitProcedureInstanceHandler(
     ITramiteLifecycleService lifecycle,
     IProcedureInstanceRepository repo,
-    IPlatePreassignPolicy platePreassignPolicy,
     ILogger<SubmitProcedureInstanceHandler> logger)
 {
-    private readonly IPlatePreassignPolicy _platePolicy = platePreassignPolicy;
     private readonly ILogger<SubmitProcedureInstanceHandler> _logger = logger;
 
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
@@ -36,7 +39,9 @@ public sealed class SubmitProcedureInstanceHandler(
         Guid? changedBy,
         CancellationToken ct = default)
     {
-        var instance = await repo.GetByIdAsync(id, tenantId, ct);
+        // Con tipo y field_values: el destino de la radicación depende de si el tipo pide placa y de
+        // si el trámite ya la tiene.
+        var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
 
@@ -70,89 +75,29 @@ public sealed class SubmitProcedureInstanceHandler(
             return (null, TramiteEstadoErrores.TransicionNoPermitida);
         }
 
-        // Feature #10587 / HU #10785 / HU #10806 — ruta de preasignación de placa (solo matrícula
-        // inicial con la ruta activa). El status SIEMPRE queda en 'entregado' (máquina == develop); lo
-        // que varía es el sub-estado INTERNO de placa: Flujo A (placa elegida y reservada) → asignado;
-        // Flujo B (sin rango/placa) → preasignado; ruta estándar → null.
-        var route = await _platePolicy.DecideAsync(tenantId, id, ct).ConfigureAwait(false);
+        var contexto = TransitionContext.ForInstance(instance, TramiteActor.Gestor);
+        var destino = TramiteTransitionPolicy.DestinoDeRadicacion(contexto);
+        SubmitLog.DestinoRadicacion(_logger, id, tenantId, destino, contexto.RequiresPlateRequest, contexto.HasPlate);
 
-        // Defensa: placa completa NUNCA debe quedar en Standard/Preasignado (el OT aprobaría sin
-        // paso gestor). Si la policy degradó, forzar Asignado (skip OFF es el default seguro).
-        route = await EnsureFullPlateNotStandardAsync(route, id, tenantId, ct).ConfigureAwait(false);
-
-        SubmitLog.PlateRoute(_logger, id, tenantId, route.Decision, route.Reason);
-
-        // HU #10806 (AC4) — la compañía tiene preasignación activa pero el OT está mal configurado:
-        // se BLOQUEA la radicación con un error subsanable, en vez de degradar a estándar en silencio.
-        if (route.Decision == PlateRouteDecision.Blocked)
-            return (null, "plate_route_misconfigured");
-
-        var (plateFlowStatus, transitionReason) = route.Decision switch
-        {
-            PlateRouteDecision.Asignado => (
-                PlateFlowStatus.Asignado,
-                "Radicación: entregado; placa seleccionada o del RUNT (sub-estado asignado)."),
-            PlateRouteDecision.Terminado => (
-                PlateFlowStatus.Terminado,
-                "Radicación: entregado; placa seleccionada/RUNT y paso gestor omitido (sub-estado terminado)."),
-            PlateRouteDecision.Preasignado => (
-                PlateFlowStatus.Preasignado,
-                "Radicación: entregado sin placa; pendiente de asignación OT (sub-estado preasignado / sin asignar)."),
-            _ => (
-                (string?)null,
-                "Radicación: trámite entregado al organismo de tránsito."),
-        };
+        var motivo = destino == TramiteEstado.Preasignacion
+            ? "Radicación: sin placa; pendiente de asignación de placa por el organismo de tránsito."
+            : "Radicación: trámite entregado al organismo de tránsito.";
 
         var final = await lifecycle.TransitionAsync(
-            new TramiteTransitionCommand(id, tenantId, TramiteEstado.Entregado, transitionReason, changedBy, plateFlowStatus),
+            new TramiteTransitionCommand(id, tenantId, destino, motivo, changedBy, TramiteActor.Gestor),
             ct).ConfigureAwait(false);
         if (!final.Success)
             return (null, final.ErrorCode);
 
         return (CreateProcedureInstanceHandler.ToSummary(final.Instance!), null);
     }
-
-    /// <summary>
-    /// Si hay field_value <c>plate</c> con valor y la policy devolvió Standard o Preasignado,
-    /// corrige a Asignado para no entregar la pelota al OT sin paso gestor.
-    /// </summary>
-    private async Task<PlateRouteResult> EnsureFullPlateNotStandardAsync(
-        PlateRouteResult route,
-        Guid id,
-        Guid tenantId,
-        CancellationToken ct)
-    {
-        if (route.Decision is not (PlateRouteDecision.Standard or PlateRouteDecision.Preasignado))
-            return route;
-
-        var detail = await repo.GetByIdWithDetailsAsync(id, tenantId, ct).ConfigureAwait(false);
-        if (detail is null)
-            return route;
-
-        if (!string.Equals(detail.FamilyCode, "matricula_inicial", StringComparison.OrdinalIgnoreCase))
-            return route;
-
-        var plate = detail.FieldValues
-            .FirstOrDefault(f => string.Equals(f.FieldKey, "plate", StringComparison.OrdinalIgnoreCase))
-            ?.ValueText;
-        if (string.IsNullOrWhiteSpace(plate))
-            return route;
-
-        SubmitLog.PlateRouteForcedAsignado(_logger, id, tenantId, route.Decision, route.Reason);
-        return PlateRouteResult.Reserved;
-    }
 }
 
-/// <summary>Logging source-generated (CA1848) del enrutamiento de placa al radicar (HU #10806).</summary>
+/// <summary>Logging source-generated (CA1848) del destino de la radicación (ADR-0059).</summary>
 internal static partial class SubmitLog
 {
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Ruta de placa para el trámite {InstanceId} (tenant {TenantId}): {Decision} ({Reason}).")]
-    public static partial void PlateRoute(
-        ILogger logger, Guid instanceId, Guid tenantId, PlateRouteDecision decision, PlateRouteReason reason);
-
-    [LoggerMessage(Level = LogLevel.Warning,
-        Message = "Ruta de placa corregida a Asignado para {InstanceId} (tenant {TenantId}): la policy devolvió {Decision} ({Reason}) con placa completa.")]
-    public static partial void PlateRouteForcedAsignado(
-        ILogger logger, Guid instanceId, Guid tenantId, PlateRouteDecision decision, PlateRouteReason reason);
+        Message = "Radicación del trámite {InstanceId} (tenant {TenantId}) → '{Destino}' (pide placa: {PidePlaca}, tiene placa: {TienePlaca}).")]
+    public static partial void DestinoRadicacion(
+        ILogger logger, Guid instanceId, Guid tenantId, string destino, bool pidePlaca, bool tienePlaca);
 }

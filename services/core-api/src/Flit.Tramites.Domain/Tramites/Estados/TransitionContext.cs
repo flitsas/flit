@@ -1,3 +1,7 @@
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
+
 namespace Flit.Tramites.Domain.Tramites.Estados;
 
 /// <summary>
@@ -18,4 +22,26 @@ public sealed record TransitionContext(
     bool RequiresPlateRequest,
     bool HasPlate,
     TramiteActor Actor,
-    bool SubsanacionActiva = false);
+    bool SubsanacionActiva = false)
+{
+    /// <summary>
+    /// Construye el contexto desde la instancia cargada con su tipo y sus <c>field_values</c>. La placa
+    /// se lee de <c>field_values.plate</c> (fuente de verdad) y, si el grafo no la trae, de la columna
+    /// denormalizada <see cref="ProcedureInstance.Plate"/>.
+    /// </summary>
+    public static TransitionContext ForInstance(ProcedureInstance instance, TramiteActor actor)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        var plate = instance.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, VehicleFieldKeys.Plate, StringComparison.OrdinalIgnoreCase))
+            ?.ValueText
+            ?? instance.Plate;
+
+        return new TransitionContext(
+            ProcedureTypeGateProfile.FromJson(instance.ProcedureType?.GateProfile).RequiresPlateRequest,
+            !string.IsNullOrWhiteSpace(plate),
+            actor,
+            instance.SubsanacionActiva);
+    }
+}

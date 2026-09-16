@@ -134,6 +134,15 @@ public sealed class ProcedureInstance
     public bool SubsanacionActiva { get; set; }
 
     /// <summary>
+    /// ADR-0059 (HU #12597) — estado desde el que el OT rechazó el trámite la última vez
+    /// (<c>entregado</c> | <c>preasignacion</c>). Lo escribe la transición a <c>rechazado</c>; se limpia al
+    /// activar la subsanación y al salir de <c>rechazado</c>. El gestor ve el distintivo «Rechazado
+    /// preasignación» cuando vale <c>preasignacion</c>. Columna por migración SQL cruda (tabla
+    /// ExcludeFromMigrations); aquí solo se mapea.
+    /// </summary>
+    public string? RejectedFrom { get; set; }
+
+    /// <summary>
     /// Cuántas veces se ha activado la subsanación en este expediente (contador monotónico).
     /// Columna por migración SQL cruda (tabla ExcludeFromMigrations).
     /// </summary>

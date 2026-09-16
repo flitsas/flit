@@ -90,11 +90,11 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                     .FirstOrDefault(),
                                 SoatPagado = _context.ProcedureInstanceFieldValues
                                     .Any(f => f.ProcedureInstanceId == p.Id
-                                        && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.SoatPagado
+                                        && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.SoatPagado
                                         && f.ValueText == "true"),
                                 ImpuestoDepartamentalPagado = _context.ProcedureInstanceFieldValues
                                     .Any(f => f.ProcedureInstanceId == p.Id
-                                        && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.ImpuestoDepartamentalPagado
+                                        && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.ImpuestoDepartamentalPagado
                                         && f.ValueText == "true"),
                                 TransitOfficeId = p.TransitOfficeId,
                                 CreatedAt = p.CreatedAt,
@@ -1206,10 +1206,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     SoatEstado = Field(fields, Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey),
                     // HU #10805 — dígito de preferencia también en el detalle.
                     PlatePreferredLastDigit = Field(fields, PlatePreferredLastDigitFieldKey),
-                    SoatPagado = IsTrue(fields, Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.SoatPagado),
+                    SoatPagado = IsTrue(fields, Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.SoatPagado),
                     ImpuestoDepartamentalPagado = IsTrue(
                         fields,
-                        Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.ImpuestoDepartamentalPagado),
+                        Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.ImpuestoDepartamentalPagado),
                     TransitOfficeId = mapped.TransitOfficeId,
                     CreatedAt = mapped.CreatedAt,
                     SubmittedAt = mapped.SubmittedAt,
