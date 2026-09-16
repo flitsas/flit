@@ -2551,6 +2551,12 @@ const TRANSITION_ERROR_COPY: Record<string, string> = {
   motivo_requerido: 'Debes indicar el motivo para esta transición.',
   conflicto_concurrencia: 'El trámite fue modificado por otro usuario, recarga e intenta de nuevo.',
   estado_desconocido: 'El estado destino no es válido.',
+  // ADR-0059 — Ruta Larga de matrícula inicial (estados Preasignación / Asignado).
+  transicion_requiere_placa: 'El trámite no tiene placa: debe pasar por Preasignación para que el organismo la asigne.',
+  transicion_requiere_preasignacion: 'La matrícula inicial sin placa se radica en Preasignación, no directamente en Entregado.',
+  transicion_placa_incoherente: 'La placa del trámite no es coherente con el estado solicitado.',
+  transicion_solo_ot: 'Esta transición solo puede hacerla el organismo de tránsito.',
+  transicion_solo_gestor: 'Esta transición solo puede hacerla el gestor de la empresa.',
 };
 
 /**
