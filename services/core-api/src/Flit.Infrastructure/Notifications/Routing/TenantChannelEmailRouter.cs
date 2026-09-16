@@ -167,6 +167,10 @@ internal sealed partial class TenantChannelEmailRouter(
         }
 
         var options = rentingOptions.Value;
+        // HU #12430 AC2 — el canal Renting IGNORA message.SenderDisplayName a propósito: el
+        // remitente de este canal es siempre el configurado para él (options.SendEmailSenderEmail/
+        // SendEmailSenderUsername), nunca el de la marca del tenant ni el de FLIT. No hay una rama
+        // condicional que "apague" el campo porque simplemente nunca se lee aquí.
         var request = new RentingSendEmailRequest(
             message.Subject,
             message.HtmlBody,

@@ -257,6 +257,9 @@ internal sealed class AnalyticsSchedulerProcessor(
                 {
                     ThemeKind = theme.KindWireValue,
                     ThemeVersion = theme.IsBrand ? theme.Version : null,
+                    // HU #12430 AC1/AC3 — nombre visible del remitente = nombre de plataforma de
+                    // la marca, solo con tema Brand; la dirección nunca cambia.
+                    SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
                 };
                 if (message.Attachment is not null)
                     email = email with { Attachments = [message.Attachment] };
@@ -593,6 +596,8 @@ internal sealed class AnalyticsSchedulerProcessor(
                     {
                         ThemeKind = theme.KindWireValue,
                         ThemeVersion = theme.IsBrand ? theme.Version : null,
+                        // HU #12430 AC1/AC3 — igual que el informe programado.
+                        SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
                     }, ct);
                 if (result.Success)
                     anySent = true;

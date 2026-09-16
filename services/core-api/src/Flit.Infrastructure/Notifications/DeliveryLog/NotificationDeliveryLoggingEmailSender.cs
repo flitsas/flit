@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Infrastructure.Email;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -56,8 +57,15 @@ namespace Flit.Infrastructure.Notifications.DeliveryLog;
 internal sealed partial class NotificationDeliveryLoggingEmailSender(
     IEmailSender inner,
     IServiceScopeFactory scopeFactory,
-    ILogger<NotificationDeliveryLoggingEmailSender> logger) : IEmailSender
+    ILogger<NotificationDeliveryLoggingEmailSender> logger,
+    EmailSettings? emailSettings = null) : IEmailSender
 {
+    // Parámetro opcional (mismo patrón que IEmailThemeResolver? en los handlers de Seguridad, HU
+    // #12428): así ningún test existente que construye este decorador con 3 argumentos deja de
+    // compilar. DI de producción (InfrastructureExtensions) SIEMPRE pasa la instancia real
+    // registrada como singleton.
+    private readonly EmailSettings _emailSettings = emailSettings ?? new EmailSettings();
+
     public async Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -87,6 +95,17 @@ internal sealed partial class NotificationDeliveryLoggingEmailSender(
 
             // Canal REALMENTE usado (ver comentario de clase) — nunca una constante fija.
             var effectiveChannel = result.Channel ?? TenantSettingsCodes.ChannelFlitSmtp;
+            // HU #12430 AC2/AC5 — el remitente solo se traza para el canal FlitSmtp: es el único
+            // donde este proceso conoce con certeza la dirección aplicada
+            // (EmailSettings.DefaultSenderEmail, fija por ambiente). El canal Renting (TenantApi)
+            // aplica su PROPIO remitente configurado (RentingChannelOptions, ver
+            // TenantChannelEmailRouter) — este decorador no lo conoce sin acoplarse a ese canal, así
+            // que registra NULL en vez de arriesgar un valor incorrecto.
+            var isFlitSmtp = effectiveChannel == TenantSettingsCodes.ChannelFlitSmtp;
+            var appliedSenderName = isFlitSmtp
+                ? SenderDisplayNameSanitizer.Sanitize(message.SenderDisplayName) ?? _emailSettings.DefaultSenderName
+                : null;
+            var appliedSenderEmail = isFlitSmtp ? _emailSettings.DefaultSenderEmail : null;
 
             await writer.WriteAsync(
                 new NotificationDeliveryLogEntry(
@@ -106,7 +125,8 @@ internal sealed partial class NotificationDeliveryLoggingEmailSender(
                     // componer message.HtmlBody; este decorador solo los traslada a la bitácora.
                     ThemeKind = message.ThemeKind,
                     ThemeVersion = message.ThemeVersion,
-                    SenderName = message.SenderDisplayName,
+                    SenderName = appliedSenderName,
+                    SenderEmail = appliedSenderEmail,
                 },
                 CancellationToken.None).ConfigureAwait(false);
         }

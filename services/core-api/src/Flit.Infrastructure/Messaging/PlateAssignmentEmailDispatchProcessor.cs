@@ -227,6 +227,10 @@ internal sealed class PlateAssignmentEmailDispatchProcessor(
             {
                 ThemeKind = brand == PlateAssignmentEmailBrand.Renting ? null : theme.KindWireValue,
                 ThemeVersion = brand == PlateAssignmentEmailBrand.Renting ? null : (theme.IsBrand ? theme.Version : null),
+                // HU #12430 AC1/AC2 — Renting nunca resuelve marca (theme queda EmailTheme.Flit
+                // arriba), así que IsBrand ya es false en ese caso: no hace falta una guarda extra
+                // por canal, basta con IsBrand.
+                SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
             };
 
             var result = await emailSender.SendAsync(message, ct).ConfigureAwait(false);

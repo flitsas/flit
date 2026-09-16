@@ -420,7 +420,8 @@ public static class InfrastructureExtensions
             return new NotificationDeliveryLoggingEmailSender(
                 router,
                 sp.GetRequiredService<IServiceScopeFactory>(),
-                sp.GetRequiredService<ILogger<NotificationDeliveryLoggingEmailSender>>());
+                sp.GetRequiredService<ILogger<NotificationDeliveryLoggingEmailSender>>(),
+                sp.GetRequiredService<EmailSettings>());
         });
 
         services.AddSecurityApplication();

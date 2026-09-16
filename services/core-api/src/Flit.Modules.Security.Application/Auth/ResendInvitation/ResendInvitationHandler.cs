@@ -64,6 +64,9 @@ public sealed partial class ResendInvitationHandler(
         {
             ThemeKind = theme.KindWireValue,
             ThemeVersion = theme.IsBrand ? theme.Version : null,
+            // HU #12430 AC1/AC3 — nombre visible del remitente = nombre de plataforma de la marca,
+            // SOLO cuando el tema resuelto es Brand; la dirección nunca cambia.
+            SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
         };
 
         LogActivationLinkDev(logger, link);

@@ -69,6 +69,10 @@ public sealed partial class ForgotPasswordHandler(
         {
             ThemeKind = theme.KindWireValue,
             ThemeVersion = theme.IsBrand ? theme.Version : null,
+            // HU #12430 AC1/AC3 — nombre visible del remitente = nombre de plataforma de la marca,
+            // SOLO cuando el tema resuelto es Brand; la dirección (settings.DefaultSenderEmail en
+            // SmtpEmailSender) nunca cambia.
+            SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
         };
 
         var sendResult = await emailSender.SendAsync(message, cancellationToken);

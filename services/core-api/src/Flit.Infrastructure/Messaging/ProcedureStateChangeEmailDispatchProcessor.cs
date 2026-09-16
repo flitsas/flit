@@ -291,6 +291,9 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
                     BccEmails = group.Bcc,
                     ThemeKind = channel == NotificationChannel.TenantApi ? null : theme.KindWireValue,
                     ThemeVersion = channel == NotificationChannel.TenantApi ? null : (theme.IsBrand ? theme.Version : null),
+                    // HU #12430 AC1/AC2 — TenantApi nunca resuelve marca (theme queda
+                    // EmailTheme.Flit arriba), así que IsBrand ya es false en ese caso.
+                    SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
                 };
 
                 var result = await emailSender.SendAsync(message, ct).ConfigureAwait(false);
