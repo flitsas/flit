@@ -20,6 +20,7 @@ import {
   FileText,
   CheckCircle,
   Car,
+  Layers,
 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -29,7 +30,7 @@ import {
   fetchNetworkAnalyticsOverview,
   fetchNetworkMonthlyTrend,
 } from "@/lib/api/analytics";
-import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import { tramitesClient } from "@/lib/api/tramites-client";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
@@ -40,6 +41,7 @@ import { useNetworkScope } from "@/hooks/useNetworkScope";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
+import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
 import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
@@ -91,32 +93,10 @@ function buildChartData(items: MonthlyTrendPoint[]) {
 
 function countCompleted(categories: CategoryMetrics[]): number {
   return categories.reduce(
-    (sum, cat) => sum + (cat.byStatus.find((s) => s.status === "completed")?.count ?? 0),
+    (sum, cat) => sum + (cat.byStatus.find((s) => s.status === "aprobado")?.count ?? 0),
     0,
   );
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Borrador",
-  submitted: "Enviado",
-  in_review: "En revisión",
-  pending_ot: "Pendiente OT",
-  approved_ot: "Aprobado OT",
-  completed: "Completado",
-  cancelled: "Cancelado",
-  rejected_ot: "Rechazado",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: "#557EFF",
-  submitted: "#00DBD5",
-  in_review: "#F9AC00",
-  pending_ot: "#8CC63F",
-  approved_ot: "#00DBD5",
-  completed: "#8CC63F",
-  cancelled: "#FF4E00",
-  rejected_ot: "#FF4E00",
-};
 
 function describeError(error: unknown, networkActive = false): string {
   if (error instanceof ApiError) {
@@ -281,13 +261,14 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
     setIsSuper(isSuperAdmin(payload));
   }, []);
 
-  // Cargar catálogo de compañías para el selector SuperAdmin
+  // Cargar catálogo COMPLETO de compañías para el selector SuperAdmin (paginado internamente:
+  // el buscador filtra en cliente y no puede encontrar lo que nunca llegó al navegador).
   useEffect(() => {
     if (!isSuper) return;
     const controller = new AbortController();
-    fetchCompaniesIndex({ pageSize: 100, estadoActivo: true }, controller.signal)
-      .then((res) => {
-        if (!controller.signal.aborted) setCompanies(res.data);
+    fetchAllCompanies({ estadoActivo: true }, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setCompanies(data);
       })
       .catch(() => { /* silencioso: el selector queda vacío, el dashboard sigue operativo */ });
     return () => controller.abort();
@@ -448,6 +429,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   }, [slides.length]);
   const matriculas = categories.find((c) => c.category === "matriculas")?.total ?? 0;
   const traspasos = categories.find((c) => c.category === "traspasos")?.total ?? 0;
+  const otros = categories.find((c) => c.category === "otros")?.total ?? 0;
   const completados = countCompleted(categories);
 
   // Distribución consolidada por estado de TODAS las categorías (no solo traspasos).
@@ -497,13 +479,6 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   // biometricStats, etc. tienen su propio status independiente).
   const comingSoonStatus: UiStatus =
     activeModulesStatus === "ready" ? (comingSoonModules.length > 0 ? "ready" : "empty") : activeModulesStatus;
-  // "Empty" cubre dos causas distintas: sin compañía elegida (SuperAdmin) vs. ningún módulo
-  // adicional activado para la compañía concreta — cada una con su propio mensaje, mismo patrón
-  // que `emptyMessage` de biometricStatus arriba.
-  const comingSoonEmptyMessage =
-    isSuper && !tenantId
-      ? "Selecciona una compañía para ver sus módulos activos."
-      : "Tu compañía no tiene módulos adicionales activados.";
 
   // Defensivo: si un banner falla después de posicionar el índice en él (p. ej. `onError` de la
   // última imagen visible), `slides` puede encoger antes de que el índice se reacomode.
@@ -655,11 +630,12 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           {/* KPIs de Trámites — solo visibles si el módulo está habilitado para el tenant
               (AC1: `true` por defecto mientras carga, evita ocultar la sección con parpadeo). */}
           {tramitesModuleEnabled !== false && (
-            <div className="grid grid-cols-2 gap-3 flex-1">
+            <div className="grid grid-cols-3 gap-3 flex-1">
               {[
                 { label: "Total Trámites", value: totalTramites, icon: FileText, color: "#557EFF" },
                 { label: "Matrículas", value: matriculas, icon: Car, color: "#00DBD5" },
                 { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00" },
+                { label: "Otros Trámites", value: otros, icon: Layers, color: "#162744" },
                 { label: "Completados", value: completados, icon: CheckCircle, color: "#8CC63F" },
               ].map((k) => {
                 const Icon = k.icon;
@@ -667,10 +643,10 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 return (
                   <div
                     key={k.label}
-                    className="rounded-2xl p-4 flex items-center justify-between bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
+                    className="rounded-2xl p-3 flex items-center justify-between bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
                   >
                     <div className="min-w-0">
-                      <p className="text-[11px] opacity-70 font-medium">{k.label}</p>
+                      <p className="text-[11px] opacity-70 font-medium truncate">{k.label}</p>
                       {/* AC1 — cada indicador dice que es de la red (texto, no solo color). */}
                       {networkActive && (
                         <NetworkScopeBadge
@@ -691,16 +667,16 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                           <span className="sr-only">Error al cargar {k.label.toLowerCase()}</span>
                         </p>
                       ) : (
-                        <p className="text-3xl font-bold mt-1" style={{ color: k.color }}>
+                        <p className="text-2xl font-bold mt-1" style={{ color: k.color }}>
                           {status === "loading" ? "—" : k.value}
                         </p>
                       )}
                     </div>
                     <div
-                      className="h-11 w-11 rounded-xl grid place-items-center"
+                      className="h-9 w-9 rounded-xl grid place-items-center shrink-0"
                       style={{ background: isError ? "#FF4E001A" : `${k.color}1A` }}
                     >
-                      <Icon className="h-5 w-5" style={{ color: isError ? "#FF4E00" : k.color }} />
+                      <Icon className="h-4 w-4" style={{ color: isError ? "#FF4E00" : k.color }} />
                     </div>
                   </div>
                 );
@@ -712,35 +688,37 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
 
       {/* Módulos aún no habilitados para el tenant ("Próximamente") — HU #12253. Estado
           aislado (comingSoonStatus): un fallo al consultar los flags no bloquea el resto
-          del dashboard (AC5). */}
-      <UiStateBoundary
-        status={comingSoonStatus}
-        errorMessage={activeModulesErrorMessage}
-        onRetry={retry}
-        emptyMessage={comingSoonEmptyMessage}
-        skeletonRows={1}
-        className="shrink-0"
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
-          {comingSoonModules.map((m) => (
-            <div
-              key={m.key}
-              className="rounded-2xl p-4 flex items-center gap-3 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
-            >
+          del dashboard (AC5). Sin nada que anunciar (ni módulos por activar ni una compañía
+          elegida) la sección no ocupa espacio: ni tarjetas ni mensaje de estado vacío. */}
+      {comingSoonStatus !== "empty" && (
+        <UiStateBoundary
+          status={comingSoonStatus}
+          errorMessage={activeModulesErrorMessage}
+          onRetry={retry}
+          skeletonRows={1}
+          className="shrink-0"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
+            {comingSoonModules.map((m) => (
               <div
-                className="h-11 w-11 rounded-xl grid place-items-center shrink-0"
-                style={{ background: "#7D87981A" }}
+                key={m.key}
+                className="rounded-2xl p-4 flex items-center gap-3 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
               >
-                <Clock className="h-5 w-5" style={{ color: "#7D8798" }} aria-hidden="true" />
+                <div
+                  className="h-11 w-11 rounded-xl grid place-items-center shrink-0"
+                  style={{ background: "#7D87981A" }}
+                >
+                  <Clock className="h-5 w-5" style={{ color: "#7D8798" }} aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold">{m.label}</p>
+                  <p className="text-[11px] opacity-70 font-medium">Próximamente</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-bold">{m.label}</p>
-                <p className="text-[11px] opacity-70 font-medium">Próximamente</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </UiStateBoundary>
+            ))}
+          </div>
+        </UiStateBoundary>
+      )}
 
       {/* Fila inferior: Distribución general + Validaciones Biométricas (cada una con su propio estado) + gráfica mensual (chartStatus) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -766,7 +744,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 ) : (
                   <ul className="space-y-2">
                     {globalFunnel.map((f, i) => {
-                      const color = STATUS_COLORS[f.status] ?? "#557EFF";
+                      const color = estadoChipStyle(f.status).accent;
                       return (
                         <li
                           key={f.status}
@@ -779,7 +757,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                             {i + 1}
                           </span>
                           <span className="flex-1 text-xs font-medium">
-                            {STATUS_LABELS[f.status] ?? f.status}
+                            {estadoLabel(f.status)}
                           </span>
                           <span className="text-base font-bold" style={{ color }}>
                             {f.count}
