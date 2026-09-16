@@ -4,6 +4,7 @@ using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -11,6 +12,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// Aplica sellos FLIT a la impronta manual al componer el consolidado (ruta OT).
 /// Gates: matrícula con placa asignada; propietarios con identidad vigente.
 /// Si el stamp aplica: sobrescribe el adjunto en storage y registra auditoría.
+/// Idempotencia por <b>trámite + hash</b> (Bug #12594): el mismo PDF base puede firmarse en
+/// trámites distintos sin considerarse duplicado; solo se deduplica dentro del mismo trámite.
 /// </summary>
 public static class ImprontaManualStampApplier
 {
@@ -23,7 +26,8 @@ public static class ImprontaManualStampApplier
         CancellationToken ct,
         ISignatureVaultPolicy? vaultPolicy = null,
         IProcedureInstanceRepository? repo = null,
-        IVehicleSignatureImprintRepository? auditRepo = null)
+        IVehicleSignatureImprintRepository? auditRepo = null,
+        ILogger? logger = null)
     {
         if (stamper is null)
             return pdf;
@@ -48,7 +52,7 @@ public static class ImprontaManualStampApplier
             return result.Pdf;
 
         await TryPersistSignedOriginalAsync(
-                result, attachment, instance, storage, repo, auditRepo, ct)
+                result, attachment, instance, storage, repo, auditRepo, logger, ct)
             .ConfigureAwait(false);
 
         return result.Pdf;
@@ -61,14 +65,18 @@ public static class ImprontaManualStampApplier
         IAttachmentStorage storage,
         IProcedureInstanceRepository? repo,
         IVehicleSignatureImprintRepository? auditRepo,
+        ILogger? logger,
         CancellationToken ct)
     {
         if (repo is null || auditRepo is null)
             return;
 
-        // Idempotencia: solo filas activas (parcial uq document_hash WHERE deleted_at IS NULL).
+        // Idempotencia por trámite + hash (Bug #12594): solo filas activas del MISMO trámite
+        // bloquean el re-registro (parcial uq (procedure_instance_id, document_hash) WHERE
+        // deleted_at IS NULL). El mismo PDF base firmado en otro trámite SÍ debe persistir su
+        // propio adjunto + auditoría.
         var existing = await auditRepo
-            .FindByDocumentHashAsync(stamp.DocumentHash, ct)
+            .FindActiveByInstanceAndHashAsync(instance.Id, stamp.DocumentHash, ct)
             .ConfigureAwait(false);
         if (existing is not null)
             return;
@@ -89,9 +97,16 @@ public static class ImprontaManualStampApplier
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort: el consolidado OT sigue con los bytes sellados en memoria.
+            // Best-effort: el consolidado OT sigue con los bytes sellados en memoria. Se registra
+            // el fallo (sin PII: solo ids/tipo/nombre de excepción) porque antes se tragaba en
+            // silencio y no había forma de diagnosticar por qué faltaba la auditoría (Bug #12594, H1).
+            if (logger is not null)
+            {
+                ImprontaManualStampLog.StorageSaveFailed(
+                    logger, instance.Id, previous.Id, previous.Tipo, ex.GetType().Name, ex);
+            }
             return;
         }
 
@@ -133,4 +148,14 @@ public static class ImprontaManualStampApplier
             return "tramites";
         return code.Trim().Length <= 40 ? code.Trim() : code.Trim()[..40];
     }
+}
+
+/// <summary>Logging source-generado (CA1848) de la impronta manual. NUNCA incluye PII.</summary>
+internal static partial class ImprontaManualStampLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Impronta manual: fallo al persistir el original sellado (instanceId={InstanceId}, " +
+            "attachmentId={AttachmentId}, tipo={Tipo}, exceptionType={ExceptionType})")]
+    public static partial void StorageSaveFailed(
+        ILogger logger, Guid instanceId, Guid attachmentId, string tipo, string exceptionType, Exception ex);
 }
