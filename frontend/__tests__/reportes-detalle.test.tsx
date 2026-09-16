@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   exportAnalyticsExcel: vi.fn(),
   exportExecutivePdf: vi.fn(),
   fetchLiveOverview: vi.fn(),
-  fetchCompaniesIndex: vi.fn(),
+  fetchAllCompanies: vi.fn(),
   usePermissions: vi.fn(),
 }));
 
@@ -34,7 +34,7 @@ vi.mock("@/lib/api/analytics-v2", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/analytics-v2")>();
   return { ...actual, fetchLiveOverview: mocks.fetchLiveOverview };
 });
-vi.mock("@/lib/api/admin-companies", () => ({ fetchCompaniesIndex: mocks.fetchCompaniesIndex }));
+vi.mock("@/lib/api/admin-companies", () => ({ fetchAllCompanies: mocks.fetchAllCompanies }));
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: mocks.usePermissions }));
 
 import { Reportes } from "@/components/atom/modules/Reportes";
@@ -102,7 +102,7 @@ beforeEach(() => {
   mocks.fetchLiveOverview.mockResolvedValue(LIVE);
   mocks.fetchTopProducers.mockResolvedValue(PRODUCERS_RESPONSE);
   mocks.fetchProcedureDetails.mockResolvedValue(DETAIL_PAGE);
-  mocks.fetchCompaniesIndex.mockResolvedValue({ data: [], totalCount: 0, page: 1, pageSize: 100 });
+  mocks.fetchAllCompanies.mockResolvedValue([]);
 });
 
 describe("Reportes — AC1 tabla lateral al clic en un segmento", () => {

@@ -10,7 +10,7 @@ import {
 import { ApiError } from "@/lib/api/types";
 import type { StandaloneDocumentListItem } from "@/lib/api/types-generacion-documental";
 import { HistorialTable } from "./HistorialTable";
-import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { getToken } from "@/lib/api/client";
 import {
@@ -140,15 +140,15 @@ export function HistorialSection() {
     const controller = new AbortController();
     void (async () => {
       try {
-        const result = await fetchCompaniesIndex(
-          { page: 1, pageSize: 200, excludeTransitOffices: false },
+        const data = await fetchAllCompanies(
+          { excludeTransitOffices: false },
           controller.signal,
         );
         if (controller.signal.aborted) {
           return;
         }
         setCompanyOptions(
-          (result.data ?? []).map((c) => ({ id: c.id, name: c.razonSocial })),
+          (data ?? []).map((c) => ({ id: c.id, name: c.razonSocial })),
         );
       } catch {
         // Silencio deliberado: ver la nota de arriba.

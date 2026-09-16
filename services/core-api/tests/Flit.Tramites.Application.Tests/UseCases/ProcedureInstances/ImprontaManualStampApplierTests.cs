@@ -8,6 +8,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
 
@@ -120,7 +121,8 @@ public sealed class ImprontaManualStampApplierTests
             WasSignedWithoutOwnerSignature: true);
         _stamper.AlreadyStamped(pdf).Returns(false);
         _stamper.Stamp(pdf, Arg.Any<ImprontaManualStampContext>()).Returns(stamp);
-        _audit.FindByDocumentHashAsync("abc123", Arg.Any<CancellationToken>()).Returns((VehicleSignatureImprint?)null);
+        _audit.FindActiveByInstanceAndHashAsync(instance.Id, "abc123", Arg.Any<CancellationToken>())
+            .Returns((VehicleSignatureImprint?)null);
         _storage.SaveAsync(instance.Id, "impronta", "impronta.pdf", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(new StoredFile("path-new", "bb", 99));
 
@@ -212,6 +214,7 @@ public sealed class ImprontaManualStampApplierTests
     [Fact]
     public async Task MaybeStamp_AlreadyAuditedHash_DoesNotReupload()
     {
+        // Mismo trámite + mismo hash ya auditado (fila activa) ⇒ no re-sube ni re-audita.
         var instance = InstanceTraspasoReady();
         var att = Attachment(instance.TenantId, instance.Id, null);
         instance.Attachments.Add(att);
@@ -222,8 +225,8 @@ public sealed class ImprontaManualStampApplierTests
             PrivateKeyPem: "pk", PublicKeyPem: "pub", SignedAt: DateTimeOffset.UtcNow);
         _stamper.AlreadyStamped(pdf).Returns(false);
         _stamper.Stamp(pdf, Arg.Any<ImprontaManualStampContext>()).Returns(stamp);
-        _audit.FindByDocumentHashAsync("dup", Arg.Any<CancellationToken>())
-            .Returns(new VehicleSignatureImprint { DocumentHash = "dup" });
+        _audit.FindActiveByInstanceAndHashAsync(instance.Id, "dup", Arg.Any<CancellationToken>())
+            .Returns(new VehicleSignatureImprint { DocumentHash = "dup", ProcedureInstanceId = instance.Id });
 
         var result = await ImprontaManualStampApplier.MaybeStampAsync(
             pdf, att, instance, _storage, _stamper, TestContext.Current.CancellationToken,
@@ -233,6 +236,83 @@ public sealed class ImprontaManualStampApplierTests
         await _storage.DidNotReceive().SaveAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>());
         _audit.DidNotReceive().Add(Arg.Any<VehicleSignatureImprint>());
+    }
+
+    [Fact]
+    public async Task MaybeStamp_MismoHashEnOtroTramite_PersisteAdjuntoYAuditoria()
+    {
+        // Bug #12594 (D1): el mismo PDF base (mismo hash) firmado en OTRO trámite no debe bloquear
+        // el registro de auditoría ni la actualización del adjunto de ESTE trámite. Antes,
+        // FindByDocumentHashAsync buscaba el hash de forma global y devolvía la fila del otro
+        // trámite, cortando el flujo en un `return` silencioso.
+        var instance = InstanceTraspasoReady();
+        var att = Attachment(instance.TenantId, instance.Id, null);
+        instance.Attachments.Add(att);
+        var pdf = "%PDF-manual"u8.ToArray();
+        var stampedPdf = "%PDF-stamped"u8.ToArray();
+        var stamp = new ImprontaManualStampResult(
+            stampedPdf, Applied: true, DocumentHash: "hash-compartido", SignatureBase64: "sig-b",
+            PrivateKeyPem: "pk-b", PublicKeyPem: "pub-b", SignedAt: DateTimeOffset.UtcNow);
+        _stamper.AlreadyStamped(pdf).Returns(false);
+        _stamper.Stamp(pdf, Arg.Any<ImprontaManualStampContext>()).Returns(stamp);
+        // Repo filtra por (instance.Id, hash): sin fila activa para ESTE trámite, aunque el hash
+        // ya esté auditado en otro trámite.
+        _audit.FindActiveByInstanceAndHashAsync(instance.Id, "hash-compartido", Arg.Any<CancellationToken>())
+            .Returns((VehicleSignatureImprint?)null);
+        _storage.SaveAsync(instance.Id, "impronta", "impronta.pdf", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(new StoredFile("path-otro-tramite", "dd", 150));
+
+        var result = await ImprontaManualStampApplier.MaybeStampAsync(
+            pdf, att, instance, _storage, _stamper, TestContext.Current.CancellationToken,
+            repo: _repo, auditRepo: _audit);
+
+        result.Should().BeSameAs(stampedPdf);
+        await _storage.Received(1).SaveAsync(
+            instance.Id, "impronta", "impronta.pdf", Arg.Any<Stream>(), Arg.Any<CancellationToken>());
+        att.StoragePath.Should().Be("path-otro-tramite");
+        att.Sha256.Should().Be("dd");
+        att.SizeBytes.Should().Be(150);
+        _audit.Received(1).Add(Arg.Is<VehicleSignatureImprint>(r =>
+            r.DocumentHash == "hash-compartido"
+            && r.ProcedureInstanceId == instance.Id
+            && r.AttachmentId == att.Id
+            && r.SignedStoragePath == "path-otro-tramite"));
+    }
+
+    [Fact]
+    public async Task MaybeStamp_StorageFalla_LogueaWarningYSigue()
+    {
+        // Bug #12594 (H1): el catch genérico ya no traga la excepción en silencio — registra un
+        // warning (sin PII) y sigue best-effort con los bytes sellados en memoria.
+        var instance = InstanceTraspasoReady();
+        var att = Attachment(instance.TenantId, instance.Id, null);
+        instance.Attachments.Add(att);
+        var pdf = "%PDF-manual"u8.ToArray();
+        var stampedPdf = "%PDF-stamped"u8.ToArray();
+        var stamp = new ImprontaManualStampResult(
+            stampedPdf, Applied: true, DocumentHash: "hash-falla-storage", SignatureBase64: "sig-c",
+            PrivateKeyPem: "pk-c", PublicKeyPem: "pub-c", SignedAt: DateTimeOffset.UtcNow);
+        _stamper.AlreadyStamped(pdf).Returns(false);
+        _stamper.Stamp(pdf, Arg.Any<ImprontaManualStampContext>()).Returns(stamp);
+        _audit.FindActiveByInstanceAndHashAsync(instance.Id, "hash-falla-storage", Arg.Any<CancellationToken>())
+            .Returns((VehicleSignatureImprint?)null);
+        _storage.SaveAsync(instance.Id, "impronta", "impronta.pdf", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<StoredFile>(new IOException("disco lleno")));
+        var logger = Substitute.For<ILogger>();
+        logger.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
+
+        var result = await ImprontaManualStampApplier.MaybeStampAsync(
+            pdf, att, instance, _storage, _stamper, TestContext.Current.CancellationToken,
+            repo: _repo, auditRepo: _audit, logger: logger);
+
+        result.Should().BeSameAs(stampedPdf, "best-effort: el consolidado sigue con los bytes sellados en memoria");
+        _audit.DidNotReceive().Add(Arg.Any<VehicleSignatureImprint>());
+        logger.Received(1).Log(
+            LogLevel.Warning,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(state => state.ToString()!.Contains("Impronta manual")),
+            Arg.Any<IOException>(),
+            Arg.Any<Func<object, Exception?, string>>());
     }
 
     [Fact]
@@ -253,8 +333,8 @@ public sealed class ImprontaManualStampApplierTests
             SignedAt: DateTimeOffset.UtcNow);
         _stamper.AlreadyStamped(pdf).Returns(false);
         _stamper.Stamp(pdf, Arg.Any<ImprontaManualStampContext>()).Returns(stamp);
-        // Repo filtra soft-deleted: no hay fila activa con ese hash.
-        _audit.FindByDocumentHashAsync("reused-after-soft-delete", Arg.Any<CancellationToken>())
+        // Repo filtra soft-deleted: no hay fila activa con ese hash para este trámite.
+        _audit.FindActiveByInstanceAndHashAsync(instance.Id, "reused-after-soft-delete", Arg.Any<CancellationToken>())
             .Returns((VehicleSignatureImprint?)null);
         _storage.SaveAsync(instance.Id, "impronta", "impronta.pdf", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(new StoredFile("path-restamp", "cc", 120));

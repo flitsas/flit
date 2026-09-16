@@ -119,7 +119,11 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         /// <summary><see cref="PathString.StartsWithSegments(string, StringComparison)"/> — cubre rutas hijas.</summary>
         Prefix,
 
-        /// <summary><see cref="PathString.Equals(PathString, StringComparison)"/> — solo la ruta exacta.</summary>
+        /// <summary>
+        /// Solo la ruta exacta, tolerando únicamente la barra final (<c>/ruta</c> y <c>/ruta/</c>): el
+        /// routing de ASP.NET Core sirve ambas y con <see cref="PathString.Equals(PathString, StringComparison)"/>
+        /// la segunda saltaba el middleware (Bug #12564). Ni sufijos pegados ni rutas hijas.
+        /// </summary>
         Exact,
     }
 
@@ -129,7 +133,8 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         /// <summary><c>true</c> si <paramref name="requestPath"/> cae bajo esta declaración.</summary>
         public bool Matches(PathString requestPath) => Match == RouteMatch.Prefix
             ? requestPath.StartsWithSegments(Path, StringComparison.OrdinalIgnoreCase)
-            : requestPath.Equals(Path, StringComparison.OrdinalIgnoreCase);
+            : requestPath.StartsWithSegments(Path, StringComparison.OrdinalIgnoreCase, out var remaining)
+                && (!remaining.HasValue || remaining.Value == "/");
     }
 
     /// <summary>Prefijo bajo el que viven los endpoints runtime de trámites que este middleware protege.</summary>
@@ -137,10 +142,12 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
 
     /// <summary>
     /// Lista declarativa (enumerable y testeable — HU #12320 AC3) de los endpoints runtime tenant-scoped
-    /// (excluye parametrización y portal público). El matching es idéntico al histórico: cada entrada
-    /// conserva su comparación (<see cref="RouteMatch.Prefix"/> = StartsWithSegments,
-    /// <see cref="RouteMatch.Exact"/> = Equals). Un test de arquitectura enumera las rutas registradas
-    /// bajo <see cref="RuntimeRoutePrefix"/> y falla nombrando la que no esté cubierta aquí.
+    /// (excluye parametrización y portal público). Cada entrada conserva su comparación:
+    /// <see cref="RouteMatch.Prefix"/> = StartsWithSegments (cubre rutas hijas) y
+    /// <see cref="RouteMatch.Exact"/> = StartsWithSegments con resto vacío o <c>/</c> (solo la ruta y
+    /// su variante con barra final — Bug #12564: <c>Equals</c> dejaba pasar <c>/ruta/</c>, que el routing
+    /// sí sirve). Un test de arquitectura enumera las rutas registradas bajo
+    /// <see cref="RuntimeRoutePrefix"/> y falla nombrando la que no esté cubierta aquí.
     /// </summary>
     public static readonly IReadOnlyList<RuntimeScopedRoute> RuntimeScopedRoutes =
     [
@@ -216,6 +223,16 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // header del request con el tenant del JWT para cualquier caller NO-SuperAdmin (línea de abajo),
         // así que el binding del endpoint ve el valor correcto sin tocar el handler.
         new("/api/v1/me/ui-preferences", RouteMatch.Prefix),
+        // Bug #12564 (hallado en la revisión de seguridad del PR #374) — GET
+        // /api/v1/tramites/consultation-config (HU #10478) leía [FromHeader(Name = "X-Tenant-Id")] y
+        // estaba congelado como deuda en LegacyUncoveredRoutes desde HU #12320: cualquier usuario
+        // autenticado NO-SuperAdmin del tenant A podía mandar el X-Tenant-Id de OTRA compañía y ver su
+        // proveedor primario de consulta (VIN/placa/conductor) y sus flags OnlyOwnVehicles* /
+        // BlockProcedureFamily*. Mismo fix que /api/v1/me/ui-preferences: el endpoint NO cambia — este
+        // middleware sobrescribe el header con el tenant del JWT para cualquier caller NO-SuperAdmin y
+        // el SuperAdmin sigue acotando con el header. Exact: no hay rutas hijas; Exact tolera solo la
+        // barra final (/consultation-config/ también pasa por aquí, PR #377).
+        new("/api/v1/tramites/consultation-config", RouteMatch.Exact),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

@@ -27,8 +27,6 @@ public static class BannerValidator
         }
 
         if (validFrom is null != (validUntil is null)) return "Debe indicar ambas fechas de vigencia, o ninguna.";
-        if (validFrom is not null && validUntil is not null && validUntil <= validFrom)
-            return "La fecha de fin de vigencia debe ser posterior a la de inicio.";
 
         return null;
     }

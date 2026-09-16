@@ -29,4 +29,8 @@ public sealed record ImprintSignatureDto(
     long? SignedSizeBytes,
     string? SignedFilename,
     DateTimeOffset? DeletedAt,
-    ImprintSignatureValidationSummaryDto? LastValidation = null);
+    ImprintSignatureValidationSummaryDto? LastValidation = null,
+    // Bug #12594 (H2): true cuando la fila es una impronta reemplazada/borrada por el gestor
+    // (soft-delete: AttachmentId null, conserva SignedStoragePath histórico). Serializa como
+    // "reemplazada" (camelCase, naming policy del API).
+    bool Reemplazada = false);

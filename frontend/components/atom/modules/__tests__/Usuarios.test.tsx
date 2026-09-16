@@ -34,36 +34,28 @@ vi.mock("@/lib/api/security", () => ({
 }));
 
 vi.mock("@/lib/api/admin-companies", () => ({
-  fetchCompaniesIndex: vi.fn().mockResolvedValue({
-    data: [{ id: "company-1", razonSocial: "Compañía Demo", nit: "900111111-1" }],
-    totalCount: 1,
-    page: 1,
-    pageSize: 200,
-  }),
+  fetchAllCompanies: vi.fn().mockResolvedValue([
+    { id: "company-1", razonSocial: "Compañía Demo", nit: "900111111-1" },
+  ]),
 }));
 
 vi.mock("@/lib/api/admin-transit-office-tenants", () => ({
-  fetchTransitOfficeTenants: vi.fn().mockResolvedValue({
-    data: [
-      {
-        id: "ot-tenant-1",
-        legalName: "Secretaría de Movilidad Demo",
-        taxId: "900222222-2",
-        code: "OT-DEMO",
-        tenantType: "RENTING",
-        estadoActivo: true,
-        fechaCreacion: "2026-07-01T00:00:00Z",
-        rowVersion: 0,
-        transitOfficeId: "office-1",
-        transitOfficeName: "Secretaría de Movilidad Demo",
-        transitOfficeCode: "11001",
-        operationMode: "dashboard",
-      },
-    ],
-    totalCount: 1,
-    page: 1,
-    pageSize: 200,
-  }),
+  fetchAllTransitOfficeTenants: vi.fn().mockResolvedValue([
+    {
+      id: "ot-tenant-1",
+      legalName: "Secretaría de Movilidad Demo",
+      taxId: "900222222-2",
+      code: "OT-DEMO",
+      tenantType: "RENTING",
+      estadoActivo: true,
+      fechaCreacion: "2026-07-01T00:00:00Z",
+      rowVersion: 0,
+      transitOfficeId: "office-1",
+      transitOfficeName: "Secretaría de Movilidad Demo",
+      transitOfficeCode: "11001",
+      operationMode: "dashboard",
+    },
+  ]),
 }));
 
 // El alta de usuario dejó de tener un único selector "empresa u organismo destino" con el rol

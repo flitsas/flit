@@ -225,6 +225,34 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Signatures)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
+    // HU #12116 — cross-tenant a propósito (backfill de plataforma): la fila de auditoría vigente
+    // se resuelve con el query filter propio de VehicleSignatureImprintConfiguration
+    // (DeletedAt == null), y el WHERE compara contra Attachments (sin query filter propio: los
+    // adjuntos que ya no aplican se borran, no se marcan).
+    public async Task<IReadOnlyList<(Guid InstanceId, Guid TenantId)>> ListImprontaManualBackfillCandidatesAsync(
+        int limit, CancellationToken ct)
+    {
+        var signedAttachmentIds = db.VehicleSignatureImprints
+            .Where(v => v.AttachmentId != null)
+            .Select(v => v.AttachmentId!.Value);
+
+        var rows = await db.ProcedureInstances
+            .AsNoTracking()
+            .Where(i => i.DeletedAt == null
+                && (i.Status == TramiteEstado.Entregado || i.Status == TramiteEstado.Aprobado)
+                && i.Attachments.Any(a =>
+                    a.Tipo == "impronta"
+                    && (a.Provider == null || a.Provider.ToLower() != Flit.Tramites.Domain.Documents.AttachmentProviders.Kyverum)
+                    && !signedAttachmentIds.Contains(a.Id)))
+            .OrderBy(i => i.CreatedAt)
+            .Take(limit)
+            .Select(i => new { i.Id, i.TenantId })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows.Select(r => (r.Id, r.TenantId)).ToList();
+    }
+
     public Task<ProcedureInstance?> GetByIdWithFurGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.ProcedureType)

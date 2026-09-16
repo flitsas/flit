@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Landmark, Shield, ShieldCheck, X } from "lucide-react";
 import { createInvitation, type InvitationCreatedResult, type TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
-import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
-import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
+import { fetchAllCompanies } from "@/lib/api/admin-companies";
+import { fetchAllTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
 import type { CompanyListItem } from "@/lib/api/types";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import { SearchableSelect } from "@/components/atom/SearchableSelect";
@@ -90,12 +90,12 @@ export function InviteUserModal({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTenantsLoading(true);
     Promise.all([
-      fetchCompaniesIndex({ pageSize: 200 }),
-      fetchTransitOfficeTenants({ pageSize: 200 }),
+      fetchAllCompanies(),
+      fetchAllTransitOfficeTenants(),
     ])
-      .then(([companiesResult, otResult]) => {
-        setCompanies(companiesResult.data.map((c: CompanyListItem) => ({ id: c.id, name: c.razonSocial })));
-        setTransitOfficeTenants(otResult.data);
+      .then(([companiesData, otData]) => {
+        setCompanies(companiesData.map((c: CompanyListItem) => ({ id: c.id, name: c.razonSocial })));
+        setTransitOfficeTenants(otData);
       })
       .catch(() => {
         /* silencioso: el selector queda vacío y el submit valida */

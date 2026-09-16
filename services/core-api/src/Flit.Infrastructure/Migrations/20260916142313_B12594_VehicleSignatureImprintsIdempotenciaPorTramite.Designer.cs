@@ -3,6 +3,7 @@ using System;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    partial class FlitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916142313_B12594_VehicleSignatureImprintsIdempotenciaPorTramite")]
+    partial class B12594_VehicleSignatureImprintsIdempotenciaPorTramite
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2712,6 +2715,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("personalized_documents_enabled");
+
+                    b.Property<bool>("PlateFlowSkipToTerminado")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("plate_flow_skip_to_terminado");
 
                     b.Property<bool>("PlatePreassignEnabled")
                         .ValueGeneratedOnAdd()
@@ -7836,6 +7845,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("plate_assigned_at");
 
+                    b.Property<string>("PlateFlowStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("plate_flow_status");
+
                     b.Property<DateTimeOffset?>("PlateUpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("plate_updated_at");
@@ -7856,11 +7870,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("reference_number");
-
-                    b.Property<string>("RejectedFrom")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("rejected_from");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()

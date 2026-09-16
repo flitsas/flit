@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
   fetchOtMetrics: vi.fn(),
   fetchFunnel: vi.fn(),
   fetchUsageMetrics: vi.fn(),
-  fetchCompaniesIndex: vi.fn(),
+  fetchAllCompanies: vi.fn(),
   usePermissions: vi.fn(),
 }));
 
@@ -46,7 +46,7 @@ vi.mock("@/lib/api/analytics-v2", async (importOriginal) => {
     fetchUsageMetrics: mocks.fetchUsageMetrics,
   };
 });
-vi.mock("@/lib/api/admin-companies", () => ({ fetchCompaniesIndex: mocks.fetchCompaniesIndex }));
+vi.mock("@/lib/api/admin-companies", () => ({ fetchAllCompanies: mocks.fetchAllCompanies }));
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: mocks.usePermissions }));
 
 import { variationPct } from "@/lib/api/analytics-v2";
@@ -208,7 +208,7 @@ beforeEach(() => {
   mocks.fetchOtMetrics.mockResolvedValue(OT_METRICS);
   mocks.fetchFunnel.mockResolvedValue(FUNNEL);
   mocks.fetchUsageMetrics.mockResolvedValue(USAGE_EMPTY);
-  mocks.fetchCompaniesIndex.mockResolvedValue({ data: [], totalCount: 0, page: 1, pageSize: 100 });
+  mocks.fetchAllCompanies.mockResolvedValue([]);
   window.history.replaceState(null, "", "/");
 });
 

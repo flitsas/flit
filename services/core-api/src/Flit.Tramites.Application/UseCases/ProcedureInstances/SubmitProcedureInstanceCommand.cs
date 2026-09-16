@@ -29,7 +29,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public sealed class SubmitProcedureInstanceHandler(
     ITramiteLifecycleService lifecycle,
     IProcedureInstanceRepository repo,
-    ILogger<SubmitProcedureInstanceHandler> logger)
+    ILogger<SubmitProcedureInstanceHandler> logger,
+    FirmarImprontaManualSiListaHandler? firmaImpronta = null)
 {
     private readonly ILogger<SubmitProcedureInstanceHandler> _logger = logger;
 
@@ -89,6 +90,25 @@ public sealed class SubmitProcedureInstanceHandler(
         if (!final.Success)
             return (null, final.ErrorCode);
 
+        // HU #12116 — firma automática de la impronta manual apenas el trámite queda entregado (cubre
+        // también la re-radicación por subsanación). Best-effort: un fallo NO cambia la respuesta del
+        // submit; el fallo ya queda logueado/trazado dentro del handler. En la Ruta Larga (ADR-0059)
+        // el trámite entra en preasignación sin placa: aquí el gate responde «placa pendiente» y la
+        // firma la dispara el OT al asignar la placa (AdminPlateRangesEndpoints).
+        if (firmaImpronta is not null)
+        {
+            try
+            {
+                await firmaImpronta
+                    .HandleAsync(id, tenantId, FirmaImprontaAutomaticaOrigen.Radicacion, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                SubmitLog.FirmaImprontaOmitida(_logger, ex, id, tenantId);
+            }
+        }
+
         return (CreateProcedureInstanceHandler.ToSummary(final.Instance!), null);
     }
 }
@@ -100,4 +120,8 @@ internal static partial class SubmitLog
         Message = "Radicación del trámite {InstanceId} (tenant {TenantId}) → '{Destino}' (pide placa: {PidePlaca}, tiene placa: {TienePlaca}).")]
     public static partial void DestinoRadicacion(
         ILogger logger, Guid instanceId, Guid tenantId, string destino, bool pidePlaca, bool tienePlaca);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "La firma automática de impronta del trámite {InstanceId} (tenant {TenantId}) se omitió por una excepción no controlada.")]
+    public static partial void FirmaImprontaOmitida(ILogger logger, Exception ex, Guid instanceId, Guid tenantId);
 }
