@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
@@ -503,6 +504,168 @@ public sealed class PlatePreassignTests
         detail.ProcedureInstanceId.Should().Be(instance);
     }
 
+    // ---------- Bug local 2026-09-16: hijas de Concesión/Marca Blanca sin grant propio ----------
+
+    [Fact] // Hija con flag propio, SIN grant propio; cabeza tiene grant; OT permite → Allowed.
+    public async Task EvaluateEligibility_HijaSinGrantPropio_ConOtEfectivoDeLaCabeza_Allowed()
+    {
+        var db = NewDbName();
+        var head = Guid.NewGuid();
+        var hija = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var otTenant = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var seed = NewContext(db))
+        {
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(), TenantId = hija, PlatePreassignEnabled = true, CreatedAt = now,
+            });
+            // La hija NUNCA tiene grant propio (TransitGrantMutationGuard) — solo la cabeza.
+            seed.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant
+            {
+                Id = Guid.NewGuid(), TenantId = head, TransitOfficeId = office, IsEnabled = true, CreatedAt = now,
+            });
+            seed.OtRequirements.Add(new OtRequirementsEntity
+            {
+                Id = Guid.NewGuid(), TenantId = otTenant, TransitOfficeId = office, AllowPlatePreassign = true, CreatedAt = now,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var resolver = new StubEffectiveOffices(new Dictionary<Guid, IReadOnlyList<Guid>>
+        {
+            [hija] = [office], // el OT efectivo de la hija = grants de la cabeza (jerarquía)
+        });
+        var repo = new PlateRangeRepository(ctx, resolver);
+
+        var result = await repo.EvaluateAssignmentEligibilityAsync(hija, office, TestContext.Current.CancellationToken);
+        result.Should().Be(PlateAssignmentEligibility.Allowed);
+    }
+
+    [Fact] // Misma hija, pero SIN flag propio (no se hereda de la cabeza) → CompanyDisabled.
+    public async Task EvaluateEligibility_HijaSinFlagPropio_CompanyDisabled()
+    {
+        var db = NewDbName();
+        var head = Guid.NewGuid();
+        var hija = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var seed = NewContext(db))
+        {
+            // La cabeza SÍ tiene flag + grant, pero la hija no hereda el flag.
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(), TenantId = head, PlatePreassignEnabled = true, CreatedAt = now,
+            });
+            seed.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant
+            {
+                Id = Guid.NewGuid(), TenantId = head, TransitOfficeId = office, IsEnabled = true, CreatedAt = now,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var resolver = new StubEffectiveOffices(new Dictionary<Guid, IReadOnlyList<Guid>>
+        {
+            [hija] = [office],
+        });
+        var repo = new PlateRangeRepository(ctx, resolver);
+
+        var result = await repo.EvaluateAssignmentEligibilityAsync(hija, office, TestContext.Current.CancellationToken);
+        result.Should().Be(PlateAssignmentEligibility.CompanyDisabled);
+    }
+
+    [Fact] // Regresión: tenant SIN padre, sin grant propio → Misconfigured (el resolver no inventa un grant).
+    public async Task EvaluateEligibility_TenantSinPadreSinGrant_Misconfigured_Regresion()
+    {
+        var db = NewDbName();
+        var tenant = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var otTenant = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var seed = NewContext(db))
+        {
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(), TenantId = tenant, PlatePreassignEnabled = true, CreatedAt = now,
+            });
+            seed.OtRequirements.Add(new OtRequirementsEntity
+            {
+                Id = Guid.NewGuid(), TenantId = otTenant, TransitOfficeId = office, AllowPlatePreassign = true, CreatedAt = now,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        // Resolver presente pero SIN entrada para este tenant → lista efectiva vacía (mismo criterio
+        // que el resolver real para un tenant sin padre y sin grants propios).
+        var resolver = new StubEffectiveOffices(new Dictionary<Guid, IReadOnlyList<Guid>>());
+        var repo = new PlateRangeRepository(ctx, resolver);
+
+        var result = await repo.EvaluateAssignmentEligibilityAsync(tenant, office, TestContext.Current.CancellationToken);
+        result.Should().Be(PlateAssignmentEligibility.Misconfigured);
+    }
+
+    [Fact] // ListEligibleCompaniesAsync incluye cabeza (grant directo) e hija (OT efectivo por jerarquía);
+           // excluye una hija SIN flag y una hija de OTRA red cuyo OT efectivo no incluye este office.
+    public async Task ListEligibleCompanies_IncluyeCabezaEHija_ExcluyeSinFlagYOtraRed()
+    {
+        var db = NewDbName();
+        var office = Guid.NewGuid();
+        var otTenant = Guid.NewGuid();
+        var head = Guid.NewGuid();
+        var hija = Guid.NewGuid();
+        var hijaSinFlag = Guid.NewGuid();
+        var hijaOtraRed = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var seed = NewContext(db))
+        {
+            seed.OtRequirements.Add(new OtRequirementsEntity
+            {
+                Id = Guid.NewGuid(), TenantId = otTenant, TransitOfficeId = office, AllowPlatePreassign = true, CreatedAt = now,
+            });
+
+            // Cabeza: grant directo + flag propio → elegible por el criterio ya existente.
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy { Id = Guid.NewGuid(), TenantId = head, PlatePreassignEnabled = true, CreatedAt = now });
+            seed.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant { Id = Guid.NewGuid(), TenantId = head, TransitOfficeId = office, IsEnabled = true, CreatedAt = now });
+            seed.Tenants.Add(new Tenant { Id = head, LegalName = "Concesión Cabeza S.A.S.", Code = "CAB", TaxId = "900000010-1", TenantType = "CONCESION", IsGroupParent = true, CreatedAt = now });
+
+            // Hija: flag propio, SIN grant, pero el OT efectivo (stub) contiene `office`.
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy { Id = Guid.NewGuid(), TenantId = hija, PlatePreassignEnabled = true, CreatedAt = now });
+            seed.Tenants.Add(new Tenant { Id = hija, LegalName = "Hija Elegible S.A.S.", Code = "HIJ", TaxId = "900000011-1", TenantType = "CONCESIONARIO", ParentTenantId = head, CreatedAt = now });
+
+            // Hija sin flag: no debe entrar aunque tenga padre (el filtro de policy la corta antes del join).
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy { Id = Guid.NewGuid(), TenantId = hijaSinFlag, PlatePreassignEnabled = false, CreatedAt = now });
+            seed.Tenants.Add(new Tenant { Id = hijaSinFlag, LegalName = "Hija Sin Flag S.A.S.", Code = "HSF", TaxId = "900000012-1", TenantType = "CONCESIONARIO", ParentTenantId = head, CreatedAt = now });
+
+            // Hija de otra red: flag propio, sin grant, pero su OT efectivo (stub) NO incluye `office`.
+            seed.TenantOperationalPolicies.Add(new TenantOperationalPolicy { Id = Guid.NewGuid(), TenantId = hijaOtraRed, PlatePreassignEnabled = true, CreatedAt = now });
+            seed.Tenants.Add(new Tenant { Id = hijaOtraRed, LegalName = "Hija Otra Red S.A.S.", Code = "HOR", TaxId = "900000013-1", TenantType = "CONCESIONARIO", ParentTenantId = head, CreatedAt = now });
+
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var resolver = new StubEffectiveOffices(new Dictionary<Guid, IReadOnlyList<Guid>>
+        {
+            [hija] = [office],
+            [hijaOtraRed] = [Guid.NewGuid()], // otro OT, no este
+        });
+        var repo = new PlateRangeRepository(ctx, resolver);
+
+        var companies = await repo.ListEligibleCompaniesAsync(office, TestContext.Current.CancellationToken);
+
+        companies.Select(c => c.TenantId).Should().BeEquivalentTo([head, hija]);
+        companies.Select(c => c.TenantId).Should().NotContain(hijaSinFlag);
+        companies.Select(c => c.TenantId).Should().NotContain(hijaOtraRed);
+    }
+
     // ---------- Helpers ----------
 
     private static string NewDbName() => $"flit-plate-{Guid.NewGuid()}";
@@ -511,4 +674,13 @@ public sealed class PlatePreassignTests
         new(new DbContextOptionsBuilder<FlitDbContext>()
             .UseInMemoryDatabase(dbName)
             .Options);
+
+    private sealed class StubEffectiveOffices(IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> map)
+        : IEffectiveTransitOfficeListResolver
+    {
+        public Task<IReadOnlyList<Guid>> ListEffectiveOfficeIdsAsync(
+            Guid tenantId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(map.TryGetValue(tenantId, out var ids) ? ids : (IReadOnlyList<Guid>)Array.Empty<Guid>());
+    }
 }
