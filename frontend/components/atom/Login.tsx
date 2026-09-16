@@ -5,7 +5,16 @@ import Link from "next/link";
 import { loginUser } from "@/lib/api/auth";
 import { rememberEmail, storeToken } from "@/lib/auth/session";
 import { BrandLogo } from "@/components/brand/BrandLogo";
-import { ShieldAlert, Lock, Mail, User as UserIcon } from "lucide-react";
+import { ShieldAlert, Lock, Mail, User as UserIcon, ExternalLink } from "lucide-react";
+
+/**
+ * HU #12424 AC2 — datos del 403 `NETWORK_DOMAIN_REQUIRED` (ADR-0060 D3). Vienen tal cual del
+ * servidor; el cliente no decide nada de acceso, solo pinta el mensaje y el enlace.
+ */
+interface NetworkRedirectInfo {
+  networkDomain: string;
+  loginUrl: string;
+}
 
 function ParticlesCanvas() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -77,6 +86,7 @@ export function Login({
   const [error, setError] = useState("");
   const [blocked, setBlocked] = useState(false);
   const [roleDeactivated, setRoleDeactivated] = useState(false);
+  const [networkRedirect, setNetworkRedirect] = useState<NetworkRedirectInfo | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function submitCreds(e: React.FormEvent) {
@@ -84,6 +94,7 @@ export function Login({
     setError("");
     setBlocked(false);
     setRoleDeactivated(false);
+    setNetworkRedirect(null);
 
     if (!email.trim() || !pass) {
       setError("Ingresa tu correo y contraseña.");
@@ -97,8 +108,21 @@ export function Login({
       rememberEmail(email.trim());
       onAuthenticated();
     } catch (err) {
-      const apiErr = err as { status?: number; body?: { code?: string } };
-      if (apiErr.body?.code === "ALL_ROLES_INACTIVE") {
+      const apiErr = err as {
+        status?: number;
+        body?: { code?: string; error?: string; networkDomain?: string; loginUrl?: string };
+      };
+      if (
+        apiErr.status === 403 &&
+        apiErr.body?.error === "NETWORK_DOMAIN_REQUIRED" &&
+        apiErr.body.networkDomain &&
+        apiErr.body.loginUrl
+      ) {
+        // HU #12424 AC2 (ADR-0060 D3) — credencial válida de un usuario de una red MARCA_BLANCA
+        // presentada por el dominio de FLIT: se ofrece el enlace directo, sin redirigir solo.
+        // Ninguna decisión de acceso se toma aquí — el servidor ya la tomó.
+        setNetworkRedirect({ networkDomain: apiErr.body.networkDomain, loginUrl: apiErr.body.loginUrl });
+      } else if (apiErr.body?.code === "ALL_ROLES_INACTIVE") {
         // HU #10511 — todos los roles del usuario fueron desactivados: mensaje
         // distinto al de bloqueo temporal (HU #10170), para no confundir la causa.
         setRoleDeactivated(true);
@@ -106,6 +130,8 @@ export function Login({
         // Cuenta bloqueada temporalmente (HU #10170): panel de acceso restringido.
         setBlocked(true);
       } else {
+        // HU #12424 AC3 — credencial incorrecta y usuario fuera de la red responden IGUAL
+        // (401 INVALID_CREDENTIALS, sin código distintivo): mismo texto de siempre, sin ramas.
         setError("Correo o contraseña incorrectos.");
       }
     } finally {
@@ -170,6 +196,37 @@ export function Login({
                   type="button"
                   onClick={() => setRoleDeactivated(false)}
                   className="text-xs mt-3 font-semibold transition hover:opacity-80"
+                  style={{ color: "var(--color-flit-brand)" }}
+                >
+                  ← Volver a intentar
+                </button>
+              </div>
+            </div>
+          ) : networkRedirect ? (
+            <div
+              className="rounded-xl border p-5 flex gap-3 animate-fade-in"
+              style={{ borderColor: "var(--color-flit-brand)", background: "rgba(85,126,255,0.06)" }}
+              role="alert"
+              aria-live="assertive"
+            >
+              <ExternalLink className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
+              <div className="text-sm">
+                <p className="font-semibold" style={{ color: "var(--color-flit-brand)" }}>Tu red tiene un dominio propio</p>
+                <p className="text-slate-600 text-xs mt-1">
+                  Ingresa desde <strong>{networkRedirect.networkDomain}</strong> para acceder a tu cuenta.
+                </p>
+                <a
+                  href={networkRedirect.loginUrl}
+                  rel="noopener"
+                  className="inline-flex items-center gap-1 text-xs mt-3 font-semibold underline hover:opacity-80"
+                  style={{ color: "var(--color-flit-brand)" }}
+                >
+                  Ir a {networkRedirect.networkDomain}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setNetworkRedirect(null)}
+                  className="block text-xs mt-3 font-semibold transition hover:opacity-80"
                   style={{ color: "var(--color-flit-brand)" }}
                 >
                   ← Volver a intentar

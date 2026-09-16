@@ -631,3 +631,23 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+
+// ── Acceso por dominio de red (HU #12422, consumido por #12424) ────────────
+// Origen: contracts/openapi/core-api.v1.yaml → LoginNetworkInfo / NetworkDomainRequiredResponse.
+// Campos aditivos y opcionales: no alteran el contrato existente de LoginResponse/AuthErrorResponse.
+
+/** `LoginResponse.network` — solo presente cuando el login se hizo por el dominio de una red MARCA_BLANCA activa. */
+export interface LoginNetworkInfo {
+  host: string;
+}
+
+/**
+ * 403 aditivo de `POST /auth/login` (ADR-0060 D3): credencial válida de un usuario de una red
+ * MARCA_BLANCA con dominio activo, presentada por el dominio de FLIT. El cliente NO decide
+ * acceso con esto — solo ofrece el enlace directo al dominio propio.
+ */
+export interface NetworkDomainRequiredResponse {
+  error: "NETWORK_DOMAIN_REQUIRED";
+  networkDomain: string;
+  loginUrl: string;
+}

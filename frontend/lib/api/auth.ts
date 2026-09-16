@@ -1,11 +1,17 @@
 // Funciones de la API de autenticación (HU #10168-#10171, #10203). Envuelven apiFetch
 // para los flujos de login, recuperación, cambio y administración de credenciales.
 import { apiFetch } from "./client";
+import type { LoginNetworkInfo } from "./types";
 
 export interface LoginResult {
   accessToken: string;
   expiresInSeconds: number;
   tokenType: string;
+  /**
+   * HU #12422/#12424 — aditivo y opcional: solo presente cuando el login se hizo por el
+   * dominio de una red MARCA_BLANCA activa. `Login.tsx` no lo usa para decidir acceso.
+   */
+  network?: LoginNetworkInfo | null;
 }
 
 /** POST /api/v1/auth/login → JWT 12h. */

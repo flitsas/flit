@@ -139,6 +139,14 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       emitSessionExpired();
       throw new ApiError(401, "SESSION_EXPIRED");
     }
+    if (response.status === 401 && data?.error === "SESSION_DOMAIN_MISMATCH") {
+      // HU #12422 AC5 / #12424 (ADR-0060 D3) — el JWT se emitió para un dominio distinto del
+      // sellado en esta petición (`DomainBindingMiddleware`). Se trata igual que una sesión
+      // expirada: limpiar y volver al login, sin exponer nada de la red al usuario.
+      clearToken();
+      emitSessionExpired();
+      throw new ApiError(401, "SESSION_DOMAIN_MISMATCH", data);
+    }
     throw new ApiError(response.status, friendlyErrorMessage(data), data);
   }
 
