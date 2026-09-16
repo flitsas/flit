@@ -39,4 +39,62 @@ public interface ITenantDomainRepository
 
     /// <summary>Hosts activos de toda la plataforma (CORS del Gateway, consumido por #12417).</summary>
     Task<IReadOnlyList<string>> ListActiveHostsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Hosts de cabezas MARCA_BLANCA activas y vigentes que necesitan certificado (#12426, poller ACME):
+    /// <c>verified</c> sin <c>certificate_issued_at</c>, o <c>active</c> con
+    /// <c>certificate_expires_at &lt;= renewBefore</c> (renovación próxima a vencer). Consumido por
+    /// <c>GET /internal/domains/pending-certificate</c>.
+    /// </summary>
+    Task<IReadOnlyList<string>> ListPendingCertificateHostsAsync(DateTimeOffset renewBefore, CancellationToken cancellationToken = default);
+
+    /// <summary>La fila vigente por host, sin importar estado (HU #12425 AC3, consumido por <c>PUT /internal/domains/{host}/certificate</c>). <c>null</c> si no existe o fue retirada.</summary>
+    Task<TenantDomain?> GetByHostAsync(string host, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reclama hasta <paramref name="batchSize"/> filas vencidas (<c>next_check_at &lt;= now</c>, HU #12425
+    /// AC2, AC4, AC6) con <c>FOR UPDATE SKIP LOCKED</c> sobre <c>ix_tenant_domains_next_check</c> y les
+    /// aplica un "lease" corto (adelanta <c>next_check_at</c>) para que otra réplica no las vuelva a
+    /// tomar mientras esta procesa la comprobación DNS FUERA de la transacción de reclamo — si el
+    /// proceso muere a medias, el lease expira y la fila vuelve a ser reclamable (autocorrectivo). Sin
+    /// filas vencidas devuelve lista vacía (AC6, "el trabajo programado no hace nada").
+    /// </summary>
+    Task<IReadOnlyList<DomainCheckClaim>> ClaimDueForCheckAsync(int batchSize, TimeSpan lease, DateTimeOffset now, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Aplica el resultado de UNA comprobación DNS (a demanda o del job, HU #12425 AC2, AC4, AC5, AC7) y
+    /// audita la transición (<c>EntityName=TenantDomain</c>, <c>FieldName=status</c>,
+    /// <c>NewValue={"status","reason","changedBy"}</c>). Exactamente uno de <paramref name="changedByUserId"/>
+    /// / <paramref name="changedByJob"/> identifica al autor (AC5); ninguno de los dos = sistema.
+    /// <c>null</c> si <paramref name="tenantId"/> ya no tiene fila vigente (carrera con un retiro).
+    /// </summary>
+    Task<TenantDomain?> ApplyCheckOutcomeAsync(
+        Guid tenantId,
+        string newStatus,
+        string? statusReason,
+        DateTimeOffset? verifiedAt,
+        DateTimeOffset? graceUntil,
+        int checkAttempts,
+        DateTimeOffset? nextCheckAt,
+        DateTimeOffset now,
+        Guid? changedByUserId,
+        string? changedByJob,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Aplica la señal de certificado emitido (#12426 → HU #12425 AC3): <paramref name="newStatus"/> ya
+    /// viene decidido por <c>DomainStateMachine.DecideCertificate</c> (Application). <c>null</c> si
+    /// <paramref name="host"/> no tiene fila vigente (404 del endpoint interno).
+    /// </summary>
+    Task<TenantDomain?> ApplyCertificateAsync(
+        string host,
+        string newStatus,
+        DateTimeOffset? activatedAt,
+        DateTimeOffset certificateIssuedAt,
+        DateTimeOffset? certificateExpiresAt,
+        string changedByJob,
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>Fila reclamada por el job de comprobación (HU #12425), datos mínimos para decidir la transición sin recargar toda la entidad.</summary>
+public sealed record DomainCheckClaim(Guid TenantId, string Host, string Status, DateTimeOffset? GraceUntil, int CheckAttempts);

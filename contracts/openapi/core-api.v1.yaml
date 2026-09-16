@@ -1127,6 +1127,39 @@ paths:
         "403": { description: Autenticado pero sin rol SuperAdmin. }
         "404": { description: El tenant no tiene un dominio registrado. }
 
+  /api/v1/admin/companies/{tenantId}/domain/verify:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (cabeza de grupo MARCA_BLANCA).
+    post:
+      tags: [Admin · Dominio de la red]
+      operationId: adminDomainVerify
+      summary: Comprueba a demanda el registro TXT de titularidad (HU #12425 AC2)
+      description: >
+        Consulta _flit-verify.<host> y aplica la misma máquina de estados que el trabajo
+        programado (pending/failed → verified con TXT coincidente; → failed con motivo si no
+        coincide o no existe; en active, ausencia del TXT entra en gracia — AC4). Sujeto a
+        enfriamiento (Domains:Verification:ManualCooldownSeconds).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Resultado de la comprobación (verified o failed con statusReason).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantDomainResponse" }
+        "401": { description: No autenticado. }
+        "403": { description: Autenticado pero sin rol SuperAdmin. }
+        "404": { description: El tenant no tiene un dominio registrado. }
+        "429":
+          description: Se pidió la comprobación antes de que venciera el enfriamiento.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /api/v1/company/domain:
     get:
       tags: [Compañía · Dominio de la red]
@@ -1143,6 +1176,29 @@ paths:
         "401": { description: No autenticado. }
         "403": { description: No es cabeza de grupo (respuesta uniforme, sin revelar nada). }
         "404": { description: La red no tiene un dominio registrado. }
+
+  /api/v1/company/domain/verify:
+    post:
+      tags: [Compañía · Dominio de la red]
+      operationId: companyDomainVerify
+      summary: Comprueba a demanda el registro TXT de titularidad de la propia red (HU #12427 AC2)
+      description: Mismo comportamiento que el endpoint SuperAdmin (HU #12425 AC2); el tenant sale del JWT.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Resultado de la comprobación (verified o failed con statusReason).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantDomainResponse" }
+        "401": { description: No autenticado. }
+        "403": { description: No es cabeza de grupo. }
+        "404": { description: La red no tiene un dominio registrado. }
+        "429":
+          description: Se pidió la comprobación antes de que venciera el enfriamiento.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
 
   /api/v1/internal/domains/active:
     get:
@@ -1176,6 +1232,78 @@ paths:
                     items: { type: string }
                 required: [hosts]
         "401": { description: Clave interna ausente o incorrecta. }
+
+  /api/v1/internal/domains/pending-certificate:
+    get:
+      tags: [Internal]
+      operationId: internalPendingCertificateDomains
+      summary: >-
+        USO INTERNO (HU #12425, consumido por el poller ACME de #12426) — dominios que necesitan
+        certificado: verified sin certificate_issued_at (primera emisión), o active con
+        certificate_expires_at dentro de 30 días (renovación).
+      description: >
+        No forma parte de la superficie pública. Autenticado con X-Internal-Key. Solo cabezas
+        MARCA_BLANCA activas y vigentes (deleted_at IS NULL).
+      security: []
+      parameters:
+        - name: X-Internal-Key
+          in: header
+          required: true
+          schema: { type: string }
+          description: Clave compartida servicio a servicio.
+      responses:
+        "200":
+          description: Hosts pendientes de emisión o renovación de certificado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hosts:
+                    type: array
+                    items: { type: string }
+                required: [hosts]
+        "401": { description: Clave interna ausente o incorrecta. }
+
+  /api/v1/internal/domains/{host}/certificate:
+    parameters:
+      - name: host
+        in: path
+        required: true
+        schema: { type: string }
+        description: Host del dominio (ya normalizado).
+    put:
+      tags: [Internal]
+      operationId: internalDomainCertificate
+      summary: >-
+        USO INTERNO (HU #12425 AC3, señal de #12426) — certificado emitido en el borde: verified
+        pasa a active (activated_at = now()); active solo actualiza las fechas del certificado.
+      security: []
+      parameters:
+        - name: X-Internal-Key
+          in: header
+          required: true
+          schema: { type: string }
+          description: Clave compartida servicio a servicio.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                issuedAt: { type: string, format: date-time }
+                expiresAt: { type: string, format: date-time, nullable: true }
+              required: [issuedAt]
+      responses:
+        "200": { description: Certificado aplicado (y activado si estaba verified). }
+        "401": { description: Clave interna ausente o incorrecta. }
+        "404": { description: El host no tiene dominio registrado. }
+        "409":
+          description: El dominio no está verified/active (DOMAIN_NOT_VERIFIED) — no puede recibir certificado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
 
   /api/v1/admin/companies/{tenantId}/whitelist:
     parameters:
@@ -9976,7 +10104,11 @@ components:
       properties:
         host: { type: string }
         status: { type: string, enum: [pending, verified, active, failed] }
-        statusReason: { type: string, nullable: true }
+        statusReason:
+          type: string
+          nullable: true
+          enum: [TXT_NOT_FOUND, TXT_MISMATCH, DNS_ERROR]
+          description: Solo presente cuando status=failed (HU #12425 AC2).
         statusChangedAt: { type: string, format: date-time }
         verification:
           type: object

@@ -25,4 +25,10 @@ public static class DomainErrors
     public const string AlreadyRegisteredForTenant = "DOMAIN_ALREADY_REGISTERED_FOR_TENANT";
 
     public const string ConcurrencyConflict = "CONCURRENCY_CONFLICT";
+
+    /// <summary>Comprobación a demanda pedida antes de que venza <c>Domains:Verification:ManualCooldownSeconds</c> desde la última. HU #12425.</summary>
+    public const string VerificationCooldown = "DOMAIN_VERIFICATION_COOLDOWN";
+
+    /// <summary>El dominio aún no pasó a <c>verified</c>/<c>active</c>: no puede recibir la señal de certificado (#12426). HU #12425 AC3.</summary>
+    public const string NotVerified = "DOMAIN_NOT_VERIFIED";
 }

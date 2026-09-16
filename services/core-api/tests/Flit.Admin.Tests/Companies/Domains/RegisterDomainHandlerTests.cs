@@ -25,6 +25,7 @@ public sealed class RegisterDomainHandlerTests
         Status = TenantDomainStatus.Pending,
         VerificationToken = "tok-0000000000000001",
         StatusChangedAt = DateTimeOffset.UtcNow,
+        CheckAttempts = 0,
         RowVersion = rowVersion,
     };
 

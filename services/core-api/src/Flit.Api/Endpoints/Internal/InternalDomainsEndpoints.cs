@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using Flit.Admin.Application.Companies.Domains;
+using Flit.Admin.Application.Companies.Domains.Verification;
+using Flit.Admin.Domain.Companies.Domains;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints.Internal;
@@ -29,7 +31,78 @@ public static class InternalDomainsEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .AllowAnonymous();
 
+        // HU #12425 — dominios que el poller ACME de #12426 debe atender: verified sin certificado
+        // (primera emisión) o active con certificado próximo a vencer (renovación).
+        app.MapGet("/api/v1/internal/domains/pending-certificate", GetPendingCertificateDomainsAsync)
+            .WithName("InternalPendingCertificateDomains")
+            .WithTags("Internal")
+            .Produces<ActiveDomainsResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .AllowAnonymous();
+
+        // HU #12425 (AC3) — señal de certificado emitido en el borde (#12426): verified → active.
+        app.MapPut("/api/v1/internal/domains/{host}/certificate", PutCertificateAsync)
+            .WithName("InternalDomainCertificate")
+            .WithTags("Internal")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .AllowAnonymous();
+
         return app;
+    }
+
+    /// <summary>Ventana de renovación: certificados con <c>certificate_expires_at</c> dentro de 30 días entran igual que los dominios sin certificado emitido — el poller de #12426 los trata idéntico (pide/renueva).</summary>
+    private static readonly TimeSpan CertificateRenewalWindow = TimeSpan.FromDays(30);
+
+    internal static async Task<IResult> GetPendingCertificateDomainsAsync(
+        HttpRequest request,
+        [FromServices] ITenantDomainRepository repository,
+        [FromServices] IConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        var expectedKey = configuration[ConfigKey];
+        if (string.IsNullOrEmpty(expectedKey) || !HasValidKey(request, expectedKey))
+        {
+            return Results.Unauthorized();
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var hosts = await repository.ListPendingCertificateHostsAsync(now + CertificateRenewalWindow, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(new ActiveDomainsResponse(hosts));
+    }
+
+    internal static async Task<IResult> PutCertificateAsync(
+        string host,
+        DomainCertificateRequestBody? body,
+        HttpRequest request,
+        [FromServices] ApplyDomainCertificateHandler handler,
+        [FromServices] IConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        var expectedKey = configuration[ConfigKey];
+        if (string.IsNullOrEmpty(expectedKey) || !HasValidKey(request, expectedKey))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (body is null || body.IssuedAt == default)
+        {
+            return Results.Json(new { error = DomainErrors.HostInvalid, message = "issuedAt es requerido." }, statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var result = await handler.HandleAsync(host, body.IssuedAt, body.ExpiresAt, cancellationToken).ConfigureAwait(false);
+        return result.Outcome switch
+        {
+            Flit.Admin.Application.Companies.Domains.Verification.ApplyDomainCertificateOutcome.NotFound =>
+                Results.NotFound(new { error = DomainErrors.NotFound, message = $"El host {host} no tiene dominio registrado." }),
+            Flit.Admin.Application.Companies.Domains.Verification.ApplyDomainCertificateOutcome.NotVerified =>
+                Results.Json(
+                    new { error = DomainErrors.NotVerified, message = "El dominio aún no comprobó titularidad (pending/failed)." },
+                    statusCode: StatusCodes.Status409Conflict),
+            _ => Results.Ok(),
+        };
     }
 
     internal static async Task<IResult> GetActiveDomainsAsync(
@@ -68,3 +141,6 @@ public static class InternalDomainsEndpoints
 
 /// <summary>Forma de <c>GET /api/v1/internal/domains/active</c> (HU #12417 AC3).</summary>
 public sealed record ActiveDomainsResponse(IReadOnlyList<string> Hosts);
+
+/// <summary>Cuerpo de <c>PUT /api/v1/internal/domains/{host}/certificate</c> (HU #12425 AC3, #12426).</summary>
+public sealed record DomainCertificateRequestBody(DateTimeOffset IssuedAt, DateTimeOffset? ExpiresAt);

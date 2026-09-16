@@ -26,6 +26,7 @@ public sealed class RemoveDomainHandlerTests
             VerificationToken = "tok-0000000000000001",
             StatusChangedAt = DateTimeOffset.UtcNow,
             RowVersion = 3,
+            CheckAttempts = 0,
         };
         repo.RetireAsync(TenantId, Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(retired);
 

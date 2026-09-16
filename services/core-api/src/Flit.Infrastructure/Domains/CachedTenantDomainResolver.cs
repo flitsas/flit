@@ -23,7 +23,15 @@ internal sealed class CachedTenantDomainResolver(
 {
     private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(60);
     private const string ResolveCacheKeyPrefix = "flit:domain-resolve:";
-    private const string ActiveHostsCacheKey = "flit:domain-resolve:active-hosts";
+    internal const string ActiveHostsCacheKey = "flit:domain-resolve:active-hosts";
+
+    /// <summary>
+    /// Clave de caché de un host (visible para <c>TenantDomainRepository</c>, HU #12425 AC3): al
+    /// activar o fallar un dominio, la transición invalida su entrada aquí y en
+    /// <see cref="ActiveHostsCacheKey"/> — sin esperar el TTL de 60 s — porque "un dominio que no está
+    /// activo no resuelve marca ni permite autenticar" debe verse de inmediato, no en hasta un minuto.
+    /// </summary>
+    internal static string ResolveCacheKey(string normalizedHost) => ResolveCacheKeyPrefix + normalizedHost;
 
     private readonly ITenantDomainRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     private readonly IMemoryCache _cache = cache ?? throw new ArgumentNullException(nameof(cache));
@@ -33,7 +41,7 @@ internal sealed class CachedTenantDomainResolver(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(host);
         var normalizedHost = host.Trim().ToLowerInvariant();
-        var cacheKey = ResolveCacheKeyPrefix + normalizedHost;
+        var cacheKey = ResolveCacheKey(normalizedHost);
 
         if (_cache.TryGetValue<NetworkResolution>(cacheKey, out var cached))
         {

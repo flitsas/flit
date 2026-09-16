@@ -34,6 +34,7 @@ public sealed class GetDomainHandlerTests
             VerificationToken = "tok-0000000000000001",
             StatusChangedAt = DateTimeOffset.UtcNow,
             RowVersion = 0,
+            CheckAttempts = 0,
         };
         repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(domain);
 

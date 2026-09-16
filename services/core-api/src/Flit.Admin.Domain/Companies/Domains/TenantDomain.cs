@@ -35,6 +35,9 @@ public sealed class TenantDomain
 
     public DateTimeOffset? NextCheckAt { get; init; }
 
+    /// <summary>Comprobaciones consecutivas sin éxito (HU #12425 AC2, backoff creciente); se reinicia al verificar.</summary>
+    public required int CheckAttempts { get; init; }
+
     public DateTimeOffset? GraceUntil { get; init; }
 
     /// <summary>Última escritura sobre la fila (proyección de <c>updated_at</c>); usado como <c>statusChangedAt</c> del contrato.</summary>

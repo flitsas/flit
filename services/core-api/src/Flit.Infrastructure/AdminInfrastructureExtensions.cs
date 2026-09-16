@@ -138,6 +138,29 @@ public static class AdminInfrastructureExtensions
             services.AddSingleton(new Flit.Admin.Application.Companies.Domains.DomainOptions());
         }
 
+        // HU #12425 (Feature #12370, Épica #12237) — comprobación de titularidad por TXT DNS y ciclo
+        // de estados pending → verified → active. Mismo patrón que DomainOptions: Application consume
+        // el POCO ya resuelto por IOptions, sin depender de Microsoft.Extensions.Options.
+        if (configuration is not null)
+        {
+            services.Configure<Flit.Admin.Application.Companies.Domains.Verification.DomainVerificationOptions>(
+                configuration.GetSection(Flit.Admin.Application.Companies.Domains.Verification.DomainVerificationOptions.SectionName));
+            services.AddSingleton(sp =>
+                sp.GetRequiredService<IOptions<Flit.Admin.Application.Companies.Domains.Verification.DomainVerificationOptions>>().Value);
+        }
+        else
+        {
+            services.AddSingleton(new Flit.Admin.Application.Companies.Domains.Verification.DomainVerificationOptions());
+        }
+
+        services.AddSingleton<Flit.Admin.Application.Companies.Domains.Verification.IDnsTxtResolver,
+            Flit.Infrastructure.Domains.DnsClientTxtResolver>();
+        services.AddScoped<Flit.Admin.Application.Companies.Domains.Verification.VerifyDomainHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.Domains.Verification.ApplyDomainCertificateHandler>();
+        // El BackgroundService respeta Domains:Verification:Enabled en su propio ExecuteAsync (AC6);
+        // se registra siempre para que encender/apagar por configuración no requiera reiniciar el DI.
+        services.AddHostedService<Flit.Infrastructure.Domains.DomainVerificationSchedulerProcessor>();
+
         // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
         // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
         services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();

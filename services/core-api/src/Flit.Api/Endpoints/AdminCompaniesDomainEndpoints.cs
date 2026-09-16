@@ -3,6 +3,7 @@ using Flit.Admin.Application.Companies.Domains;
 using Flit.Admin.Application.Companies.Domains.GetDomain;
 using Flit.Admin.Application.Companies.Domains.RegisterDomain;
 using Flit.Admin.Application.Companies.Domains.RemoveDomain;
+using Flit.Admin.Application.Companies.Domains.Verification;
 using Flit.Admin.Domain.Companies.Domains;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -51,8 +52,37 @@ public static class AdminCompaniesDomainEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapPost("/verify", VerifyDomainAsync)
+            .WithName("AdminDomainVerify")
+            .WithSummary("Comprueba a demanda el registro TXT de titularidad (HU #12425 AC2)")
+            .Produces<TenantDomainResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status429TooManyRequests);
+
         return app;
     }
+
+    private static async Task<IResult> VerifyDomainAsync(
+        Guid tenantId,
+        HttpContext httpContext,
+        [FromServices] VerifyDomainHandler handler,
+        [FromServices] DomainOptions options,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(tenantId, ResolveUserId(httpContext.User), cancellationToken).ConfigureAwait(false);
+        return ToVerifyResult(result, tenantId, options.EdgeTarget);
+    }
+
+    internal static IResult ToVerifyResult(VerifyDomainResult result, Guid tenantId, string edgeTarget) => result.Outcome switch
+    {
+        VerifyDomainOutcome.NotFound => NotFoundResponse(tenantId),
+        VerifyDomainOutcome.Cooldown => Results.Json(
+            new { error = DomainErrors.VerificationCooldown, message = "La comprobación se pidió hace muy poco. Intenta de nuevo más tarde.", retryAfterSeconds = result.RetryAfterSeconds },
+            statusCode: StatusCodes.Status429TooManyRequests),
+        _ => Results.Ok(TenantDomainResponse.From(result.Domain!, edgeTarget)),
+    };
 
     internal static async Task<IResult> GetDomainAsync(
         Guid tenantId,

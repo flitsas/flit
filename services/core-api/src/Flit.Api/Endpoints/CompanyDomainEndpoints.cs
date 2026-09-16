@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.Domains;
 using Flit.Admin.Application.Companies.Domains.GetDomain;
+using Flit.Admin.Application.Companies.Domains.Verification;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -33,8 +34,35 @@ public static class CompanyDomainEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapPost("/verify", VerifyDomainAsync)
+            .WithName("CompanyDomainVerify")
+            .WithSummary("Comprueba a demanda el registro TXT de titularidad de la propia red (HU #12427 AC2)")
+            .Produces<TenantDomainResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status429TooManyRequests);
+
         return app;
     }
+
+    private static async Task<IResult> VerifyDomainAsync(
+        HttpContext httpContext,
+        [FromServices] VerifyDomainHandler handler,
+        [FromServices] DomainOptions options,
+        CancellationToken cancellationToken)
+    {
+        var tenant = ResolveOwnTenant(httpContext.User);
+        if (tenant is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(tenant.Value, ResolveUserId(httpContext.User), cancellationToken).ConfigureAwait(false);
+        return AdminCompaniesDomainEndpoints.ToVerifyResult(result, tenant.Value, options.EdgeTarget);
+    }
+
+    private static Guid? ResolveUserId(ClaimsPrincipal user) => AdminCompaniesDomainEndpoints.ResolveUserId(user);
 
     private static async Task<IResult> GetDomainAsync(
         HttpContext httpContext,

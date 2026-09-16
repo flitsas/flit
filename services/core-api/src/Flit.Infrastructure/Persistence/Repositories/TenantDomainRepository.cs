@@ -1,7 +1,10 @@
+using System.Text.Json;
 using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.Companies.Domains;
+using Flit.Infrastructure.Domains;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -21,11 +24,13 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
 {
     private readonly FlitDbContext _context;
     private readonly IAuditContextAccessor _auditContext;
+    private readonly IMemoryCache? _cache;
 
-    public TenantDomainRepository(FlitDbContext context, IAuditContextAccessor? auditContext = null)
+    public TenantDomainRepository(FlitDbContext context, IAuditContextAccessor? auditContext = null, IMemoryCache? cache = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _auditContext = auditContext ?? NullAuditContextAccessor.Instance;
+        _cache = cache;
     }
 
     public async Task<TenantDomain?> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -165,6 +170,251 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
+    public async Task<IReadOnlyList<string>> ListPendingCertificateHostsAsync(DateTimeOffset renewBefore, CancellationToken cancellationToken = default)
+    {
+        var query =
+            from d in _context.TenantDomains.AsNoTracking()
+            join t in _context.Tenants.AsNoTracking() on d.TenantId equals t.Id
+            where d.DeletedAt == null
+                  && t.TenantType == "MARCA_BLANCA"
+                  && t.IsGroupParent
+                  && t.IsActive
+                  && (
+                      (d.Status == TenantDomainStatuses.Verified && d.CertificateIssuedAt == null)
+                      || (d.Status == TenantDomainStatuses.Active && d.CertificateExpiresAt != null && d.CertificateExpiresAt <= renewBefore)
+                  )
+            select d.Host;
+
+        return await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<TenantDomain?> GetByHostAsync(string host, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(host);
+
+        var entity = await _context.TenantDomains
+            .AsNoTracking()
+            .Where(d => d.Host == host && d.DeletedAt == null)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return entity is null ? null : Map(entity);
+    }
+
+    public async Task<IReadOnlyList<DomainCheckClaim>> ClaimDueForCheckAsync(
+        int batchSize, TimeSpan lease, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        if (batchSize <= 0)
+        {
+            return [];
+        }
+
+        // UPDATE ... RETURNING con SKIP LOCKED en una única sentencia (sin transacción manual): el
+        // "lease" (adelantar next_check_at) es la propia reclamación — si el proceso muere antes de
+        // aplicar el resultado, la fila vuelve a ser reclamable cuando el lease expira (HU #12425 AC2,
+        // AC6). EF Core no expone FOR UPDATE SKIP LOCKED en LINQ; SQL parametrizado, sin concatenación.
+        var connection = _context.Database.GetDbConnection();
+        var opened = connection.State != System.Data.ConnectionState.Open;
+        if (opened)
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        try
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                UPDATE admin.tenant_domains
+                SET next_check_at = @leased_until
+                WHERE id IN (
+                    SELECT id FROM admin.tenant_domains
+                    WHERE next_check_at <= @now
+                      AND deleted_at IS NULL
+                      AND status IN ('pending', 'failed', 'active')
+                    ORDER BY next_check_at
+                    LIMIT @batch_size
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING tenant_id, host, status, grace_until, check_attempts
+                """;
+
+            AddParam(cmd, "leased_until", now + lease);
+            AddParam(cmd, "now", now);
+            AddParam(cmd, "batch_size", batchSize);
+
+            var claims = new List<DomainCheckClaim>();
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                claims.Add(new DomainCheckClaim(
+                    reader.GetGuid(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3),
+                    reader.GetInt32(4)));
+            }
+
+            return claims;
+        }
+        finally
+        {
+            if (opened)
+            {
+                await connection.CloseAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    public async Task<TenantDomain?> ApplyCheckOutcomeAsync(
+        Guid tenantId,
+        string newStatus,
+        string? statusReason,
+        DateTimeOffset? verifiedAt,
+        DateTimeOffset? graceUntil,
+        int checkAttempts,
+        DateTimeOffset? nextCheckAt,
+        DateTimeOffset now,
+        Guid? changedByUserId,
+        string? changedByJob,
+        CancellationToken cancellationToken = default)
+    {
+        var current = await _context.TenantDomains
+            .Where(d => d.TenantId == tenantId && d.DeletedAt == null)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (current is null)
+        {
+            return null;
+        }
+
+        var oldStatus = current.Status;
+        current.Status = newStatus;
+        current.FailureReason = newStatus == TenantDomainStatuses.Failed ? statusReason : null;
+        current.FailedAt = newStatus == TenantDomainStatuses.Failed ? now : current.FailedAt;
+        if (verifiedAt is not null)
+        {
+            current.VerifiedAt = verifiedAt;
+        }
+        current.GraceUntil = graceUntil;
+        current.CheckAttempts = checkAttempts;
+        current.LastCheckedAt = now;
+        current.NextCheckAt = nextCheckAt;
+        current.UpdatedAt = now;
+        current.UpdatedBy = changedByUserId;
+
+        AddStatusAudit(tenantId, oldStatus, newStatus, statusReason, changedByUserId, changedByJob, now);
+
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _context.Entry(current).ReloadAsync(cancellationToken).ConfigureAwait(false);
+
+        InvalidateResolutionCache(current.Host, oldStatus, newStatus);
+
+        return Map(current);
+    }
+
+    public async Task<TenantDomain?> ApplyCertificateAsync(
+        string host,
+        string newStatus,
+        DateTimeOffset? activatedAt,
+        DateTimeOffset certificateIssuedAt,
+        DateTimeOffset? certificateExpiresAt,
+        string changedByJob,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(host);
+        ArgumentException.ThrowIfNullOrWhiteSpace(changedByJob);
+
+        var current = await _context.TenantDomains
+            .Where(d => d.Host == host && d.DeletedAt == null)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (current is null)
+        {
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var oldStatus = current.Status;
+        current.CertificateIssuedAt = certificateIssuedAt;
+        current.CertificateExpiresAt = certificateExpiresAt;
+        current.UpdatedAt = now;
+
+        if (!string.Equals(oldStatus, newStatus, StringComparison.Ordinal))
+        {
+            current.Status = newStatus;
+            current.ActivatedAt = activatedAt;
+            AddStatusAudit(current.TenantId, oldStatus, newStatus, statusReason: null, changedByUserId: null, changedByJob: changedByJob, now);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _context.Entry(current).ReloadAsync(cancellationToken).ConfigureAwait(false);
+
+        InvalidateResolutionCache(current.Host, oldStatus, current.Status);
+
+        return Map(current);
+    }
+
+    /// <summary>Invalida la caché de resolución (60 s, <see cref="CachedTenantDomainResolver"/>) SIN esperar el TTL cuando el estado entra o sale de <c>active</c> (AC3).</summary>
+    private void InvalidateResolutionCache(string host, string oldStatus, string newStatus)
+    {
+        if (_cache is null)
+        {
+            return;
+        }
+
+        var wasActive = oldStatus == TenantDomainStatuses.Active;
+        var isActive = newStatus == TenantDomainStatuses.Active;
+        if (wasActive == isActive)
+        {
+            return;
+        }
+
+        _cache.Remove(CachedTenantDomainResolver.ResolveCacheKey(host));
+        _cache.Remove(CachedTenantDomainResolver.ActiveHostsCacheKey);
+    }
+
+    /// <summary>
+    /// Auditoría legible de una transición de estado (HU #12425 AC5): <c>NewValue</c> lleva
+    /// <c>{status, reason, changedBy}</c> compacto porque <c>TenantConfigAuditLog.ChangedBy</c> es
+    /// <c>Guid?</c> (identidad de usuario) y no puede llevar el literal <c>"job:dns-verification"</c> —
+    /// el autor "trabajo" queda igualmente trazado dentro del JSON, cumpliendo AC5 sin ampliar el
+    /// esquema compartido de auditoría (decisión documentada en delta-hechos-post-adr.md).
+    /// </summary>
+    private void AddStatusAudit(Guid tenantId, string oldStatus, string newStatus, string? statusReason, Guid? changedByUserId, string? changedByJob, DateTimeOffset now)
+    {
+        var actor = changedByJob ?? changedByUserId?.ToString() ?? "system";
+        var oldJson = JsonSerializer.Serialize(new { status = oldStatus });
+        var newJson = JsonSerializer.Serialize(new { status = newStatus, reason = statusReason, changedBy = actor });
+
+        _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            EntityName = "TenantDomain",
+            FieldName = "status",
+            OldValue = oldJson,
+            NewValue = newJson,
+            ChangedAt = now,
+            ChangedBy = changedByUserId,
+            ClientIp = _auditContext.ClientIp,
+            Operation = AuditVocabulary.Operations.Update,
+            Result = AuditVocabulary.Results.Success,
+            Module = AuditVocabulary.Modules.Companies,
+            TargetEntityType = "TENANT_DOMAIN",
+            TargetEntityId = tenantId,
+        });
+    }
+
+    private static void AddParam(System.Data.Common.DbCommand cmd, string name, object value)
+    {
+        var p = cmd.CreateParameter();
+        p.ParameterName = name;
+        p.Value = value;
+        cmd.Parameters.Add(p);
+    }
+
     private void AddAudit(Guid tenantId, string? oldHost, string? newHost, string operation, Guid? changedBy, DateTimeOffset now)
     {
         _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
@@ -205,6 +455,7 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
         CertificateExpiresAt = entity.CertificateExpiresAt,
         LastCheckedAt = entity.LastCheckedAt,
         NextCheckAt = entity.NextCheckAt,
+        CheckAttempts = entity.CheckAttempts,
         GraceUntil = entity.GraceUntil,
         StatusChangedAt = entity.UpdatedAt,
         RowVersion = entity.RowVersion,
