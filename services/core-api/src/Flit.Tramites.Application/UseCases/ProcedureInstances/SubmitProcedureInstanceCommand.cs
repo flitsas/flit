@@ -25,7 +25,8 @@ public sealed class SubmitProcedureInstanceHandler(
     ITramiteLifecycleService lifecycle,
     IProcedureInstanceRepository repo,
     IPlatePreassignPolicy platePreassignPolicy,
-    ILogger<SubmitProcedureInstanceHandler> logger)
+    ILogger<SubmitProcedureInstanceHandler> logger,
+    FirmarImprontaManualSiListaHandler? firmaImpronta = null)
 {
     private readonly IPlatePreassignPolicy _platePolicy = platePreassignPolicy;
     private readonly ILogger<SubmitProcedureInstanceHandler> _logger = logger;
@@ -109,6 +110,23 @@ public sealed class SubmitProcedureInstanceHandler(
         if (!final.Success)
             return (null, final.ErrorCode);
 
+        // HU #12116 — firma automática de la impronta manual apenas el trámite queda entregado (cubre
+        // también la re-radicación por subsanación). Best-effort: un fallo NO cambia la respuesta del
+        // submit; el fallo ya queda logueado/trazado dentro del handler.
+        if (firmaImpronta is not null)
+        {
+            try
+            {
+                await firmaImpronta
+                    .HandleAsync(id, tenantId, FirmaImprontaAutomaticaOrigen.Radicacion, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                SubmitLog.FirmaImprontaOmitida(_logger, ex, id, tenantId);
+            }
+        }
+
         return (CreateProcedureInstanceHandler.ToSummary(final.Instance!), null);
     }
 
@@ -155,4 +173,8 @@ internal static partial class SubmitLog
         Message = "Ruta de placa corregida a Asignado para {InstanceId} (tenant {TenantId}): la policy devolvió {Decision} ({Reason}) con placa completa.")]
     public static partial void PlateRouteForcedAsignado(
         ILogger logger, Guid instanceId, Guid tenantId, PlateRouteDecision decision, PlateRouteReason reason);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "La firma automática de impronta del trámite {InstanceId} (tenant {TenantId}) se omitió por una excepción no controlada.")]
+    public static partial void FirmaImprontaOmitida(ILogger logger, Exception ex, Guid instanceId, Guid tenantId);
 }

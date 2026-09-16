@@ -29,33 +29,57 @@ public static class ImprontaManualStampApplier
         IVehicleSignatureImprintRepository? auditRepo = null,
         ILogger? logger = null)
     {
-        if (stamper is null)
-            return pdf;
-        if (!string.Equals(attachment.Tipo, "impronta", StringComparison.OrdinalIgnoreCase))
-            return pdf;
-        if (AttachmentProviders.IsKyverum(attachment.Provider))
-            return pdf;
-        if (stamper.AlreadyStamped(pdf))
-            return pdf;
+        var outcome = await StampAndPersistAsync(
+                pdf, attachment, instance, storage, stamper, ct,
+                vaultPolicy, repo, auditRepo, logger)
+            .ConfigureAwait(false);
+        return outcome.Pdf;
+    }
 
-        var (ready, _) = await ImprontaManualStampReadiness
+    /// <summary>
+    /// HU #12116 — misma lógica de <see cref="MaybeStampAsync"/> pero con un desenlace TIPADO, para
+    /// que el disparador automático (radicación / asignación de placa / backfill) sepa distinguir
+    /// «ya estaba firmada» de «no lista» de «se firmó ahora» sin repetir la lógica de sellado.
+    /// </summary>
+    public static async Task<ImprontaManualStampOutcomeResult> StampAndPersistAsync(
+        byte[] pdf,
+        ProcedureInstanceAttachment attachment,
+        ProcedureInstance instance,
+        IAttachmentStorage storage,
+        IImprontaManualStamper? stamper,
+        CancellationToken ct,
+        ISignatureVaultPolicy? vaultPolicy = null,
+        IProcedureInstanceRepository? repo = null,
+        IVehicleSignatureImprintRepository? auditRepo = null,
+        ILogger? logger = null)
+    {
+        if (stamper is null)
+            return new ImprontaManualStampOutcomeResult(ImprontaManualStampOutcome.Skipped, pdf);
+        if (!string.Equals(attachment.Tipo, "impronta", StringComparison.OrdinalIgnoreCase))
+            return new ImprontaManualStampOutcomeResult(ImprontaManualStampOutcome.Skipped, pdf);
+        if (AttachmentProviders.IsKyverum(attachment.Provider))
+            return new ImprontaManualStampOutcomeResult(ImprontaManualStampOutcome.Skipped, pdf);
+        if (stamper.AlreadyStamped(pdf))
+            return new ImprontaManualStampOutcomeResult(ImprontaManualStampOutcome.AlreadyStamped, pdf);
+
+        var (ready, reason) = await ImprontaManualStampReadiness
             .EvaluateAsync(instance, repo, vaultPolicy, ct)
             .ConfigureAwait(false);
         if (!ready)
-            return pdf;
+            return new ImprontaManualStampOutcomeResult(ImprontaManualStampOutcome.NotReady, pdf, reason);
 
         var context = await ImprontaManualStampContextBuilder
             .BuildAsync(instance, attachment, storage, vaultPolicy, repo, ct)
             .ConfigureAwait(false);
         var result = stamper.Stamp(pdf, context);
         if (!result.Applied)
-            return result.Pdf;
+            return new ImprontaManualStampOutcomeResult(ImprontaManualStampOutcome.Skipped, result.Pdf);
 
         await TryPersistSignedOriginalAsync(
                 result, attachment, instance, storage, repo, auditRepo, logger, ct)
             .ConfigureAwait(false);
 
-        return result.Pdf;
+        return new ImprontaManualStampOutcomeResult(ImprontaManualStampOutcome.Applied, result.Pdf);
     }
 
     private static async Task TryPersistSignedOriginalAsync(
@@ -149,6 +173,29 @@ public static class ImprontaManualStampApplier
         return code.Trim().Length <= 40 ? code.Trim() : code.Trim()[..40];
     }
 }
+
+/// <summary>Desenlace tipado de <see cref="ImprontaManualStampApplier.StampAndPersistAsync"/>.</summary>
+public enum ImprontaManualStampOutcome
+{
+    /// <summary>Se estampó y persistió ahora.</summary>
+    Applied,
+
+    /// <summary>El PDF ya traía el sello (idempotencia por hash del PDF base).</summary>
+    AlreadyStamped,
+
+    /// <summary>No cumple los gates de momento (ver <see cref="ImprontaManualStampOutcomeResult.NotReadyReason"/>).</summary>
+    NotReady,
+
+    /// <summary>No aplica: sin stamper, sin adjunto de impronta manual, o el stamper decidió no aplicar.</summary>
+    Skipped,
+}
+
+/// <param name="Pdf">Bytes resultantes (sellados si <see cref="Outcome"/> es <c>Applied</c>; los mismos de entrada en el resto).</param>
+/// <param name="NotReadyReason">Motivo cuando <see cref="Outcome"/> es <c>NotReady</c> (ver <see cref="ImprontaManualStampReadiness"/>).</param>
+public sealed record ImprontaManualStampOutcomeResult(
+    ImprontaManualStampOutcome Outcome,
+    byte[] Pdf,
+    string? NotReadyReason = null);
 
 /// <summary>Logging source-generado (CA1848) de la impronta manual. NUNCA incluye PII.</summary>
 internal static partial class ImprontaManualStampLog
