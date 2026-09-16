@@ -225,6 +225,18 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     );
   });
 
+  it("ADR-0059 — en preasignacion el detalle permite rechazar pero no aprobar, igual que la fila", async () => {
+    prepararBandeja({ ...ENTREGADO, status: "preasignacion", placa: null });
+    const user = userEvent.setup();
+    renderSection();
+
+    const dialog = await abrirDetalle(user, "RAD-2026-101");
+    expect(within(dialog).getByText(/Pendiente asignar placa por el OT/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/solo se aprueba una vez entregado/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Aprobar trámite" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Rechazar trámite" })).toBeEnabled();
+  });
+
   it("AC5 — un trámite ya resuelto dice que no admite decisión", async () => {
     prepararBandeja({ ...ENTREGADO, status: "aprobado" });
     const user = userEvent.setup();

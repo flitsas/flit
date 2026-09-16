@@ -168,17 +168,23 @@ export function ClientProcedureDetailModal({
     setAbiertos((prev) => ({ ...prev, [id]: !prev[id] }));
 
   /**
-   * Un trámite fuera de `entregado` ya fue resuelto (o nunca llegó): el organismo no decide sobre
-   * él. Es un bloqueo distinto de los pendientes —que sí se pueden subsanar— y por eso se nombra
-   * aparte antes de mezclarlo con ellos en la banda de aviso.
+   * ADR-0059 — lo que el organismo puede decidir depende del estado, y las dos decisiones no van
+   * juntas: aprobar solo en `entregado`; rechazar en `entregado` y también en `preasignacion`
+   * (devolver un trámite al que aún no le puso placa). Fuera de eso el trámite ya fue resuelto o
+   * está en manos del cliente. Es un bloqueo distinto de los pendientes —que sí se pueden subsanar—
+   * y por eso se nombra aparte antes de mezclarlo con ellos en la banda de aviso. Misma regla que
+   * el menú de la fila: el modal no puede negar lo que la fila ofrece.
    */
-  const bloqueo =
-    row.status === "entregado"
-      ? null
+  const puedeAprobar = row.status === "entregado";
+  const puedeRechazar = row.status === "entregado" || row.status === "preasignacion";
+  const bloqueo = puedeAprobar
+    ? null
+    : puedeRechazar
+      ? `El trámite está en «${formatOtProcedureStatus(row.status)}»: se puede rechazar, pero solo se aprueba una vez entregado.`
       : `El trámite está en «${formatOtProcedureStatus(row.status)}»: el organismo solo decide sobre los que tiene entregados.`;
 
-  // ADR-0059 — la decisión solo existe en entregado; asignar placa, solo en preasignacion.
-  const decidible = bloqueo === null;
+  // Asignar placa, solo en preasignacion.
+  const decidible = puedeAprobar;
   const puedeAsignarPlaca =
     showApprovalActions && Boolean(onAssignPlate) && row.status === "preasignacion";
   const hayPie = showApprovalActions && Boolean(onApprove || onReject);
@@ -280,8 +286,8 @@ export function ClientProcedureDetailModal({
         <button
           type="button"
           onClick={() => onReject(row)}
-          disabled={!decidible}
-          aria-describedby={!decidible && avisos.length > 0 ? avisosId : undefined}
+          disabled={!puedeRechazar}
+          aria-describedby={!puedeRechazar && avisos.length > 0 ? avisosId : undefined}
           className="h-11 min-w-[200px] rounded-xl px-6 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           style={{ background: OT_ORANGE }}
         >
