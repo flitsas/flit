@@ -371,11 +371,11 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     expect(actores).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("HU #12602 AC6 — liberar la placa devuelve la fila a Preasignación y NO finge que la placa se borró", async () => {
-    // Liberar suelta la reserva del inventario y devuelve el trámite a la cola de placa, pero el
-    // backend deja el field_value 'plate' escrito (HU #12077): el trámite sigue trayendo la placa en
-    // la siguiente lectura. Si la UI la borrara de forma optimista, desaparecería para reaparecer al
-    // refrescar — el usuario vería dos verdades distintas de la misma pantalla.
+  it("HU #12602 AC6 — liberar la placa devuelve el trámite a Preasignación y lo saca de «Asignados»", async () => {
+    // Liberar suelta la reserva del inventario y devuelve el trámite a la cola de placa; el backend
+    // deja el field_value 'plate' escrito (HU #12077) y la fila NO la borra de forma optimista
+    // (`liberado` solo cambia el estado). Con la bandeja filtrada por estado, el trámite ya no
+    // pertenece a la tarjeta activa y se retira en vez de quedarse con un chip que no cuadra.
     prepararBandeja({ ...ENTREGADO, status: "asignado", placa: "OTV120" });
     vi.mocked(releaseProcedurePlate).mockResolvedValue(undefined);
     const user = userEvent.setup();
@@ -397,13 +397,9 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     await user.click(within(liberar).getByRole("button", { name: "Liberar placa" }));
 
     expect(releaseProcedurePlate).toHaveBeenCalledWith("proc-1", "Placa mal digitada");
-    // El estado sí vuelve atrás, y esa parte se ve sin recargar (la tarjeta de la tira también dice
-    // «Preasignación»: se mira la fila).
-    const fila = screen.getByText("RAD-2026-101").closest("tr");
-    expect(fila).not.toBeNull();
-    expect(await within(fila!).findByText("Preasignación")).toBeInTheDocument();
-    // La placa sigue donde el servidor la deja: la pantalla no se contradice al refrescar.
-    expect(screen.getByText("OTV120")).toBeInTheDocument();
+    // Preasignación no es la tarjeta activa: la fila se va sin recargar y sin fingir que la placa
+    // se borró (cuando reaparezca bajo «Preasignación» traerá OTV120, como la deja el servidor).
+    await waitFor(() => expect(screen.queryByText("RAD-2026-101")).not.toBeInTheDocument());
   });
 
   it("HU #12602 AC3 — en preasignacion el menú ofrece Asignar placa y Rechazar; ni Aprobar ni Adjuntar LT", async () => {

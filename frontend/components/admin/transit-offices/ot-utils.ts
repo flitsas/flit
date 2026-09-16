@@ -1,7 +1,7 @@
 "use client";
 
 import { formatFecha } from "@/lib/format/date";
-import { estadoLabel } from "@/lib/tramites/estados";
+import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
 
 /** Muestra los últimos 6 caracteres visibles de una URL (HU #10219 AC1). */
 export function maskTargetUrl(url: string): string {
@@ -25,15 +25,19 @@ export function formatOtProcedureStatus(status: string): string {
   return estadoLabel(status);
 }
 
-export function procedureStatusTone(
-  status: string,
-): "success" | "warning" | "danger" | "info" | "neutral" {
-  if (status === "aprobado") return "success";
-  if (status === "rechazado" || status === "revocado") return "danger";
-  if (status === "entregado") return "warning";
-  // ADR-0059 — cola de placa: el organismo asigna (preasignacion) o espera al gestor (asignado).
-  if (status === "preasignacion" || status === "asignado") return "info";
-  return "neutral";
+/**
+ * ADR-0059 — el chip del organismo lleva EXACTAMENTE los colores del catálogo del gestor
+ * (`ESTADO_CHIP_STYLES`), no un tono semántico: con la paleta de cinco tonos, Preasignación y
+ * Asignado salían del mismo azul y el mismo estado se veía de un color en /tramites y de otro en
+ * la bandeja. Se pasa como estilo crudo a `StatusBadge`, igual que hace el listado del gestor.
+ */
+export function procedureStatusChip(status: string): {
+  bg: string;
+  color: string;
+  border: string;
+} {
+  const { bg, color, border } = estadoChipStyle(status);
+  return { bg, color, border };
 }
 
 /**

@@ -674,6 +674,27 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
   }, [transitOfficeId]);
 
+  /**
+   * Fila tras una decisión del OT. Si la bandeja está filtrada por estado y el trámite acaba de
+   * salir de ese estado, la fila se retira en vez de quedarse pintada con un chip que ya no cuadra
+   * con la tarjeta activa: un «Aprobado» dentro de «Por decidir» confunde más que una fila menos.
+   * Sin filtro (o si sigue cabiendo) se parchea en sitio, para no perder página ni orden.
+   */
+  const reconciliarFila = useCallback(
+    (id: string, cambio: (r: OtClientProcedure) => OtClientProcedure) => {
+      const permitidos = statusFilter ? statusFilter.split(",").map((s) => s.trim()) : [];
+      setRows((prev) => {
+        const siguiente = prev.map((r) => (r.id === id ? cambio(r) : r));
+        if (permitidos.length === 0) return siguiente;
+        const fila = siguiente.find((r) => r.id === id);
+        if (!fila || permitidos.includes(fila.status)) return siguiente;
+        setTotalCount((t) => Math.max(0, t - 1));
+        return siguiente.filter((r) => r.id !== id);
+      });
+    },
+    [statusFilter],
+  );
+
   const load = useCallback(
     async (signal?: AbortSignal, targetPage = page) => {
       setStatus("loading");
@@ -918,7 +939,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       // en 'asignado', así que adjuntar antes fallaba con estado_invalido; tras aprobar queda
       // 'aprobado' (válido para la LT). El consolidado se genera on-demand y toma la LT vigente.
       const updated = await approveOtClientProcedure(target.id, mandateSignerId);
-      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      reconciliarFila(updated.id, () => updated);
       refreshCounters();
 
       if (ltFile) {
@@ -1034,7 +1055,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         placa: placaAsignada,
         status: "asignado",
       });
-      setRows((prev) => prev.map((r) => (r.id === assignTarget.id ? conPlaca(r) : r)));
+      reconciliarFila(assignTarget.id, conPlaca);
       refreshCounters();
       // El detalle abierto es un objeto de estado APARTE del de la fila: sin esto seguía enseñando
       // «Sin preasignar» hasta cerrar el modal y recargar la bandeja, y el operador no sabía si la
@@ -1069,7 +1090,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         ...r,
         status: "preasignacion",
       });
-      setRows((prev) => prev.map((r) => (r.id === revokeTarget.id ? liberado(r) : r)));
+      reconciliarFila(revokeTarget.id, liberado);
       refreshCounters();
       setDetailProcedure((prev) => (prev && prev.id === revokeTarget.id ? liberado(prev) : prev));
       setRevokeTarget(null);
@@ -1090,7 +1111,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     setActing(true);
     try {
       const updated = await revokeOtClientProcedure(revokeAprobacionTarget.id, revokeAprobacionReason);
-      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      reconciliarFila(updated.id, () => updated);
       refreshCounters();
       setDetailProcedure((prev) => (prev && prev.id === updated.id ? updated : prev));
       setRevokeAprobacionTarget(null);
@@ -1281,7 +1302,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         reason: rejectReason.trim(),
         rejectionReasonIds: rejectReasonIds.length > 0 ? rejectReasonIds : undefined,
       });
-      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      reconciliarFila(updated.id, () => updated);
       refreshCounters();
       setRejectTarget(null);
       setDetailProcedure(null);

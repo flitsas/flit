@@ -26,7 +26,7 @@ import {
   OT_WARN,
   OT_WARN_TEXT,
 } from "./detalle/ot-detalle-visual";
-import { formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
+import { formatOtProcedureStatus, procedureStatusChip } from "./ot-utils";
 
 /**
  * Bloques del detalle. Ya no son pasos de un recorrido sino acordeones independientes; el nombre
@@ -209,7 +209,7 @@ export function ClientProcedureDetailModal({
               rechazados, y sin el sello no habría forma de distinguirlos dentro del modal. */}
           <StatusBadge
             label={formatOtProcedureStatus(row.status)}
-            tone={procedureStatusTone(row.status)}
+            {...procedureStatusChip(row.status)}
           />
         </div>
         <p className="mt-1 text-[12px] text-slate-600 dark:text-white/60">

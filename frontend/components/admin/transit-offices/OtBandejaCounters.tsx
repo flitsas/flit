@@ -1,5 +1,6 @@
 "use client";
 
+import { ESTADO_ICONO } from "@/lib/tramites/estados";
 import type { OtBandejaCounters as Counters } from "@/lib/api/types-ot";
 
 /** Clave de la tarjeta pulsada; el contenedor la traduce al filtro de estado del listado. */
@@ -28,19 +29,22 @@ interface TarjetaDef {
  *
  * ADR-0059 — cada tarjeta ES un estado real (preasignacion, asignado, entregado, aprobado,
  * rechazado, revocado): pulsarla equivale a filtrar por ese estado, y las seis son excluyentes.
+ * El icono (y con él el color) es el MISMO del catálogo del gestor (`ESTADO_ICONO`): un estado se
+ * ve igual en las dos pantallas. «Por decidir» conserva el suyo porque no nombra el estado sino
+ * la cola de trabajo del organismo.
  */
 const TARJETAS: TarjetaDef[] = [
   {
     key: "preasignacion",
     label: "Preasignación",
-    icon: "/assets/ot-estados/sin-placa.svg",
+    icon: ESTADO_ICONO.preasignacion,
     hint: "Radicados sin placa: el organismo debe asignarla",
     status: "preasignacion",
   },
   {
     key: "asignados",
     label: "Asignados",
-    icon: "/assets/ot-estados/con-placa.svg",
+    icon: ESTADO_ICONO.asignado,
     hint: "Con placa asignada; el gestor gestiona SOAT e impuestos y envía al OT",
     status: "asignado",
   },
@@ -54,21 +58,21 @@ const TARJETAS: TarjetaDef[] = [
   {
     key: "aprobados",
     label: "Aprobados",
-    icon: "/assets/ot-estados/aprobados.svg",
+    icon: ESTADO_ICONO.aprobado,
     hint: "Trámites que el organismo aprobó",
     status: "aprobado",
   },
   {
     key: "rechazados",
     label: "Rechazados",
-    icon: "/assets/ot-estados/rechazados.svg",
+    icon: ESTADO_ICONO.rechazado,
     hint: "Trámites que el organismo rechazó (desde entregado o desde preasignación)",
     status: "rechazado",
   },
   {
     key: "revocados",
     label: "Revocados",
-    icon: "/assets/ot-estados/revocados.svg",
+    icon: ESTADO_ICONO.revocado,
     hint: "Trámites Aprobados que el organismo revocó (HU #12166)",
     status: "revocado",
   },

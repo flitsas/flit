@@ -27,7 +27,7 @@ import {
 import { OtTablePagination } from "./OtTablePagination";
 import { ActionsMenu, type ActionsMenuItem } from "@/components/atom/ActionsMenu";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
-import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusTone } from "./ot-utils";
+import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusChip } from "./ot-utils";
 import {
 } from "@/lib/tramites/estados";
 import {
@@ -334,7 +334,7 @@ function renderCelda(columnKey: string, row: OtClientProcedure) {
         <div className="flex flex-wrap items-center gap-1.5">
           <StatusBadge
             label={formatOtProcedureStatus(row.status)}
-            tone={procedureStatusTone(row.status)}
+            {...procedureStatusChip(row.status)}
           />
         </div>
       );
