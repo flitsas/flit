@@ -586,6 +586,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             EnSubsanacion: rows.Count(r => r.EstadoOt == OtReportEstado.EnSubsanacion),
             Rechazados: rows.Count(r => r.EstadoOt == OtReportEstado.Rechazado),
             Anulados: rows.Count(r => r.EstadoOt == OtReportEstado.Anulado),
+            Revocados: rows.Count(r => r.EstadoOt == OtReportEstado.Revocado),
             Otros: rows.Count(r => r.EstadoOt == OtReportEstado.Otro),
             Decididos: rows.Count(r => r.DecididoEn is not null),
             Devoluciones: devoluciones,

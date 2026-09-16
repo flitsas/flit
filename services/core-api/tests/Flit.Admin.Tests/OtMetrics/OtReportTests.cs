@@ -47,12 +47,15 @@ public sealed class OtReportTests
             Radicar(seed, "REF-5", TramiteEstado.Preasignacion, DiasAtras(2));
             Radicar(seed, "REF-6", TramiteEstado.Entregado, DiasAtras(2), isPaused: true);
             Radicar(seed, "REF-7", TramiteEstado.Anulado, DiasAtras(5), decision: null);
+            // ADR-0059 (HU #12166) — revocado es un cierre propio: ni «aprobado» ni «otro».
+            Radicar(seed, "REF-8", TramiteEstado.Revocado, DiasAtras(3), decision: DiasAtras(2),
+                decisionStatus: TramiteEstado.Aprobado);
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         var report = await RunAsync(db, UltimosDias(7));
 
-        report!.Resumen.Total.Should().Be(7);
+        report!.Resumen.Total.Should().Be(8);
 
         var suma = report.Resumen.EnRevision
             + report.Resumen.EsperandoPlaca
@@ -61,6 +64,7 @@ public sealed class OtReportTests
             + report.Resumen.EnSubsanacion
             + report.Resumen.Rechazados
             + report.Resumen.Anulados
+            + report.Resumen.Revocados
             + report.Resumen.Otros;
 
         suma.Should().Be(report.Resumen.Total);
@@ -70,6 +74,10 @@ public sealed class OtReportTests
         report.Resumen.EsperandoPlaca.Should().Be(1);
         report.Resumen.EsperandoCliente.Should().Be(1);
         report.Resumen.Anulados.Should().Be(1);
+        report.Resumen.Revocados.Should().Be(1);
+        report.Resumen.Otros.Should().Be(0);
+        report.Filas.Should().ContainSingle(f => f.ReferenceNumber == "REF-8")
+            .Which.EstadoOt.Should().Be(OtReportEstado.Revocado);
     }
 
     [Fact] // Un rechazo con subsanación abierta vuelve al organismo; uno sin ella se quedó ahí.

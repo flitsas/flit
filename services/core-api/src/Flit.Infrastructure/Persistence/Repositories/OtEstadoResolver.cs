@@ -23,6 +23,8 @@ internal static class OtEstadoResolver
     {
         TramiteEstado.Aprobado => OtReportEstado.Aprobado,
         TramiteEstado.Anulado => OtReportEstado.Anulado,
+        // Revocar deshace una aprobación: es un cierre propio, no un «otro» que haya que mirar.
+        TramiteEstado.Revocado => OtReportEstado.Revocado,
         // Un rechazo con subsanación abierta vuelve; uno sin ella se quedó ahí. Para el organismo
         // son dos cosas distintas y contarlas juntas escondería cuánto trabajo tiene de vuelta.
         TramiteEstado.Rechazado => subsanacionActiva
