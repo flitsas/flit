@@ -8,9 +8,15 @@ export type EstadoTramite =
   | 'borrador'
   | 'anulado'
   | 'preparado'
+  // ADR-0059 (Epic #12549) — Ruta Larga de matrícula: radicado sin placa, el OT debe asignarla.
+  | 'preasignacion'
+  // ADR-0059 — el OT ya asignó la placa; el gestor gestiona SOAT/impuestos y «Envía al OT».
+  | 'asignado'
   | 'entregado'
   | 'aprobado'
   | 'rechazado'
+  // HU #12166 — el OT deshizo su propia aprobación. Final.
+  | 'revocado'
   // HU #10870/#10874 — reabre la edición de un entregado/rechazado sin volver a borrador.
   | 'subsanacion';
 
@@ -18,24 +24,46 @@ export const ESTADOS_TRAMITE: readonly EstadoTramite[] = [
   'borrador',
   'anulado',
   'preparado',
+  'preasignacion',
+  'asignado',
   'entregado',
   'aprobado',
   'rechazado',
+  'revocado',
   'subsanacion',
 ] as const;
 
 /** Estados finales (RF04): sin transiciones posteriores ni edición. */
-export const ESTADOS_FINALES: readonly EstadoTramite[] = ['aprobado', 'anulado'] as const;
+export const ESTADOS_FINALES: readonly EstadoTramite[] = ['aprobado', 'anulado', 'revocado'] as const;
+
+/**
+ * ADR-0059 — estados de la RUTA DE PLACA: el trámite ya está en manos del organismo, pero todavía no
+ * en su cola de decisión. Solo los alcanza un tipo que pide placa (matrícula inicial).
+ */
+export const ESTADOS_RUTA_PLACA: readonly EstadoTramite[] = ['preasignacion', 'asignado'] as const;
 
 export const ESTADO_LABELS: Record<EstadoTramite, string> = {
   borrador: 'Borrador',
   anulado: 'Anulado',
   preparado: 'Preparado',
+  preasignacion: 'Preasignación',
+  asignado: 'Asignado',
   entregado: 'Entregado',
   aprobado: 'Aprobado',
   rechazado: 'Rechazado',
+  revocado: 'Revocado',
   subsanacion: 'En subsanación',
 };
+
+/**
+ * ADR-0059 — distintivo del rechazo desde Preasignación. El OT puede rechazar un trámite que todavía
+ * no tenía placa; para el gestor es otra cola (hay que corregir y volver a pedir placa), así que el
+ * chip lo dice sin cambiar de color: sigue siendo un rechazo.
+ */
+export const RECHAZADO_PREASIGNACION_LABEL = 'Rechazado preasignación';
+
+/** Valor de `rejectedFrom` que activa el distintivo. */
+export const REJECTED_FROM_PREASIGNACION = 'preasignacion';
 
 export interface EstadoChipStyle {
   bg: string;
@@ -55,7 +83,7 @@ export interface EstadoChipStyle {
  * gris pizarra, azul, verde azulado, verde lima, naranja, rojo y vino— en vez de reutilizar una
  * escala de cinco.
  *
- * El tono lo MANDA EL ICONO. Los siete iconos de estado (`public/assets/estados/*.svg`) traen su
+ * El tono lo MANDA EL ICONO. Los diez iconos de estado (`public/assets/estados/*.svg`) traen su
  * círculo de color pintado dentro, así que `accent` es exactamente ese color: si el chip usara
  * otro, el mismo estado se vería de dos colores distintos en la misma pantalla —la tira de KPIs
  * y el chip de la fila— y un tono acabaría significando dos estados según dónde se mirara.
@@ -65,6 +93,11 @@ export interface EstadoChipStyle {
  * #FF4E00 ≈ 3.5:1, #00A99D ≈ 2.7:1), así que se conserva la identidad cromática y se ajusta solo
  * la luminosidad, que es lo que corresponde cuando un color del prototipo no cumple contraste en
  * un uso concreto. `borrador` y `anulado` ya cumplen y se usan tal cual.
+ *
+ * ADR-0059: `preasignacion` (cian) y `asignado` (índigo) heredan los tonos que ya tenía el badge
+ * secundario del sub-estado de placa, así el usuario no reaprende colores; `revocado` (violeta) se
+ * separa de `anulado` (vino) porque son dos finales distintos: uno lo decide el gestor, el otro lo
+ * deshace el organismo.
  */
 export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
   borrador: {
@@ -78,6 +111,18 @@ export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
     color: '#4465CC',
     border: 'rgba(85,126,255,0.35)',
     accent: '#557EFF',
+  },
+  preasignacion: {
+    bg: 'rgba(6,182,212,0.14)',
+    color: '#0E7490',
+    border: 'rgba(6,182,212,0.35)',
+    accent: '#06B6D4',
+  },
+  asignado: {
+    bg: 'rgba(99,102,241,0.14)',
+    color: '#4F46E5',
+    border: 'rgba(99,102,241,0.35)',
+    accent: '#6366F1',
   },
   entregado: {
     bg: 'rgba(0,169,157,0.14)',
@@ -103,6 +148,12 @@ export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
     border: 'rgba(193,39,45,0.35)',
     accent: '#C1272D',
   },
+  revocado: {
+    bg: 'rgba(139,92,246,0.14)',
+    color: '#6D28D9',
+    border: 'rgba(139,92,246,0.35)',
+    accent: '#8B5CF6',
+  },
   subsanacion: {
     bg: 'rgba(255,78,0,0.14)',
     color: '#BF3B00',
@@ -120,9 +171,12 @@ export const ESTADO_ICONO: Record<EstadoTramite, string> = {
   borrador: '/assets/estados/borrador.svg',
   anulado: '/assets/estados/anulado.svg',
   preparado: '/assets/estados/preparado.svg',
+  preasignacion: '/assets/estados/preasignacion.svg',
+  asignado: '/assets/estados/asignado.svg',
   entregado: '/assets/estados/entregado.svg',
   aprobado: '/assets/estados/aprobado.svg',
   rechazado: '/assets/estados/rechazado.svg',
+  revocado: '/assets/estados/revocado.svg',
   subsanacion: '/assets/estados/subsanacion.svg',
 };
 
@@ -141,6 +195,27 @@ export function estadoLabel(value: string | null | undefined): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** ¿El rechazo vino de la cola de placa (ADR-0059)? */
+export function esRechazadoDesdePreasignacion(
+  status: string | null | undefined,
+  rejectedFrom: string | null | undefined,
+): boolean {
+  return status === 'rechazado' && rejectedFrom === REJECTED_FROM_PREASIGNACION;
+}
+
+/**
+ * Label del estado con el distintivo de origen del rechazo: «Rechazado preasignación» cuando el OT
+ * rechazó desde la cola de placa; en cualquier otro caso, {@link estadoLabel}.
+ */
+export function estadoLabelConOrigen(
+  status: string | null | undefined,
+  rejectedFrom: string | null | undefined,
+): string {
+  return esRechazadoDesdePreasignacion(status, rejectedFrom)
+    ? RECHAZADO_PREASIGNACION_LABEL
+    : estadoLabel(status);
+}
+
 /** Estilo del chip con fallback neutro (gris) para estados desconocidos/antiguos. */
 export function estadoChipStyle(value: string | null | undefined): EstadoChipStyle {
   if (value && esEstadoTramite(value)) return ESTADO_CHIP_STYLES[value];
@@ -153,8 +228,9 @@ export function estadoChipStyle(value: string | null | undefined): EstadoChipSty
 }
 
 /**
- * Sub-estado INTERNO de la ruta de placa. Ortogonal a `entregado`.
- * UI: Sin asignar / Asignado / Terminado.
+ * @deprecated LEGACY (ADR-0059) — el sub-estado de placa se promovió a los estados `preasignacion` /
+ * `asignado` (y `terminado` ES `entregado`). Estos helpers se conservan solo mientras los últimos
+ * consumidores migran (HU #12601 / HU #12602) y se borran en esa misma entrega. No usar en código nuevo.
  */
 export type PlateFlowStatus = 'preasignado' | 'asignado' | 'terminado';
 

@@ -11,6 +11,9 @@ const counts = {
   rechazado: 1,
   anulado: 0,
   subsanacion: 4,
+  preasignacion: 0,
+  asignado: 0,
+  revocado: 0,
 };
 
 describe('EstadoFunnel', () => {

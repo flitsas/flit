@@ -42,7 +42,12 @@ import {
   rangoDePeriodo,
   type RangoSobre,
 } from './TramitesFiltrosBar';
-import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
+import {
+  ESTADOS_TRAMITE,
+  estadoChipStyle,
+  estadoLabel,
+  type EstadoTramite,
+} from '@/lib/tramites/estados';
 import {
   TRAMITES_COLUMNS,
   TRAMITES_SELECTABLE_COLUMNS,
@@ -764,16 +769,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    * tarjetas sigan diciendo a dónde puede moverse el gestor después de elegir una.
    */
   const estadoCountsMostrados = useMemo(() => {
-    const c: Record<EstadoTramite, number> = {
-      borrador: 0,
-      anulado: 0,
-      preparado: 0,
-      entregado: 0,
-      aprobado: 0,
-      rechazado: 0,
-      subsanacion: 0,
-    };
-    for (const key of Object.keys(c) as EstadoTramite[]) c[key] = estadoCounts[key] ?? 0;
+    // Se construye desde el catálogo: un estado nuevo (ADR-0059 añadió tres) entra aquí solo.
+    const c = {} as Record<EstadoTramite, number>;
+    for (const key of ESTADOS_TRAMITE) c[key] = estadoCounts[key] ?? 0;
     return c;
   }, [estadoCounts]);
 

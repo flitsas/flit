@@ -52,8 +52,8 @@ export interface OtClientProcedure {
   /** `matricula_inicial` | `traspaso`. Determina qué causales de rechazo ofrece el modal. */
   familia?: string;
   /**
-   * Sub-estado interno de la ruta de placa (null | preasignado | asignado | terminado),
-   * ortogonal al status (que permanece en 'entregado').
+   * @deprecated LEGACY (ADR-0059) — la ruta de placa vive en `status` (`preasignacion` / `asignado`).
+   * El backend ya no lo envía; se retira en HU #12602 con la bandeja.
    */
   plateFlowStatus?: string | null;
   /**
