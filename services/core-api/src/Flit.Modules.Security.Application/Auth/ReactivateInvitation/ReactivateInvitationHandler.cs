@@ -1,4 +1,5 @@
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
 using Microsoft.Extensions.Logging;
@@ -23,6 +24,7 @@ public sealed partial class ReactivateInvitationHandler(
     ISecureTokenGenerator tokenGenerator,
     IEmailSender emailSender,
     InvitationOptions options,
+    INetworkUrlBaseResolver urlBaseResolver,
     ILogger<ReactivateInvitationHandler> logger)
 {
     public async Task<ReactivateInvitationResult> HandleAsync(
@@ -84,7 +86,12 @@ public sealed partial class ReactivateInvitationHandler(
         await invitationRepository.ReactivateAsync(
             invitation.InvitationId, token.TokenHash, now, command.ReactivatedBy, cancellationToken);
 
-        var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
+        // HU #12423 AC1/AC2 — mismo resolutor que crear/reenviar: dominio vigente de la red del
+        // tenant dueño de la invitación.
+        var activateUrlBase = await urlBaseResolver
+            .ForTenantAsync(invitation.TenantId, options.ActivateUrlBase, cancellationToken)
+            .ConfigureAwait(false);
+        var link = InvitationEmailTemplate.BuildActivateLink(activateUrlBase, token.RawToken);
         var composed = InvitationEmailTemplate.Compose(invitation.FullName, link);
         var message = new EmailMessage(
             invitation.TenantId, "security.invitation", invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody);

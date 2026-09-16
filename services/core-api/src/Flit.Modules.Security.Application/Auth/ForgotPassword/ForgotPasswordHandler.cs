@@ -29,6 +29,7 @@ public sealed partial class ForgotPasswordHandler(
     IAuditContextAccessor auditContext,
     ITenantNetworkMembership networkMembership,
     IDomainContextAccessor domainContext,
+    INetworkUrlBaseResolver urlBaseResolver,
     ILogger<ForgotPasswordHandler> logger)
 {
     private const string Purpose = "password_reset";
@@ -52,7 +53,10 @@ public sealed partial class ForgotPasswordHandler(
 
         await tokenRepository.CreateAsync(user.UserId, token.TokenHash, Purpose, expiresAt, cancellationToken);
 
-        var link = ForgotPasswordEmailTemplate.BuildResetLink(options.ResetUrlBase, token.RawToken);
+        // HU #12423 AC3 — el enlace apunta al dominio POR EL QUE SE HIZO la solicitud (sellado por
+        // el Gateway), nunca a uno deducido de la identidad del usuario.
+        var resetUrlBase = urlBaseResolver.ForRequestDomain(domainContext, options.ResetUrlBase);
+        var link = ForgotPasswordEmailTemplate.BuildResetLink(resetUrlBase, token.RawToken);
         var composed = ForgotPasswordEmailTemplate.Compose(user.DisplayName, link, options.TokenLifetimeMinutes);
         // HU #11363 AC1 — id estable del catálogo (NotificationTemplateCatalog.TemplateIds.ForgotPassword
         // en Flit.Infrastructure); literal a mano porque este proyecto no depende de Infrastructure.

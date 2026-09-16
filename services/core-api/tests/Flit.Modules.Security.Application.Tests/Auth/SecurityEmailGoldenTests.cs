@@ -3,6 +3,7 @@ using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Tests.Shared;
@@ -62,12 +63,18 @@ public sealed class SecurityEmailGoldenTests
         userManagement.FindByEmailIncludingDeletedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((ExistingUserByEmail?)null);
 
+        var urlBaseResolver = Substitute.For<INetworkUrlBaseResolver>();
+        urlBaseResolver
+            .ForTenantAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => Task.FromResult(callInfo.ArgAt<string>(1)));
+
         var handler = new CreateInvitationHandler(
             repo,
             userManagement,
             tokenGen,
             email,
             new InvitationOptions { ActivateUrlBase = ActivateUrlBase },
+            urlBaseResolver,
             NullLogger<CreateInvitationHandler>.Instance);
 
         await handler.HandleAsync(
@@ -91,6 +98,11 @@ public sealed class SecurityEmailGoldenTests
             .Returns(new PasswordRecoveryUser(Guid.NewGuid(), "destinatario@flit.test", "Nombre De Prueba", Guid.NewGuid()));
         tokenGen.Generate().Returns(new GeneratedToken(RawToken, "hash-golden"));
 
+        var urlBaseResolver = Substitute.For<INetworkUrlBaseResolver>();
+        urlBaseResolver
+            .ForRequestDomain(Arg.Any<IDomainContextAccessor>(), Arg.Any<string>())
+            .Returns(callInfo => callInfo.ArgAt<string>(1));
+
         // Fijado en el test: el golden protege la PLANTILLA, no el valor configurado del TTL.
         var handler = new ForgotPasswordHandler(
             accounts,
@@ -102,6 +114,7 @@ public sealed class SecurityEmailGoldenTests
             NullAuditContextAccessor.Instance,
             Substitute.For<Flit.Modules.Security.Application.Auth.Network.ITenantNetworkMembership>(),
             Substitute.For<IDomainContextAccessor>(),
+            urlBaseResolver,
             NullLogger<ForgotPasswordHandler>.Instance);
 
         await handler.HandleAsync(new ForgotPasswordCommand("destinatario@flit.test"), Ct);

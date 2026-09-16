@@ -21,6 +21,7 @@ public sealed class ForgotPasswordHandlerTests
     private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
     private readonly ITenantNetworkMembership _networkMembership = Substitute.For<ITenantNetworkMembership>();
     private readonly IDomainContextAccessor _domainContext = Substitute.For<IDomainContextAccessor>();
+    private readonly INetworkUrlBaseResolver _urlBaseResolver = Substitute.For<INetworkUrlBaseResolver>();
     private readonly ForgotPasswordHandler _handler;
 
     public ForgotPasswordHandlerTests()
@@ -30,8 +31,12 @@ public sealed class ForgotPasswordHandlerTests
         // (HU #12422 AC4: FLIT ∧ usuario ∉ red MB con dominio activo).
         _handler = new ForgotPasswordHandler(
             _userAccountRepository, _tokenRepository, _tokenGenerator, _emailSender, _options,
-            _auditWriter, _auditContext, _networkMembership, _domainContext,
+            _auditWriter, _auditContext, _networkMembership, _domainContext, _urlBaseResolver,
             NullLogger<ForgotPasswordHandler>.Instance);
+        // Por defecto: dominio FLIT — el resolutor devuelve la base configurada literal (AC4).
+        _urlBaseResolver
+            .ForRequestDomain(Arg.Any<IDomainContextAccessor>(), Arg.Any<string>())
+            .Returns(callInfo => callInfo.ArgAt<string>(1));
         // HU #11358 — el puerto ya no es "void": por defecto el sender simula éxito, igual que
         // antes lo hacía implícitamente un Task no configurado.
         _emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())

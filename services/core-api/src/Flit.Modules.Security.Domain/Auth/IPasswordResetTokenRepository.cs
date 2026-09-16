@@ -1,7 +1,15 @@
 namespace Flit.Modules.Security.Domain.Auth;
 
-/// <summary>Proyección mínima de un token de recuperación activo.</summary>
-public sealed record PasswordResetTokenRecord(Guid Id, Guid UserId);
+/// <summary>
+/// Proyección mínima de un token de recuperación activo.
+/// </summary>
+/// <param name="TenantId">
+/// HU #12423 AC5 — tenant del usuario dueño del token, derivado de su asignación de rol activa
+/// (mismo criterio que <c>PasswordRecoveryUser.TenantId</c>). Puede ser <c>null</c> si el usuario
+/// no tiene ninguna asignación de rol activa; en ese caso la coherencia de dominio se resuelve
+/// como "sin red" (comportamiento de hoy).
+/// </param>
+public sealed record PasswordResetTokenRecord(Guid Id, Guid UserId, Guid? TenantId = null);
 
 /// <summary>Acceso a la tabla <c>security.password_reset_tokens</c>.</summary>
 public interface IPasswordResetTokenRepository

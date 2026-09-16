@@ -1,3 +1,4 @@
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
 using Microsoft.Extensions.Logging;
@@ -10,6 +11,7 @@ public sealed partial class CreateInvitationHandler(
     ISecureTokenGenerator tokenGenerator,
     IEmailSender emailSender,
     InvitationOptions options,
+    INetworkUrlBaseResolver urlBaseResolver,
     ILogger<CreateInvitationHandler> logger)
 {
     public async Task<InvitationCreatedResult> HandleAsync(
@@ -56,7 +58,12 @@ public sealed partial class CreateInvitationHandler(
             new UserInvitationData(command.TenantId, email, command.FullName, roleIds, token.TokenHash, command.InvitedBy),
             cancellationToken);
 
-        var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
+        // HU #12423 AC1 — el enlace de activación usa el dominio de la red del tenant al que se
+        // invita (cabeza o hija); sin dominio activo, la base configurada literal (AC4).
+        var activateUrlBase = await urlBaseResolver
+            .ForTenantAsync(command.TenantId, options.ActivateUrlBase, cancellationToken)
+            .ConfigureAwait(false);
+        var link = InvitationEmailTemplate.BuildActivateLink(activateUrlBase, token.RawToken);
         var composed = InvitationEmailTemplate.Compose(command.FullName, link);
         // HU #11363 AC1 — id estable del catálogo (TemplateIds.Invitation en Flit.Infrastructure);
         // comparte plantilla con ResendInvitationHandler (dos disparadores, una sola entrada).

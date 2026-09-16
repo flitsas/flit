@@ -1,4 +1,5 @@
 using Flit.Admin.Application.Auditing;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,8 @@ public sealed partial class ActivateAccountHandler(
     IEmailSender emailSender,
     IAdminAuditWriter auditWriter,
     IAuditContextAccessor auditContext,
+    ITenantNetworkMembership networkMembership,
+    IDomainContextAccessor domainContext,
     ILogger<ActivateAccountHandler> logger)
 {
     public async Task<AccountActivatedResult> HandleAsync(
@@ -24,6 +27,18 @@ public sealed partial class ActivateAccountHandler(
         if (invitation is null)
         {
             await AuditAsync(null, AuditVocabulary.Results.Failure, "invitation_invalid", cancellationToken)
+                .ConfigureAwait(false);
+            throw new InvalidInvitationTokenException();
+        }
+
+        // HU #12423 AC5 — el enlace es de la red de otro tenant (o de FLIT para un tenant de red):
+        // mismo error genérico de token inválido de hoy, sin revelar a qué red pertenece.
+        var domainCoherent = await NetworkDomainCoherence
+            .IsCoherentAsync(networkMembership, domainContext, invitation.TenantId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!domainCoherent)
+        {
+            await AuditAsync(invitation, AuditVocabulary.Results.Failure, "invitation_invalid", cancellationToken)
                 .ConfigureAwait(false);
             throw new InvalidInvitationTokenException();
         }

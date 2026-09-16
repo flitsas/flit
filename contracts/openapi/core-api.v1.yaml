@@ -147,7 +147,10 @@ paths:
       description: >
         Genera un token de un solo uso y envía un correo con el enlace de
         restablecimiento. Responde siempre 202 con un mensaje genérico, sin
-        revelar si el email está registrado (anti-enumeración, AC2).
+        revelar si el email está registrado (anti-enumeración, AC2). HU #12423
+        AC3: el enlace apunta al dominio por el que se hizo la solicitud (o al
+        de FLIT si no pertenece a una red con dominio activo), nunca a uno
+        deducido de la identidad del usuario.
       requestBody:
         required: true
         content:
@@ -169,7 +172,9 @@ paths:
       security: []
       description: >
         Valida el token vigente y fija la nueva contraseña. El token se invalida
-        tras su uso.
+        tras su uso. HU #12423 AC5: si el dominio sellado de la petición no
+        coincide con la red del tenant dueño del token, responde el mismo error
+        genérico de token inválido, sin revelar a qué red pertenece.
       requestBody:
         required: true
         content:
