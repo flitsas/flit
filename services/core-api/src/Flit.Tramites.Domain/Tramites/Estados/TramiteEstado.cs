@@ -15,14 +15,14 @@ public static class TramiteEstado
     /// ADR-0059 (Epic #12549) — Ruta Larga de matrícula inicial: el trámite se radicó SIN placa y espera
     /// que el Organismo de Tránsito se la asigne. UI: «Preasignación». Exclusivo de los tipos con
     /// <c>gate_profile.requiresPlateRequest = true</c> (ver <see cref="TramiteTransitionPolicy"/>).
-    /// Sustituye al sub-estado <c>plate_flow_status = 'preasignado'</c> (Feature #10587), que se retira.
+    /// Sustituye al sub-estado <c>preasignado</c> de la Feature #10587, retirado en la HU #12603.
     /// </summary>
     public const string Preasignacion = "preasignacion";
 
     /// <summary>
     /// ADR-0059 (Epic #12549) — el OT ya asignó la placa; el gestor gestiona SOAT e impuestos SIN salir
     /// de este estado y, cuando termina, «Envía al OT» (→ <see cref="Entregado"/>). Sustituye al
-    /// sub-estado <c>plate_flow_status = 'asignado'</c>. El antiguo <c>'terminado'</c> desaparece: ES
+    /// sub-estado <c>asignado</c> de la Feature #10587. El antiguo <c>'terminado'</c> desaparece: ES
     /// <see cref="Entregado"/>.
     /// </summary>
     public const string Asignado = "asignado";

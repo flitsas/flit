@@ -3616,10 +3616,9 @@ function ConsultaStep({
     if (!muestraDigitoPlaca || !transitOfficeId || vehiculoConPlacaRunt) return;
     let active = true;
     /**
-     * HU #10806 (Alternativa C) — la decisión de ruta se persiste como `plate_route_active`: es la
-     * fuente que consume el trigger de BD para fijar `plate_flow_status = 'preasignado'` al radicar
-     * sin placa. El paso del FUR hace exactamente esto al abrir su sección; aquí se anota con el
-     * resto de lo capturado y viaja con la creación del trámite.
+     * HU #10806 (Alternativa C) — la decisión de ruta se persiste como `plate_route_active`. Desde
+     * ADR-0059 la ruta la decide el estado del trámite (preasignacion / entregado) y no un trigger,
+     * así que el campo es solo informativo; se conserva hasta que la Epic #12550 rehaga este paso.
      */
     const persistRouteActive = (enabled: boolean) => {
       if (deferred) {
@@ -4024,7 +4023,7 @@ function ConsultaStep({
                     : preasignacionActiva === null
                       ? 'Consultando si el organismo tiene preasignación de placa…'
                       : preasignacionActiva === false
-                        ? 'Este organismo (o tu compañía) no tiene preasignación de placa activa: el trámite se entregará de forma estándar.'
+                        ? 'Este organismo (o tu compañía) no tiene inventario de placas activo. Si radicas sin placa, el trámite quedará en Preasignación hasta que el organismo la asigne.'
                         : digitoPlacaSinDecidir
                           ? 'Elige un dígito o indica que no tienes preferencia: es obligatorio para continuar.'
                           : 'Si radicas sin placa, indica el número en el que prefieres que termine. El organismo lo toma como guía; podrás cambiarlo en el paso final.'}

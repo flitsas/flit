@@ -376,7 +376,6 @@ public sealed class SubmitProcedureInstanceTests
         error.Should().BeNull();
         result!.Status.Should().Be(TramiteEstado.Preasignacion);
         instance.SubmittedAt.Should().NotBeNull();
-        instance.PlateFlowStatus.Should().BeNull("el sub-estado legado ya no se escribe");
         _recorder.Records.Should().ContainSingle(r =>
             r.FromStatus == TramiteEstado.Preparado && r.ToStatus == TramiteEstado.Preasignacion);
         _publisher.Published.Should().ContainSingle(r => r.ToStatus == TramiteEstado.Preasignacion);

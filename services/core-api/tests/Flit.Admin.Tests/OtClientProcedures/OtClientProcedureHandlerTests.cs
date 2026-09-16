@@ -1029,7 +1029,6 @@ public sealed class OtClientProcedureHandlerTests
         var instance = await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken);
         instance.Status.Should().Be(TramiteEstado.Asignado);
         instance.PlateAssignedAt.Should().NotBeNull();
-        instance.PlateFlowStatus.Should().BeNull("el sub-estado legado ya no se escribe");
         (await verify.ProcedureInstanceStatusHistories
             .Where(h => h.ProcedureInstanceId == procedureId)
             .ToListAsync(TestContext.Current.CancellationToken))

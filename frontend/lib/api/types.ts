@@ -226,11 +226,6 @@ export interface TenantSettings {
   baulFirmasActivo: boolean;
   /** Preasignación de placa activa (Feature #10587, matrícula inicial). */
   preasignacionPlacaActiva: boolean;
-  /**
-   * Con placa completa/rango al radicar → Terminado directo (omite paso Asignado del gestor).
-   * Default false.
-   */
-  plateFlowSkipToTerminado?: boolean;
   /** Opción activa: permite continuar aunque el RUNT no reporte SOAT vigente. Apagada: bloquea. */
   validarSoatConRunt?: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
@@ -261,11 +256,6 @@ export interface TenantSettingsUpdate {
   baulFirmasActivo: boolean;
   /** Preasignación de placa activa (Feature #10587, matrícula inicial). */
   preasignacionPlacaActiva: boolean;
-  /**
-   * Con placa completa/rango al radicar → Terminado directo (omite paso Asignado del gestor).
-   * Default false.
-   */
-  plateFlowSkipToTerminado?: boolean;
   /** Opción activa: permite continuar aunque el RUNT no reporte SOAT vigente. Apagada: bloquea. */
   validarSoatConRunt?: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;

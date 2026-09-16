@@ -82,7 +82,6 @@ public sealed class SettingsDiffPersonalizedDocumentsExclusionTests
                     MetodosRecaudo: ["pse", "efecty"],
                     RuntFailoverTimeoutMs: 8000,
                     PreasignacionPlacaActiva: true,
-                    PlateFlowSkipToTerminado: true,
                     ValidarSoatConRunt: true,
                     FinesQuerySource: "internal",
                     DocumentosPersonalizadosActivo: true),

@@ -53,8 +53,6 @@ public sealed record InstanceSummaryDto(
     // OJO: es el valor CRUDO. La columna "Fuente" del listado NO lo usa directo, sino `Fuente` (abajo),
     // que además contempla los trámites migrados de V1.
     string? Origin = null,
-    // LEGACY (ADR-0059): sub-estado de placa, se retira en HU #12603. La ruta de placa ya vive en Estado.
-    string? PlateFlowStatus = null,
                                               // HU #11056 — columnas de seguimiento del listado. Todo se DERIVA del grafo que ya
                                               // carga ListWithSummaryGraphAsync; lo único que cuesta una consulta extra es el
                                               // nombre del gestor (resuelto en lote, nunca por fila).
@@ -258,7 +256,6 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             // Solo tiene sentido mostrar la nota cuando está pausado; se limpia al reanudar de todos modos.
             e.IsPaused ? e.PausedObservation : null,
             e.Origin,
-            e.PlateFlowStatus,
             e.UpdatedAt,
             string.IsNullOrWhiteSpace(gestorNombre) ? null : gestorNombre.Trim(),
             TramiteFuente.Desde(e.Origin, e.IsMigrated),

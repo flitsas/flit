@@ -148,13 +148,6 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .IsRequired()
             .HasDefaultValue(false);
 
-        // Feature #10587 / HU #10785 — sub-estado interno de placa, ortogonal al status global
-        // (que permanece en 'entregado'). Columna agregada por migración SQL cruda (la tabla está
-        // ExcludeFromMigrations); aquí solo se mapea para el modelo EF. Nullable: null = sin ruta de placa.
-        builder.Property(x => x.PlateFlowStatus)
-            .HasColumnName("plate_flow_status")
-            .HasMaxLength(20);
-
         // HU #12165 (Feature #12156) — ventana de 1 hora de corrección de placa por el OT (HU
         // #12167). Columnas agregadas por migración SQL cruda (la tabla está ExcludeFromMigrations);
         // aquí solo se mapean para el modelo EF.

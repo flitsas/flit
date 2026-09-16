@@ -68,16 +68,6 @@ public sealed class ProcedureInstance
     public string? CurrentStep { get; set; }
 
     /// <summary>
-    /// Feature #10587 / HU #10785 — sub-estado INTERNO del flujo de asignación de placa, ortogonal al
-    /// <see cref="Status"/> global (que permanece en <c>entregado</c> durante todo el sub-flujo). Valores:
-    /// <c>null</c> (trámite sin ruta de placa, comportamiento estándar), <c>preasignado</c> (entregado al
-    /// OT, esperando placa) y <c>asignado</c> (placa registrada; pendiente de SOAT + recepción del OT).
-    /// Ver <see cref="Tramites.Estados.PlateFlowStatus"/>. Columna agregada por migración SQL cruda
-    /// (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
-    /// </summary>
-    public string? PlateFlowStatus { get; set; }
-
-    /// <summary>
     /// HU #12165 (Feature #12156) — momento exacto en que el OT asignó/actualizó por última vez la
     /// placa (<see cref="Plate"/>) vía <c>AssignPlateAsync</c>/<c>UpdatePlateAsync</c>. Base confiable
     /// para calcular la ventana de 1 hora de HU #12167: a diferencia de <see cref="UpdatedAt"/>, no lo

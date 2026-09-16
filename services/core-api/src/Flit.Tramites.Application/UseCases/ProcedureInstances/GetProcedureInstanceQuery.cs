@@ -88,8 +88,6 @@ public sealed record ProcedureInstanceDetailDto(
     // frontend lo usa para el modo "readOnly parcial" del wizard (datos bloqueados, identidad
     // operable). Opcional (default null) para compat con consumidores que no lo lean.
     DateTimeOffset? DraftFinalizedAt = null,
-    // LEGACY (ADR-0059): sub-estado de placa, se retira en HU #12603. La ruta de placa ya vive en Status.
-    string? PlateFlowStatus = null,
     // HU #10879 — paso actual persistido del wizard (Key del paso). Prima como punto de retoma al
     // reabrir el borrador (AC2); null = el frontend cae al paso derivado de los gates. Opcional (default null).
     string? CurrentStep = null,
@@ -309,7 +307,6 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
                 .Select(a => new ProcedureInstanceActorDto(a.ActorType, a.DocumentType, a.DocumentNumber, a.FullName, a.Email))
                 .ToList(),
             e.DraftFinalizedAt,
-            e.PlateFlowStatus,
             e.CurrentStep,
             e.SubsanacionActiva,
             e.SubsanacionCount,
