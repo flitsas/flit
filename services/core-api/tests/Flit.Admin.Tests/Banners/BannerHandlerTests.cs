@@ -193,10 +193,12 @@ public sealed class BannerHandlerTests
     }
 
     [Fact]
-    public async Task AC2_List_Estado_Inactivo_DominaSobreExpirado_CuandoIsActiveFalse()
+    public async Task AC2_List_Estado_Expirado_DominaSobreIsActiveFalse()
     {
-        // Decision de precedencia (documentada en BannerEstado): is_active=false domina sobre
-        // cualquier estado temporal, incluido un banner cuya vigencia ya expiro.
+        // Decision de precedencia invertida (Bug #12584, 2026-09-15 — ver BannerEstado.cs): con
+        // vigencia programada, la programacion manda sobre is_active. Reemplaza el criterio
+        // original de HU #12239 AC2 ("is_active=false domina"); no es una correccion de defecto,
+        // es un cambio de criterio explicito del PO documentado en la Discussion del Bug #12584.
         var db = NewDbName();
         await SeedAsync(db, NewBanner(isActive: false, validFrom: Now.AddDays(-10), validUntil: Now.AddDays(-1)));
 
@@ -204,7 +206,35 @@ public sealed class BannerHandlerTests
         var handler = new ListBannersHandler(new BannerRepository(ctx), new FixedTimeProvider(Now));
         var result = await handler.HandleAsync(new ListBannersQuery(), TestContext.Current.CancellationToken);
 
-        result.Data.Single().Estado.Should().Be(BannerResponse.EstadoInactivo);
+        result.Data.Single().Estado.Should().Be(BannerResponse.EstadoExpirado);
+    }
+
+    [Fact]
+    public async Task AC2_List_Estado_Activo_DominaSobreIsActiveFalse_CuandoVigenciaEnCurso()
+    {
+        // Repro exacto del defecto 5 del Bug #12584: banner creado con el checkbox Activo en
+        // false pero con vigencia que ya cubre "ahora" — debe verse Activo, no Inactivo.
+        var db = NewDbName();
+        await SeedAsync(db, NewBanner(isActive: false, validFrom: Now.AddDays(-1), validUntil: Now.AddDays(1)));
+
+        await using var ctx = NewContext(db);
+        var handler = new ListBannersHandler(new BannerRepository(ctx), new FixedTimeProvider(Now));
+        var result = await handler.HandleAsync(new ListBannersQuery(), TestContext.Current.CancellationToken);
+
+        result.Data.Single().Estado.Should().Be(BannerResponse.EstadoActivo);
+    }
+
+    [Fact]
+    public async Task AC2_List_Estado_Programado_DominaSobreIsActiveFalse()
+    {
+        var db = NewDbName();
+        await SeedAsync(db, NewBanner(isActive: false, validFrom: Now.AddDays(1), validUntil: Now.AddDays(10)));
+
+        await using var ctx = NewContext(db);
+        var handler = new ListBannersHandler(new BannerRepository(ctx), new FixedTimeProvider(Now));
+        var result = await handler.HandleAsync(new ListBannersQuery(), TestContext.Current.CancellationToken);
+
+        result.Data.Single().Estado.Should().Be(BannerResponse.EstadoProgramado);
     }
 
     // ---------- AC3: PATCH activar/desactivar sin fechas ----------

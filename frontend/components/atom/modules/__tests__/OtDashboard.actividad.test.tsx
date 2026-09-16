@@ -306,6 +306,10 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     await waitFor(() => expect(getActiveBanners).toHaveBeenCalled());
     expect(screen.getAllByRole("button", { name: /^Mensaje \d/ })).toHaveLength(1);
     expect(await screen.findByText("Pendientes en total")).toBeInTheDocument();
+    // Bug #12584 defecto 3 (aplica también en OT): un solo mensaje navegable => sin a dónde
+    // moverse, Anterior/Siguiente deben quedar deshabilitados.
+    expect(screen.getByRole("button", { name: "Mensaje anterior" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Mensaje siguiente" })).toBeDisabled();
   });
 
   it("AC3 — con la cola vacía el banner no promete trabajo que no existe", async () => {
