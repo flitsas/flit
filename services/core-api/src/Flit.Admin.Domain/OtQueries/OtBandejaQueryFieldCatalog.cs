@@ -14,14 +14,14 @@ namespace Flit.Admin.Domain.OtQueries;
 /// <item><description><b>El estado es el de la bandeja, no el del informe.</b> Consultas ofrece la
 /// lectura analítica del trámite (en revisión, esperando placa, en espera del cliente), que se
 /// deriva de cuatro columnas. La bandeja ofrece el estado crudo que el organismo recibe
-/// —entregado, aprobado, rechazado, revocado, en subsanación— porque es el que mandan sus tarjetas
+/// —preasignación, asignado, entregado, aprobado, rechazado, revocado, en subsanación— porque es el que mandan sus tarjetas
 /// de cabecera y el que decide qué trabajo tiene delante. Ofrecer las dos lecturas en la misma
 /// pantalla serían dos formas de decir lo mismo, que es justo lo que este trabajo viene a
 /// quitar.</description></item>
-/// <item><description><b>El sub-estado de placa solo existe aquí.</b> Es el otro eje por el que ya
-/// cuentan las tarjetas de la bandeja, y sin él una tarjeta llevaría a una lista que no se puede
-/// reproducir con los filtros.</description></item>
 /// </list>
+///
+/// <para>ADR-0059: el antiguo eje «sub-estado de placa» desapareció; la ruta de placa son estados
+/// del ciclo de vida (<c>preasignacion</c>, <c>asignado</c>) y se filtran con «Estado».</para>
 ///
 /// <para><b>Fuera de alcance a propósito:</b> «Decidido por» y «Transformaciones» se quedan en
 /// Consultas. El primero es una pregunta sobre decisiones ya tomadas —cosa de informe, no de cola de
@@ -52,12 +52,6 @@ public sealed class OtBandejaQueryFieldCatalog : IQueryFieldCatalog
     /// <summary>Quién radicó el trámite en la empresa cliente. La bandeja ya lo muestra en su tabla.</summary>
     public const string Gestor = "gestor";
 
-    /// <summary>
-    /// Sub-estado de la ruta de placa. Propio de la bandeja: es el eje por el que cuentan tres de
-    /// sus tarjetas de cabecera.
-    /// </summary>
-    public const string SubEstadoPlaca = "sub_estado_placa";
-
     public const string GrupoVehiculo = OtQueryFieldCatalog.GrupoVehiculo;
     public const string GrupoPersonas = OtQueryFieldCatalog.GrupoPersonas;
     public const string GrupoTramite = OtQueryFieldCatalog.GrupoTramite;
@@ -80,28 +74,15 @@ public sealed class OtBandejaQueryFieldCatalog : IQueryFieldCatalog
     /// </summary>
     private static readonly QueryFieldOptionDto[] EstadoOptions =
     [
-        // ADR-0059 (Epic #12549) — la cola de placa entra a la bandeja como estados reales. El
-        // sub-estado de placa (abajo) queda LEGACY hasta que la HU #12598 lo retire del filtro.
+        // ADR-0059 (Epic #12549) — la cola de placa son estados reales y se nombran como tales
+        // (decisión del PO: sin sufijos ni alias en los filtros del organismo).
         new("preasignacion", "Preasignación"),
         new("asignado", "Asignado"),
-        new("entregado", "Pendiente de decisión"),
+        new("entregado", "Entregado"),
         new("aprobado", "Aprobado"),
         new("rechazado", "Rechazado"),
         new("subsanacion", "En subsanación"),
         new("revocado", "Revocado"),
-    ];
-
-    /// <summary>
-    /// Sub-estado de la ruta de placa. <c>sin_ruta</c> no es un valor de la columna sino su ausencia:
-    /// se ofrece como opción porque «los que no están en ruta de placa» es una pregunta que el
-    /// organismo hace, y sin ella habría que expresarla negando las otras tres.
-    /// </summary>
-    private static readonly QueryFieldOptionDto[] SubEstadoPlacaOptions =
-    [
-        new("sin_ruta", "Sin ruta de placa"),
-        new("preasignado", "Placa preasignada"),
-        new("asignado", "Placa asignada"),
-        new("terminado", "Terminado"),
     ];
 
     private static readonly QueryFieldOptionDto[] SiNoOptions =
@@ -146,10 +127,6 @@ public sealed class OtBandejaQueryFieldCatalog : IQueryFieldCatalog
             EstadoOptions,
             "El estado con el que el trámite llega al organismo, no el que tiene en su empresa.",
             AdmiteLista: true),
-        new(SubEstadoPlaca, "Ruta de placa", QueryFieldKind.Opcion, GrupoTramite, OpcionOperators,
-            SubEstadoPlacaOptions,
-            "En qué punto va la preasignación de placa. Es lo mismo que cuentan las tarjetas de la "
-            + "cabecera.", AdmiteLista: true),
         new(Gestor, "Gestor", QueryFieldKind.Texto, GrupoTramite, TextoOperators, [],
             "Quién radicó el trámite en la empresa cliente.", AdmiteLista: false),
 

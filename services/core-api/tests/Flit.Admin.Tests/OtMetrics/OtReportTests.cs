@@ -44,8 +44,7 @@ public sealed class OtReportTests
                 decisionStatus: TramiteEstado.Rechazado, subsanacionActiva: true);
             Radicar(seed, "REF-4", TramiteEstado.Rechazado, DiasAtras(4), decision: DiasAtras(1),
                 decisionStatus: TramiteEstado.Rechazado);
-            Radicar(seed, "REF-5", TramiteEstado.Entregado, DiasAtras(2),
-                plateFlowStatus: PlateFlowStatus.Preasignado);
+            Radicar(seed, "REF-5", TramiteEstado.Preasignacion, DiasAtras(2));
             Radicar(seed, "REF-6", TramiteEstado.Entregado, DiasAtras(2), isPaused: true);
             Radicar(seed, "REF-7", TramiteEstado.Anulado, DiasAtras(5), decision: null);
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -364,14 +363,18 @@ public sealed class OtReportTests
         DateTimeOffset radicadoEn,
         DateTimeOffset? decision = null,
         string decisionStatus = TramiteEstado.Aprobado,
-        string? plateFlowStatus = null,
         bool isPaused = false,
         bool subsanacionActiva = false,
         Guid? tenantId = null)
     {
         var id = Guid.NewGuid();
-        SeedInstance(ctx, id, reference, status, plateFlowStatus, isPaused, subsanacionActiva, tenantId);
-        SeedHistory(ctx, id, TramiteEstado.Entregado, radicadoEn, tenantId: tenantId);
+        SeedInstance(ctx, id, reference, status, isPaused, subsanacionActiva, tenantId);
+        // ADR-0059 — la radicación aterriza en preasignacion (sin placa) o en entregado; el reloj y los
+        // recuentos del organismo tratan ambas llegadas por igual.
+        SeedHistory(
+            ctx, id,
+            status == TramiteEstado.Preasignacion ? TramiteEstado.Preasignacion : TramiteEstado.Entregado,
+            radicadoEn, tenantId: tenantId);
 
         if (decision is DateTimeOffset at)
         {
@@ -384,7 +387,6 @@ public sealed class OtReportTests
         Guid id,
         string reference,
         string status,
-        string? plateFlowStatus = null,
         bool isPaused = false,
         bool subsanacionActiva = false,
         Guid? tenantId = null) =>
@@ -395,7 +397,6 @@ public sealed class OtReportTests
             ProcedureTypeId = ProcedureTypeId,
             ReferenceNumber = reference,
             Status = status,
-            PlateFlowStatus = plateFlowStatus,
             IsPaused = isPaused,
             SubsanacionActiva = subsanacionActiva,
             TransitOfficeId = TransitOffice,

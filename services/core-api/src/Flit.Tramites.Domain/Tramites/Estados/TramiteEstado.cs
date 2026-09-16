@@ -114,6 +114,32 @@ public static class TramiteEstado
         estado is not null && RecibidosPorOrganismo.Contains(estado, StringComparer.Ordinal);
 
     /// <summary>
+    /// Estados en los que el trámite LLEGA al organismo para que actúe (ADR-0059): <see cref="Entregado"/>
+    /// (decidir) y <see cref="Preasignacion"/> (asignar placa). Una fila de historial hacia uno de ellos
+    /// es una "entrega" para los relojes y recuentos del organismo; <see cref="Asignado"/> no lo es: ahí
+    /// la pelota está en el gestor.
+    /// </summary>
+    public static readonly IReadOnlyList<string> EstadosDeLlegadaAlOrganismo = [Preasignacion, Entregado];
+
+    /// <summary>¿Una transición hacia <paramref name="toStatus"/> pone el trámite en manos del organismo?</summary>
+    public static bool EsLlegadaAlOrganismo(string? toStatus) =>
+        toStatus is not null && EstadosDeLlegadaAlOrganismo.Contains(toStatus, StringComparer.Ordinal);
+
+    /// <summary>
+    /// ¿La transición es una RADICACIÓN (el gestor radica o re-radica)? Desde <see cref="Preparado"/> o
+    /// <see cref="Rechazado"/> hacia un estado de llegada. Deja fuera <c>asignado → entregado</c>
+    /// («Enviar al OT»): ese trámite ya se radicó.
+    /// </summary>
+    public static bool EsRadicacion(string? from, string? to) =>
+        from is Preparado or Rechazado && EsLlegadaAlOrganismo(to);
+
+    /// <summary>
+    /// Estados en los que el trámite sigue ABIERTO en la bandeja del organismo (sin decisión final):
+    /// la cola de placa completa y la de decisión. Universo de los "pendientes" de métricas e informes.
+    /// </summary>
+    public static readonly IReadOnlyList<string> PendientesDelOrganismo = [Preasignacion, Asignado, Entregado];
+
+    /// <summary>
     /// Estados "en proceso" (CF-01, HU #10876): activan el bloqueo de duplicidad de trámite por
     /// familia. Los estados finales (<see cref="Aprobado"/>, <see cref="Rechazado"/>,
     /// <see cref="Anulado"/>) NO cuentan por sí solos. Un <see cref="Rechazado"/> con

@@ -112,7 +112,7 @@ public sealed class TramiteLifecycleService(
         // Radicación: preparado → entregado|preasignacion, o re-radicación desde rechazado. Es el momento
         // en que el trámite LLEGA al organismo: corren los gates de entrega y se fija submitted_at.
         // «Enviar al OT» (asignado → entregado) no es una radicación: el trámite ya llegó al OT.
-        var esRadicacion = EsRadicacion(from, command.ToStatus);
+        var esRadicacion = TramiteEstado.EsRadicacion(from, command.ToStatus);
 
         // RF05 — anular/rechazar exigen motivo explícito para el historial.
         if (command.ToStatus is TramiteEstado.Anulado or TramiteEstado.Rechazado
@@ -234,15 +234,6 @@ public sealed class TramiteLifecycleService(
 
         return TramiteTransitionOutcome.Ok(instance);
     }
-
-    /// <summary>
-    /// ¿La transición es una RADICACIÓN (el trámite llega al organismo)? Desde <c>preparado</c> o desde
-    /// <c>rechazado</c> (re-radicación) hacia <c>entregado</c> o <c>preasignacion</c>. Deja fuera
-    /// <c>asignado → entregado</c> («Enviar al OT»): ese trámite ya se radicó.
-    /// </summary>
-    private static bool EsRadicacion(string? from, string to) =>
-        from is TramiteEstado.Preparado or TramiteEstado.Rechazado
-        && to is TramiteEstado.Entregado or TramiteEstado.Preasignacion;
 
     /// <summary>
     /// ADR-0036 §D9 (HU #10916) — resuelve el mandatario del mandato al aprobar. Devuelve el código de
