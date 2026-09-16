@@ -527,10 +527,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 }
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                var mapped = Map(entity);
-                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken)
-                    .ConfigureAwait(false);
-                return enriched[0];
+                return await MapRowAsync(entity, cancellationToken).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -787,9 +784,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     otTenantId, source, resolvedChangedBy, now, cancellationToken).ConfigureAwait(false);
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                var mapped = Map(entity);
-                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
-                return PlateAssignmentOutcome.Ok(enriched[0]);
+                return PlateAssignmentOutcome.Ok(await MapRowAsync(entity, cancellationToken).ConfigureAwait(false));
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -919,9 +914,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 });
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                var mapped = Map(entity);
-                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
-                return PlateAssignmentOutcome.Ok(enriched[0]);
+                return PlateAssignmentOutcome.Ok(await MapRowAsync(entity, cancellationToken).ConfigureAwait(false));
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -988,9 +981,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     .ConfigureAwait(false);
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                var mapped = Map(entity);
-                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
-                return enriched[0];
+                return await MapRowAsync(entity, cancellationToken).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -1081,9 +1072,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 });
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                var mapped = Map(entity);
-                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
-                return enriched[0];
+                return await MapRowAsync(entity, cancellationToken).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -1825,6 +1814,36 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 ordered.ThenBy(p => p.CreatedAt).ThenByDescending(p => p.Id),
             _ => ordered.ThenByDescending(p => p.CreatedAt).ThenByDescending(p => p.Id),
         };
+    }
+
+    /// <summary>
+    /// Fila que devuelve toda mutación del OT (decidir, asignar, liberar, corregir placa). Completa
+    /// <see cref="Map"/> con lo que la grilla proyecta y la entidad no trae —gestor, SOAT, dígito
+    /// preferido y los checks de «Enviar al OT»—, porque la bandeja sustituye la fila por esta
+    /// respuesta: si viniera recortada, el operador vería desaparecer el gestor y los badges justo
+    /// después de decidir. Corre dentro del scope del tenant cliente, igual que el guardado.
+    /// </summary>
+    private async Task<OtClientProcedure> MapRowAsync(ProcedureInstance entity, CancellationToken cancellationToken)
+    {
+        var fields = await LoadFieldValuesAsync(entity.Id, cancellationToken).ConfigureAwait(false);
+        var gestorId = entity.CreatedByUserId;
+        var gestorNombre = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == gestorId)
+            .Select(u => u.DisplayName)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var mapped = Map(entity) with
+        {
+            SoatEstado = Field(fields, Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey),
+            PlatePreferredLastDigit = Field(fields, PlatePreferredLastDigitFieldKey),
+            SoatPagado = IsTrue(fields, Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.SoatPagado),
+            ImpuestoDepartamentalPagado = IsTrue(
+                fields, Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.ImpuestoDepartamentalPagado),
+            GestorNombre = gestorNombre,
+        };
+        var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
+        return enriched[0];
     }
 
     private static OtClientProcedure Map(ProcedureInstance entity) => new()

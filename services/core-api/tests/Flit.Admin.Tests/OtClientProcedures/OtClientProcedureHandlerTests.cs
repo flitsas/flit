@@ -146,6 +146,47 @@ public sealed class OtClientProcedureHandlerTests
         history.Metadata.Should().Contain(OtTenant.ToString());
     }
 
+    [Fact] // La bandeja sustituye la fila por la respuesta de la decisión: si viniera recortada, el
+           // operador vería desaparecer el gestor y los badges de «Enviar al OT» justo tras decidir.
+    public async Task Decision_LaRespuestaTraeLaMismaFilaQueLaGrilla()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedActorUser(seed, ActorUser);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                ProcedureInstanceId = procedureId,
+                TenantId = ClientTenant,
+                FieldKey = Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.SoatPagado,
+                ValueText = "true",
+            });
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = NewApproveHandler(ctx);
+        var result = await handler.HandleAsync(new ApproveOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            ApprovedBy = Approver,
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(ApproveOtClientProcedureStatus.Approved);
+        result.Procedure!.GestorNombre.Should().Be("Actor Test");
+        result.Procedure.SoatPagado.Should().BeTrue();
+        result.Procedure.ImpuestoDepartamentalPagado.Should().BeFalse();
+        result.Procedure.ClientTenantName.Should().NotBeNullOrEmpty();
+    }
+
     [Fact]
     public async Task AC3_Reject_PersistsReasonAndRejectedOt()
     {
@@ -422,6 +463,70 @@ public sealed class OtClientProcedureHandlerTests
     }
 
     // ---------- HU #10871 (AC1): observación subsanable del OT (entregado→subsanacion) ----------
+
+    [Theory] // ADR-0059 (HU #12598) — el handler no repite el literal 'entregado': rechazar sale también de Preasignación.
+    [InlineData(TramiteEstado.Preasignacion)]
+    [InlineData(TramiteEstado.Entregado)]
+    public async Task Adr0059_Reject_DesdePreasignacionOEntregado_RechazaYGuardaElOrigen(string estadoActual)
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, estadoActual);
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = NewRejectHandler(ctx);
+        var result = await handler.HandleAsync(new RejectOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            RejectedBy = Approver,
+            Request = new() { Reason = "Falta la factura electrónica de compra" },
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(RejectOtClientProcedureStatus.Rejected);
+        result.Procedure!.Status.Should().Be(TramiteEstado.Rechazado);
+
+        await using var verify = NewContext(db);
+        var entity = await verify.ProcedureInstances
+            .SingleAsync(p => p.Id == procedureId, cancellationToken: TestContext.Current.CancellationToken);
+        entity.RejectedFrom.Should().Be(estadoActual);
+    }
+
+    [Theory] // ADR-0059 — la política sigue mandando: desde Asignado o Aprobado el OT no rechaza.
+    [InlineData(TramiteEstado.Asignado)]
+    [InlineData(TramiteEstado.Aprobado)]
+    public async Task Adr0059_Reject_DesdeEstadoSinArista_InvalidState(string estadoActual)
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, estadoActual);
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = NewRejectHandler(ctx);
+        var result = await handler.HandleAsync(new RejectOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            RejectedBy = Approver,
+            Request = new() { Reason = "motivo" },
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(RejectOtClientProcedureStatus.InvalidState);
+    }
 
     [Fact] // AC1 — con ítems del checklist, la decisión OT observa (subsanacion) en vez de rechazar.
     public async Task Ac1_Reject_ConItems_TransicionaASubsanacionConChecklistHibridoEnMetadata()
