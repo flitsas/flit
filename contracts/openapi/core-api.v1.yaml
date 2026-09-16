@@ -6980,10 +6980,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
   # ── Admin · Generación documental (Feature #12201, ADR-0056) ──
   # Emisión SIN trámite: ninguna ruta crea ni referencia una procedure_instance.
