@@ -1468,8 +1468,10 @@ describe('TramitesTable — «Enviar al OT» desde asignado (ADR-0059, HU #12601
     expect(screen.queryByRole('menuitem', { name: 'Enviar al OT' })).toBeNull();
   });
 
-  async function enviarAlOt() {
-    mocks.listInstances.mockResolvedValue([asignado()]);
+  async function enviarAlOt(trasEnviar: InstanceSummary[] = [asignado()]) {
+    // La primera carga trae la fila en asignado; tras enviar, la tabla recarga (contadores y
+    // filtro activo) y el backend devuelve lo que `trasEnviar` diga.
+    mocks.listInstances.mockResolvedValueOnce([asignado()]).mockResolvedValue(trasEnviar);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
     // Con la fila pendiente por enviar, ActionsMenu añade el hint al nombre accesible.
     await userEvent.click(
@@ -1482,7 +1484,7 @@ describe('TramitesTable — «Enviar al OT» desde asignado (ADR-0059, HU #12601
   it('AC1 — el modal es el mismo de checks SOAT/impuesto y al confirmar el trámite pasa a Entregado', async () => {
     mocks.enviarAlOt.mockResolvedValue({ instance: null, warningCode: null, warningMessage: null });
 
-    await enviarAlOt();
+    await enviarAlOt([{ ...asignado(), estado: 'entregado' }]);
 
     expect(mocks.enviarAlOt).toHaveBeenCalledWith(
       'proc1',
@@ -1490,7 +1492,7 @@ describe('TramitesTable — «Enviar al OT» desde asignado (ADR-0059, HU #12601
       undefined,
     );
     expect(screen.queryByRole('dialog', { name: 'Enviar al organismo de tránsito' })).toBeNull();
-    // La fila ya dice Entregado sin recargar (el otro «Entregado» es la tarjeta de la tira KPI).
+    // La fila dice Entregado (el otro «Entregado» es la tarjeta de la tira KPI).
     const fila = screen.getByText('TR-PROC').closest('tr');
     expect(fila).not.toBeNull();
     expect(await within(fila!).findByText('Entregado')).toBeInTheDocument();
