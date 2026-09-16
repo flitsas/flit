@@ -7,8 +7,9 @@ namespace Flit.Infrastructure.Persistence.Configurations.Tramites;
 
 /// <summary>
 /// HU #12116 — auditoría de impronta firmada. DDL en
-/// <c>97-vehicle-signature-imprints.sql</c>, <c>98-…-audit-snapshot.sql</c>
-/// y <c>99-…-partial-unique-hash.sql</c> (ExcludeFromMigrations).
+/// <c>97-vehicle-signature-imprints.sql</c>, <c>98-…-audit-snapshot.sql</c>,
+/// <c>99-…-partial-unique-hash.sql</c> y <c>115-B12594-…-idempotencia-por-tramite.sql</c>
+/// (ExcludeFromMigrations).
 /// </summary>
 internal sealed class VehicleSignatureImprintConfiguration : IEntityTypeConfiguration<VehicleSignatureImprint>
 {
@@ -41,10 +42,12 @@ internal sealed class VehicleSignatureImprintConfiguration : IEntityTypeConfigur
         builder.Property(x => x.DeletedAt).HasColumnName("deleted_at");
         builder.Property(x => x.DeletedBy).HasColumnName("deleted_by");
 
-        builder.HasIndex(x => x.DocumentHash)
+        // Bug #12594: idempotencia por trámite + hash (115-B12594-…sql); el mismo PDF base
+        // puede firmarse en trámites distintos.
+        builder.HasIndex(x => new { x.ProcedureInstanceId, x.DocumentHash })
             .IsUnique()
             .HasFilter("deleted_at IS NULL")
-            .HasDatabaseName("uq_vehicle_signature_imprints_document_hash_active");
+            .HasDatabaseName("uq_vehicle_signature_imprints_instance_document_hash_active");
 
         builder.HasQueryFilter(x => x.DeletedAt == null);
     }
