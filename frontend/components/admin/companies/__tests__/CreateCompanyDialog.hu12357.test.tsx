@@ -37,7 +37,7 @@ describe("CreateCompanyDialog (HU #12357)", () => {
     expect(select).toHaveTextContent("Cliente concesión");
   });
 
-  it("al elegir Marca Blanca muestra placeholder de dominio", () => {
+  it("al elegir Marca Blanca muestra el campo opcional de dominio (HU #12427 AC3)", () => {
     render(
       <CreateCompanyDialog open onClose={vi.fn()} onCreate={vi.fn()} onCreated={vi.fn()} isSuperAdmin />,
     );
@@ -46,7 +46,16 @@ describe("CreateCompanyDialog (HU #12357)", () => {
     select.value = "MARCA_BLANCA";
     select.dispatchEvent(new Event("change", { bubbles: true }));
 
-    expect(screen.getByText(/dominio de integración/i)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/pendiente de registro/i)).toBeDisabled();
+    const domainInput = screen.getByLabelText(/dominio de la red \(opcional\)/i);
+    expect(domainInput).toBeEnabled();
+    expect(screen.getByText(/puedes dejarlo en blanco/i)).toBeInTheDocument();
+  });
+
+  it("otros tipos no muestran el campo de dominio (paridad AC4)", () => {
+    render(
+      <CreateCompanyDialog open onClose={vi.fn()} onCreate={vi.fn()} onCreated={vi.fn()} isSuperAdmin />,
+    );
+
+    expect(screen.queryByLabelText(/dominio de la red/i)).not.toBeInTheDocument();
   });
 });

@@ -651,3 +651,42 @@ export interface NetworkDomainRequiredResponse {
   networkDomain: string;
   loginUrl: string;
 }
+
+// ── Dominio propio de la red (HU #12416, #12425, #12427; ADR-0060) ─────────
+// Origen: contracts/openapi/core-api.v1.yaml → TenantDomainResponse.
+export type TenantDomainStatus = "pending" | "verified" | "active" | "failed";
+
+/**
+ * Origen: contracts/openapi/core-api.v1.yaml → TenantDomainResponse.statusReason (nullable).
+ * Los tres valores documentados para HU #12425 AC2 son `TXT_NOT_FOUND | TXT_MISMATCH | DNS_ERROR`;
+ * se tipa como `string` (no unión cerrada) porque el backend puede sumar motivos y el panel ya
+ * cae a un texto genérico para cualquier valor no reconocido — no debe romperse por eso.
+ */
+export type TenantDomainStatusReason = string | null;
+
+export interface TenantDomainVerificationInstructions {
+  txtName: string;
+  txtValue: string;
+  cnameName: string;
+  cnameTarget: string;
+}
+
+export interface TenantDomainCertificate {
+  issuedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface TenantDomainResponse {
+  host: string;
+  status: TenantDomainStatus;
+  statusReason: TenantDomainStatusReason;
+  statusChangedAt: string;
+  verification: TenantDomainVerificationInstructions;
+  verifiedAt: string | null;
+  activatedAt: string | null;
+  certificate: TenantDomainCertificate;
+  lastCheckedAt: string | null;
+  nextCheckAt: string | null;
+  graceUntil: string | null;
+  rowVersion: number;
+}

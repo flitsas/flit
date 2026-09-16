@@ -11,6 +11,8 @@ import { CompanyConfigTabs } from "@/components/admin/companies/CompanyConfigTab
 import { AdminChildContextBanner } from "@/components/admin/companies/AdminChildContextBanner";
 import { CompanyChildrenSection } from "@/components/admin/companies/CompanyChildrenSection";
 import { BrandingConfigurator } from "@/components/admin/branding/BrandingConfigurator";
+import { DomainStatusPanel } from "@/components/admin/domain/DomainStatusPanel";
+import { DomainRegisterForm } from "@/components/admin/domain/DomainRegisterForm";
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
 import { OTConfigTablePanel } from "@/components/admin/companies/panels/OTConfigTablePanel";
 import { TransitBlocksPanel } from "@/components/admin/companies/panels/TransitBlocksPanel";
@@ -26,7 +28,7 @@ import { CompanyMandatariosPanel } from "@/components/admin/companies/mandate-si
 import { CompanyUsersPanel } from "@/components/admin/companies/panels/CompanyUsersPanel";
 import { fetchCompany, fetchCompanyChildren, fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
 import { isHeadTenantType } from "@/lib/api/types";
-import type { CompanyListItem, TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
+import type { CompanyListItem, TenantDomainResponse, TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
 
 export default function AdminCompanyDetailPage() {
@@ -324,7 +326,51 @@ function CompanyDetail() {
           <BrandingConfigurator source="admin" tenantId={tenantId} />
         </div>
       )}
+
+      {/* HU #12427 AC3 — estado del dominio + registro/cambio/retiro, solo cabezas MARCA_BLANCA.
+          En otro tipo de compañía, o en una sin red, esta sección no se renderiza (AC4). */}
+      {isSuperAdmin && company?.tenantType === "MARCA_BLANCA" && (
+        <div className="mt-6">
+          <DomainAdminSection tenantId={tenantId} />
+        </div>
+      )}
     </main>
+  );
+}
+
+/** HU #12427 AC3 — coordina `DomainStatusPanel` (lectura + comprobar) y `DomainRegisterForm` (registrar/cambiar/retirar) sobre el mismo `tenantId`, ambos exclusivos SuperAdmin. */
+function DomainAdminSection({ tenantId }: { tenantId: string }) {
+  const [domain, setDomain] = useState<TenantDomainResponse | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  return (
+    <section className="rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60" aria-labelledby="domain-admin-title">
+      <div className="mb-3">
+        <h2 id="domain-admin-title" className="text-sm font-bold" style={{ color: "#162744" }}>
+          Dominio de la red
+        </h2>
+        <p className="text-[11px] opacity-60">
+          Dominio propio para el acceso y las comunicaciones de esta red Marca Blanca.
+        </p>
+      </div>
+
+      <DomainStatusPanel mode="admin" tenantId={tenantId} onLoaded={setDomain} reloadToken={reloadToken} />
+
+      <div className="mt-4 border-t pt-4" style={{ borderColor: "#DFE5ED" }}>
+        <DomainRegisterForm
+          tenantId={tenantId}
+          domain={domain}
+          onRegistered={(updated) => {
+            setDomain(updated);
+            setReloadToken((n) => n + 1);
+          }}
+          onRemoved={() => {
+            setDomain(null);
+            setReloadToken((n) => n + 1);
+          }}
+        />
+      </div>
+    </section>
   );
 }
 

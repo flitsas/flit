@@ -7,6 +7,7 @@ import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { NetworkChildrenPanel } from "@/components/admin/companies/NetworkChildrenPanel";
 import { BrandingConfigurator } from "@/components/admin/branding/BrandingConfigurator";
+import { DomainStatusPanel } from "@/components/admin/domain/DomainStatusPanel";
 import { fetchCompany } from "@/lib/api/admin-companies";
 import { isHeadTenantType } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
@@ -80,6 +81,25 @@ export default function NetworkChildrenPage() {
           (app/admin/companies/[tenantId]/page.tsx), no aquí. */}
       {head && !isSuperAdmin && head.tenantType === "MARCA_BLANCA" && (
         <BrandingConfigurator source="company" />
+      )}
+
+      {/* HU #12427 AC1/AC2 — la cabeza ve el estado de su dominio y puede comprobarlo; registrar,
+          cambiar o retirar es exclusivo del SuperAdmin (ficha de compañía, AC3). */}
+      {head && !isSuperAdmin && head.tenantType === "MARCA_BLANCA" && (
+        <section
+          className="rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60"
+          aria-labelledby="domain-company-title"
+        >
+          <div className="mb-3">
+            <h2 id="domain-company-title" className="text-sm font-bold" style={{ color: "#162744" }}>
+              Dominio de la red
+            </h2>
+            <p className="text-[11px] opacity-60">
+              Dominio propio para el acceso y las comunicaciones de tu red.
+            </p>
+          </div>
+          <DomainStatusPanel mode="company" />
+        </section>
       )}
     </main>
   );
