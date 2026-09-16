@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Admin.Application.Improntas.GenerarImpronta;
 using Flit.Admin.Application.Improntas.ListImprontas;
 using Flit.Api.Authorization;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
@@ -42,7 +43,26 @@ public static class AdminImprontasEndpoints
             .Produces(StatusCodes.Status422UnprocessableEntity)
             .Produces(StatusCodes.Status502BadGateway);
 
+        // HU #12116 — backfill de la firma automática de la impronta manual (trámites que quedaron
+        // sin firmar por no haber pasado por el consolidado). Idempotente y re-ejecutable.
+        group.MapPost("/firmas/backfill", BackfillFirmaImprontaManualAsync)
+            .WithName("AdminImprontasFirmasBackfill")
+            .WithSummary("Firma la impronta manual de trámites entregados/aprobados que aún no la tienen")
+            .Produces<BackfillFirmaImprontaManualResult>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         return app;
+    }
+
+    private static async Task<IResult> BackfillFirmaImprontaManualAsync(
+        BackfillFirmaImprontaManualHandler handler,
+        CancellationToken ct,
+        [FromQuery] int? limit = null)
+    {
+        var effectiveLimit = limit is > 0 ? Math.Min(limit.Value, 1000) : 200;
+        var result = await handler.HandleAsync(effectiveLimit, ct).ConfigureAwait(false);
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> ListImprontasAsync(

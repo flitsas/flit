@@ -1,3 +1,5 @@
+using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.Tests.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
@@ -510,5 +512,36 @@ public sealed class SubmitProcedureInstanceTests
 
         error.Should().BeNull();
         _recorder.Records.Should().OnlyContain(r => r.ChangedByUserId == null);
+    }
+
+    /// <summary>
+    /// HU #12116 — al quedar entregado, el submit dispara la firma automática de impronta. Este test
+    /// NO stubea <c>GetByIdWithFurGraphAsync</c>: el handler de firma recibe <c>null</c> (no
+    /// encontrado) y termina como best-effort "Fallo" — lo que importa es que SE INVOCÓ y que el
+    /// submit no cambia su respuesta por eso.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_TrasEntregar_InvocaFirmaImprontaSinAlterarLaRespuesta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        Wire(instance, ct);
+
+        var lifecycle = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher);
+        var firmaImpronta = new FirmarImprontaManualSiListaHandler(
+            _repo, Substitute.For<IExpedienteConsolidadoMerger>(), Substitute.For<IAttachmentStorage>(),
+            Substitute.For<IImprontaManualStamper>());
+        var sutConFirma = new SubmitProcedureInstanceHandler(
+            lifecycle, _repo, NullPlatePreassignPolicy.Instance,
+            NullLogger<SubmitProcedureInstanceHandler>.Instance, firmaImpronta);
+
+        var (result, error) = await sutConFirma.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+        await _repo.Received(1).GetByIdWithFurGraphAsync(id, tenantId, Arg.Any<CancellationToken>());
     }
 }

@@ -26,17 +26,30 @@ namespace Flit.Infrastructure.Messaging;
 internal sealed class RegeneracionDocumentalTrazaWriter(FlitDbContext db)
     : IRegeneracionDocumentalTrazaWriter
 {
+    public Task<bool> EscribirFalloAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string origen,
+        string codigoError,
+        string? detalle,
+        CancellationToken cancellationToken = default) =>
+        EscribirFalloAsync(
+            tenantId, procedureInstanceId, origen, codigoError, detalle,
+            RegenerarDocumentosTrazadoHandler.EventoFallo, cancellationToken);
+
     public async Task<bool> EscribirFalloAsync(
         Guid tenantId,
         Guid procedureInstanceId,
         string origen,
         string codigoError,
         string? detalle,
+        string tipoEvento,
         CancellationToken cancellationToken = default)
     {
         if (tenantId == Guid.Empty || procedureInstanceId == Guid.Empty)
             return false;
 
+        var tipo = tipoEvento;
         var id = Guid.CreateVersion7();
         var now = DateTimeOffset.UtcNow;
         var payload = JsonSerializer.Serialize(new
@@ -56,7 +69,7 @@ internal sealed class RegeneracionDocumentalTrazaWriter(FlitDbContext db)
                 Id = id,
                 TenantId = tenantId,
                 ProcedureInstanceId = procedureInstanceId,
-                Tipo = RegenerarDocumentosTrazadoHandler.EventoFallo,
+                Tipo = tipo,
                 Payload = payload,
                 CreatedAt = now,
             });
@@ -72,7 +85,7 @@ internal sealed class RegeneracionDocumentalTrazaWriter(FlitDbContext db)
              INSERT INTO tramites.procedure_instance_events
                  (id, tenant_id, procedure_instance_id, tipo, payload, created_at)
              SELECT {id}, {tenantId}, {procedureInstanceId},
-                    {RegenerarDocumentosTrazadoHandler.EventoFallo}, {payload}::jsonb, {now}
+                    {tipo}, {payload}::jsonb, {now}
              WHERE EXISTS (
                  SELECT 1 FROM tramites.procedure_instances
                  WHERE id = {procedureInstanceId} AND tenant_id = {tenantId})
