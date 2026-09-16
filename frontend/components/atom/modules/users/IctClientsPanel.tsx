@@ -15,7 +15,7 @@ import {
   updateIctClient,
   type IctClient,
 } from "@/lib/api/ict-clients";
-import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import type { CompanyListItem } from "@/lib/api/types";
 import { SearchableSelect } from "@/components/atom/SearchableSelect";
 
@@ -90,8 +90,8 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
   useEffect(() => {
     if (!isSuperAdmin) return;
     const controller = new AbortController();
-    fetchCompaniesIndex({ page: 1, pageSize: 200 }, controller.signal)
-      .then((r) => setCompanies(r.data.filter((c) => c.estadoActivo)))
+    fetchAllCompanies({}, controller.signal)
+      .then((data) => setCompanies(data.filter((c) => c.estadoActivo)))
       .catch(() => {
         // El selector de compañía es opcional: si falla, el alta queda deshabilitada para SuperAdmin.
       });
