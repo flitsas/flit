@@ -6,13 +6,20 @@ namespace Flit.Admin.Domain.Banners;
 /// nunca se persiste, porque cambia con el paso del tiempo sin que nadie edite la fila.
 ///
 /// Precedencia (mutuamente excluyentes, se evalúa en este orden):
-/// 1. <see cref="Inactivo"/> — <c>is_active = false</c>. Es el interruptor manual del
-///    administrador (AC3) y domina sobre cualquier estado temporal: un banner desactivado no
-///    debe mostrarse como "Expirado" ni "Programado".
-/// 2. <see cref="Expirado"/> — <c>valid_until</c> ya pasó. Hecho temporal absoluto, independiente
-///    de si el administrador olvidó desactivarlo.
-/// 3. <see cref="Programado"/> — <c>valid_from</c> aún no llega.
-/// 4. <see cref="Activo"/> — dentro de vigencia, o sin fechas programadas.
+/// 1. Si hay vigencia programada (<c>valid_from</c> y/o <c>valid_until</c> no nulos), la
+///    programación manda sobre <c>is_active</c>: <see cref="Expirado"/> si ya pasó
+///    <c>valid_until</c>, <see cref="Programado"/> si aún no llega <c>valid_from</c>, o
+///    <see cref="Activo"/> dentro del intervalo — en los tres casos sin mirar el flag manual.
+/// 2. <see cref="Inactivo"/> — solo aplica cuando NO hay vigencia programada (ambas fechas
+///    nulas) y <c>is_active = false</c>. El interruptor manual del administrador (AC3) gobierna
+///    el estado únicamente en ausencia de fechas.
+/// 3. <see cref="Activo"/> — sin fechas programadas e <c>is_active = true</c>.
+///
+/// Decisión de producto (Bug #12584, 2026-09-15): invierte la precedencia original de HU #12239
+/// AC2 ("is_active=false domina sobre cualquier estado temporal"). No es un defecto del código
+/// original — la HU #12239 se implementó tal como se acordó entonces; es un cambio de criterio
+/// explícito del PO tras la certificación de QA del Feature #12236, documentado para que quede
+/// trazabilidad de que no cuenta como bug de desarrollo.
 /// </summary>
 public enum BannerEstado
 {
