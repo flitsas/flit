@@ -19,20 +19,32 @@ import { bogotaClock, bogotaDay } from "@/lib/xlsx";
 const ESTADO_LABEL: Record<string, string> = {
   borrador: "Borrador",
   preparado: "Preparado",
+  preasignacion: "Preasignación",
+  asignado: "Asignado",
   entregado: "Entregado",
   aprobado: "Aprobado",
   rechazado: "Rechazado",
+  revocado: "Revocado",
   anulado: "Anulado",
+  subsanacion: "En subsanación",
 };
 
-/** Color por estado. El mismo criterio que en la bandeja: verde cierra bien, rojo cierra mal. */
+/**
+ * Color por estado. El mismo criterio que en la bandeja: verde cierra bien, rojo cierra mal. Los
+ * estados de la Ruta Larga (ADR-0059) y el revocado usan el acento del catálogo de `/tramites`,
+ * para que el mismo trámite se vea del mismo color desde la consulta y desde el listado.
+ */
 const ESTADO_COLOR: Record<string, string> = {
   borrador: "#9AA5B4",
   preparado: "#557EFF",
+  preasignacion: "#E08A00",
+  asignado: "#6366F1",
   entregado: "#00A8B5",
   aprobado: "#1D6F42",
   rechazado: "#C0392B",
+  revocado: "#8B5CF6",
   anulado: "#6B7280",
+  subsanacion: "#FF4E00",
 };
 
 export function estadoEmpresa(estado: string): { label: string; color: string } {
