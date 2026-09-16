@@ -46,7 +46,9 @@ import {
   ESTADOS_TRAMITE,
   FILTRO_RECHAZADO_PREASIGNACION,
   estadoChipStyle,
+  estadoLabel,
   estadoLabelConOrigen,
+  esRechazadoDesdePreasignacion,
   type EstadoFiltro,
   type EstadoTramite,
 } from '@/lib/tramites/estados';
@@ -636,11 +638,13 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         { soatPagado, impuestoDepartamentalPagado: impuestoPagado },
         isAdmin ? processTarget.tenantId : undefined,
       );
-      // El trámite ya está en Entregado: la fila lo refleja sin recargar y las tarjetas se
-      // reajustan en la próxima carga.
+      // El trámite ya está en Entregado: la fila lo refleja al instante y acto seguido se recarga
+      // la página con sus contadores, para que salga del filtro «Asignado» si está activo y la
+      // tira de KPIs no se quede vieja (un «Entregado» dentro de «Asignado» confunde).
       setItems((prev) =>
         prev.map((it) => (it.id === processTarget.id ? { ...it, estado: 'entregado' } : it)),
       );
+      void load();
       if (res?.warningMessage) {
         setProcessWarning(res.warningMessage);
       } else {
@@ -2609,6 +2613,22 @@ function TramiteRow({
                 ayuda={ayudaIdentidad}
                 tipId={`identidad-ayuda-${item.id}`}
               />
+            ) : esRechazadoDesdePreasignacion(item.estado, item.rejectedFrom) ? (
+              /* ADR-0059 — el distintivo va en DOS líneas: el chip dice «Rechazado» (mismo ancho que
+                 cualquier otro estado, sin invadir la columna vecina) y el origen va debajo, en el
+                 mismo tono. El nombre accesible sigue siendo el completo. */
+              <span className="flex flex-col items-start gap-0.5">
+                <StatusBadge
+                  label={estadoLabel(item.estado)}
+                  ariaLabel={chip.label}
+                  bg={chip.bg}
+                  color={chip.color}
+                  border={chip.border}
+                />
+                <span className="text-[11px] font-medium leading-none" style={{ color: chip.color }}>
+                  desde Preasignación
+                </span>
+              </span>
             ) : (
               <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
             )}

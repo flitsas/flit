@@ -2298,7 +2298,7 @@ export function TramiteWizard(props: Props) {
               sino en Preasignación, a la espera de que el organismo asigne la placa. */}
           <p className="mt-4 text-xs opacity-70">
             {radicado?.estado === 'preasignacion'
-              ? 'El trámite quedó en Preasignación: el organismo de tránsito asignará la placa y luego podrás enviarlo al OT.'
+              ? 'El trámite quedó en Preasignación: el organismo de tránsito asignará la placa.'
               : 'El trámite fue validado y enviado correctamente al organismo de tránsito.'}
           </p>
           <button

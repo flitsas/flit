@@ -50,8 +50,8 @@ describe('catálogo de estados (ADR-0059)', () => {
     }
   });
 
-  it('AC1 — la ruta de placa hereda los tonos del antiguo badge secundario; revocado no se confunde con anulado', () => {
-    expect(ESTADO_CHIP_STYLES.preasignacion.accent).toBe('#06B6D4');
+  it('AC1 — preasignación ámbar (artefacto ADR-0059), asignado índigo; revocado no se confunde con anulado', () => {
+    expect(ESTADO_CHIP_STYLES.preasignacion.accent).toBe('#E08A00');
     expect(ESTADO_CHIP_STYLES.asignado.accent).toBe('#6366F1');
     expect(ESTADO_CHIP_STYLES.revocado.accent).not.toBe(ESTADO_CHIP_STYLES.anulado.accent);
     expect(ESTADOS_RUTA_PLACA).toEqual(['preasignacion', 'asignado']);

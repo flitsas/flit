@@ -104,10 +104,12 @@ export interface EstadoChipStyle {
  * la luminosidad, que es lo que corresponde cuando un color del prototipo no cumple contraste en
  * un uso concreto. `borrador` y `anulado` ya cumplen y se usan tal cual.
  *
- * ADR-0059: `preasignacion` (cian) y `asignado` (índigo) heredan los tonos que ya tenía el badge
- * secundario del sub-estado de placa, así el usuario no reaprende colores; `revocado` (violeta) se
- * separa de `anulado` (vino) porque son dos finales distintos: uno lo decide el gestor, el otro lo
- * deshace el organismo.
+ * ADR-0059: `preasignacion` es ámbar (#E08A00, el del artefacto de la epic: «falta algo del
+ * organismo», a medio camino entre el azul de lo que avanza y el rojo de lo que se devolvió);
+ * `asignado` es índigo (#6366F1), heredado del badge de placa asignada para que el usuario no
+ * reaprenda; `revocado` (violeta) se separa de `anulado` (vino) porque son dos finales distintos:
+ * uno lo decide el gestor, el otro lo deshace el organismo. Los mismos tonos valen para el
+ * organismo: sus tarjetas y chips leen de aquí.
  */
 export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
   borrador: {
@@ -123,10 +125,10 @@ export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
     accent: '#557EFF',
   },
   preasignacion: {
-    bg: 'rgba(6,182,212,0.14)',
-    color: '#0E7490',
-    border: 'rgba(6,182,212,0.35)',
-    accent: '#06B6D4',
+    bg: 'rgba(224,138,0,0.14)',
+    color: '#8A5400',
+    border: 'rgba(224,138,0,0.35)',
+    accent: '#E08A00',
   },
   asignado: {
     bg: 'rgba(99,102,241,0.14)',

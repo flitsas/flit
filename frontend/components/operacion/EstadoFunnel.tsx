@@ -96,7 +96,9 @@ export function EstadoFunnel({ counts, selected = '', onSelect }: EstadoFunnelPr
               height={28}
               className="h-7 w-7 shrink-0"
             />
-            <span className="max-w-full truncate text-xs font-medium opacity-70 text-[#162744] dark:text-white/70">
+            {/* Hasta dos líneas: «Rechazado preasignación» no cabe en una y truncarlo dejaba
+                «Rechazado pre…», que no se distingue de la tarjeta de al lado. */}
+            <span className="line-clamp-2 max-w-full text-center text-xs font-medium leading-tight opacity-70 text-[#162744] dark:text-white/70">
               {label}
             </span>
             <span
