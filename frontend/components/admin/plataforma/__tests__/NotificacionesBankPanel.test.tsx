@@ -17,6 +17,12 @@ vi.mock("@/lib/api/admin-plataforma-notificaciones", () => ({
   sendNotificationTest: (...a: unknown[]) => sendNotificationTest(...a),
 }));
 
+// HU #12431 AC2 — selector "Red con marca": listado reutilizado de admin-companies.
+const fetchCompaniesIndex = vi.fn();
+vi.mock("@/lib/api/admin-companies", () => ({
+  fetchCompaniesIndex: (...a: unknown[]) => fetchCompaniesIndex(...a),
+}));
+
 // Uso de ejemplo: <NotificacionesBankPanel /> carga plantillas + buzón y arma 10 filas
 // (9 plantillas del catálogo + Kyverum, informativa).
 
@@ -96,7 +102,9 @@ describe("NotificacionesBankPanel", { timeout: 15_000 }, () => {
     updateTestMailbox.mockReset();
     getNotificationSample.mockReset();
     sendNotificationTest.mockReset();
+    fetchCompaniesIndex.mockReset();
     getTestMailbox.mockResolvedValue(sampleMailboxConfigured);
+    fetchCompaniesIndex.mockResolvedValue({ data: [], totalCount: 0, page: 1, pageSize: 200 });
   });
 
   it("muestra el estado de carga mientras resuelven las plantillas", async () => {

@@ -25,6 +25,12 @@ export interface NotificacionVistaPreviaModalProps {
   channel?: NotificationTestChannel;
   /** Etiqueta corta para el título (p. ej. "FLIT" / "Renting"). */
   formatLabel?: string;
+  /**
+   * HU #12431 AC2 — red con marca elegida en el selector de la consola. Se agrega tal cual a
+   * `getNotificationSample`; sin valor, la petición y el render son IDÉNTICOS a como eran antes
+   * de esta HU (paridad).
+   */
+  tenantId?: string;
 }
 
 /**
@@ -37,6 +43,7 @@ export function NotificacionVistaPreviaModal({
   templateName,
   channel,
   formatLabel,
+  tenantId,
 }: NotificacionVistaPreviaModalProps) {
   const requiresType = isTramiteCambioEstadoTemplate(templateId);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -69,13 +76,14 @@ export function NotificacionVistaPreviaModal({
     getNotificationSample(templateId, {
       channel,
       procedureTypeId: requiresType ? typeId : undefined,
+      tenantId,
     })
       .then((data) => {
         setSample(data);
         setStatus(data.html.trim().length === 0 ? "empty" : "ready");
       })
       .catch(() => setStatus("error"));
-  }, [channel, requiresType, templateId, typeId]);
+  }, [channel, requiresType, templateId, typeId, tenantId]);
 
   useEffect(() => {
     if (!open) return;
@@ -89,14 +97,14 @@ export function NotificacionVistaPreviaModal({
       return;
     }
     setStatus("loading");
-    getNotificationSample(templateId, { channel })
+    getNotificationSample(templateId, { channel, tenantId })
       .then((data) => {
         setSample(data);
         setStatus(data.html.trim().length === 0 ? "empty" : "ready");
       })
       .catch(() => setStatus("error"));
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [open, templateId, channel, requiresType, loadCatalog]);
+  }, [open, templateId, channel, requiresType, loadCatalog, tenantId]);
 
   useEffect(() => {
     if (!open || !requiresType || !typeId) return;
@@ -148,6 +156,16 @@ export function NotificacionVistaPreviaModal({
                   <span className="font-semibold text-[#162244] dark:text-white">Asunto: </span>
                   {sample.subject}
                 </p>
+                {sample.theme && (
+                  <p
+                    className="text-[11px] text-[#59677D] dark:text-white/55"
+                    data-testid="notificaciones-vista-previa-theme"
+                  >
+                    <span className="font-semibold text-[#162244] dark:text-white">Tema: </span>
+                    {sample.theme.platformName}
+                    {sample.theme.senderName ? ` · Remitente: ${sample.theme.senderName}` : ""}
+                  </p>
+                )}
                 <p
                   role="note"
                   className="text-[11px] text-[#59677D] dark:text-white/45"

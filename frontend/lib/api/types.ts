@@ -690,3 +690,15 @@ export interface TenantDomainResponse {
   graceUntil: string | null;
   rowVersion: number;
 }
+
+// ── Tema de correo por red — HU #12431 (consumido por #12428) ──────────────
+// Campo aditivo `theme` de `NotificationTemplateSampleResponse`
+// (`contracts/openapi/core-api.v1.yaml`, ver `.claude/state/marca-blanca/diseno/contratos-api.md`).
+// `kind`: "brand" = tema de una red publicada; "flit" = sin red o sin marca (fallback);
+// "draft-partial" = borrador de la cabeza incompleto, completado con FLIT.
+export interface EmailThemeInfo {
+  kind: "flit" | "brand" | "draft-partial";
+  platformName: string;
+  version?: number;
+  senderName?: string;
+}

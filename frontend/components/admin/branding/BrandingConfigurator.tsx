@@ -373,6 +373,8 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
         platformName={draftName}
         colors={draftColors}
         logoUrl={draftLogoUrl}
+        source={source}
+        tenantId={tenantId}
       />
     </section>
   );
