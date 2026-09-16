@@ -101,6 +101,7 @@ builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHa
 
 // HU #12345 — cabeza de grupo (AdminCompany + is_group_parent en BD).
 builder.Services.AddScoped<IAuthorizationHandler, GroupHeadCompanyAuthorizationHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, MarcaBlancaHeadCompanyAuthorizationHandler>();
 
 // HU #12417 (Feature #12368, ADR-0060 D2) — DomainContext por petición (DomainContextMiddleware
 // más abajo puebla HttpContext.Items; este accessor lo expone a Application sin acoplarla a HTTP).

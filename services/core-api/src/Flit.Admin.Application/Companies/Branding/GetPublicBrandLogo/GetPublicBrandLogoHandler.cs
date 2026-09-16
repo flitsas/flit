@@ -1,6 +1,7 @@
 using Flit.Admin.Application.Banners.GetBannerImage;
 using Flit.Admin.Domain.Companies.Branding;
 using Flit.Admin.Domain.Companies.Create;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Admin.Application.Companies.Branding.GetPublicBrandLogo;
 
@@ -13,20 +14,23 @@ namespace Flit.Admin.Application.Companies.Branding.GetPublicBrandLogo;
 /// inmutable, ADR-0060 D2). Publicar una versión nueva cambia <c>logoId</c> ⇒ cambia la URL, así que
 /// la caché de la anterior nunca se reutiliza.
 /// </summary>
-public sealed class GetPublicBrandLogoHandler
+public sealed partial class GetPublicBrandLogoHandler
 {
     private readonly ITenantBrandingRepository _brandingRepository;
     private readonly IBrandingTenantLookup _tenantLookup;
     private readonly IBrandLogoStorage _storage;
+    private readonly ILogger<GetPublicBrandLogoHandler> _logger;
 
     public GetPublicBrandLogoHandler(
         ITenantBrandingRepository brandingRepository,
         IBrandingTenantLookup tenantLookup,
-        IBrandLogoStorage storage)
+        IBrandLogoStorage storage,
+        ILogger<GetPublicBrandLogoHandler> logger)
     {
         _brandingRepository = brandingRepository ?? throw new ArgumentNullException(nameof(brandingRepository));
         _tenantLookup = tenantLookup ?? throw new ArgumentNullException(nameof(tenantLookup));
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<GetPublicBrandLogoResult> HandleAsync(
@@ -53,7 +57,20 @@ public sealed class GetPublicBrandLogoHandler
             return GetPublicBrandLogoResult.NotModified(logo.StorageSha256);
         }
 
-        var stream = await _storage.OpenReadAsync(logo.StoragePath, cancellationToken).ConfigureAwait(false);
+        // HU #12429 AC5 — un fallo del storage (excepción de transporte, no solo "archivo
+        // ausente") NUNCA debe convertirse en un 500 del endpoint público: mismo respaldo
+        // "controlado" que ResolvePublicBrandingHandler aplica a un fallo de BD.
+        Stream? stream;
+        try
+        {
+            stream = await _storage.OpenReadAsync(logo.StoragePath, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogStorageOpenFailed(_logger, logo.TenantId, ex);
+            return GetPublicBrandLogoResult.NotFound();
+        }
+
         if (stream is null)
         {
             return GetPublicBrandLogoResult.NotFound();
@@ -65,4 +82,8 @@ public sealed class GetPublicBrandLogoHandler
 
     private static bool MatchesEtag(string ifNoneMatch, string currentEtag) =>
         ifNoneMatch.Split(',').Select(v => v.Trim()).Any(v => v == "*" || v == currentEtag);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Fallo al abrir el logotipo del tenant {TenantId} en el storage; se responde 404 controlado (HU #12429 AC5).")]
+    private static partial void LogStorageOpenFailed(ILogger logger, Guid tenantId, Exception ex);
 }

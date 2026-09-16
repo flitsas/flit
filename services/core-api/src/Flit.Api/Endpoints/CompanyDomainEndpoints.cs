@@ -13,7 +13,9 @@ namespace Flit.Api.Endpoints;
 /// cambiar o retirar el dominio es exclusivo del SuperAdmin (<see cref="AdminCompaniesDomainEndpoints"/>);
 /// aquí no hay <c>PUT</c>/<c>DELETE</c>. Sin <c>{tenantId}</c> en la ruta: el tenant sale del JWT
 /// (<see cref="RequestTenantResolver"/>), nunca de un header/param crudo — mismo patrón que
-/// <see cref="CompanyBrandingEndpoints"/>.
+/// <see cref="CompanyBrandingEndpoints"/>. La policy <see cref="AdminAuthorization.MarcaBlancaHeadCompanyPolicy"/>
+/// (HU #12429, endurecimiento del hecho 88) exige además clase MARCA_BLANCA: una Concesión con hijas
+/// no puede autogestionar dominio de red.
 /// </summary>
 public static class CompanyDomainEndpoints
 {
@@ -23,7 +25,7 @@ public static class CompanyDomainEndpoints
 
         var group = app
             .MapGroup("/api/v1/company/domain")
-            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
+            .RequireAuthorization(AdminAuthorization.MarcaBlancaHeadCompanyPolicy)
             .WithTags("Compañía · Dominio de la red");
 
         group.MapGet("", GetDomainAsync)

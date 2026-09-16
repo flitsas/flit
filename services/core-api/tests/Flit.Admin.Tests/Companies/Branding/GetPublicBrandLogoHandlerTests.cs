@@ -3,6 +3,7 @@ using Flit.Admin.Application.Companies.Branding.GetPublicBrandLogo;
 using Flit.Admin.Domain.Companies.Branding;
 using Flit.Admin.Domain.Companies.Create;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
 
@@ -10,7 +11,7 @@ namespace Flit.Admin.Tests.Companies.Branding;
 
 /// <summary>
 /// Uso de ejemplo:
-/// var handler = new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage);
+/// var handler = new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage, logger);
 /// var result = await handler.HandleAsync(logoId, ifNoneMatch: null, ct);
 /// HU #12418 AC4 — logotipo servido por dirección pública inmutable; 404 indistinguible.
 /// </summary>
@@ -29,7 +30,7 @@ public sealed class GetPublicBrandLogoHandlerTests
         var tenantLookup = Substitute.For<IBrandingTenantLookup>();
         var storage = Substitute.For<IBrandLogoStorage>();
 
-        var result = await new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage)
+        var result = await new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage, NullLogger<GetPublicBrandLogoHandler>.Instance)
             .HandleAsync(Guid.NewGuid(), ifNoneMatch: null, TestContext.Current.CancellationToken);
 
         result.Found.Should().BeFalse();
@@ -48,7 +49,7 @@ public sealed class GetPublicBrandLogoHandlerTests
             .Returns(new BrandingTenantSnapshot(tenantId, CompanyTenantTypes.Concesion, true, true, null));
         var storage = Substitute.For<IBrandLogoStorage>();
 
-        var result = await new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage)
+        var result = await new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage, NullLogger<GetPublicBrandLogoHandler>.Instance)
             .HandleAsync(logoId, ifNoneMatch: null, TestContext.Current.CancellationToken);
 
         result.Found.Should().BeFalse();
@@ -70,7 +71,7 @@ public sealed class GetPublicBrandLogoHandlerTests
         storage.OpenReadAsync("fm://brand-logo/x", Arg.Any<CancellationToken>())
             .Returns(new MemoryStream(PngBytes));
 
-        var result = await new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage)
+        var result = await new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage, NullLogger<GetPublicBrandLogoHandler>.Instance)
             .HandleAsync(logoId, ifNoneMatch: null, TestContext.Current.CancellationToken);
 
         result.Found.Should().BeTrue();
@@ -91,7 +92,7 @@ public sealed class GetPublicBrandLogoHandlerTests
             .Returns(new BrandingTenantSnapshot(tenantId, HeadTenantTypes.MarcaBlanca, true, true, null));
         var storage = Substitute.For<IBrandLogoStorage>();
 
-        var result = await new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage)
+        var result = await new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage, NullLogger<GetPublicBrandLogoHandler>.Instance)
             .HandleAsync(logoId, ifNoneMatch: $"\"{sha256}\"", TestContext.Current.CancellationToken);
 
         result.Found.Should().BeTrue();
@@ -112,7 +113,29 @@ public sealed class GetPublicBrandLogoHandlerTests
         var storage = Substitute.For<IBrandLogoStorage>();
         storage.OpenReadAsync("fm://brand-logo/x", Arg.Any<CancellationToken>()).Returns((Stream?)null);
 
-        var result = await new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage)
+        var result = await new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage, NullLogger<GetPublicBrandLogoHandler>.Instance)
+            .HandleAsync(logoId, ifNoneMatch: null, TestContext.Current.CancellationToken);
+
+        result.Found.Should().BeFalse();
+    }
+
+    // HU #12429 AC5 — fallo simulado del storage (excepción, no solo "no encontrado"): el logotipo
+    // responde 404 controlado, nunca 500. Endurecimiento del handler hecho en la misma HU.
+    [Fact]
+    public async Task AC5_StorageLanzaExcepcion_Responde404SinPropagar()
+    {
+        var logoId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var brandingRepo = Substitute.For<ITenantBrandingRepository>();
+        brandingRepo.GetLogoVersionByIdAsync(logoId, Arg.Any<CancellationToken>()).Returns(NewLogo(logoId, tenantId));
+        var tenantLookup = Substitute.For<IBrandingTenantLookup>();
+        tenantLookup.GetAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns(new BrandingTenantSnapshot(tenantId, HeadTenantTypes.MarcaBlanca, true, true, null));
+        var storage = Substitute.For<IBrandLogoStorage>();
+        storage.OpenReadAsync("fm://brand-logo/x", Arg.Any<CancellationToken>())
+            .Returns<Stream?>(_ => throw new InvalidOperationException("caída simulada del storage"));
+
+        var result = await new GetPublicBrandLogoHandler(brandingRepo, tenantLookup, storage, NullLogger<GetPublicBrandLogoHandler>.Instance)
             .HandleAsync(logoId, ifNoneMatch: null, TestContext.Current.CancellationToken);
 
         result.Found.Should().BeFalse();

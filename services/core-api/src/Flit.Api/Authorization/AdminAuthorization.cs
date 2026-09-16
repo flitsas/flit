@@ -8,6 +8,14 @@ public static class AdminAuthorization
     /// <summary>Nombre de la policy que exige rol SuperAdmin.</summary>
     public const string SuperAdminPolicy = "SuperAdmin";
 
+    /// <summary>
+    /// HU #12429 — como <see cref="GroupHeadCompanyPolicy"/>, pero exige además que la clase de la
+    /// cabeza sea MARCA_BLANCA. Exclusiva de <c>/company/branding*</c> y <c>/company/domain*</c>: una
+    /// Concesión con hijas sigue usando <see cref="GroupHeadCompanyPolicy"/> para sus rutas de
+    /// jerarquía (#12345), pero no puede autogestionar marca ni dominio.
+    /// </summary>
+    public const string MarcaBlancaHeadCompanyPolicy = "MarcaBlancaHeadCompany";
+
     /// <summary>Valor del claim de rol que concede acceso multi-tenant.</summary>
     public const string SuperAdminRole = "SuperAdmin";
 

@@ -111,6 +111,9 @@ public static class ApiSecurityExtensions
             .AddPolicy(AdminAuthorization.GroupHeadCompanyPolicy, policy => policy
                 .RequireAuthenticatedUser()
                 .AddRequirements(new GroupHeadCompanyRequirement()))
+            .AddPolicy(AdminAuthorization.MarcaBlancaHeadCompanyPolicy, policy => policy
+                .RequireAuthenticatedUser()
+                .AddRequirements(new MarcaBlancaHeadCompanyRequirement()))
             .AddPolicy(AdminAuthorization.OtAdminPolicy, policy => policy
                 .RequireAuthenticatedUser()
                 .RequireRole(AdminAuthorization.OtAdminRole))

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Flit.Api.Authorization;
 using Flit.Modules.Security.Application.Auth.ActivateAccount;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
@@ -368,9 +369,14 @@ public static class AuthEndpoints
     private sealed record MessageResponse(string Message);
 
     // HU #12422 AC1/AC7 (ADR-0060 D3) — "Network" es aditivo y opcional: solo viene con valor
-    // cuando el login se hizo por el dominio de una red MARCA_BLANCA.
+    // cuando el login se hizo por el dominio de una red MARCA_BLANCA. HU #12429 AC1 — sin red,
+    // la propiedad se OMITE del JSON (no viaja como "network":null): una respuesta de login sin
+    // red debe seguir siendo byte a byte la de antes de la épica, con exactamente 3 claves.
     private sealed record LoginResponse(
-        string AccessToken, int ExpiresInSeconds, string TokenType, NetworkInfoResponse? Network = null);
+        string AccessToken,
+        int ExpiresInSeconds,
+        string TokenType,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] NetworkInfoResponse? Network = null);
 
     private sealed record NetworkInfoResponse(string Host);
 

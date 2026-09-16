@@ -20,10 +20,11 @@ namespace Flit.Api.Endpoints;
 /// Autogestión de la marca por la propia cabeza de grupo (HU #12412 AC3/AC4, Feature #12366).
 /// Contrato: <c>.claude/state/marca-blanca/diseno/contratos-api.md</c> §4. Sin <c>{tenantId}</c> en la
 /// ruta: el tenant sale del JWT (<see cref="RequestTenantResolver"/>), nunca de un header/param
-/// crudo. La policy <see cref="AdminAuthorization.GroupHeadCompanyPolicy"/> ya exige
-/// <c>is_group_parent = true</c> sobre el tenant del caller (HU #12345 AC4) — un hijo o una compañía
-/// sin red no la superan (403 uniforme, sin revelar nada, AC3). No existe
-/// <c>POST /company/branding/retire</c>: retirar es exclusivo del SuperAdmin.
+/// crudo. La policy <see cref="AdminAuthorization.MarcaBlancaHeadCompanyPolicy"/> (HU #12429,
+/// endurecimiento del hecho 88) exige <c>is_group_parent = true</c> Y clase MARCA_BLANCA sobre el
+/// tenant del caller — un hijo, una compañía sin red o una Concesión con hijas no la superan (403
+/// uniforme, sin revelar nada, AC3). No existe <c>POST /company/branding/retire</c>: retirar es
+/// exclusivo del SuperAdmin.
 /// </summary>
 public static class CompanyBrandingEndpoints
 {
@@ -33,7 +34,7 @@ public static class CompanyBrandingEndpoints
 
         var group = app
             .MapGroup("/api/v1/company/branding")
-            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
+            .RequireAuthorization(AdminAuthorization.MarcaBlancaHeadCompanyPolicy)
             .WithTags("Compañía · Identidad de marca");
 
         group.MapGet("", GetBrandingAsync)
