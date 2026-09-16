@@ -11,21 +11,13 @@ vi.mock("@/lib/api/security", async (orig) => ({
 }));
 
 vi.mock("@/lib/api/admin-companies", () => ({
-  fetchCompaniesIndex: vi.fn().mockResolvedValue({
-    data: [{ id: "company-1", razonSocial: "Compañía Demo" }],
-    totalCount: 1,
-    page: 1,
-    pageSize: 200,
-  }),
+  fetchAllCompanies: vi.fn().mockResolvedValue([{ id: "company-1", razonSocial: "Compañía Demo" }]),
 }));
 
 vi.mock("@/lib/api/admin-transit-office-tenants", () => ({
-  fetchTransitOfficeTenants: vi.fn().mockResolvedValue({
-    data: [{ id: "ot-tenant-1", legalName: "Secretaría Demo", transitOfficeCode: "OT-DEMO" }],
-    totalCount: 1,
-    page: 1,
-    pageSize: 200,
-  }),
+  fetchAllTransitOfficeTenants: vi.fn().mockResolvedValue([
+    { id: "ot-tenant-1", legalName: "Secretaría Demo", transitOfficeCode: "OT-DEMO" },
+  ]),
 }));
 
 const listRoles = vi.fn();

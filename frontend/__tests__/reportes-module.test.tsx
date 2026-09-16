@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   fetchOtMetrics: vi.fn(),
   fetchFunnel: vi.fn(),
   fetchUsageMetrics: vi.fn(),
-  fetchCompaniesIndex: vi.fn(),
+  fetchAllCompanies: vi.fn(),
   usePermissions: vi.fn(),
 }));
 
@@ -39,7 +39,7 @@ vi.mock("@/lib/api/analytics-v2", async (importOriginal) => {
     fetchUsageMetrics: mocks.fetchUsageMetrics,
   };
 });
-vi.mock("@/lib/api/admin-companies", () => ({ fetchCompaniesIndex: mocks.fetchCompaniesIndex }));
+vi.mock("@/lib/api/admin-companies", () => ({ fetchAllCompanies: mocks.fetchAllCompanies }));
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: mocks.usePermissions }));
 
 import { Reportes } from "@/components/atom/modules/Reportes";
@@ -113,7 +113,7 @@ beforeEach(() => {
   mocks.fetchAnalyticsOverview.mockResolvedValue(FULL);
   mocks.fetchMonthlyTrend.mockResolvedValue({ items: [] });
   mocks.fetchLiveOverview.mockResolvedValue(LIVE);
-  mocks.fetchCompaniesIndex.mockResolvedValue({ data: [COMPANY], totalCount: 1, page: 1, pageSize: 100 });
+  mocks.fetchAllCompanies.mockResolvedValue([COMPANY]);
 });
 
 describe("Reportes — AC3 estados de UI (UiStateBoundary)", () => {
@@ -202,7 +202,7 @@ describe("Reportes — AC1 acceso por rol", () => {
 
     await screen.findByText("Total trámites");
     expect(screen.queryByLabelText("Compañía")).not.toBeInTheDocument();
-    expect(mocks.fetchCompaniesIndex).not.toHaveBeenCalled();
+    expect(mocks.fetchAllCompanies).not.toHaveBeenCalled();
   });
 
   it("SuperAdmin: ve el selector con sus compañías y filtra por tenantId", async () => {

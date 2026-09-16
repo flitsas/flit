@@ -13,7 +13,7 @@ import userEvent from "@testing-library/user-event";
 const mocks = vi.hoisted(() => ({
   fetchStandaloneDocuments: vi.fn(),
   requestStandaloneDocumentDownload: vi.fn(),
-  fetchCompaniesIndex: vi.fn(),
+  fetchAllCompanies: vi.fn(),
   isSuperAdmin: vi.fn(),
   push: vi.fn(),
 }));
@@ -23,7 +23,7 @@ vi.mock("@/lib/api/admin-generacion-documental", () => ({
   requestStandaloneDocumentDownload: mocks.requestStandaloneDocumentDownload,
 }));
 vi.mock("@/lib/api/admin-companies", () => ({
-  fetchCompaniesIndex: mocks.fetchCompaniesIndex,
+  fetchAllCompanies: mocks.fetchAllCompanies,
 }));
 vi.mock("@/lib/auth/jwt", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/jwt")>()),
@@ -44,15 +44,10 @@ const item = {
   createdAt: "2026-09-01T14:30:00.000Z",
 };
 
-const COMPANIAS = {
-  data: [
-    { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", razonSocial: "Renting Demo S.A.S." },
-    { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", razonSocial: "Transportes Acme S.A.S." },
-  ],
-  totalCount: 2,
-  page: 1,
-  pageSize: 200,
-};
+const COMPANIAS = [
+  { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", razonSocial: "Renting Demo S.A.S." },
+  { id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", razonSocial: "Transportes Acme S.A.S." },
+];
 
 /** Última llamada al listado: es la que refleja el filtro recién aplicado. */
 function ultimaConsulta(): Record<string, unknown> {
@@ -68,7 +63,7 @@ beforeEach(() => {
     pageSize: 20,
     total: 1,
   });
-  mocks.fetchCompaniesIndex.mockResolvedValue(COMPANIAS);
+  mocks.fetchAllCompanies.mockResolvedValue(COMPANIAS);
 });
 
 describe("Historial — el selector de compañía es exclusivo del SuperAdmin", () => {
@@ -80,7 +75,7 @@ describe("Historial — el selector de compañía es exclusivo del SuperAdmin", 
 
     expect(screen.queryByTestId("historial-filtro-compania")).not.toBeInTheDocument();
     // No está oculto ni deshabilitado: no existe. Y no se gasta una consulta que no se usaría.
-    expect(mocks.fetchCompaniesIndex).not.toHaveBeenCalled();
+    expect(mocks.fetchAllCompanies).not.toHaveBeenCalled();
   });
 
   it("el SuperAdmin ve «Mi compañía», «Todas las compañías» y las compañías cargadas", async () => {
@@ -88,7 +83,7 @@ describe("Historial — el selector de compañía es exclusivo del SuperAdmin", 
     render(<HistorialSection />);
 
     const selector = await screen.findByTestId("historial-filtro-compania");
-    await waitFor(() => expect(mocks.fetchCompaniesIndex).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.fetchAllCompanies).toHaveBeenCalled());
 
     await waitFor(() =>
       expect(screen.getByRole("option", { name: "Transportes Acme S.A.S." })).toBeInTheDocument(),
@@ -143,7 +138,7 @@ describe("Historial — qué viaja en la consulta según el universo elegido", (
 describe("Historial — si la carga de compañías falla, la pantalla sigue sirviendo", () => {
   it("conserva las dos opciones que no dependen de ese listado", async () => {
     mocks.isSuperAdmin.mockReturnValue(true);
-    mocks.fetchCompaniesIndex.mockRejectedValue(new Error("500"));
+    mocks.fetchAllCompanies.mockRejectedValue(new Error("500"));
 
     render(<HistorialSection />);
 
