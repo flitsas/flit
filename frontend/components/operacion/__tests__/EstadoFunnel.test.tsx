@@ -11,9 +11,10 @@ const counts = {
   rechazado: 1,
   anulado: 0,
   subsanacion: 4,
-  preasignacion: 0,
-  asignado: 0,
+  preasignacion: 6,
+  asignado: 2,
   revocado: 0,
+  rechazado_preasignacion: 1,
 };
 
 describe('EstadoFunnel', () => {
@@ -21,20 +22,36 @@ describe('EstadoFunnel', () => {
     render(<EstadoFunnel counts={counts} />);
     expect(screen.getByLabelText('Borrador: 5 trámites')).toBeInTheDocument();
     expect(screen.getByLabelText('Aprobado: 7 trámites')).toBeInTheDocument();
+    // ADR-0059 (HU #12601 AC3) — la ruta de placa, Revocado y «Rechazado preasignación» tienen tarjeta.
     for (const label of [
       'Borrador',
       'Preparado',
+      'Preasignación',
+      'Asignado',
       'Entregado',
       'Aprobado',
       'En subsanación',
       'Rechazado',
+      'Rechazado preasignación',
+      'Revocado',
       'Anulado',
     ]) {
       expect(screen.getByLabelText(new RegExp(`^${label}:`))).toBeInTheDocument();
     }
     expect(screen.getByLabelText('En subsanación: 4 trámites')).toBeInTheDocument();
-    expect(screen.queryByLabelText(/^Preasignado:/)).toBeNull();
-    expect(screen.queryByLabelText(/^Asignado:/)).toBeNull();
+    expect(screen.getByLabelText('Preasignación: 6 trámites')).toBeInTheDocument();
+    expect(screen.getByLabelText('Rechazado preasignación: 1 trámite')).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(11);
+  });
+
+  it('«Rechazado preasignación» filtra con el pseudo-estado y sin conteo pinta cero', async () => {
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    const sinPseudo = { ...counts, rechazado_preasignacion: undefined };
+    render(<EstadoFunnel counts={sinPseudo} selected="" onSelect={onSelect} />);
+
+    await user.click(screen.getByRole('button', { name: 'Rechazado preasignación: 0 trámites' }));
+    expect(onSelect).toHaveBeenCalledWith('rechazado_preasignacion');
   });
 
   it('singulariza el nombre accesible cuando hay un solo trámite', () => {

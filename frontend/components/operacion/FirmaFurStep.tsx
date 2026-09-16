@@ -306,6 +306,8 @@ export function FirmaFurStep({
     fieldValues: FieldValue[];
     actors: Actor[];
     status: InstanceStatus;
+    /** ADR-0059 — origen del último rechazo para el chip del resumen. */
+    rejectedFrom: string | null;
     statusHistory: StatusHistory[];
   } | null>(null);
   /** Contacto completo (teléfono/dirección/ciudad) desde GET actors — el detalle de instancia no lo trae. */
@@ -355,6 +357,7 @@ export function FirmaFurStep({
         fieldValues: d.fieldValues ?? [],
         actors: d.actors ?? [],
         status: d.status,
+        rejectedFrom: d.rejectedFrom ?? null,
         statusHistory: d.statusHistory ?? [],
       });
       setActorsContact(actors);
@@ -703,6 +706,7 @@ export function FirmaFurStep({
         partesBiometricas={partesBiometricas}
         rotulosPorRol={rotulosPorRol}
         status={detail?.status ?? 'borrador'}
+        rejectedFrom={detail?.rejectedFrom ?? null}
         placa={fv('plate')}
         vehiculo={[fv('vehicle_brand'), fv('vehicle_line'), fv('vehicle_year')]
           .filter(Boolean)

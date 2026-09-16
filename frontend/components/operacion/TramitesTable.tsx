@@ -44,8 +44,10 @@ import {
 } from './TramitesFiltrosBar';
 import {
   ESTADOS_TRAMITE,
+  FILTRO_RECHAZADO_PREASIGNACION,
   estadoChipStyle,
-  estadoLabel,
+  estadoLabelConOrigen,
+  type EstadoFiltro,
   type EstadoTramite,
 } from '@/lib/tramites/estados';
 import {
@@ -117,17 +119,6 @@ import { IdentidadParteTrackingModal } from './IdentidadParteTrackingModal';
 const SERVER_LIST_TAKE = 200;
 
 /**
- * Texto corto y discreto del sub-estado de placa (debajo del chip de estado). Exportada porque
- * `TramiteDetalleModal` reutiliza el mismo texto en su banner contextual — no se duplica.
- */
-export function plateFlowHint(status: string | null | undefined): string | null {
-  if (status === 'asignado') return 'Placa asignada por el OT';
-  if (status === 'preasignado') return 'Esperando placa del OT';
-  if (status === 'terminado') return 'Listo para el OT';
-  return null;
-}
-
-/**
  * Track A — vista completa del listado de "Trámites en curso": toolbar de
  * filtros (búsqueda + modalidad + estado) + tabla. Lista las instancias del
  * tenant (GET /instances) y filtra client-side sobre el array (máx ~200 del
@@ -136,13 +127,20 @@ export function plateFlowHint(status: string | null | undefined): string | null 
  * Actualizar y cada vez que cambia `refreshKey`.
  */
 
-// N 03 (RF01) — chip de estado con los 6 estados de negocio en español; labels/colores
-// desde la fuente única lib/tramites/estados.ts (fallback titlecase para valores desconocidos).
+// N 03 (RF01) — chip de estado de negocio en español; labels/colores desde la fuente única
+// lib/tramites/estados.ts (fallback titlecase para valores desconocidos). ADR-0059: un rechazo
+// desde la cola de placa se distingue en el label («Rechazado preasignación») sin cambiar el color.
 const estadoChip = (
   estado: InstanceStatus,
+  rejectedFrom: string | null | undefined,
 ): { label: string; bg: string; color: string; border: string } => {
   const style = estadoChipStyle(estado);
-  return { label: estadoLabel(estado), bg: style.bg, color: style.color, border: style.border };
+  return {
+    label: estadoLabelConOrigen(estado, rejectedFrom),
+    bg: style.bg,
+    color: style.color,
+    border: style.border,
+  };
 };
 
 type Chip = { label: string; bg: string; color: string; border: string };
@@ -359,7 +357,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   // aparte del filtro `modalidad` del listado: son cosas distintas (crear vs filtrar).
   // ADR-0050 — el campo `modalidad` de la fila transporta ya la FAMILIA del tipo.
   const [modalidad, setModalidad] = useState<'' | ProcedureFamily>('');
-  const [estado, setEstado] = useState<'' | InstanceStatus>('');
+  // ADR-0059 — además de los estados reales, la tira ofrece «Rechazado preasignación», un
+  // pseudo-estado que el servidor traduce a rechazado + rejectedFrom = preasignacion.
+  const [estado, setEstado] = useState<'' | EstadoFiltro>('');
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
   // HU #10536 — filtro "solo prioritarios".
   const [soloPrioritarios, setSoloPrioritarios] = useState(false);
@@ -605,7 +605,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     };
   }, []);
 
-  /** Modal Procesar (Asignado → Terminado) desde la tabla. */
+  /** Modal «Enviar al OT» (ADR-0059: asignado → entregado) desde la tabla. */
   const [processTarget, setProcessTarget] = useState<InstanceSummary | null>(null);
   const [soatPagado, setSoatPagado] = useState(false);
   const [impuestoPagado, setImpuestoPagado] = useState(false);
@@ -631,15 +631,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     setProcessError(null);
     setProcessWarning(null);
     try {
-      const res = await tramitesClient.completePlateFlow(
+      const res = await tramitesClient.enviarAlOt(
         processTarget.id,
         { soatPagado, impuestoDepartamentalPagado: impuestoPagado },
         isAdmin ? processTarget.tenantId : undefined,
       );
+      // El trámite ya está en Entregado: la fila lo refleja sin recargar y las tarjetas se
+      // reajustan en la próxima carga.
       setItems((prev) =>
-        prev.map((it) =>
-          it.id === processTarget.id ? { ...it, plateFlowStatus: 'terminado' } : it,
-        ),
+        prev.map((it) => (it.id === processTarget.id ? { ...it, estado: 'entregado' } : it)),
       );
       if (res?.warningMessage) {
         setProcessWarning(res.warningMessage);
@@ -647,7 +647,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         setProcessTarget(null);
       }
     } catch (err) {
-      setProcessError(err instanceof Error ? err.message : 'No se pudo marcar como Terminado.');
+      setProcessError(err instanceof Error ? err.message : 'No se pudo enviar el trámite al OT.');
     } finally {
       setProcessActing(false);
     }
@@ -769,9 +769,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    * tarjetas sigan diciendo a dónde puede moverse el gestor después de elegir una.
    */
   const estadoCountsMostrados = useMemo(() => {
-    // Se construye desde el catálogo: un estado nuevo (ADR-0059 añadió tres) entra aquí solo.
-    const c = {} as Record<EstadoTramite, number>;
+    // Se construye desde el catálogo: un estado nuevo (ADR-0059 añadió tres) entra aquí solo. El
+    // pseudo-estado «rechazado desde preasignación» lo cuenta el servidor aparte (subconjunto de
+    // rechazado) y se pinta como una tarjeta más.
+    const c = {} as Record<EstadoFiltro, number>;
     for (const key of ESTADOS_TRAMITE) c[key] = estadoCounts[key] ?? 0;
+    c[FILTRO_RECHAZADO_PREASIGNACION] = estadoCounts[FILTRO_RECHAZADO_PREASIGNACION] ?? 0;
     return c;
   }, [estadoCounts]);
 
@@ -910,7 +913,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     setModalidad(v);
     setPage(1);
   };
-  const handleEstadoChange = (v: '' | InstanceStatus) => {
+  const handleEstadoChange = (v: '' | EstadoFiltro) => {
     setEstado(v);
     setPage(1);
   };
@@ -1514,15 +1517,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="procesar-plate-title" className="text-lg font-semibold" style={{ color: '#162744' }}>
-              Procesar trámite
+              Enviar al organismo de tránsito
             </h2>
             <p className="mt-1 text-sm opacity-80">
               {processTarget.referenceNumber}
               {processTarget.placa ? ` · ${processTarget.placa}` : ''}
             </p>
             <p className="mt-2 text-xs opacity-70">
-              El OT ya asignó la placa. Marca los checks opcionales si aplican y pasa a Terminado
-              para que el OT pueda aprobar o rechazar.
+              El OT ya asignó la placa. Marca los checks opcionales si aplican y envía el trámite
+              al organismo para que pueda aprobar o rechazar.
             </p>
             <div className="mt-4 space-y-2">
               <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -1547,7 +1550,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               </label>
             </div>
             {processError ? (
-              <InlineAlert tone="warning" title="No se pudo procesar el trámite" className="mt-4">
+              <InlineAlert tone="warning" title="No se pudo enviar el trámite" className="mt-4">
                 {processError}
               </InlineAlert>
             ) : null}
@@ -1583,7 +1586,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                     disabled={processActing}
                     onClick={() => void confirmProcesar()}
                   >
-                    {processActing ? 'Procesando…' : 'Marcar como Terminado'}
+                    {processActing ? 'Enviando…' : 'Enviar al OT'}
                   </button>
                 </>
               )}
@@ -2225,7 +2228,7 @@ function TramiteRow({
   // firma"/"Listo para radicar"); el resto usa el chip base de estado. `ready` promueve la acción a
   // "Radicar" cuando la identidad ya quedó aprobada y los gates están listos.
   const async = asyncStatus(item);
-  const chip = async?.chip ?? estadoChip(item.estado);
+  const chip = async?.chip ?? estadoChip(item.estado, item.rejectedFrom);
   // HU #11668 — solo los chips derivados de la identidad llevan ayuda; el chip base de estado
   // (radicado, entregado…) no habla de acreditación y no debe crecerle un tooltip.
   const ayudaIdentidad = async?.ayuda ?? null;
@@ -2245,9 +2248,8 @@ function TramiteRow({
         ? 'Continuar'
         : 'Ver';
   const actionIcon = consultaMode ? Eye : async?.ready ? FileCheck : abreAsistente ? Play : Eye;
-  const plateHint = plateFlowHint(item.plateFlowStatus);
-  const puedeProcesar =
-    !consultaMode && item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
+  // ADR-0059 — «Enviar al OT» solo en asignado: la placa ya está y la pelota es del gestor.
+  const puedeEnviarAlOt = !consultaMode && item.estado === 'asignado';
   // HU #12163 — acciones avanzadas del administrador (Cambiar estado, Anular, Consolidado,
   // Reenviar validación, Reasignar gestor), gateadas por permiso (AC1) y por estado (AC2).
   const { items: adminActionItems, modals: adminActionModals } = useAdminTramiteAcciones({
@@ -2275,11 +2277,11 @@ function TramiteRow({
           },
         ]
       : []),
-    ...(puedeProcesar
+    ...(puedeEnviarAlOt
       ? [
           {
-            key: 'procesar',
-            label: 'Procesar',
+            key: 'enviar-al-ot',
+            label: 'Enviar al OT',
             icon: CheckCircle2,
             attention: true,
             onSelect: () => onProcesar(item),
@@ -2703,14 +2705,6 @@ function TramiteRow({
             Pausado
           </span>
         ) : null}
-        {plateHint ? (
-          <span
-            className="text-xs leading-tight text-[#162744]/45 dark:text-white/40 truncate"
-            title={plateHint}
-          >
-            {plateHint}
-          </span>
-        ) : null}
       </span>
     ),
     fechaCreacion: (
@@ -2900,8 +2894,8 @@ function TramiteRow({
           ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
           items={actionItems}
           className="bg-white dark:bg-[#162744]"
-          attention={puedeProcesar}
-          attentionHint="Pendiente por procesar: el OT ya asignó la placa"
+          attention={puedeEnviarAlOt}
+          attentionHint="Pendiente por enviar al OT: la placa ya está asignada"
         />
       </td>
       {/* ICT — confirmación FLIT (Modal con blur/overlay/CTA degradado) al continuar un trámite

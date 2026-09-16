@@ -234,9 +234,9 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
 }
 
 /// <summary>
-/// Conteo por estado para la tira de KPIs del listado. Devuelve SIEMPRE las siete claves del
-/// vocabulario —con cero donde no hay filas— para que la tira pinte las siete tarjetas sin que el
-/// cliente tenga que rellenar huecos.
+/// Conteo por estado para la tira de KPIs del listado. Devuelve SIEMPRE todas las claves del
+/// vocabulario (más el pseudo-estado «rechazado desde preasignación», ADR-0059) —con cero donde no
+/// hay filas— para que la tira pinte sus tarjetas sin que el cliente tenga que rellenar huecos.
 /// </summary>
 public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRepository repo)
 {
@@ -280,6 +280,9 @@ public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRep
         foreach (var estado in TramiteEstado.Todos)
             resultado[estado] = conteos.GetValueOrDefault(estado);
         resultado[TramiteEstado.Subsanacion] = conteos.GetValueOrDefault(TramiteEstado.Subsanacion);
+        // ADR-0059 — subconjunto de rechazado que el gestor prioriza; también con cero cuando no hay.
+        resultado[TramiteEstado.FiltroRechazadoPreasignacion] =
+            conteos.GetValueOrDefault(TramiteEstado.FiltroRechazadoPreasignacion);
 
         return resultado;
     }

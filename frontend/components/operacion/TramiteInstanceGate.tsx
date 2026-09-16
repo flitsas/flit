@@ -39,7 +39,7 @@ function resumenDesdeDetalle(detail: NetworkInstanceDetail): InstanceSummary {
     referenceNumber: detail.referenceNumber,
     modalidad: 'OTROS',
     estado: detail.status,
-    plateFlowStatus: detail.plateFlowStatus ?? null,
+    rejectedFrom: detail.rejectedFrom ?? null,
     placa: null,
     vin: null,
     vehiculoMarca: null,

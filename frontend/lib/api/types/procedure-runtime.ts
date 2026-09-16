@@ -129,12 +129,12 @@ export interface ProcedureInstanceSummary {
 }
 
 /**
- * Respuesta de POST /instances/{id}/plate-flow/complete. El trámite avanzó a Terminado, pero puede
- * hacerlo con salvedades: p. ej. la compañía permite continuar sin SOAT vigente
+ * Respuesta de POST /instances/{id}/enviar-al-ot (ADR-0059). El trámite pasó a Entregado, pero
+ * puede hacerlo con salvedades: p. ej. la compañía permite continuar sin SOAT vigente
  * (`warningCode = 'soat_no_vigente_advertencia'`). La UI debe mostrar `warningMessage` aunque la
  * llamada haya sido exitosa.
  */
-export interface CompletePlateFlowResult {
+export interface EnviarAlOtResult {
   instance: ProcedureInstanceSummary | null;
   warningCode: string | null;
   warningMessage: string | null;

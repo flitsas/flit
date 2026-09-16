@@ -65,6 +65,16 @@ export const RECHAZADO_PREASIGNACION_LABEL = 'Rechazado preasignación';
 /** Valor de `rejectedFrom` que activa el distintivo. */
 export const REJECTED_FROM_PREASIGNACION = 'preasignacion';
 
+/**
+ * Pseudo-estado de FILTRO (no es un estado del trámite): «rechazado desde preasignación». El
+ * servidor lo acepta en `estado=` y lo traduce a rechazado + rejectedFrom = preasignacion, y lo
+ * cuenta aparte en `/instances/estado-counts`. Así la tira de KPIs lo ofrece como una tarjeta más.
+ */
+export const FILTRO_RECHAZADO_PREASIGNACION = 'rechazado_preasignacion';
+
+/** Lo que el filtro de estado del gestor puede valer: un estado real o el pseudo-estado de arriba. */
+export type EstadoFiltro = EstadoTramite | typeof FILTRO_RECHAZADO_PREASIGNACION;
+
 export interface EstadoChipStyle {
   bg: string;
   /** Color del TEXTO del chip. Cumple ≥4.5:1 sobre `bg`: es texto pequeño. */

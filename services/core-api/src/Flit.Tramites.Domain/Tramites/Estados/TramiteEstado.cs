@@ -48,6 +48,13 @@ public static class TramiteEstado
     /// </summary>
     public const string Subsanacion = "subsanacion";
 
+    /// <summary>
+    /// ADR-0059 — pseudo-estado de FILTRO (no es un estado del trámite ni entra en <see cref="Todos"/>):
+    /// «rechazado desde preasignación» = <see cref="Rechazado"/> con <c>rejected_from = preasignacion</c>.
+    /// El gestor lo pide como una tarjeta más del listado para priorizar esos rechazos.
+    /// </summary>
+    public const string FiltroRechazadoPreasignacion = "rechazado_preasignacion";
+
     /// <summary>Todos los estados válidos (para validación de entrada y checks DDL).</summary>
     public static readonly IReadOnlyList<string> Todos =
         [Borrador, Anulado, Preparado, Preasignacion, Asignado, Entregado, Aprobado, Rechazado, Revocado];

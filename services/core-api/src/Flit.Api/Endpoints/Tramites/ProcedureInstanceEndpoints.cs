@@ -1232,7 +1232,9 @@ internal static class ProcedureInstanceEndpoints
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(e => e.ToLowerInvariant())
             .Where(e => TramiteEstado.EsValido(e)
-                || string.Equals(e, TramiteEstado.Subsanacion, StringComparison.Ordinal))
+                || string.Equals(e, TramiteEstado.Subsanacion, StringComparison.Ordinal)
+                // ADR-0059 — pseudo-estado de filtro «rechazado desde preasignación».
+                || string.Equals(e, TramiteEstado.FiltroRechazadoPreasignacion, StringComparison.Ordinal))
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
