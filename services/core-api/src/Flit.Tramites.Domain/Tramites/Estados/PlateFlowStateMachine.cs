@@ -1,6 +1,9 @@
 namespace Flit.Tramites.Domain.Tramites.Estados;
 
 /// <summary>
+/// LEGACY (ADR-0059, Epic #12549) — sustituida por las aristas de placa de <see cref="TramiteStateMachine"/>
+/// y <see cref="TramiteTransitionPolicy"/>. Se retira en la HU #12603. No añadir usos nuevos.
+/// <para>
 /// Máquina del sub-estado INTERNO de placa. Pura. Opera sobre <see cref="PlateFlowStatus"/> de forma
 /// ortogonal a <see cref="TramiteStateMachine"/>. <c>null</c> = sin ruta de placa.
 /// <code>
@@ -10,6 +13,7 @@ namespace Flit.Tramites.Domain.Tramites.Estados;
 /// asignado --[OT revoca]--> preasignado
 /// terminado|asignado|preasignado --[OT aprueba/rechaza]--> null
 /// </code>
+/// </para>
 /// </summary>
 public static class PlateFlowStateMachine
 {

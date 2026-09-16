@@ -1,9 +1,15 @@
 namespace Flit.Tramites.Domain.Tramites.Estados;
 
 /// <summary>
+/// LEGACY (ADR-0059, Epic #12549) — el sub-estado de placa se PROMUEVE a estados de negocio reales
+/// (<see cref="TramiteEstado.Preasignacion"/>, <see cref="TramiteEstado.Asignado"/>; <c>terminado</c>
+/// pasa a ser <see cref="TramiteEstado.Entregado"/>). Este tipo se conserva solo mientras se migra la
+/// columna y se retira en la HU #12603. No añadir lecturas nuevas.
+/// <para>
 /// Sub-estado INTERNO del flujo de asignación de placa (Feature #10587 + extensión post-radicación).
 /// Ortogonal al <see cref="TramiteEstado"/>: mientras avanza, el status permanece en <c>entregado</c>.
 /// Se persiste en <c>procedure_instances.plate_flow_status</c> (nullable): <c>null</c> = sin ruta de placa.
+/// </para>
 /// </summary>
 public static class PlateFlowStatus
 {

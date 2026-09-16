@@ -80,6 +80,10 @@ public sealed class OtBandejaQueryFieldCatalog : IQueryFieldCatalog
     /// </summary>
     private static readonly QueryFieldOptionDto[] EstadoOptions =
     [
+        // ADR-0059 (Epic #12549) — la cola de placa entra a la bandeja como estados reales. El
+        // sub-estado de placa (abajo) queda LEGACY hasta que la HU #12598 lo retire del filtro.
+        new("preasignacion", "Preasignación"),
+        new("asignado", "Asignado"),
         new("entregado", "Pendiente de decisión"),
         new("aprobado", "Aprobado"),
         new("rechazado", "Rechazado"),
