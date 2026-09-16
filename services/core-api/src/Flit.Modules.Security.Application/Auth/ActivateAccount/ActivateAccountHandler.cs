@@ -15,8 +15,11 @@ public sealed partial class ActivateAccountHandler(
     IAuditContextAccessor auditContext,
     ITenantNetworkMembership networkMembership,
     IDomainContextAccessor domainContext,
-    ILogger<ActivateAccountHandler> logger)
+    ILogger<ActivateAccountHandler> logger,
+    IEmailThemeResolver? themeResolver = null)
 {
+    private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
+
     public async Task<AccountActivatedResult> HandleAsync(
         ActivateAccountCommand command,
         CancellationToken cancellationToken)
@@ -79,14 +82,19 @@ public sealed partial class ActivateAccountHandler(
     {
         try
         {
-            var composed = WelcomeRegistrationEmailTemplate.Compose();
+            var theme = await _themeResolver.ResolveAsync(invitation.TenantId, cancellationToken).ConfigureAwait(false);
+            var composed = WelcomeRegistrationEmailTemplate.Compose(theme: theme);
             var message = new EmailMessage(
                 invitation.TenantId,
                 "security.welcome-registration",
                 invitation.Email,
                 invitation.FullName,
                 composed.Subject,
-                composed.HtmlBody);
+                composed.HtmlBody)
+            {
+                ThemeKind = theme.KindWireValue,
+                ThemeVersion = theme.IsBrand ? theme.Version : null,
+            };
 
             var sendResult = await emailSender.SendAsync(message, cancellationToken).ConfigureAwait(false);
             if (!sendResult.Success)

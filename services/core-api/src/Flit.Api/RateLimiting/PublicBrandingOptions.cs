@@ -18,6 +18,14 @@ public sealed class PublicBrandingOptions
     /// </summary>
     public int MinResponseMs { get; set; }
 
+    /// <summary>
+    /// HU #12428 AC3 — base HTTPS pública y ALCANZABLE por clientes de correo, usada para construir
+    /// la URL absoluta del logotipo (<c>{PublicBaseUrl}/api/v1/public/branding/logos/{logoId}</c>) que
+    /// interpola <c>EmailTheme.LogoUrl</c>. Nunca la firma un token: es la misma ruta pública sin auth
+    /// que ya expone <c>Flit.Api.Endpoints.Public.PublicBrandingEndpoints</c> desde otro host/base.
+    /// </summary>
+    public string PublicBaseUrl { get; set; } = "https://dev.flitsas.online";
+
     public RateLimitOptions RateLimit { get; set; } = new();
 
     public sealed class RateLimitOptions

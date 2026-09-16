@@ -30,8 +30,11 @@ public sealed partial class ForgotPasswordHandler(
     ITenantNetworkMembership networkMembership,
     IDomainContextAccessor domainContext,
     INetworkUrlBaseResolver urlBaseResolver,
-    ILogger<ForgotPasswordHandler> logger)
+    ILogger<ForgotPasswordHandler> logger,
+    IEmailThemeResolver? themeResolver = null)
 {
+    private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
+
     private const string Purpose = "password_reset";
 
     public async Task HandleAsync(ForgotPasswordCommand command, CancellationToken cancellationToken)
@@ -57,11 +60,16 @@ public sealed partial class ForgotPasswordHandler(
         // el Gateway), nunca a uno deducido de la identidad del usuario.
         var resetUrlBase = urlBaseResolver.ForRequestDomain(domainContext, options.ResetUrlBase);
         var link = ForgotPasswordEmailTemplate.BuildResetLink(resetUrlBase, token.RawToken);
-        var composed = ForgotPasswordEmailTemplate.Compose(user.DisplayName, link, options.TokenLifetimeMinutes);
+        var theme = await _themeResolver.ResolveAsync(user.TenantId, cancellationToken).ConfigureAwait(false);
+        var composed = ForgotPasswordEmailTemplate.Compose(user.DisplayName, link, options.TokenLifetimeMinutes, theme: theme);
         // HU #11363 AC1 — id estable del catálogo (NotificationTemplateCatalog.TemplateIds.ForgotPassword
         // en Flit.Infrastructure); literal a mano porque este proyecto no depende de Infrastructure.
         var message = new EmailMessage(
-            user.TenantId, "security.forgot-password", user.Email, user.DisplayName, composed.Subject, composed.HtmlBody);
+            user.TenantId, "security.forgot-password", user.Email, user.DisplayName, composed.Subject, composed.HtmlBody)
+        {
+            ThemeKind = theme.KindWireValue,
+            ThemeVersion = theme.IsBrand ? theme.Version : null,
+        };
 
         var sendResult = await emailSender.SendAsync(message, cancellationToken);
         if (!sendResult.Success)

@@ -100,7 +100,14 @@ internal sealed partial class NotificationDeliveryLoggingEmailSender(
                     // HU #11364 AC2 — el destinatario ORIGINAL ya es message.ToEmail (arriba): esta
                     // marca es lo único que faltaba para que la fila no afirme, falsamente, que el
                     // correo llegó a ese destinatario.
-                    result.RecipientDiverted),
+                    result.RecipientDiverted)
+                {
+                    // HU #12428 AC5 / #12430 AC5 — el tema y el remitente YA se resolvieron al
+                    // componer message.HtmlBody; este decorador solo los traslada a la bitácora.
+                    ThemeKind = message.ThemeKind,
+                    ThemeVersion = message.ThemeVersion,
+                    SenderName = message.SenderDisplayName,
+                },
                 CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)

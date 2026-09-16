@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using Flit.Modules.Security.Domain.Auth;
 
 namespace Flit.Infrastructure.Notifications.Tramites;
 
@@ -68,14 +69,81 @@ public static class TramiteCambioEstadoEmailComposer
     public static string ResolveRentingFooterUrl(string assetsBaseUrl) =>
         CombineAssetUrl(assetsBaseUrl, DefaultRentingFooterFileName);
 
+    /// <param name="theme">
+    /// HU #12428 AC1/AC2/AC9 — tema resuelto. <c>null</c> o <see cref="EmailThemeKind.Flit"/> ⇒ esta
+    /// firma produce EXACTAMENTE el mismo HTML que antes de la historia (parámetro aditivo al final,
+    /// AC9 paridad byte a byte). Con <see cref="EmailThemeKind.Brand"/> aplica el chrome de marca
+    /// sobre el mismo cuerpo funcional (AC2).
+    /// </param>
     public static (string Subject, string Html) ComposeFlit(
-        TramiteCambioEstadoEmailModel model, string assetsBaseUrl)
+        TramiteCambioEstadoEmailModel model, string assetsBaseUrl, EmailTheme? theme = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         var estado = NormalizeEstado(model.EstadoActual);
         var subject = BuildSubject(model.Placa, estado);
-        var html = BuildFlitHtml(model, estado, assetsBaseUrl);
+        var html = theme is { IsBrand: true }
+            ? BuildBrandedHtml(model, estado, theme)
+            : BuildFlitHtml(model, estado, assetsBaseUrl);
         return (subject, html);
+    }
+
+    /// <summary>
+    /// Variante de marca (HU #12428 AC2/AC3/AC6): mismo dato del trámite que <see cref="BuildFlitHtml"/>,
+    /// encabezado/pie de <see cref="BrandedEmailChrome"/> con el logotipo, nombre y color de
+    /// <paramref name="theme"/>.
+    /// </summary>
+    private static string BuildBrandedHtml(
+        TramiteCambioEstadoEmailModel model, string estado, EmailTheme theme)
+    {
+        var comprador = Enc(model.CompradorNombre);
+        var placa = Enc(model.Placa);
+        var ciudad = Enc(model.CiudadOt);
+        var ot = Enc(model.NombreOt);
+        var approved = IsApproved(estado);
+        var estadoColor = approved ? ApprovedGreen : RejectedRed;
+        var estadoIcon = approved ? "✓" : "❌";
+        var estadoEnc = Enc(estado);
+        var linkColor = BrandedEmailChrome.LinkColor(theme);
+
+        var destinatario = Enc(GreetingName(model));
+        var saludo = model.DestinatarioEsEmpresa
+            ? $"Estimados señores <strong style=\"color:{linkColor}\">{destinatario}</strong>."
+            : $"Estimado/a Señor/a <strong style=\"color:{linkColor}\">{destinatario}</strong>.";
+        var introParte = ProcedureNounPhrase(model, placa, forRentingLead: false);
+
+        var body = new StringBuilder();
+        body.Append(CultureInfo.InvariantCulture, $"<p style=\"margin:0 0 12px;\">{saludo}</p>");
+        body.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 16px;\">Nos ponemos en contacto para informarle que {introParte} ha sido <strong style=\"color:{estadoColor};\">{estadoEnc}</strong>.</p>");
+        if (model.EsTraspaso)
+        {
+            body.Append(CultureInfo.InvariantCulture,
+                $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{linkColor};\">Vendedor:</strong> {Enc(model.VendedorNombre)}</p>");
+        }
+        body.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{linkColor};\">Comprador:</strong> {comprador}</p>");
+        body.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{linkColor};\">Placa del Vehículo:</strong> {placa}</p>");
+        if (!string.IsNullOrWhiteSpace(model.CiudadOt))
+        {
+            body.Append(CultureInfo.InvariantCulture,
+                $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{linkColor};\">Ciudad:</strong> {ciudad}</p>");
+        }
+        body.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{linkColor};\">Secretaría de Tránsito:</strong> {ot}</p>");
+        var rejectionLines = BuildRejectionLines(model, estado);
+        var estadoMargin = rejectionLines.Count > 0 ? "6px" : "16px";
+        body.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 {estadoMargin};\"><strong style=\"color:{linkColor};\">Estado Actual:</strong> <span style=\"color:{estadoColor};font-weight:700;\">{estadoIcon} {estadoEnc}</span></p>");
+        AppendRejectionLines(
+            body,
+            rejectionLines,
+            lastMargin: "16px",
+            (label, value, margin) =>
+                $"<p style=\"margin:0 0 {margin};\"><strong style=\"color:{linkColor};\">{label}:</strong> {value}</p>");
+        body.Append("<p style=\"margin:0;\">Nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.</p>");
+
+        return BrandedEmailChrome.Wrap(theme, "¡NOTIFICACIÓN RADICACIÓN DEL TRÁMITE!", body.ToString());
     }
 
     public static (string Subject, string Html) ComposeRenting(

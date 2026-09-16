@@ -1,12 +1,18 @@
 using System.Security.Claims;
 using Flit.Admin.Domain.Companies.Branding;
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Application.Companies.Branding;
 using Flit.Admin.Application.Companies.Branding.GetBranding;
 using Flit.Admin.Application.Companies.Branding.PublishBranding;
 using Flit.Admin.Application.Companies.Branding.UploadBrandLogo;
 using Flit.Admin.Application.Companies.Branding.UpsertBrandingDraft;
 using Flit.Api.Authorization;
+using Flit.Infrastructure.Notifications;
+using Flit.Infrastructure.Notifications.Catalog;
+using Flit.Infrastructure.Notifications.Theme;
+using Flit.Modules.Security.Domain.Auth;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Api.Endpoints;
 
@@ -65,6 +71,16 @@ public static class CompanyBrandingEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // HU #12428 (AC1/AC2/AC6), HU #12431 AC1, HU #12414 AC4 — muestra de correo con el tema
+        // propio (publicado o borrador) de la cabeza. Contrato: contratos-api.md §4.
+        group.MapGet("/email-sample", GetEmailSampleAsync)
+            .WithName("CompanyBrandingEmailSample")
+            .WithSummary("Previsualiza una plantilla de correo con el tema propio de la cabeza")
+            .Produces<NotificationTemplateSampleResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         return app;
     }
@@ -180,6 +196,81 @@ public static class CompanyBrandingEndpoints
                 statusCode: StatusCodes.Status409Conflict),
             _ => Results.Json(new { errors = result.Errors }, statusCode: StatusCodes.Status422UnprocessableEntity),
         };
+    }
+
+    /// <summary>
+    /// HU #12428 AC1/AC2/AC6, HU #12431 AC1, HU #12414 AC4 — muestra de correo con el tema PROPIO de
+    /// la cabeza (nunca el de otra red, AC5 del contrato de sesión/pública se replica aquí por
+    /// consistencia: el tenant sale del JWT, jamás de un parámetro). <c>source=published</c> sin
+    /// marca publicada (borrador únicamente, o nada) responde <c>200</c> con
+    /// <c>theme.kind = "flit"</c> — no <c>404</c>: la ausencia de marca publicada no es un error de
+    /// la muestra, es el estado "aún no configurado" que el propio configurador ya distingue con
+    /// <c>GET /company/branding</c> (AC4 del fallback: nunca falla por causa del tema).
+    /// <c>source=draft</c> con un borrador incompleto completa los campos faltantes con FLIT y
+    /// marca <c>theme.kind = "draft-partial"</c> (nunca <c>"brand"</c> a medias).
+    /// </summary>
+    private static async Task<IResult> GetEmailSampleAsync(
+        [FromQuery] string? templateId,
+        [FromQuery] string? source,
+        HttpContext httpContext,
+        [FromServices] GetBrandingHandler brandingHandler,
+        [FromServices] IOptions<Flit.Admin.Application.Companies.Branding.BrandingOptions> brandingOptions,
+        [FromServices] EmailThemePublicBrandingOptions publicBrandingOptions,
+        CancellationToken cancellationToken)
+    {
+        var tenant = ResolveOwnTenant(httpContext.User);
+        if (tenant is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var resolvedTemplateId = string.IsNullOrWhiteSpace(templateId) ? "tramites.aprobado" : templateId.Trim();
+        var allowed = brandingOptions.Value.SampleTemplates;
+        if (!allowed.Contains(resolvedTemplateId, StringComparer.Ordinal))
+        {
+            return Results.Json(
+                new { error = BrandingErrors.SampleTemplateNotAllowed, allowed },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        if (!NotificationTemplateCatalog.TryResolve(resolvedTemplateId, out var descriptor))
+        {
+            return Results.Json(
+                new { error = BrandingErrors.SampleTemplateNotAllowed, allowed },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var useDraft = string.Equals(source, "draft", StringComparison.OrdinalIgnoreCase);
+
+        var branding = await brandingHandler.HandleAsync(tenant.Value, cancellationToken).ConfigureAwait(false);
+
+        EmailTheme theme;
+        string kindOverride;
+        if (useDraft)
+        {
+            var draft = branding?.Draft ?? BrandingDraft.Empty;
+            theme = EmailThemeFactory.FromDraft(draft, publicBrandingOptions.PublicBaseUrl);
+            kindOverride = draft.MissingFields().Count > 0 ? "draft-partial" : theme.KindWireValue;
+        }
+        else
+        {
+            // source=published (default) — sin marca publicada (o retirada), tema FLIT (AC4: nunca
+            // falla ni responde 404 por esto).
+            theme = branding is { IsRetired: false, Published: { } published }
+                ? EmailThemeFactory.FromPublished(published, branding.PublishedVersion, publicBrandingOptions.PublicBaseUrl)
+                : EmailTheme.Flit;
+            kindOverride = theme.KindWireValue;
+        }
+
+        var (subject, html) = NotificationSampleRenderer.Render(
+            descriptor.Id, NotificationChannel.FlitSmtp, theme: theme);
+
+        var response = new NotificationTemplateSampleResponse(descriptor.Id, subject, html)
+        {
+            Theme = new EmailThemeInfoResponse(kindOverride, theme.PlatformName, theme.IsBrand ? theme.Version : null, SenderName: null),
+        };
+
+        return Results.Ok(response);
     }
 
     /// <summary>

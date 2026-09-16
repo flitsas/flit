@@ -43,4 +43,18 @@ internal sealed class NotificationDeliveryLogEntity
     public DateTimeOffset CreatedAt { get; set; }
 
     public Guid? CreatedBy { get; set; }
+
+    /// <summary>HU #12428 AC5 — <c>flit</c> | <c>brand</c>. <c>null</c> en filas anteriores a esta
+    /// historia (backfill deliberadamente omitido: "correos ya enviados no cambian").</summary>
+    public string? ThemeKind { get; set; }
+
+    /// <summary><c>tenant_brandings.published_version</c> aplicada. <c>null</c> con <c>flit</c> o en
+    /// filas anteriores a #12428.</summary>
+    public int? ThemeVersion { get; set; }
+
+    /// <summary>HU #12430 AC5 — nombre visible del remitente aplicado (saneado). @pii:low</summary>
+    public string? SenderName { get; set; }
+
+    /// <summary>HU #12430 AC5 — dirección de remitente aplicada. @pii:low</summary>
+    public string? SenderEmail { get; set; }
 }

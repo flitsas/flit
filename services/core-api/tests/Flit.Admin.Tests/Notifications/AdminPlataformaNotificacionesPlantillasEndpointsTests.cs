@@ -44,6 +44,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         _factory.PasswordGenerator.ClearReceivedCalls();
         _factory.PasswordHasher.ClearReceivedCalls();
         _factory.AuditWriter.ClearReceivedCalls();
+        _factory.ThemeResolver.ClearReceivedCalls();
     }
 
     // ── Autorización — mismo patrón que el resto de Plataforma ─────────────
@@ -216,6 +217,54 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         System.Net.WebUtility.HtmlDecode(body.Html).Should().Contain(expectedMarker);
     }
 
+    // ── HU #12428 AC1/AC8 — ?tenantId= opcional en la muestra de plantillas ─
+
+    [Fact]
+    public async Task GetSample_SinTenantId_RespuestaIdenticaAHoy_TemaNuloYSinResolverInvocado()
+    {
+        var response = await SuperAdminClient().GetAsync(
+            $"{GroupUrl}/tramites.aprobado/muestra?channel=FLIT_SMTP&procedureTypeId={_factory.ActiveProcedureTypeId}",
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SampleDto>(TestContext.Current.CancellationToken);
+        body!.Theme.Should().BeNull("sin tenantId la respuesta debe ser idéntica a antes de HU #12428");
+        await _factory.ThemeResolver.DidNotReceiveWithAnyArgs().ResolveAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task GetSample_ConTenantIdDeCabezaConMarca_DevuelveThemeBrand()
+    {
+        var tenantId = Guid.NewGuid();
+        _factory.ThemeResolver.ResolveAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns(new EmailTheme(EmailThemeKind.Brand, "Movilidad Andina", "https://dev.flitsas.online/api/v1/public/branding/logos/abc", "#0B3D91", "#1FA2FF", "#FFFFFF", 5));
+
+        var response = await SuperAdminClient().GetAsync(
+            $"{GroupUrl}/tramites.aprobado/muestra?channel=FLIT_SMTP&procedureTypeId={_factory.ActiveProcedureTypeId}&tenantId={tenantId}",
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SampleDto>(TestContext.Current.CancellationToken);
+        body!.Theme!.Kind.Should().Be("brand");
+        body.Theme.PlatformName.Should().Be("Movilidad Andina");
+        body.Theme.Version.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task GetSample_ConTenantIdDeCabezaSinMarca_DevuelveThemeFlit()
+    {
+        var tenantId = Guid.NewGuid();
+        _factory.ThemeResolver.ResolveAsync(tenantId, Arg.Any<CancellationToken>()).Returns(EmailTheme.Flit);
+
+        var response = await SuperAdminClient().GetAsync(
+            $"{GroupUrl}/tramites.aprobado/muestra?channel=FLIT_SMTP&procedureTypeId={_factory.ActiveProcedureTypeId}&tenantId={tenantId}",
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SampleDto>(TestContext.Current.CancellationToken);
+        body!.Theme!.Kind.Should().Be("flit");
+    }
+
     // ── AC3 — la ruta rechaza datos reales, sin revelar existencia ─────────
 
     [Theory]
@@ -333,7 +382,9 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
 
     private sealed record ListDto(List<ListItemDto> Items);
 
-    private sealed record SampleDto(string TemplateId, string Subject, string Html);
+    private sealed record EmailThemeInfoDto(string Kind, string PlatformName, int? Version, string? SenderName);
+
+    private sealed record SampleDto(string TemplateId, string Subject, string Html, EmailThemeInfoDto? Theme);
 
     /// <summary>
     /// Factory que sustituye los cuatro puertos con efectos observables (envío de correo,
@@ -347,6 +398,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         public IPasswordHasher PasswordHasher { get; } = Substitute.For<IPasswordHasher>();
         public IAdminAuditWriter AuditWriter { get; } = Substitute.For<IAdminAuditWriter>();
         public IProcedureTypeCatalog ProcedureTypes { get; } = Substitute.For<IProcedureTypeCatalog>();
+        public IEmailThemeResolver ThemeResolver { get; } = Substitute.For<IEmailThemeResolver>();
         public Guid ActiveProcedureTypeId { get; } = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
         public SideEffectFreeFactory()
@@ -368,6 +420,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
                 services.AddScoped(_ => PasswordHasher);
                 services.AddScoped(_ => AuditWriter);
                 services.AddScoped(_ => ProcedureTypes);
+                services.AddScoped(_ => ThemeResolver);
             });
         }
     }

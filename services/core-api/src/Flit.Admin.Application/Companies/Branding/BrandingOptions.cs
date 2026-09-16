@@ -14,6 +14,14 @@ public sealed class BrandingOptions
 
     /// <summary>Umbral mínimo de contraste WCAG (AC4). Por defecto 4.5:1.</summary>
     public double MinContrastRatio { get; set; } = 4.5;
+
+    /// <summary>
+    /// HU #12428/#12431 — plantillas permitidas en <c>GET /company/branding/email-sample</c>
+    /// (autogestión de la cabeza, sin SuperAdmin). Lista cerrada a propósito: la muestra de correo de
+    /// la cabeza NO debe exponer plantillas con datos sensibles de otros módulos. Por defecto solo
+    /// <c>tramites.aprobado</c>.
+    /// </summary>
+    public IReadOnlyList<string> SampleTemplates { get; set; } = ["tramites.aprobado"];
 }
 
 public sealed class BrandingLogoOptions

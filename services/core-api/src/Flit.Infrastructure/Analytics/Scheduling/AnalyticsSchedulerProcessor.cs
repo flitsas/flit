@@ -213,12 +213,18 @@ internal sealed class AnalyticsSchedulerProcessor(
         await using var scope = scopeFactory.CreateAsyncScope();
 
         (string Subject, string Html, EmailAttachment? Attachment) message;
+        // HU #12428 AC1/AC8 — cuarto punto de inyección del tema (Analítica). Se resuelve UNA vez
+        // para los 6 tipos de informe (incluida "consulta", AC8 completo): mismo tenant dueño del
+        // schedule para todo el envío.
+        var themeResolver = scope.ServiceProvider.GetRequiredService<IEmailThemeResolver>();
+        var theme = await themeResolver.ResolveAsync(schedule.TenantId, ct).ConfigureAwait(false);
+
         if (schedule.ReportType == "consulta")
         {
             // No hay overview/top radicadores que mostrar para una consulta arbitraria — plantilla
             // y ejecución propias (ver SendConsultaReportAsync), sin el periodo vencido de los otros
             // 5 tipos: el rango lo decide el filtro relativo de la propia SavedQuery.
-            message = await BuildConsultaMessageAsync(scope.ServiceProvider, schedule, ct);
+            message = await BuildConsultaMessageAsync(scope.ServiceProvider, schedule, theme, ct);
         }
         else
         {
@@ -232,7 +238,7 @@ internal sealed class AnalyticsSchedulerProcessor(
                 schedule.TenantId, from, to, TopProducersLimit, ct);
 
             var (subject, html) = SchedulerEmailComposer.BuildScheduledReport(
-                schedule.Name, schedule.ReportType, periodLabel, overview, topProducers);
+                schedule.Name, schedule.ReportType, periodLabel, overview, topProducers, theme);
             var attachment = await BuildAttachmentAsync(scope.ServiceProvider, schedule, from, to, ct);
             message = (subject, html, attachment);
         }
@@ -247,7 +253,11 @@ internal sealed class AnalyticsSchedulerProcessor(
                 // HU #11363 AC1 — id estable del catálogo (TemplateIds.ScheduledReport).
                 var email = new EmailMessage(
                     schedule.TenantId, "analytics.scheduled-report", recipient, recipient,
-                    message.Subject, message.Html);
+                    message.Subject, message.Html)
+                {
+                    ThemeKind = theme.KindWireValue,
+                    ThemeVersion = theme.IsBrand ? theme.Version : null,
+                };
                 if (message.Attachment is not null)
                     email = email with { Attachments = [message.Attachment] };
 
@@ -272,7 +282,7 @@ internal sealed class AnalyticsSchedulerProcessor(
     /// aviso que una SavedQuery borrada — best-effort, igual criterio que el resto del scheduler.
     /// </summary>
     private async Task<(string Subject, string Html, EmailAttachment? Attachment)> BuildConsultaMessageAsync(
-        IServiceProvider services, ReportSchedule schedule, CancellationToken ct)
+        IServiceProvider services, ReportSchedule schedule, EmailTheme theme, CancellationToken ct)
     {
         try
         {
@@ -287,12 +297,12 @@ internal sealed class AnalyticsSchedulerProcessor(
                 var otResult = await otBuilder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
                 if (otResult is null)
                 {
-                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name, theme);
                     return (missingSubject, missingHtml, null);
                 }
 
                 (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
-                    schedule.Name, otResult.QueryName, otResult.Total, otResult.Truncated, OtQueryReportDocumentBuilder.RowCap);
+                    schedule.Name, otResult.QueryName, otResult.Total, otResult.Truncated, OtQueryReportDocumentBuilder.RowCap, theme);
                 bytes = otResult.Bytes;
             }
             else if (schedule.SavedQueryScope == "ict")
@@ -304,12 +314,12 @@ internal sealed class AnalyticsSchedulerProcessor(
                 var ictResult = await ictBuilder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
                 if (ictResult is null)
                 {
-                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name, theme);
                     return (missingSubject, missingHtml, null);
                 }
 
                 (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
-                    schedule.Name, ictResult.QueryName, ictResult.Total, ictResult.Truncated, IctQueryReportDocumentBuilder.RowCap);
+                    schedule.Name, ictResult.QueryName, ictResult.Total, ictResult.Truncated, IctQueryReportDocumentBuilder.RowCap, theme);
                 bytes = ictResult.Bytes;
             }
             else
@@ -320,12 +330,12 @@ internal sealed class AnalyticsSchedulerProcessor(
                     : await builder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
                 if (result is null)
                 {
-                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name, theme);
                     return (missingSubject, missingHtml, null);
                 }
 
                 (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
-                    schedule.Name, result.QueryName, result.Total, result.Truncated, CompanyQueryReportDocumentBuilder.RowCap);
+                    schedule.Name, result.QueryName, result.Total, result.Truncated, CompanyQueryReportDocumentBuilder.RowCap, theme);
                 bytes = result.Bytes;
             }
 
@@ -564,9 +574,11 @@ internal sealed class AnalyticsSchedulerProcessor(
         DateTimeOffset nowUtc, CancellationToken ct)
     {
         var emailSender = services.GetRequiredService<IEmailSender>();
+        var themeResolver = services.GetRequiredService<IEmailThemeResolver>();
+        var theme = await themeResolver.ResolveAsync(rule.TenantId, ct).ConfigureAwait(false);
         var (subject, html) = SchedulerEmailComposer.BuildAlert(
             rule.Name, rule.Metric, rule.Operator, rule.Threshold, alertEvent.MetricValue,
-            rule.WindowMinutes, nowUtc, BogotaTimeZone);
+            rule.WindowMinutes, nowUtc, BogotaTimeZone, theme);
 
         var anySent = false;
         foreach (var recipient in alertEvent.Recipients)
@@ -577,7 +589,11 @@ internal sealed class AnalyticsSchedulerProcessor(
                 // decide anySent, no la ausencia de excepción.
                 // HU #11363 AC1 — id estable del catálogo (TemplateIds.Alert).
                 var result = await emailSender.SendAsync(
-                    new EmailMessage(rule.TenantId, "analytics.alert", recipient, recipient, subject, html), ct);
+                    new EmailMessage(rule.TenantId, "analytics.alert", recipient, recipient, subject, html)
+                    {
+                        ThemeKind = theme.KindWireValue,
+                        ThemeVersion = theme.IsBrand ? theme.Version : null,
+                    }, ct);
                 if (result.Success)
                     anySent = true;
                 else

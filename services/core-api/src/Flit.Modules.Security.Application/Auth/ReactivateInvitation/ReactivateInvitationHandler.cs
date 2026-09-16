@@ -25,8 +25,11 @@ public sealed partial class ReactivateInvitationHandler(
     IEmailSender emailSender,
     InvitationOptions options,
     INetworkUrlBaseResolver urlBaseResolver,
-    ILogger<ReactivateInvitationHandler> logger)
+    ILogger<ReactivateInvitationHandler> logger,
+    IEmailThemeResolver? themeResolver = null)
 {
+    private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
+
     public async Task<ReactivateInvitationResult> HandleAsync(
         ReactivateInvitationCommand command,
         CancellationToken cancellationToken)
@@ -92,9 +95,14 @@ public sealed partial class ReactivateInvitationHandler(
             .ForTenantAsync(invitation.TenantId, options.ActivateUrlBase, cancellationToken)
             .ConfigureAwait(false);
         var link = InvitationEmailTemplate.BuildActivateLink(activateUrlBase, token.RawToken);
-        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link);
+        var theme = await _themeResolver.ResolveAsync(invitation.TenantId, cancellationToken).ConfigureAwait(false);
+        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link, theme: theme);
         var message = new EmailMessage(
-            invitation.TenantId, "security.invitation", invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody);
+            invitation.TenantId, "security.invitation", invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody)
+        {
+            ThemeKind = theme.KindWireValue,
+            ThemeVersion = theme.IsBrand ? theme.Version : null,
+        };
 
         LogActivationLinkDev(logger, link);
 

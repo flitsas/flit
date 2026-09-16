@@ -12,6 +12,10 @@ public static class BrandingErrors
     public const string ConcurrencyConflict = "CONCURRENCY_CONFLICT";
     public const string Incomplete = "BRANDING_INCOMPLETE";
 
+    /// <summary>HU #12428/#12431 — <c>templateId</c> fuera de <c>Branding:SampleTemplates</c> en
+    /// <c>GET /company/branding/email-sample</c>.</summary>
+    public const string SampleTemplateNotAllowed = "BRANDING_SAMPLE_TEMPLATE_NOT_ALLOWED";
+
     // Formato/contraste — vocabulario reservado para #12413 (IBrandAssetValidator permisivo hoy).
     public const string NameLength = "BRANDING_NAME_LENGTH";
     public const string NameMarkup = "BRANDING_NAME_MARKUP";

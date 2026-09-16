@@ -77,25 +77,27 @@ internal sealed class PlateAssignmentEmailDispatchProcessor(
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
         var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
         var brandResolver = scope.ServiceProvider.GetRequiredService<IPlateAssignmentBrandResolver>();
+        var themeResolver = scope.ServiceProvider.GetRequiredService<IEmailThemeResolver>();
         var projector = scope.ServiceProvider.GetRequiredService<IPlateAssignmentEmailModelProjector>();
         var assets = scope.ServiceProvider.GetRequiredService<IOptions<NotificationEmailAssetsOptions>>().Value;
 
         if (!db.Database.IsRelational())
         {
             return await ProcessOneInMemoryAsync(
-                db, emailSender, brandResolver, projector, assets, excludeIds, ct);
+                db, emailSender, brandResolver, themeResolver, projector, assets, excludeIds, ct);
         }
 
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(
             async () => await ProcessOneAsync(
-                db, emailSender, brandResolver, projector, assets, excludeIds, ct));
+                db, emailSender, brandResolver, themeResolver, projector, assets, excludeIds, ct));
     }
 
     private async Task<Guid?> ProcessOneAsync(
         FlitDbContext db,
         IEmailSender emailSender,
         IPlateAssignmentBrandResolver brandResolver,
+        IEmailThemeResolver themeResolver,
         IPlateAssignmentEmailModelProjector projector,
         NotificationEmailAssetsOptions assets,
         IReadOnlySet<Guid> excludeIds,
@@ -112,7 +114,7 @@ internal sealed class PlateAssignmentEmailDispatchProcessor(
         }
 
         var row = await db.PlateAssignmentEmailDispatches.FirstAsync(d => d.Id == claimedId.Value, ct);
-        await DispatchAsync(row, db, emailSender, brandResolver, projector, assets, ct);
+        await DispatchAsync(row, db, emailSender, brandResolver, themeResolver, projector, assets, ct);
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -123,6 +125,7 @@ internal sealed class PlateAssignmentEmailDispatchProcessor(
         FlitDbContext db,
         IEmailSender emailSender,
         IPlateAssignmentBrandResolver brandResolver,
+        IEmailThemeResolver themeResolver,
         IPlateAssignmentEmailModelProjector projector,
         NotificationEmailAssetsOptions assets,
         IReadOnlySet<Guid> excludeIds,
@@ -137,7 +140,7 @@ internal sealed class PlateAssignmentEmailDispatchProcessor(
         if (row is null)
             return null;
 
-        await DispatchAsync(row, db, emailSender, brandResolver, projector, assets, ct);
+        await DispatchAsync(row, db, emailSender, brandResolver, themeResolver, projector, assets, ct);
         await db.SaveChangesAsync(ct);
         return row.Id;
     }
@@ -147,6 +150,7 @@ internal sealed class PlateAssignmentEmailDispatchProcessor(
         FlitDbContext db,
         IEmailSender emailSender,
         IPlateAssignmentBrandResolver brandResolver,
+        IEmailThemeResolver themeResolver,
         IPlateAssignmentEmailModelProjector projector,
         NotificationEmailAssetsOptions assets,
         CancellationToken ct)
@@ -204,9 +208,14 @@ internal sealed class PlateAssignmentEmailDispatchProcessor(
                 .ResolveForClientTenantAsync(row.TenantId, ct)
                 .ConfigureAwait(false);
             var assetsBaseUrl = assets.BaseUrl;
+            // HU #12428 AC1/AC8 — el canal Renting no cambia (mismo criterio que
+            // ProcedureStateChangeEmailDispatchProcessor): solo la variante FLIT resuelve tema.
+            var theme = brand == PlateAssignmentEmailBrand.Renting
+                ? EmailTheme.Flit
+                : await themeResolver.ResolveAsync(row.TenantId, ct).ConfigureAwait(false);
             var (subject, html) = brand == PlateAssignmentEmailBrand.Renting
                 ? AsignacionPlacaEmailComposer.ComposeRenting(model, assetsBaseUrl)
-                : AsignacionPlacaEmailComposer.ComposeFlit(model, assetsBaseUrl);
+                : AsignacionPlacaEmailComposer.ComposeFlit(model, assetsBaseUrl, theme);
 
             var message = new EmailMessage(
                 row.TenantId,
@@ -214,7 +223,11 @@ internal sealed class PlateAssignmentEmailDispatchProcessor(
                 row.Recipient,
                 row.RecipientName ?? string.Empty,
                 subject,
-                html);
+                html)
+            {
+                ThemeKind = brand == PlateAssignmentEmailBrand.Renting ? null : theme.KindWireValue,
+                ThemeVersion = brand == PlateAssignmentEmailBrand.Renting ? null : (theme.IsBrand ? theme.Version : null),
+            };
 
             var result = await emailSender.SendAsync(message, ct).ConfigureAwait(false);
             if (result.Success)

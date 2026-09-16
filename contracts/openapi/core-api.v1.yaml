@@ -984,6 +984,42 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/BrandingIncompleteResponse" }
 
+  /api/v1/company/branding/email-sample:
+    get:
+      tags: [Compañía · Identidad de marca]
+      operationId: companyBrandingEmailSample
+      summary: Previsualiza una plantilla de correo con el tema propio de la cabeza (HU #12428, HU #12431 AC1, HU #12414 AC4)
+      description: >-
+        El tenant sale del JWT (nunca de un parámetro). `source=published` (por defecto) sin marca
+        publicada (borrador únicamente, o sin configuración) responde `200` con `theme.kind = "flit"`
+        — nunca `404`: la ausencia de marca publicada no es un error de la muestra (HU #12428 AC4,
+        el tema nunca hace fallar el envío/la previsualización). `source=draft` construye el tema
+        desde el borrador sin persistir nada; si el borrador está incompleto, los campos faltantes se
+        completan con FLIT y `theme.kind = "draft-partial"`. `templateId` está limitado a
+        `Branding:SampleTemplates` (por defecto `["tramites.aprobado"]`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: templateId
+          in: query
+          schema: { type: string, default: "tramites.aprobado" }
+        - name: source
+          in: query
+          schema: { type: string, enum: [draft, published], default: published }
+      responses:
+        "200":
+          description: Muestra compuesta con el tema propio de la cabeza.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTemplateSampleResponse" }
+        "400":
+          description: templateId fuera de la lista permitida (BRANDING_SAMPLE_TEMPLATE_NOT_ALLOWED).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401": { description: No autenticado. }
+        "403": { description: No es cabeza de grupo (respuesta uniforme, sin revelar nada). }
+
   /api/v1/public/branding:
     get:
       tags: [Público · Identidad de marca]
@@ -10073,6 +10109,37 @@ components:
         sizeBytes: { type: integer, format: int64 }
         sha256: { type: string }
         logoUrl: { type: string }
+
+    # ── Tema de correo (HU #12428/#12430/#12431, Feature #12405, ADR-0060) ────────────────────
+    EmailThemeInfo:
+      type: object
+      required: [kind, platformName]
+      description: >-
+        Tema aplicado a una muestra de correo. `kind=flit`: respaldo FLIT (version null/0).
+        `kind=brand`: marca publicada. `kind=draft-partial`: solo en `source=draft` con un
+        borrador incompleto — los campos faltantes se completaron con FLIT.
+      properties:
+        kind: { type: string, enum: [flit, brand, draft-partial] }
+        platformName: { type: string }
+        version: { type: integer, nullable: true }
+        senderName:
+          type: string
+          nullable: true
+          description: HU #12430 — nombre visible del remitente aplicado. Null hasta que #12430 lo puebla.
+    NotificationTemplateSampleResponse:
+      type: object
+      required: [templateId, subject, html]
+      properties:
+        templateId: { type: string }
+        subject: { type: string }
+        html: { type: string }
+        theme:
+          allOf: [{ $ref: "#/components/schemas/EmailThemeInfo" }]
+          nullable: true
+          description: >-
+            Aditivo (HU #12428/#12431). Ausente en `GET .../plantillas/{templateId}/muestra` sin
+            `?tenantId=` (salida idéntica a antes de esta historia); siempre presente en
+            `GET /company/branding/email-sample`.
 
     # ── Público/sesión · Identidad de marca (HU #12418, Feature #12366, ADR-0060 D2) ───────────
     # PROHIBIDO agregar tenantId, NIT, correo, razón social, lista de hijos o isDefault/isNetwork

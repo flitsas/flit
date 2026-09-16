@@ -1,6 +1,7 @@
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Notifications.Preview;
 using Flit.Infrastructure.Notifications.Tramites;
+using Flit.Modules.Security.Domain.Auth;
 
 namespace Flit.Infrastructure.Notifications;
 
@@ -13,31 +14,40 @@ public sealed record NotificationSampleProcedureType(string Name, bool EsTraspas
 /// </summary>
 public static class NotificationSampleRenderer
 {
+    /// <param name="theme">
+    /// HU #12428/#12431 — tema a aplicar sobre la muestra (<c>?tenantId=</c> del endpoint de
+    /// plantillas, o el borrador/publicado de <c>GET /company/branding/email-sample</c>). <c>null</c>
+    /// o <see cref="EmailThemeKind.Flit"/> ⇒ la muestra sale exactamente igual que antes de esta
+    /// historia. El canal Renting (TenantApi) NUNCA recibe tema de marca (mismo criterio que
+    /// producción, AC8).
+    /// </param>
     public static (string Subject, string Html) Render(
         string templateId,
         NotificationChannel channel,
         string? assetsBaseUrl = null,
-        NotificationSampleProcedureType? procedureType = null)
+        NotificationSampleProcedureType? procedureType = null,
+        EmailTheme? theme = null)
     {
         var baseUrl = string.IsNullOrWhiteSpace(assetsBaseUrl)
             ? TramiteEmailPreviewSample.DefaultAssetsBaseUrl
             : assetsBaseUrl;
+        var effectiveTheme = channel == NotificationChannel.TenantApi ? null : theme;
 
         return templateId switch
         {
-            "security.invitation" => ToTuple(SecurityEmailPreviewSample.BuildInvitation(baseUrl)),
-            "security.forgot-password" => ToTuple(SecurityEmailPreviewSample.BuildForgotPassword(assetsBaseUrl: baseUrl)),
-            "security.admin-reset-password" => ToTuple(SecurityEmailPreviewSample.BuildAdminResetPassword(baseUrl)),
-            "security.welcome-registration" => ToTuple(SecurityEmailPreviewSample.BuildWelcomeRegistration(baseUrl)),
-            "analytics.scheduled-report" => AnalyticsEmailPreviewSample.BuildScheduledReport(),
-            "analytics.alert" => AnalyticsEmailPreviewSample.BuildAlert(),
+            "security.invitation" => ToTuple(SecurityEmailPreviewSample.BuildInvitation(baseUrl, effectiveTheme)),
+            "security.forgot-password" => ToTuple(SecurityEmailPreviewSample.BuildForgotPassword(assetsBaseUrl: baseUrl, theme: effectiveTheme)),
+            "security.admin-reset-password" => ToTuple(SecurityEmailPreviewSample.BuildAdminResetPassword(baseUrl, effectiveTheme)),
+            "security.welcome-registration" => ToTuple(SecurityEmailPreviewSample.BuildWelcomeRegistration(baseUrl, effectiveTheme)),
+            "analytics.scheduled-report" => AnalyticsEmailPreviewSample.BuildScheduledReport(effectiveTheme),
+            "analytics.alert" => AnalyticsEmailPreviewSample.BuildAlert(effectiveTheme),
             TramiteCambioEstadoEmailComposer.TemplateIdAprobado => ComposeTramiteCambio(
-                TramiteEmailPreviewSample.SampleAprobado, channel, baseUrl, procedureType),
+                TramiteEmailPreviewSample.SampleAprobado, channel, baseUrl, procedureType, effectiveTheme),
             TramiteCambioEstadoEmailComposer.TemplateIdRechazado => ComposeTramiteCambio(
-                TramiteEmailPreviewSample.SampleRechazado, channel, baseUrl, procedureType),
+                TramiteEmailPreviewSample.SampleRechazado, channel, baseUrl, procedureType, effectiveTheme),
             AsignacionPlacaEmailComposer.TemplateId => channel == NotificationChannel.TenantApi
                 ? AsignacionPlacaEmailPreviewSample.BuildRenting(baseUrl)
-                : AsignacionPlacaEmailPreviewSample.BuildFlit(baseUrl),
+                : AsignacionPlacaEmailPreviewSample.BuildFlit(baseUrl, effectiveTheme),
             _ => throw new InvalidOperationException(
                 $"El catálogo resolvió el id '{templateId}' pero no hay muestra registrada para él."),
         };
@@ -47,7 +57,8 @@ public static class NotificationSampleRenderer
         TramiteCambioEstadoEmailModel sample,
         NotificationChannel channel,
         string baseUrl,
-        NotificationSampleProcedureType? procedureType)
+        NotificationSampleProcedureType? procedureType,
+        EmailTheme? theme)
     {
         var model = procedureType is null
             ? sample
@@ -56,8 +67,9 @@ public static class NotificationSampleRenderer
 
         return channel == NotificationChannel.TenantApi
             ? TramiteCambioEstadoEmailComposer.ComposeRenting(model, baseUrl)
-            : TramiteCambioEstadoEmailComposer.ComposeFlit(model, baseUrl);
+            : TramiteCambioEstadoEmailComposer.ComposeFlit(model, baseUrl, theme);
     }
+
 
     private static (string Subject, string Html) ToTuple(
         Flit.Modules.Security.Application.Auth.ComposedEmail email) =>

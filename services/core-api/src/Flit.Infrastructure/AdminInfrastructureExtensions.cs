@@ -117,6 +117,25 @@ public static class AdminInfrastructureExtensions
         services.AddSingleton<Flit.Admin.Application.Companies.Branding.IBrandingCacheInvalidator>(
             sp => sp.GetRequiredService<Flit.Infrastructure.Domains.MemoryPublicBrandingCache>());
 
+        // HU #12428 (Feature #12405, Épica #12237 Marca Blanca, ADR-0060) — resolutor del tema de
+        // correo. Misma herencia de marca que #12418, sobre el MISMO IMemoryCache singleton (arriba)
+        // — MemoryPublicBrandingCache.InvalidateTenant ya limpia también esta clave.
+        if (configuration is not null)
+        {
+            services.AddSingleton(sp =>
+            {
+                var options = new Flit.Infrastructure.Notifications.Theme.EmailThemePublicBrandingOptions();
+                configuration.GetSection(Flit.Infrastructure.Notifications.Theme.EmailThemePublicBrandingOptions.SectionName).Bind(options);
+                return options;
+            });
+        }
+        else
+        {
+            services.AddSingleton(new Flit.Infrastructure.Notifications.Theme.EmailThemePublicBrandingOptions());
+        }
+        services.AddScoped<Flit.Modules.Security.Domain.Auth.IEmailThemeResolver,
+            Flit.Infrastructure.Notifications.Theme.DbEmailThemeResolver>();
+
         // HU #12416 (Feature #12368, ADR-0060 D1/D2) — dominio dedicado de la red MARCA_BLANCA.
         services.AddScoped<Flit.Admin.Domain.Companies.Domains.ITenantDomainRepository, TenantDomainRepository>();
         // Resolutor por host con caché de 60 s (ADR-0060 D2): IMemoryCache es Singleton, la clase es

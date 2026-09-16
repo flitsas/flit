@@ -39,7 +39,16 @@ internal sealed class MemoryPublicBrandingCache : IPublicBrandingCache, IBrandin
     public void Store(Guid headTenantId, BrandIdentity identity, TimeSpan ttl) =>
         _cache.Set(KeyFor(headTenantId), identity, ttl);
 
-    public void InvalidateTenant(Guid tenantId) => _cache.Remove(KeyFor(tenantId));
+    public void InvalidateTenant(Guid tenantId)
+    {
+        _cache.Remove(KeyFor(tenantId));
+
+        // HU #12428 AC5 — mismo evento que invalida la identidad pública/sesión (publicar/retirar
+        // marca, cambio de tenant_type) también debe invalidar el tema de correo cacheado por
+        // DbEmailThemeResolver: comparten el mismo IMemoryCache singleton, así que basta con limpiar
+        // también su clave aquí, sin una segunda suscripción a los mismos eventos.
+        _cache.Remove(Notifications.Theme.DbEmailThemeResolver.CacheKeyFor(tenantId));
+    }
 
     private static string KeyFor(Guid tenantId) => KeyPrefix + tenantId;
 }

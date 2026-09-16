@@ -23,8 +23,11 @@ public sealed partial class AdminResetPasswordHandler(
     IEmailSender emailSender,
     IAdminAuditWriter auditWriter,
     IAuditContextAccessor auditContext,
-    ILogger<AdminResetPasswordHandler> logger)
+    ILogger<AdminResetPasswordHandler> logger,
+    IEmailThemeResolver? themeResolver = null)
 {
+    private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
+
     /// <summary>Permiso requerido para resetear contraseñas dentro del propio tenant.</summary>
     public const string ResetPermission = "security.users.reset_password";
 
@@ -104,10 +107,15 @@ public sealed partial class AdminResetPasswordHandler(
         await userAccountRepository.UpdatePasswordHashAsync(
             target.UserId, hash, DateTimeOffset.UtcNow, mustChangePassword: true, cancellationToken);
 
-        var composed = AdminResetPasswordEmailTemplate.Compose(target.DisplayName, temporaryPassword);
+        var theme = await _themeResolver.ResolveAsync(target.TenantId, cancellationToken).ConfigureAwait(false);
+        var composed = AdminResetPasswordEmailTemplate.Compose(target.DisplayName, temporaryPassword, theme: theme);
         // HU #11363 AC1 — id estable del catálogo (TemplateIds.AdminResetPassword en Flit.Infrastructure).
         var message = new EmailMessage(
-            target.TenantId, "security.admin-reset-password", target.Email, target.DisplayName, composed.Subject, composed.HtmlBody);
+            target.TenantId, "security.admin-reset-password", target.Email, target.DisplayName, composed.Subject, composed.HtmlBody)
+        {
+            ThemeKind = theme.KindWireValue,
+            ThemeVersion = theme.IsBrand ? theme.Version : null,
+        };
 
         var sendResult = await emailSender.SendAsync(message, cancellationToken);
         if (!sendResult.Success)

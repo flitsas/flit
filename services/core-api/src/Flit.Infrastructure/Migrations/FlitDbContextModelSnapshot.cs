@@ -1358,6 +1358,16 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("result");
 
+                    b.Property<string>("SenderEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("sender_email");
+
+                    b.Property<string>("SenderName")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("sender_name");
+
                     b.Property<string>("TemplateKey")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1367,6 +1377,15 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
+
+                    b.Property<string>("ThemeKind")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("theme_kind");
+
+                    b.Property<int?>("ThemeVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("theme_version");
 
                     b.HasKey("Id")
                         .HasName("pk_notification_delivery_logs");

@@ -15,7 +15,21 @@ internal sealed record NotificationDeliveryLogEntry(
     bool Success,
     string? FailureReason,
     int DurationMs,
-    bool RecipientDiverted = false);
+    bool RecipientDiverted = false)
+{
+    /// <summary>HU #12428 AC5 — <c>flit</c> | <c>brand</c> aplicado a este envío. <c>null</c> si el
+    /// composer no participó de la resolución de tema.</summary>
+    public string? ThemeKind { get; init; }
+
+    /// <summary><c>tenant_brandings.published_version</c> aplicada (solo <c>brand</c>).</summary>
+    public int? ThemeVersion { get; init; }
+
+    /// <summary>HU #12430 AC5 — nombre visible del remitente aplicado.</summary>
+    public string? SenderName { get; init; }
+
+    /// <summary>HU #12430 AC5 — dirección de remitente aplicada.</summary>
+    public string? SenderEmail { get; init; }
+}
 
 /// <summary>
 /// Escribe una fila de la bitácora de envíos. Implementación única: <see cref="NotificationDeliveryLogWriter"/>.
