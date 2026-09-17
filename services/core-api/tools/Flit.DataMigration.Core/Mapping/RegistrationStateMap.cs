@@ -40,10 +40,10 @@ public sealed class RegistrationStateMap : IV1StateMap
     /// <summary>
     /// Estados sin equivalente exacto en V2. Se migran igual —el migrador es indiferente a lo que
     /// le manden— pero se reportan como decisión pendiente de negocio. En producción son pocos:
-    /// Sent 1, Assigned 5, Archived 0. (Revoked dejó de ser ambiguo: V2 tiene 'revocado' desde
-    /// HU #12165.)
+    /// Archived 0. (Revoked dejó de ser ambiguo: V2 tiene 'revocado' desde HU #12165. Sent y
+    /// Assigned dejaron de serlo con ADR-0059: V2 tiene 'preasignacion' y 'asignado'.)
     /// </summary>
-    private static readonly HashSet<int> Ambiguous = [4, 5, 10];
+    private static readonly HashSet<int> Ambiguous = [10];
 
     public string V1Name(int processStatus) =>
         V1Names.TryGetValue(processStatus, out var name) ? name : $"desconocido({processStatus})";
@@ -57,13 +57,13 @@ public sealed class RegistrationStateMap : IV1StateMap
         2 => TramiteEstado.Anulado,
         3 => TramiteEstado.Preparado,
 
-        // "Sent" (radicado al organismo) no existe en V2; 'preparado' es el estado inmediatamente
-        // anterior a la entrega y el más cercano semánticamente. Mismo criterio que en traspaso.
-        4 => TramiteEstado.Preparado,
+        // ADR-0059 (HU #12603) — "Sent" es la matrícula radicada SIN placa, esperando que el organismo
+        // la asigne: exactamente 'preasignacion'. Antes caía en 'preparado' por no existir el estado.
+        // Solo aplica a corridas nuevas del migrador: lo ya migrado no se reprocesa.
+        4 => TramiteEstado.Preasignacion,
 
-        // "Assigned" (asignado dentro del organismo) es posterior a Sent: el trámite YA está en
-        // tránsito, así que 'entregado' describe mejor el hecho que 'preparado'.
-        5 => TramiteEstado.Entregado,
+        // "Assigned": el organismo ya asignó la placa y la pelota está en el gestor: 'asignado'.
+        5 => TramiteEstado.Asignado,
 
         6 => TramiteEstado.Entregado,
         7 => TramiteEstado.Aprobado,

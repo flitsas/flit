@@ -49,7 +49,7 @@ const mocks = vi.hoisted(() => ({
   startSubsanacion: vi.fn(),
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
-  completePlateFlow: vi.fn(),
+  enviarAlOt: vi.fn(),
   adminLimpiarConsolidado: vi.fn(),
   adminCargarConsolidado: vi.fn(),
   adminCambiarEstado: vi.fn(),
@@ -64,7 +64,7 @@ const ESCRITURAS = [
   'setPriority',
   'pauseInstance',
   'pauseInstancesMassive',
-  'completePlateFlow',
+  'enviarAlOt',
   'startSubsanacion',
   'adminLimpiarConsolidado',
   'adminCargarConsolidado',
@@ -374,10 +374,10 @@ describe('HU #12362 — AC1/AC2/AC8: listado, un caso por punto de escritura', (
       interactuar: async () => abrirAcciones('TR-RED'),
     },
     {
-      accion: 'procesar (placa asignada)',
-      fila: makeRed({ estado: 'entregado', plateFlowStatus: 'asignado' }),
+      accion: 'enviar al OT (placa asignada, ADR-0059)',
+      fila: makeRed({ estado: 'asignado' }),
       noDebeExistir: () => {
-        expect(screen.queryByRole('menuitem', { name: 'Procesar' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('menuitem', { name: 'Enviar al OT' })).not.toBeInTheDocument();
       },
       interactuar: async () => abrirAcciones('TR-RED'),
     },
@@ -665,7 +665,7 @@ describe('HU #12362 — AC4: el trámite propio de la cabeza no cambia', () => {
   it('la fila propia conserva prioridad, menú admin y la llamada de escritura funciona igual', async () => {
     tokenCabeza();
     mocks.listInstances.mockResolvedValue([
-      makeInstance({ estado: 'entregado', plateFlowStatus: 'asignado' }),
+      makeInstance({ estado: 'asignado' }),
       makeRed(),
     ]);
     renderTable();
@@ -678,7 +678,7 @@ describe('HU #12362 — AC4: el trámite propio de la cabeza no cambia', () => {
 
     await abrirAcciones('TR-PROPIO');
     const items = menuItems();
-    for (const label of ['Ver', 'Procesar', 'Ver documentos', 'Cambiar estado', 'Anular', 'Reasignar gestor']) {
+    for (const label of ['Ver', 'Enviar al OT', 'Ver documentos', 'Cambiar estado', 'Anular', 'Reasignar gestor']) {
       expect(items).toContain(label);
     }
     expect(screen.queryByRole('status', { name: /Solo consulta/ })).toBeInTheDocument(); // solo la de la red

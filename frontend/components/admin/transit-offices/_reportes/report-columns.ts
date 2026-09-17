@@ -37,7 +37,7 @@ export const ESTADO_META: Record<string, EstadoMeta> = {
   [OT_REPORT_ESTADOS.esperandoPlaca]: {
     label: "Esperando placa",
     color: "#00DBD5",
-    hint: "Aprobado el expediente, falta asignar la placa. Sigue siendo trabajo del organismo.",
+    hint: "Radicado sin placa: el organismo debe asignarla antes de que el gestor lo envíe a revisión. Sigue siendo trabajo del organismo.",
   },
   [OT_REPORT_ESTADOS.esperandoCliente]: {
     label: "Esperando al cliente",
@@ -64,6 +64,11 @@ export const ESTADO_META: Record<string, EstadoMeta> = {
     color: "#64748B",
     hint: "La empresa lo dio de baja después de radicarlo.",
   },
+  [OT_REPORT_ESTADOS.revocado]: {
+    label: "Revocado",
+    color: "#8B5CF6",
+    hint: "Se aprobó y el organismo lo revocó después. Cerrado, pero no a favor.",
+  },
   [OT_REPORT_ESTADOS.otro]: {
     label: "Otro",
     color: "#CBD5E1",
@@ -80,6 +85,7 @@ export const ESTADO_ORDER: string[] = [
   OT_REPORT_ESTADOS.aprobado,
   OT_REPORT_ESTADOS.rechazado,
   OT_REPORT_ESTADOS.anulado,
+  OT_REPORT_ESTADOS.revocado,
   OT_REPORT_ESTADOS.otro,
 ];
 

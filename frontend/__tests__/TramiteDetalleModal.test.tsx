@@ -43,7 +43,6 @@ const ITEM = {
   tenantId: '11111111-1111-1111-1111-111111111111',
   companiaNombre: null,
   subsanacionActiva: false,
-  plateFlowStatus: null,
   ultimoRechazoMotivo: null,
   isPaused: false,
   pausedObservation: null,

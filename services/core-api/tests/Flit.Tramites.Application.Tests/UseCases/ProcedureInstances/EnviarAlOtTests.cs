@@ -9,16 +9,21 @@ using Xunit;
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
 /// <summary>
-/// Validación del SOAT ante el RUNT al procesar (sub-estado <c>asignado</c> → <c>terminado</c>).
+/// «Enviar al OT» (ADR-0059, HU #12597 AC4/AC5): <c>asignado → entregado</c> por el ciclo de vida, con
+/// la validación del SOAT ante el RUNT.
 ///
 /// <para>Con la opción <b>apagada</b> (default), un SOAT que el RUNT no reporta vigente detiene el
 /// avance. Con la opción <b>activa</b> el hallazgo solo se informa y el trámite continúa.</para>
 /// </summary>
-public sealed class CompletePlateFlowSoatTests
+public sealed class EnviarAlOtTests
 {
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
+    private readonly ITramiteLifecycleService _lifecycle = Substitute.For<ITramiteLifecycleService>();
+    private TramiteTransitionCommand? _comandoRecibido;
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private EnviarAlOtHandler Sut() => new(_repo, _lifecycle);
 
     private ProcedureInstance Asignado(Guid id, Guid tenantId)
     {
@@ -29,66 +34,95 @@ public sealed class CompletePlateFlowSoatTests
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000100",
-            Status = TramiteEstado.Entregado,
-            PlateFlowStatus = PlateFlowStatus.Asignado,
+            Status = TramiteEstado.Asignado,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _repo.GetByIdWithDetailsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
+        // El ciclo de vida real se prueba en TramiteLifecycleServiceTests; aquí solo interesa QUÉ orden
+        // recibe y que el handler devuelva la instancia transicionada.
+        _lifecycle.TransitionAsync(Arg.Any<TramiteTransitionCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                _comandoRecibido = call.Arg<TramiteTransitionCommand>();
+                instance.Status = _comandoRecibido.ToStatus;
+                return TramiteTransitionOutcome.Ok(instance);
+            });
         return instance;
     }
 
-    /// <summary>Sin validador inyectado el handler avanza (no hay consulta que bloquee).</summary>
+    /// <summary>AC4 — sin validador inyectado el handler envía (no hay consulta que bloquee).</summary>
     [Fact]
-    public async Task Procesar_sinValidador_avanzaATerminado()
+    public async Task Enviar_sinValidador_pasaAEntregadoPorElCicloDeVida()
     {
         var instance = Asignado(Guid.NewGuid(), Guid.NewGuid());
-        var sut = new CompletePlateFlowHandler(_repo);
+        var usuario = Guid.NewGuid();
 
-        var (result, error, warning) = await sut.HandleAsync(
-            instance.Id, instance.TenantId, Guid.NewGuid(), new CompletePlateFlowRequest(true, true), Ct);
+        var (result, error, warning) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, usuario, new EnviarAlOtRequest(true, true), Ct);
 
         error.Should().BeNull();
         warning.Should().BeNull();
         result.Should().NotBeNull();
-        instance.PlateFlowStatus.Should().Be(PlateFlowStatus.Terminado);
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+        _comandoRecibido.Should().NotBeNull();
+        _comandoRecibido!.ToStatus.Should().Be(TramiteEstado.Entregado);
+        _comandoRecibido.Actor.Should().Be(TramiteActor.Gestor);
+        _comandoRecibido.ChangedByUserId.Should().Be(usuario);
     }
 
-    [Fact]
-    public async Task Procesar_fueraDeAsignado_noAvanza()
+    /// <summary>AC5 — en preasignacion no hay placa y en entregado ya se envió: 422 transicion_no_permitida.</summary>
+    [Theory]
+    [InlineData("preasignacion")]
+    [InlineData("entregado")]
+    [InlineData("preparado")]
+    public async Task Enviar_fueraDeAsignado_noAvanzaNiTocaElCicloDeVida(string status)
     {
         var instance = Asignado(Guid.NewGuid(), Guid.NewGuid());
-        instance.PlateFlowStatus = PlateFlowStatus.Preasignado;
-        var sut = new CompletePlateFlowHandler(_repo);
+        instance.Status = status;
 
-        var (result, error, _) = await sut.HandleAsync(
-            instance.Id, instance.TenantId, null, new CompletePlateFlowRequest(), Ct);
+        var (result, error, _) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, null, new EnviarAlOtRequest(), Ct);
 
         result.Should().BeNull();
-        error.Should().Be("plate_flow_not_asignado");
+        error.Should().Be(TramiteEstadoErrores.TransicionNoPermitida);
+        _comandoRecibido.Should().BeNull();
     }
 
     [Fact]
-    public async Task Procesar_registraLosChecksDeSoatEImpuesto()
+    public async Task Enviar_siElCicloDeVidaDeniega_propagaElCodigo()
     {
         var instance = Asignado(Guid.NewGuid(), Guid.NewGuid());
-        var sut = new CompletePlateFlowHandler(_repo);
+        _lifecycle.TransitionAsync(Arg.Any<TramiteTransitionCommand>(), Arg.Any<CancellationToken>())
+            .Returns(TramiteTransitionOutcome.Fail(TramiteEstadoErrores.TransicionSoloGestor, "x"));
 
-        await sut.HandleAsync(
-            instance.Id, instance.TenantId, Guid.NewGuid(), new CompletePlateFlowRequest(true, false), Ct);
+        var (result, error, _) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, null, new EnviarAlOtRequest(), Ct);
+
+        result.Should().BeNull();
+        error.Should().Be(TramiteEstadoErrores.TransicionSoloGestor);
+    }
+
+    [Fact]
+    public async Task Enviar_registraLosChecksDeSoatEImpuestoAntesDeTransicionar()
+    {
+        var instance = Asignado(Guid.NewGuid(), Guid.NewGuid());
+
+        await Sut().HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(true, false), Ct);
 
         instance.FieldValues.Should().Contain(f =>
-            f.FieldKey == PlateFlowCheckFields.SoatPagado && f.ValueText == "true");
+            f.FieldKey == EnvioOtCheckFields.SoatPagado && f.ValueText == "true");
         instance.FieldValues.Should().Contain(f =>
-            f.FieldKey == PlateFlowCheckFields.ImpuestoDepartamentalPagado && f.ValueText == "false");
+            f.FieldKey == EnvioOtCheckFields.ImpuestoDepartamentalPagado && f.ValueText == "false");
     }
 
     /// <summary>El código de error es el que el endpoint traduce a la alerta bloqueante (409).</summary>
     [Fact]
     public void ElCodigoDeErrorDeSoatEsEstable()
     {
-        CompletePlateFlowHandler.SoatNoVigente.Should().Be("soat_no_vigente");
-        CompletePlateFlowHandler.SoatNoVigenteAdvertencia.Should().Be("soat_no_vigente_advertencia");
+        EnviarAlOtHandler.SoatNoVigente.Should().Be("soat_no_vigente");
+        EnviarAlOtHandler.SoatNoVigenteAdvertencia.Should().Be("soat_no_vigente_advertencia");
     }
 
     // ---------- Gate invertido: activo = no bloquea; apagado = bloquea ----------
@@ -101,7 +135,7 @@ public sealed class CompletePlateFlowSoatTests
     public void Gate_activoNoBloquea_apagadoSiBloqueaCuandoSoatNoVigente(
         bool opcionActiva, bool soatVigente, bool expectedBlock)
     {
-        CompletePlateFlowHandler
+        EnviarAlOtHandler
             .DebeBloquearPorSoatNoVigente(opcionActiva, consultaRespondio: true, soatVigente)
             .Should().Be(expectedBlock);
     }
@@ -117,7 +151,7 @@ public sealed class CompletePlateFlowSoatTests
     public void Advertencia_soloCuandoLaOpcionActivaDejaPasarUnSoatNoVigente(
         bool opcionActiva, bool soatVigente, bool expectedWarn)
     {
-        CompletePlateFlowHandler
+        EnviarAlOtHandler
             .DebeAdvertirSoatNoVigente(opcionActiva, consultaRespondio: true, soatVigente)
             .Should().Be(expectedWarn);
     }
@@ -125,7 +159,7 @@ public sealed class CompletePlateFlowSoatTests
     [Fact]
     public void Advertencia_sinRespuestaDelRunt_noAdvierte()
     {
-        CompletePlateFlowHandler
+        EnviarAlOtHandler
             .DebeAdvertirSoatNoVigente(
                 permiteContinuarSinSoatVigente: true,
                 consultaRespondio: false,
@@ -137,14 +171,14 @@ public sealed class CompletePlateFlowSoatTests
     public void Gate_sinRespuestaDelRunt_nuncaBloquea()
     {
         // Proveedor caído / plantilla ausente: no convertir en bloqueo silencioso.
-        CompletePlateFlowHandler
+        EnviarAlOtHandler
             .DebeBloquearPorSoatNoVigente(
                 permiteContinuarSinSoatVigente: false,
                 consultaRespondio: false,
                 soatVigente: false)
             .Should().BeFalse();
 
-        CompletePlateFlowHandler
+        EnviarAlOtHandler
             .DebeBloquearPorSoatNoVigente(
                 permiteContinuarSinSoatVigente: false,
                 consultaRespondio: true,

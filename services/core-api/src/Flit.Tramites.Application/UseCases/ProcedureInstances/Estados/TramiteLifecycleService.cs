@@ -101,20 +101,18 @@ public sealed class TramiteLifecycleService(
                 TramiteEstadoErrores.EstadoFinal,
                 $"El trámite está en estado final '{from}' y no admite más transiciones.");
 
-        if (!TramiteStateMachine.IsValidTransition(from, command.ToStatus))
-            return TramiteTransitionOutcome.Fail(
-                TramiteEstadoErrores.TransicionNoPermitida,
-                $"La transición de '{from}' a '{command.ToStatus}' no está permitida.");
+        // ADR-0059 — la política decide con contexto (máquina + tipo pide placa + placa presente + actor
+        // + subsanación activa). Aquí se resuelven también la re-radicación sin flag y las aristas de
+        // la ruta de placa; el resto de gates de abajo asumen una arista ya válida.
+        var veredicto = TramiteTransitionPolicy.Evaluate(
+            from, command.ToStatus, TransitionContext.ForInstance(instance, command.Actor));
+        if (!veredicto.Allowed)
+            return TramiteTransitionOutcome.Fail(veredicto.ErrorCode!, veredicto.Detail);
 
-        // Rechazado → entregado solo con subsanación activa (flag). Sin flag no se re-radica.
-        if (string.Equals(from, TramiteEstado.Rechazado, StringComparison.OrdinalIgnoreCase)
-            && command.ToStatus == TramiteEstado.Entregado
-            && !instance.SubsanacionActiva)
-        {
-            return TramiteTransitionOutcome.Fail(
-                TramiteEstadoErrores.TransicionNoPermitida,
-                "Solo se puede re-radicar a entregado cuando la subsanación está activa.");
-        }
+        // Radicación: preparado → entregado|preasignacion, o re-radicación desde rechazado. Es el momento
+        // en que el trámite LLEGA al organismo: corren los gates de entrega y se fija submitted_at.
+        // «Enviar al OT» (asignado → entregado) no es una radicación: el trámite ya llegó al OT.
+        var esRadicacion = TramiteEstado.EsRadicacion(from, command.ToStatus);
 
         // RF05 — anular/rechazar exigen motivo explícito para el historial.
         if (command.ToStatus is TramiteEstado.Anulado or TramiteEstado.Rechazado
@@ -126,8 +124,7 @@ public sealed class TramiteLifecycleService(
         // Re-radicación selectiva: desde subsanación (flag sobre rechazado, o legado status
         // subsanacion) → entregado. Solo re-evalúa gates afectados por el diff del snapshot.
         var isSubsanacionReradicacion =
-            TramiteEstado.EsReRadicacionSubsanacion(from, instance.SubsanacionActiva)
-            && command.ToStatus == TramiteEstado.Entregado;
+            TramiteEstado.EsReRadicacionSubsanacion(from, instance.SubsanacionActiva) && esRadicacion;
 
         var affectedGates = isSubsanacionReradicacion
             ? await ResolveSubsanacionAffectedGatesAsync(instance, command.TenantId, ct).ConfigureAwait(false)
@@ -140,7 +137,7 @@ public sealed class TramiteLifecycleService(
         // 'aprobado' mientras este seguía en curso, esta relectura lo atrapa antes de preparar/entregar.
         // Al re-radicar desde subsanación, SOLO si el VIN fue uno de los campos corregidos (o no hay
         // snapshot base: fail-safe).
-        if (command.ToStatus is TramiteEstado.Preparado or TramiteEstado.Entregado
+        if ((command.ToStatus == TramiteEstado.Preparado || esRadicacion)
             && affectedGates.Contains(SubsanacionGateMap.VehicleState))
         {
             var vehicleStateDetail = await EvaluarEstadoVehiculoRegistralAsync(instance, ct).ConfigureAwait(false);
@@ -164,7 +161,7 @@ public sealed class TramiteLifecycleService(
 
         // Gates OT de entrega (heredados del submit HU #10217/#2). HU #10872 (AC1) — este es el GATE
         // FINAL de radicación: corre SIEMPRE, sin importar el diff de campos corregidos.
-        if (command.ToStatus == TramiteEstado.Entregado)
+        if (esRadicacion)
         {
             var entregaError = await EvaluarEntregaAsync(instance, ct).ConfigureAwait(false);
             if (entregaError is var (code, detail) && code is not null)
@@ -185,13 +182,9 @@ public sealed class TramiteLifecycleService(
         var now = DateTimeOffset.UtcNow;
         instance.Status = command.ToStatus;
         instance.UpdatedAt = now;
-        if (command.ToStatus == TramiteEstado.Entregado)
+        if (esRadicacion)
         {
             instance.SubmittedAt = now;
-            // Feature #10587 / HU #10785 — la ruta de placa NO cambia el status (queda 'entregado'):
-            // fija el sub-estado interno de placa (preasignado Flujo B / asignado Flujo A / null estándar).
-            // Los gates de entrega (EvaluarEntregaAsync) ya corrieron y promovieron el OT elegido.
-            instance.PlateFlowStatus = command.PlateFlowStatus;
 
             // Cierra la ventana de edición de subsanación al re-radicar. El baseline ya se consumió
             // en el diff de gates de esta misma transición, así que se suelta con la ventana.
@@ -208,6 +201,10 @@ public sealed class TramiteLifecycleService(
             instance.SubsanacionActiva = false;
             instance.SubsanacionBaseline = null;
         }
+
+        // ADR-0059 (HU #12597) — origen del rechazo: se fija al entrar a 'rechazado' (el gestor distingue
+        // un rechazo desde preasignación) y se limpia al salir de él por cualquier arista.
+        instance.RejectedFrom = command.ToStatus == TramiteEstado.Rechazado ? from : null;
 
         // Feature #10701 / HU #10860 — un cambio de estado invalida los consolidados persistidos
         // (maestro y wizard): el expediente cambió, así que la próxima generación debe regenerarlos

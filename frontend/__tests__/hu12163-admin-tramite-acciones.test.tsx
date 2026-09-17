@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => ({
   listBiometricExpediente: vi.fn(),
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
-  completePlateFlow: vi.fn(),
+  enviarAlOt: vi.fn(),
   // HU #12163 — las 5(6) acciones administrativas avanzadas.
   adminLimpiarConsolidado: vi.fn(),
   adminCargarConsolidado: vi.fn(),

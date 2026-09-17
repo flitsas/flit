@@ -15,7 +15,6 @@ import {
   X,
 } from 'lucide-react';
 import { InlineAlert } from '@/components/atom/InlineAlert';
-import { plateFlowHint } from './TramitesTable';
 import { AttachmentPreview, AvisoDescargaFallida, useAttachmentPreview } from './TramiteDocumentosModal';
 import { SeccionCargando, SeccionError } from './detalle/primitivos';
 import { DetalleTramiteShell } from './detalle/DetalleTramiteShell';
@@ -338,8 +337,7 @@ export function TramiteDetalleModal({
   );
   const pasoActivo = pasos[pasoActivoIndex];
   const StepIcon = pasoActivo?.Icon ?? FileText;
-  const estadoHdr = item ? detalleEstadoHeader(item.estado) : null;
-  const plateHint = item ? plateFlowHint(item.plateFlowStatus) : null;
+  const estadoHdr = item ? detalleEstadoHeader(item.estado, item.rejectedFrom) : null;
   const systemAttachments = attachments.filter((a) => a.source === 'system');
 
   // Subsanación: `rechazado` es el único estado con vuelta a la edición (el backend responde 409
@@ -535,7 +533,6 @@ export function TramiteDetalleModal({
                 {item.pausedObservation?.trim() || 'Este trámite está pausado y no avanza hasta reanudarlo.'}
               </InlineAlert>
             ) : null}
-            {plateHint ? <InlineAlert tone="info">{plateHint}</InlineAlert> : null}
             {estadoHdr?.alert &&
             !item.ultimoRechazoMotivo?.trim() &&
             // Rechazado sin motivo ya se anuncia arriba, en el aviso que trae "Subsanar trámite":

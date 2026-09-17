@@ -21,9 +21,6 @@ public sealed class OtClientProcedureResponse
     /// <summary>Familia del tipo (MATRICULAS | TRASPASO | OTROS): determina qué causales de rechazo aplican.</summary>
     public string Familia { get; init; } = string.Empty;
 
-    /// <summary>Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado).</summary>
-    public string? PlateFlowStatus { get; init; }
-
     /// <summary>HU #12165/#12167 (Feature #12156) — base de la ventana de 1 hora para corregir la placa.</summary>
     public DateTimeOffset? PlateAssignedAt { get; init; }
 
@@ -31,17 +28,17 @@ public sealed class OtClientProcedureResponse
     public DateTimeOffset? PlateUpdatedAt { get; init; }
 
     /// <summary>HU #10804 (Feature #10587) — estado del SOAT (soat_estado): null | unknown | vencido | vigente.
-    /// El frontend oculta Aprobar/Rechazar salvo ruta estándar o placa asignada con SOAT vigente.</summary>
+    /// Informativo (ADR-0059): las acciones del OT las gobierna <see cref="Status"/>.</summary>
     public string? SoatEstado { get; init; }
 
     /// <summary>HU #10805 (Feature #10587) — dígito de preferencia de placa (0-9). Guía para el OT
     /// al asignar; no obliga (puede asignar una placa que termine en otro dígito).</summary>
     public string? PlatePreferredLastDigit { get; init; }
 
-    /// <summary>Check opcional del gestor; badge en dashboard OT solo si PlateFlowStatus = terminado.</summary>
+    /// <summary>Check opcional del gestor al «Enviar al OT»; badge en el dashboard OT en <c>entregado</c>.</summary>
     public bool SoatPagado { get; init; }
 
-    /// <summary>Check opcional del gestor; badge en dashboard OT solo si PlateFlowStatus = terminado.</summary>
+    /// <summary>Check opcional del gestor al «Enviar al OT»; badge en el dashboard OT en <c>entregado</c>.</summary>
     public bool ImpuestoDepartamentalPagado { get; init; }
 
     public Guid? TransitOfficeId { get; init; }
@@ -195,7 +192,6 @@ internal static class OtClientProcedureMapper
             ReferenceNumber = procedure.ReferenceNumber,
             Status = procedure.Status,
             Familia = procedure.Familia,
-            PlateFlowStatus = procedure.PlateFlowStatus,
             PlateAssignedAt = procedure.PlateAssignedAt,
             PlateUpdatedAt = procedure.PlateUpdatedAt,
             SoatEstado = procedure.SoatEstado,

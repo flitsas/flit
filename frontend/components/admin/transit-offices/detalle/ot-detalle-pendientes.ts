@@ -25,11 +25,12 @@ export function pendientesDelTramite(
 ): string[] {
   const items: string[] = [];
 
-  if (procedure.plateFlowStatus === "preasignado") {
+  // ADR-0059 — la ruta de placa son estados reales.
+  if (procedure.status === "preasignacion") {
     items.push("Pendiente asignar placa por el OT.");
   }
-  if (procedure.plateFlowStatus === "asignado") {
-    items.push("Pendiente proceso del gestor (Asignado → Terminado) antes de decidir.");
+  if (procedure.status === "asignado") {
+    items.push("Pendiente que el gestor gestione SOAT e impuestos y envíe el trámite al OT.");
   }
   if (procedure.soatEstado && procedure.soatEstado !== "vigente") {
     items.push(`SOAT RUNT no vigente (${soatEstadoLabel(procedure.soatEstado)}).`);

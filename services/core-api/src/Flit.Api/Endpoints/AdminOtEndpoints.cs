@@ -1170,7 +1170,6 @@ public static class AdminOtEndpoints
         ListOtClientProceduresHandler handler,
         ITransitOfficeCatalog transitOfficeCatalog,
         string? status,
-        string? plateFlowStatus,
         Guid? procedureTypeId,
         string? vin,
         string? placa,
@@ -1207,7 +1206,6 @@ public static class AdminOtEndpoints
             OtTenantId = tenantId,
             TransitOfficeId = scopedOfficeId,
             Status = status,
-            PlateFlowStatus = plateFlowStatus,
             ProcedureTypeId = procedureTypeId,
             Vin = vin,
             Placa = placa,
@@ -2898,10 +2896,10 @@ public static class AdminOtEndpoints
 /// <summary>
 /// Cuerpo de <c>POST /client-procedures/search</c> (HU #12217).
 ///
-/// <para>Conserva los filtros sueltos del GET además de <see cref="Condiciones"/>: <c>status</c> y
-/// <c>plateFlowStatus</c> los sigue mandando la tira de tarjetas de la cabecera, que no es un filtro
-/// que el usuario escriba sino un atajo a un recuento ya hecho, y los enlaces profundos de los
-/// reportes entran por ahí también.</para>
+/// <para>Conserva los filtros sueltos del GET además de <see cref="Condiciones"/>: <c>status</c> lo
+/// sigue mandando la tira de tarjetas de la cabecera (ADR-0059: cada tarjeta es un estado real), que
+/// no es un filtro que el usuario escriba sino un atajo a un recuento ya hecho, y los enlaces
+/// profundos de los reportes entran por ahí también.</para>
 /// </summary>
 internal sealed record OtBandejaSearchRequest
 {
@@ -2911,7 +2909,6 @@ internal sealed record OtBandejaSearchRequest
     public string? Busqueda { get; init; }
 
     public string? Status { get; init; }
-    public string? PlateFlowStatus { get; init; }
     public Guid? ProcedureTypeId { get; init; }
     public string? Vin { get; init; }
     public string? Placa { get; init; }
@@ -2936,7 +2933,6 @@ internal sealed record OtBandejaSearchRequest
         Condiciones = Condiciones,
         Busqueda = Busqueda,
         Status = Status,
-        PlateFlowStatus = PlateFlowStatus,
         ProcedureTypeId = ProcedureTypeId,
         Vin = Vin,
         Placa = Placa,
