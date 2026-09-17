@@ -31,6 +31,21 @@ describe("ot-nav — refactor adminOT", () => {
     expect(tab?.segment).toBe("revocation-requests");
   });
 
+  // Pedido del usuario (2026-09-16) — modo Dashboard/QX, ventana de revocatoria (HU #12569) y
+  // feature flags operativos solo vivían en una ruta legacy sin enlace en ningún menú.
+  it("incluye el tab 'configuracion' en OT_HUB_TABS", () => {
+    const tab = OT_HUB_TABS.find((t) => t.id === "configuracion");
+    expect(tab).toBeDefined();
+    expect(tab?.label).toBe("Configuración");
+    expect(tab?.segment).toBe("configuracion");
+  });
+
+  it("otHubModulePath arma la ruta del tab configuracion", () => {
+    expect(otHubModulePath("ot-1", "configuracion")).toBe(
+      "/admin/transit-offices/ot-1/configuracion",
+    );
+  });
+
   it("incluye el tab 'usuarios' en OT_HUB_TABS", () => {
     const tab = OT_HUB_TABS.find((t) => t.id === "usuarios");
     expect(tab).toBeDefined();

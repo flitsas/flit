@@ -105,8 +105,7 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   [OT_ADM_DOCK.reportes]: "reportes",
   [OT_ADM_DOCK.mandatos]: "administracion",
   [OT_ADM_DOCK.imprintValidation]: "administracion",
-  // HU #12578 (Feature #12565) — vista dedicada "Revocatorias" del hub OT.
-  [OT_ADM_DOCK.revocationRequests]: "administracion",
+  [OT_ADM_DOCK.configuracion]: "administracion",
   rbac: "administradores",
   auditoria: "administradores",
   "log-qx": "integraciones",

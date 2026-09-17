@@ -72,7 +72,7 @@ import {
   Image as ImageIcon,
   BadgeCheck,
   Timer,
-  Undo2,
+  Settings,
 } from "lucide-react";
 
 export type ModuleId =
@@ -498,13 +498,14 @@ export function Shell({
         onClick: () => goOtHub("imprint-validation"),
       },
       {
-        // HU #12578 (Feature #12565, AC2) — visible solo para Admin OT (este bloque ya está
-        // gateado por `currentUser?.isOtAdmin`); cualquier otro rol no ve esta entrada.
-        key: OT_ADM_DOCK.revocationRequests,
-        label: "Revocatorias",
-        icon: Undo2,
-        active: isOtHubSegmentActive(pathname, "revocation-requests"),
-        onClick: () => goOtHub("revocation-requests"),
+        // Pedido del usuario (2026-09-16) — modo Dashboard/QX, ventana de revocatoria (HU #12569) y
+        // feature flags operativos: sin esta entrada, esos ajustes solo eran alcanzables escribiendo
+        // a mano la URL de una pestaña legacy sin enlace en ningún menú.
+        key: OT_ADM_DOCK.configuracion,
+        label: "Configuración",
+        icon: Settings,
+        active: isOtHubSegmentActive(pathname, "configuracion"),
+        onClick: () => goOtHub("configuracion"),
       },
     );
   }
