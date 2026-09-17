@@ -187,12 +187,6 @@ public sealed class ApproveOtClientProcedureRequest
     public Guid? MandateSignerId { get; init; }
 }
 
-/// <summary>HU #12166 (Feature #12156) — motivo opcional de la revocación (auditoría, no exigido por AC).</summary>
-public sealed class RevokeOtClientProcedureRequest
-{
-    public string? Reason { get; init; }
-}
-
 internal static class OtClientProcedureMapper
 {
     public static OtClientProcedureResponse ToResponse(Domain.OtClientProcedures.OtClientProcedure procedure) =>

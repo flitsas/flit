@@ -15,7 +15,7 @@ namespace Flit.Api.UseCases.RevocationRequests;
 public sealed class DecideRevocationRequestApiRequest
 {
     /// <summary>
-    /// Aprobar: motivo OPCIONAL (auditoría, mismo criterio que <see cref="RevokeOtClientProcedureRequest"/>
+    /// Aprobar: motivo OPCIONAL (auditoría, mismo criterio que <see cref="RevokeOtClientProcedureCommand"/>
     /// de HU #12166). Rechazar: OBLIGATORIO (AC2 — 422 <c>motivo_requerido</c> si falta).
     /// </summary>
     public string? Reason { get; init; }
