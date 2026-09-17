@@ -122,6 +122,16 @@ function isVehicleBodyTypeMissing(err: unknown): boolean {
   return (problem as { title?: unknown }).title === 'VEHICLE_BODY_TYPE_MISSING';
 }
 
+// Epic #12550 — Ruta Corta ante un organismo no habilitado: misma reimplementación local.
+function getOrganismoRuntNoHabilitado(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return null;
+  const { title, transitOfficeName } = problem as { title?: unknown; transitOfficeName?: unknown };
+  if (title !== 'organismo_runt_no_habilitado') return null;
+  return typeof transitOfficeName === 'string' ? transitOfficeName : 'el organismo reportado por el RUNT';
+}
+
 // Levantamiento de prenda sobre un vehículo sin gravamen: misma reimplementación local.
 function isVehiclePrendaMissing(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
@@ -139,6 +149,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   isTransitOfficeUnavailable,
   isVehicleBodyTypeMissing,
   isVehiclePrendaMissing,
+  getOrganismoRuntNoHabilitado,
   // Mismo duck-typing que la implementación real (`err.status === 503`): lo importa
   // DeclaracionesTramite, que el paso de requisitos monta siempre.
   isRuesPreviewUnavailable: (err: unknown) =>

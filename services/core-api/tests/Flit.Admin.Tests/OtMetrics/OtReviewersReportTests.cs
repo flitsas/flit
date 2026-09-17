@@ -371,11 +371,11 @@ public sealed class OtReviewersReportTests
     private static OtMetricsFilter Entre(int desdeDiasAtras, int hastaDiasAtras) =>
         new(Hoy().AddDays(-desdeDiasAtras), Hoy().AddDays(-hastaDiasAtras));
 
+    // El desfase va literal a proposito: el test es el oraculo del huso y no debe leerlo de
+    // ColombiaTime. FindSystemTimeZoneById no sirve aqui — los proyectos compilan con
+    // InvariantGlobalization y el id IANA no existe (Epica #12552, RN-10).
     private static DateOnly Hoy() => DateOnly.FromDateTime(
-        TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Bogota).DateTime);
-
-    private static readonly TimeZoneInfo Bogota =
-        TimeZoneInfo.FindSystemTimeZoneById("America/Bogota");
+        DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).DateTime);
 
     /// <summary>
     /// Un instante fijado a una hora concreta del día de Bogotá.

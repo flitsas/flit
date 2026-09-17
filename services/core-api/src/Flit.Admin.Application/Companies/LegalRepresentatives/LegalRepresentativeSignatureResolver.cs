@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.SignatureVault;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Admin.Application.Companies.LegalRepresentatives;
 
@@ -18,11 +19,6 @@ namespace Flit.Admin.Application.Companies.LegalRepresentatives;
 /// </summary>
 public sealed class LegalRepresentativeSignatureResolver : ILegalRepresentativeSignatureResolver
 {
-    // Hora de Colombia (UTC-5, sin DST): la vigencia se cuenta por día calendario local (ADR-0025 §3
-    // / BiometricRules). El instante "ahora" para la consulta de identidad se ancla al inicio del día
-    // en Colombia, coherente con el corte por día de la vigencia biométrica.
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
-
     private readonly ISignatureVaultReader _signatureVaultReader;
     private readonly IRepresentativeIdentityLookup _identityLookup;
 
@@ -61,7 +57,10 @@ public sealed class LegalRepresentativeSignatureResolver : ILegalRepresentativeS
         }
 
         // (2) Validación de identidad biométrica vigente por documento.
-        var now = new DateTimeOffset(today.ToDateTime(TimeOnly.MinValue), ColombiaUtcOffset);
+        // Hora de Colombia (UTC-5, sin DST): la vigencia se cuenta por día calendario local (ADR-0025 §3
+        // / BiometricRules). El instante "ahora" para la consulta de identidad se ancla al inicio del día
+        // en Colombia, coherente con el corte por día de la vigencia biométrica.
+        var now = new DateTimeOffset(today.ToDateTime(TimeOnly.MinValue), ColombiaTime.Offset);
         var identityRef = await _identityLookup
             .FindVigenteIdentityRefAsync(tenantId, tipoDocumento.Trim(), documento, now, cancellationToken)
             .ConfigureAwait(false);

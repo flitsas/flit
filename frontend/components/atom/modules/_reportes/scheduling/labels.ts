@@ -7,7 +7,9 @@ import type {
   ScheduleFrequency,
 } from "@/lib/api/analytics-scheduling";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+
   resumen: "Resumen general",
   operacion: "Operación / Trámites",
   ot: "Organismo de Tránsito",
@@ -127,7 +129,7 @@ export function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("es-CO", {
+  return d.toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

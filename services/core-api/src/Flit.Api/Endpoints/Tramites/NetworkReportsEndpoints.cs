@@ -134,7 +134,10 @@ internal static class NetworkReportsEndpoints
             PublishOutcome(http, NetworkAccessVocabulary.Resources.ReportsExport, request, null, null, reached, null);
             return Results.File(file, ExcelContentType, fileDownloadName: $"reporte_red_{from:yyyyMMdd}_{to:yyyyMMdd}.xlsx");
         })
-            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            // HU #12652 — la policy AdminCompany que llevaba esta ruta quedó subsumida por el
+            // GroupHeadReadFilter del grupo (rol AdminCompany + alcance de red): se retira para que
+            // TODA la familia responda el mismo 403 { error: "network_role_required" } con cuerpo,
+            // en vez de un 403 vacío solo en la exportación.
             .WithName("NetworkReportsExportExcel")
             .WithSummary("Exporta a Excel el reporte detallado de la red con el mismo filtro que el listado")
             .Produces(StatusCodes.Status200OK, contentType: ExcelContentType)

@@ -1,5 +1,6 @@
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Domain.Companies.SignatureVault;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Admin.Application.Companies.LegalRepresentatives.FindByNit;
 
@@ -21,9 +22,6 @@ namespace Flit.Admin.Application.Companies.LegalRepresentatives.FindByNit;
 /// </summary>
 public sealed class FindRepresentativeByNitHandler
 {
-    // Hora de Colombia (UTC-5, sin DST): la vigencia se cuenta por día calendario local (ADR-0025 §3).
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
-
     private readonly ILegalRepresentativeReader _representativeReader;
     private readonly ISignatureVaultReader _signatureVaultReader;
     private readonly IRepresentativeIdentityLookup _identityLookup;
@@ -64,8 +62,9 @@ public sealed class FindRepresentativeByNitHandler
             return null;
         }
 
-        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
-        var now = new DateTimeOffset(today.ToDateTime(TimeOnly.MinValue), ColombiaUtcOffset);
+        // Hora de Colombia (UTC-5, sin DST): la vigencia se cuenta por día calendario local (ADR-0025 §3).
+        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
+        var now = new DateTimeOffset(today.ToDateTime(TimeOnly.MinValue), ColombiaTime.Offset);
 
         var options = new List<RepresentativeOptionDto>(representatives.Count);
         foreach (var representative in representatives)

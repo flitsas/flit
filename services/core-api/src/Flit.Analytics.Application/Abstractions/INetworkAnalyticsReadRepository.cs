@@ -21,8 +21,9 @@ namespace Flit.Analytics.Application.Abstractions;
 public interface INetworkAnalyticsReadRepository
 {
     /// <summary>Conteos por categoría y estado del universo de <paramref name="tenantIds"/> en el rango.</summary>
+    /// <remarks>BUG #12588 — fechas null = sin acotar; mismo criterio que el overview propio.</remarks>
     Task<NetworkAnalyticsResult<IReadOnlyList<CategoryMetricsDto>>> GetNetworkOverviewAsync(
-        IReadOnlySet<Guid> tenantIds, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default);
+        IReadOnlySet<Guid> tenantIds, DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default);
 
     /// <summary>Top de radicadores de la red (ranking único por usuario, sumando sus radicaciones en cualquier cliente del conjunto).</summary>
     Task<NetworkAnalyticsResult<IReadOnlyList<TopProducerDto>>> GetNetworkTopProducersAsync(

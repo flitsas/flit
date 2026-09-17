@@ -140,6 +140,57 @@ public sealed class RequestTenantResolverTests
             .Should().BeFalse();
     }
 
+    // ── HasRole / RoleValues (HU #12652: puerta de rol de la red sin ir a la base) ────────────
+
+    [Theory]
+    [InlineData("AdminCompany")]
+    [InlineData("admincompany")]
+    public void HasRole_PorClaimRole_OrdinalIgnoreCase(string value)
+    {
+        RequestTenantResolver.HasRole(Principal(new Claim(AdminAuthorization.RoleClaimType, value)), AdminAuthorization.AdminCompanyRole)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasRole_PorClaimRoleCode_Verdadero()
+    {
+        RequestTenantResolver.HasRole(Principal(new Claim("role_code", "AdminCompany")), AdminAuthorization.AdminCompanyRole)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasRole_MultiRolNoEsElPrimerClaim_SigueSiendoReconocido()
+    {
+        var user = Principal(
+            new Claim(AdminAuthorization.RoleClaimType, "Radicador"),
+            new Claim("role_code", "Radicador"),
+            new Claim(AdminAuthorization.RoleClaimType, "AdminCompany"));
+
+        RequestTenantResolver.HasRole(user, AdminAuthorization.AdminCompanyRole).Should().BeTrue();
+        RequestTenantResolver.RoleValues(user).Should().BeEquivalentTo(["Radicador", "Radicador", "AdminCompany"]);
+    }
+
+    [Theory]
+    [InlineData("Radicador")]
+    [InlineData("Operador")]
+    [InlineData("SuperAdmin")]
+    public void HasRole_OtroRolOSinClaims_Falso(string role)
+    {
+        RequestTenantResolver.HasRole(Principal(new Claim(AdminAuthorization.RoleClaimType, role)), AdminAuthorization.AdminCompanyRole)
+            .Should().BeFalse();
+        RequestTenantResolver.HasRole(Principal(new Claim(AdminAuthorization.TenantIdClaimType, CompanyTenant)), AdminAuthorization.AdminCompanyRole)
+            .Should().BeFalse();
+        RequestTenantResolver.RoleValues(Principal()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void HasRole_ClaimDeOtroTipoConElValor_NoCuenta()
+    {
+        // Solo role / role_code: un claim "permissions" o "sub" con el texto del rol no otorga el rol.
+        RequestTenantResolver.HasRole(Principal(new Claim("permissions", "AdminCompany")), AdminAuthorization.AdminCompanyRole)
+            .Should().BeFalse();
+    }
+
     [Fact]
     public void IsSuperAdmin_ValorSuperAdminEnOtroTipoDeClaim_NoCuenta()
     {

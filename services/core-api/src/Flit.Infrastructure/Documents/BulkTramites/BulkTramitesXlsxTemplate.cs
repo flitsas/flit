@@ -202,7 +202,9 @@ public sealed class BulkTramitesXlsxTemplate(
                 AllowBlank = true,
                 ShowInputMessage = true,
                 PromptTitle = PromptTitle,
-                Prompt = columna.Guia,
+                // Prompt, no Guia: Excel descarta las validaciones si el emergente pasa de 255
+                // caracteres (Bug #12651). La guía completa va en la hoja «Instrucciones».
+                Prompt = columna.Prompt,
             };
 
             if (columna.Opciones is { Count: > 0 })

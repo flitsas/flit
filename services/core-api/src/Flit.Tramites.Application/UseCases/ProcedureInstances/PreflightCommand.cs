@@ -96,6 +96,9 @@ public sealed class RunPreflightHandler(
     // por OT, es una precondición del tipo de trámite.
     private const string CheckPrendaAusente = "prenda_ausente";
 
+    /// <summary>Epic #12550 — check informativo con la ruta de la matrícula inicial que decidió el RUNT.</summary>
+    public const string CheckRutaMatricula = "ruta_matricula";
+
     // A4/B4 (HU #10673, ADR-0029) — atributos del vehículo que el operador puede TRANSFORMAR durante el
     // trámite (color/combustible). Cada valor efectivo (el que va al FUR) mapea con su flag de cambio
     // declarado; el snapshot RUNT vive en "{key}_runt". Ver UpsertTransformationAwareField.
@@ -486,6 +489,16 @@ public sealed class RunPreflightHandler(
     /// mismo mensaje y NO devuelve bloqueo (el operador ve el hallazgo en amarillo y sigue);
     /// <c>off</c> no toca esos dos casos (ni señal). La degradación <c>fail</c>→<c>warn</c> del último
     /// caso se conserva en los tres modos: es de la HU #10538, NO de CF-03.</para>
+    ///
+    /// <para>Epic #12550 (HU #12648, ADR-0059 §Ruta Corta) — cuando la respuesta trae historial de
+    /// solicitudes, «ya matriculado» se lee del historial y NO del estado: el check
+    /// <c>matricula_previa_runt</c> (siempre <c>ok</c>, con el veredicto en <c>Datos</c>) manda sobre
+    /// <c>estado_vehiculo</c>. Con veredicto MATRICULADO se bloquea (mismo código
+    /// <see cref="VehicleStatePolicy.VehicleStatusActivoRunt"/> y mismo mensaje, para que el frontend
+    /// siga ofreciendo el traspaso) aunque el estado no sea ACTIVO; con veredicto SIN_MATRICULA_INICIAL
+    /// un estado ACTIVO ya no bloquea (vehículo con placa preasignada por convenio concesionario–OT). Sin
+    /// historial se conserva la regla por estado tal cual. Verificado con 7 VINes reales: los
+    /// preasignados llegan REGISTRADO y sin matrícula en el historial; los matriculados ACTIVO y con ella.</para>
     /// </summary>
     internal static VehicleStateBlock? EndurecerEstadoVehiculoMatricula(
         List<PreflightCheckDto> checks,
@@ -494,6 +507,29 @@ public sealed class RunPreflightHandler(
     {
         if (modalidad != ProcedureFamily.Matriculas)
             return null;
+
+        var historial = VeredictoDelHistorialRunt(checks);
+        if (historial == KyverumRuntVehicleResultMapper.VeredictoMatriculado && mode != TramiteValidationMode.Off)
+        {
+            var idx = checks.FindIndex(c => string.Equals(c.Key, KyverumRuntVehicleResultMapper.CheckMatriculaPreviaRunt, StringComparison.Ordinal));
+            checks[idx] = checks[idx] with
+            {
+                Status = mode == TramiteValidationMode.Block ? "fail" : "warn",
+                Message = "El vehículo ya se encuentra matriculado según el RUNT.",
+            };
+            // El estado (ACTIVO) ya no aporta nada: se deja informativo para no contar el mismo
+            // hallazgo dos veces en el semáforo.
+            DegradarEstadoVehiculoAInformativo(checks);
+            if (mode == TramiteValidationMode.Warn)
+                return null;
+
+            return new VehicleStateBlock(
+                VehicleStatePolicy.VehicleStatusActivoRunt,
+                VehicleStatePolicy.ProcedureTypeMatriculaInicial,
+                VehicleStateSource.Runt);
+        }
+
+        var historialDescartaMatricula = historial == KyverumRuntVehicleResultMapper.VeredictoSinMatricula;
 
         for (var i = 0; i < checks.Count; i++)
         {
@@ -505,6 +541,11 @@ public sealed class RunPreflightHandler(
             {
                 case "ok":
                     if (mode == TramiteValidationMode.Off)
+                        break;
+
+                    // ACTIVO con un historial que no registra matrícula inicial: el vehículo tiene placa
+                    // preasignada y sigue sin matricularse. Se deja el check informativo (ok) y sigue.
+                    if (historialDescartaMatricula)
                         break;
 
                     checks[i] = c with
@@ -544,6 +585,46 @@ public sealed class RunPreflightHandler(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Epic #12550 — el paso 1 dice con nombre por dónde va la matrícula. Siempre <c>ok</c>: no es un
+    /// hallazgo, es la explicación de lo que el gestor va a ver en la tarjeta de radicación.
+    /// </summary>
+    internal static PreflightCheckDto BuildRutaMatriculaCheck(string ruta, string? placa, string? organismo)
+    {
+        var corta = ruta == MatriculaRuta.Corta;
+        return new PreflightCheckDto(
+            CheckRutaMatricula,
+            "Placa y organismo",
+            "ok",
+            SystemSource,
+            // «Ruta Corta» / «Ruta Larga» son nombres internos: al gestor se le dice qué pasa, no cómo
+            // se llama (Samuel, 2026-09-17). El nombre queda en Datos para trazabilidad.
+            corta
+                ? organismo is null
+                    ? $"El vehículo ya tiene la placa {placa} según el RUNT. Llegará al organismo listo para su decisión."
+                    : $"El vehículo ya tiene la placa {placa} ante {organismo} según el RUNT. Llegará al organismo listo para su decisión."
+                : "El vehículo no tiene placa. El organismo de tránsito la asignará en Preasignación.",
+            Datos: ConsultationCheckDetail.Datos(
+                ("Ruta", corta ? "Corta" : "Larga"),
+                ("Placa", placa),
+                ("Organismo", organismo)));
+    }
+
+    /// <summary>Veredicto del check <c>matricula_previa_runt</c> (MATRICULADO | SIN_MATRICULA_INICIAL), o <c>null</c> sin historial.</summary>
+    internal static string? VeredictoDelHistorialRunt(IReadOnlyList<PreflightCheckDto> checks) =>
+        checks
+            .FirstOrDefault(c => string.Equals(c.Key, KyverumRuntVehicleResultMapper.CheckMatriculaPreviaRunt, StringComparison.Ordinal))
+            ?.Datos?
+            .FirstOrDefault(d => string.Equals(d.Etiqueta, KyverumRuntVehicleResultMapper.DatoVeredicto, StringComparison.Ordinal))
+            ?.Valor;
+
+    private static void DegradarEstadoVehiculoAInformativo(List<PreflightCheckDto> checks)
+    {
+        var i = checks.FindIndex(c => string.Equals(c.Key, "estado_vehiculo", StringComparison.Ordinal));
+        if (i >= 0 && checks[i].Status is "fail" or "unknown")
+            checks[i] = checks[i] with { Status = "warn" };
     }
 
     /// <summary>

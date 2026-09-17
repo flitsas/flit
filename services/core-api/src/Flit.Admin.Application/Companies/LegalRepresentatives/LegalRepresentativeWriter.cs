@@ -1,6 +1,7 @@
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.DocumentRequirements;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Admin.Application.Companies.LegalRepresentatives;
 
@@ -20,10 +21,6 @@ namespace Flit.Admin.Application.Companies.LegalRepresentatives;
 /// </summary>
 public sealed class LegalRepresentativeWriter
 {
-    // Hora de Colombia (UTC-5, sin DST): la vigencia de firma/identidad se cuenta por día calendario
-    // local (ADR-0025 §3 / ADR-0033 §5.1), coherente con el resolutor.
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
-
     private readonly IProcedureTypeCatalog _procedureTypeCatalog;
     private readonly ILegalRepresentativeSignatureResolver _signatureResolver;
     private readonly ISignatureVaultReader _signatureVaultReader;
@@ -90,7 +87,9 @@ public sealed class LegalRepresentativeWriter
 
         var effectiveCompanies = EffectiveCompanies(input);
         var primaryNit = effectiveCompanies.Count > 0 ? effectiveCompanies[0].Nit!.Trim() : string.Empty;
-        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
+        // Hora de Colombia (UTC-5, sin DST): la vigencia de firma/identidad se cuenta por día calendario
+        // local (ADR-0025 §3 / ADR-0033 §5.1), coherente con el resolutor.
+        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
 
         LegalRepresentativeSignatureResolution resolution;
         if (input.SignatureVaultId is { } explicitSignatureId)
@@ -215,7 +214,7 @@ public sealed class LegalRepresentativeWriter
         // activa y vigente. PII (documentNumber) no se incluye en mensajes de error.
         if (input.SignatureVaultId is { } signatureVaultId && errors.Count == 0)
         {
-            var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
+            var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
             await ValidateExplicitSignatureAsync(
                 input.TenantId,
                 signatureVaultId,

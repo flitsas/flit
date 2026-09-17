@@ -119,6 +119,9 @@ interface PreflightSnapshotDto {
 interface PreflightPreviewDto extends PreflightSnapshotDto {
   previewToken: string;
   vehicleFields?: Array<{ fieldKey: string; valueText?: string | null; valueJson?: string | null }>;
+  /** Epic #12550 — `corta` | `larga` en matrícula inicial; ausente/null en el resto. */
+  route?: string | null;
+  transitOffice?: { id: string; code: string; name: string; cityName?: string | null } | null;
 }
 
 function mapChecks(dtos: PreflightSnapshotDto['checks']): PreflightSnapshot['checks'] {
@@ -424,6 +427,23 @@ export function isVehicleBodyTypeMissing(err: unknown): boolean {
   const { status, problem } = err as { status?: unknown; problem?: unknown };
   if (status !== 422 || !problem || typeof problem !== 'object') return false;
   return (problem as { title?: unknown }).title === 'VEHICLE_BODY_TYPE_MISSING';
+}
+
+/**
+ * Epic #12550 — Ruta Corta ante un organismo que la compañía no tiene habilitado (422
+ * `organismo_runt_no_habilitado`). Devuelve el nombre del organismo que reporta el RUNT, o `null` si
+ * el error es otro. No es subsanable desde el trámite: la matrícula se radica ante ese organismo o no
+ * se crea.
+ */
+export function getOrganismoRuntNoHabilitado(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return null;
+  const { title, transitOfficeName } = problem as { title?: unknown; transitOfficeName?: unknown };
+  if (title !== 'organismo_runt_no_habilitado') return null;
+  return typeof transitOfficeName === 'string' && transitOfficeName.trim() !== ''
+    ? transitOfficeName
+    : 'el organismo reportado por el RUNT';
 }
 
 export function isTransitOfficeUnavailable(err: unknown): boolean {
@@ -1636,6 +1656,15 @@ export const tramitesClient = {
         valueJson: f.valueJson ?? null,
         source: 'consultation',
       })),
+      route: dto.route === 'corta' || dto.route === 'larga' ? dto.route : null,
+      transitOffice: dto.transitOffice
+        ? {
+            id: dto.transitOffice.id,
+            code: dto.transitOffice.code,
+            name: dto.transitOffice.name,
+            cityName: dto.transitOffice.cityName ?? null,
+          }
+        : null,
     };
   },
 

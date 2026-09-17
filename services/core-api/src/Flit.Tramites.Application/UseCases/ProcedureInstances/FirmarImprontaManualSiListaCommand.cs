@@ -17,6 +17,9 @@ public static class FirmaImprontaAutomaticaOrigen
     /// <summary>El OT asigna la placa (Flujo B) sobre un trámite ya entregado.</summary>
     public const string AsignacionPlaca = "asignacion_placa";
 
+    /// <summary>El gestor envía al OT un trámite en <c>asignado</c> (ADR-0059): reintento por si la identidad quedó vigente tras la asignación.</summary>
+    public const string EnvioOt = "envio_ot";
+
     /// <summary>Backfill administrativo de trámites que quedaron sin firmar (sin consolidado generado).</summary>
     public const string Backfill = "backfill";
 }

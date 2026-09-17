@@ -1,6 +1,8 @@
 using System.Text.Json;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.UseCases.Certifications;
 using Flit.Tramites.Domain.Certifications;
+using Flit.Tramites.Domain.RuntConfirmation;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -39,8 +41,20 @@ public static class KyverumRuntVehicleResultMapper
     /// </summary>
     public const string MapperVersion = "kyverum-v4";
 
+    /// <summary>
+    /// Check informativo del historial de solicitudes (Epic #12550, HU #12648). SIEMPRE en <c>ok</c>:
+    /// el veredicto viaja en <c>Datos</c> (<see cref="DatoVeredicto"/>) y es el preflight de matrícula
+    /// inicial quien lo convierte en bloqueo. Un <c>fail</c> aquí pondría en rojo la consulta de un
+    /// traspaso, cuyo vehículo está matriculado por definición. Se omite cuando no hay historial.
+    /// </summary>
+    public const string CheckMatriculaPreviaRunt = "matricula_previa_runt";
+
+    public const string DatoVeredicto = "Veredicto";
+    public const string VeredictoMatriculado = "MATRICULADO";
+    public const string VeredictoSinMatricula = "SIN_MATRICULA_INICIAL";
+
     public static ConsultationResult MapVehicle(KyverumRuntVehicleResponse response) =>
-        MapVehicle(response, DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaOffset).Date));
+        MapVehicle(response, DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaTime.Offset).Date));
 
     /// <summary>Sobrecarga con la fecha inyectada, para que las pruebas no dependan del reloj.</summary>
     public static ConsultationResult MapVehicle(KyverumRuntVehicleResponse response, DateOnly today)
@@ -54,6 +68,8 @@ public static class KyverumRuntVehicleResultMapper
             MapTecnomecanica(response.Data?.Rtm),
             MapGravamenes(vehiculo),
         };
+        if (MapMatriculaPrevia(response.Data) is { } previa)
+            checks.Add(previa);
 
         var hydrated = MapHydratedFields(response.Data);
         var overall = ComputeOverall(checks);
@@ -61,8 +77,6 @@ public static class KyverumRuntVehicleResultMapper
 
         return new ConsultationResult(Provider, overall, checks, hydrated, Certifications: certifications);
     }
-
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
 
     /// <summary>
     /// Traduce la respuesta al vocabulario canónico (HU #11303, ADR-0041). Se conserva el
@@ -120,6 +134,46 @@ public static class KyverumRuntVehicleResultMapper
             // por el camino, y para los expedientes cuyo pre-vuelo se guardó antes de que existiera.
             ConsultationCheckDetail.Resumen(estadoDatos),
             Datos: estadoDatos);
+    }
+
+    /// <summary>
+    /// Solicitudes del RUNT en la forma neutra del dominio (misma que la Confirmación RUNT lee del
+    /// crudo), para aplicar <see cref="RuntMatriculaPolicy"/> sin duplicar la regla.
+    /// </summary>
+    internal static IReadOnlyList<RuntSolicitud> ToSolicitudes(KyverumRuntVehicleData? data) =>
+        (data?.Solicitudes ?? [])
+            .Where(s => s is not null)
+            .Select(s => new RuntSolicitud(
+                s.NoSolicitud, RuntText.ParseDay(s.FechaSolicitud), s.Estado, s.TramitesRealizados, s.Entidad))
+            .ToList();
+
+    private static ConsultationCheck? MapMatriculaPrevia(KyverumRuntVehicleData? data)
+    {
+        var solicitudes = ToSolicitudes(data);
+        var previa = RuntMatriculaPolicy.EvaluarMatriculaPrevia(solicitudes);
+        if (previa.Veredicto == MatriculaPreviaRuntVeredicto.SinHistorial)
+            return null;
+
+        var placa = data?.Vehiculo?.Placa?.Trim();
+        var fecha = previa.Fecha?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var matriculado = previa.Veredicto == MatriculaPreviaRuntVeredicto.Matriculado;
+        var datos = ConsultationCheckDetail.Datos(
+            (DatoVeredicto, matriculado ? VeredictoMatriculado : VeredictoSinMatricula),
+            ("Placa", placa),
+            ("Organismo", previa.Organismo),
+            (matriculado ? "Matrícula inicial" : "Placa preasignada", fecha));
+
+        return new ConsultationCheck(
+            CheckMatriculaPreviaRunt,
+            "Historial de matrícula en el RUNT",
+            Ok,
+            Provider,
+            matriculado
+                ? "El historial del RUNT registra una matrícula inicial autorizada para este vehículo."
+                : previa.Organismo is null
+                    ? "El historial del RUNT no registra una matrícula inicial para este vehículo."
+                    : "El historial del RUNT no registra matrícula inicial; la placa está preasignada.",
+            Datos: datos);
     }
 
     private static ConsultationCheck MapSoat(List<KyverumRuntSoat>? soat)
@@ -233,7 +287,12 @@ public static class KyverumRuntVehicleResultMapper
         Add(fields, "vehicle_class", v.Clase);
         Add(fields, "vehicle_fuel", v.TipoCombustible);
         Add(fields, "vehicle_engine_displacement", v.Cilindraje);
-        Add(fields, "transit_office_name", v.OrganismoTransito);
+        // Un vehículo con placa preasignada llega SIN organismo en el bloque del vehículo: la entidad
+        // que preasignó la placa viene en el historial de solicitudes. Solo se completa desde ahí cuando
+        // hay placa (sin placa no hay organismo que fijar) — Epic #12550, HU #12648.
+        Add(fields, "transit_office_name", string.IsNullOrWhiteSpace(v.Placa)
+            ? v.OrganismoTransito
+            : RuntMatriculaPolicy.OrganismoDelVehiculo(v.OrganismoTransito, ToSolicitudes(data)));
         Add(fields, "vehicle_state", v.EstadoAutomotor);
         Add(fields, "vehicle_service", v.TipoServicio);
         Add(fields, "vehicle_body_type", v.TipoCarroceria);

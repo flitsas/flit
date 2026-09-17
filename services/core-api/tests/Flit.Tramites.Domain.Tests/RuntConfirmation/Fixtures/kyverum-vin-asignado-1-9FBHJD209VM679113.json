@@ -1,0 +1,188 @@
+{
+ "ok": true,
+ "data": {
+  "vehiculo": {
+   "placa": "WVT948",
+   "nombrePais": null,
+   "numLicencia": null,
+   "estadoAutomotor": "REGISTRADO",
+   "tipoServicio": "Particular",
+   "clase": "CAMIONETA",
+   "marca": "RENAULT",
+   "linea": "DUSTER",
+   "modelo": "2027",
+   "color": "GRIS CASSIOPEE",
+   "numSerie": null,
+   "numMotor": "J759Q396441",
+   "numChasis": "9FBHJD209VM679113",
+   "vin": "9FBHJD209VM679113",
+   "cilindraje": "1598",
+   "tipoCarroceria": "WAGON",
+   "fechaRegistro": null,
+   "gravamenes": "NO",
+   "organismoTransito": null,
+   "capacidadCarga": "489",
+   "codigoMedidaCarga": null,
+   "pesoBruto": "1763",
+   "numeroEjes": "2",
+   "idAutomotor": 614074110,
+   "repotenciado": "NO",
+   "idTipoServicio": 1,
+   "idClaseVehiculo": 5,
+   "diasMatriculado": null,
+   "prendas": "NO",
+   "clasificacion": "AUTOMOVIL",
+   "esRegrabadoMotor": "NO",
+   "esRegrabadoChasis": "NO",
+   "esRegrabadoSerie": "NO",
+   "esRegrabadoVin": "NO",
+   "numRegraChasis": null,
+   "numRegraMotor": null,
+   "numRegraSerie": null,
+   "numRegraVin": null,
+   "antiguoClasico": "NO",
+   "tipoCombustible": "GASOLINA",
+   "pasajerosTotal": null,
+   "pasajerosSentados": "5",
+   "vehiculoEnsenanza": "NO",
+   "puertas": "5",
+   "importacion": 0,
+   "fechaExpedLTImportacion": null,
+   "fechaVenciLTImportacion": null,
+   "seguridadEstado": "NO",
+   "verValidaDIAN": false,
+   "validacionDIAN": null,
+   "mostrarSolicitudes": "SI",
+   "tipoMaquinaria": null,
+   "subpartida": null,
+   "fechaMatricula": null,
+   "tarjetaRegistro": null,
+   "noIdentificacion": null
+  },
+  "tipoDocPropietario": "C",
+  "datosTecnicos": {
+   "capacidadCarga": "489 Kgs",
+   "pesoBrutoVehicular": "1763 Kgs",
+   "noEjes": "2",
+   "noLlantas": null,
+   "alto": null,
+   "ancho": null,
+   "largo": null,
+   "pasajerosTotal": null,
+   "pasajerosSentados": "5",
+   "rodaje": null,
+   "peso": null
+  },
+  "soat": [
+   {
+    "origen": "NACIONAL",
+    "tipoTarifa": "222",
+    "numSoat": "3627654400",
+    "fechaExpedicion": "2026-09-16T00:00:00.000-05:00",
+    "fechaExpediSoat": "2026-09-16T00:00:00.000-05:00",
+    "fechaInicioPoliza": "2026-09-17T00:00:00.000-05:00",
+    "fechaVencimSoat": "2027-09-16T00:00:00.000-05:00",
+    "razonSocialAsegur": "AXA COLPATRIA SEGUROS SA",
+    "estado": "VIGENTE",
+    "estadoSoat": "EMITIDA",
+    "placa": null,
+    "nombrePais": null
+   }
+  ],
+  "solicitudes": [
+   {
+    "noSolicitud": "302942121",
+    "fechaSolicitud": "2026-09-16T10:18:36.000-05:00",
+    "estado": "APROBADA",
+    "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, ",
+    "entidad": "STRIA TTEyTTO ENVIGADO"
+   }
+  ],
+  "garantias": [],
+  "garantiasPrendas": [],
+  "limitacionesPropiedad": [],
+  "polizaCaucion": {
+   "noPoliza": null,
+   "estadoPoliza": null,
+   "fechaExpedicion": null,
+   "fechaVigenciaPoliza": null,
+   "noCertificacion": null,
+   "estadoCertificado": null
+  },
+  "responsabilidadCivil": [],
+  "responsabilidadCivilHabilitar": true,
+  "tarjetaOperacion": {
+   "empresaAfiliadora": null,
+   "modalidadTransporte": null,
+   "modalidadServicio": null,
+   "radioAccion": null,
+   "fechaExpedicion": null,
+   "fechaInicio": null,
+   "fechaFin": null,
+   "estado": null,
+   "nroTarjetaOperacion": null
+  },
+  "permisosPcr": [],
+  "datosBlindaje": {
+   "blindado": null,
+   "nivelBlindaje": null,
+   "nivelBlindajeNumero": null,
+   "fechaBlindaje": null,
+   "fechaDesblindaje": null,
+   "numeroResolucion": null,
+   "tipoBlindajeNombre": null,
+   "fechaExpedicionCertificado": null,
+   "fechaExpedicionCertificadoFormatoWS": null,
+   "idDocumentoCertificadoBlindaje": null,
+   "autorizacion": null
+  },
+  "informacionGps": {
+   "noIdentificacionSerie": null,
+   "empresaHabilitacion": null
+  },
+  "informacionRepotenciado": {
+   "repotenciado": null,
+   "fechaRepotenciacion": null,
+   "modeloRepotenciado": null
+  },
+  "desintegracion": {
+   "placa": null,
+   "desintegrar": null
+  },
+  "certificadoDesintegracion": {
+   "noCertificado": null,
+   "estadoCertificado": null,
+   "fechaExpedicion": null,
+   "entidadDesintegradora": null
+  },
+  "normalizacion": [
+   {
+    "deficienciaMatriculaInicial": "NO",
+    "vehiculoNormalizado": "NO DISPONIBLE",
+    "fecha": null,
+    "numeroActoAdministrativo": null,
+    "descargaCertificado": null,
+    "solicitudNormalizacion": null
+   }
+  ],
+  "certificadoDijin": {
+   "noCertificado": null,
+   "fechaExpedicion": null,
+   "entidadCertificado": null,
+   "estadoCertificado": null
+  },
+  "registroInicial": {
+   "noCertificado": null,
+   "fechaExpedicion": null,
+   "estadoCertificado": null,
+   "placaReposicion": null
+  },
+  "registroInicialInvc": {
+   "noCertificado": null,
+   "fechaExpedicion": null,
+   "estadoCertificado": null,
+   "placaReposicion": null
+  }
+ },
+ "fromCache": false
+}

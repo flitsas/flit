@@ -6,6 +6,8 @@ import type { StatusHistoryItem } from '@/lib/api/types/procedure-runtime';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { LogQxLink } from './LogQxLink';
 
+import { ZONA_COLOMBIA } from '@/lib/format/date';
+
 /**
  * HU-2 (N03, RF05) — timeline vertical del historial de transiciones de estado del trámite
  * (GET /instances/{id}/status-history). Más reciente arriba; cada entrada muestra el chip del
@@ -16,6 +18,7 @@ import { LogQxLink } from './LogQxLink';
 const PAGE_SIZE = 20;
 
 const fmtFecha = new Intl.DateTimeFormat('es-CO', {
+  timeZone: ZONA_COLOMBIA,
   dateStyle: 'medium',
   timeStyle: 'short',
 });

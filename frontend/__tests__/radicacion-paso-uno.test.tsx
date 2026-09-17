@@ -31,7 +31,8 @@ const mocks = vi.hoisted(() => ({
   listVehicleServiceTypes: vi.fn(),
 }));
 
-const plateMocks = vi.hoisted(() => ({ getPlatePreassignStatus: vi.fn() }));
+/** Epic #12550 — organismo que devolvería `getOrganismoRuntNoHabilitado` para el error del preview. */
+const rutaMocks = vi.hoisted(() => ({ organismoNoHabilitado: null as string | null }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: mocks,
@@ -40,11 +41,11 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getDuplicateActiveProcedureId: () => null,
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => false,
+  // Epic #12550 — organismo del RUNT no habilitado (Ruta Corta); null = no es ese error.
+  getOrganismoRuntNoHabilitado: () => rutaMocks.organismoNoHabilitado,
   isVehicleBodyTypeMissing: () => false,
   isVehiclePrendaMissing: () => false,
 }));
-
-vi.mock('@/lib/api/admin-plate-ranges', () => plateMocks);
 
 vi.mock('@/components/admin/Toast', () => ({
   useToast: () => ({ show: vi.fn() }),
@@ -91,6 +92,21 @@ const PREVIEW_RESULT = {
   vehicleFields: [
     { formFieldId: '', fieldKey: 'vehicle_brand', valueText: 'RENAULT', valueJson: null, source: 'consultation' },
   ],
+  // Epic #12550 — sin placa el RUNT decide Ruta Larga: el gestor elige secretaría y dígito.
+  route: 'larga' as const,
+  transitOffice: null,
+};
+
+/** Epic #12550 — lo que devuelve el preview para un vehículo con placa preasignada (Ruta Corta). */
+const PREVIEW_RUTA_CORTA = {
+  ...PREVIEW_RESULT,
+  vehicleFields: [
+    ...PREVIEW_RESULT.vehicleFields,
+    { formFieldId: '', fieldKey: 'plate', valueText: 'WVT948', valueJson: null, source: 'consultation' },
+    { formFieldId: '', fieldKey: 'transit_office_name', valueText: 'STRIA TTEyTTO ENVIGADO', valueJson: null, source: 'consultation' },
+  ],
+  route: 'corta' as const,
+  transitOffice: { id: 'ot-envigado', code: '05266000', name: 'Tránsito de Envigado', cityName: 'ENVIGADO' },
 };
 
 function renderNuevo() {
@@ -135,6 +151,7 @@ async function declararSinPreferenciaDigito(user: ReturnType<typeof userEvent.se
 
 beforeEach(() => {
   vi.clearAllMocks();
+  rutaMocks.organismoNoHabilitado = null;
   mocks.runPreflightPreview.mockResolvedValue(PREVIEW_RESULT);
   mocks.getConsultationConfig.mockResolvedValue({ vehiclePlate: 'kyverum_runt', onlyOwnVehicles: false });
   mocks.listTransitOffices.mockResolvedValue(SECRETARIAS);
@@ -151,7 +168,6 @@ beforeEach(() => {
     },
     preflight: PREVIEW_RESULT.preflight,
   });
-  plateMocks.getPlatePreassignStatus.mockResolvedValue({ enabled: true });
   mocks.setPriority.mockResolvedValue({ id: 'inst-1', prioritario: true });
 });
 
@@ -195,20 +211,16 @@ describe('Dígito de preasignación de placa — paso 1', () => {
 
     expect(await screen.findByLabelText('Dígito de preasignación de placa')).toBeDisabled();
     expect(screen.getByText(/Elige primero la secretaría/)).toBeInTheDocument();
-    // No se consulta el estado de la ruta hasta que haya organismo que consultar.
-    expect(plateMocks.getPlatePreassignStatus).not.toHaveBeenCalled();
   });
 
-  it('con preasignación activa se habilita y la preferencia viaja al crear el trámite', async () => {
+  it('con organismo elegido se habilita (sin depender del inventario del OT) y la preferencia viaja al crear el trámite', async () => {
     const user = userEvent.setup();
     renderNuevo();
 
     await consultarVehiculo(user);
     await elegirSecretaria(user);
 
-    await waitFor(() =>
-      expect(plateMocks.getPlatePreassignStatus).toHaveBeenCalledWith(SECRETARIA_ID),
-    );
+    // Epic #12550 (decisión B) — ya no se consulta si el organismo tiene inventario de placas.
     await waitFor(() => expect(digito()).toBeEnabled());
 
     await user.selectOptions(digito(), '7');
@@ -230,79 +242,110 @@ describe('Dígito de preasignación de placa — paso 1', () => {
   });
 
   /**
-   * AC2 (HU #10799) — misma regla que el paso del FUR: si la consulta trae placa, el vehículo ya
-   * está matriculado y no hay nada que el organismo tenga que asignarle.
+   * Epic #12550 (HU #12649, AC1/AC4) — Ruta Corta: el RUNT trae placa y organismo; el gestor los ve
+   * en solo lectura, no elige secretaría ni dígito, y la creación no envía organismo (lo fija el
+   * backend con el del RUNT).
    */
-  it('con placa del RUNT no aplica la preasignación: se dice y no se ofrece el dígito', async () => {
+  it('Ruta Corta: placa y organismo del RUNT en solo lectura, sin secretaría ni dígito, y la creación no envía organismo', async () => {
+    mocks.runPreflightPreview.mockResolvedValue(PREVIEW_RUTA_CORTA);
+    const user = userEvent.setup();
+    renderNuevo();
+
+    await consultarVehiculo(user);
+
+    const chip = await screen.findByTestId('ruta-matricula');
+    expect(chip).toHaveAttribute('data-ruta', 'corta');
+    // Los nombres «Ruta Corta» / «Ruta Larga» son internos: no se muestran al gestor.
+    expect(chip).not.toHaveTextContent(/Ruta (Corta|Larga)/);
+    expect(chip).toHaveTextContent(/Llegará al organismo listo para su decisión/);
+    expect(screen.getByTestId('ruta-corta-placa')).toHaveTextContent('WVT948');
+    expect(screen.getByTestId('ruta-corta-organismo')).toHaveTextContent('Tránsito de Envigado');
+    expect(screen.queryByRole('combobox', { name: /secretaría de tránsito/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Dígito de preasignación de placa')).not.toBeInTheDocument();
+    // El organismo de «Datos del vehículo» tampoco se edita: viene del RUNT igual que la placa.
+    expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
+
+    // Continuar no exige secretaría ni dígito.
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: /Continuar/ }));
+    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
+    expect(mocks.createInstanceFromConsulta.mock.calls[0][0]).toMatchObject({
+      previewToken: 'token-abc',
+      transitOfficeId: undefined,
+    });
+    // Y no viaja ninguna preferencia de dígito ni el campo informativo de ruta.
+    const patches = mocks.patchFieldValues.mock.calls.flatMap(
+      (c) => c[1] as { fieldKey: string; valueText: string }[],
+    );
+    expect(patches.find((i) => i.fieldKey === 'plate_route_active')).toBeUndefined();
+    expect(patches.find((i) => i.fieldKey === 'plate_preferred_last_digit')?.valueText ?? '').toBe('');
+  });
+
+  /**
+   * Epic #12550 (HU #12649, AC3) — el RUNT reporta un organismo que la compañía no tiene habilitado:
+   * se nombra el organismo y no se puede continuar (no hay consulta válida).
+   */
+  it('organismo del RUNT no habilitado: se dice cuál y no se puede continuar', async () => {
+    rutaMocks.organismoNoHabilitado = 'STRIA TTOyTTE PALMIRA';
+    mocks.runPreflightPreview.mockRejectedValue(
+      Object.assign(new Error('422'), {
+        status: 422,
+        problem: { title: 'organismo_runt_no_habilitado', transitOfficeName: 'STRIA TTOyTTE PALMIRA' },
+      }),
+    );
+    const user = userEvent.setup();
+    renderNuevo();
+
+    await consultarVehiculo(user);
+
+    const aviso = await screen.findByText(/no tiene habilitado ese organismo de tránsito/);
+    expect(aviso).toHaveTextContent('STRIA TTOyTTE PALMIRA');
+    expect(screen.queryByTestId('ruta-matricula')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+  });
+
+  it('Ruta Corta sin organismo en el RUNT: se dice y se radica en la secretaría que se elija después', async () => {
     mocks.runPreflightPreview.mockResolvedValue({
-      ...PREVIEW_RESULT,
-      vehicleFields: [
-        ...PREVIEW_RESULT.vehicleFields,
-        { formFieldId: '', fieldKey: 'plate', valueText: 'JNH38H', valueJson: null, source: 'consultation' },
-      ],
+      ...PREVIEW_RUTA_CORTA,
+      vehicleFields: PREVIEW_RUTA_CORTA.vehicleFields.filter((f) => f.fieldKey !== 'transit_office_name'),
+      transitOffice: null,
     });
     const user = userEvent.setup();
     renderNuevo();
 
     await consultarVehiculo(user);
-    await elegirSecretaria(user);
 
-    // La placa se nombra dentro del propio aviso (también se pinta arriba, en los datos del RUNT).
-    const aviso = await screen.findByText(/No aplica la preasignación de placa/);
-    expect(aviso).toHaveTextContent('JNH38H');
-    expect(screen.queryByLabelText('Dígito de preasignación de placa')).not.toBeInTheDocument();
-    // Ni se consulta el estado de la ruta: no hay ruta que decidir.
-    expect(plateMocks.getPlatePreassignStatus).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole('button', { name: /Continuar/ }));
-    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
-    // Y el trámite no nace con la ruta de preasignación activa.
-    const patches = mocks.patchFieldValues.mock.calls.flatMap(
-      (c) => c[1] as { fieldKey: string; valueText: string }[],
-    );
-    expect(patches.find((i) => i.fieldKey === 'plate_route_active')?.valueText ?? 'false').toBe('false');
+    expect(await screen.findByTestId('ruta-corta-organismo')).toHaveTextContent(/El RUNT no reporta el organismo/);
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
   });
 
   /**
-   * HU #10806 (Alternativa C) — `plate_route_active` se sigue escribiendo como dato informativo de la
-   * decisión de ruta (desde ADR-0059 la ruta la decide el estado del trámite, no un trigger). El paso
-   * del FUR lo escribe al abrir su sección; aquí viaja con la creación.
+   * Epic #12550 (HU #12649, AC2) — Ruta Larga: chip explicativo y los controles de siempre; el campo
+   * informativo `plate_route_active` (HU #10806) dejó de escribirse.
    */
-  it('la decisión de ruta queda persistida con el trámite', async () => {
+  it('Ruta Larga: chip, secretaría y dígito, sin escribir plate_route_active', async () => {
     const user = userEvent.setup();
     renderNuevo();
 
     await consultarVehiculo(user);
+
+    const chip = await screen.findByTestId('ruta-matricula');
+    expect(chip).toHaveAttribute('data-ruta', 'larga');
+    expect(chip).toHaveTextContent(/la asignará en Preasignación/);
+    expect(chip).not.toHaveTextContent(/Ruta (Corta|Larga)/);
+    // Sin placa del RUNT el organismo de «Datos del vehículo» sí se puede corregir.
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument();
+
     await elegirSecretaria(user);
     await declararSinPreferenciaDigito(user);
-
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
-    await waitFor(() =>
-      expect(mocks.patchFieldValues).toHaveBeenCalledWith(
-        'inst-1',
-        expect.arrayContaining([
-          expect.objectContaining({ fieldKey: 'plate_route_active', valueText: 'true' }),
-        ]),
-        'tenant-1',
-      ),
+    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
+    expect(mocks.createInstanceFromConsulta.mock.calls[0][0]).toMatchObject({ transitOfficeId: SECRETARIA_ID });
+    const patches = mocks.patchFieldValues.mock.calls.flatMap(
+      (c) => c[1] as { fieldKey: string; valueText: string }[],
     );
-  });
-
-  it('organismo sin inventario de placas: se explica que el trámite quedará en Preasignación y no se ofrece el dígito', async () => {
-    plateMocks.getPlatePreassignStatus.mockResolvedValue({ enabled: false });
-    const user = userEvent.setup();
-    renderNuevo();
-
-    await consultarVehiculo(user);
-    await elegirSecretaria(user);
-
-    // ADR-0059 — la ruta no depende de la configuración de preasignación: sin placa, el trámite
-    // queda en Preasignación igual; lo que no hay es inventario para elegir una aquí.
-    expect(
-      await screen.findByText(/no tiene inventario de placas activo.*quedará en Preasignación/),
-    ).toBeInTheDocument();
-    expect(digito()).toBeDisabled();
+    expect(patches.find((i) => i.fieldKey === 'plate_route_active')).toBeUndefined();
   });
 
   /**
@@ -324,9 +367,6 @@ describe('Dígito de preasignación de placa — paso 1', () => {
     // HU #11628 — el reinicio deja el selector en "no decidido" (placeholder), no en "sin
     // preferencia": son estados distintos y el segundo exige una elección nueva del gestor.
     await waitFor(() => expect(digito()).toHaveValue(''));
-    await waitFor(() =>
-      expect(plateMocks.getPlatePreassignStatus).toHaveBeenLastCalledWith('ot-envigado'),
-    );
     await declararSinPreferenciaDigito(user);
 
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
@@ -419,23 +459,20 @@ describe('HU #11628 — elección consciente del dígito de preferencia', () => 
     });
   });
 
-  it('AC4 — organismo sin preasignación activa: "Continuar" avanza sin exigir nada (no se puede bloquear)', async () => {
-    plateMocks.getPlatePreassignStatus.mockResolvedValue({ enabled: false });
+  it('AC4 (revisado por Epic #12550) — en Ruta Corta no hay dígito que exigir: "Continuar" avanza', async () => {
+    mocks.runPreflightPreview.mockResolvedValue(PREVIEW_RUTA_CORTA);
     const user = userEvent.setup();
     renderNuevo();
 
     await consultarVehiculo(user);
-    await elegirSecretaria(user);
-    await waitFor(() => expect(digito()).toBeDisabled());
+    await screen.findByTestId('ruta-corta-placa');
 
-    // El selector deshabilitado no exige elección: el botón sigue habilitado.
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
-
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
     await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
   });
 
-  it('AC5 — sin placa y sin dígito declarado, la ruta de preasignación sigue activándose igual que antes', async () => {
+  it('AC5 (revisado por Epic #12550) — la Ruta Larga no escribe plate_route_active: la ruta la decide el estado del trámite', async () => {
     const user = userEvent.setup();
     renderNuevo();
 
@@ -444,18 +481,11 @@ describe('HU #11628 — elección consciente del dígito de preferencia', () => 
     await declararSinPreferenciaDigito(user);
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
-    // `plate_route_active` (lo que gobierna la ruta de preasignación al radicar sin placa) sigue
-    // dependiendo únicamente de `getPlatePreassignStatus`, no del dígito — mismo comportamiento que
-    // antes de la HU #11628.
-    await waitFor(() =>
-      expect(mocks.patchFieldValues).toHaveBeenCalledWith(
-        'inst-1',
-        expect.arrayContaining([
-          expect.objectContaining({ fieldKey: 'plate_route_active', valueText: 'true' }),
-        ]),
-        'tenant-1',
-      ),
+    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
+    const patches = mocks.patchFieldValues.mock.calls.flatMap(
+      (c) => c[1] as { fieldKey: string; valueText: string }[],
     );
+    expect(patches.find((i) => i.fieldKey === 'plate_route_active')).toBeUndefined();
   });
 });
 
@@ -509,6 +539,32 @@ describe('Tarjeta de radicación sobre un trámite ya creado', () => {
 
     await waitFor(() => expect(digito().value).toBe('7'));
     expect(screen.queryByRole('button', { name: /Trámite prioritario/ })).not.toBeInTheDocument();
+  });
+
+  /**
+   * Epic #12550 (HU #12649, AC5) — un borrador con placa del RUNT se rehidrata en Ruta Corta: placa y
+   * organismo del expediente en solo lectura, sin secretaría ni dígito editables.
+   */
+  it('un borrador con placa del RUNT se rehidrata en Ruta Corta, en solo lectura', async () => {
+    mocks.getWizardState.mockResolvedValue(wizard());
+    mocks.getInstance.mockResolvedValue({
+      ...INSTANCIA,
+      fieldValues: [
+        { formFieldId: '', fieldKey: 'vin', valueText: VIN_VALIDO, valueJson: null, source: 'consultation' },
+        { formFieldId: '', fieldKey: 'vehicle_brand', valueText: 'RENAULT', valueJson: null, source: 'consultation' },
+        { formFieldId: '', fieldKey: 'plate', valueText: 'WVT948', valueJson: null, source: 'consultation' },
+        { formFieldId: '', fieldKey: 'transit_office_id', valueText: 'ot-envigado', valueJson: null, source: 'manual' },
+        { formFieldId: '', fieldKey: 'transit_office_name', valueText: 'Tránsito de Envigado', valueJson: null, source: 'manual' },
+      ],
+    });
+    mocks.getPreflight.mockResolvedValue(PREVIEW_RESULT.preflight);
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
+
+    expect(await screen.findByTestId('ruta-matricula')).toHaveAttribute('data-ruta', 'corta');
+    expect(screen.getByTestId('ruta-corta-placa')).toHaveTextContent('WVT948');
+    expect(screen.getByTestId('ruta-corta-organismo')).toHaveTextContent('Tránsito de Envigado');
+    expect(screen.queryByRole('combobox', { name: /secretaría de tránsito/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Dígito de preasignación de placa')).not.toBeInTheDocument();
   });
 
   it('no ofrece cambiar la prioridad desde el paso 1', async () => {

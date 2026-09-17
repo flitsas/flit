@@ -183,6 +183,74 @@ public sealed class BulkTramitesXlsxTemplateTests
         valores.Should().NotContain("BLINDAJE");
     }
 
+    // ── Bug #12651: Excel «repara» la plantilla si un emergente pasa de 255 caracteres ──────────
+
+    [Theory]
+    [InlineData(BulkTramitesTemplateType.Matricula)]
+    [InlineData(BulkTramitesTemplateType.Traspaso)]
+    [InlineData(BulkTramitesTemplateType.Otros)]
+    public async Task Build_NingunaValidacionSuperaLosTopesDeExcel(BulkTramitesTemplateType tipo)
+    {
+        // QA abrió la plantilla en Excel de escritorio y salió «Registros reparados: Celdas con
+        // validación de datos»: la guía de {actor}_representante_documento medía 339-393
+        // caracteres y Excel, en vez de truncar, descarta TODAS las validaciones de la hoja. El
+        // validador OOXML no lo detecta (el límite no está en el esquema), así que se mide aquí
+        // sobre el archivo generado, que es lo que Excel lee.
+        _procedureTypeRepository
+            .ListAsync(null, null, Arg.Any<CancellationToken>())
+            .Returns([Tipo("CAMBIO_COLOR")]);
+
+        var archivo = await _plantilla.BuildAsync(tipo, Tenant, TestContext.Current.CancellationToken);
+
+        using var libro = SpreadsheetDocument.Open(new MemoryStream(archivo.Content), false);
+        var validaciones = libro.WorkbookPart!.WorksheetParts.First().Worksheet
+            .Descendants<DataValidation>()
+            .ToList();
+
+        validaciones.Should().NotBeEmpty();
+
+        foreach (var validacion in validaciones)
+        {
+            var celda = validacion.SequenceOfReferences!.InnerText;
+            (validacion.Prompt?.Value?.Length ?? 0).Should().BeLessThanOrEqualTo(
+                BulkTramitesTemplateCatalog.MaxPromptLength, "Excel repararía el archivo por el emergente de {0}", celda);
+            (validacion.PromptTitle?.Value?.Length ?? 0).Should().BeLessThanOrEqualTo(
+                BulkTramitesTemplateCatalog.MaxTitleLength, "título del emergente de {0}", celda);
+            (validacion.Error?.Value?.Length ?? 0).Should().BeLessThanOrEqualTo(
+                BulkTramitesTemplateCatalog.MaxErrorLength, "mensaje de error de {0}", celda);
+            (validacion.ErrorTitle?.Value?.Length ?? 0).Should().BeLessThanOrEqualTo(
+                BulkTramitesTemplateCatalog.MaxTitleLength, "título del error de {0}", celda);
+        }
+    }
+
+    [Fact]
+    public async Task Build_ElRepresentanteLegal_MuestraLaAyudaCortaEnLaCelda_YLaGuiaCompletaEnInstrucciones()
+    {
+        var columna = BulkTramitesTemplateCatalog.TraspasoColumns()
+            .Single(c => c.Header == "vendedor_1_representante_documento");
+
+        columna.Ayuda.Should().NotBeNull();
+        columna.Prompt.Should().Be(columna.Ayuda);
+        columna.Guia.Length.Should().BeGreaterThan(BulkTramitesTemplateCatalog.MaxPromptLength,
+            "si la guía ya cabe en la celda, la ayuda corta sobra");
+
+        var archivo = await _plantilla.BuildAsync(
+            BulkTramitesTemplateType.Traspaso, Tenant, TestContext.Current.CancellationToken);
+
+        using var libro = SpreadsheetDocument.Open(new MemoryStream(archivo.Content), false);
+        var partes = libro.WorkbookPart!.WorksheetParts.ToList();
+
+        // La celda enseña la versión corta…
+        partes[0].Worksheet.Descendants<DataValidation>()
+            .Select(v => v.Prompt?.Value)
+            .Should().Contain(columna.Ayuda);
+
+        // …y la hoja «Instrucciones» conserva la guía completa, que es donde no hay tope.
+        partes[1].Worksheet.Descendants<Cell>()
+            .Select(c => c.InlineString?.Text?.Text)
+            .Should().Contain(columna.Guia);
+    }
+
     [Theory]
     [InlineData("matricula", BulkTramitesTemplateType.Matricula)]
     [InlineData("Traspaso", BulkTramitesTemplateType.Traspaso)]

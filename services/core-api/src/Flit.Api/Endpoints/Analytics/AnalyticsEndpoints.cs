@@ -85,12 +85,18 @@ public static class AnalyticsEndpoints
         return app;
     }
 
+    /// <remarks>
+    /// BUG #12588 — <c>from</c>/<c>to</c> son OPCIONALES: omitirlos devuelve el universo completo del
+    /// tenant. El dashboard arranca así para que su total sea el número real de trámites y no el de un
+    /// periodo; antes se enviaba siempre el mes en curso y QA leía la diferencia como un conteo mal
+    /// calculado. Cada extremo se puede mandar suelto.
+    /// </remarks>
     private static async Task<IResult> GetOverviewAsync(
         HttpContext httpContext,
-        DateOnly from,
-        DateOnly to,
         GetAnalyticsOverviewHandler handler,
         CancellationToken ct,
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
         [FromQuery] Guid? tenantId = null)
     {
         if (!TryResolveEffectiveTenant(httpContext.User, tenantId, out var tenant, out var error))

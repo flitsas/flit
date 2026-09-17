@@ -1003,6 +1003,17 @@ internal static class ProcedureInstanceEndpoints
                     title: InitialProcedureValidationGate.DuplicateActiveProcedure,
                     detail: "Ya existe un trámite en proceso para este VIN/placa.",
                     extensions: new Dictionary<string, object?> { ["procedureInstanceId"] = existingId }),
+                // Epic #12550 — Ruta Corta ante un organismo que la compañía no tiene habilitado: el
+                // trámite se radica ante el organismo que el RUNT reporta o no se crea.
+                VehicleStatePolicy.OrganismoRuntNoHabilitadoErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: VehicleStatePolicy.OrganismoRuntNoHabilitadoErrorCode,
+                    detail: $"El vehículo tiene la placa preasignada ante «{vehicleState?.Detalle}» y la compañía no tiene habilitado ese organismo de tránsito. No es posible crear la matrícula.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["transitOfficeName"] = vehicleState?.Detalle,
+                        ["vehicleStatus"] = vehicleState?.VehicleStatus,
+                    }),
                 VehicleStatePolicy.ErrorCode => Results.Problem(
                     statusCode: 422,
                     title: VehicleStatePolicy.ErrorCode,
@@ -1124,6 +1135,17 @@ internal static class ProcedureInstanceEndpoints
                     title: InitialProcedureValidationGate.DuplicateActiveProcedure,
                     detail: "Ya existe un trámite en proceso para este VIN/placa.",
                     extensions: new Dictionary<string, object?> { ["procedureInstanceId"] = existingId }),
+                // Epic #12550 — Ruta Corta ante un organismo que la compañía no tiene habilitado: el
+                // trámite se radica ante el organismo que el RUNT reporta o no se crea.
+                VehicleStatePolicy.OrganismoRuntNoHabilitadoErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: VehicleStatePolicy.OrganismoRuntNoHabilitadoErrorCode,
+                    detail: $"El vehículo tiene la placa preasignada ante «{vehicleState?.Detalle}» y la compañía no tiene habilitado ese organismo de tránsito. No es posible crear la matrícula.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["transitOfficeName"] = vehicleState?.Detalle,
+                        ["vehicleStatus"] = vehicleState?.VehicleStatus,
+                    }),
                 VehicleStatePolicy.ErrorCode => Results.Problem(
                     statusCode: 422,
                     title: VehicleStatePolicy.ErrorCode,

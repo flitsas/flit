@@ -12,7 +12,9 @@ import {
   type UserProfileKind,
 } from "@/lib/users/profiles";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 /**
+
  * Fila normalizada de usuario. Los tres listados (módulo Usuarios, ficha de compañía y hub OT)
  * hablan APIs distintas (`TenantUser` vs `OtUserItem`); cada uno mapea a este tipo y comparte
  * de ahí en adelante la misma tabla, los mismos filtros y la misma columna de acciones.
@@ -99,7 +101,7 @@ function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" }).format(parsed);
+  return new Intl.DateTimeFormat("es-CO", { timeZone: ZONA_COLOMBIA, dateStyle: "medium", timeStyle: "short" }).format(parsed);
 }
 
 export interface UsersTableProps {

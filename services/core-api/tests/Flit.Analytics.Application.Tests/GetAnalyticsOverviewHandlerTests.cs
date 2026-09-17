@@ -64,4 +64,60 @@ public sealed class GetAnalyticsOverviewHandlerTests
         error.Should().BeNull();
         dto.Should().NotBeNull();
     }
+
+    // ── BUG #12588 — el rango es opcional ────────────────────────────────────────────────────────
+    // El dashboard pasa a consultar sin fechas para que su total sea el universo real del tenant.
+    // El repositorio recibe los nulls tal cual y decide no acotar; el handler no los sustituye por
+    // un rango implícito, que es justo lo que escondía los trámites radicados antes del periodo.
+
+    [Fact]
+    public async Task HandleAsync_SinRango_NoValidaYConsultaElUniversoCompleto()
+    {
+        var categorias = new List<CategoryMetricsDto>
+        {
+            new("matriculas", 21, new List<StatusCountDto> { new("aprobado", 21) }),
+            new("otros", 4, new List<StatusCountDto> { new("entregado", 4) }),
+        };
+        _repo.GetOverviewAsync(Tenant, null, null, Ct).Returns(categorias);
+
+        var (dto, error) = await new GetAnalyticsOverviewHandler(_repo)
+            .HandleAsync(new GetAnalyticsOverviewQuery(Tenant, null, null), Ct);
+
+        error.Should().BeNull();
+        dto.Should().NotBeNull();
+        dto!.From.Should().BeNull("sin rango, la respuesta no inventa un periodo");
+        dto.To.Should().BeNull();
+        dto.Categories.Sum(c => c.Total).Should().Be(25);
+        await _repo.Received(1).GetOverviewAsync(Tenant, null, null, Ct);
+    }
+
+    [Theory] // Cada extremo acota por su lado: uno suelto NO es un rango a medio llenar
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task HandleAsync_UnSoloExtremo_EsValidoYViajaAlRepositorio(bool conDesde, bool conHasta)
+    {
+        DateOnly? desde = conDesde ? From : null;
+        DateOnly? hasta = conHasta ? To : null;
+        _repo.GetOverviewAsync(Tenant, desde, hasta, Ct).Returns(new List<CategoryMetricsDto>());
+
+        var (dto, error) = await new GetAnalyticsOverviewHandler(_repo)
+            .HandleAsync(new GetAnalyticsOverviewQuery(Tenant, desde, hasta), Ct);
+
+        error.Should().BeNull();
+        dto.Should().NotBeNull();
+        dto!.From.Should().Be(desde);
+        dto.To.Should().Be(hasta);
+        await _repo.Received(1).GetOverviewAsync(Tenant, desde, hasta, Ct);
+    }
+
+    [Fact] // El par incoherente sigue siendo 400: lo único que el backend rechaza
+    public async Task HandleAsync_ParIncoherente_SigueSiendoInvalidRange()
+    {
+        var (dto, error) = await new GetAnalyticsOverviewHandler(_repo)
+            .HandleAsync(new GetAnalyticsOverviewQuery(Tenant, To, From), Ct);
+
+        dto.Should().BeNull();
+        error.Should().Be("invalid_range");
+        _repo.ReceivedCalls().Should().BeEmpty();
+    }
 }

@@ -2,7 +2,9 @@ import type { StatusTone } from "@/components/atom/StatusBadge";
 import type { LogQxBandejaEstado, LogQxStatus } from "@/lib/api/admin-log-qx";
 import { ESTADO_CHIP_STYLES, type EstadoChipStyle } from "@/lib/tramites/estados";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 /**
+
  * Traducción de todo lo que el LOG QX muestra (Feature #11784). Vive en un solo sitio porque lo
  * comparten la bandeja, la línea de hitos y el log completo: si cada pantalla tradujera por su
  * cuenta, el mismo código acabaría con tres nombres distintos.
@@ -165,7 +167,7 @@ export function formatFecha(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return new Intl.DateTimeFormat("es-CO", { timeZone: ZONA_COLOMBIA, dateStyle: "medium", timeStyle: "short" }).format(d);
 }
 
 export function formatDuracion(ms: number | null | undefined): string | null {

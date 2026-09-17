@@ -12,7 +12,9 @@ import {
   type TipoFirmaMandatario,
 } from "@/lib/plataforma/mandatario-firma";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 export function MandatarioFirmaPreviewDialog({
+
   signer,
   officeId,
   onClose,
@@ -39,7 +41,7 @@ export function MandatarioFirmaPreviewDialog({
         {signer.identityStatus === "valid" && signer.identityValidUntil ? (
           <Field
             label="Identidad vigente hasta"
-            value={new Date(signer.identityValidUntil).toLocaleDateString("es-CO")}
+            value={new Date(signer.identityValidUntil).toLocaleDateString("es-CO", { timeZone: ZONA_COLOMBIA })}
           />
         ) : null}
       </dl>

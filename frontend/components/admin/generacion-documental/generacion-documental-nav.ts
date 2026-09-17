@@ -1,3 +1,5 @@
+
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 /**
  * Navegación y gate de visibilidad del módulo "Generación documental"
  * (HU-01 · Feature #12201).
@@ -56,7 +58,7 @@ export function formatGeneracionDocumentalDate(iso: string): string {
   if (Number.isNaN(parsed.getTime())) {
     return iso;
   }
-  return parsed.toLocaleString("es-CO", {
+  return parsed.toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

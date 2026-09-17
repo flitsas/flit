@@ -7,7 +7,9 @@ import type { IdentityAuditEvent } from '@/lib/api/types/procedure-runtime';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { FLIT } from '@/lib/flit-design-tokens';
 
+import { ZONA_COLOMBIA } from '@/lib/format/date';
 /**
+
  * Etiquetas legibles de `stage` (código técnico en BD sin cambiar).
  * Desconocidas se muestran tal cual. "webhook" → "Notificación" en UI.
  */
@@ -306,7 +308,7 @@ function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }
 
 /** Texto del resultado de un evento de bitácora, anexando el código HTTP si lo hay. */
