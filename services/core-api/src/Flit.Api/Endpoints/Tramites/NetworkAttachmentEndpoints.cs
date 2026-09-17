@@ -22,7 +22,8 @@ namespace Flit.Api.Endpoints.Tramites;
 ///   URL prefirmada de S3 es un portador anónimo sin cliente ni usuario en la firma.</item>
 /// </list>
 /// Códigos: 403 <c>network_scope_required</c> (sin alcance de grupo, incl. interruptor
-/// <c>group_read_scope</c> apagado — AC7) · 403 <c>network_documents_disabled</c> (cabeza CONCESION con
+/// <c>group_read_scope</c> apagado — AC7) · 403 <c>network_role_required</c> (cabeza sin rol
+/// AdminCompany — HU #12652) · 403 <c>network_documents_disabled</c> (cabeza CONCESION con
 /// <c>network_documents_concesion</c> apagado — AC5) · 404 <c>{ error: "not_found" }</c> idéntico para
 /// trámite inexistente, ajeno, fuera del alcance, documento inexistente o binario perdido (AC6).
 /// Cada listado y cada descarga (servida o rechazada sobre un hijo) publica UN desenlace con el
@@ -33,14 +34,14 @@ internal static class NetworkAttachmentEndpoints
 {
     /// <summary>
     /// Policy explícita de las dos rutas (hallazgo de seguridad del PR #370): el slug RBAC de «Ver
-    /// trámites», el mismo que habilita el módulo de Operación al usuario. Se eligió sobre
-    /// <c>GroupHeadCompanyPolicy</c>/<c>AdminCompanyPolicy</c> porque ambas exigen el rol AdminCompany y
-    /// la vista consolidada está abierta a TODO usuario de la cabeza (el selector de alcance del
-    /// frontend se pinta por <c>is_group_parent</c>, no por rol): un operador de la cabeza que ve el
-    /// detalle del hijo debe poder ver sus documentos. SuperAdmin hace bypass del permiso y aun así
-    /// recibe 403 <c>network_scope_required</c> de <see cref="GroupHeadReadFilter"/> (D7). Un token sin
-    /// el slug ⇒ 403 antes de tocar el alcance, el interruptor o el almacenamiento, y sin auditar
-    /// (el actor no llegó a la ruta).
+    /// trámites», el mismo que habilita el módulo de Operación al usuario. Un token sin el slug ⇒ 403
+    /// antes de tocar el alcance, el interruptor o el almacenamiento, y sin auditar (el actor no llegó
+    /// a la ruta). HU #12652: la vista consolidada ya NO está abierta a todo usuario de la cabeza — el
+    /// <see cref="GroupHeadReadFilter"/> del grupo exige además el rol AdminCompany
+    /// (<c>NetworkScopePolicy.HeadAdminRole</c>): un Operador de la cabeza con el slug recibe 403
+    /// <c>network_role_required</c>. El slug se conserva como primera puerta (sin él no hay ni
+    /// auditoría), no como sustituto del rol. SuperAdmin hace bypass del permiso y aun así recibe 403
+    /// <c>network_scope_required</c> del filtro (D7).
     /// </summary>
     internal const string ReadPermission = "tramites.read";
 

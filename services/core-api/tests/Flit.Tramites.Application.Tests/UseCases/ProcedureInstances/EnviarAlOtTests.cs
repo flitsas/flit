@@ -1,4 +1,7 @@
+using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -184,5 +187,51 @@ public sealed class EnviarAlOtTests
                 consultaRespondio: true,
                 soatVigente: null)
             .Should().BeFalse();
+    }
+
+    /// <summary>
+    /// HU #12116 — al pasar a entregado, «Enviar al OT» reintenta la firma automática de impronta
+    /// (idempotente si ya se firmó al asignar la placa). Como en Submit, NO se stubea
+    /// <c>GetByIdWithFurGraphAsync</c>: el handler de firma recibe <c>null</c> y termina best-effort;
+    /// lo que importa es que SE INVOCÓ tras la transición y que el envío no cambia su respuesta.
+    /// </summary>
+    [Fact]
+    public async Task Enviar_trasEntregar_invocaFirmaImprontaSinAlterarLaRespuesta()
+    {
+        var instance = Asignado(Guid.NewGuid(), Guid.NewGuid());
+        var firmaImpronta = new FirmarImprontaManualSiListaHandler(
+            _repo, Substitute.For<IExpedienteConsolidadoMerger>(), Substitute.For<IAttachmentStorage>(),
+            Substitute.For<IImprontaManualStamper>());
+        var sut = new EnviarAlOtHandler(_repo, _lifecycle, firmaImpronta: firmaImpronta);
+
+        var (result, error, warning) = await sut.HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
+
+        error.Should().BeNull();
+        warning.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+        await _repo.Received(1).GetByIdWithFurGraphAsync(
+            instance.Id, instance.TenantId, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>HU #12116 — si el ciclo de vida rechaza la transición, la firma ni se intenta.</summary>
+    [Fact]
+    public async Task Enviar_siLaTransicionFalla_noIntentaFirmarLaImpronta()
+    {
+        var instance = Asignado(Guid.NewGuid(), Guid.NewGuid());
+        _lifecycle.TransitionAsync(Arg.Any<TramiteTransitionCommand>(), Arg.Any<CancellationToken>())
+            .Returns(TramiteTransitionOutcome.Fail(TramiteEstadoErrores.TransicionNoPermitida));
+        var firmaImpronta = new FirmarImprontaManualSiListaHandler(
+            _repo, Substitute.For<IExpedienteConsolidadoMerger>(), Substitute.For<IAttachmentStorage>(),
+            Substitute.For<IImprontaManualStamper>());
+        var sut = new EnviarAlOtHandler(_repo, _lifecycle, firmaImpronta: firmaImpronta);
+
+        var (result, error, _) = await sut.HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(), Ct);
+
+        result.Should().BeNull();
+        error.Should().Be(TramiteEstadoErrores.TransicionNoPermitida);
+        await _repo.DidNotReceive().GetByIdWithFurGraphAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 }

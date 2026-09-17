@@ -3721,6 +3721,9 @@ paths:
 
         Solo una cabeza de grupo con hijos puede llamarla: un cliente sin jerarquía o un SuperAdmin
         reciben 403 `network_scope_required` (el SuperAdmin ya tiene el listado global por sus rutas).
+        HU #12652 — y solo con el rol AdminCompany de la cabeza: cualquier otro rol de la cabeza
+        (Radicador, Operador, …) recibe 403 `network_role_required` sin ejecutar la consulta; multi-rol
+        con AdminCompany pasa. Aplica a TODAS las rutas `/api/v1/tramites/network/**`.
         `childTenantId` fuera del conjunto de lectura responde 403 `network_child_out_of_scope` sin
         ejecutar la consulta.
 
@@ -3807,7 +3810,8 @@ paths:
           description: Sin token válido.
         "403":
           description: >
-            `network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin) o
+            `network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin),
+            `network_role_required` (cabeza sin rol AdminCompany — HU #12652) o
             `network_child_out_of_scope` (`childTenantId` fuera del conjunto de lectura).
           content:
             application/json:
@@ -3847,7 +3851,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` o `network_child_out_of_scope`."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -3883,7 +3887,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` o `network_child_out_of_scope`."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -3918,7 +3922,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required`: la petición no tiene alcance de grupo."
+          description: "`network_scope_required` (la petición no tiene alcance de grupo) o `network_role_required` (cabeza sin rol AdminCompany, HU #12652)."
           content:
             application/json:
               schema:
@@ -3966,6 +3970,7 @@ paths:
           description: Sin token válido.
         "403":
           description: >
+            `network_role_required` (cabeza sin rol AdminCompany — HU #12652),
             `network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin o interruptor
             `group_read_scope` apagado) o `network_documents_disabled` (cabeza CONCESION con
             `network_documents_concesion` apagado). Sin permiso `tramites.read`: 403 sin cuerpo.
@@ -4018,7 +4023,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` o `network_documents_disabled`; sin permiso `tramites.read`: 403 sin cuerpo."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_documents_disabled`; sin permiso `tramites.read`: 403 sin cuerpo."
           content:
             application/json:
               schema:
@@ -4072,7 +4077,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin) o `network_child_out_of_scope`."
+          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin), `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -4115,7 +4120,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` o `network_child_out_of_scope`."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -4153,7 +4158,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` o `network_child_out_of_scope`."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -4218,7 +4223,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin) o `network_child_out_of_scope`."
+          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin), `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -4269,7 +4274,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required`, `network_child_out_of_scope` o rol insuficiente."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany, HU #12652) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:

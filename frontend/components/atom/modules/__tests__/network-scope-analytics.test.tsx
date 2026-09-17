@@ -507,3 +507,78 @@ describe("HU #12364 AC6 — sin documentos ni anexos", () => {
     expect(screen.queryByRole("button", { name: /anexo|documento|paquete/i })).not.toBeInTheDocument();
   });
 });
+
+// ── HU #12652 — el alcance de red es exclusivo del AdminCompany de la cabeza ──
+
+/**
+ * HU #12652 — Alcance de red exclusivo del administrador de la cabeza.
+ *
+ * Uso de ejemplo: un Radicador de la cabeza (claim `is_group_parent`, sin AdminCompany) abre el
+ * Dashboard, Reportes o el reporte detallado: no ve el selector «Alcance» ni ningún chip «Red», y
+ * las consultas son las propias de siempre (nunca `network/**`), aunque tenga guardada una
+ * preferencia `tramites.scope=network` de otra sesión. El AdminCompany (solo o multi-rol) sigue
+ * viendo el selector con las hijas.
+ */
+function cabezaSinAdmin(scope: unknown = { mode: "network" }) {
+  mocks.usePermissions.mockReturnValue(
+    permisos({ isGroupParent: true, isAdminCompany: false, roleCode: "Radicador" }),
+  );
+  mocks.prefsGet.mockResolvedValue({ value: scope });
+  mocks.fetchNetworkChildren.mockResolvedValue(HIJOS);
+}
+
+describe("HU #12652 — alcance de red exclusivo del AdminCompany de la cabeza", () => {
+  it("AC3/AC4 — Dashboard: Radicador de cabeza con preferencia `network` guardada no ve selector ni chips «Red» y consulta solo lo propio", async () => {
+    cabezaSinAdmin({ mode: "network", childTenantId: HIJO });
+    render(<Dashboard onNewTramite={() => {}} />);
+
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalledTimes(1));
+    expect(mocks.fetchMonthlyTrend).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchNetworkAnalyticsOverview).not.toHaveBeenCalled();
+    expect(mocks.fetchNetworkMonthlyTrend).not.toHaveBeenCalled();
+    expect(mocks.fetchNetworkChildren).not.toHaveBeenCalled();
+    expect(mocks.prefsGet).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("dashboard-network-scope-select")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(ETIQUETA_ALCANCE)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kpi-red-Total Trámites")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("status", { name: new RegExp(`^${ETIQUETA_DISTINTIVO_RED}:`) })).toHaveLength(0);
+    expect(screen.queryByText(/No tienes acceso a las métricas de la red/)).not.toBeInTheDocument();
+  });
+
+  it("AC3 — Reporte detallado: Radicador de cabeza sin selector, sin chip «Red» y consulta propia", async () => {
+    cabezaSinAdmin({ mode: "network" });
+    render(<DetailedReportPanel />);
+
+    await waitFor(() => expect(mocks.fetchDetailedReport).toHaveBeenCalledTimes(1));
+    expect(mocks.fetchNetworkDetailedReport).not.toHaveBeenCalled();
+    expect(mocks.fetchNetworkChildren).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("detallado-network-scope-select")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("detallado-red-badge")).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Cliente" })).not.toBeInTheDocument();
+  });
+
+  it("AC3 — Reportes 2.0: Radicador de cabeza sin selector, sin chip «Red» y con los exports de siempre", async () => {
+    cabezaSinAdmin({ mode: "network" });
+    render(<Reportes />);
+
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+    expect(mocks.fetchNetworkAnalyticsOverview).not.toHaveBeenCalled();
+    expect(mocks.fetchNetworkChildren).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(ETIQUETA_ALCANCE)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("reportes-red-badge")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Exportar Excel/ })).toBeInTheDocument();
+  });
+
+  it("AC1/AC5 — AdminCompany de cabeza (incluso multi-rol con Radicador como primer rol) sigue viendo el selector con las hijas en el Dashboard", async () => {
+    mocks.usePermissions.mockReturnValue(
+      permisos({ isGroupParent: true, isAdminCompany: true, roleCode: "Radicador", roleId: "r-rad" }),
+    );
+    mocks.prefsGet.mockResolvedValue({ value: { mode: "own" } });
+    mocks.fetchNetworkChildren.mockResolvedValue(HIJOS);
+    render(<Dashboard onNewTramite={() => {}} />);
+
+    const select = await screen.findByTestId("dashboard-network-scope-select");
+    await waitFor(() => expect(within(select).getAllByRole("option").length).toBe(4));
+    expect(mocks.fetchNetworkChildren).toHaveBeenCalledTimes(1);
+  });
+});

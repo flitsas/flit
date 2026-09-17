@@ -136,3 +136,90 @@ describe('useNetworkScope', () => {
     expect(result.current.isGroupParent).toBe(true);
   });
 });
+
+/**
+ * HU #12652 — alcance de red exclusivo del administrador de la cabeza.
+ *
+ * Uso de ejemplo: un Radicador de la cabeza (claim `is_group_parent`, sin rol AdminCompany) monta
+ * cualquiera de las 4 superficies: el hook devuelve `isGroupParent=false`, alcance «Mi compañía» y
+ * no pide ni la preferencia ni `/api/v1/tramites/network/children`. El AdminCompany (solo o
+ * multi-rol) sigue viendo el selector. Un 403 `network_role_required` del servidor degrada igual
+ * que `network_scope_required` (defensa en profundidad).
+ */
+describe('HU #12652 — el alcance de red exige rol AdminCompany en la cabeza', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('AC3 — cabeza SIN rol AdminCompany (Radicador): sin selector, sin fetch de hijos y alcance propio', () => {
+    vi.mocked(usePermissions).mockReturnValue(
+      permisos({ isGroupParent: true, isAdminCompany: false, roleCode: 'Radicador' }),
+    );
+    const { result } = renderHook(() => useNetworkScope());
+    expect(result.current.isGroupParent).toBe(false);
+    expect(result.current.ready).toBe(true);
+    expect(result.current.scope).toEqual({ mode: 'own' });
+    expect(result.current.networkActive).toBe(false);
+    expect(result.current.childrenStatus).toBe('idle');
+    expect(fetchNetworkChildren).not.toHaveBeenCalled();
+    expect(uiPreferencesClient.get).not.toHaveBeenCalled();
+  });
+
+  it('AC1 — cabeza CON rol AdminCompany: el selector se ofrece y se piden las hijas', async () => {
+    vi.mocked(usePermissions).mockReturnValue(permisos({ isGroupParent: true, isAdminCompany: true }));
+    vi.mocked(uiPreferencesClient.get).mockResolvedValue({ scope: 'tramites.scope', value: {} });
+    vi.mocked(fetchNetworkChildren).mockResolvedValue([{ id: HIJO_A, nombre: 'Alfa SAS' }]);
+    const { result } = renderHook(() => useNetworkScope());
+    await waitFor(() => expect(result.current.childrenStatus).toBe('ready'));
+    expect(result.current.isGroupParent).toBe(true);
+    expect(fetchNetworkChildren).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC5 — multi-rol Radicador + AdminCompany: el primer rol NO decide; basta que AdminCompany esté activo', async () => {
+    // `roleCode` es "el primer rol" (Radicador); `isAdminCompany` recorre todos los claims `roles`.
+    vi.mocked(usePermissions).mockReturnValue(
+      permisos({ isGroupParent: true, isAdminCompany: true, roleCode: 'Radicador', roleId: 'r-rad' }),
+    );
+    vi.mocked(uiPreferencesClient.get).mockResolvedValue({ scope: 'tramites.scope', value: {} });
+    vi.mocked(fetchNetworkChildren).mockResolvedValue([{ id: HIJO_A, nombre: 'Alfa SAS' }]);
+    const { result } = renderHook(() => useNetworkScope());
+    await waitFor(() => expect(result.current.childrenStatus).toBe('ready'));
+    expect(result.current.isGroupParent).toBe(true);
+    expect(result.current.children).toEqual([{ id: HIJO_A, nombre: 'Alfa SAS' }]);
+  });
+
+  it('AC4 — preferencia `tramites.scope=network` persistida y sin rol admin: alcance propio, sin fetch de hijas y sin error', async () => {
+    vi.mocked(usePermissions).mockReturnValue(
+      permisos({ isGroupParent: true, isAdminCompany: false, roleCode: 'Radicador' }),
+    );
+    // Aunque el servidor tuviera guardada la red, el hook ni siquiera la consulta para este rol.
+    vi.mocked(uiPreferencesClient.get).mockResolvedValue({
+      scope: 'tramites.scope',
+      value: { mode: 'network', childTenantId: HIJO_A },
+    });
+    const { result } = renderHook(() => useNetworkScope());
+    // Nada asíncrono que esperar: `ready` sale en true de inmediato como para quien no es cabeza.
+    expect(result.current.ready).toBe(true);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(result.current.scope).toEqual({ mode: 'own' });
+    expect(result.current.networkActive).toBe(false);
+    expect(fetchNetworkChildren).not.toHaveBeenCalled();
+    expect(uiPreferencesClient.get).not.toHaveBeenCalled();
+    // La preferencia del usuario no se pisa en silencio: no hay PUT.
+    expect(uiPreferencesClient.put).not.toHaveBeenCalled();
+  });
+
+  it('defensa en profundidad — 403 `network_role_required` del endpoint de hijas degrada igual que `network_scope_required`', async () => {
+    vi.mocked(usePermissions).mockReturnValue(permisos({ isGroupParent: true, isAdminCompany: true }));
+    vi.mocked(uiPreferencesClient.get).mockResolvedValue({ scope: 'tramites.scope', value: { mode: 'network' } });
+    vi.mocked(fetchNetworkChildren).mockRejectedValue(
+      new TramitesApiError(403, '403 Forbidden', { error: 'network_role_required' }),
+    );
+    const { result } = renderHook(() => useNetworkScope());
+    await waitFor(() => expect(fetchNetworkChildren).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.isGroupParent).toBe(false));
+    expect(result.current.childrenStatus).not.toBe('unavailable');
+    expect(result.current.scope).toEqual({ mode: 'own' });
+    expect(result.current.networkActive).toBe(false);
+  });
+});
