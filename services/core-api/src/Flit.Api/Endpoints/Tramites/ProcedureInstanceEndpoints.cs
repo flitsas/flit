@@ -748,46 +748,67 @@ internal static class ProcedureInstanceEndpoints
             });
         }).WithName("PauseProcedureInstancesMassive");
 
-        // Sub-flujo placa (HU11037): gestor procesa Asignado → Terminado (checks SOAT/impuesto opcionales).
-        group.MapPost("/instances/{id:guid}/plate-flow/complete", async (
+        // ADR-0059 (HU #12597) — «Enviar al OT»: el gestor, en 'asignado', marca los checks SOAT/impuesto y
+        // pasa el trámite a 'entregado' para la decisión del organismo. La ruta anterior
+        // (/plate-flow/complete, «Procesar» del sub-estado) se conserva como alias hasta que el frontend
+        // migre (HU #12601); misma lógica, mismo contrato.
+        static async Task<IResult> EnviarAlOtAsync(
             Guid id,
-            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            Guid? tenantId,
             HttpContext http,
-            CompletePlateFlowRequest? body,
-            CompletePlateFlowHandler handler,
-            CancellationToken ct) =>
+            EnviarAlOtRequest? body,
+            EnviarAlOtHandler handler,
+            CancellationToken ct)
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error, warning) = await handler.HandleAsync(
-                id, tenantId.Value, ResolveUserId(http.User), body ?? new CompletePlateFlowRequest(), ct);
+                id, tenantId.Value, ResolveUserId(http.User), body ?? new EnviarAlOtRequest(), ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 TramiteEstadoErrores.TransicionNoPermitida => Results.Problem(
-                    statusCode: 409, title: TramiteEstadoErrores.TransicionNoPermitida,
-                    detail: "El trámite no está en entregado o no admite completar el flujo de placa."),
-                "plate_flow_not_asignado" => Results.Problem(
-                    statusCode: 409, title: "plate_flow_not_asignado",
-                    detail: "Solo se puede procesar cuando el sub-estado de placa es asignado."),
-                CompletePlateFlowHandler.SoatNoVigente => Results.Problem(
-                    statusCode: 409, title: CompletePlateFlowHandler.SoatNoVigente,
+                    statusCode: 422, title: TramiteEstadoErrores.TransicionNoPermitida,
+                    detail: "Solo se puede enviar al organismo de tránsito un trámite con placa asignada (estado Asignado)."),
+                EnviarAlOtHandler.SoatNoVigente => Results.Problem(
+                    statusCode: 409, title: EnviarAlOtHandler.SoatNoVigente,
                     detail: "El RUNT no reporta un SOAT vigente para el vehículo. La compañía tiene "
                         + "desactivada la opción de continuar sin SOAT vigente: registra un SOAT vigente y vuelve a intentarlo."),
                 TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(
                     statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
                     detail: "El trámite cambió mientras se procesaba. Recarga e inténtalo de nuevo."),
-                // 200 con advertencia: el trámite avanzó, pero el gestor tiene que saber con qué salvedad.
-                _ => Results.Ok(new CompletePlateFlowResponse(
+                null => Results.Ok(new EnviarAlOtResponse(
                     result,
                     warning,
-                    warning == CompletePlateFlowHandler.SoatNoVigenteAdvertencia
+                    // 200 con advertencia: el trámite avanzó, pero el gestor tiene que saber con qué salvedad.
+                    warning == EnviarAlOtHandler.SoatNoVigenteAdvertencia
                         ? "El trámite se envió al OT SIN SOAT vigente: el RUNT no lo reporta vigente. "
                             + "La compañía permite continuar, pero el OT puede rechazarlo por este motivo."
-                        : null))
+                        : null)),
+                // Cualquier otro código lo emite el ciclo de vida (política de transición, gates): se
+                // expone tal cual, como hace /transition.
+                _ => Results.Problem(statusCode: 422, title: error, detail: "No se pudo enviar el trámite al organismo de tránsito."),
             };
-        }).WithName("CompletePlateFlow");
+        }
+
+        group.MapPost("/instances/{id:guid}/enviar-al-ot", (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
+            EnviarAlOtRequest? body,
+            EnviarAlOtHandler handler,
+            CancellationToken ct) => EnviarAlOtAsync(id, tenantId, http, body, handler, ct))
+            .WithName("EnviarAlOt");
+
+        group.MapPost("/instances/{id:guid}/plate-flow/complete", (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
+            EnviarAlOtRequest? body,
+            EnviarAlOtHandler handler,
+            CancellationToken ct) => EnviarAlOtAsync(id, tenantId, http, body, handler, ct))
+            .WithName("CompletePlateFlow");
 
         // Activa subsanación sobre rechazado (flag, sin cambiar status). Solo permitido en rechazado.
         group.MapPost("/instances/{id:guid}/subsanar", async (
@@ -1211,7 +1232,9 @@ internal static class ProcedureInstanceEndpoints
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(e => e.ToLowerInvariant())
             .Where(e => TramiteEstado.EsValido(e)
-                || string.Equals(e, TramiteEstado.Subsanacion, StringComparison.Ordinal))
+                || string.Equals(e, TramiteEstado.Subsanacion, StringComparison.Ordinal)
+                // ADR-0059 — pseudo-estado de filtro «rechazado desde preasignación».
+                || string.Equals(e, TramiteEstado.FiltroRechazadoPreasignacion, StringComparison.Ordinal))
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
@@ -1277,7 +1300,7 @@ internal sealed record SetCurrentStepRequest(string? Step);
 /// puede traer una salvedad que el gestor debe ver: <c>WarningCode</c> para lógica y
 /// <c>WarningMessage</c> ya redactado para la UI. Ambos van en null cuando no hay nada que advertir.
 /// </summary>
-internal sealed record CompletePlateFlowResponse(
+internal sealed record EnviarAlOtResponse(
     ProcedureInstanceSummary? Instance,
     string? WarningCode,
     string? WarningMessage);

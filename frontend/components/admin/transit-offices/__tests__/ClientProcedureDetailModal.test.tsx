@@ -28,7 +28,6 @@ const PROCEDURE: OtClientProcedure = {
   clientTenantName: "Empresa Demo",
   referenceNumber: "RAD-0001",
   status: "entregado",
-  plateFlowStatus: null,
   soatEstado: "vigente",
   createdAt: "2026-08-01T00:00:00Z",
   placa: "ABC123",
@@ -151,7 +150,8 @@ describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => 
     expect(screen.getAllByText("RAD-0001").length).toBeGreaterThan(0);
     expect(dialog).toHaveTextContent("ABC123");
     expect(dialog).toHaveTextContent("VIN-9");
-    expect(screen.getAllByText("Pendiente OT").length).toBeGreaterThan(0);
+    // ADR-0059 — el organismo ve el nombre real del estado, sin sufijo «OT».
+    expect(screen.getAllByText("Entregado").length).toBeGreaterThan(0);
   });
 
   it("muestra las especificaciones técnicas y omite las que el trámite no tiene", async () => {

@@ -79,7 +79,7 @@ describe('PlacaPreasignadaSection (HU #10799)', () => {
     render(
       <PlacaPreasignadaSection instanceId="i" organismoId="o" plateValue="" plateSource="" readOnly={false} />,
     );
-    expect(await screen.findByText(/no está habilitada para este organismo/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no tienen inventario de placas habilitado/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Buscar placa/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Dígito de preferencia de placa/i)).not.toBeInTheDocument();
   });

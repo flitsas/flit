@@ -38,12 +38,15 @@ public static class AdminPlateRangesEndpoints
         group.MapPost("/plates/{plateId:guid}/revoke", (Guid plateId, HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
             => SetStateAsync(plateId, PlateState.Revocada, repo, ct)).WithName("AdminPlateRevoke");
 
-        // HU #10654 — el OT asigna una placa a un trámite en preasignado (Flujo B).
+        // HU #10654 / ADR-0059 — el OT asigna una placa a un trámite en preasignacion.
         group.MapPost("/procedures/{instanceId:guid}/assign-plate", AssignPlateToProcedureAsync)
             .WithName("AdminPlateAssignToProcedure");
 
-        // HU #10655 — el OT revoca la preasignación de un trámite.
-        group.MapPost("/procedures/{instanceId:guid}/revoke", RevokeProcedurePlateAsync)
+        // ADR-0059 (HU #12598) — «Liberar placa»: asignado → preasignacion. La ruta anterior (/revoke,
+        // «Revocar placa») se conserva como alias hasta que el frontend migre (HU #12602).
+        group.MapPost("/procedures/{instanceId:guid}/release-plate", ReleaseProcedurePlateAsync)
+            .WithName("AdminPlateReleaseProcedure");
+        group.MapPost("/procedures/{instanceId:guid}/revoke", ReleaseProcedurePlateAsync)
             .WithName("AdminPlateRevokeProcedure");
 
         // HU #12167 (Feature #12156) — el OT corrige la placa dentro de la ventana de 1 hora.
@@ -53,7 +56,7 @@ public static class AdminPlateRangesEndpoints
         return app;
     }
 
-    private static async Task<IResult> RevokeProcedurePlateAsync(
+    private static async Task<IResult> ReleaseProcedurePlateAsync(
         Guid instanceId, RevokePlateRequest request, HttpContext http,
         IOtClientProcedureRepository otRepo, CancellationToken ct)
     {
@@ -62,13 +65,13 @@ public static class AdminPlateRangesEndpoints
             return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "No se pudo resolver el OT.");
         }
 
-        var result = await otRepo.RevokePlateAsync(
+        var result = await otRepo.ReleasePlateAsync(
             otTenantId, instanceId, request.Reason, ResolveUserId(http.User), "ot_console", ct)
             .ConfigureAwait(false);
 
         return result is null
             ? Results.Problem(statusCode: 422, title: "Unprocessable",
-                detail: "No se pudo revocar: el trámite no es accesible o no está en preasignado/asignado.")
+                detail: "No se pudo liberar la placa: el trámite no es accesible o no está en estado Asignado.")
             : Results.Ok(result);
     }
 
@@ -130,7 +133,7 @@ public static class AdminPlateRangesEndpoints
                 PlateAssignmentFailure.PlateNotAvailable =>
                     $"La placa {plate} no está disponible en los rangos del organismo de tránsito. Elija una del rango o regístrela como fuera de rango.",
                 PlateAssignmentFailure.NotPreassigned =>
-                    "El trámite no está en preasignado: no admite asignación de placa en su estado actual.",
+                    "El trámite no está en Preasignación: no admite asignación de placa en su estado actual.",
                 PlateAssignmentFailure.ProcedureNotAccessible =>
                     "El trámite no existe o el organismo de tránsito no tiene acceso vigente a él.",
                 _ => "La placa es obligatoria.",

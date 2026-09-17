@@ -90,15 +90,21 @@ public sealed class CompanyQueryFieldCatalog : IQueryFieldCatalog
     /// <summary>
     /// El ciclo de vida del trámite en la empresa, en orden. NO es el estado del organismo: aquí
     /// «entregado» quiere decir que la gestora ya lo radicó, no que alguien lo haya mirado.
+    /// Preasignación y Asignado son la Ruta Larga de matrícula inicial (ADR-0059): el trámite ya
+    /// está en manos del organismo, pero todavía sin placa o sin que el gestor lo haya enviado.
     /// </summary>
     private static readonly QueryFieldOptionDto[] EstadoOptions =
     [
         new("borrador", "Borrador"),
         new("preparado", "Preparado"),
+        new("preasignacion", "Preasignación"),
+        new("asignado", "Asignado"),
         new("entregado", "Entregado al organismo"),
         new("aprobado", "Aprobado"),
         new("rechazado", "Rechazado"),
+        new("revocado", "Revocado"),
         new("anulado", "Anulado"),
+        new("subsanacion", "En subsanación"),
     ];
 
     private static readonly QueryFieldOptionDto[] SiNoOptions =

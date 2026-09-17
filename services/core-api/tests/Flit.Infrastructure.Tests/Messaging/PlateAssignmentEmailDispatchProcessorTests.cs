@@ -172,9 +172,8 @@ public sealed class PlateAssignmentEmailDispatchProcessorTests
             TenantId = TenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "DSP-1",
-            Status = "en_proceso",
+            Status = "asignado",
             Plate = plate,
-            PlateFlowStatus = "Asignado",
             CreatedByUserId = Guid.NewGuid(),
             CreatedAt = DateTimeOffset.UtcNow,
             Actors =

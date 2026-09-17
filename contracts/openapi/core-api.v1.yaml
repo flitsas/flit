@@ -13586,7 +13586,7 @@ components:
           description: >
             El mismo objeto que devuelve `GET /api/v1/tramites/instances/{id}` al propio cliente
             (id, referenceNumber, status, procedureTypeId, tenantId, createdAt, submittedAt,
-            completedAt, fieldValues, statusHistory, actors, draftFinalizedAt, plateFlowStatus,
+            completedAt, fieldValues, statusHistory, actors, draftFinalizedAt, rejectedFrom,
             currentStep, subsanacionActiva, subsanacionCount, prioritario, events).
           additionalProperties: true
       required: [tenantId, instance]
@@ -13841,7 +13841,13 @@ components:
       properties:
         id: { type: string, format: uuid }
         referenceNumber: { type: string }
-        status: { type: string, example: draft }
+        status:
+          type: string
+          example: borrador
+          description: >
+            Estado global (ADR-0059): borrador, preparado, preasignacion, asignado, entregado,
+            aprobado, rechazado, revocado, anulado o subsanacion. 'preasignacion' y 'asignado' son la
+            Ruta Larga de matrícula inicial (radicada sin placa; el organismo la asigna).
         procedureTypeId: { type: string, format: uuid }
         tenantId: { type: string, format: uuid }
         createdAt: { type: string, format: date-time }
@@ -13850,14 +13856,15 @@ components:
           format: date-time
           nullable: true
           description: Fecha de radicación (Draft→Submitted). Null mientras es borrador.
-        plateFlowStatus:
+        rejectedFrom:
           type: string
           nullable: true
-          enum: [preasignado, asignado]
+          enum: [preasignacion, entregado]
           description: >
-            Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al status
-            global (que permanece en 'entregado'): null (sin ruta de placa), 'preasignado' (entregado
-            al OT, esperando placa) o 'asignado' (placa registrada; pendiente de SOAT + recepción del OT).
+            ADR-0059 (Epic #12549) — estado desde el que el organismo rechazó el trámite. Solo tiene
+            valor en 'rechazado'; 'preasignacion' distingue el rechazo previo a la placa (el gestor
+            debe corregir y volver a pedirla). Sustituye al sub-estado 'plateFlowStatus' de
+            HU #10785: la ruta de placa son ahora los estados globales 'preasignacion' y 'asignado'.
         draftFinalizedAt:
           type: string
           format: date-time

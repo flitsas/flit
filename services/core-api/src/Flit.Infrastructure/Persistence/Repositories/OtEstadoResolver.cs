@@ -19,24 +19,25 @@ internal static class OtEstadoResolver
     public static string Resolve(
         string status,
         bool subsanacionActiva,
-        bool isPaused,
-        string? plateFlowStatus) => status switch
+        bool isPaused) => status switch
     {
         TramiteEstado.Aprobado => OtReportEstado.Aprobado,
         TramiteEstado.Anulado => OtReportEstado.Anulado,
+        // Revocar deshace una aprobación: es un cierre propio, no un «otro» que haya que mirar.
+        TramiteEstado.Revocado => OtReportEstado.Revocado,
         // Un rechazo con subsanación abierta vuelve; uno sin ella se quedó ahí. Para el organismo
         // son dos cosas distintas y contarlas juntas escondería cuánto trabajo tiene de vuelta.
         TramiteEstado.Rechazado => subsanacionActiva
             ? OtReportEstado.EnSubsanacion
             : OtReportEstado.Rechazado,
-        TramiteEstado.Entregado when isPaused => OtReportEstado.EsperandoCliente,
-        TramiteEstado.Entregado => plateFlowStatus switch
-        {
-            PlateFlowStatus.Preasignado => OtReportEstado.EsperandoPlaca,
-            null => OtReportEstado.EnRevision,
-            // `asignado` y posteriores: la pelota está en el cliente (SOAT, impuestos).
-            _ => OtReportEstado.EsperandoCliente,
-        },
+        // ADR-0059 — la ruta de placa son estados reales: preasignacion = el organismo debe poner
+        // placa; asignado = la pelota está en el cliente (SOAT, impuestos, enviar al OT); entregado =
+        // en revisión del organismo. Un trámite pausado espera al cliente, esté donde esté.
+        TramiteEstado.Preasignacion or TramiteEstado.Asignado or TramiteEstado.Entregado when isPaused
+            => OtReportEstado.EsperandoCliente,
+        TramiteEstado.Preasignacion => OtReportEstado.EsperandoPlaca,
+        TramiteEstado.Asignado => OtReportEstado.EsperandoCliente,
+        TramiteEstado.Entregado => OtReportEstado.EnRevision,
         _ => OtReportEstado.Otro,
     };
 }

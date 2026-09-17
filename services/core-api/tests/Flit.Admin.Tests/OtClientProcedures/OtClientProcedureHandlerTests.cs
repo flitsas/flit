@@ -146,6 +146,47 @@ public sealed class OtClientProcedureHandlerTests
         history.Metadata.Should().Contain(OtTenant.ToString());
     }
 
+    [Fact] // La bandeja sustituye la fila por la respuesta de la decisión: si viniera recortada, el
+           // operador vería desaparecer el gestor y los badges de «Enviar al OT» justo tras decidir.
+    public async Task Decision_LaRespuestaTraeLaMismaFilaQueLaGrilla()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedActorUser(seed, ActorUser);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                ProcedureInstanceId = procedureId,
+                TenantId = ClientTenant,
+                FieldKey = Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.SoatPagado,
+                ValueText = "true",
+            });
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = NewApproveHandler(ctx);
+        var result = await handler.HandleAsync(new ApproveOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            ApprovedBy = Approver,
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(ApproveOtClientProcedureStatus.Approved);
+        result.Procedure!.GestorNombre.Should().Be("Actor Test");
+        result.Procedure.SoatPagado.Should().BeTrue();
+        result.Procedure.ImpuestoDepartamentalPagado.Should().BeFalse();
+        result.Procedure.ClientTenantName.Should().NotBeNullOrEmpty();
+    }
+
     [Fact]
     public async Task AC3_Reject_PersistsReasonAndRejectedOt()
     {
@@ -422,6 +463,70 @@ public sealed class OtClientProcedureHandlerTests
     }
 
     // ---------- HU #10871 (AC1): observación subsanable del OT (entregado→subsanacion) ----------
+
+    [Theory] // ADR-0059 (HU #12598) — el handler no repite el literal 'entregado': rechazar sale también de Preasignación.
+    [InlineData(TramiteEstado.Preasignacion)]
+    [InlineData(TramiteEstado.Entregado)]
+    public async Task Adr0059_Reject_DesdePreasignacionOEntregado_RechazaYGuardaElOrigen(string estadoActual)
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, estadoActual);
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = NewRejectHandler(ctx);
+        var result = await handler.HandleAsync(new RejectOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            RejectedBy = Approver,
+            Request = new() { Reason = "Falta la factura electrónica de compra" },
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(RejectOtClientProcedureStatus.Rejected);
+        result.Procedure!.Status.Should().Be(TramiteEstado.Rechazado);
+
+        await using var verify = NewContext(db);
+        var entity = await verify.ProcedureInstances
+            .SingleAsync(p => p.Id == procedureId, cancellationToken: TestContext.Current.CancellationToken);
+        entity.RejectedFrom.Should().Be(estadoActual);
+    }
+
+    [Theory] // ADR-0059 — la política sigue mandando: desde Asignado o Aprobado el OT no rechaza.
+    [InlineData(TramiteEstado.Asignado)]
+    [InlineData(TramiteEstado.Aprobado)]
+    public async Task Adr0059_Reject_DesdeEstadoSinArista_InvalidState(string estadoActual)
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, estadoActual);
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = NewRejectHandler(ctx);
+        var result = await handler.HandleAsync(new RejectOtClientProcedureCommand
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+            RejectedBy = Approver,
+            Request = new() { Reason = "motivo" },
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(RejectOtClientProcedureStatus.InvalidState);
+    }
 
     [Fact] // AC1 — con ítems del checklist, la decisión OT observa (subsanacion) en vez de rechazar.
     public async Task Ac1_Reject_ConItems_TransicionaASubsanacionConChecklistHibridoEnMetadata()
@@ -1004,8 +1109,8 @@ public sealed class OtClientProcedureHandlerTests
 
     // ---------- HU #10654 (Feature #10587): el OT asigna placa a un trámite en preasignado ----------
 
-    [Fact] // HU #10785 — el sub-estado avanza preasignado→asignado; el status global permanece 'entregado'.
-    public async Task AssignPlate_Preasignado_ReservaPlacaYAvanzaSubEstado()
+    [Fact] // HU #12598 AC2 (ADR-0059) — preasignacion → asignado por la política única, con historial y PlateAssignedAt.
+    public async Task AssignPlate_Preasignacion_ReservaPlacaYTransicionaAAsignado()
     {
         var db = NewDbName();
         var procedureId = Guid.NewGuid();
@@ -1015,7 +1120,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion);
             await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
         }
 
@@ -1027,8 +1132,12 @@ public sealed class OtClientProcedureHandlerTests
         result.Failure.Should().Be(PlateAssignmentFailure.None);
         await using var verify = NewContext(db);
         var instance = await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken);
-        instance.Status.Should().Be(TramiteEstado.Entregado);
-        instance.PlateFlowStatus.Should().Be(PlateFlowStatus.Asignado);
+        instance.Status.Should().Be(TramiteEstado.Asignado);
+        instance.PlateAssignedAt.Should().NotBeNull();
+        (await verify.ProcedureInstanceStatusHistories
+            .Where(h => h.ProcedureInstanceId == procedureId)
+            .ToListAsync(TestContext.Current.CancellationToken))
+            .Should().ContainSingle(h => h.FromStatus == TramiteEstado.Preasignacion && h.ToStatus == TramiteEstado.Asignado);
         var detail = await verify.PlateRangeDetails.SingleAsync(d => d.Plate == "ABC100", TestContext.Current.CancellationToken);
         detail.State.Should().Be("preasignada");
         detail.ProcedureInstanceId.Should().Be(procedureId);
@@ -1037,8 +1146,10 @@ public sealed class OtClientProcedureHandlerTests
             TestContext.Current.CancellationToken)).Should().BeTrue();
     }
 
-    [Fact] // La asignación exige el sub-estado 'preasignado'; un entregado estándar (sub-estado null) la rechaza.
-    public async Task AssignPlate_NoPreasignado_InformaElSubEstado()
+    [Theory] // HU #12598 AC3 — la asignación exige 'preasignacion': asignado y entregado la rechazan con not_preassigned.
+    [InlineData(TramiteEstado.Asignado)]
+    [InlineData(TramiteEstado.Entregado)]
+    public async Task AssignPlate_FueraDePreasignacion_NotPreassigned(string estado)
     {
         var db = NewDbName();
         var procedureId = Guid.NewGuid();
@@ -1047,7 +1158,7 @@ public sealed class OtClientProcedureHandlerTests
         {
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, estado);
             await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
         }
 
@@ -1074,8 +1185,8 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, primero, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado);
-            SeedProcedure(seed, segundo, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, primero, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion);
+            SeedProcedure(seed, segundo, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion);
             await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
         }
 
@@ -1085,11 +1196,14 @@ public sealed class OtClientProcedureHandlerTests
         var primera = await repo.AssignPlateAsync(OtTenant, primero, "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
         primera.Succeeded.Should().BeTrue();
 
-        // Segundo trámite, misma placa: ya está tomada.
+        // Segundo trámite, misma placa: ya está viva en el primero. La regla global ("una placa no
+        // puede estar viva en dos trámites") corre ANTES que el inventario y es la que responde —
+        // igual que en PostgreSQL, donde el trigger de denormalización deja la placa en la columna.
         var segunda = await repo.AssignPlateAsync(OtTenant, segundo, "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
         segunda.Succeeded.Should().BeFalse();
-        segunda.Failure.Should().Be(PlateAssignmentFailure.PlateAlreadyAssigned);
+        segunda.Failure.Should().Be(PlateAssignmentFailure.PlateInUseByAnotherProcedure);
+        segunda.Detail.Should().Contain("REF-001");
         segunda.Procedure.Should().BeNull();
     }
 
@@ -1111,7 +1225,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion);
             SeedProcedure(seed, otroTramite, otraCompania, TransitOffice, ProcedureTypeA, estadoDelOtro, reference: "TRM-2026-000018", plate: "ABC100");
             await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
         }
@@ -1127,7 +1241,7 @@ public sealed class OtClientProcedureHandlerTests
 
         await using var verify = NewContext(db);
         var instance = await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken);
-        instance.PlateFlowStatus.Should().Be(PlateFlowStatus.Preasignado);
+        instance.Status.Should().Be(TramiteEstado.Preasignacion);
     }
 
     [Theory] // Rechazado y anulado liberan la placa: el vehículo puede volver a tramitarse con ella.
@@ -1144,7 +1258,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion);
             SeedProcedure(seed, otroTramite, ClientTenant, TransitOffice, ProcedureTypeA, estadoDelOtro, reference: "TRM-2026-000019", plate: "ABC100");
             await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
         }
@@ -1167,7 +1281,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado, plate: "ABC100");
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion, plate: "ABC100");
             await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
         }
 
@@ -1189,7 +1303,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion);
             await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
         }
 
@@ -1239,8 +1353,8 @@ public sealed class OtClientProcedureHandlerTests
 
     // ---------- HU #10655: aprobar RUNT (placa utilizada) / revocar (placa revocada) ----------
 
-    [Fact]
-    public async Task Approve_Terminado_MarcaPlacaUtilizada()
+    [Fact] // Aprobar desde entregado con placa de rango reservada: la placa pasa a utilizada.
+    public async Task Approve_EntregadoConPlacaReservada_MarcaPlacaUtilizada()
     {
         var db = NewDbName();
         var procedureId = Guid.NewGuid();
@@ -1250,7 +1364,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Terminado);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
             var plateRepo = new PlateRangeRepository(seed);
             await plateRepo.CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
             await plateRepo.TryReservePlateAsync(ClientTenant, TransitOffice, "ABC100", procedureId, TestContext.Current.CancellationToken);
@@ -1264,14 +1378,14 @@ public sealed class OtClientProcedureHandlerTests
         await using var verify = NewContext(db);
         var instance = await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken);
         instance.Status.Should().Be(TramiteEstado.Aprobado);
-        instance.PlateFlowStatus.Should().BeNull(); // el sub-flujo de placa se cierra en el terminal
+        instance.RejectedFrom.Should().BeNull();
         (await verify.PlateRangeDetails.SingleAsync(d => d.Plate == "ABC100", TestContext.Current.CancellationToken))
             .State.Should().Be("utilizada");
     }
 
-    [Fact] // HU #10785 — revocar libera la placa y devuelve el sub-estado a 'preasignado'; el status
-           // global permanece 'entregado'.
-    public async Task Revoke_Asignado_LiberaPlacaYVuelveSubEstadoAPreasignado()
+    [Fact] // HU #12598 AC4 (ADR-0059) — «Liberar placa»: asignado → preasignacion; la placa sigue en el
+           // expediente (HU #12077) y la reserva del inventario queda revocada.
+    public async Task ReleasePlate_Asignado_VuelveAPreasignacionYConservaLaPlaca()
     {
         var db = NewDbName();
         var procedureId = Guid.NewGuid();
@@ -1281,7 +1395,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Asignado);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Asignado, plate: "ABC100");
             var plateRepo = new PlateRangeRepository(seed);
             await plateRepo.CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
             await plateRepo.TryReservePlateAsync(ClientTenant, TransitOffice, "ABC100", procedureId, TestContext.Current.CancellationToken);
@@ -1289,16 +1403,106 @@ public sealed class OtClientProcedureHandlerTests
 
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
-        var updated = await repo.RevokePlateAsync(OtTenant, procedureId, "Error en la placa", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+        var updated = await repo.ReleasePlateAsync(OtTenant, procedureId, "Error en la placa", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+
+        updated.Should().NotBeNull();
+        updated!.Status.Should().Be(TramiteEstado.Preasignacion);
+        await using var verify = NewContext(db);
+        var instance = await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken);
+        instance.Status.Should().Be(TramiteEstado.Preasignacion);
+        instance.Plate.Should().Be("ABC100", "liberar no borra la placa del expediente (HU #12077)");
+        (await verify.ProcedureInstanceStatusHistories
+            .Where(h => h.ProcedureInstanceId == procedureId)
+            .ToListAsync(TestContext.Current.CancellationToken))
+            .Should().ContainSingle(h => h.FromStatus == TramiteEstado.Asignado && h.ToStatus == TramiteEstado.Preasignacion);
+        var detail = await verify.PlateRangeDetails.SingleAsync(d => d.Plate == "ABC100", TestContext.Current.CancellationToken);
+        detail.State.Should().Be("revocada");
+        detail.ProcedureInstanceId.Should().BeNull();
+    }
+
+    [Theory] // HU #12598 AC4 (−) — liberar solo aplica en asignado.
+    [InlineData(TramiteEstado.Preasignacion)]
+    [InlineData(TramiteEstado.Entregado)]
+    public async Task ReleasePlate_FueraDeAsignado_NoHaceNada(string estado)
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, estado);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+        var updated = await repo.ReleasePlateAsync(OtTenant, procedureId, "x", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+
+        updated.Should().BeNull();
+        await using var verify = NewContext(db);
+        (await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken))
+            .Status.Should().Be(estado);
+    }
+
+    // ---------- HU #12598 AC5 (ADR-0059): decidir solo en entregado; rechazar también en preasignacion ----------
+
+    [Theory] // Aprobar desde la cola de placa no existe; rechazar desde asignado tampoco (primero se libera).
+    [InlineData(TramiteEstado.Preasignacion, TramiteEstado.Aprobado)]
+    [InlineData(TramiteEstado.Asignado, TramiteEstado.Aprobado)]
+    [InlineData(TramiteEstado.Asignado, TramiteEstado.Rechazado)]
+    public async Task Decision_FueraDeEntregado_NoTransiciona(string estado, string destino)
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, estado, plate: "ABC100");
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+        var updated = destino == TramiteEstado.Aprobado
+            ? await repo.ApproveAsync(OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken)
+            : await repo.RejectAsync(OtTenant, procedureId, "motivo", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+
+        updated.Should().BeNull();
+        await using var verify = NewContext(db);
+        (await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken))
+            .Status.Should().Be(estado);
+    }
+
+    [Fact] // Rechazar desde preasignacion: OK, con rejected_from = preasignacion (distintivo del gestor).
+    public async Task Reject_DesdePreasignacion_GuardaElOrigen()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
+        var updated = await repo.RejectAsync(OtTenant, procedureId, "Documentos ilegibles", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
         updated.Should().NotBeNull();
         await using var verify = NewContext(db);
         var instance = await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken);
-        instance.Status.Should().Be(TramiteEstado.Entregado);
-        instance.PlateFlowStatus.Should().Be(PlateFlowStatus.Preasignado);
-        var detail = await verify.PlateRangeDetails.SingleAsync(d => d.Plate == "ABC100", TestContext.Current.CancellationToken);
-        detail.State.Should().Be("revocada");
-        detail.ProcedureInstanceId.Should().BeNull();
+        instance.Status.Should().Be(TramiteEstado.Rechazado);
+        instance.RejectedFrom.Should().Be(TramiteEstado.Preasignacion);
+        (await verify.ProcedureInstanceStatusHistories
+            .Where(h => h.ProcedureInstanceId == procedureId)
+            .ToListAsync(TestContext.Current.CancellationToken))
+            .Should().ContainSingle(h => h.FromStatus == TramiteEstado.Preasignacion && h.ToStatus == TramiteEstado.Rechazado);
     }
 
     // ---------- HU #10804 (Feature #10587): la bandeja del OT proyecta soat_estado por trámite ----------
@@ -1319,7 +1523,7 @@ public sealed class OtClientProcedureHandlerTests
         {
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
-            SeedProcedure(seed, asignadoConSoat, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-ASG", PlateFlowStatus.Asignado);
+            SeedProcedure(seed, asignadoConSoat, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Asignado, "REF-ASG");
             seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
             {
                 Id = Guid.NewGuid(),
@@ -1328,7 +1532,7 @@ public sealed class OtClientProcedureHandlerTests
                 FieldKey = "soat_estado",
                 ValueText = "vigente",
             });
-            SeedProcedure(seed, preasignadoSinSoat, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-PRE", PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, preasignadoSinSoat, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion, "REF-PRE");
             SeedProcedure(seed, estandar, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-STD");
             seed.SaveChanges();
         }
@@ -1338,7 +1542,8 @@ public sealed class OtClientProcedureHandlerTests
         var result = await handler.HandleAsync(new ListOtClientProceduresQuery
         {
             OtTenantId = OtTenant,
-            Status = TramiteEstado.Entregado,
+            // ADR-0059 — la cola completa del organismo: varios estados separados por coma.
+            Status = "preasignacion,asignado,entregado",
         }, TestContext.Current.CancellationToken);
 
         // AC1 — asignado con SOAT vigente: el frontend mostrará Aprobar/Rechazar.
@@ -1366,7 +1571,7 @@ public sealed class OtClientProcedureHandlerTests
         {
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
-            SeedProcedure(seed, conDigito, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-DIG", PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, conDigito, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion, "REF-DIG");
             seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
             {
                 Id = Guid.NewGuid(),
@@ -1375,7 +1580,7 @@ public sealed class OtClientProcedureHandlerTests
                 FieldKey = "plate_preferred_last_digit",
                 ValueText = "5",
             });
-            SeedProcedure(seed, sinDigito, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, "REF-NODIG", PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, sinDigito, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion, "REF-NODIG");
             seed.SaveChanges();
         }
 
@@ -1384,7 +1589,7 @@ public sealed class OtClientProcedureHandlerTests
         var result = await handler.HandleAsync(new ListOtClientProceduresQuery
         {
             OtTenantId = OtTenant,
-            Status = TramiteEstado.Entregado,
+            Status = "preasignacion,asignado,entregado", // ADR-0059 — cola completa del organismo
         }, TestContext.Current.CancellationToken);
 
         // AC2 — el OT recibe el dígito como guía.
@@ -1393,44 +1598,7 @@ public sealed class OtClientProcedureHandlerTests
         result.Data.Single(p => p.Id == sinDigito).PlatePreferredLastDigit.Should().BeNull();
     }
 
-    // ---------- Gate duro: OT solo aprueba en null (estándar) o terminado ----------
-
-    [Theory]
-    [InlineData("asignado", false)]
-    [InlineData("preasignado", false)]
-    [InlineData("terminado", true)]
-    public async Task Approve_RutaPlaca_SoloTerminado(string plateFlowStatus, bool expectApproved)
-    {
-        var db = NewDbName();
-        var procedureId = Guid.NewGuid();
-
-        await using (var seed = NewContext(db))
-        {
-            SeedOt(seed, OtTenant, TransitOffice);
-            SeedGrant(seed, ClientTenant, TransitOffice);
-            SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: plateFlowStatus);
-        }
-
-        await using var ctx = NewContext(db);
-        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
-        var updated = await repo.ApproveAsync(OtTenant, procedureId, Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
-
-        await using var verify = NewContext(db);
-        var status = (await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken)).Status;
-        if (expectApproved)
-        {
-            updated.Should().NotBeNull();
-            status.Should().Be(TramiteEstado.Aprobado);
-        }
-        else
-        {
-            updated.Should().BeNull();
-            status.Should().Be(TramiteEstado.Entregado);
-        }
-    }
-
-    [Fact] // OT aprueba vía handler un trámite Terminado (ruta de placa).
+    [Fact] // OT aprueba vía handler un trámite entregado con placa de rango (ruta de placa).
     public async Task Approve_RutaPlaca_ViaHandler_DesdeEntregadoSinHitoSintetico()
     {
         var db = NewDbName();
@@ -1441,7 +1609,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Terminado);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
             var plateRepo = new PlateRangeRepository(seed);
             await plateRepo.CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
             await plateRepo.TryReservePlateAsync(ClientTenant, TransitOffice, "ABC100", procedureId, TestContext.Current.CancellationToken);
@@ -1469,7 +1637,7 @@ public sealed class OtClientProcedureHandlerTests
         history.Should().NotContain(h => h.ToStatus == TramiteEstado.Entregado); // sin hito sintético asignado→entregado
     }
 
-    [Fact] // OT rechaza vía handler un trámite Terminado; libera placa.
+    [Fact] // OT rechaza vía handler un trámite entregado con placa de rango; libera la placa y guarda el origen.
     public async Task Reject_RutaPlaca_ViaHandler_DesdeEntregadoYLiberaPlaca()
     {
         var db = NewDbName();
@@ -1480,7 +1648,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedOt(seed, OtTenant, TransitOffice);
             SeedGrant(seed, ClientTenant, TransitOffice);
             SeedActorUser(seed, Approver);
-            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Terminado);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
             var plateRepo = new PlateRangeRepository(seed);
             await plateRepo.CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
             await plateRepo.TryReservePlateAsync(ClientTenant, TransitOffice, "ABC100", procedureId, TestContext.Current.CancellationToken);
@@ -1498,8 +1666,9 @@ public sealed class OtClientProcedureHandlerTests
         result.Status.Should().Be(RejectOtClientProcedureStatus.Rejected);
 
         await using var verify = NewContext(db);
-        (await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken))
-            .Status.Should().Be(TramiteEstado.Rechazado);
+        var rechazado = await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken);
+        rechazado.Status.Should().Be(TramiteEstado.Rechazado);
+        rechazado.RejectedFrom.Should().Be(TramiteEstado.Entregado);
         var plate = await verify.PlateRangeDetails.SingleAsync(d => d.Plate == "ABC100", TestContext.Current.CancellationToken);
         plate.State.Should().Be("disponible");
         plate.ProcedureInstanceId.Should().BeNull();
@@ -1604,7 +1773,6 @@ public sealed class OtClientProcedureHandlerTests
         Guid procedureTypeId,
         string status,
         string reference = "REF-001",
-        string? plateFlowStatus = null,
         string? plate = null)
     {
         // ADR-0050 — el tipo referenciado debe existir: la clasificación se resuelve navegando a él,
@@ -1617,6 +1785,8 @@ public sealed class OtClientProcedureHandlerTests
                 Code = "MATRICULA_NUEVA",
                 Name = "Matrícula inicial",
                 Family = "MATRICULAS",
+                // ADR-0059 — la ruta de placa (preasignacion/asignado) solo existe para tipos que piden placa.
+                GateProfile = """{"entryMode":"VIN","requiresBuyer":true,"requiresPlateRequest":true}""",
                 IsActive = true,
                 PublicationStatus = PublicationStatus.Published,
                 CreatedAt = DateTimeOffset.UtcNow,
@@ -1630,7 +1800,6 @@ public sealed class OtClientProcedureHandlerTests
             ProcedureTypeId = procedureTypeId,
             ReferenceNumber = reference,
             Status = status,
-            PlateFlowStatus = plateFlowStatus,
             Plate = plate,
             TransitOfficeId = transitOfficeId,
             CreatedByUserId = ActorUser,

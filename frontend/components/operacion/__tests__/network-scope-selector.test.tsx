@@ -45,7 +45,7 @@ const mocks = vi.hoisted(() => ({
   startSubsanacion: vi.fn(),
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
-  completePlateFlow: vi.fn(),
+  enviarAlOt: vi.fn(),
   adminListGestoresDisponibles: vi.fn(),
 }));
 

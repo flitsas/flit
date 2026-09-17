@@ -37,7 +37,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             new NullTramiteTransitionRecorder(),
             new NullTramiteTransitionPublisher());
         return new SubmitProcedureInstanceHandler(
-            lifecycle, _repo, NullPlatePreassignPolicy.Instance, NullLogger<SubmitProcedureInstanceHandler>.Instance);
+            lifecycle, _repo, NullLogger<SubmitProcedureInstanceHandler>.Instance);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenant, string status = TramiteEstado.Borrador) =>
@@ -247,7 +247,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(instance);
         _repo.GetByIdWithWizardGraphAsync(id, tenant, ct).Returns(instance);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
 
@@ -303,7 +303,7 @@ public sealed class FinalizeDraftProcedureInstanceTests
             WizardEnabled = true,
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithDetailsAsync(id, tenant, ct).Returns(instance);
         _repo.GetByIdWithWizardGraphAsync(id, tenant, ct).Returns(instance);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
 
@@ -312,7 +312,8 @@ public sealed class FinalizeDraftProcedureInstanceTests
         var (result, error) = await submit.HandleAsync(id, tenant, changedBy: null, ct);
 
         error.Should().BeNull();
-        result!.Status.Should().Be(TramiteEstado.Entregado);
+        // ADR-0059 — matrícula (pide placa) sin placa radica a preasignacion (Ruta Larga).
+        result!.Status.Should().Be(TramiteEstado.Preasignacion);
     }
 
     // ── AC3 — biométrica funciona sobre un borrador finalizado ────────────────────

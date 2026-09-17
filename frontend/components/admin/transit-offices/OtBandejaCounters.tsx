@@ -1,65 +1,80 @@
 "use client";
 
+import { ESTADO_ICONO } from "@/lib/tramites/estados";
 import type { OtBandejaCounters as Counters } from "@/lib/api/types-ot";
 
-/** Clave de la tarjeta pulsada; el contenedor la traduce a filtros del listado. */
+/** Clave de la tarjeta pulsada; el contenedor la traduce al filtro de estado del listado. */
 export type OtCounterKey =
-  | "sinAsignarPlaca"
-  | "conPlacaAsignada"
+  | "preasignacion"
+  | "asignados"
+  | "porDecidir"
   | "aprobados"
   | "rechazados"
-  | "sinGestion"
   | "revocados";
 
 interface TarjetaDef {
   key: OtCounterKey;
   label: string;
   icon: string;
-  /** Qué mide, para el título del control: la etiqueta sola no basta para dos de ellas. */
+  /** Qué mide, para el título del control. */
   hint: string;
+  /** Estado real del ciclo de vida que la tarjeta cuenta y filtra (ADR-0059). */
+  status: string;
 }
 
 /**
- * Orden de lectura: primero la cola de placa (lo que el organismo tiene que despachar), luego los
- * desenlaces, y al final lo que nadie ha tocado. No es el orden del ciclo de vida sino el del
- * trabajo: la tira se lee de izquierda a derecha buscando dónde hay algo que hacer.
+ * Orden de lectura: primero la cola de placa (lo que el organismo tiene que despachar), luego la
+ * cola de decisión y al final los desenlaces. No es el orden del ciclo de vida sino el del trabajo:
+ * la tira se lee de izquierda a derecha buscando dónde hay algo que hacer.
+ *
+ * ADR-0059 — cada tarjeta ES un estado real (preasignacion, asignado, entregado, aprobado,
+ * rechazado, revocado): pulsarla equivale a filtrar por ese estado, y las seis son excluyentes.
+ * El icono (y con él el color) es el MISMO del catálogo del gestor (`ESTADO_ICONO`): un estado se
+ * ve igual en las dos pantallas. «Por decidir» conserva el suyo porque no nombra el estado sino
+ * la cola de trabajo del organismo.
  */
 const TARJETAS: TarjetaDef[] = [
   {
-    key: "sinAsignarPlaca",
-    label: "Sin asignar placa",
-    icon: "/assets/ot-estados/sin-placa.svg",
-    hint: "Entregados en ruta de placa que todavía no la tienen",
+    key: "preasignacion",
+    label: "Preasignación",
+    icon: ESTADO_ICONO.preasignacion,
+    hint: "Radicados sin placa: el organismo debe asignarla",
+    status: "preasignacion",
   },
   {
-    key: "conPlacaAsignada",
-    label: "Con placa asignada",
-    icon: "/assets/ot-estados/con-placa.svg",
-    hint: "Entregados con la placa ya puesta",
+    key: "asignados",
+    label: "Asignados",
+    icon: ESTADO_ICONO.asignado,
+    hint: "Con placa asignada; el gestor gestiona SOAT e impuestos y envía al OT",
+    status: "asignado",
+  },
+  {
+    key: "porDecidir",
+    label: "Por decidir",
+    icon: "/assets/ot-estados/sin-gestion.svg",
+    hint: "Entregados a la espera de la decisión del organismo",
+    status: "entregado",
   },
   {
     key: "aprobados",
     label: "Aprobados",
-    icon: "/assets/ot-estados/aprobados.svg",
+    icon: ESTADO_ICONO.aprobado,
     hint: "Trámites que el organismo aprobó",
+    status: "aprobado",
   },
   {
     key: "rechazados",
     label: "Rechazados",
-    icon: "/assets/ot-estados/rechazados.svg",
-    hint: "Trámites que el organismo rechazó",
-  },
-  {
-    key: "sinGestion",
-    label: "Sin gestión",
-    icon: "/assets/ot-estados/sin-gestion.svg",
-    hint: "Entregados que nadie ha empezado a trabajar",
+    icon: ESTADO_ICONO.rechazado,
+    hint: "Trámites que el organismo rechazó (desde entregado o desde preasignación)",
+    status: "rechazado",
   },
   {
     key: "revocados",
     label: "Revocados",
-    icon: "/assets/ot-estados/revocados.svg",
+    icon: ESTADO_ICONO.revocado,
     hint: "Trámites Aprobados que el organismo revocó (HU #12166)",
+    status: "revocado",
   },
 ];
 
@@ -132,28 +147,14 @@ export function OtBandejaCountersStrip({
 }
 
 /**
- * Filtros del listado que corresponden a cada tarjeta. Es el punto donde las cinco clases se
- * traducen al contrato del API — dos van por sub-estado de placa y tres por estado del trámite—, y
- * vive junto a la tira para que contar y filtrar no puedan divergir.
+ * Estado del listado que corresponde a cada tarjeta. Vive junto a la tira para que contar y filtrar
+ * no puedan divergir: la tarjeta dice «N» y, al pulsarla, el filtro es exactamente ese estado.
  */
-export function filtrosDeContador(key: OtCounterKey | ""): {
-  status: string;
-  plateFlowStatus: string;
-} {
-  switch (key) {
-    case "sinAsignarPlaca":
-      return { status: "entregado", plateFlowStatus: "preasignado" };
-    case "conPlacaAsignada":
-      return { status: "entregado", plateFlowStatus: "asignado,terminado" };
-    case "aprobados":
-      return { status: "aprobado", plateFlowStatus: "" };
-    case "rechazados":
-      return { status: "rechazado", plateFlowStatus: "" };
-    case "sinGestion":
-      return { status: "entregado", plateFlowStatus: "sin_ruta" };
-    case "revocados":
-      return { status: "revocado", plateFlowStatus: "" };
-    default:
-      return { status: "", plateFlowStatus: "" };
-  }
+export function estadoDeContador(key: OtCounterKey | ""): string {
+  return TARJETAS.find((t) => t.key === key)?.status ?? "";
+}
+
+/** Tarjeta que corresponde a un estado del filtro (para marcar la activa cuando el filtro cambia por el desplegable). */
+export function contadorDeEstado(status: string): OtCounterKey | "" {
+  return TARJETAS.find((t) => t.status === status)?.key ?? "";
 }

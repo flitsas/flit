@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
   // ICT (PR #204) — pausa individual y masiva + cierre del subflujo de placa.
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
-  completePlateFlow: vi.fn(),
+  enviarAlOt: vi.fn(),
   // La tabla consulta la config del tenant al montar (bloqueo de creación por familia y
   // "solo vehículos propios"); sin este mock el efecto revienta y tumba todo el archivo.
   getConsultationConfig: vi.fn(),
@@ -1441,64 +1441,93 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
 
 // El trámite puede avanzar a Terminado CON salvedades (compañía que permite continuar sin SOAT
 // vigente). Enviarlo al OT en silencio en ese caso es el bug que esta suite cubre.
-describe('TramitesTable — advertencias al procesar (SOAT no vigente)', () => {
-  const procesable = () => {
+describe('TramitesTable — «Enviar al OT» desde asignado (ADR-0059, HU #12601)', () => {
+  const asignado = () => {
     const [item] = makeInstances(1);
-    return { ...item, id: 'proc1', referenceNumber: 'TR-PROC', placa: 'PRC001', estado: 'entregado', plateFlowStatus: 'asignado' } satisfies InstanceSummary;
+    return { ...item, id: 'proc1', referenceNumber: 'TR-PROC', placa: 'PRC001', estado: 'asignado' } satisfies InstanceSummary;
   };
 
-  it('cuando hay alerta de procesar, el menú destaca la opción Procesar', async () => {
-    mocks.listInstances.mockResolvedValue([procesable()]);
+  it('AC1 — en asignado el menú destaca «Enviar al OT»; en otros estados no existe', async () => {
+    const [otro] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      asignado(),
+      { ...otro, id: 'pre1', referenceNumber: 'TR-PRE', estado: 'preasignacion' } satisfies InstanceSummary,
+    ]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(
       await screen.findByRole('button', {
-        name: /Acciones del trámite TR-PROC.*Pendiente por procesar/,
+        name: /Acciones del trámite TR-PROC.*Pendiente por enviar al OT/,
       }),
     );
-    const procesar = await screen.findByRole('menuitem', { name: 'Procesar' });
-    expect(procesar).toHaveClass('bg-amber-50');
+    const enviar = await screen.findByRole('menuitem', { name: 'Enviar al OT' });
+    expect(enviar).toHaveClass('bg-amber-50');
+    await userEvent.keyboard('{Escape}');
+
+    await userEvent.click(await screen.findByRole('button', { name: /Acciones del trámite TR-PRE/ }));
+    expect(screen.queryByRole('menuitem', { name: 'Enviar al OT' })).toBeNull();
   });
 
-  async function procesar() {
-    mocks.listInstances.mockResolvedValue([procesable()]);
+  async function enviarAlOt(trasEnviar: InstanceSummary[] = [asignado()]) {
+    // La primera carga trae la fila en asignado; tras enviar, la tabla recarga (contadores y
+    // filtro activo) y el backend devuelve lo que `trasEnviar` diga.
+    mocks.listInstances.mockResolvedValueOnce([asignado()]).mockResolvedValue(trasEnviar);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
-    // Con la fila pendiente por procesar, ActionsMenu añade el hint al nombre accesible.
+    // Con la fila pendiente por enviar, ActionsMenu añade el hint al nombre accesible.
     await userEvent.click(
       await screen.findByRole('button', { name: /Acciones del trámite TR-PROC/ }),
     );
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Procesar' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Marcar como Terminado' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Enviar al OT' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar al OT' }));
   }
 
-  it('muestra la advertencia del backend y deja el modal abierto', async () => {
-    mocks.completePlateFlow.mockResolvedValue({
+  it('AC1 — el modal es el mismo de checks SOAT/impuesto y al confirmar el trámite pasa a Entregado', async () => {
+    mocks.enviarAlOt.mockResolvedValue({ instance: null, warningCode: null, warningMessage: null });
+
+    await enviarAlOt([{ ...asignado(), estado: 'entregado' }]);
+
+    expect(mocks.enviarAlOt).toHaveBeenCalledWith(
+      'proc1',
+      { soatPagado: false, impuestoDepartamentalPagado: false },
+      undefined,
+    );
+    expect(screen.queryByRole('dialog', { name: 'Enviar al organismo de tránsito' })).toBeNull();
+    // La fila dice Entregado (el otro «Entregado» es la tarjeta de la tira KPI).
+    const fila = screen.getByText('TR-PROC').closest('tr');
+    expect(fila).not.toBeNull();
+    expect(await within(fila!).findByText('Entregado')).toBeInTheDocument();
+  });
+
+  it('AC5 — muestra la advertencia del backend y deja el modal abierto', async () => {
+    mocks.enviarAlOt.mockResolvedValue({
       instance: null,
       warningCode: 'soat_no_vigente_advertencia',
       warningMessage: 'El trámite se envió al OT SIN SOAT vigente: el RUNT no lo reporta vigente.',
     });
 
-    await procesar();
+    await enviarAlOt();
 
-    const dialog = screen.getByRole('dialog', { name: 'Procesar trámite' });
+    const dialog = screen.getByRole('dialog', { name: 'Enviar al organismo de tránsito' });
     expect(within(dialog).getByRole('alert')).toHaveTextContent(/SIN SOAT vigente/);
     // La operación fue exitosa: ya no se puede reintentar, solo cerrar.
-    expect(within(dialog).queryByRole('button', { name: 'Marcar como Terminado' })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Enviar al OT' })).toBeNull();
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Entendido' }));
-    expect(screen.queryByRole('dialog', { name: 'Procesar trámite' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Enviar al organismo de tránsito' })).toBeNull();
   });
 
-  it('sin advertencia cierra el modal directamente', async () => {
-    mocks.completePlateFlow.mockResolvedValue({
-      instance: null,
-      warningCode: null,
-      warningMessage: null,
-    });
+  it('AC5 — con SOAT no vigente y la compañía sin permiso de continuar, el modal muestra el error y el trámite sigue en Asignado', async () => {
+    mocks.enviarAlOt.mockRejectedValue(
+      new Error('El RUNT no reporta un SOAT vigente para el vehículo. La compañía tiene desactivada la opción de continuar sin SOAT vigente.'),
+    );
 
-    await procesar();
+    await enviarAlOt();
 
-    expect(screen.queryByRole('dialog', { name: 'Procesar trámite' })).toBeNull();
+    const dialog = screen.getByRole('dialog', { name: 'Enviar al organismo de tránsito' });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/SOAT vigente/);
+    // Sigue pudiendo reintentar: el trámite no se movió.
+    expect(within(dialog).getByRole('button', { name: 'Enviar al OT' })).toBeInTheDocument();
+    expect(screen.getAllByText('Asignado').length).toBeGreaterThan(0);
   });
 });
 

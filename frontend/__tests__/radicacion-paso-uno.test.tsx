@@ -264,9 +264,9 @@ describe('Dígito de preasignación de placa — paso 1', () => {
   });
 
   /**
-   * HU #10806 (Alternativa C) — `plate_route_active` es lo que lee el trigger de BD para marcar
-   * `plate_flow_status = 'preasignado'` al radicar sin placa. El paso del FUR lo escribe al abrir su
-   * sección; aquí viaja con la creación.
+   * HU #10806 (Alternativa C) — `plate_route_active` se sigue escribiendo como dato informativo de la
+   * decisión de ruta (desde ADR-0059 la ruta la decide el estado del trámite, no un trigger). El paso
+   * del FUR lo escribe al abrir su sección; aquí viaja con la creación.
    */
   it('la decisión de ruta queda persistida con el trámite', async () => {
     const user = userEvent.setup();
@@ -289,7 +289,7 @@ describe('Dígito de preasignación de placa — paso 1', () => {
     );
   });
 
-  it('organismo sin preasignación: se explica que el trámite se entrega estándar y no se ofrece', async () => {
+  it('organismo sin inventario de placas: se explica que el trámite quedará en Preasignación y no se ofrece el dígito', async () => {
     plateMocks.getPlatePreassignStatus.mockResolvedValue({ enabled: false });
     const user = userEvent.setup();
     renderNuevo();
@@ -297,8 +297,10 @@ describe('Dígito de preasignación de placa — paso 1', () => {
     await consultarVehiculo(user);
     await elegirSecretaria(user);
 
+    // ADR-0059 — la ruta no depende de la configuración de preasignación: sin placa, el trámite
+    // queda en Preasignación igual; lo que no hay es inventario para elegir una aquí.
     expect(
-      await screen.findByText(/no tiene preasignación de placa activa/),
+      await screen.findByText(/no tiene inventario de placas activo.*quedará en Preasignación/),
     ).toBeInTheDocument();
     expect(digito()).toBeDisabled();
   });

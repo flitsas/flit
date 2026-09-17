@@ -143,10 +143,12 @@ describe("ClientProceduresSection — HU #10220", () => {
     // Empresa y gestor comparten celda, así que el nombre accesible de la celda los lleva a los
     // dos: se comprueba el texto de la empresa, que es lo que la columna promete.
     expect(screen.getByText("Flota Andina S.A.S.")).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "Estado: Pendiente OT" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Estado: Entregado" })).toBeInTheDocument();
   });
 
-  it("AC2 aprobar con confirmación actualiza fila optimistamente", async () => {
+  it("AC2 aprobar con confirmación saca la fila de la tarjeta activa sin recargar", async () => {
+    // ADR-0059 — la bandeja está en «Por decidir» (entregado). Un trámite recién aprobado ya no
+    // pertenece a esa tarjeta: dejarlo pintado con chip «Aprobado» confunde más que retirarlo.
     const user = userEvent.setup();
     renderSection();
     // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
@@ -154,7 +156,8 @@ describe("ClientProceduresSection — HU #10220", () => {
     await user.click(await screen.findByRole("menuitem", { name: /Aprobar/i }));
     await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
     await waitFor(() => expect(approveOtClientProcedure).toHaveBeenCalledWith("proc-1", undefined));
-    expect(screen.getByRole("status", { name: "Estado: Aprobado OT" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("RAD-2026-101")).not.toBeInTheDocument());
+    expect(screen.queryByRole("status", { name: "Estado: Aprobado" })).not.toBeInTheDocument();
   });
 
   it("ADR-0036 §D9: 409 mandatario_requerido abre el diálogo y reintenta con el elegido", async () => {
@@ -193,7 +196,8 @@ describe("ClientProceduresSection — HU #10220", () => {
     await user.click(screen.getByRole("button", { name: /Aprobar con este mandatario/i }));
 
     await waitFor(() => expect(approveOtClientProcedure).toHaveBeenLastCalledWith("proc-1", "signer-2"));
-    expect(screen.getByRole("status", { name: "Estado: Aprobado OT" })).toBeInTheDocument();
+    // Aprobado → sale de «Por decidir» (ADR-0059: la fila no se queda en una tarjeta que ya no es la suya).
+    await waitFor(() => expect(screen.queryByText("RAD-2026-101")).not.toBeInTheDocument());
   });
 
   it("AC3 rechazar deshabilita confirmar sin motivo", async () => {
