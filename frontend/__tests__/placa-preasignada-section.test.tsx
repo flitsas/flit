@@ -1,4 +1,7 @@
-// HU #10799 — sección explícita de selección de placa preasignada (Flujo A) en el paso FUR.
+// Epic #12550 (HU #12650) — tarjeta «Placa» del paso FUR: la placa la decide el RUNT (Ruta Corta,
+// solo lectura) o la asigna el organismo (Ruta Larga, solo dígito de preferencia). El selector de
+// placas del inventario (HU #10799/#10806) se retiró: elegir una placa aquí saltaba la asignación
+// del organismo.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -23,170 +26,99 @@ vi.mock('@/lib/api/tramites-client', () => ({
 
 import { PlacaPreasignadaSection } from '@/components/operacion/FirmaFurStep';
 
-const plate = (id: string, p: string) => ({
-  id,
-  plateRangeId: 'r',
-  tenantId: 't',
-  transitOfficeId: 'o',
-  plate: p,
-  state: 'disponible' as const,
-  procedureInstanceId: null,
-});
-
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.listAvailablePlatesForCompany.mockResolvedValue([plate('1', 'ABC100'), plate('2', 'ABC101')]);
-  mocks.getPlatePreassignStatus.mockResolvedValue({ enabled: true });
   mocks.patchFieldValues.mockResolvedValue({});
   mocks.generarFur.mockResolvedValue({ documents: [] });
 });
 
-describe('PlacaPreasignadaSection (HU #10799)', () => {
-  it('AC2 — VIN con placa del RUNT (source consultation): no aplica, sin selector', async () => {
+describe('PlacaPreasignadaSection (Epic #12550, HU #12650)', () => {
+  it('AC1 — Ruta Corta: placa del RUNT en solo lectura, sin dígito ni inventario', async () => {
     render(
-      <PlacaPreasignadaSection
-        instanceId="i" organismoId="o" plateValue="XYZ999" plateSource="consultation" readOnly={false}
-      />,
+      <PlacaPreasignadaSection instanceId="i" plateValue="WVT948" plateSource="consultation" readOnly={false} />,
     );
-    expect(await screen.findByText(/ya tiene placa asignada según el RUNT/i)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Buscar placa/i)).not.toBeInTheDocument();
-    expect(mocks.listAvailablePlatesForCompany).not.toHaveBeenCalled();
-  });
-
-  it('AC1/AC5 — sin placa: muestra el selector con las placas y filtra por búsqueda', async () => {
-    const user = userEvent.setup();
-    render(
-      <PlacaPreasignadaSection instanceId="i" organismoId="o" plateValue="" plateSource="" readOnly={false} />,
-    );
-    expect(await screen.findByRole('button', { name: 'ABC100' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'ABC101' })).toBeInTheDocument();
-    await user.type(screen.getByLabelText(/Buscar placa/i), '100');
-    expect(screen.getByRole('button', { name: 'ABC100' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'ABC101' })).not.toBeInTheDocument();
-  });
-
-  it('AC3 — sin placas disponibles: informa que el OT asignará', async () => {
-    mocks.listAvailablePlatesForCompany.mockResolvedValue([]);
-    render(
-      <PlacaPreasignadaSection instanceId="i" organismoId="o" plateValue="" plateSource="" readOnly={false} />,
-    );
-    expect(await screen.findByText(/No hay placas disponibles/i)).toBeInTheDocument();
-  });
-
-  // HU #10806 AC3 — ruta de placa NO habilitada para la compañía/OT: avisa y NO muestra el selector.
-  it('AC3 (HU #10806) — preasignación no habilitada: muestra aviso y oculta el selector', async () => {
-    mocks.getPlatePreassignStatus.mockResolvedValue({ enabled: false });
-    render(
-      <PlacaPreasignadaSection instanceId="i" organismoId="o" plateValue="" plateSource="" readOnly={false} />,
-    );
-    expect(await screen.findByText(/no tienen inventario de placas habilitado/i)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Buscar placa/i)).not.toBeInTheDocument();
+    const nota = await screen.findByTestId('fur-placa-ruta-corta');
+    expect(nota).toHaveTextContent(/Ruta Corta/);
+    expect(nota).toHaveTextContent('WVT948');
+    expect(nota).toHaveTextContent(/no se pueden modificar/);
     expect(screen.queryByLabelText(/Dígito de preferencia de placa/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Buscar placa/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Quitar placa|Cambiar/ })).not.toBeInTheDocument();
   });
 
-  it('AC4 — elegir una placa la persiste (field plate) y refresca', async () => {
-    const onRefresh = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <PlacaPreasignadaSection
-        instanceId="inst-1" organismoId="o" plateValue="" plateSource="" readOnly={false} onRefresh={onRefresh}
-      />,
-    );
-    await user.click(await screen.findByRole('button', { name: 'ABC100' }));
-    await waitFor(() =>
-      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-1', [
-        { formFieldId: null, fieldKey: 'plate', valueText: 'ABC100' },
-      ]),
-    );
-    expect(onRefresh).toHaveBeenCalled();
-    expect(mocks.generarFur).toHaveBeenCalledWith('inst-1');
-  });
-
-  it('placa ya elegida (source user): la muestra con opción Cambiar', () => {
-    render(
-      <PlacaPreasignadaSection
-        instanceId="i" organismoId="o" plateValue="ABC100" plateSource="user" readOnly={false}
-      />,
-    );
-    expect(screen.getByText(/Placa seleccionada:/i)).toBeInTheDocument();
-    expect(screen.getByText('ABC100')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Cambiar/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Quitar placa/i })).toBeInTheDocument();
+  it('AC2 — Ruta Larga: dígito de preferencia editable y NINGUNA placa del inventario', async () => {
+    render(<PlacaPreasignadaSection instanceId="i" plateValue="" plateSource="" readOnly={false} />);
+    expect(await screen.findByTestId('fur-placa-ruta-larga')).toHaveTextContent(/El organismo de tránsito la asignará en Preasignación/);
+    expect(screen.getByLabelText(/Dígito de preferencia de placa/i)).toBeEnabled();
+    expect(screen.queryByLabelText(/Buscar placa/i)).not.toBeInTheDocument();
+    // AC2 — ni se consulta el inventario ni el estado de la ruta.
     expect(mocks.listAvailablePlatesForCompany).not.toHaveBeenCalled();
+    expect(mocks.getPlatePreassignStatus).not.toHaveBeenCalled();
   });
 
-  // HU #10806 AC1 — "Quitar placa" limpia el field plate (='') y reabre el selector + el dígito,
-  // de modo que se pueda radicar sin placa o con dígito de preferencia tras haber elegido una.
-  it('AC1 (HU #10806) — "Quitar placa" limpia el field plate y reabre el selector', async () => {
-    const onRefresh = vi.fn();
-    const user = userEvent.setup();
-    const { rerender } = render(
-      <PlacaPreasignadaSection
-        instanceId="inst-x" organismoId="o" plateValue="ABC100" plateSource="user"
-        readOnly={false} onRefresh={onRefresh}
-      />,
-    );
-    await user.click(screen.getByRole('button', { name: /Quitar placa/i }));
-    await waitFor(() =>
-      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-x', [
-        { formFieldId: null, fieldKey: 'plate', valueText: '' },
-      ]),
-    );
-    expect(onRefresh).toHaveBeenCalled();
-    expect(mocks.generarFur).toHaveBeenCalledWith('inst-x');
-    // Tras el refresh, el padre re-renderiza sin placa → reaparece el selector y el dígito.
-    rerender(
-      <PlacaPreasignadaSection
-        instanceId="inst-x" organismoId="o" plateValue="" plateSource=""
-        readOnly={false} onRefresh={onRefresh}
-      />,
-    );
-    expect(await screen.findByLabelText(/Buscar placa/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Dígito de preferencia de placa/i)).toBeInTheDocument();
-  });
-});
-
-// HU #10805 — dígito de preferencia (guía para el OT); se captura al radicar sin placa.
-// Uso de ejemplo: <PlacaPreasignadaSection preferredDigitValue="5" ... /> → select en "Termina en 5"
-describe('PlacaPreasignadaSection — dígito de preferencia (HU #10805)', () => {
-  // AC1/AC5 — el control ofrece exactamente "Sin preferencia" + 0..9 (entrada acotada, no texto libre).
-  it('AC1/AC5 — ofrece el dígito de preferencia con opciones Sin preferencia + 0-9', async () => {
-    render(
-      <PlacaPreasignadaSection instanceId="i" organismoId="o" plateValue="" plateSource="" readOnly={false} />,
-    );
-    const select = await screen.findByLabelText(/Dígito de preferencia de placa/i);
-    expect(within(select).getAllByRole('option')).toHaveLength(11); // Sin preferencia + 0..9
-  });
-
-  // AC1 — seleccionar un dígito lo persiste en el field plate_preferred_last_digit y refresca.
-  it('AC1 — seleccionar un dígito lo persiste y refresca', async () => {
+  it('AC3 — desde este paso no se escribe la placa: solo el dígito de preferencia', async () => {
     const onRefresh = vi.fn();
     const user = userEvent.setup();
     render(
-      <PlacaPreasignadaSection
-        instanceId="inst-9" organismoId="o" plateValue="" plateSource="" readOnly={false} onRefresh={onRefresh}
-      />,
+      <PlacaPreasignadaSection instanceId="inst-9" plateValue="" plateSource="" readOnly={false} onRefresh={onRefresh} />,
     );
-    const select = await screen.findByLabelText(/Dígito de preferencia de placa/i);
-    await user.selectOptions(select, '5');
+    await user.selectOptions(await screen.findByLabelText(/Dígito de preferencia de placa/i), '5');
     await waitFor(() =>
       expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-9', [
         { formFieldId: null, fieldKey: 'plate_preferred_last_digit', valueText: '5' },
       ]),
     );
     expect(onRefresh).toHaveBeenCalled();
+    const escritos = mocks.patchFieldValues.mock.calls.flatMap((c) => c[1] as { fieldKey: string }[]);
+    expect(escritos.some((f) => f.fieldKey === 'plate')).toBe(false);
+    expect(escritos.some((f) => f.fieldKey === 'plate_route_active')).toBe(false);
   });
 
-  // AC4 (edge) — si ya hay dígito persistido, el control lo prellena.
+  it('AC5 — en solo lectura el dígito no se edita', async () => {
+    render(<PlacaPreasignadaSection instanceId="i" plateValue="" plateSource="" readOnly />);
+    expect(await screen.findByLabelText(/Dígito de preferencia de placa/i)).toBeDisabled();
+  });
+
+  // Borrador anterior a la Epic #12550 con una placa elegida por el gestor desde el inventario.
+  it('placa elegida por el gestor antes del cambio (source user): se muestra y solo se puede quitar', async () => {
+    const onRefresh = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <PlacaPreasignadaSection instanceId="inst-x" plateValue="ABC100" plateSource="user" readOnly={false} onRefresh={onRefresh} />,
+    );
+    expect(screen.getByText('ABC100')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cambiar/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Quitar placa/i }));
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-x', [
+        { formFieldId: null, fieldKey: 'plate', valueText: '' },
+      ]),
+    );
+    expect(mocks.generarFur).toHaveBeenCalledWith('inst-x');
+    expect(onRefresh).toHaveBeenCalled();
+
+    // Tras el refresh, el padre re-renderiza sin placa → Ruta Larga con el dígito.
+    rerender(
+      <PlacaPreasignadaSection instanceId="inst-x" plateValue="" plateSource="" readOnly={false} onRefresh={onRefresh} />,
+    );
+    expect(await screen.findByTestId('fur-placa-ruta-larga')).toBeInTheDocument();
+  });
+});
+
+// HU #10805 — dígito de preferencia (guía para el OT); se captura al radicar sin placa.
+describe('PlacaPreasignadaSection — dígito de preferencia (HU #10805)', () => {
+  it('AC1/AC5 — ofrece el dígito de preferencia con opciones Sin preferencia + 0-9', async () => {
+    render(<PlacaPreasignadaSection instanceId="i" plateValue="" plateSource="" readOnly={false} />);
+    const select = await screen.findByLabelText(/Dígito de preferencia de placa/i);
+    expect(within(select).getAllByRole('option')).toHaveLength(11); // Sin preferencia + 0..9
+  });
+
   it('AC4 — prellena el dígito de preferencia persistido', async () => {
     render(
-      <PlacaPreasignadaSection
-        instanceId="i" organismoId="o" plateValue="" plateSource="" preferredDigitValue="7" readOnly={false}
-      />,
+      <PlacaPreasignadaSection instanceId="i" plateValue="" plateSource="" preferredDigitValue="7" readOnly={false} />,
     );
-    const select = (await screen.findByLabelText(
-      /Dígito de preferencia de placa/i,
-    )) as HTMLSelectElement;
+    const select = (await screen.findByLabelText(/Dígito de preferencia de placa/i)) as HTMLSelectElement;
     expect(select.value).toBe('7');
   });
 });

@@ -571,23 +571,20 @@ describe('FirmaFurStep — inventario: expediente y documentos generados', () =>
   });
 });
 
-describe('FirmaFurStep — inventario: placa preasignada (solo matrícula inicial)', () => {
-  it('matrícula ofrece el rango del organismo, su buscador y el dígito de preferencia', async () => {
-    plateMocks.listAvailablePlatesForCompany.mockResolvedValue([
-      { id: 'p-1', plate: 'ABC123' },
-      { id: 'p-2', plate: 'ABC124' },
-    ]);
+describe('FirmaFurStep — inventario: tarjeta Placa (solo matrícula inicial, Epic #12550)', () => {
+  it('Ruta Larga: sin placa ofrece solo el dígito de preferencia, nunca el inventario del organismo', async () => {
     mocks.getInstance.mockResolvedValue({
       ...DETALLE,
-      // Sin placa elegida todavía: es cuando aplica el selector.
       fieldValues: DETALLE.fieldValues.filter((f) => f.fieldKey !== 'plate'),
     });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    const placa = await screen.findByRole('region', { name: 'Placa preasignada' });
-    expect(within(placa).getByLabelText('Buscar placa disponible')).toBeInTheDocument();
-    expect(await within(placa).findByRole('button', { name: 'ABC123' })).toBeInTheDocument();
-    expect(within(placa).getByRole('button', { name: 'ABC124' })).toBeInTheDocument();
+    const placa = await screen.findByRole('region', { name: 'Placa' });
+    expect(within(placa).getByText(/El organismo de tránsito la asignará en Preasignación/)).toBeInTheDocument();
+    expect(within(placa).queryByLabelText('Buscar placa disponible')).toBeNull();
+    // Epic #12550 (decisión K) — el inventario de rangos ya no se consulta desde el gestor.
+    expect(plateMocks.listAvailablePlatesForCompany).not.toHaveBeenCalled();
+    expect(plateMocks.getPlatePreassignStatus).not.toHaveBeenCalled();
 
     // HU #10805 — si se radica sin placa, el dígito de preferencia es la guía para el OT.
     const digito = within(placa).getByLabelText('Dígito de preferencia de placa');
@@ -596,17 +593,16 @@ describe('FirmaFurStep — inventario: placa preasignada (solo matrícula inicia
     expect(within(digito).getByRole('option', { name: 'Termina en 7' })).toBeInTheDocument();
   });
 
-  it('con una placa ya elegida la muestra y deja cambiarla o quitarla', async () => {
+  it('con una placa elegida por el gestor antes del cambio la muestra y solo deja quitarla', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    const placa = await screen.findByRole('region', { name: 'Placa preasignada' });
-    expect(within(placa).getByText(/Placa seleccionada:/)).toBeInTheDocument();
+    const placa = await screen.findByRole('region', { name: 'Placa' });
     expect(within(placa).getByText('PWL160')).toBeInTheDocument();
-    expect(within(placa).getByRole('button', { name: 'Cambiar' })).toBeInTheDocument();
+    expect(within(placa).queryByRole('button', { name: 'Cambiar' })).toBeNull();
     expect(within(placa).getByRole('button', { name: 'Quitar placa' })).toBeInTheDocument();
   });
 
-  it('si el vehículo ya trae placa del RUNT explica que no aplica la preasignación', async () => {
+  it('Ruta Corta: si el vehículo trae placa del RUNT la muestra en solo lectura', async () => {
     mocks.getInstance.mockResolvedValue({
       ...DETALLE,
       fieldValues: DETALLE.fieldValues.map((f) =>
@@ -615,15 +611,18 @@ describe('FirmaFurStep — inventario: placa preasignada (solo matrícula inicia
     });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    const placa = await screen.findByRole('region', { name: 'Placa preasignada' });
-    expect(within(placa).getByText(/No aplica la preasignación de placa\./)).toBeInTheDocument();
+    const placa = await screen.findByRole('region', { name: 'Placa' });
+    expect(within(placa).getByText(/Ruta Corta/)).toBeInTheDocument();
+    expect(within(placa).getByText('PWL160')).toBeInTheDocument();
+    expect(within(placa).queryByLabelText('Dígito de preferencia de placa')).toBeNull();
+    expect(within(placa).queryByRole('button', { name: 'Quitar placa' })).toBeNull();
   });
 
-  it('traspaso no tiene placa preasignada: el vehículo ya la tiene', async () => {
+  it('traspaso no tiene tarjeta de placa: el vehículo ya la tiene', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
     await screen.findByRole('region', { name: 'Consolidado del trámite' });
-    expect(screen.queryByRole('region', { name: 'Placa preasignada' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Placa' })).toBeNull();
   });
 });
 
@@ -919,16 +918,16 @@ describe('FirmaFurStep — inventario: organismo de tránsito también en traspa
     ).toBeInTheDocument();
     // El dígito de preferencia de placa sigue exclusivo de matrícula: en traspaso el vehículo ya
     // tiene placa.
-    expect(screen.queryByRole('region', { name: 'Placa preasignada' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Placa' })).toBeNull();
   });
 
-  it('matrícula sigue mostrando organismo + preasignación de placa emparejados, en su propia fila', async () => {
+  it('matrícula sigue mostrando organismo + tarjeta Placa emparejados, en su propia fila', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.getByText('Organismo de tránsito')).toBeInTheDocument();
     expect(
-      await screen.findByRole('region', { name: 'Placa preasignada' }),
+      await screen.findByRole('region', { name: 'Placa' }),
     ).toBeInTheDocument();
   });
 });
