@@ -193,7 +193,7 @@ public sealed class MatriculaRutaRuntPreviewTests
         error.Should().BeNull();
         dto!.Route.Should().Be(MatriculaRuta.Larga);
         dto.TransitOffice.Should().BeNull();
-        Check(dto, RunPreflightHandler.CheckRutaMatricula).Message.Should().Contain("Ruta Larga");
+        Check(dto, RunPreflightHandler.CheckRutaMatricula).Message.Should().Contain("no tiene placa").And.NotContain("Ruta");
         await _resolver.DidNotReceive().ResolveEnabledByNameAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 

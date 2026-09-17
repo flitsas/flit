@@ -3899,30 +3899,21 @@ function ConsultaStep({
   ) : null;
 
   /**
-   * Epic #12550 — chip de ruta de la matrícula, con la explicación de a dónde llega el trámite. Solo
-   * en los tipos que piden placa y con el vehículo ya identificado: antes de consultar no hay ruta.
+   * Epic #12550 — explicación de a dónde llega el trámite según lo que trajo el RUNT. Solo en los
+   * tipos que piden placa y con el vehículo ya identificado: antes de consultar no hay nada que decir.
+   * «Ruta Corta» / «Ruta Larga» son nombres internos de operación y NO se muestran al gestor
+   * (Samuel, 2026-09-17): el `data-ruta` queda para las pruebas.
    */
   const rutaChip = muestraDigitoPlaca && hasVehicleData ? (
-    <div
-      className="mb-3 flex flex-wrap items-center gap-2"
+    <p
+      className="mb-3 text-xs opacity-70"
       data-testid="ruta-matricula"
       data-ruta={rutaCorta ? 'corta' : 'larga'}
     >
-      <span
-        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold"
-        style={rutaCorta
-          ? { color: '#007A71', borderColor: 'rgba(0,169,157,.4)', background: 'rgba(0,169,157,.14)' }
-          : { color: '#8A5400', borderColor: 'rgba(224,138,0,.4)', background: 'rgba(224,138,0,.16)' }}
-      >
-        <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
-        {rutaCorta ? 'Ruta Corta' : 'Ruta Larga'}
-      </span>
-      <span className="text-xs opacity-70">
-        {rutaCorta
-          ? 'El vehículo ya tiene placa asignada según el RUNT. Llegará al organismo listo para su decisión.'
-          : 'El vehículo no tiene placa. El organismo la asignará en Preasignación.'}
-      </span>
-    </div>
+      {rutaCorta
+        ? 'El vehículo ya tiene placa asignada según el RUNT. Llegará al organismo listo para su decisión.'
+        : 'El vehículo no tiene placa. El organismo de tránsito la asignará en Preasignación.'}
+    </p>
   ) : null;
 
   const radicacionCard = muestraRadicacion && (hasVehicleData || secretariaAntesDeConsultar) ? (
@@ -4337,8 +4328,9 @@ function ConsultaStep({
               bare
               validadoEnRunt
               layout="pdf"
+              // Epic #12550 — con placa del RUNT el organismo también viene del RUNT y no se edita.
               onEditOrganismo={
-                isVin
+                isVin && !vehiculoConPlacaRunt
                   ? () => {
                       const el = document.getElementById('wizard-ot-radicacion');
                       el?.scrollIntoView({ behavior: 'smooth', block: 'start' });

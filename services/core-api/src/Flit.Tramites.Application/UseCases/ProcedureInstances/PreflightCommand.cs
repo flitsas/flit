@@ -596,14 +596,16 @@ public sealed class RunPreflightHandler(
         var corta = ruta == MatriculaRuta.Corta;
         return new PreflightCheckDto(
             CheckRutaMatricula,
-            "Ruta de la matrícula",
+            "Placa y organismo",
             "ok",
             SystemSource,
+            // «Ruta Corta» / «Ruta Larga» son nombres internos: al gestor se le dice qué pasa, no cómo
+            // se llama (Samuel, 2026-09-17). El nombre queda en Datos para trazabilidad.
             corta
                 ? organismo is null
-                    ? $"Ruta Corta: el vehículo ya tiene la placa {placa} según el RUNT. Llegará al organismo listo para su decisión."
-                    : $"Ruta Corta: el vehículo ya tiene la placa {placa} ante {organismo} según el RUNT. Llegará al organismo listo para su decisión."
-                : "Ruta Larga: el vehículo no tiene placa. El organismo la asignará en Preasignación.",
+                    ? $"El vehículo ya tiene la placa {placa} según el RUNT. Llegará al organismo listo para su decisión."
+                    : $"El vehículo ya tiene la placa {placa} ante {organismo} según el RUNT. Llegará al organismo listo para su decisión."
+                : "El vehículo no tiene placa. El organismo de tránsito la asignará en Preasignación.",
             Datos: ConsultationCheckDetail.Datos(
                 ("Ruta", corta ? "Corta" : "Larga"),
                 ("Placa", placa),

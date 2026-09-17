@@ -612,7 +612,8 @@ describe('FirmaFurStep — inventario: tarjeta Placa (solo matrícula inicial, E
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     const placa = await screen.findByRole('region', { name: 'Placa' });
-    expect(within(placa).getByText(/Ruta Corta/)).toBeInTheDocument();
+    expect(within(placa).getByText(/ya tiene la placa/)).toBeInTheDocument();
+    expect(within(placa).queryByText(/Ruta (Corta|Larga)/)).toBeNull();
     expect(within(placa).getByText('PWL160')).toBeInTheDocument();
     expect(within(placa).queryByLabelText('Dígito de preferencia de placa')).toBeNull();
     expect(within(placa).queryByRole('button', { name: 'Quitar placa' })).toBeNull();

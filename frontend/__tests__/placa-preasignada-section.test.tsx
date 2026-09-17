@@ -38,7 +38,7 @@ describe('PlacaPreasignadaSection (Epic #12550, HU #12650)', () => {
       <PlacaPreasignadaSection instanceId="i" plateValue="WVT948" plateSource="consultation" readOnly={false} />,
     );
     const nota = await screen.findByTestId('fur-placa-ruta-corta');
-    expect(nota).toHaveTextContent(/Ruta Corta/);
+    expect(nota).not.toHaveTextContent(/Ruta (Corta|Larga)/);
     expect(nota).toHaveTextContent('WVT948');
     expect(nota).toHaveTextContent(/no se pueden modificar/);
     expect(screen.queryByLabelText(/Dígito de preferencia de placa/i)).not.toBeInTheDocument();

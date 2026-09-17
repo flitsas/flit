@@ -255,12 +255,15 @@ describe('Dígito de preasignación de placa — paso 1', () => {
 
     const chip = await screen.findByTestId('ruta-matricula');
     expect(chip).toHaveAttribute('data-ruta', 'corta');
-    expect(chip).toHaveTextContent('Ruta Corta');
+    // Los nombres «Ruta Corta» / «Ruta Larga» son internos: no se muestran al gestor.
+    expect(chip).not.toHaveTextContent(/Ruta (Corta|Larga)/);
     expect(chip).toHaveTextContent(/Llegará al organismo listo para su decisión/);
     expect(screen.getByTestId('ruta-corta-placa')).toHaveTextContent('WVT948');
     expect(screen.getByTestId('ruta-corta-organismo')).toHaveTextContent('Tránsito de Envigado');
     expect(screen.queryByRole('combobox', { name: /secretaría de tránsito/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Dígito de preasignación de placa')).not.toBeInTheDocument();
+    // El organismo de «Datos del vehículo» tampoco se edita: viene del RUNT igual que la placa.
+    expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
 
     // Continuar no exige secretaría ni dígito.
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
@@ -328,7 +331,10 @@ describe('Dígito de preasignación de placa — paso 1', () => {
 
     const chip = await screen.findByTestId('ruta-matricula');
     expect(chip).toHaveAttribute('data-ruta', 'larga');
-    expect(chip).toHaveTextContent(/El organismo la asignará en Preasignación/);
+    expect(chip).toHaveTextContent(/la asignará en Preasignación/);
+    expect(chip).not.toHaveTextContent(/Ruta (Corta|Larga)/);
+    // Sin placa del RUNT el organismo de «Datos del vehículo» sí se puede corregir.
+    expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument();
 
     await elegirSecretaria(user);
     await declararSinPreferenciaDigito(user);

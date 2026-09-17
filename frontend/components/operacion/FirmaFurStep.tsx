@@ -931,9 +931,9 @@ export function PlacaPreasignadaSection({
   if (vinTienePlacaRunt) {
     return shell(
       <p className="mt-2 text-xs opacity-80" data-testid="fur-placa-ruta-corta">
-        Ruta Corta: el vehículo ya tiene la placa{' '}
-        <span className="font-mono font-semibold">{placa}</span> asignada según el RUNT. Llegará al
-        organismo listo para su decisión; la placa y el organismo no se pueden modificar.
+        El vehículo ya tiene la placa <span className="font-mono font-semibold">{placa}</span>{' '}
+        asignada según el RUNT. Llegará al organismo listo para su decisión; la placa y el organismo no
+        se pueden modificar.
       </p>,
     );
   }
@@ -967,7 +967,7 @@ export function PlacaPreasignadaSection({
   return shell(
     <div className="mt-2 flex flex-col gap-3" data-testid="fur-placa-ruta-larga">
       <p className="text-xs opacity-70">
-        Ruta Larga: el vehículo no tiene placa. El organismo de tránsito la asignará en Preasignación.
+        El vehículo no tiene placa. El organismo de tránsito la asignará en Preasignación.
       </p>
       {error && (
         <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
