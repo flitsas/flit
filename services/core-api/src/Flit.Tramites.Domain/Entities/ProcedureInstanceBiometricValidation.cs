@@ -1,3 +1,5 @@
+using Flit.Queries.Domain.Time;
+
 namespace Flit.Tramites.Domain.Entities;
 
 /// <summary>
@@ -270,13 +272,6 @@ public static class BiometricRules
     public const int VigenciaPorVencerDias = 7;
 
     /// <summary>
-    /// Huso horario de Colombia (UTC-5, sin horario de verano). La vigencia se cuenta por DÍA CALENDARIO
-    /// local de Colombia —el día que ve el gestor— y no por el día UTC: una aprobación cerca de medianoche
-    /// no debe contar un día de menos/más por la diferencia de 5 horas.
-    /// </summary>
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
-
-    /// <summary>
     /// ¿La validación está APROBADA y VIGENTE en la fecha <paramref name="now"/>? Vigente ⟺ el DÍA
     /// calendario de hoy (en hora de Colombia) es anterior a <c>ValidadoAt + VigenciaDias</c>: el día de
     /// aprobación es el día 1 y vence en el día 31. El corte es por DÍA, no por hora.
@@ -299,8 +294,8 @@ public static class BiometricRules
         if (validation.ValidatedAt is not { } validadoAt)
             return true;
         // Día calendario en hora de Colombia (no UTC) para que coincida con el día del gestor.
-        var hoy = now.ToOffset(ColombiaUtcOffset).Date;
-        var diaAprobacion = validadoAt.ToOffset(ColombiaUtcOffset).Date;
+        var hoy = now.ToOffset(ColombiaTime.Offset).Date;
+        var diaAprobacion = validadoAt.ToOffset(ColombiaTime.Offset).Date;
         return hoy < diaAprobacion.AddDays(VigenciaDias);
     }
 
@@ -331,12 +326,12 @@ public static class BiometricRules
     /// </summary>
     public static DateTimeOffset FechaFinVigencia(DateTimeOffset validadoAt)
     {
-        var diaExpiracion = validadoAt.ToOffset(ColombiaUtcOffset).Date.AddDays(VigenciaDias);
+        var diaExpiracion = validadoAt.ToOffset(ColombiaTime.Offset).Date.AddDays(VigenciaDias);
         // El instante (medianoche Colombia) se conserva, pero se DEVUELVE en UTC (offset 0): Npgsql solo
         // acepta offset 0 al escribir en `timestamptz`; un offset -05:00 hacía fallar SaveChanges con
         // ArgumentException y devolvía 500 al aprobar (webhook y reconcile). Los lectores de vigencia
-        // reconvierten con .ToOffset(ColombiaUtcOffset), así que el día calendario Colombia no cambia.
-        return new DateTimeOffset(diaExpiracion, ColombiaUtcOffset).ToUniversalTime();
+        // reconvierten con .ToOffset(ColombiaTime.Offset), así que el día calendario Colombia no cambia.
+        return new DateTimeOffset(diaExpiracion, ColombiaTime.Offset).ToUniversalTime();
     }
 
     /// <summary>
@@ -350,8 +345,8 @@ public static class BiometricRules
         ArgumentNullException.ThrowIfNull(validation);
         if (validation.ValidatedAt is not { } validadoAt)
             return null;
-        var hoy = now.ToOffset(ColombiaUtcOffset).Date;
-        var diaExpiracion = validadoAt.ToOffset(ColombiaUtcOffset).Date.AddDays(VigenciaDias);
+        var hoy = now.ToOffset(ColombiaTime.Offset).Date;
+        var diaExpiracion = validadoAt.ToOffset(ColombiaTime.Offset).Date.AddDays(VigenciaDias);
         var dias = (diaExpiracion - hoy).Days;
         return dias < 0 ? 0 : dias;
     }

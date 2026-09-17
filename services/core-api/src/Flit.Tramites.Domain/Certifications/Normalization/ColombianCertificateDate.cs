@@ -1,4 +1,5 @@
 using System.Globalization;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Tramites.Domain.Certifications.Normalization;
 
@@ -23,9 +24,6 @@ namespace Flit.Tramites.Domain.Certifications.Normalization;
 /// </remarks>
 public static class ColombianCertificateDate
 {
-    /// <summary>Offset civil de Colombia. No tiene horario de verano desde 1993, así que es constante.</summary>
-    public static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
-
     /// <summary>
     /// Formatos sin zona observados en los proveedores. El orden importa: <c>dd/MM/yyyy</c> va antes
     /// que <c>MM/dd/yyyy</c> —que deliberadamente NO se acepta— porque en Colombia 05/06/2026 es
@@ -62,7 +60,7 @@ public static class ColombianCertificateDate
             && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var withOffset))
         {
-            return Build(DateOnly.FromDateTime(withOffset.ToOffset(ColombiaOffset).DateTime), raw);
+            return Build(DateOnly.FromDateTime(withOffset.ToOffset(ColombiaTime.Offset).DateTime), raw);
         }
 
         // 2) Sin offset: ya es un día colombiano.
@@ -88,7 +86,7 @@ public static class ColombianCertificateDate
         if (value is null)
             return new CertifiedDate(null, raw);
 
-        var day = DateOnly.FromDateTime(value.Value.ToOffset(ColombiaOffset).DateTime);
+        var day = DateOnly.FromDateTime(value.Value.ToOffset(ColombiaTime.Offset).DateTime);
         return Build(day, raw ?? value.Value.ToString("O", CultureInfo.InvariantCulture));
     }
 

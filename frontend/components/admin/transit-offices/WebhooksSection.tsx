@@ -20,6 +20,7 @@ import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 import { maskTargetUrl } from "./ot-utils";
 import { WebhookFormPanel } from "./WebhookFormPanel";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 const LOG_PAGE_SIZE = 20;
 
 type Tab = "webhooks" | "logs";
@@ -183,7 +184,7 @@ export function WebhooksSection() {
                       />
                     </td>
                     <td className="border-y px-4 py-3 opacity-70">
-                      {new Date(w.createdAt).toLocaleString("es-CO")}
+                      {new Date(w.createdAt).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA })}
                     </td>
                     <td
                       className="rounded-r-xl border-y border-r px-4 py-3 text-right"
@@ -326,7 +327,7 @@ export function WebhooksSection() {
                     <td
                       className="rounded-r-xl border-y border-r px-4 py-3 opacity-70"
                     >
-                      {new Date(log.calledAt).toLocaleString("es-CO")}
+                      {new Date(log.calledAt).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA })}
                     </td>
                   </tr>
                 ))}

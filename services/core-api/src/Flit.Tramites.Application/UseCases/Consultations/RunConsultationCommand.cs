@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.UseCases.Certifications;
 using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Domain.Entities;
@@ -56,9 +57,6 @@ public sealed class RunConsultationHandler(
     /// mapper porque no es un dato de la RESPUESTA del proveedor, sino de la EJECUCIÓN de la consulta.
     /// </summary>
     private const string FieldKeyRuntConsultaFecha = "runt_consulta_fecha";
-
-    /// <summary>Huso horario de Colombia (UTC-5), mismo criterio que el sello de identidad del FUR.</summary>
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
 
     public async Task<(ConsultationResult? Result, string? Error)> HandleAsync(
         Guid instanceId,
@@ -243,7 +241,7 @@ public sealed class RunConsultationHandler(
             return result.HydratedFields;
 
         var fecha = (result.QueriedAt ?? ejecutadaAt)
-            .ToOffset(ColombiaOffset)
+            .ToOffset(ColombiaTime.Offset)
             .ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
 
         return [.. result.HydratedFields, new HydratedField(FieldKeyRuntConsultaFecha, fecha, null)];

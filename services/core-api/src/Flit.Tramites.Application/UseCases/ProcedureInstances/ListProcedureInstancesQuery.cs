@@ -1,4 +1,5 @@
 ﻿using Flit.Tramites.Domain.Entities;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
@@ -167,7 +168,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         // tenants del listado, con la MISMA llave que la identidad (tenant|TIPO|NÚMERO).
         // HU #11667 — ese mismo diccionario alimenta ahora la acreditación por baúl de los chips: sin él,
         // el chip contradecía al gate de radicación y al FUR. Pasarlo no cuesta ninguna consulta.
-        var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaUtcOffset).DateTime);
+        var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaTime.Offset).DateTime);
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
 
@@ -198,9 +199,6 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     private static readonly IReadOnlyDictionary<Guid, string> EmptyNames = new Dictionary<Guid, string>();
 
     private static readonly IReadOnlyDictionary<string, bool> EmptyFirmaBaul = new Dictionary<string, bool>();
-
-    /// <summary>Hora de Colombia (UTC-5, sin DST): la vigencia del baúl se cuenta por día calendario local.</summary>
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
 
     internal static InstanceSummaryDto ToSummary(
         ProcedureInstance e,

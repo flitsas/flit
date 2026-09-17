@@ -1,4 +1,6 @@
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 // Escritor mínimo de XLSX.
+
 //
 // Por qué no una librería: las dos candidatas del ecosistema son SheetJS —cuyo paquete público de
 // npm está descontinuado y arrastra avisos de seguridad— y ExcelJS, que pesa más que todo el módulo
@@ -68,7 +70,7 @@ export function bogotaClock(iso: string | null): XlsxDate | null {
   if (Number.isNaN(date.getTime())) return null;
 
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota",
+    timeZone: ZONA_COLOMBIA,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

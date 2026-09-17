@@ -28,7 +28,9 @@ import {
 } from "./detalle/ot-detalle-visual";
 import { formatOtProcedureStatus, procedureStatusChip } from "./ot-utils";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 /**
+
  * Bloques del detalle. Ya no son pasos de un recorrido sino acordeones independientes; el nombre
  * sigue sirviendo para decir con cuál abre el modal según por dónde se entró desde la bandeja.
  */
@@ -295,7 +297,7 @@ export function ClientProcedureDetailModal({
             {row.revocationDecisionAt ? (
               <p className="mt-0.5 opacity-80">
                 Decidido el{" "}
-                {new Date(row.revocationDecisionAt).toLocaleString("es-CO", {
+                {new Date(row.revocationDecisionAt).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA,
                   dateStyle: "medium",
                   timeStyle: "short",
                 })}

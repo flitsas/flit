@@ -14,28 +14,6 @@ public static class ScheduleDueEvaluator
     public const string Weekly = "weekly";
     public const string Monthly = "monthly";
 
-    /// <summary>
-    /// Zona horaria de negocio (§0 del contrato). Se intenta el id IANA <c>America/Bogota</c>
-    /// (Linux/contenedores); en Windows sin ICU cae al id nativo <c>SA Pacific Standard Time</c>
-    /// y, como última red, a un huso fijo UTC-5 — Colombia NO tiene horario de verano, así que
-    /// los tres son equivalentes (mismo criterio que <c>FurCommand.ColombiaOffset</c>).
-    /// </summary>
-    public static TimeZoneInfo BogotaTimeZone { get; } = ResolveBogotaTimeZone();
-
-    private static TimeZoneInfo ResolveBogotaTimeZone()
-    {
-        try { return TimeZoneInfo.FindSystemTimeZoneById("America/Bogota"); }
-        catch (TimeZoneNotFoundException) { }
-        catch (InvalidTimeZoneException) { }
-
-        try { return TimeZoneInfo.FindSystemTimeZoneById("SA Pacific Standard Time"); }
-        catch (TimeZoneNotFoundException) { }
-        catch (InvalidTimeZoneException) { }
-
-        return TimeZoneInfo.CreateCustomTimeZone(
-            "America/Bogota", TimeSpan.FromHours(-5), "Hora de Colombia", "Hora de Colombia");
-    }
-
     /// <summary>¿Está vencido este schedule en el instante <paramref name="nowUtc"/>?</summary>
     /// <param name="dayOfWeek">0 (domingo) … 6 (sábado) — solo weekly.</param>
     /// <param name="dayOfMonth">1..28 — solo monthly.</param>

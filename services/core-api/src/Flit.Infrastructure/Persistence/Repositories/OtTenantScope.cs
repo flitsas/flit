@@ -1,4 +1,4 @@
-using Flit.Infrastructure.Analytics.Scheduling;
+using Flit.Queries.Domain.Time;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -20,7 +20,7 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class OtTenantScope
 {
-    public static TimeZoneInfo Bogota => ScheduleDueEvaluator.BogotaTimeZone;
+    public static TimeZoneInfo Bogota => ColombiaTime.Zone;
 
     private readonly FlitDbContext _context;
 

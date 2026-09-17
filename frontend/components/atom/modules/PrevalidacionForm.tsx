@@ -9,7 +9,9 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { sanitizeDocNumber } from '@/lib/validation/fieldRules';
 
+import { ZONA_COLOMBIA } from '@/lib/format/date';
 /**
+
  * Resultado de REUTILIZAR una validación existente en vez de crear una nueva (módulo unificado de
  * Identidad). Un documento solo puede tener una validación en vuelo por tenant: si ya existe, no se
  * crea otra fila.
@@ -229,7 +231,7 @@ export function PrevalidacionForm({
     if (!iso) return null;
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(d);
+    return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium' }).format(d);
   };
 
   const fieldClass = (field: keyof FormValues) =>

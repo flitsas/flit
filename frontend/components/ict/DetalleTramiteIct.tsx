@@ -23,6 +23,7 @@ import {
 } from "@/lib/api/ict-trazabilidad";
 import { formatearDuracion } from "@/lib/ict/trazabilidad";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 type Pestana = "recorrido" | "consultas" | "datos" | "log";
 
 const PESTANAS: { id: Pestana; label: string }[] = [
@@ -195,7 +196,7 @@ function Hito({ hito, ultimo }: { hito: HitoTrazabilidad; ultimo: boolean }) {
   const tono = TONO_RESULTADO[hito.resultado] ?? TONO_RESULTADO.pendiente;
   const Icon = tono.Icon;
   const hora = hito.ocurrido
-    ? new Date(hito.ocurrido).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "medium" })
+    ? new Date(hito.ocurrido).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA, dateStyle: "short", timeStyle: "medium" })
     : null;
 
   return (
@@ -544,7 +545,7 @@ function PanelLog({ numero }: { numero: number }) {
                 {dato.map((e) => (
                   <tr key={e.id} className="border-t border-[#DFE5ED] align-top dark:border-white/10">
                     <td className="px-3 py-2 font-mono tabular-nums">
-                      {new Date(e.ocurrido).toLocaleString("es-CO", {
+                      {new Date(e.ocurrido).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA,
                         dateStyle: "short",
                         timeStyle: "medium",
                       })}

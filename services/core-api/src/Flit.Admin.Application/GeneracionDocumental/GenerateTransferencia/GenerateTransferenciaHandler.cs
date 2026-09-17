@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Flit.Admin.Application.GeneracionDocumental.Ports;
 using Flit.Admin.Domain.Common;
 using Flit.Admin.Domain.GeneracionDocumental;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Admin.Application.GeneracionDocumental.GenerateTransferencia;
 
@@ -295,7 +296,7 @@ public sealed class GenerateTransferenciaHandler
     /// </summary>
     private DateOnly ResolveFechaFirma(GenerateTransferenciaCommand command) =>
         command.Negocio?.FechaFirma
-        ?? DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(TimeSpan.FromHours(-5)).DateTime);
+        ?? DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
 
     /// <summary>
     /// Variables del negocio de los escenarios A y C (anexo §5.4). El escenario B no pasa por aquí:

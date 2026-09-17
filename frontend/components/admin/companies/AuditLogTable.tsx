@@ -3,7 +3,9 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { AuditLogEntry } from "@/lib/api/types";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 // Tabla del historial de auditoría (HU #10194, AC5). Columnas: Fecha, Campo
+
 // modificado, Valor anterior, Valor nuevo, Operador. El orden DESC por fecha lo
 // garantiza el backend; la tabla preserva el orden recibido.
 export interface AuditLogTableProps {
@@ -114,7 +116,7 @@ function formatDateTime(iso: string): string {
   if (Number.isNaN(parsed.getTime())) {
     return iso;
   }
-  return parsed.toLocaleString("es-CO", {
+  return parsed.toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

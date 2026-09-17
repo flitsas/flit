@@ -37,7 +37,9 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
+import { ZONA_COLOMBIA } from '@/lib/format/date';
 interface Props {
+
   instanceId: string | null;
   modalidad: WizardModalidad;
   /** Re-consulta el estado del wizard tras iniciar/refrescar (server-driven). */
@@ -176,7 +178,7 @@ function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }
 
 /**
@@ -1380,7 +1382,7 @@ function StartAction({
       if (conflict) {
         setConfirmOpen(false);
         const hasta = conflict.validUntil
-          ? new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(new Date(conflict.validUntil))
+          ? new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium' }).format(new Date(conflict.validUntil))
           : null;
         setConflictMsg(
           conflict.motivo === 'identidad_vigente'

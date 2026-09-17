@@ -68,7 +68,9 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
 
+import { ZONA_COLOMBIA } from '@/lib/format/date';
 /**
+
  * Módulo ÚNICO de Identidad: validaciones y prevalidaciones viven aquí (antes había una pantalla
  * aparte, /tramites/prevalidaciones, hoy retirada). Vista transversal del tenant AGRUPADA POR PERSONA
  * (GET /api/v1/tramites/biometric-validations/by-person): una fila por documento, sin repetir la misma
@@ -111,7 +113,7 @@ function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }
 
 /** Formatea una fecha ISO solo a día (es-CO), sin hora. Para aprobación/expiración de la vigencia. */
@@ -119,7 +121,7 @@ function formatFechaCorta(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(d);
+  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium' }).format(d);
 }
 
 /**
@@ -1060,7 +1062,7 @@ export function Validaciones() {
  */
 function LiveIndicator({ at }: { at: Date | null }) {
   const time = at
-    ? at.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    ? at.toLocaleTimeString('es-CO', { timeZone: ZONA_COLOMBIA, hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : null;
   return (
     <span

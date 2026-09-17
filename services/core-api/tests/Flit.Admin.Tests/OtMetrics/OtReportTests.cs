@@ -354,10 +354,11 @@ public sealed class OtReportTests
     private static OtMetricsFilter UltimosDias(int dias) =>
         new(Hoy().AddDays(-(dias - 1)), Hoy());
 
+    // El desfase va literal a proposito: el test es el oraculo del huso y no debe leerlo de
+    // ColombiaTime. FindSystemTimeZoneById no sirve aqui — los proyectos compilan con
+    // InvariantGlobalization y el id IANA no existe (Epica #12552, RN-10).
     private static DateOnly Hoy() => DateOnly.FromDateTime(
-        TimeZoneInfo.ConvertTime(
-            DateTimeOffset.UtcNow,
-            TimeZoneInfo.FindSystemTimeZoneById("America/Bogota")).DateTime);
+        DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).DateTime);
 
     private static DateTimeOffset DiasAtras(int dias) => DateTimeOffset.UtcNow.AddDays(-dias);
 

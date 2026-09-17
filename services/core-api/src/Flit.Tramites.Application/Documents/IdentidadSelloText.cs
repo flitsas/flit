@@ -1,4 +1,5 @@
 using System.Globalization;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 
@@ -10,7 +11,6 @@ namespace Flit.Tramites.Application.Documents;
 /// </summary>
 public static class IdentidadSelloText
 {
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
 
     public static string Build(ProcedureInstanceBiometricValidation v)
     {
@@ -19,9 +19,9 @@ public static class IdentidadSelloText
         var uuid = string.IsNullOrWhiteSpace(v.KyverumVerificationId) ? v.Id.ToString("D") : v.KyverumVerificationId!;
         var firma = string.IsNullOrWhiteSpace(v.CertificateHash) ? "no disponible" : v.CertificateHash!;
         var aprob = v.ValidatedAt is { } va
-            ? va.ToOffset(ColombiaOffset).ToString(FechaDocumento.Formato, CultureInfo.InvariantCulture) : "-";
+            ? va.ToOffset(ColombiaTime.Offset).ToString(FechaDocumento.Formato, CultureInfo.InvariantCulture) : "-";
         var vence = v.ValidUntil is { } vu
-            ? vu.ToOffset(ColombiaOffset).ToString(FechaDocumento.Formato, CultureInfo.InvariantCulture) : "-";
+            ? vu.ToOffset(ColombiaTime.Offset).ToString(FechaDocumento.Formato, CultureInfo.InvariantCulture) : "-";
         return $"Validación biométrica {doc}\nUUID {uuid}\nFirma {firma}\nAprob {aprob} · Vence {vence}";
     }
 }

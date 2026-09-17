@@ -1,3 +1,4 @@
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Domain.Certifications;
 
 namespace Flit.Tramites.Application.UseCases.Certifications;
@@ -14,7 +15,6 @@ namespace Flit.Tramites.Application.UseCases.Certifications;
 public sealed class CertificationIngestionService(ICertificationRepository repository)
     : ICertificationIngestionService
 {
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
 
     public async Task<int> IngestAsync(
         Guid instanceId,
@@ -36,7 +36,7 @@ public sealed class CertificationIngestionService(ICertificationRepository repos
             return 0;
 
         var stamped = provenance with { RawPayloadId = provenance.RawPayloadId ?? payloadId };
-        var today = DateOnly.FromDateTime(stamped.ObservedAt.ToOffset(ColombiaOffset).DateTime);
+        var today = DateOnly.FromDateTime(stamped.ObservedAt.ToOffset(ColombiaTime.Offset).DateTime);
         var existing = await repository.LoadAsync(tenantId, instanceId, cancellationToken);
 
         var written = 0;

@@ -2,6 +2,7 @@ using Flit.Admin.Domain.Common;
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Domain.Identity;
 using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Domain.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -16,10 +17,6 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
 {
-    // Hora de Colombia (UTC-5, sin DST): el estado de vigencia se cuenta por día calendario local,
-    // coherente con el resto del cálculo de vigencia de escrituras (ADR-0033).
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
-
     private readonly FlitDbContext _context;
     private readonly TimeProvider _timeProvider;
     private readonly IdentityVigenciaPorDocumentoResolver _identityResolver;
@@ -636,7 +633,9 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
 
         var tenantIds = rows.Select(r => r.TenantId).Distinct().ToList();
         var documentos = rows.Select(r => r.DocumentNumber).Distinct().ToList();
-        var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaUtcOffset).DateTime);
+        // Hora de Colombia (UTC-5, sin DST): el estado de vigencia se cuenta por día calendario local,
+        // coherente con el resto del cálculo de vigencia de escrituras (ADR-0033).
+        var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaTime.Offset).DateTime);
 
         // El filtro por tenant + documento se hace en SQL; el cotejo del tipo de documento se cierra en
         // memoria, porque una tupla compuesta no se traduce a un IN de PostgreSQL.
@@ -710,7 +709,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             .ToDictionaryAsync(d => d.Id, cancellationToken)
             .ConfigureAwait(false);
 
-        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
+        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
 
         return bridgeRows
             .Where(b => deeds.ContainsKey(b.DeedId))
