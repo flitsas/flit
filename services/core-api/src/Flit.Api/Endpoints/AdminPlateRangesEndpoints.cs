@@ -76,6 +76,7 @@ public static class AdminPlateRangesEndpoints
         Guid instanceId, AssignPlateToProcedureRequest request, HttpContext http,
         IOtClientProcedureRepository otRepo, RegenerarDocumentosTrazadoHandler regeneracionTrazada,
         IPlateAssignmentEmailEnqueuer plateAssignmentEmailEnqueuer,
+        FirmarImprontaManualSiListaHandler firmaImpronta,
         ILoggerFactory loggerFactory, CancellationToken ct)
     {
         if (!RequestTenantResolver.TryResolveTenantId(http.User, out var otTenantId))
@@ -192,6 +193,26 @@ public static class AdminPlateRangesEndpoints
                 // Red de seguridad: solo los fallos del scope RLS / conexión llegan hasta aquí.
                 AdminPlateRegenLog.RegeneracionPlacaOmitida(
                     loggerFactory.CreateLogger("AdminPlate.AssignPlateRegen"), ex, instanceId);
+            }
+
+            // HU #12116 — con la placa ya reflejada en el FUR regenerado arriba, intenta firmar la
+            // impronta manual si ya cumple los gates. Best-effort: no revierte la asignación.
+            var firmaImprontaLogger = loggerFactory.CreateLogger("AdminPlate.AssignPlateFirmaImpronta");
+            try
+            {
+                var firma = await otRepo
+                    .ExecuteInClientTenantScopeAsync(
+                        procedure.ClientTenantId,
+                        () => firmaImpronta.HandleAsync(
+                            instanceId, procedure.ClientTenantId, FirmaImprontaAutomaticaOrigen.AsignacionPlaca, ct),
+                        ct)
+                    .ConfigureAwait(false);
+                AdminPlateRegenLog.FirmaImprontaResultado(
+                    firmaImprontaLogger, instanceId, procedure.ClientTenantId, firma.Estado);
+            }
+            catch (Exception ex)
+            {
+                AdminPlateRegenLog.FirmaImprontaOmitida(firmaImprontaLogger, ex, instanceId);
             }
 
             // HU #11485 (Feature #11482, ADR-0046) — aviso de correo al comprador tras asignar placa
@@ -468,4 +489,13 @@ internal static partial class AdminPlateRegenLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo encolar el aviso de correo tras asignar la placa al trámite {InstanceId}; la asignación se conserva.")]
     public static partial void CorreoAsignacionPlacaOmitido(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Firma automática de impronta tras asignar placa al trámite {InstanceId} (tenant {TenantId}): {Resultado}.")]
+    public static partial void FirmaImprontaResultado(
+        ILogger logger, Guid instanceId, Guid tenantId, FirmaImprontaAutomaticaEstado resultado);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo evaluar la firma automática de impronta tras asignar la placa al trámite {InstanceId}; la asignación se conserva.")]
+    public static partial void FirmaImprontaOmitida(ILogger logger, Exception ex, Guid instanceId);
 }

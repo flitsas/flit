@@ -2,11 +2,12 @@
 // mandan `multipart/form-data` DIRECTO al API (sin presigned storage, a diferencia de
 // escrituras/documentos personalizados); (2) el error 422 `{ error }` del backend se traduce a
 // `ApiError` con el mensaje legible; (3) `bannerImageUrl` arma la ruta pública SIEMPRE a partir
-// del `id`, nunca del campo crudo `imageUrl`; (4) las fechas se normalizan a inicio/fin de día UTC.
+// del `id`, nunca del campo crudo `imageUrl`; (4) las fechas de vigencia viajan como hora Colombia
+// (UTC-5, Bug #12584 defecto 1) y se convierten a ISO UTC antes de enviarlas.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../types";
 import {
-  bannerDateInputValue,
+  bannerDateTimeInputValue,
   bannerImageUrl,
   createBanner,
   deleteBanner,
@@ -64,13 +65,19 @@ describe("bannerImageUrl", () => {
   });
 });
 
-describe("bannerDateInputValue", () => {
-  it("recorta el ISO a yyyy-mm-dd para precargar <input type=date>", () => {
-    expect(bannerDateInputValue("2026-09-15T00:00:00Z")).toBe("2026-09-15");
+describe("bannerDateTimeInputValue", () => {
+  it("convierte el ISO UTC a yyyy-MM-ddTHH:mm en hora Colombia (UTC-5) para <input type=datetime-local>", () => {
+    // 13:00Z - 5h = 08:00 Colombia, mismo día.
+    expect(bannerDateTimeInputValue("2026-09-15T13:00:00Z")).toBe("2026-09-15T08:00");
+  });
+
+  it("cruza medianoche hacia el día anterior cuando la resta de 5h lo exige", () => {
+    // 03:00Z - 5h = 22:00 Colombia del día anterior.
+    expect(bannerDateTimeInputValue("2026-09-15T03:00:00Z")).toBe("2026-09-14T22:00");
   });
 
   it("devuelve cadena vacía si no hay fecha", () => {
-    expect(bannerDateInputValue(null)).toBe("");
+    expect(bannerDateTimeInputValue(null)).toBe("");
   });
 });
 
@@ -88,8 +95,8 @@ describe("createBanner", () => {
     const result = await createBanner({
       name: "Promo verano",
       linkUrl: "https://flitsas.com/promo",
-      validFrom: "2026-09-01",
-      validUntil: "2026-09-30",
+      validFrom: "2026-09-01T08:00",
+      validUntil: "2026-09-30T18:00",
       file,
       isActive: true,
     });
@@ -100,9 +107,9 @@ describe("createBanner", () => {
     const form = capturedForm as unknown as FormData;
     expect(form.get("name")).toBe("Promo verano");
     expect(form.get("linkUrl")).toBe("https://flitsas.com/promo");
-    // Inicio de día / fin de día en UTC (BannerEstadoCalculator compara contra el rango completo).
-    expect(form.get("validFrom")).toBe("2026-09-01T00:00:00.000Z");
-    expect(form.get("validUntil")).toBe("2026-09-30T23:59:59.999Z");
+    // Hora Colombia (UTC-5) a ISO UTC: 08:00 Colombia = 13:00Z, 18:00 Colombia = 23:00Z.
+    expect(form.get("validFrom")).toBe("2026-09-01T13:00:00.000Z");
+    expect(form.get("validUntil")).toBe("2026-09-30T23:00:00.000Z");
     expect(form.get("file")).toBe(file);
   });
 
@@ -132,12 +139,12 @@ describe("createBanner", () => {
     });
   });
 
-  it("si isActive: false, aplica el PATCH /active tras crear (el POST siempre nace activo)", async () => {
+  it("si isActive: false, aplica el PATCH /active tras crear (el POST siempre nace activo) y recalcula estado", async () => {
     const calls: Array<{ url: string; method: string }> = [];
     global.fetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
       calls.push({ url: url.toString(), method: init?.method ?? "GET" });
       if (calls.length === 1) {
-        return new Response(JSON.stringify(banner({ isActive: true })), { status: 201 });
+        return new Response(JSON.stringify(banner({ isActive: true, estado: "activo" })), { status: 201 });
       }
       return new Response(null, { status: 204 });
     }) as never;
@@ -148,6 +155,9 @@ describe("createBanner", () => {
     expect(calls[1].method).toBe("PATCH");
     expect(calls[1].url).toContain("/api/v1/admin/banners/b1/active");
     expect(result.isActive).toBe(false);
+    // Bug #12584 defecto 4: sin vigencia, `estado` es espejo de `isActive` — sin este fix quedaba
+    // "activo" (el que trajo el POST, calculado ANTES del PATCH) hasta el próximo F5.
+    expect(result.estado).toBe("inactivo");
   });
 
   it("si isActive: true (el default del backend), NO hace un segundo request", async () => {
@@ -188,12 +198,12 @@ describe("updateBanner", () => {
     expect((capturedForm as unknown as FormData).get("file")).toBeNull();
   });
 
-  it("si isActive difiere del banner devuelto, aplica el PATCH /active tras editar", async () => {
+  it("si isActive difiere del banner devuelto, aplica el PATCH /active tras editar y recalcula estado", async () => {
     const calls: Array<{ url: string; method: string }> = [];
     global.fetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
       calls.push({ url: url.toString(), method: init?.method ?? "GET" });
       if (calls.length === 1) {
-        return new Response(JSON.stringify(banner({ id: "b2", isActive: true })), { status: 200 });
+        return new Response(JSON.stringify(banner({ id: "b2", isActive: true, estado: "activo" })), { status: 200 });
       }
       return new Response(null, { status: 204 });
     }) as never;
@@ -204,6 +214,37 @@ describe("updateBanner", () => {
     expect(calls[1].method).toBe("PATCH");
     expect(calls[1].url).toContain("/api/v1/admin/banners/b2/active");
     expect(result.isActive).toBe(false);
+    expect(result.estado).toBe("inactivo");
+  });
+
+  it("con vigencia configurada, el PATCH /active NO cambia estado (la vigencia manda, Bug #12584)", async () => {
+    global.fetch = vi.fn(async (_url: string | URL, init?: RequestInit) => {
+      if (!init?.method || init.method === "PUT") {
+        return new Response(
+          JSON.stringify(
+            banner({
+              id: "b2",
+              isActive: true,
+              estado: "activo",
+              validFrom: "2026-09-01T00:00:00Z",
+              validUntil: "2026-09-30T00:00:00Z",
+            }),
+          ),
+          { status: 200 },
+        );
+      }
+      return new Response(null, { status: 204 });
+    }) as never;
+
+    const result = await updateBanner("b2", {
+      ...EMPTY_INPUT,
+      validFrom: "2026-09-01T00:00",
+      validUntil: "2026-09-30T00:00",
+      isActive: false,
+    });
+
+    expect(result.isActive).toBe(false);
+    expect(result.estado).toBe("activo");
   });
 
   it("si isActive coincide con el banner devuelto, NO hace un segundo request", async () => {

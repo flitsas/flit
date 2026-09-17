@@ -9,11 +9,14 @@ internal sealed class VehicleSignatureImprintRepository(FlitDbContext db) : IVeh
 {
     public void Add(VehicleSignatureImprint row) => db.VehicleSignatureImprints.Add(row);
 
-    public Task<VehicleSignatureImprint?> FindByDocumentHashAsync(
+    public Task<VehicleSignatureImprint?> FindActiveByInstanceAndHashAsync(
+        Guid procedureInstanceId,
         string documentHash,
         CancellationToken cancellationToken = default) =>
         db.VehicleSignatureImprints.AsNoTracking()
-            .Where(x => x.DeletedAt == null && x.DocumentHash == documentHash)
+            .Where(x => x.DeletedAt == null
+                && x.ProcedureInstanceId == procedureInstanceId
+                && x.DocumentHash == documentHash)
             .FirstOrDefaultAsync(cancellationToken);
 
     public async Task<IReadOnlySet<Guid>> ListSignedAttachmentIdsForInstanceAsync(

@@ -99,4 +99,55 @@ public sealed class ListImprintSignaturesByPlacaHandlerTests
 
         result.Data[0].LastValidation.Should().BeNull();
     }
+
+    [Fact]
+    public async Task HandleAsync_PropagatesReemplazada_FromRow()
+    {
+        // Bug #12594 (H2): el DTO debe reflejar la marca de reemplazo que calcula la fila del
+        // repositorio (DeletedAt != null), no un valor fijo.
+        var vigenteId = Guid.NewGuid();
+        var reemplazadaId = Guid.NewGuid();
+        _imprints.ListByPlacaAsync("REP123", Arg.Any<CancellationToken>()).Returns(
+        [
+            new VehicleSignatureImprintListRow
+            {
+                Id = vigenteId,
+                TenantId = Guid.NewGuid(),
+                ProcedureInstanceId = Guid.NewGuid(),
+                Placa = "REP123",
+                ModuleCode = "impronta_manual",
+                PublicKey = "pk",
+                DocumentHash = "hash-vigente",
+                Signature = "sig",
+                SignedAt = DateTimeOffset.UtcNow,
+            },
+            new VehicleSignatureImprintListRow
+            {
+                Id = reemplazadaId,
+                TenantId = Guid.NewGuid(),
+                ProcedureInstanceId = Guid.NewGuid(),
+                Placa = "REP123",
+                ModuleCode = "impronta_manual",
+                AttachmentId = null,
+                PublicKey = "pk",
+                DocumentHash = "hash-reemplazada",
+                Signature = "sig",
+                SignedAt = DateTimeOffset.UtcNow,
+                SignedStoragePath = "snap/historica.pdf",
+                DeletedAt = DateTimeOffset.UtcNow,
+            },
+        ]);
+        _validations.GetLatestByImprintIdsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, ImprintSignatureValidation>());
+
+        var result = await _sut.HandleAsync(
+            new ListImprintSignaturesByPlacaQuery { TenantId = Guid.NewGuid(), Placa = "REP123" },
+            TestContext.Current.CancellationToken);
+
+        result.Data.Single(d => d.Id == vigenteId).Reemplazada.Should().BeFalse();
+        var reemplazada = result.Data.Single(d => d.Id == reemplazadaId);
+        reemplazada.Reemplazada.Should().BeTrue();
+        reemplazada.SignedStoragePath.Should().Be("snap/historica.pdf",
+            "el snapshot del PDF firmado debe seguir disponible aunque la fila esté reemplazada");
+    }
 }

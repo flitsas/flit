@@ -123,6 +123,32 @@ public sealed class BannerRepositoryTests
     }
 
     [Fact]
+    public async Task ListActiveAsync_BannerVigenteConIsActiveFalse_Aparece()
+    {
+        // Repro exacto del defecto 5 del Bug #12584 (2026-09-15): la vigencia manda sobre el
+        // flag manual. Invierte el criterio original de HU #12239 AC1 (is_active exigido siempre)
+        // documentado en BannerEstado.cs; no es una correccion de defecto sino un cambio de
+        // criterio explicito del PO.
+        var dbName = Guid.NewGuid().ToString();
+        var id = Guid.NewGuid();
+
+        await using (var seed = NewContext(dbName))
+        {
+            seed.Banners.Add(Row(
+                id, "Vigente pero desactivado manualmente", isActive: false,
+                validFrom: Now.AddDays(-1), validUntil: Now.AddDays(1)));
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(dbName);
+        var repo = new BannerRepository(ctx);
+
+        var activos = await repo.ListActiveAsync(Now, TestContext.Current.CancellationToken);
+
+        activos.Should().ContainSingle(b => b.Id == id);
+    }
+
+    [Fact]
     public async Task ListActiveAsync_SinBannersActivos_DevuelveListaVacia()
     {
         await using var ctx = NewContext(Guid.NewGuid().ToString());

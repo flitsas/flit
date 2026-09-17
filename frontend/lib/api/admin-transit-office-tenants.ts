@@ -134,6 +134,27 @@ export function fetchTransitOfficeTenants(
 }
 
 /**
+ * Trae TODOS los tenants OT que cumplan `params`, paginando internamente hasta agotar
+ * `totalCount` — mismo motivo que `fetchAllCompanies`: el backend clampa `pageSize` a 100
+ * (`ListTransitOfficeTenantsHandler.MaxPageSize`) sin avisar, y un selector no debe perder
+ * tenants antiguos por quedar fuera de la primera página.
+ */
+export async function fetchAllTransitOfficeTenants(
+  params: Omit<TransitOfficeTenantsIndexParams, "page" | "pageSize"> = {},
+  signal?: AbortSignal,
+): Promise<TransitOfficeTenantItem[]> {
+  const pageSize = 100;
+  const first = await fetchTransitOfficeTenants({ ...params, page: 1, pageSize }, signal);
+  const items = [...first.data];
+  const totalPages = Math.ceil(first.totalCount / pageSize);
+  for (let page = 2; page <= totalPages; page++) {
+    const next = await fetchTransitOfficeTenants({ ...params, page, pageSize }, signal);
+    items.push(...next.data);
+  }
+  return items;
+}
+
+/**
  * GET /api/v1/admin/transit-offices/operational-status — estado operativo por OT
  * (RF01, SuperAdmin). Por cada oficina del catálogo indica si tiene tenant y su estado.
  */

@@ -37,7 +37,7 @@ const mocks = vi.hoisted(() => ({
   exportDetailedReport: vi.fn(),
   fetchNetworkDetailedReport: vi.fn(),
   exportNetworkDetailedReport: vi.fn(),
-  fetchCompaniesIndex: vi.fn(),
+  fetchAllCompanies: vi.fn(),
   fetchCompanyChildren: vi.fn(),
   fetchNetworkChildren: vi.fn(),
   listTenantBiometricValidations: vi.fn(),
@@ -80,7 +80,7 @@ vi.mock("@/lib/api/detailed-report", async (importOriginal) => ({
   exportNetworkDetailedReport: mocks.exportNetworkDetailedReport,
 }));
 vi.mock("@/lib/api/admin-companies", () => ({
-  fetchCompaniesIndex: mocks.fetchCompaniesIndex,
+  fetchAllCompanies: mocks.fetchAllCompanies,
   fetchCompanyChildren: mocks.fetchCompanyChildren,
 }));
 vi.mock("@/lib/api/tramites-client", () => ({
@@ -208,7 +208,7 @@ beforeEach(() => {
   mocks.fetchNetworkMonthlyTrend.mockResolvedValue({ ...TREND, scope: { tenantIds: [CABEZA, HIJO] } });
   mocks.fetchNetworkTopProducers.mockResolvedValue({ items: [], scope: { tenantIds: [CABEZA] } });
   mocks.fetchActiveModules.mockResolvedValue({ tramitesModuleEnabled: true, comparendosModuleEnabled: false, resolucionesModuleEnabled: false });
-  mocks.fetchCompaniesIndex.mockResolvedValue({ data: [], total: 0 });
+  mocks.fetchAllCompanies.mockResolvedValue([]);
   mocks.listTenantBiometricValidations.mockResolvedValue({ stats: { total: 0, aprobadas: 0, enProceso: 0, rechazadas: 0 }, total: 0, items: [] });
   mocks.listPublishedProcedureTypes.mockResolvedValue([]);
   mocks.listTransitOffices.mockResolvedValue([]);

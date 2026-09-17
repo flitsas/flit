@@ -1,7 +1,7 @@
 // HU #12241 AC2/AC4 — formulario de alta/edición con vista previa en vivo (blob local antes de
 // guardar, endpoint público tras guardar) y guía de tamaño recomendado junto al campo de imagen.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BannerFormPanel } from "../BannerFormPanel";
 import type { Banner, BannerFormInput } from "@/lib/api/admin-banners";
@@ -113,11 +113,23 @@ describe("BannerFormPanel — validación y envío", () => {
     const user = userEvent.setup();
     const { onSubmit } = renderPanel({ editing: banner() });
 
-    await user.type(screen.getByLabelText(/fecha inicio/i), "2026-09-01");
+    fireEvent.change(screen.getByLabelText(/fecha inicio/i), { target: { value: "2026-09-01T08:00" } });
     await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     expect(await screen.findByText("Indica ambas fechas de vigencia, o ninguna.")).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("Bug #12584 — permite guardar con la fecha fin anterior a la de inicio (sin validación de orden)", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderPanel({ editing: banner() });
+
+    fireEvent.change(screen.getByLabelText(/fecha inicio/i), { target: { value: "2026-09-15T19:14" } });
+    fireEvent.change(screen.getByLabelText(/fecha fin/i), { target: { value: "2026-09-15T18:20" } });
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    expect(screen.queryByText(/debe ser posterior a la de inicio/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
   });
 
   it("envía los datos completos y llama a onSaved con la respuesta", async () => {
@@ -161,5 +173,20 @@ describe("BannerFormPanel — activar/inhabilitar", () => {
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect((onSubmit.mock.calls[0][0] as BannerFormInput).isActive).toBe(false);
+  });
+
+  it("Bug #12584 — con vigencia programada, el interruptor queda deshabilitado (la fecha manda)", () => {
+    renderPanel({
+      editing: banner({ validFrom: "2026-09-10T19:00:00Z", validUntil: "2026-09-12T18:59:00Z" }),
+    });
+
+    expect(screen.getByRole("switch", { name: /banner activo/i })).toBeDisabled();
+    expect(screen.getByText(/programaste una vigencia/i)).toBeInTheDocument();
+  });
+
+  it("sin vigencia programada, el interruptor permanece habilitado", () => {
+    renderPanel({ editing: banner() });
+
+    expect(screen.getByRole("switch", { name: /banner activo/i })).not.toBeDisabled();
   });
 });

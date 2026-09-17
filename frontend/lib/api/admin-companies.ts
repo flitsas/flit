@@ -63,6 +63,29 @@ export function fetchCompaniesIndex(
 }
 
 /**
+ * Trae TODAS las compañías que cumplan `params`, paginando internamente hasta agotar
+ * `totalCount`. El backend clampa `pageSize` a `ListCompaniesHandler.MaxPageSize` (100) sin
+ * avisar, así que un selector que pide una sola página grande (200, 500…) igual se queda con
+ * las primeras 100 más recientes por `created_at` — un tenant antiguo (p. ej. el sembrado en
+ * desarrollo) queda invisible sin importar qué se busque. Los selectores de compañía deben
+ * ofrecer el catálogo completo, no una ventana de las más recientes.
+ */
+export async function fetchAllCompanies(
+  params: Omit<CompaniesIndexParams, "page" | "pageSize"> = {},
+  signal?: AbortSignal,
+): Promise<CompanyListItem[]> {
+  const pageSize = 100;
+  const first = await fetchCompaniesIndex({ ...params, page: 1, pageSize }, signal);
+  const items = [...first.data];
+  const totalPages = Math.ceil(first.totalCount / pageSize);
+  for (let page = 2; page <= totalPages; page++) {
+    const next = await fetchCompaniesIndex({ ...params, page, pageSize }, signal);
+    items.push(...next.data);
+  }
+  return items;
+}
+
+/**
  * GET /{tenantId} — identidad de la compañía (HU #11062), para rotular la consola de configuración.
  * Devuelve `null` si no existe: la pantalla sigue usable sin el encabezado en vez de romperse.
  */

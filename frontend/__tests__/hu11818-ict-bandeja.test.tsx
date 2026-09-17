@@ -9,7 +9,7 @@ import type { PaginaTramitesIct, TramiteIct } from "@/lib/api/ict-trazabilidad";
 const mocks = vi.hoisted(() => ({
   fetchTramitesIct: vi.fn(),
   fetchTiposTramiteIct: vi.fn(),
-  fetchCompaniesIndex: vi.fn(),
+  fetchAllCompanies: vi.fn(),
 }));
 vi.mock("@/lib/api/ict-trazabilidad", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/ict-trazabilidad")>();
@@ -21,7 +21,7 @@ vi.mock("@/lib/api/ict-trazabilidad", async (importOriginal) => {
 });
 vi.mock("@/lib/api/admin-companies", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/admin-companies")>();
-  return { ...actual, fetchCompaniesIndex: mocks.fetchCompaniesIndex };
+  return { ...actual, fetchAllCompanies: mocks.fetchAllCompanies };
 });
 
 /**
@@ -101,10 +101,9 @@ describe("HU #11818 — bandeja de Trazabilidad ICT", () => {
       { id: 2, nombre: "Matrícula Inicial Leasing", familia: "MATRICULAS" },
       { id: 3, nombre: "Traspaso", familia: "TRASPASO" },
     ]);
-    mocks.fetchCompaniesIndex.mockResolvedValue({
-      data: [{ id: TENANT, razonSocial: "Renting Colombia S.A.S.", nit: "900123456" }],
-      total: 1,
-    });
+    mocks.fetchAllCompanies.mockResolvedValue([
+      { id: TENANT, razonSocial: "Renting Colombia S.A.S.", nit: "900123456" },
+    ]);
   });
 
   it("AC1: cada fila es un trámite, con su número, placa y estado", async () => {
@@ -340,7 +339,7 @@ describe("HU #11818 — bandeja de Trazabilidad ICT", () => {
 
     await waitFor(() => expect(mocks.fetchTramitesIct).toHaveBeenCalled());
     expect(screen.queryByLabelText("Compañía")).not.toBeInTheDocument();
-    expect(mocks.fetchCompaniesIndex).not.toHaveBeenCalled();
+    expect(mocks.fetchAllCompanies).not.toHaveBeenCalled();
   });
 
   it("cambiar de compañía suelta el tipo elegido", async () => {

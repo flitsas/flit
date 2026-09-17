@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   fetchAnalyticsOverview: vi.fn(),
   fetchMonthlyTrend: vi.fn(),
   fetchActiveModules: vi.fn(),
-  fetchCompaniesIndex: vi.fn(),
+  fetchAllCompanies: vi.fn(),
   listTenantBiometricValidations: vi.fn(),
   getToken: vi.fn(),
   decodeJwtPayload: vi.fn(),
@@ -35,7 +35,7 @@ vi.mock("@/lib/api/analytics", () => ({
   fetchMonthlyTrend: mocks.fetchMonthlyTrend,
   fetchActiveModules: mocks.fetchActiveModules,
 }));
-vi.mock("@/lib/api/admin-companies", () => ({ fetchCompaniesIndex: mocks.fetchCompaniesIndex }));
+vi.mock("@/lib/api/admin-companies", () => ({ fetchAllCompanies: mocks.fetchAllCompanies }));
 vi.mock("@/lib/api/tramites-client", () => ({
   tramitesClient: { listTenantBiometricValidations: mocks.listTenantBiometricValidations },
 }));
@@ -63,8 +63,8 @@ const FULL_OVERVIEW: AnalyticsOverviewResponse = {
   from: "2026-08-01",
   to: "2026-08-31",
   categories: [
-    { category: "matriculas", total: 5, byStatus: [{ status: "completed", count: 5 }] },
-    { category: "traspasos", total: 2, byStatus: [{ status: "submitted", count: 2 }] },
+    { category: "matriculas", total: 5, byStatus: [{ status: "aprobado", count: 5 }] },
+    { category: "traspasos", total: 2, byStatus: [{ status: "entregado", count: 2 }] },
     { category: "otros", total: 0, byStatus: [] },
   ],
 };
@@ -102,6 +102,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
     mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
     mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
     mocks.getActiveBanners.mockResolvedValue([]);
   });
 
@@ -117,10 +118,25 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
     expect(await screen.findByText("Seguimiento operativo")).toBeInTheDocument();
 
-    // Sin ningún módulo adicional activado (estado por defecto), no debe verse ninguna
-    // tarjeta "Próximamente" — la compañía no contrató Comparendos ni Resoluciones.
+    // Sin ningún módulo adicional activado (estado por defecto), la sección "Próximamente"
+    // no ocupa espacio: ni tarjeta, ni mensaje de estado vacío — la compañía no contrató
+    // Comparendos ni Resoluciones y no hay nada que anunciar.
+    await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalled());
     expect(screen.queryByText("Próximamente")).not.toBeInTheDocument();
-    expect(await screen.findByText("Tu compañía no tiene módulos adicionales activados.")).toBeInTheDocument();
+    expect(screen.queryByText("Tu compañía no tiene módulos adicionales activados.")).not.toBeInTheDocument();
+  });
+
+  it("BUG12588: mapea Otros Trámites y capitaliza los estados en la Distribución General (vocabulario ADR-0022)", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalled());
+    expect(await screen.findByText("Otros Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
+    // Labels de negocio capitalizados (estadoLabel), no los códigos crudos que persiste la BD.
+    expect(await screen.findByText("Aprobado")).toBeInTheDocument();
+    expect(screen.getByText("Entregado")).toBeInTheDocument();
+    expect(screen.queryByText("aprobado")).not.toBeInTheDocument();
+    expect(screen.queryByText("entregado")).not.toBeInTheDocument();
   });
 
   it("AC2: ComparendosModuleEnabled=true muestra la tarjeta Próximamente con el estilo de las tarjetas KPI existentes", async () => {
@@ -213,7 +229,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
   it("SuperAdmin en 'Todas las compañías': no llama al endpoint (no hay un tenant concreto) y no queda en error permanente", async () => {
     mocks.isSuperAdmin.mockReturnValue(true);
-    mocks.fetchCompaniesIndex.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 100 });
+    mocks.fetchAllCompanies.mockResolvedValue([]);
 
     render(<Dashboard onNewTramite={noop} />);
 
@@ -222,11 +238,11 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     // Para este endpoint (sin vista global) un tenantId vacío respondería 400 del backend —
     // antes de este fix eso dejaba la fila de "Próximamente" en error permanente sin importar
-    // qué se cambiara en configuración de compañía. Se explica con un mensaje, no con la
-    // alerta roja de error genérico.
-    expect(
-      await screen.findByText("Selecciona una compañía para ver sus módulos activos."),
-    ).toBeInTheDocument();
+    // qué se cambiara en configuración de compañía. Ahora, sin una compañía concreta elegida,
+    // la sección completa no ocupa espacio: ni tarjeta, ni mensaje, ni alerta de error.
+    await waitFor(() => expect(mocks.fetchAllCompanies).toHaveBeenCalled());
+    expect(screen.queryByText("Selecciona una compañía para ver sus módulos activos.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Próximamente")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
@@ -269,6 +285,10 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
     // Un solo punto de navegación: no hay más slides detrás del fijo.
     expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(1);
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    // Bug #12584 defecto 3: sin banners (un solo slide navegable), Anterior/Siguiente deben
+    // quedar deshabilitados — no hay a dónde moverse.
+    expect(screen.getByRole("button", { name: "Anterior" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Siguiente" })).toBeDisabled();
   });
 
   it("AC1 — los banners activos se agregan como slides después del fijo", async () => {
@@ -282,6 +302,8 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
     await waitFor(() =>
       expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(3),
     );
+    expect(screen.getByRole("button", { name: "Anterior" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Siguiente" })).toBeEnabled();
 
     // Avanza al primer banner (slide 2 de 3): sin enlace, no hay ningún <a> envolviendo el banner
     // ni título visible — el nombre solo viaja como texto accesible de la imagen (alt).
@@ -367,6 +389,7 @@ describe("Dashboard — cuerpo dinámico del slide de bienvenida (Opción A)", (
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchMonthlyTrend.mockResolvedValue(CAROUSEL_TREND);
     mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
     mocks.getActiveBanners.mockResolvedValue([]);
   });
 

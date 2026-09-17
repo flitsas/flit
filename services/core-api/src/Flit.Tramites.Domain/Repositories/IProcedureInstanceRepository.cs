@@ -608,6 +608,16 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<IReadOnlyList<ReadModels.GestorOption>> ListAvailableGestoresAsync(
         Guid tenantId, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12116 — candidatos para el backfill de firma automática de impronta manual: trámites
+    /// <c>entregado</c>/<c>aprobado</c> (no eliminados) con un adjunto activo tipo <c>impronta</c>
+    /// NO Kyverum sin fila activa en <c>vehicle_signature_imprints</c> para ese adjunto. Cross-tenant
+    /// (acción de plataforma, RLS decorativo): no filtra por tenant. Solo lectura, tope
+    /// <paramref name="limit"/>, orden por antigüedad para procesar primero los más rezagados.
+    /// </summary>
+    Task<IReadOnlyList<(Guid InstanceId, Guid TenantId)>> ListImprontaManualBackfillCandidatesAsync(
+        int limit, CancellationToken ct = default);
 }
 
 /// <summary>Opciones de filtro que salen de los datos del tenant, no de una lista fija.</summary>

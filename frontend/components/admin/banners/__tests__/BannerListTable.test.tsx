@@ -94,10 +94,12 @@ describe("BannerListTable", () => {
     expect(messages).toHaveLength(2);
   });
 
-  it("formatea las fechas (en columnas separadas) cuando sí hay vigencia configurada", () => {
-    renderTable([banner({ validFrom: "2026-09-01T00:00:00Z", validUntil: "2026-09-30T23:59:59Z" })]);
-    expect(screen.getByText("01/09/2026")).toBeInTheDocument();
-    expect(screen.getByText("30/09/2026")).toBeInTheDocument();
+  it("formatea fecha y hora Colombia (en columnas separadas) cuando sí hay vigencia configurada", () => {
+    // Bug #12584 (defecto 1): la vigencia ahora incluye hora, mostrada en Colombia (UTC-5) vía
+    // `formatFechaHora` — 13:00Z es 08:00 Colombia, mismo día; 23:00Z del 30/09 es 18:00 Colombia.
+    renderTable([banner({ validFrom: "2026-09-01T13:00:00Z", validUntil: "2026-09-30T23:00:00Z" })]);
+    expect(screen.getByText("2026/09/01 08:00")).toBeInTheDocument();
+    expect(screen.getByText("2026/09/30 18:00")).toBeInTheDocument();
   });
 
   it("al hacer clic en la miniatura, abre un visualizador con la imagen completa", async () => {

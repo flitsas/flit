@@ -14,6 +14,7 @@ import {
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
 import { bannerImageUrl, type Banner, type BannerEstado } from "@/lib/api/admin-banners";
+import { formatFechaHora } from "@/lib/format/date";
 
 const ESTADO_LABEL: Record<BannerEstado, string> = {
   programado: "Programado",
@@ -166,10 +167,10 @@ export function BannerListTable({
                   <StatusBadge label={ESTADO_LABEL[b.estado]} tone={bannerEstadoTone(b.estado)} />
                 </td>
                 <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
-                  {formatDate(b.validFrom)}
+                  {formatFechaHora(b.validFrom, "Sin fecha programada")}
                 </td>
                 <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
-                  {formatDate(b.validUntil)}
+                  {formatFechaHora(b.validUntil, "Sin fecha programada")}
                 </td>
                 <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
                   <RowActions
@@ -214,11 +215,4 @@ export function BannerListTable({
       </Modal>
     </div>
   );
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "Sin fecha programada";
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return "Sin fecha programada";
-  return parsed.toLocaleDateString("es-CO", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "UTC" });
 }

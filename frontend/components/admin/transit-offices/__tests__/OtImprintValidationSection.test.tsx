@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OtImprintValidationSection } from "@/components/admin/transit-offices/OtImprintValidationSection";
 import { ToastProvider } from "@/components/admin/Toast";
-import type { ImprintSignatureDto } from "@/lib/api/admin-ot-imprint-signatures";
+import { imprintEsReemplazada, type ImprintSignatureDto } from "@/lib/api/admin-ot-imprint-signatures";
 
 const fetchListImprintSignatures = vi.fn();
 const validateImprintSignature = vi.fn();
@@ -291,5 +291,57 @@ describe("OtImprintValidationSection", () => {
     expect(screen.getByText("no coincide")).toBeInTheDocument();
     expect(screen.getByText("ot.admin@example.com")).toBeInTheDocument();
     expect(screen.getByText("Administrador OT")).toBeInTheDocument();
+  });
+
+  it("muestra el badge Reemplazada cuando la fila viene marcada y conserva el enlace al PDF (Bug #12594 H2)", async () => {
+    fetchListImprintSignatures.mockResolvedValue([
+      imprintRow({
+        id: "imp-replaced",
+        attachmentId: null,
+        signedStoragePath: "snap/impronta-historica.pdf",
+        reemplazada: true,
+      }),
+    ]);
+    renderSection();
+    await userEvent.type(screen.getByTestId("ot-imprint-validation-placa-input"), "ABC123");
+    await userEvent.click(screen.getByTestId("ot-imprint-validation-search-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("ot-imprint-replaced-imp-replaced")).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Impronta reemplazada de la placa ABC123")).toBeInTheDocument();
+    expect(screen.getByText("Reemplazada")).toBeInTheDocument();
+
+    const viewBtn = await screen.findByTestId("ot-imprint-view-pdf-imp-replaced");
+    expect(viewBtn).toBeEnabled();
+  });
+
+  it("no muestra el badge Reemplazada cuando la fila es false o no trae el campo", async () => {
+    fetchListImprintSignatures.mockResolvedValue([
+      imprintRow({ id: "imp-vigente", reemplazada: false }),
+      imprintRow({ id: "imp-legacy" }),
+    ]);
+    renderSection();
+    await userEvent.type(screen.getByTestId("ot-imprint-validation-placa-input"), "ABC123");
+    await userEvent.click(screen.getByTestId("ot-imprint-validation-search-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("ot-imprint-validation-table")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Reemplazada")).not.toBeInTheDocument();
+  });
+});
+
+describe("imprintEsReemplazada", () => {
+  it("retorna true solo cuando el campo es exactamente true", () => {
+    expect(imprintEsReemplazada({ reemplazada: true })).toBe(true);
+  });
+
+  it("retorna false cuando el campo es false", () => {
+    expect(imprintEsReemplazada({ reemplazada: false })).toBe(false);
+  });
+
+  it("retorna false (backend viejo) cuando el campo es undefined", () => {
+    expect(imprintEsReemplazada({ reemplazada: undefined })).toBe(false);
   });
 });

@@ -61,11 +61,11 @@ vi.mock("@/lib/api/security", () => ({
 }));
 
 vi.mock("@/lib/api/admin-companies", () => ({
-  fetchCompaniesIndex: vi.fn().mockResolvedValue({ data: [], totalCount: 0, page: 1, pageSize: 200 }),
+  fetchAllCompanies: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/lib/api/admin-transit-office-tenants", () => ({
-  fetchTransitOfficeTenants: vi.fn().mockResolvedValue({ data: [], totalCount: 0, page: 1, pageSize: 200 }),
+  fetchAllTransitOfficeTenants: vi.fn().mockResolvedValue([]),
 }));
 
 beforeEach(() => {
