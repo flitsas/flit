@@ -73,6 +73,17 @@ tags:
     description: "Gestión del baúl de firmas precargadas por compañía (HU #10643, ADR-0025). Solo SuperAdmin."
   - name: Admin · Representantes Legales
     description: "Directorio de representantes legales por compañía (HU #10901, ADR-0033). Solo SuperAdmin."
+  - name: Admin · Plataforma · Notificaciones
+    description: >
+      SuperAdmin → Plataforma → Notificaciones (Feature #11349): buzón de pruebas global de
+      plataforma (HU #11366), canales con remitente resuelto (HU #11367) y envío de prueba con
+      límite de frecuencia (HU #11368). Nunca escribe política de tenant. HU #12430 AC2: el envío
+      de prueba acepta `tenantId` para aplicar el tema y el remitente de marca de esa compañía.
+  - name: Admin · Plataforma · Notificaciones · Plantillas
+    description: >
+      Catálogo de plantillas de notificación y muestra compuesta sin datos de personas
+      (HU #11366 AC1-AC3, Ley 1581). HU #12428/#12431: la muestra acepta `tenantId` para
+      componerse con el tema de correo de esa compañía.
   - name: Preferencias de UI
     description: >
       Base compartida para que el usuario elija qué ve en la UI (p. ej. columnas
@@ -198,6 +209,38 @@ paths:
           description: >
             La contraseña nueva es igual a la vigente (código `PASSWORD_REUSED`, HU #11553).
             El token de recuperación NO se invalida — se puede reintentar con otra contraseña.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/auth/activate:
+    post:
+      operationId: authActivateAccount
+      tags: [Auth]
+      summary: Activar cuenta con token de invitación (HU #10177 AC1/AC2)
+      security: []
+      description: >
+        Onboarding: canjea el token de invitación de un solo uso y fija la primera contraseña.
+        El token se invalida tras su uso. Documentado a posteriori (deuda previa a la épica
+        #12237); el enlace que llega por correo lo construye el backend con el dominio de la red
+        del tenant cuando existe (HU #12423).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivateAccountRequest'
+      responses:
+        '200':
+          description: Cuenta activada; el usuario ya puede iniciar sesión.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: >
+            Token inválido o ya utilizado (código `INVITATION_INVALID`) o contraseña que no cumple
+            los requisitos mínimos (código `WEAK_PASSWORD`).
           content:
             application/json:
               schema:
@@ -888,7 +931,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TenantBrandingResponse" }
         "401": { description: No autenticado. }
-        "403": { description: No es cabeza de grupo (respuesta uniforme, sin revelar nada). }
+        "403": { description: "No es cabeza de grupo (respuesta uniforme, sin revelar nada)." }
         "404": { description: Aún no tiene configuración inicial de marca. }
     put:
       tags: [Compañía · Identidad de marca]
@@ -1018,7 +1061,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
         "401": { description: No autenticado. }
-        "403": { description: No es cabeza de grupo (respuesta uniforme, sin revelar nada). }
+        "403": { description: "No es cabeza de grupo (respuesta uniforme, sin revelar nada)." }
 
   /api/v1/public/branding:
     get:
@@ -1076,7 +1119,7 @@ paths:
             image/jpeg: { schema: { type: string, format: binary } }
             image/webp: { schema: { type: string, format: binary } }
         "304": { description: If-None-Match coincide con el ETag actual. }
-        "404": { description: Id inexistente, borrado o de una cabeza que dejó de ser MARCA_BLANCA (indistinguibles). }
+        "404": { description: "Id inexistente, borrado o de una cabeza que dejó de ser MARCA_BLANCA (indistinguibles)." }
         "429":
           description: Límite de tasa por IP excedido (policy public-branding). Sin cuerpo informativo.
 
@@ -1098,7 +1141,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BrandIdentityResponse" }
-        "401": { description: No autenticado. }
+        "401": { $ref: "#/components/responses/SessionDomainMismatch" }
 
   /api/v1/admin/companies/{tenantId}/domain:
     parameters:
@@ -1210,7 +1253,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TenantDomainResponse" }
         "401": { description: No autenticado. }
-        "403": { description: No es cabeza de grupo (respuesta uniforme, sin revelar nada). }
+        "403": { description: "No es cabeza de grupo (respuesta uniforme, sin revelar nada)." }
         "404": { description: La red no tiene un dominio registrado. }
 
   /api/v1/company/domain/verify:
@@ -9945,6 +9988,202 @@ paths:
                 properties:
                   code: { type: string, example: HIERARCHY_SWITCH_NOT_FOUND }
 
+  # ── Admin · Plataforma · Notificaciones (Feature #11349; ampliado por #12428/#12430/#12431) ──
+  /api/v1/admin/plataforma/notificaciones/buzon-pruebas:
+    get:
+      tags: [Admin · Plataforma · Notificaciones]
+      operationId: adminPlataformaNotificacionesGetBuzonPruebas
+      summary: Buzón de pruebas de la plataforma (HU #11366 AC2)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Estado del buzón (configurado o no, destinatario, último envío, rowVersion).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTestMailboxResponse" }
+        "401": { description: No autenticado. }
+        "403": { description: Sin permiso (requiere SuperAdmin). }
+    put:
+      tags: [Admin · Plataforma · Notificaciones]
+      operationId: adminPlataformaNotificacionesUpdateBuzonPruebas
+      summary: Fijar el destinatario del buzón de pruebas (HU #11366 AC3)
+      description: >
+        Concurrencia optimista: `rowVersion` debe coincidir con el vigente; si no, `409`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateNotificationTestMailboxRequest" }
+      responses:
+        "200":
+          description: Buzón actualizado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTestMailboxResponse" }
+        "400":
+          description: Correo inválido (`correo_invalido`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationsAdminError" }
+        "401": { description: No autenticado. }
+        "403": { description: Sin permiso (requiere SuperAdmin). }
+        "409":
+          description: rowVersion desactualizado (`row_version_conflict`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationsAdminError" }
+
+  /api/v1/admin/plataforma/notificaciones/canales:
+    get:
+      tags: [Admin · Plataforma · Notificaciones]
+      operationId: adminPlataformaNotificacionesGetCanales
+      summary: Canales de notificación con su remitente resuelto por configuración (HU #11367)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de canales (`FLIT_SMTP`, `TENANT_API`) con etiqueta, si es el canal por defecto, si está configurado y su remitente.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationChannelsResponse" }
+        "401": { description: No autenticado. }
+        "403": { description: Sin permiso (requiere SuperAdmin). }
+
+  /api/v1/admin/plataforma/notificaciones/buzon-pruebas/envios:
+    post:
+      tags: [Admin · Plataforma · Notificaciones]
+      operationId: adminPlataformaNotificacionesEnviarPrueba
+      summary: Enviar una plantilla de prueba al buzón de pruebas (HU #11368; HU #12430 AC2)
+      description: >-
+        Sub-recurso del buzón: el destinatario SIEMPRE es el buzón configurado, nunca viaja en el
+        cuerpo. Límite de frecuencia persistido (AC2 → `429` con `retryAfterSeconds`). Un fallo de
+        TRANSPORTE (SMTP real que rechazó el mensaje) se reporta como `200` con
+        `outcome = TransportFailed` y `success = false` — la solicitud fue válida (AC8).
+        HU #12430 AC2 — `tenantId` es opcional y ADITIVO: con él (y canal `FLIT_SMTP`) la muestra
+        sale con el tema de correo y el remitente de marca de esa compañía y la respuesta incluye
+        `applied`; sin él, comportamiento y respuesta idénticos a antes de esa historia.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SendNotificationTestRequest" }
+      responses:
+        "200":
+          description: Resultado del intento (`Sent` o `TransportFailed`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTestSendResponse" }
+        "400":
+          description: >-
+            `canal_invalido` | `buzon_no_configurado` | `configuracion_incompleta` |
+            `plantilla_sin_enrutamiento_por_canal` (plantilla de cuenta + canal `TENANT_API`, HU #11371) |
+            `procedure_type_id_invalido` | `tipo_tramite_no_encontrado` | `tipo_tramite_inactivo`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationsAdminError" }
+        "401": { description: No autenticado. }
+        "403": { description: Sin permiso (requiere SuperAdmin). }
+        "404":
+          description: Plantilla inexistente (`plantilla_no_encontrada`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationsAdminError" }
+        "429":
+          description: Límite de frecuencia (`limite_frecuencia`), con `retryAfterSeconds`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationsAdminError" }
+        "500":
+          description: Fallo al componer la plantilla (`fallo_render`) o error desconocido (`error_desconocido`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationsAdminError" }
+
+  /api/v1/admin/plataforma/notificaciones/plantillas:
+    get:
+      tags: [Admin · Plataforma · Notificaciones · Plantillas]
+      operationId: adminPlataformaNotificacionesPlantillasList
+      summary: Catálogo íntegro de plantillas de notificación (HU #11366 AC1)
+      description: Listado estático del catálogo, sin filtrar por módulo ni por lo ya implementado.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Plantillas con id estable, nombre, módulo y disparadores.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTemplateListResponse" }
+        "401": { description: No autenticado. }
+        "403": { description: Sin permiso (requiere SuperAdmin). }
+
+  /api/v1/admin/plataforma/notificaciones/plantillas/{templateId}/muestra:
+    parameters:
+      - name: templateId
+        in: path
+        required: true
+        schema: { type: string }
+        description: Id estable de la plantilla (p. ej. `tramites.aprobado`).
+    get:
+      tags: [Admin · Plataforma · Notificaciones · Plantillas]
+      operationId: adminPlataformaNotificacionesPlantillasGetMuestra
+      summary: Muestra compuesta de una plantilla, sin datos de personas (HU #11366 AC2/AC3; HU #12428 AC1/AC8)
+      description: >-
+        Compone asunto y HTML con los MISMOS composers de producción pero con marcadores — nunca
+        con datos reales (Ley 1581). AC3: `tramiteId` y `usuarioId` existen solo para ser
+        rechazados: si cualquiera llega con valor la respuesta es `400 solicitud_invalida` ANTES de
+        resolver el catálogo, exista o no `templateId` (sin canal lateral). Las plantillas de
+        cambio de estado de trámite exigen `procedureTypeId` activo. HU #12428/#12431 —
+        `tenantId` es opcional y ADITIVO: con él la muestra se compone con el tema de correo de esa
+        compañía y la respuesta trae `theme`; sin él, salida idéntica a antes de esa historia.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel
+          in: query
+          required: false
+          schema: { type: string, enum: [FLIT_SMTP, TENANT_API], default: FLIT_SMTP }
+        - name: procedureTypeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Obligatorio para las plantillas de cambio de estado de trámite.
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: HU #12428 — compañía cuyo tema de correo se aplica a la muestra.
+        - name: tramiteId
+          in: query
+          required: false
+          schema: { type: string }
+          description: NO admitido — cualquier valor produce `400 solicitud_invalida` (AC3).
+        - name: usuarioId
+          in: query
+          required: false
+          schema: { type: string }
+          description: NO admitido — cualquier valor produce `400 solicitud_invalida` (AC3).
+      responses:
+        "200":
+          description: Asunto y cuerpo HTML de la muestra.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTemplateSampleResponse" }
+        "400":
+          description: >-
+            `solicitud_invalida` (identificador real colado) | `canal_invalido` (con `allowed`) |
+            `procedure_type_id_invalido` | `tipo_tramite_no_encontrado` | `tipo_tramite_inactivo`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationsAdminError" }
+        "401": { description: No autenticado. }
+        "403": { description: Sin permiso (requiere SuperAdmin). }
+        "404": { description: Plantilla inexistente. Sin cuerpo. }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -9955,7 +10194,8 @@ components:
   responses:
     SessionDomainMismatch:
       description: >-
-        HU #12422 AC5 (ADR-0060 D3) — error COMÚN de toda ruta autenticada: el JWT lleva un claim
+        No autenticado (sin cuerpo), o — HU #12422 AC5 (ADR-0060 D3), error COMÚN de toda ruta
+        autenticada, referenciado aquí desde `/me/branding` a modo de ejemplo — el JWT lleva un claim
         `dom` (dominio de emisión de la sesión) distinto del dominio sellado de la petición actual
         (`Flit.Api.Authorization.DomainBindingMiddleware`). No aplica a rutas anónimas ni a
         `/internal/*`. Un token sin claim `dom` (emitido antes de esta HU) se trata como `flit`.
@@ -10093,6 +10333,7 @@ components:
       properties:
         platformName: { type: string, nullable: true }
         colors:
+          type: object
           allOf: [{ $ref: "#/components/schemas/BrandColors" }]
           nullable: true
         logoId: { type: string, format: uuid, nullable: true }
@@ -10101,6 +10342,7 @@ components:
       properties:
         platformName: { type: string, nullable: true, minLength: 2, maxLength: 40 }
         colors:
+          type: object
           allOf: [{ $ref: "#/components/schemas/BrandColors" }]
           nullable: true
         logoId: { type: string, format: uuid, nullable: true }
@@ -10112,6 +10354,7 @@ components:
         tenantId: { type: string, format: uuid }
         draft: { $ref: "#/components/schemas/BrandingSnapshot" }
         published:
+          type: object
           allOf: [{ $ref: "#/components/schemas/BrandingSnapshot" }]
           nullable: true
         publishedVersion: { type: integer }
@@ -10167,12 +10410,147 @@ components:
         subject: { type: string }
         html: { type: string }
         theme:
+          type: object
           allOf: [{ $ref: "#/components/schemas/EmailThemeInfo" }]
           nullable: true
           description: >-
             Aditivo (HU #12428/#12431). Ausente en `GET .../plantillas/{templateId}/muestra` sin
             `?tenantId=` (salida idéntica a antes de esta historia); siempre presente en
             `GET /company/branding/email-sample`.
+
+    # ── Admin · Plataforma · Notificaciones (Feature #11349; HU #12428/#12430/#12431) ──────────
+    NotificationsAdminError:
+      type: object
+      required: [error]
+      description: >-
+        Error de las rutas de Plataforma → Notificaciones. `error` es un código estable en
+        snake_case (ver cada respuesta); `message`, `retryAfterSeconds` (solo `limite_frecuencia`)
+        y `allowed` (solo `canal_invalido` en la muestra) son opcionales.
+      properties:
+        error: { type: string, example: limite_frecuencia }
+        message: { type: string, nullable: true }
+        retryAfterSeconds: { type: integer, nullable: true }
+        allowed: { type: string, nullable: true, example: "FLIT_SMTP, TENANT_API" }
+    NotificationTestMailboxResponse:
+      type: object
+      required: [isConfigured, rowVersion]
+      properties:
+        isConfigured: { type: boolean }
+        testRecipientEmail: { type: string, format: email, nullable: true }
+        lastTestSentAt: { type: string, format: date-time, nullable: true }
+        rowVersion: { type: integer, format: int64 }
+    UpdateNotificationTestMailboxRequest:
+      type: object
+      required: [email, rowVersion]
+      properties:
+        email: { type: string, format: email }
+        rowVersion:
+          type: integer
+          format: int64
+          description: Valor leído en el último GET (concurrencia optimista).
+    NotificationChannelsResponse:
+      type: object
+      required: [channels]
+      properties:
+        channels:
+          type: array
+          items: { $ref: "#/components/schemas/NotificationChannelItem" }
+    NotificationChannelItem:
+      type: object
+      required: [channel, label, isDefault, isConfigured]
+      properties:
+        channel: { type: string, enum: [FLIT_SMTP, TENANT_API] }
+        label: { type: string }
+        isDefault: { type: boolean }
+        isConfigured: { type: boolean }
+        senderEmail: { type: string, nullable: true }
+        senderName: { type: string, nullable: true }
+    SendNotificationTestRequest:
+      type: object
+      required: [templateId, channel]
+      properties:
+        templateId: { type: string, example: tramites.aprobado }
+        channel:
+          type: string
+          enum: [FLIT_SMTP, TENANT_API]
+          description: Obligatorio; ausente o fuera del catálogo ⇒ `400 canal_invalido` (sin consumir enfriamiento).
+        procedureTypeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Obligatorio para las plantillas de cambio de estado de trámite.
+        tenantId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            HU #12430 AC2 — compañía cuyo tema de correo y remitente de marca se aplican al envío
+            (solo con canal `FLIT_SMTP`). Ausente ⇒ comportamiento idéntico a antes de esa historia.
+    NotificationTestSendResponse:
+      type: object
+      required: [success, outcome, message, isConsoleTransport, recipientDiverted]
+      properties:
+        success: { type: boolean }
+        outcome:
+          type: string
+          enum: [Sent, TransportFailed]
+          description: Solo estos dos valores llegan con `200`; el resto del enum se mapea a 4xx/5xx.
+        message: { type: string }
+        templateId: { type: string, nullable: true }
+        channel: { type: string, nullable: true }
+        senderEmail: { type: string, nullable: true }
+        senderName: { type: string, nullable: true }
+        sentAt: { type: string, format: date-time, nullable: true }
+        isConsoleTransport:
+          type: boolean
+          description: true cuando el transporte configurado es consola (no salió un correo real).
+        recipientDiverted:
+          type: boolean
+          description: true cuando el destinatario fue desviado al buzón de pruebas por configuración.
+        applied:
+          type: object
+          allOf: [{ $ref: "#/components/schemas/NotificationTestSendApplied" }]
+          nullable: true
+          description: >-
+            Aditivo (HU #12430 AC2). Solo presente cuando la solicitud trajo `tenantId` y el canal
+            fue `FLIT_SMTP`; ausente en cualquier otro caso.
+    NotificationTestSendApplied:
+      type: object
+      required: [themeKind]
+      description: Tema y remitente REALMENTE aplicados a un envío de prueba con `tenantId` (HU #12430 AC2).
+      properties:
+        themeKind: { type: string, enum: [flit, brand] }
+        themeVersion: { type: integer, nullable: true, description: Versión de la marca publicada; null con `flit`. }
+        senderName: { type: string, nullable: true }
+        senderEmail: { type: string, nullable: true }
+    NotificationTemplateListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/NotificationTemplateListItem" }
+    NotificationTemplateListItem:
+      type: object
+      required: [id, name, module, triggers]
+      properties:
+        id: { type: string, example: tramites.aprobado }
+        name: { type: string }
+        module: { type: string, enum: [Security, Analytics, Tramites] }
+        triggers:
+          type: array
+          items:
+            type: string
+            enum:
+              - CreateInvitation
+              - ResendInvitation
+              - ForgotPassword
+              - AdminResetPassword
+              - WelcomeRegistration
+              - ScheduledReport
+              - Alert
+              - ProcedureStatusChanged
+              - PlateAssigned
 
     # ── Público/sesión · Identidad de marca (HU #12418, Feature #12366, ADR-0060 D2) ───────────
     # PROHIBIDO agregar tenantId, NIT, correo, razón social, lista de hijos o isDefault/isNetwork
@@ -11286,6 +11664,7 @@ components:
           description: >-
             Aditivo y opcional (HU #12422 AC1/AC7, ADR-0060 D3): solo presente cuando el login se
             hizo por el dominio de una red MARCA_BLANCA activa.
+          type: object
           nullable: true
           allOf:
             - $ref: '#/components/schemas/LoginNetworkInfo'
@@ -11377,6 +11756,16 @@ components:
         token:
           type: string
         newPassword:
+          type: string
+          format: password
+    ActivateAccountRequest:
+      type: object
+      required: [token, password]
+      properties:
+        token:
+          type: string
+          description: Token de invitación de un solo uso (HU #10177).
+        password:
           type: string
           format: password
     MessageResponse:
