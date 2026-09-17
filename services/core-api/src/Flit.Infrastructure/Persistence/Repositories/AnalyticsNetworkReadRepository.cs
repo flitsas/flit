@@ -1,3 +1,4 @@
+using System.Data;
 using System.Data.Common;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Dtos;
@@ -50,7 +51,8 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
         JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
         WHERE pi.tenant_id = ANY(@tenants)
           AND pi.deleted_at IS NULL
-          AND pi.created_at::date BETWEEN @from AND @to
+          AND (@from::date IS NULL OR pi.created_at::date >= @from::date)
+          AND (@to::date   IS NULL OR pi.created_at::date <= @to::date)
         GROUP BY pi.tenant_id, 2, pi.status
         ORDER BY 2, pi.status, pi.tenant_id;
         """;
@@ -101,7 +103,7 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
     // ── INetworkAnalyticsReadRepository ──────────────────────────────────────────────────────────────
 
     public async Task<NetworkAnalyticsResult<IReadOnlyList<CategoryMetricsDto>>> GetNetworkOverviewAsync(
-        IReadOnlySet<Guid> tenantIds, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
+        IReadOnlySet<Guid> tenantIds, DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(tenantIds);
         if (tenantIds.Count == 0)
@@ -110,8 +112,8 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
         var conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
         await using var cmd = CreateCommand(conn, OverviewNetworkSql);
         AddTenantsParam(cmd, tenantIds);
-        AddParam(cmd, "from", fromDate);
-        AddParam(cmd, "to", toDate);
+        AddDateParam(cmd, "from", fromDate);
+        AddDateParam(cmd, "to", toDate);
 
         // Suma en memoria por (categoría, estado) preservando el orden del SQL; tenant_id solo alimenta «alcanzados».
         var reached = new HashSet<Guid>();
@@ -242,6 +244,20 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
         p.Value = tenantIds.ToArray();
         if (p is NpgsqlParameter np)
             np.NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Uuid;
+        cmd.Parameters.Add(p);
+    }
+
+    /// <summary>
+    /// BUG #12588 — parámetro de fecha OPCIONAL. Va tipado siempre: un <see cref="DBNull"/> sin
+    /// <c>DbType</c> deja al proveedor sin forma de inferir el tipo y la consulta revienta al
+    /// prepararse, no al leerse. Con el tipo puesto, el <c>IS NULL</c> del SQL resuelve como debe.
+    /// </summary>
+    private static void AddDateParam(DbCommand cmd, string name, DateOnly? value)
+    {
+        var p = cmd.CreateParameter();
+        p.ParameterName = name;
+        p.DbType = DbType.Date;
+        p.Value = (object?)value ?? DBNull.Value;
         cmd.Parameters.Add(p);
     }
 

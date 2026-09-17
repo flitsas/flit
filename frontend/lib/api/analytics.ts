@@ -28,7 +28,8 @@ export function fetchAnalyticsOverview(
   signal?: AbortSignal,
 ): Promise<AnalyticsOverviewResponse> {
   return apiFetch<AnalyticsOverviewResponse>(`${base}/overview`, {
-    query: { from: params.from, to: params.to, tenantId: params.tenantId },
+    // BUG #12588 — un extremo vacío NO viaja: el backend lo interpreta como «sin acotar por ahí».
+    query: { from: params.from || undefined, to: params.to || undefined, tenantId: params.tenantId },
     signal,
   });
 }
@@ -142,8 +143,9 @@ const networkBase = "/api/v1/tramites/network/stats";
 
 /** Query de las rutas `network/stats/*`: rango + hijo opcional. Sin `tenantId` (lo decide el JWT). */
 export interface NetworkStatsParams {
-  from: string;
-  to: string;
+  /** BUG #12588 — opcionales en `/stats/overview`; el resto de rutas de stats sí los exige. */
+  from?: string;
+  to?: string;
   /** Acota a un cliente de la red (puede ser la propia cabeza). Vacío ⇒ toda la red. */
   childTenantId?: string;
 }
@@ -163,7 +165,11 @@ export function fetchNetworkAnalyticsOverview(
   signal?: AbortSignal,
 ): Promise<NetworkAnalyticsOverviewResponse> {
   return apiFetch<NetworkAnalyticsOverviewResponse>(`${networkBase}/overview`, {
-    query: { from: params.from, to: params.to, childTenantId: params.childTenantId },
+    query: {
+      from: params.from || undefined,
+      to: params.to || undefined,
+      childTenantId: params.childTenantId,
+    },
     signal,
   });
 }

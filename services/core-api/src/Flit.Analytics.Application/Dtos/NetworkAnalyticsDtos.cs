@@ -23,10 +23,11 @@ public sealed record NetworkScopeDto(IReadOnlyList<Guid> TenantIds);
 /// <see cref="AnalyticsOverviewDto"/> (<c>tenantId</c> = cliente cabeza o hijo acotado, <c>from</c>,
 /// <c>to</c>, <c>categories</c>) más <see cref="Scope"/>.
 /// </summary>
+/// <remarks>BUG #12588 — <c>From</c>/<c>To</c> null cuando la consulta no acotó por fecha.</remarks>
 public sealed record NetworkAnalyticsOverviewDto(
     Guid TenantId,
-    DateOnly From,
-    DateOnly To,
+    DateOnly? From,
+    DateOnly? To,
     IReadOnlyList<CategoryMetricsDto> Categories,
     NetworkScopeDto Scope);
 
