@@ -203,10 +203,10 @@ public sealed class ImprontaManualStamperTests
         // 2026-09-14 20:00 UTC → 15:00 Colombia.
         var stampUtc = new DateTimeOffset(2026, 9, 14, 20, 0, 0, TimeSpan.Zero);
 
+        // Épica #12552: el sello y el pie compartían dato y no formato — EN-US legacy uno,
+        // dd-MM-yyyy el otro. Ahora los dos son el estándar DD/MM/YYYY HH:mm, sin segundos.
         ImprontaManualStamper.FormatSelloTiempoColombia(stampUtc)
-            .Should().Be("9/14/2026 3:00:00 PM");
-        ImprontaManualStamper.FormatFechaHoraOperacionColombia(stampUtc)
-            .Should().Be("14-09-2026 15:00:00");
+            .Should().Be("14/09/2026 15:00");
     }
 
     [Fact]
@@ -217,12 +217,9 @@ public sealed class ImprontaManualStamperTests
         var stampNow = new DateTimeOffset(2026, 9, 14, 17, 30, 45, TimeSpan.Zero);
 
         var sello = ImprontaManualStamper.FormatSelloTiempoColombia(stampNow);
-        var cargue = ImprontaManualStamper.FormatFechaHoraOperacionColombia(stampNow);
 
-        sello.Should().Be("9/14/2026 12:30:45 PM");
-        cargue.Should().Be("14-09-2026 12:30:45");
-        sello.Should().NotContain("9/1/2026");
-        cargue.Should().NotContain("01-09-2026");
+        sello.Should().Be("14/09/2026 12:30");
+        sello.Should().NotContain("01/09/2026");
         _ = oldUpload; // documenta el contraste con el bug (upload ≠ stamp)
     }
 
@@ -247,8 +244,8 @@ public sealed class ImprontaManualStamperTests
         result.SignedAt.Should().NotBeNull();
         result.SignedAt!.Value.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
         // El formateo Colombia del SignedAt no puede coincidir con el upload antiguo.
-        ImprontaManualStamper.FormatFechaHoraOperacionColombia(result.SignedAt.Value)
-            .Should().NotBe(ImprontaManualStamper.FormatFechaHoraOperacionColombia(oldUpload));
+        ImprontaManualStamper.FormatSelloTiempoColombia(result.SignedAt.Value)
+            .Should().NotBe(ImprontaManualStamper.FormatSelloTiempoColombia(oldUpload));
     }
 
     [Fact]

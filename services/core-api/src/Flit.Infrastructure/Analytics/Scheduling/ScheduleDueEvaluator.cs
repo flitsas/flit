@@ -1,4 +1,5 @@
 using System.Globalization;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Analytics.Scheduling;
 
@@ -76,16 +77,13 @@ public static class ScheduleDueEvaluator
     }
 
     /// <summary>
-    /// Etiqueta en español del periodo para el asunto del correo. Formato dd/MM/yyyy con
-    /// InvariantCulture: el repo compila con <c>InvariantGlobalization</c> (es-CO no existe).
+    /// Etiqueta del periodo para el asunto del correo. Son límites de CALENDARIO
+    /// (<see cref="DateOnly"/>), así que van sin hora y sin convertir de zona (RN-08).
     /// </summary>
-    public static string DescribePeriod(string frequency, DateOnly from, DateOnly to)
-    {
-        var inv = CultureInfo.InvariantCulture;
-        return frequency == Daily
-            ? from.ToString("dd/MM/yyyy", inv)
-            : $"{from.ToString("dd/MM/yyyy", inv)} al {to.ToString("dd/MM/yyyy", inv)}";
-    }
+    public static string DescribePeriod(string frequency, DateOnly from, DateOnly to) =>
+        frequency == Daily
+            ? FormatoFecha.Calendario(from)
+            : $"{FormatoFecha.Calendario(from)} al {FormatoFecha.Calendario(to)}";
 
     private static bool SameWindow(string frequency, DateTimeOffset lastLocal, DateTimeOffset nowLocal) =>
         frequency switch

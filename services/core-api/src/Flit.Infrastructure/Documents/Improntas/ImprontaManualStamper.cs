@@ -31,13 +31,17 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
     private const double BottomPad = 8;
     private const double GapAboveFooter = 4;
 
-    /// <summary>Sello vertical (EN-US legacy). Bug #12525: instante de firma en Colombia.</summary>
+    /// <summary>
+    /// Instante de firma en hora de Colombia, para el sello vertical y para el pie del PDF.
+    /// Bug #12525 fijó que es el instante de firma y no <c>FechaCargue</c> ni la zona del host.
+    ///
+    /// <para>Épica #12552: antes eran DOS formatos distintos para el mismo dato en el mismo
+    /// documento — el sello en EN-US legacy (<c>M/d/yyyy h:mm:ss tt</c>) y el pie en
+    /// <c>dd-MM-yyyy HH:mm:ss</c>. Ahora los dos usan el estándar, así que una sola
+    /// función basta.</para>
+    /// </summary>
     internal static string FormatSelloTiempoColombia(DateTimeOffset stampInstant) =>
-        stampInstant.ToOffset(ColombiaTime.Offset).ToString("M/d/yyyy h:mm:ss tt");
-
-    /// <summary>Metadato de pie. Bug #12525: mismo instante de firma en Colombia (no TZ del host).</summary>
-    internal static string FormatFechaHoraOperacionColombia(DateTimeOffset stampInstant) =>
-        stampInstant.ToOffset(ColombiaTime.Offset).ToString("dd-MM-yyyy HH:mm:ss");
+        FormatoFecha.Instante(stampInstant);
 
     public bool AlreadyStamped(byte[] pdf)
     {
@@ -316,7 +320,7 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
         XBrush greyBrush)
     {
         var cursor = y;
-        var fecha = FormatFechaHoraOperacionColombia(stampInstant);
+        var fecha = FormatSelloTiempoColombia(stampInstant);
         var hashWrap = Math.Max(48, (int)(width / 3.2));
         var metaWrap = Math.Max(28, (int)(width / 4.2));
         DrawWrappedLines(gfx, metaFont, greyBrush, x, ref cursor,
