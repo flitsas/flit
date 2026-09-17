@@ -44,7 +44,7 @@ import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
 import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
-import { esRangoVacio, isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
+import { isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
 import { ApiError } from "@/lib/api/types";
 import type {
   ActiveModulesResponse,
@@ -620,11 +620,6 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               disabled={status === "loading"}
               permiteSinRango
             />
-            {esRangoVacio(range) && (
-              <p className="text-[11px] opacity-60">
-                Mostrando todos los trámites. Usa las fechas para acotar a un periodo.
-              </p>
-            )}
             {isSuper && (
               <CompanySelector
                 companies={companies}

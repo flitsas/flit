@@ -488,12 +488,11 @@ describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
     expect(params.createdTo).toBeUndefined();
   });
 
-  it("los inputs de fecha arrancan vacíos y se avisa de que se ve todo", async () => {
+  it("los inputs de fecha arrancan vacíos", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
     expect(await screen.findByLabelText(/Desde/i)).toHaveValue("");
     expect(screen.getByLabelText(/Hasta/i)).toHaveValue("");
-    expect(screen.getByText(/Mostrando todos los trámites/i)).toBeInTheDocument();
   });
 
   it("al poner una fecha, sí se acota: el filtro sigue disponible", async () => {
