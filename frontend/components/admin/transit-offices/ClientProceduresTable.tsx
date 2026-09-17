@@ -29,7 +29,11 @@ import { OtTablePagination } from "./OtTablePagination";
 import { ActionsMenu, type ActionsMenuItem } from "@/components/atom/ActionsMenu";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusTone } from "./ot-utils";
-import { revocationRequestListColor, revocationRequestListLabel } from "@/lib/tramites/estados";
+import {
+  esRevocationRequestStatus,
+  revocationRequestListColor,
+  revocationRequestListLabel,
+} from "@/lib/tramites/estados";
 import {
   esperandoProcesoDelGestor,
   plateFlowChipStyle,
@@ -470,17 +474,21 @@ export function ClientProceduresTable({
       items.push({ key: "revocar-aprobacion", label: "Revocar", icon: Undo2, onSelect: () => onRevokeAprobacion(row) });
     }
 
-    // HU #12577 (Feature #12565) AC1 — decidir la solicitud de revocatoria del gestor. La bandeja
-    // OT (`OtClientProcedureResponse`) NO expone hoy si el trámite tiene una solicitud ACTIVA
-    // (solo lo hace `GetProcedureInstanceQuery`, del lado del gestor, HU #12575): por eso la
-    // opción se ofrece en todo trámite Aprobado y no solo en los que tienen una pendiente. Si no
-    // hay una activa, el backend responde 404 y el modal lo muestra tal cual — no se inventa un
-    // indicador que el backend no puede confirmar desde esta lista.
+    // HU #12577 (Feature #12565) AC1 — decidir la solicitud de revocatoria del gestor. Solo es
+    // accionable cuando el gestor radicó una y sigue ACTIVA: `revocationRequestStatus` de la fila
+    // vale `solicitada`/`en_revision` mientras lo esté, y null si nunca se solicitó o ya se decidió
+    // (mismo dato del que sale el contador de la cabecera y el indicativo de la celda de estado).
+    // Sin solicitud activa la opción NO se omite: se ofrece deshabilitada con el motivo, igual que
+    // "Actualizar placa" y "Ver consolidado" abajo — que el OT vea por qué no puede decidir es lo
+    // que le dice que la iniciativa es del gestor, no suya.
     if (row.status === "aprobado" && onDecideRevocation) {
+      const conSolicitudActiva = esRevocationRequestStatus(row.revocationRequestStatus);
       items.push({
         key: "decidir-revocatoria",
         label: "Decidir revocatoria",
         icon: Scale,
+        disabled: !conSolicitudActiva,
+        disabledReason: "El gestor no ha solicitado la revocatoria de este trámite.",
         onSelect: () => onDecideRevocation(row),
       });
     }
