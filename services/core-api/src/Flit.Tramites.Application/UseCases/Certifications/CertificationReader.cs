@@ -1,3 +1,4 @@
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Domain.Certifications.Normalization;
@@ -16,7 +17,6 @@ namespace Flit.Tramites.Application.UseCases.Certifications;
 /// </remarks>
 public sealed class CertificationReader(ICertificationRepository repository) : ICertificationReader
 {
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
 
     /// <summary>
     /// Procedencia que se declara cuando el dato viene del respaldo. No se disfraza de consulta: el
@@ -43,7 +43,7 @@ public sealed class CertificationReader(ICertificationRepository repository) : I
         CancellationToken cancellationToken)
     {
         var snapshot = await repository.LoadAsync(tenantId, instanceId, cancellationToken);
-        var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaOffset).DateTime);
+        var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaTime.Offset).DateTime);
 
         var (soat, soatFrom) = ResolveSoat(snapshot, fieldValues, today);
         var (rtm, rtmFrom) = ResolveRtm(snapshot, fieldValues, today);
@@ -235,7 +235,7 @@ public sealed class CertificationReader(ICertificationRepository repository) : I
         var fecha = ColombianCertificateDate.Parse(raw).Value;
 
         var observedAt = fecha is { } day
-            ? new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), ColombiaOffset)
+            ? new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), ColombiaTime.Offset)
             : DateTimeOffset.MinValue;
 
         return new CertificationProvenance(

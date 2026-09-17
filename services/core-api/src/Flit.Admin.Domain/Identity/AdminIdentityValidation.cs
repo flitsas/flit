@@ -1,3 +1,5 @@
+using Flit.Queries.Domain.Time;
+
 namespace Flit.Admin.Domain.Identity;
 
 /// <summary>
@@ -434,9 +436,6 @@ public static class AdminIdentityRules
     /// </summary>
     public const int KyverumMaxIntentos = 3;
 
-    /// <summary>Huso horario de Colombia (UTC-5, sin horario de verano).</summary>
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
-
     /// <summary>
     /// Fecha de fin de vigencia para una aprobación en <paramref name="validatedAt"/>: medianoche (hora
     /// Colombia) del día <c>validatedAt + VigenciaDias</c>, DEVUELTA en UTC (offset 0, requisito de Npgsql
@@ -444,8 +443,8 @@ public static class AdminIdentityRules
     /// </summary>
     public static DateTimeOffset FechaFinVigencia(DateTimeOffset validatedAt)
     {
-        var diaExpiracion = validatedAt.ToOffset(ColombiaUtcOffset).Date.AddDays(VigenciaDias);
-        return new DateTimeOffset(diaExpiracion, ColombiaUtcOffset).ToUniversalTime();
+        var diaExpiracion = validatedAt.ToOffset(ColombiaTime.Offset).Date.AddDays(VigenciaDias);
+        return new DateTimeOffset(diaExpiracion, ColombiaTime.Offset).ToUniversalTime();
     }
 
     /// <summary>
@@ -465,8 +464,8 @@ public static class AdminIdentityRules
             return true;
         }
 
-        var hoy = now.ToOffset(ColombiaUtcOffset).Date;
-        var diaAprobacion = validado.ToOffset(ColombiaUtcOffset).Date;
+        var hoy = now.ToOffset(ColombiaTime.Offset).Date;
+        var diaAprobacion = validado.ToOffset(ColombiaTime.Offset).Date;
         return hoy < diaAprobacion.AddDays(VigenciaDias);
     }
 }

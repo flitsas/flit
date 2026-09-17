@@ -1,3 +1,5 @@
+
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 /**
  * Navegación del módulo "Generación de improntas" (HU #10470, Feature #10462).
  * Solo dos vistas planas (Formulario / Historial) — no se usa un hub layout tipo
@@ -38,7 +40,7 @@ export function formatImprontaHistorialDate(iso: string): string {
   if (Number.isNaN(parsed.getTime())) {
     return iso;
   }
-  return parsed.toLocaleString("es-CO", {
+  return parsed.toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

@@ -14,7 +14,9 @@ import type {
   StatusHistoryItem,
 } from '@/lib/api/types/procedure-runtime';
 
+import { ZONA_COLOMBIA } from '@/lib/format/date';
 /**
+
  * Panel del trámite: se abre desde el indicador de estado del listado (HU #12185).
  *
  * <p><b>Por qué empieza por una ficha y no por el historial.</b> Un historial suelto obliga a
@@ -259,7 +261,7 @@ function juntar(nombre?: string | null, documento?: string | null): string | nul
 
 function fecha(iso: string): string {
   try {
-    return new Date(iso).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
+    return new Date(iso).toLocaleString('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' });
   } catch {
     return iso;
   }

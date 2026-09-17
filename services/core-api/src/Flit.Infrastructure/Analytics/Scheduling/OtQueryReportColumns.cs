@@ -1,5 +1,6 @@
 using Flit.Admin.Domain.OtQueries;
 using Flit.Infrastructure.Documents.Reports;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Analytics.Scheduling;
 
@@ -109,7 +110,7 @@ internal static class OtQueryReportColumns
         if (value is null)
             return TabularWorkbookWriter.Cell.Empty;
 
-        var local = TimeZoneInfo.ConvertTime(value.Value, ScheduleDueEvaluator.BogotaTimeZone);
+        var local = TimeZoneInfo.ConvertTime(value.Value, ColombiaTime.Zone);
         return TabularWorkbookWriter.Cell.Of(DateOnly.FromDateTime(local.Date));
     }
 
@@ -118,7 +119,7 @@ internal static class OtQueryReportColumns
         if (value is null)
             return TabularWorkbookWriter.Cell.Empty;
 
-        var local = TimeZoneInfo.ConvertTime(value.Value, ScheduleDueEvaluator.BogotaTimeZone);
+        var local = TimeZoneInfo.ConvertTime(value.Value, ColombiaTime.Zone);
         return TabularWorkbookWriter.Cell.OfDateTime(DateOnly.FromDateTime(local.Date), local.Hour, local.Minute);
     }
 }

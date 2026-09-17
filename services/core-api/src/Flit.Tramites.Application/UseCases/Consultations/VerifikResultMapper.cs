@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.UseCases.Certifications;
 using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -28,10 +29,8 @@ public static class VerifikResultMapper
     /// <summary>Versión del mapeo; se persiste con cada fila certificada (HU #11303, ADR-0041).</summary>
     public const string MapperVersion = "verifik-v4";
 
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
-
     public static ConsultationResult MapVehicle(VerifikVehicleResponse response) =>
-        MapVehicle(response, DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaOffset).Date));
+        MapVehicle(response, DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaTime.Offset).Date));
 
     /// <summary>Sobrecarga con la fecha inyectada, para que las pruebas no dependan del reloj.</summary>
     public static ConsultationResult MapVehicle(VerifikVehicleResponse response, DateOnly today)

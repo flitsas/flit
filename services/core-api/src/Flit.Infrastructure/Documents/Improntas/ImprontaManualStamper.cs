@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Flit.Infrastructure.Documents.Fur;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.Documents;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
@@ -21,7 +22,6 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
     private static readonly XColor LightGrey = XColor.FromArgb(0xB0, 0xB0, 0xB0);
     private static readonly Encoding Latin1 = Encoding.GetEncoding("ISO-8859-1");
     // Colombia sin DST: UTC-5 fijo (paridad SignatureVaultPolicy / IdentidadSelloText).
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
     // 50% del tamaño FUR previo (field 48→24, ancho máx. 145→72.5).
     private const double SignatureFieldH = 24;
     private const double SignatureImageMaxWidth = 72.5;
@@ -33,11 +33,11 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
 
     /// <summary>Sello vertical (EN-US legacy). Bug #12525: instante de firma en Colombia.</summary>
     internal static string FormatSelloTiempoColombia(DateTimeOffset stampInstant) =>
-        stampInstant.ToOffset(ColombiaOffset).ToString("M/d/yyyy h:mm:ss tt");
+        stampInstant.ToOffset(ColombiaTime.Offset).ToString("M/d/yyyy h:mm:ss tt");
 
     /// <summary>Metadato de pie. Bug #12525: mismo instante de firma en Colombia (no TZ del host).</summary>
     internal static string FormatFechaHoraOperacionColombia(DateTimeOffset stampInstant) =>
-        stampInstant.ToOffset(ColombiaOffset).ToString("dd-MM-yyyy HH:mm:ss");
+        stampInstant.ToOffset(ColombiaTime.Offset).ToString("dd-MM-yyyy HH:mm:ss");
 
     public bool AlreadyStamped(byte[] pdf)
     {

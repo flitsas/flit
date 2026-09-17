@@ -9,7 +9,9 @@ import {
   type MigracionRespuesta,
 } from "@/lib/migracion/types";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 /**
+
  * El reporte de una migración, en el mismo orden en que lo imprime la consola por SSH: de dónde
  * salió, si ya estaba, qué hizo cada instancia y a dónde fue a parar.
  *
@@ -42,7 +44,7 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
             <Dato etiqueta="Estado" valor={yaMigrado.estadoFinal} />
             <Dato
               etiqueta="Fecha"
-              valor={new Date(yaMigrado.migradoEl).toLocaleString("es-CO")}
+              valor={new Date(yaMigrado.migradoEl).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA })}
             />
           </dl>
           <p className="mt-2 opacity-80">

@@ -26,7 +26,9 @@ import type {
   PersonBiometricValidationsResponse,
 } from '@/lib/api/types/procedure-runtime';
 
+import { ZONA_COLOMBIA } from '@/lib/format/date';
 /**
+
  * Detalle multi-validación por persona (HU #11273 / CF-06 / ADR-0040).
  * Cabecera personal = mismo diseño que PrevalidacionDetailDrawer (develop).
  * Debajo: acordeón con un ítem por validación (Intentos, Enlace, Score, Trámites, Tracking).
@@ -52,7 +54,7 @@ function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }
 
 export interface PersonIdentityDetailDrawerProps {

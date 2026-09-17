@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Analytics.Scheduling;
+using Flit.Queries.Domain.Time;
 using FluentAssertions;
 using Xunit;
 
@@ -11,7 +12,7 @@ namespace Flit.Infrastructure.Tests.Scheduling;
 /// </summary>
 public sealed class ScheduleDueEvaluatorTests
 {
-    private static readonly TimeZoneInfo Bogota = ScheduleDueEvaluator.BogotaTimeZone;
+    private static readonly TimeZoneInfo Bogota = ColombiaTime.Zone;
 
     // Martes 2026-07-07 12:30 UTC = 07:30 en Bogotá (UTC-5).
     private static readonly DateTimeOffset TuesdayNoonUtc = new(2026, 7, 7, 12, 30, 0, TimeSpan.Zero);
