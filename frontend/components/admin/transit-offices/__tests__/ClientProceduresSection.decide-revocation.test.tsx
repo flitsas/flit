@@ -70,6 +70,9 @@ const procedureAprobado: OtClientProcedure = {
   referenceNumber: "RAD-2026-777",
   status: "aprobado",
   createdAt: "2026-06-23T09:00:00Z",
+  // Precondición de todo este archivo: el gestor YA radicó la solicitud y sigue activa. Sin
+  // esto la acción se ofrece deshabilitada y no hay nada que decidir (ver el describe de abajo).
+  revocationRequestStatus: "solicitada",
 };
 
 function renderSection() {
@@ -253,7 +256,10 @@ describe("ClientProceduresSection — HU #12577 decidir revocatoria", () => {
     expect(await screen.findByRole("status", { name: "Estado: Revocado OT" })).toBeInTheDocument();
   });
 
-  it("si no hay solicitud activa, el backend responde 404 y el error se muestra al OT", async () => {
+  // Con la acción ya gateada por `revocationRequestStatus`, un 404 aquí solo puede venir de una
+  // CARRERA: la fila se cargó con la solicitud activa y otro usuario del OT la decidió antes de
+  // este clic. El guard de UI no sustituye al del backend.
+  it("si la solicitud se decidió entre la carga y el clic, el 404 del backend se muestra al OT", async () => {
     vi.mocked(approveOtRevocationRequest).mockRejectedValue(
       new ApiError(404, "No hay una solicitud de revocatoria activa para este trámite", {
         error: "No hay una solicitud de revocatoria activa para este trámite",
@@ -268,5 +274,88 @@ describe("ClientProceduresSection — HU #12577 decidir revocatoria", () => {
     expect(
       await screen.findByText(/No hay una solicitud de revocatoria activa para este trámite/i),
     ).toBeInTheDocument();
+  });
+});
+
+// La acción solo es accionable cuando el gestor radicó la revocatoria y sigue activa. Antes se
+// ofrecía habilitada en TODO trámite Aprobado, delegando en el 404 del backend: la bandeja OT sí
+// expone `revocationRequestStatus` (es de donde salen el contador de la cabecera y el indicativo de
+// la celda de estado), así que la compuerta se resuelve en la lista sin inventar ningún dato.
+describe("ClientProceduresSection — «Decidir revocatoria» exige solicitud del gestor", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchOtProfile).mockResolvedValue({
+      operationMode: "dashboard",
+      quipuxReadOnly: false,
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      featureFlags: [],
+      revocationWindowBusinessDays: null,
+    });
+    vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
+    vi.mocked(fetchOtBandejaHealth).mockResolvedValue({
+      transitOfficeResolved: true,
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      deliveredTotal: 1,
+      deliveredWithGrant: 1,
+      deliveredWithoutGrant: 0,
+      hasDeliveredWithoutGrant: false,
+    });
+  });
+
+  function conEstadoDeRevocatoria(revocationRequestStatus: string | null) {
+    vi.mocked(searchOtClientProcedures).mockResolvedValue({
+      data: [{ ...procedureAprobado, revocationRequestStatus }],
+      totalCount: 1,
+      page: 1,
+      pageSize: 20,
+    });
+  }
+
+  async function itemDecidir(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    return screen.findByRole("menuitem", { name: /Decidir revocatoria/i });
+  }
+
+  it("sin solicitud del gestor la ofrece deshabilitada y con el motivo, no la oculta", async () => {
+    conEstadoDeRevocatoria(null);
+    const user = userEvent.setup();
+    renderSection();
+
+    const item = await itemDecidir(user);
+    expect(item).toBeDisabled();
+    expect(item).toHaveAttribute(
+      "title",
+      "El gestor no ha solicitado la revocatoria de este trámite.",
+    );
+  });
+
+  it("no la habilita para un intento YA decidido (rechazada): ese no es un sub-estado activo", async () => {
+    conEstadoDeRevocatoria("rechazada");
+    const user = userEvent.setup();
+    renderSection();
+
+    expect(await itemDecidir(user)).toBeDisabled();
+  });
+
+  it.each(["solicitada", "en_revision"])(
+    "la habilita cuando la solicitud está activa (%s)",
+    async (estado) => {
+      conEstadoDeRevocatoria(estado);
+      const user = userEvent.setup();
+      renderSection();
+
+      expect(await itemDecidir(user)).not.toBeDisabled();
+    },
+  );
+
+  it("deshabilitada, el clic no abre el modal ni llama al backend", async () => {
+    conEstadoDeRevocatoria(null);
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await itemDecidir(user));
+
+    expect(screen.queryByRole("button", { name: /Aprobar revocatoria/i })).not.toBeInTheDocument();
+    expect(fetchActiveOtRevocationRequestDetail).not.toHaveBeenCalled();
   });
 });
