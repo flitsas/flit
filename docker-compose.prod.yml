@@ -28,6 +28,8 @@
 # Variables requeridas en .env (junto al compose):
 #   CONNECTION_STRING_CORE  cadena Npgsql .NET (Host=...;Port=5432;Database=...;Username=...;Password=...)
 #   CORS_ORIGIN             origen permitido del frontend (https://<env>.flitsas.online)
+#   CORS_ORIGIN_MARCA_BLANCA  segundo origen del gateway: dominio de marca blanca
+#                             (https://marcablanca<env>.flitsas.online, mismo front)
 #   VERIFIK_API_TOKEN       token Verifik (RUNT)
 #   ICT_SERVICE_TOKEN_SECRET  secreto HMAC del canal gRPC este-oeste ICT (core-api <-> core-ict).
 #                             Sin el, la orquestacion y el callback quedan fail-closed.
@@ -450,6 +452,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:${GATEWAY_PORT:-5002}
       Cors__AllowedOrigins__0: ${CORS_ORIGIN:-https://qa.flitsas.online}
+      # Segundo origen: el dominio de marca blanca sirve el MISMO front (mismo
+      # contenedor, otro vhost de nginx) y por tanto llama al mismo gateway.
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_MARCA_BLANCA:-https://marcablancaqa.flitsas.online}
       # Destinos internos del YARP: apuntan al puerto interno de cada servicio.
       # (sobrescriben appsettings.json, que trae los puertos por defecto)
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-5003}/
