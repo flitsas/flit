@@ -38,6 +38,13 @@ public static class FormatoFecha
     /// <summary>Patrón de una fecha de calendario: <c>17/09/2026</c>.</summary>
     public const string PatronCalendario = "dd/MM/yyyy";
 
+    /// <summary>
+    /// Patrón del sello de tiempo de una impronta: <c>17/09/2026 14:05:42</c>.
+    /// <b>Única excepción autorizada a la ausencia de segundos</b> (RN-11) — ver
+    /// <see cref="SelloDeTiempo"/>.
+    /// </summary>
+    public const string PatronSelloDeTiempo = "dd/MM/yyyy HH:mm:ss";
+
     /// <summary>Instante en hora de Colombia, <c>DD/MM/YYYY HH:mm</c>.</summary>
     public static string Instante(DateTimeOffset value) =>
         ColombiaTime.From(value).ToString(PatronInstante, CultureInfo.InvariantCulture);
@@ -60,4 +67,20 @@ public static class FormatoFecha
     /// <inheritdoc cref="Calendario(DateOnly)"/>
     public static string Calendario(DateOnly? value, string vacio = "") =>
         value.HasValue ? Calendario(value.Value) : vacio;
+
+    /// <summary>
+    /// Sello de tiempo de una impronta: <c>DD/MM/YYYY HH:mm:ss</c> en hora de Colombia.
+    /// <b>Única excepción a la regla de no mostrar segundos</b> (RN-11 de la Épica #12552),
+    /// autorizada por el PO.
+    ///
+    /// <para>Motivo: la estampa va sobre un documento firmado y el segundo es información
+    /// forense — acredita el instante de la firma, no informa de una operación. Es el único
+    /// sitio donde la precisión al segundo tiene una razón que no es la costumbre.</para>
+    ///
+    /// <para>Vive aquí, y no como un formato propio del estampador, para que TODOS los formatos
+    /// autorizados estén en una sola clase y se pueda comprobar que no hay más. No debe usarse
+    /// en ningún otro sitio: el resto de la plataforma va sin segundos.</para>
+    /// </summary>
+    public static string SelloDeTiempo(DateTimeOffset value) =>
+        ColombiaTime.From(value).ToString(PatronSelloDeTiempo, CultureInfo.InvariantCulture);
 }

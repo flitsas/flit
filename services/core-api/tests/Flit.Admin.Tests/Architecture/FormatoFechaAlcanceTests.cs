@@ -76,6 +76,26 @@ public class FormatoFechaAlcanceTests
             "es la clave por la que agrupan las gráficas, no una fecha que alguien lea");
     }
 
+    [Fact]
+    public void LaExcepcionDeSegundosSoloLaUsaElSelloDeLaImpronta()
+    {
+        // RN-11: FormatoFecha.SelloDeTiempo es el único formato con segundos que queda en la
+        // plataforma. Vive en la clase canónica para poder comprobar justo esto: que nadie más
+        // la llame. Sin el test, la excepción se convierte en una puerta abierta.
+        var src = Path.Combine(RaizDeServicios(), "core-api", "src");
+        var sep = Path.DirectorySeparatorChar;
+
+        var llamantes = Directory
+            .EnumerateFiles(src, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{sep}obj{sep}", StringComparison.Ordinal)
+                && !f.Contains($"{sep}bin{sep}", StringComparison.Ordinal))
+            .Where(f => Regex.IsMatch(File.ReadAllText(f), @"FormatoFecha\.SelloDeTiempo\s*\("))
+            .Select(f => Path.GetFileName(f))
+            .ToArray();
+
+        llamantes.Should().BeEquivalentTo(["ImprontaManualStamper.cs"]);
+    }
+
     /// <summary>
     /// Se ancla en la ruta de ESTE archivo en tiempo de compilación y no en
     /// <c>AppContext.BaseDirectory</c>, para seguir encontrando el fuente aunque la compilación

@@ -204,9 +204,11 @@ public sealed class ImprontaManualStamperTests
         var stampUtc = new DateTimeOffset(2026, 9, 14, 20, 0, 0, TimeSpan.Zero);
 
         // Épica #12552: el sello y el pie compartían dato y no formato — EN-US legacy uno,
-        // dd-MM-yyyy el otro. Ahora los dos son el estándar DD/MM/YYYY HH:mm, sin segundos.
+        // dd-MM-yyyy el otro. Ahora los dos usan el mismo, con el orden estándar.
+        // Los SEGUNDOS se conservan: excepción RN-11, autorizada por el PO, porque la estampa va
+        // sobre un documento firmado y el segundo acredita el instante de la firma.
         ImprontaManualStamper.FormatSelloTiempoColombia(stampUtc)
-            .Should().Be("14/09/2026 15:00");
+            .Should().Be("14/09/2026 15:00:00");
     }
 
     [Fact]
@@ -218,7 +220,7 @@ public sealed class ImprontaManualStamperTests
 
         var sello = ImprontaManualStamper.FormatSelloTiempoColombia(stampNow);
 
-        sello.Should().Be("14/09/2026 12:30");
+        sello.Should().Be("14/09/2026 12:30:45");
         sello.Should().NotContain("01/09/2026");
         _ = oldUpload; // documenta el contraste con el bug (upload ≠ stamp)
     }

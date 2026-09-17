@@ -37,11 +37,15 @@ public sealed class ImprontaManualStamper : IImprontaManualStamper
     ///
     /// <para>Épica #12552: antes eran DOS formatos distintos para el mismo dato en el mismo
     /// documento — el sello en EN-US legacy (<c>M/d/yyyy h:mm:ss tt</c>) y el pie en
-    /// <c>dd-MM-yyyy HH:mm:ss</c>. Ahora los dos usan el estándar, así que una sola
+    /// <c>dd-MM-yyyy HH:mm:ss</c>. Ahora los dos usan el mismo, así que una sola
     /// función basta.</para>
+    ///
+    /// <para>Conserva los SEGUNDOS: es la excepción RN-11, autorizada por el PO. La estampa va
+    /// sobre un documento firmado y el segundo acredita el instante de la firma. El resto de la
+    /// plataforma va sin segundos.</para>
     /// </summary>
     internal static string FormatSelloTiempoColombia(DateTimeOffset stampInstant) =>
-        FormatoFecha.Instante(stampInstant);
+        FormatoFecha.SelloDeTiempo(stampInstant);
 
     public bool AlreadyStamped(byte[] pdf)
     {
