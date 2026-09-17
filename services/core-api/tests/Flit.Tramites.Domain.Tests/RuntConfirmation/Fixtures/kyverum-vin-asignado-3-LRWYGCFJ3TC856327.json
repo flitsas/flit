@@ -1,0 +1,173 @@
+{
+ "ok": true,
+ "data": {
+  "vehiculo": {
+   "placa": "QOV774",
+   "nombrePais": null,
+   "numLicencia": null,
+   "estadoAutomotor": "REGISTRADO",
+   "tipoServicio": "Particular",
+   "clase": "CAMIONETA",
+   "marca": "TESLA",
+   "linea": "MODEL Y",
+   "modelo": "2026",
+   "color": "GRIS GRAFITO",
+   "numSerie": null,
+   "numMotor": null,
+   "numChasis": "LRWYGCFJ3TC856327",
+   "vin": "LRWYGCFJ3TC856327",
+   "cilindraje": "0",
+   "tipoCarroceria": "SUV",
+   "fechaRegistro": null,
+   "gravamenes": "NO",
+   "organismoTransito": null,
+   "capacidadCarga": null,
+   "codigoMedidaCarga": null,
+   "pesoBruto": "1779",
+   "numeroEjes": "2",
+   "idAutomotor": 614288621,
+   "repotenciado": "NO",
+   "idTipoServicio": 1,
+   "idClaseVehiculo": 5,
+   "diasMatriculado": null,
+   "prendas": "NO",
+   "clasificacion": "AUTOMOVIL",
+   "esRegrabadoMotor": "NO",
+   "esRegrabadoChasis": "NO",
+   "esRegrabadoSerie": "NO",
+   "esRegrabadoVin": "NO",
+   "numRegraChasis": null,
+   "numRegraMotor": null,
+   "numRegraSerie": null,
+   "numRegraVin": null,
+   "antiguoClasico": "NO",
+   "tipoCombustible": "ELECTRICO",
+   "pasajerosTotal": null,
+   "pasajerosSentados": "5",
+   "vehiculoEnsenanza": "NO",
+   "puertas": "4",
+   "importacion": 0,
+   "fechaExpedLTImportacion": null,
+   "fechaVenciLTImportacion": null,
+   "seguridadEstado": "NO",
+   "verValidaDIAN": false,
+   "validacionDIAN": null,
+   "mostrarSolicitudes": "SI",
+   "tipoMaquinaria": null,
+   "subpartida": null,
+   "fechaMatricula": null,
+   "tarjetaRegistro": null,
+   "noIdentificacion": null
+  },
+  "tipoDocPropietario": "C",
+  "datosTecnicos": {
+   "capacidadCarga": null,
+   "pesoBrutoVehicular": "1779 Kgs",
+   "noEjes": "2",
+   "noLlantas": null,
+   "alto": null,
+   "ancho": null,
+   "largo": null,
+   "pasajerosTotal": null,
+   "pasajerosSentados": "5",
+   "rodaje": null,
+   "peso": null
+  },
+  "soat": [],
+  "solicitudes": [
+   {
+    "noSolicitud": "302979689",
+    "fechaSolicitud": "2026-09-16T14:09:48.000-05:00",
+    "estado": "APROBADA",
+    "tramitesRealizados": "TRÁMITE PREASIGNACIÓN PLACA CONTINGENCIA, ",
+    "entidad": "STRIA TTOyTTE PALMIRA"
+   }
+  ],
+  "garantias": [],
+  "garantiasPrendas": [],
+  "limitacionesPropiedad": [],
+  "polizaCaucion": {
+   "noPoliza": null,
+   "estadoPoliza": null,
+   "fechaExpedicion": null,
+   "fechaVigenciaPoliza": null,
+   "noCertificacion": null,
+   "estadoCertificado": null
+  },
+  "responsabilidadCivil": [],
+  "responsabilidadCivilHabilitar": true,
+  "tarjetaOperacion": {
+   "empresaAfiliadora": null,
+   "modalidadTransporte": null,
+   "modalidadServicio": null,
+   "radioAccion": null,
+   "fechaExpedicion": null,
+   "fechaInicio": null,
+   "fechaFin": null,
+   "estado": null,
+   "nroTarjetaOperacion": null
+  },
+  "permisosPcr": [],
+  "datosBlindaje": {
+   "blindado": null,
+   "nivelBlindaje": null,
+   "nivelBlindajeNumero": null,
+   "fechaBlindaje": null,
+   "fechaDesblindaje": null,
+   "numeroResolucion": null,
+   "tipoBlindajeNombre": null,
+   "fechaExpedicionCertificado": null,
+   "fechaExpedicionCertificadoFormatoWS": null,
+   "idDocumentoCertificadoBlindaje": null,
+   "autorizacion": null
+  },
+  "informacionGps": {
+   "noIdentificacionSerie": null,
+   "empresaHabilitacion": null
+  },
+  "informacionRepotenciado": {
+   "repotenciado": null,
+   "fechaRepotenciacion": null,
+   "modeloRepotenciado": null
+  },
+  "desintegracion": {
+   "placa": null,
+   "desintegrar": null
+  },
+  "certificadoDesintegracion": {
+   "noCertificado": null,
+   "estadoCertificado": null,
+   "fechaExpedicion": null,
+   "entidadDesintegradora": null
+  },
+  "normalizacion": [
+   {
+    "deficienciaMatriculaInicial": "NO",
+    "vehiculoNormalizado": "NO DISPONIBLE",
+    "fecha": null,
+    "numeroActoAdministrativo": null,
+    "descargaCertificado": null,
+    "solicitudNormalizacion": null
+   }
+  ],
+  "certificadoDijin": {
+   "noCertificado": null,
+   "fechaExpedicion": null,
+   "entidadCertificado": null,
+   "estadoCertificado": null
+  },
+  "registroInicial": {
+   "noCertificado": null,
+   "fechaExpedicion": null,
+   "estadoCertificado": null,
+   "placaReposicion": null
+  },
+  "registroInicialInvc": {
+   "noCertificado": null,
+   "fechaExpedicion": null,
+   "estadoCertificado": null,
+   "placaReposicion": null
+  }
+ },
+ "fromCache": false
+}

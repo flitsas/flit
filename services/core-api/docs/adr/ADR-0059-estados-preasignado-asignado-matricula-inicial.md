@@ -153,6 +153,49 @@ tipos MATRICULAS sin placa.
 Las aristas previas a este ADR (aprobar, rechazar-decisión, revocar, preparar) **no** miran el actor: sus
 autorizaciones viven en los endpoints y no se duplican en la política.
 
+## Ruta Corta y regla de matrícula previa (Epic #12550, Feature #12647)
+
+**Enmienda 2026-09-17.** La Epic #12550 pedía el selector de FLIT 1 («Ingresar preferencia» /
+«Ingresar placa», con placa digitada validada en RUNT). Se decidió con el PO y el supervisor que **la
+ruta la decide el RUNT, no el gestor**, y que nadie digita una placa: cumple la intención de RN-01..RN-08
+(mismo resultado que FLIT 1) sin un campo que se prestaba a errores. Comentario 29465238 en #12550.
+
+### Qué devuelve el RUNT por VIN (verificado con 7 vehículos reales de FLIT 1, capturas en tests)
+
+| Situación | `estadoAutomotor` | `placa` | `vehiculo.organismoTransito` | `solicitudes[]` |
+|---|---|---|---|---|
+| Placa preasignada (5/5) | `REGISTRADO` | sí | **nulo** | «PREASIGNACIÓN PLACA CONTINGENCIA» APROBADA, `entidad` = organismo |
+| Ya matriculado (2/2) | `ACTIVO` | sí | sí | ídem + «MATRÍCULA INICIAL» AUTORIZADA |
+| Sin placa | — | no | nulo | vacío |
+
+### Decisión
+
+1. **Ruta.** Con placa en la respuesta → **Ruta Corta**: el trámite se crea con el organismo del RUNT y
+   `DestinoDeRadicacion` lo lleva a `entregado`. Sin placa → **Ruta Larga** (`preasignacion`). La ruta
+   no se persiste: se deriva de `plate` con `source = consultation`. Se expone en el paso 1 como
+   `PreflightPreviewDto.Route` (`corta` | `larga`) con el organismo resuelto.
+2. **Organismo de la Ruta Corta.** `vehiculo.organismoTransito` o, si viene nulo, la `entidad` de la
+   solicitud de preasignación (`RuntMatriculaPolicy.OrganismoDelVehiculo`), resuelto **por nombre** contra
+   los OT habilitados de la compañía (mismo resolver que el traspaso, HU #10659). No habilitado u
+   operable → **422 `organismo_runt_no_habilitado`** con `transitOfficeName`; el trámite no se crea. En
+   la creación (`POST /instances`) se ignora el `transitOfficeId` del cliente y se fija el del RUNT.
+3. **«Ya matriculado» ⇒ traspaso.** Se lee del historial: bloquea cuando existe «MATRÍCULA INICIAL»
+   AUTORIZADA o APROBADA (`RuntMatriculaPolicy.EvaluarMatriculaPrevia`, sobre el mismo parser y rótulos
+   de la Confirmación RUNT #12276). El estado `ACTIVO` deja de significar «matriculado» cuando hay
+   historial legible (un preasignado por convenio concesionario–OT puede llegar ACTIVO); sin historial
+   —o con solicitudes sin `tramitesRealizados`— se conserva la regla CF-03 por estado. El bloqueo usa el
+   mismo código `VEHICLE_STATE_INVALID_FOR_TYPE` / `ACTIVO` para que el frontend siga ofreciendo el
+   traspaso. El bloqueo FLIT por matrícula aprobada en FLIT no cambia.
+4. **Mapper.** El check `matricula_previa_runt` viaja siempre en `ok` con el veredicto en `Datos`:
+   convertirlo en bloqueo es responsabilidad del preflight de **matrícula inicial**; un `fail` genérico
+   pondría en rojo la consulta de un traspaso, cuyo vehículo está matriculado por definición.
+5. **Lo que se retira (HU #10806).** El dígito de preferencia deja de depender del inventario de
+   rangos del OT (decisión B); `plate_route_active` deja de escribirse (valores históricos inertes, sin
+   migración); y el selector de placas del inventario en el paso FUR desaparece: elegir placa ahí
+   dejaba el trámite con placa antes de radicar y saltaba la asignación del organismo (decisión K).
+6. **Fuera de alcance (anotado).** Carga masiva (Epic #12233) sigue aceptando `placa` y
+   `organismo_transito` en la plantilla de matrícula; se alineará en una HU posterior (decisión M).
+
 ## ADRs relacionados
 
 - [ADR-0022] — vocabulario de estados: **enmendado** por este ADR (+2 estados).
