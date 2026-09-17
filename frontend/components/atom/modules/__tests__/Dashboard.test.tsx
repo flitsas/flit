@@ -450,3 +450,83 @@ describe("Dashboard — cuerpo dinámico del slide de bienvenida (Opción A)", (
     expect(await screen.findByText(GENERIC_BODY)).toBeInTheDocument();
   });
 });
+
+// ── BUG #12588 (defecto 4) — el dashboard arranca SIN rango de fechas ────────
+//
+// Antes partía del mes en curso (`defaultRange`, AC2 de la HU #10247). Como el backend acota por
+// fecha de CREACIÓN, todo lo radicado antes quedaba fuera de las tarjetas aunque siguiera en curso,
+// y QA lo reportó como un total mal calculado. No era un error de conteo: era otro universo.
+describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getToken.mockReturnValue("token");
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
+    mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
+    mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
+    mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
+    mocks.getActiveBanners.mockResolvedValue([]);
+  });
+
+  it("al abrir, pide el overview sin from ni to (universo completo)", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+    const [params] = mocks.fetchAnalyticsOverview.mock.calls[0];
+    expect(params.from).toBeFalsy();
+    expect(params.to).toBeFalsy();
+  });
+
+  it("al abrir, las estadísticas biométricas tampoco se acotan por fecha", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    await waitFor(() => expect(mocks.listTenantBiometricValidations).toHaveBeenCalled());
+    const [params] = mocks.listTenantBiometricValidations.mock.calls[0];
+    expect(params.createdFrom).toBeUndefined();
+    expect(params.createdTo).toBeUndefined();
+  });
+
+  it("los inputs de fecha arrancan vacíos y se avisa de que se ve todo", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    expect(await screen.findByLabelText(/Desde/i)).toHaveValue("");
+    expect(screen.getByLabelText(/Hasta/i)).toHaveValue("");
+    expect(screen.getByText(/Mostrando todos los trámites/i)).toBeInTheDocument();
+  });
+
+  it("al poner una fecha, sí se acota: el filtro sigue disponible", async () => {
+    const user = userEvent.setup();
+    render(<Dashboard onNewTramite={noop} />);
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+
+    await user.type(await screen.findByLabelText(/Desde/i), "2026-09-01");
+
+    await waitFor(() => {
+      const ultima = mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0];
+      expect(ultima.from).toBe("2026-09-01");
+    });
+    // Un solo extremo NO es un rango a medio llenar: acota por ese lado y el otro queda abierto.
+    expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].to).toBeFalsy();
+  });
+
+  it("«Todo el periodo» devuelve a la vista sin acotar y queda deshabilitado ahí", async () => {
+    const user = userEvent.setup();
+    render(<Dashboard onNewTramite={noop} />);
+
+    const limpiar = await screen.findByRole("button", { name: /Todo el periodo/i });
+    // Ya se está mostrando todo al abrir: no hay nada que limpiar.
+    expect(limpiar).toBeDisabled();
+
+    await user.type(await screen.findByLabelText(/Desde/i), "2026-09-01");
+    await waitFor(() => expect(limpiar).not.toBeDisabled());
+
+    await user.click(limpiar);
+
+    expect(await screen.findByLabelText(/Desde/i)).toHaveValue("");
+    await waitFor(() => {
+      expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].from).toBeFalsy();
+    });
+  });
+});

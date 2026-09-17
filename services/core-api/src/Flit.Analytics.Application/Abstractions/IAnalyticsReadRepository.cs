@@ -13,8 +13,14 @@ public interface IAnalyticsReadRepository
     /// Conteos por categoría (matriculas/traspasos/otros) y estado para el tenant y rango dados.
     /// <paramref name="tenantId"/> null → vista global de todas las compañías (solo SuperAdmin).
     /// </summary>
+    /// <para>
+    /// BUG #12588 — <paramref name="fromDate"/>/<paramref name="toDate"/> null = SIN acotar por fecha:
+    /// el dashboard arranca sin rango para que el total sea el universo real del tenant y no el de un
+    /// periodo. El filtro es por <c>created_at</c>, así que un rango deja fuera todo lo radicado antes
+    /// aunque siga en curso. Cada extremo es independiente: se puede acotar solo por uno.
+    /// </para>
     Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(
-        Guid? tenantId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default);
+        Guid? tenantId, DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default);
 
     /// <summary>
     /// Top de radicadores ordenados por trámites enviados (submitted) descendente, hasta <paramref name="limit"/>.

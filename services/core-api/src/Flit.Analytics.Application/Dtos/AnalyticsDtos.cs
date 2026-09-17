@@ -18,10 +18,11 @@ public sealed record CategoryMetricsDto(string Category, int Total, IReadOnlyLis
 /// en el rango [From, To]. <see cref="TenantId"/> refleja el tenant efectivamente consultado
 /// (AC1: coincide con el token; AC2: el tenantId que indique el SuperAdmin).
 /// </summary>
+/// <remarks>BUG #12588 — <c>From</c>/<c>To</c> null cuando la consulta no acotó por fecha.</remarks>
 public sealed record AnalyticsOverviewDto(
     Guid TenantId,
-    DateOnly From,
-    DateOnly To,
+    DateOnly? From,
+    DateOnly? To,
     IReadOnlyList<CategoryMetricsDto> Categories);
 
 /// <summary>

@@ -7,7 +7,8 @@ namespace Flit.Analytics.Application.Queries;
 /// Consulta del overview analítico por tenant y rango de fechas (HU #10243, AC1/AC2).
 /// <see cref="TenantId"/> null = vista global de todas las compañías (solo SuperAdmin).
 /// </summary>
-public sealed record GetAnalyticsOverviewQuery(Guid? TenantId, DateOnly From, DateOnly To);
+/// <remarks>BUG #12588 — From/To null = sin acotar por fecha (universo completo del tenant).</remarks>
+public sealed record GetAnalyticsOverviewQuery(Guid? TenantId, DateOnly? From, DateOnly? To);
 
 /// <summary>
 /// Valida el rango y arma <see cref="AnalyticsOverviewDto"/> a partir de los agregados.
@@ -18,7 +19,8 @@ public sealed class GetAnalyticsOverviewHandler(IAnalyticsReadRepository repo)
     public async Task<(AnalyticsOverviewDto? Result, string? Error)> HandleAsync(
         GetAnalyticsOverviewQuery query, CancellationToken ct = default)
     {
-        if (query.From > query.To)
+        // Solo hay rango que validar si vienen los dos extremos: uno suelto acota por ese lado.
+        if (query.From is { } desde && query.To is { } hasta && desde > hasta)
             return (null, "invalid_range");
 
         var categories = await repo.GetOverviewAsync(query.TenantId, query.From, query.To, ct);

@@ -44,7 +44,7 @@ import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
 import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
-import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
+import { esRangoVacio, isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
 import { ApiError } from "@/lib/api/types";
 import type {
   ActiveModulesResponse,
@@ -202,7 +202,13 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const [tenantId, setTenantId] = useState("");
 
   // Rango de fechas de las métricas (KPIs, distribución general, validaciones biométricas) — visible a todos los roles.
-  const [range, setRange] = useState<DateRange>(() => defaultRange());
+  /**
+   * BUG #12588 — arranca SIN rango: el total tiene que ser el número real de trámites del tenant.
+   * Antes partía del mes en curso, y como el backend filtra por fecha de CREACIÓN, todo lo radicado
+   * antes quedaba fuera de las tarjetas aunque siguiera en curso; QA lo leyó como un conteo mal
+   * calculado. El filtro sigue disponible para acotar a mano.
+   */
+  const [range, setRange] = useState<DateRange>(() => sinRango());
 
   // HU #12364 — alcance de red de una cabeza de grupo: el MISMO control y la MISMA preferencia
   // (`tramites.scope`) que el listado de trámites (AC5). Para quien no es cabeza el hook no hace
@@ -281,7 +287,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
     async function load() {
       setStatus("loading");
 
-      if (!isValidRange(range)) {
+      if (!isValidOptionalRange(range)) {
         setErrorMessage("La fecha inicial no puede ser posterior a la fecha final.");
         setStatus("error");
         return;
@@ -343,14 +349,17 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       }
       setBiometricStatus("loading");
 
-      if (!isValidRange(range)) {
+      if (!isValidOptionalRange(range)) {
         setBiometricErrorMessage("La fecha inicial no puede ser posterior a la fecha final.");
         setBiometricStatus("error");
         return;
       }
 
-      const createdFrom = `${range.from}T00:00:00`;
-      const createdTo = `${range.to}T23:59:59`;
+      // BUG #12588 — sin extremo no se manda el filtro: estas estadísticas siguen al mismo rango que
+      // las tarjetas, así que sin rango cuentan todo. `createdFrom`/`createdTo` ya eran opcionales en
+      // el cliente (la consulta hermana de «por vencer» nunca los manda).
+      const createdFrom = range.from ? `${range.from}T00:00:00` : undefined;
+      const createdTo = range.to ? `${range.to}T23:59:59` : undefined;
 
       try {
         const [statsRes, expiringRes] = await Promise.all([
@@ -605,7 +614,17 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
         {/* KPIs 2×2 (con filtro de fechas y selector de compañía para SuperAdmin encima) */}
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
-            <DateRangeFilter value={range} onChange={setRange} disabled={status === "loading"} />
+            <DateRangeFilter
+              value={range}
+              onChange={setRange}
+              disabled={status === "loading"}
+              permiteSinRango
+            />
+            {esRangoVacio(range) && (
+              <p className="text-[11px] opacity-60">
+                Mostrando todos los trámites. Usa las fechas para acotar a un periodo.
+              </p>
+            )}
             {isSuper && (
               <CompanySelector
                 companies={companies}
