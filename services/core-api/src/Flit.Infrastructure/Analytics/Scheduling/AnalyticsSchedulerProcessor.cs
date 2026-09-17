@@ -5,6 +5,7 @@ using Flit.Analytics.Application.Scheduling;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Queries.Domain.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,8 +39,8 @@ internal sealed class AnalyticsSchedulerProcessor(
     private const int TopProducersLimit = 5;
 
     /// <summary>Zona horaria de negocio (§0 del contrato): send_hour/day_of_* son hora Bogotá.
-    /// Resuelta con fallback multiplataforma en <see cref="ScheduleDueEvaluator.BogotaTimeZone"/>.</summary>
-    internal static readonly TimeZoneInfo BogotaTimeZone = ScheduleDueEvaluator.BogotaTimeZone;
+    /// Resuelta con fallback multiplataforma en <see cref="ColombiaTime.Zone"/>.</summary>
+    internal static readonly TimeZoneInfo BogotaTimeZone = ColombiaTime.Zone;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

@@ -1,3 +1,5 @@
+using Flit.Queries.Domain.Time;
+
 namespace Flit.Tramites.Domain.Certifications;
 
 /// <summary>Quién afirmó el dato. Determina la precedencia y lo que el certificado declara al pie.</summary>
@@ -52,7 +54,7 @@ public sealed record CertificationProvenance(
 
     /// <summary>Texto del pie de tabla del certificado: <c>Fuente: … · consultado 2026/08/07</c>.</summary>
     public string ToDocumentFooter(string sourceLabel) =>
-        $"Fuente: {sourceLabel} vía {ProviderKey} · consultado {ObservedAt.ToOffset(TimeSpan.FromHours(-5)):yyyy/MM/dd}";
+        $"Fuente: {sourceLabel} vía {ProviderKey} · consultado {ObservedAt.ToOffset(ColombiaTime.Offset):yyyy/MM/dd}";
 }
 
 /// <summary>Códigos persistidos de <see cref="CertificationSourceKind"/>. El CHECK del DDL usa estos mismos.</summary>

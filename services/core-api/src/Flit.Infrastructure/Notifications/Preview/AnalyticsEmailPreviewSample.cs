@@ -1,5 +1,6 @@
 using Flit.Analytics.Application.Dtos;
 using Flit.Infrastructure.Analytics.Scheduling;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Notifications.Preview;
 
@@ -86,5 +87,5 @@ public static class AnalyticsEmailPreviewSample
             SyntheticValue,
             SyntheticWindowMinutes,
             TriggeredAtUtc,
-            ScheduleDueEvaluator.BogotaTimeZone);
+            ColombiaTime.Zone);
 }

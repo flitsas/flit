@@ -1,5 +1,5 @@
 using Flit.Admin.Domain.OtMetrics;
-using Flit.Infrastructure.Analytics.Scheduling;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Domain.RevocationRequests;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +24,7 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 {
-    private static readonly TimeZoneInfo Bogota = ScheduleDueEvaluator.BogotaTimeZone;
+    private static readonly TimeZoneInfo Bogota = ColombiaTime.Zone;
 
     /// <summary>Un prioritario que lleva más de esto sin tocarse es el peor indicador del panel.</summary>
     private const int PrioritarioEstancadoDias = 3;

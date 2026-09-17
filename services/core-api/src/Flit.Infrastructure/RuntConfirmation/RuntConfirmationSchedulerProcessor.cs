@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Analytics.Scheduling;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.UseCases.RuntConfirmation;
 using Flit.Tramites.Domain.RuntConfirmation;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,7 +28,7 @@ internal sealed class RuntConfirmationSchedulerProcessor(
     private static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(25);
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
 
-    internal static readonly TimeZoneInfo BogotaTimeZone = ScheduleDueEvaluator.BogotaTimeZone;
+    internal static readonly TimeZoneInfo BogotaTimeZone = ColombiaTime.Zone;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

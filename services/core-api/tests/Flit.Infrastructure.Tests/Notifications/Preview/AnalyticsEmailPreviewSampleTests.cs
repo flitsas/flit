@@ -1,6 +1,7 @@
 using Flit.Infrastructure.Analytics.Scheduling;
 using Flit.Infrastructure.Notifications.Preview;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Queries.Domain.Time;
 using Flit.Tests.Shared;
 using FluentAssertions;
 using Xunit;
@@ -166,7 +167,7 @@ public sealed class AnalyticsEmailPreviewSampleTests
         var triggeredAtUtc = new DateTimeOffset(2026, 1, 15, 12, 30, 0, TimeSpan.Zero);
         var produccion = SchedulerEmailComposer.BuildAlert(
             GoldenRuleName, "rejection_rate_pct", "gt", 25m, 31.2m, 1440,
-            triggeredAtUtc, ScheduleDueEvaluator.BogotaTimeZone);
+            triggeredAtUtc, ColombiaTime.Zone);
 
         var muestra = AnalyticsEmailPreviewSample.BuildAlert();
 

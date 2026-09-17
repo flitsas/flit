@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
@@ -1146,9 +1147,6 @@ public sealed class GenerarFurHandler(
     private static bool EsActorJuridico(string? documentType) =>
         FirmaBaulCobertura.EsJuridico(documentType);
 
-    /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
-
     /// <summary>
     /// Resuelve la validación biométrica APROBADA+VIGENTE de una parte para el sello del FUR: primero la fila
     /// propia del trámite; si no, la identidad vigente REFERENCIADA por documento del actor (HU #10350, sin
@@ -1400,7 +1398,7 @@ public sealed class GenerarFurHandler(
     /// </summary>
     /// <summary>Día calendario colombiano. No se usa UTC: un certificado imprime un día civil.</summary>
     private static DateOnly HoyEnColombia() =>
-        DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).DateTime);
+        DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaTime.Offset).DateTime);
 
     /// <summary>
     /// Traduce una certificación canónica al bloque del documento. Solo formato: el parsing ya ocurrió

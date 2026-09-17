@@ -1,3 +1,4 @@
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Domain.RuntConfirmation;
 
 namespace Flit.Tramites.Application.UseCases.RuntConfirmation;
@@ -8,11 +9,8 @@ namespace Flit.Tramites.Application.UseCases.RuntConfirmation;
 /// </summary>
 public static class RuntConfirmationEvaluator
 {
-    /// <summary>Colombia no tiene horario de verano: UTC-5 fijo basta para pasar a día local.</summary>
-    public static readonly TimeSpan BogotaOffset = TimeSpan.FromHours(-5);
-
     public static DateOnly CutoffDay(DateTimeOffset cutoffAt) =>
-        DateOnly.FromDateTime(cutoffAt.ToOffset(BogotaOffset).DateTime);
+        DateOnly.FromDateTime(cutoffAt.ToOffset(ColombiaTime.Offset).DateTime);
 
     public static RuntConfirmationDecision Evaluate(
         RuntConfirmationCandidate candidate,
