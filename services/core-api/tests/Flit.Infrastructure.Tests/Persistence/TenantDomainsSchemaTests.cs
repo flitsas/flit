@@ -271,8 +271,11 @@ public sealed class TenantDomainsSchemaTests
         var migraciones = db.Database.GetMigrations().OrderBy(id => id, StringComparer.Ordinal).ToList();
 
         migraciones.Should().Contain("20260916110000_E12416_TenantDomains");
-        migraciones.Last().Should().Be("20260916110000_E12416_TenantDomains");
         migraciones.Should().Contain("20260916100000_E12412_TenantBrandings");
+        // Sucesora inmediata de la de #12412 (DDL 115 -> 116), no "la última del ensamblado":
+        // cualquier migración posterior mergeada desde develop (p. ej. B12594) no debe romper este AC.
+        migraciones[migraciones.IndexOf("20260916100000_E12412_TenantBrandings") + 1]
+            .Should().Be("20260916110000_E12416_TenantDomains");
     }
 
     // ── Modelo EF: tabla excluida de migraciones, vista keyless, concurrencia ─────────────────
