@@ -35,6 +35,14 @@ public static class NotificationTemplateCatalog
         public const string TramiteRechazado = "tramites.rechazado";
         public const string TramiteAprobado = "tramites.aprobado";
         public const string AsignacionPlaca = "tramites.asignacion-placa";
+
+        // HU #12579 (Feature #12565) — mismos literales que
+        // RevocationRequestNotificationEnqueuer.TemplateKey / DecisionTemplateKeyAprobada /
+        // DecisionTemplateKeyRechazada (Flit.Infrastructure.Messaging), escritos a mano aquí por la
+        // misma regla del AC3 de arriba: nunca nameof/typeof.
+        public const string RevocatoriaSolicitada = "tramites.revocatoria-solicitada";
+        public const string RevocatoriaAprobada = "tramites.revocatoria-aprobada";
+        public const string RevocatoriaRechazada = "tramites.revocatoria-rechazada";
     }
 
     /// <summary>
@@ -87,6 +95,21 @@ public static class NotificationTemplateCatalog
             "Asignación placa",
             NotificationModule.Tramites,
             [NotificationTrigger.PlateAssigned]),
+        new NotificationTemplateDescriptor(
+            TemplateIds.RevocatoriaSolicitada,
+            "Revocatoria solicitada",
+            NotificationModule.Tramites,
+            [NotificationTrigger.RevocationRequestSolicitada]),
+        new NotificationTemplateDescriptor(
+            TemplateIds.RevocatoriaAprobada,
+            "Revocatoria aprobada",
+            NotificationModule.Tramites,
+            [NotificationTrigger.RevocationRequestAprobada]),
+        new NotificationTemplateDescriptor(
+            TemplateIds.RevocatoriaRechazada,
+            "Revocatoria rechazada",
+            NotificationModule.Tramites,
+            [NotificationTrigger.RevocationRequestRechazada]),
     ];
 
     /// <summary>

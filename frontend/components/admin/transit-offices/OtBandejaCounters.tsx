@@ -10,7 +10,8 @@ export type OtCounterKey =
   | "porDecidir"
   | "aprobados"
   | "rechazados"
-  | "revocados";
+  | "revocados"
+  | "solicitudesRevocatoria";
 
 interface TarjetaDef {
   key: OtCounterKey;
@@ -18,8 +19,17 @@ interface TarjetaDef {
   icon: string;
   /** Qué mide, para el título del control. */
   hint: string;
-  /** Estado real del ciclo de vida que la tarjeta cuenta y filtra (ADR-0059). */
+  /**
+   * Estado real del ciclo de vida que la tarjeta cuenta y filtra (ADR-0059). Vacío en la única
+   * tarjeta que no es un estado: ver {@link hasActiveRevocationRequest}.
+   */
   status: string;
+  /**
+   * Feature #12565 — ÚNICA excepción a ADR-0059: la tarjeta no cuenta un estado sino el
+   * sub-flujo de revocatoria, ortogonal al `status` (ADR-0022: el trámite sigue `aprobado`
+   * mientras se decide). Por eso no es excluyente con las demás y filtra por su propio flag.
+   */
+  hasActiveRevocationRequest?: boolean;
 }
 
 /**
@@ -63,6 +73,18 @@ const TARJETAS: TarjetaDef[] = [
     status: "aprobado",
   },
   {
+    // Feature #12565 — Aprobados con una solicitud de revocatoria ACTIVA: sin esta tarjeta, la
+    // única forma de notarlos era entrar a "Aprobados" y leer fila por fila. Va justo al lado de
+    // "Aprobados" (de donde sale) y antes de "Rechazados": es una decisión pendiente, no un
+    // desenlace ya cerrado como "Revocados".
+    key: "solicitudesRevocatoria",
+    label: "Solicitudes de revocatoria",
+    icon: "/assets/ot-estados/solicitud-revocatoria.svg",
+    hint: "Aprobados con una solicitud de revocatoria esperando decisión",
+    status: "",
+    hasActiveRevocationRequest: true,
+  },
+  {
     key: "rechazados",
     label: "Rechazados",
     icon: ESTADO_ICONO.rechazado,
@@ -104,7 +126,7 @@ export function OtBandejaCountersStrip({
     <div
       role="group"
       aria-label="Carga de trabajo del organismo"
-      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-3 sm:divide-x lg:grid-cols-6 dark:divide-white/5 dark:border-white/10 dark:bg-[#0B0F14]"
+      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#0B0F14]"
     >
       {TARJETAS.map((t) => {
         const valor = counters ? counters[t.key] : null;
@@ -154,7 +176,18 @@ export function estadoDeContador(key: OtCounterKey | ""): string {
   return TARJETAS.find((t) => t.key === key)?.status ?? "";
 }
 
+/**
+ * Feature #12565 — flag del sub-flujo de revocatoria de la tarjeta pulsada; `undefined` en las
+ * que filtran por estado. Helper aparte de {@link estadoDeContador} porque son dos ejes de
+ * filtrado distintos, no dos valores del mismo.
+ */
+export function revocatoriaActivaDeContador(key: OtCounterKey | ""): boolean | undefined {
+  return TARJETAS.find((t) => t.key === key)?.hasActiveRevocationRequest;
+}
+
 /** Tarjeta que corresponde a un estado del filtro (para marcar la activa cuando el filtro cambia por el desplegable). */
 export function contadorDeEstado(status: string): OtCounterKey | "" {
-  return TARJETAS.find((t) => t.status === status)?.key ?? "";
+  // Se exige status no vacío: la tarjeta de revocatoria lo tiene vacío (no filtra por estado) y
+  // si no, empataría con "sin filtro" y se marcaría activa sin haberse pulsado.
+  return (status ? TARJETAS.find((t) => t.status === status)?.key : "") ?? "";
 }

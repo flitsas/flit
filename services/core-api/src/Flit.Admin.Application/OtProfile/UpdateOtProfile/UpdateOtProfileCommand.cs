@@ -15,6 +15,14 @@ public sealed class UpdateOtProfileRequest
 
     public bool? QuipuxReadOnly { get; init; }
 
+    /// <summary>
+    /// Ventana de revocatoria en días hábiles (HU #12568). A diferencia de
+    /// <see cref="OperationMode"/>/<see cref="QuipuxReadOnly"/>, aquí <c>null</c> NO significa
+    /// "no tocar" — es un valor de negocio explícito ("sin límite", AC2) que el handler
+    /// persiste tal cual en cada actualización.
+    /// </summary>
+    public int? RevocationWindowBusinessDays { get; init; }
+
     /// <summary>Ignorado — el tenant proviene del token JWT (AC5).</summary>
     public Guid? TenantId { get; init; }
 

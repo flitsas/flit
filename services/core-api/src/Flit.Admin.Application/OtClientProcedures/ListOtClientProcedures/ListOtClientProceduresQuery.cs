@@ -11,6 +11,11 @@ public sealed class ListOtClientProceduresQuery
     /// <summary>Estado del ciclo de vida; varios separados por coma (ADR-0059).</summary>
     public string? Status { get; init; }
 
+    /// <summary>
+    /// Pedido del usuario (2026-09-16) — filtro de la tarjeta "Solicitudes de revocatoria": trámites
+    /// con una solicitud de revocatoria ACTIVA (<c>solicitada</c>/<c>en_revision</c>).
+    /// </summary>
+    public bool? HasActiveRevocationRequest { get; init; }
     public Guid? ProcedureTypeId { get; init; }
 
     public string? Vin { get; init; }

@@ -70,7 +70,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
     // ── AC1 — listado del catálogo ──────────────────────────────────────────
 
     [Fact]
-    public async Task AC1_List_Returns200With9TemplatesIdModuleAndTriggers()
+    public async Task AC1_List_Returns200With12TemplatesIdModuleAndTriggers()
     {
         var client = SuperAdminClient();
 
@@ -79,7 +79,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<ListDto>(TestContext.Current.CancellationToken);
         body.Should().NotBeNull();
-        body!.Items.Should().HaveCount(9);
+        body!.Items.Should().HaveCount(12);
         body.Items.Select(i => i.Id).Should().OnlyHaveUniqueItems();
         body.Items.Should().Contain(i =>
             i.Id == "security.invitation"
@@ -104,6 +104,19 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
             i.Id == "tramites.asignacion-placa"
             && i.Module == "Tramites"
             && i.Triggers.Contains("PlateAssigned"));
+        // HU12579 (Feature #12565) — plantillas de notificación del sub-flujo de revocatoria.
+        body.Items.Should().Contain(i =>
+            i.Id == "tramites.revocatoria-solicitada"
+            && i.Module == "Tramites"
+            && i.Triggers.Contains("RevocationRequestSolicitada"));
+        body.Items.Should().Contain(i =>
+            i.Id == "tramites.revocatoria-aprobada"
+            && i.Module == "Tramites"
+            && i.Triggers.Contains("RevocationRequestAprobada"));
+        body.Items.Should().Contain(i =>
+            i.Id == "tramites.revocatoria-rechazada"
+            && i.Module == "Tramites"
+            && i.Triggers.Contains("RevocationRequestRechazada"));
     }
 
     [Theory]

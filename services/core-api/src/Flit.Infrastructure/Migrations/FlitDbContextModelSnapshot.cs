@@ -3290,6 +3290,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("quipux_read_only");
 
+                    b.Property<int?>("RevocationWindowBusinessDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("revocation_window_business_days");
+
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()

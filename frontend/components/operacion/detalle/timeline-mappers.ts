@@ -67,7 +67,29 @@ export function mapStatusHistoryToTimelineNodes(history: StatusHistory[]): Timel
       extra: hitoLabel(e),
     },
     isActive: i === sorted.length - 1,
+    timestamp: new Date(e.changedAt).getTime(),
   }));
+}
+
+/**
+ * Intercala nodos de varias fuentes (p. ej. `mapStatusHistoryToTimelineNodes` +
+ * `mapEventsToTimelineNodes`) en un solo carril, ordenado por `timestamp` real — cada mapper ordena
+ * SU propia lista, pero concatenar listas ya ordenadas no ordena la unión (un evento que ocurrió
+ * antes del último cambio de estado terminaba pintado después de él). El nodo vigente pasa a ser el
+ * último cronológico de la unión, no el último de la lista de estados: reemplaza cualquier
+ * `isActive` que trajeran los nodos de entrada.
+ */
+export function mergeTimelineNodesByTimestamp(...groups: TimelineTrackNode[][]): TimelineTrackNode[] {
+  const merged = groups
+    .flat()
+    .map((n, i) => ({ ...n, isActive: false, _i: i }))
+    .sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0) || a._i - b._i)
+    .map(({ _i, ...n }) => n);
+
+  const last = merged.at(-1);
+  if (last) last.isActive = true;
+
+  return merged;
 }
 
 /** Mapea validaciones biométricas + firma del baúl (misma semántica que `TramiteDetalleIdentidad`). */
@@ -162,41 +184,85 @@ export function mapEventsToTimelineNodes(events: ProcedureInstanceEvent[]): Time
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   );
 
-  return sorted.map((e) => {
-    if (e.tipo === 'reasignar_gestor_admin') {
-      return {
-        label: 'Reasignación de gestor',
-        color: BLUE,
-        info: {
-          gestor: e.newAssignedToName || '—',
-          // Mismo hallazgo del Bug #12526: correo/empresa son del gestor NUEVO (la misma persona que
-          // ya nombra "gestor" arriba), no de quien ejecutó la reasignación.
-          correo: e.newAssignedToEmail || '—',
-          empresa: e.newAssignedToCompania || '—',
-          rol: e.createdByName ? `Ejecutado por ${e.createdByName}` : 'Ejecutado por admin',
-          fecha: formatFechaHora(e.createdAt),
-          extra: `De ${e.previousAssignedToName || 'sin gestor asignado'} a ${e.newAssignedToName || '—'}`,
-        },
-      };
-    }
+  return sorted.map((e) => ({
+    ...mapSingleEventToTimelineNode(e),
+    timestamp: new Date(e.createdAt).getTime(),
+  }));
+}
 
-    // reenvio_validacion_admin
-    const parte = e.partyRole ? PARTY_LABEL[e.partyRole] ?? e.partyRole : null;
+function mapSingleEventToTimelineNode(e: ProcedureInstanceEvent): TimelineTrackNode {
+  if (e.tipo === 'reasignar_gestor_admin') {
     return {
-      label: `Reenvío de validación${parte ? ` · ${parte}` : ''}`,
+      label: 'Reasignación de gestor',
       color: BLUE,
       info: {
-        gestor: '—',
-        correo: e.correoDestino || '—',
-        // Aquí no hay un "gestor" propio del evento (el correo ya es el destino del reenvío): la
-        // empresa que aporta información es la de quien lo ejecutó, ya nombrado en Rol.
-        empresa: e.createdByCompania || '—',
+        gestor: e.newAssignedToName || '—',
+        // Mismo hallazgo del Bug #12526: correo/empresa son del gestor NUEVO (la misma persona que
+        // ya nombra "gestor" arriba), no de quien ejecutó la reasignación.
+        correo: e.newAssignedToEmail || '—',
+        empresa: e.newAssignedToCompania || '—',
         rol: e.createdByName ? `Ejecutado por ${e.createdByName}` : 'Ejecutado por admin',
         fecha: formatFechaHora(e.createdAt),
-        extra: e.emailActualizado
-          ? 'Reenviado a un correo distinto del registrado'
-          : 'Reenviado al correo actual',
+        extra: `De ${e.previousAssignedToName || 'sin gestor asignado'} a ${e.newAssignedToName || '—'}`,
       },
     };
-  });
+  }
+
+  if (e.tipo === 'revocatoria_solicitada') {
+    return {
+      label: `Solicitud de revocatoria${e.revocationAttemptNumber ? ` · Intento ${e.revocationAttemptNumber}` : ''}`,
+      color: WARN,
+      info: {
+        // El ejecutor ES el Administrador que solicitó (a diferencia de reasignar/reenvío, que
+        // hablan de un TERCERO): su nombre/correo van directo en "Gestor"/"Correo".
+        gestor: e.createdByName || '—',
+        correo: e.createdByEmail || '—',
+        empresa: e.createdByCompania || '—',
+        rol: e.createdByName ? `Solicitado por ${e.createdByName}` : 'Solicitado por administrador',
+        fecha: formatFechaHora(e.createdAt),
+        extra: e.revocationReason?.trim() || 'Sin motivo adicional registrado',
+      },
+    };
+  }
+
+  if (e.tipo === 'revocatoria_aprobada' || e.tipo === 'revocatoria_rechazada') {
+    const aprobada = e.tipo === 'revocatoria_aprobada';
+    return {
+      label: `Revocatoria ${aprobada ? 'aprobada' : 'rechazada'}${
+        e.revocationAttemptNumber ? ` · Intento ${e.revocationAttemptNumber}` : ''
+      }`,
+      color: aprobada ? GREEN : RED,
+      info: {
+        // El ejecutor ES el OT que decidió, igual que en revocatoria_solicitada el ejecutor es
+        // quien pidió: su nombre/correo van directo en "Gestor"/"Correo".
+        gestor: e.createdByName || '—',
+        correo: e.createdByEmail || '—',
+        empresa: e.createdByCompania || '—',
+        rol: e.createdByName
+          ? `${aprobada ? 'Aprobada' : 'Rechazada'} por ${e.createdByName}`
+          : `${aprobada ? 'Aprobada' : 'Rechazada'} por el organismo de tránsito`,
+        fecha: formatFechaHora(e.createdAt),
+        extra: e.revocationDecisionReason?.trim() || 'Sin motivo adicional registrado',
+      },
+    };
+  }
+
+  // reenvio_validacion_admin
+  const parte = e.partyRole ? PARTY_LABEL[e.partyRole] ?? e.partyRole : null;
+  return {
+    label: `Reenvío de validación${parte ? ` · ${parte}` : ''}`,
+    color: BLUE,
+    info: {
+      gestor: '—',
+      correo: e.correoDestino || '—',
+      // Aquí no hay un "gestor" propio del evento (el correo ya es el destino del reenvío): la
+      // empresa que aporta información es la de quien lo ejecutó, ya nombrado en Rol.
+      empresa: e.createdByCompania || '—',
+      rol: e.createdByName ? `Ejecutado por ${e.createdByName}` : 'Ejecutado por admin',
+      fecha: formatFechaHora(e.createdAt),
+      extra: e.emailActualizado
+        ? 'Reenviado a un correo distinto del registrado'
+        : 'Reenviado al correo actual',
+    },
+  };
 }

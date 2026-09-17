@@ -342,6 +342,8 @@ public sealed class RequestTenantResolverTests
             ("/api/v1/me/ui-preferences", TenantEnforcementMiddleware.RouteMatch.Prefix),
             // Bug #12564 — configuración de consulta del tenant (proveedor primario y flags), bajo /api/v1/tramites.
             ("/api/v1/tramites/consultation-config", TenantEnforcementMiddleware.RouteMatch.Exact),
+            // HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado gestor.
+            ("/api/v1/tramites/revocation-requests", TenantEnforcementMiddleware.RouteMatch.Exact),
         });
         routes.Should().OnlyContain(r =>
             r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal)

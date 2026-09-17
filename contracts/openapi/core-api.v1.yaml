@@ -1183,7 +1183,10 @@ paths:
         - bearerAuth: []
       responses:
         "200":
-          description: Perfil OT (operationMode, quipuxReadOnly, transitOfficeId, featureFlags).
+          description: >
+            Perfil OT (operationMode, quipuxReadOnly, transitOfficeId, featureFlags,
+            revocationWindowBusinessDays). `revocationWindowBusinessDays` es la ventana de
+            revocatoria en días hábiles (HU #12568); `null` = sin configurar = sin límite.
         "401":
           description: No autenticado.
         "403":
@@ -1191,12 +1194,39 @@ paths:
     patch:
       tags: [Admin · OT]
       operationId: adminOtPatchProfile
-      summary: Actualizar modo Dashboard/QX
+      summary: Actualizar modo Dashboard/QX y ventana de revocatoria
       security:
         - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operationMode:
+                  type: string
+                  enum: [dashboard, quipux]
+                quipuxReadOnly:
+                  type: boolean
+                revocationWindowBusinessDays:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  description: >
+                    Ventana de revocatoria en días hábiles (HU #12568). Enviar `null` (o
+                    borrar el valor) la deja sin límite — no se sustituye por ningún default
+                    numérico. Un valor ≤ 0 o no numérico responde 422 con el campo señalado.
       responses:
         "200":
           description: Perfil actualizado.
+        "422":
+          description: >
+            Payload inválido — p. ej. operationMode fuera de catálogo o
+            revocationWindowBusinessDays ≤ 0.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/admin/ot/imprint-signatures:
     get:

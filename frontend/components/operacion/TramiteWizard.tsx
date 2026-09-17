@@ -113,6 +113,7 @@ import {
   validateDocNumber,
 } from '@/lib/validation/fieldRules';
 import type {
+  ActiveRevocationRequest,
   ActorDocumentType,
   ActorRol,
   BiometricParte,
@@ -139,7 +140,7 @@ import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
 import { WizardHelpRail } from './WizardHelpRail';
 import { WizardModal } from './WizardModal';
 import { NuevoTramiteSelector } from './NuevoTramiteSelector';
-import { estadoLabel } from '@/lib/tramites/estados';
+import { estadoLabel, revocationRequestLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { InlineAlert } from '@/components/atom/InlineAlert';
@@ -490,6 +491,11 @@ export function TramiteWizard(props: Props) {
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
   const [draftFinalizedAt, setDraftFinalizedAt] = useState<string | null>(null);
+  // HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria (badge secundario en la franja
+  // de identidad), ORTOGONAL a `estadoTramite` (que sigue 'aprobado', ADR-0022). Se lee con el resto
+  // del detalle inicial. (El botón "Solicitar revocatoria"/AC1-AC3, HU #12573-#12574, ya no vive en
+  // el wizard — ver `TramiteDetalleModal.tsx` — así que no hace falta releer nada aquí tras un envío.)
+  const [activeRevocationRequest, setActiveRevocationRequest] = useState<ActiveRevocationRequest | null>(null);
   // HU #10874 (AC1) — historial de estados de la instancia: fuente única de datos del panel de
   // subsanación (motivo/checklist de la última transición a `subsanacion`). Loading/error propios
   // (no el `.catch` silencioso de arriba) porque sin ellos el panel no podría distinguir "cargando"
@@ -521,6 +527,7 @@ export function TramiteWizard(props: Props) {
         setDraftFinalizedAt(d.draftFinalizedAt ?? null);
         setStatusHistory(d.statusHistory ?? []);
         setReferenceNumber(d.referenceNumber ?? null);
+        setActiveRevocationRequest(d.activeRevocationRequest ?? null);
         setInstanceDetailError(null);
       })
       .catch((err) => {
@@ -1766,6 +1773,21 @@ export function TramiteWizard(props: Props) {
                 {estadoTramite === 'borrador' ? 'En borrador' : estadoLabel(estadoTramite)}
               </span>
             )}
+            {/* HU #12575 (Feature #12565, AC1) — badge SECUNDARIO de sub-estado de revocatoria:
+                ORTOGONAL al chip de arriba, que sigue diciendo "Aprobado" (ADR-0022). Mismo patrón
+                visual de la franja (glass, border-white/30) que el chip principal, con un tinte ámbar
+                para leerse como secundario/distinto — nunca un sistema de color nuevo. */}
+            {activeRevocationRequest && (
+              <span
+                role="status"
+                className="rounded-full border border-amber-200/50 bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-semibold"
+                aria-label={`Sub-estado de revocatoria: ${
+                  revocationRequestLabel(activeRevocationRequest.status) ?? 'en curso'
+                }`}
+              >
+                {revocationRequestLabel(activeRevocationRequest.status) ?? 'Revocatoria en curso'}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -1804,6 +1826,11 @@ export function TramiteWizard(props: Props) {
                   ) : null}
                 </>
               ) : undefined
+              // HU #12573/#12574 (Feature #12565) — el botón "Solicitar revocatoria" que vivía aquí
+              // se movió a `TramiteDetalleModal` (2026-09-16): `abreAsistente` en `TramitesTable`
+              // nunca es `true` para `aprobado`, así que este punto del wizard era inalcanzable por
+              // navegación normal (solo por URL directa con el GUID de la instancia). Ver
+              // `TramiteDetalleModal.tsx` (aviso "Trámite aprobado — solo visualización").
             }
           />
         </div>

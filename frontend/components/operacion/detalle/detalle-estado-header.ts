@@ -59,6 +59,10 @@ export function detalleEstadoHeader(
             : 'Trámite rechazado por el Organismo de Tránsito.',
         pendiente: false,
       };
+    // Feature #12565 — el aviso se mantiene aquí (es el contrato de esta función, y hay quien la
+    // usa sin el detalle a mano), pero `TramiteDetalleModal` lo suprime cuando
+    // `lastRevocationDecision` ya anunció la revocatoria con su motivo y su fecha: si no, saldrían
+    // dos avisos seguidos diciendo lo mismo.
     case 'revocado':
       return {
         label: estadoLabel(estado),

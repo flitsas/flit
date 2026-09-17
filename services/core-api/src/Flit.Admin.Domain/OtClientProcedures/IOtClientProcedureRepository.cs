@@ -185,4 +185,19 @@ public interface IOtClientProcedureRepository
         string source,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #12578 (Feature #12565) — expone el MISMO mecanismo de resolución de organismo que ya usan
+    /// <see cref="ListAsync"/>/<see cref="GetByIdAsync(Guid,Guid,Guid?,CancellationToken)"/> (y el resto
+    /// de la bandeja): <paramref name="transitOfficeIdOverride"/> si viene (SuperAdmin, ya validado
+    /// contra el catálogo por el caller), o si no el organismo del perfil OT de
+    /// <paramref name="otTenantId"/> (<c>admin.transit_office_profiles</c>). Se extrae a método público
+    /// para que otro caso de uso (listado de solicitudes de revocatoria del lado OT) reutilice la MISMA
+    /// resolución sin reimplementarla. <c>null</c> si <paramref name="otTenantId"/> no tiene perfil OT
+    /// resoluble — igual criterio "sin organismo, sin error" del resto de la superficie OT.
+    /// </summary>
+    Task<Guid?> ResolveTransitOfficeIdAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
 }

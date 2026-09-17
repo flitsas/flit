@@ -3,6 +3,7 @@ import {
   mapEventsToTimelineNodes,
   mapIdentidadToTimelineNodes,
   mapStatusHistoryToTimelineNodes,
+  mergeTimelineNodesByTimestamp,
 } from '@/components/operacion/detalle/timeline-mappers';
 import type {
   BiometricValidation,
@@ -190,6 +191,46 @@ describe('timeline-mappers', () => {
     expect(nodes[0]!.info.extra).toBe('Reenviado a un correo distinto del registrado');
   });
 
+  // HU #12575 (Feature #12565, AC2) — la solicitud de revocatoria se pinta como nodo ADICIONAL, con
+  // el número de intento en la etiqueta y el motivo/correo del SOLICITANTE (no de un tercero).
+  it('mapEventsToTimelineNodes pinta revocatoria_solicitada con intento, motivo y solicitante', () => {
+    const events: ProcedureInstanceEvent[] = [
+      {
+        tipo: 'revocatoria_solicitada',
+        createdAt: '2026-06-03T10:00:00Z',
+        createdByName: 'Ana Administradora',
+        createdByEmail: 'ana.administradora@renting.com',
+        createdByCompania: 'Renting Colombia S.A.S',
+        revocationAttemptNumber: 1,
+        revocationReason: 'Placa entregada con datos incorrectos',
+      },
+    ];
+    const nodes = mapEventsToTimelineNodes(events);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0]!.label).toBe('Solicitud de revocatoria · Intento 1');
+    expect(nodes[0]!.info.gestor).toBe('Ana Administradora');
+    expect(nodes[0]!.info.correo).toBe('ana.administradora@renting.com');
+    expect(nodes[0]!.info.empresa).toBe('Renting Colombia S.A.S');
+    expect(nodes[0]!.info.rol).toBe('Solicitado por Ana Administradora');
+    expect(nodes[0]!.info.extra).toBe('Placa entregada con datos incorrectos');
+  });
+
+  it('mapEventsToTimelineNodes revocatoria_solicitada cae a valores por defecto sin datos opcionales', () => {
+    const events: ProcedureInstanceEvent[] = [
+      {
+        tipo: 'revocatoria_solicitada',
+        createdAt: '2026-06-03T10:00:00Z',
+        createdByName: null,
+      },
+    ];
+    const nodes = mapEventsToTimelineNodes(events);
+    expect(nodes[0]!.label).toBe('Solicitud de revocatoria');
+    expect(nodes[0]!.info.gestor).toBe('—');
+    expect(nodes[0]!.info.correo).toBe('—');
+    expect(nodes[0]!.info.rol).toBe('Solicitado por administrador');
+    expect(nodes[0]!.info.extra).toBe('Sin motivo adicional registrado');
+  });
+
   it('mapEventsToTimelineNodes ordena por fecha ascendente', () => {
     const events: ProcedureInstanceEvent[] = [
       {
@@ -207,5 +248,38 @@ describe('timeline-mappers', () => {
     ];
     const nodes = mapEventsToTimelineNodes(events);
     expect(nodes.map((n) => n.info.gestor)).toEqual(['Primero', 'Segundo']);
+  });
+
+  // Reportado por el usuario (2026-09-16): en la línea de tiempo la "Solicitud de revocatoria"
+  // salía DESPUÉS del hito "Revocado" aunque cronológicamente la solicitud es siempre anterior a la
+  // decisión — porque `TramiteDetalleModal` concatenaba las dos listas (statusHistory + eventos) ya
+  // ordenadas cada una por separado, sin ordenar la unión.
+  it('mergeTimelineNodesByTimestamp intercala estado + eventos por orden cronológico real', () => {
+    const history: StatusHistory[] = [
+      { fromStatus: 'entregado', toStatus: 'aprobado', changedAt: '2026-09-16T10:00:00Z', reason: null },
+      { fromStatus: 'aprobado', toStatus: 'revocado', changedAt: '2026-09-16T16:04:00Z', reason: null },
+    ];
+    const events: ProcedureInstanceEvent[] = [
+      {
+        tipo: 'revocatoria_solicitada',
+        createdAt: '2026-09-16T16:01:00Z',
+        createdByName: 'Admin Empresa Demo',
+        revocationAttemptNumber: 1,
+      },
+    ];
+
+    const merged = mergeTimelineNodesByTimestamp(
+      mapStatusHistoryToTimelineNodes(history),
+      mapEventsToTimelineNodes(events),
+    );
+
+    expect(merged.map((n) => n.label)).toEqual([
+      'Aprobado',
+      'Solicitud de revocatoria · Intento 1',
+      'Revocado',
+    ]);
+    // El vigente pasa a ser el último cronológico de la unión (Revocado), no el último de la lista
+    // de estados sola ni el de eventos sola.
+    expect(merged.map((n) => n.isActive)).toEqual([false, false, true]);
   });
 });

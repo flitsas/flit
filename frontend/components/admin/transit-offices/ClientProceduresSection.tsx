@@ -7,18 +7,23 @@ import { tramitesClient } from "@/lib/api/tramites-client";
 import {
   adjuntarOtLicenciaTransito,
   approveOtClientProcedure,
+  approveOtRevocationRequest,
+  fetchActiveOtRevocationRequestDetail,
   fetchOtAttachmentPreviewUrl,
   fetchOtBandejaCounters,
   fetchOtBandejaFilterFields,
   fetchOtBandejaHealth,
+  fetchOtClientProcedure,
   fetchOtDocuments,
   fetchOtProfile,
   generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
+  rejectOtRevocationRequest,
   revokeOtClientProcedure,
   searchOtClientProcedures,
 } from "@/lib/api/admin-ot";
 import type {
+  OtActiveRevocationRequestDetail,
   OtBandejaCounters,
   OtBandejaHealth,
   OtClientProcedure,
@@ -52,6 +57,7 @@ import {
   OtBandejaCountersStrip,
   contadorDeEstado,
   estadoDeContador,
+  revocatoriaActivaDeContador,
   type OtCounterKey,
 } from "./OtBandejaCounters";
 import { formatDocumentWithType } from "@/lib/display/document-number";
@@ -139,6 +145,27 @@ export function readAssignPlateError(
     }
   }
   return fallback;
+}
+
+/**
+ * HU #12577 (Feature #12565) — motivo legible de un error al decidir (aprobar/rechazar) una
+ * solicitud de revocatoria. Los 404 ("Trámite no encontrado" / "No hay una solicitud de
+ * revocatoria activa para este trámite") ya llegan en español y accionables vía `err.message`
+ * (mismo `friendlyErrorMessage` de `apiFetch`); solo los códigos crípticos del 409/403 necesitan
+ * traducción aquí.
+ */
+export function readDecideRevocationError(err: unknown): string {
+  if (err instanceof ApiError) {
+    const code = (err.body as { error?: string } | null | undefined)?.error;
+    if (code === "INVALID_STATE") {
+      return "El trámite ya no está en estado Aprobado: puede que ya se haya decidido o que otra acción lo haya cambiado. Actualiza la bandeja.";
+    }
+    if (code === "QUIPUX_READONLY") {
+      return "Este organismo opera en modo de solo lectura (Quipux): no se pueden decidir revocatorias desde FLIT.";
+    }
+    if (err.message) return err.message;
+  }
+  return "No se pudo procesar la decisión de revocatoria.";
 }
 
 /**
@@ -385,6 +412,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [page, setPage] = useState(1);
   // N 03 — `entregado` reemplaza a pending_ot como estado en cola de decisión OT.
   const [statusFilter, setStatusFilter] = useState(ESTADO_POR_DEFECTO);
+  /** Sub-estado de placa; lo fijan las tarjetas de la cabecera, no el panel de búsqueda. */
+  /**
+   * Pedido del usuario (2026-09-16) — filtro de la tarjeta "Solicitudes de revocatoria", igual
+   */
+  const [hasActiveRevocationRequestFilter, setHasActiveRevocationRequestFilter] = useState(false);
   const [counters, setCounters] = useState<OtBandejaCounters | null>(null);
   const [contadorActivo, setContadorActivo] = useState<OtCounterKey | "">("");
   const [sortBy, setSortBy] = useState("createdAt");
@@ -454,6 +486,19 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // preasignación de arriba.
   const [revokeAprobacionTarget, setRevokeAprobacionTarget] = useState<OtClientProcedure | null>(null);
   const [revokeAprobacionReason, setRevokeAprobacionReason] = useState("");
+  // HU #12577 (Feature #12565) — decidir (aprobar/rechazar) la solicitud de revocatoria ACTIVA del
+  // trámite. Distinto de `revokeAprobacionTarget` de arriba (acción unilateral del OT, HU #12166):
+  // las dos conviven en Aprobado hasta que la Feature #12566 retire la unilateral.
+  const [decideRevocationTarget, setDecideRevocationTarget] = useState<OtClientProcedure | null>(null);
+  const [decideRevocationMode, setDecideRevocationMode] = useState<"approve" | "reject">("approve");
+  const [decideRevocationReason, setDecideRevocationReason] = useState("");
+  // AC2 — motivo obligatorio al rechazar: se bloquea en cliente sin llamar al backend.
+  const [decideRevocationFieldError, setDecideRevocationFieldError] = useState<string | null>(null);
+  // Feature #12565 — motivo + documento de soporte que cargó el gestor al solicitar, para que el OT
+  // los vea ANTES de decidir (hasta ahora el modal no mostraba ninguno de los dos).
+  const [decideRevocationDetail, setDecideRevocationDetail] =
+    useState<OtActiveRevocationRequestDetail | null>(null);
+  const [decideRevocationDetailLoading, setDecideRevocationDetailLoading] = useState(false);
   // HU #12167 — corregir la placa dentro de la ventana de 1 hora.
   const [updatePlateTarget, setUpdatePlateTarget] = useState<OtClientProcedure | null>(null);
   const [updatePlateInput, setUpdatePlateInput] = useState("");
@@ -632,6 +677,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const buildListQuery = useCallback(
     (): OtClientProceduresParams => ({
       status: statusFilter || undefined,
+      hasActiveRevocationRequest: hasActiveRevocationRequestFilter || undefined,
       condiciones: appliedCondiciones.length > 0 ? appliedCondiciones : undefined,
       busqueda: busquedaAplicada.trim() || undefined,
       createdFrom: appliedCreatedFrom || undefined,
@@ -643,6 +689,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }),
     [
       statusFilter,
+      hasActiveRevocationRequestFilter,
       appliedCondiciones,
       busquedaAplicada,
       appliedCreatedFrom,
@@ -766,6 +813,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     // de estado del formulario retirado.
     if (draftCondiciones.some((c) => c.fieldId === "estado")) {
       setStatusFilter("");
+      setHasActiveRevocationRequestFilter(false);
       setContadorActivo("");
     }
 
@@ -817,11 +865,13 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const handleContadorSelect = (key: OtCounterKey | "") => {
     setContadorActivo(key);
     setStatusFilter(key === "" ? ESTADO_POR_DEFECTO : estadoDeContador(key));
+    setHasActiveRevocationRequestFilter(revocatoriaActivaDeContador(key) ?? false);
     setPage(1);
   };
 
   const clearFilters = useCallback(() => {
     setContadorActivo("");
+    setHasActiveRevocationRequestFilter(false);
     setStatusFilter(ESTADO_POR_DEFECTO);
     setDraftCondiciones([]);
     setAppliedCondiciones([]);
@@ -1119,6 +1169,112 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       show("Trámite revocado.", "success");
     } catch {
       show("No se pudo revocar el trámite.", "error");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  // HU #12577 (Feature #12565) AC1 — abre el modal de decisión limpio, siempre en "Aprobar" por
+  // defecto (es la decisión más común: honrar lo que el gestor pidió).
+  const openDecideRevocation = (row: OtClientProcedure) => {
+    setDecideRevocationMode("approve");
+    setDecideRevocationReason("");
+    setDecideRevocationFieldError(null);
+    setDecideRevocationTarget(row);
+    setDecideRevocationDetail(null);
+    setDecideRevocationDetailLoading(true);
+    fetchActiveOtRevocationRequestDetail(row.id, scope)
+      .then(setDecideRevocationDetail)
+      .catch(() => {
+        // No bloquea la decisión: si el motivo/soporte no cargan, el OT puede decidir igual (mismo
+        // criterio que el resto del modal, que ya funcionaba sin ellos).
+        setDecideRevocationDetail(null);
+      })
+      .finally(() => setDecideRevocationDetailLoading(false));
+  };
+
+  /** Abre el PDF de soporte de la solicitud en el MISMO visor inline que "Ver documentos". */
+  const handleVerSoporteRevocatoria = async () => {
+    if (!decideRevocationTarget || !decideRevocationDetail?.supportDocumentId) return;
+    const procId = decideRevocationTarget.id;
+    const attId = decideRevocationDetail.supportDocumentId;
+    setPreview((p) => {
+      if (p.url) URL.revokeObjectURL(p.url);
+      return {
+        open: true,
+        title: `Soporte de revocatoria — ${decideRevocationTarget.referenceNumber}`,
+        mimetype: "application/pdf",
+        url: null,
+        loading: true,
+        error: null,
+        download: null,
+      };
+    });
+    try {
+      const { url } = await fetchOtAttachmentPreviewUrl(procId, attId, scope);
+      const blob = await fetch(url).then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.blob();
+      });
+      const objectUrl = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+      setPreview((p) => ({
+        ...p,
+        loading: false,
+        url: objectUrl,
+        download: { procId, attId, filename: "soporte-revocatoria.pdf" },
+      }));
+    } catch {
+      setPreview((p) => ({
+        ...p,
+        loading: false,
+        error: "No se pudo abrir el documento de soporte. Intenta de nuevo.",
+      }));
+    }
+  };
+
+  /**
+   * AC1/AC2 — aprueba o rechaza la solicitud de revocatoria activa del trámite.
+   *
+   * AC2: rechazar sin motivo NUNCA llama al backend — se valida aquí primero, igual que
+   * `RevocationRequestModal` (HU #12574) del lado del gestor. Aprobar sí acepta motivo vacío (es
+   * opcional, mismo criterio que `revokeOtClientProcedure`/HU #12166).
+   */
+  const confirmDecideRevocation = async () => {
+    if (!decideRevocationTarget) return;
+    if (decideRevocationMode === "reject" && !decideRevocationReason.trim()) {
+      setDecideRevocationFieldError("Indica el motivo del rechazo.");
+      return;
+    }
+    setDecideRevocationFieldError(null);
+    setActing(true);
+    const targetId = decideRevocationTarget.id;
+    try {
+      if (decideRevocationMode === "approve") {
+        await approveOtRevocationRequest(targetId, decideRevocationReason, scope);
+        show("Revocatoria aprobada: el trámite quedó Revocado.", "success");
+      } else {
+        await rejectOtRevocationRequest(targetId, decideRevocationReason, scope);
+        show("Revocatoria rechazada. El trámite permanece Aprobado.", "success");
+      }
+      // Se relee la fila del servidor en vez de confiar en `decision.procedure`: en rechazar, el
+      // backend no devuelve ningún trámite actualizado (no cambia), y en aprobar el snapshot que
+      // devuelve el handler de revocatoria se toma ANTES de que la fila procedure_revocation_requests
+      // quede en 'aprobada' — las dos veces la fila de la bandeja se quedaba con el dato viejo hasta
+      // un refresco manual de pantalla.
+      try {
+        const fresh = await fetchOtClientProcedure(targetId, undefined, scope);
+        if (fresh) {
+          setRows((prev) => prev.map((r) => (r.id === fresh.id ? fresh : r)));
+          setDetailProcedure((prev) => (prev && prev.id === fresh.id ? fresh : prev));
+        }
+      } catch {
+        // La decisión ya se persistió (el show() de arriba ya avisó éxito); si el refresco falla,
+        // la próxima carga de la bandeja trae el dato correcto de todos modos.
+      }
+      setDecideRevocationTarget(null);
+      setDecideRevocationReason("");
+    } catch (err) {
+      show(readDecideRevocationError(err), "error");
     } finally {
       setActing(false);
     }
@@ -1520,6 +1676,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               ? (row) => { setRevokeAprobacionReason(""); setRevokeAprobacionTarget(row); }
               : undefined
           }
+          onDecideRevocation={
+            !isReadOnly && !superAdmin ? (row) => openDecideRevocation(row) : undefined
+          }
           onUpdatePlate={
             !isReadOnly && !superAdmin
               ? (row) => { setUpdatePlateInput(""); setUpdatePlateTarget(row); }
@@ -1819,6 +1978,158 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <div className="mt-5 flex gap-3">
               <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setRevokeAprobacionTarget(null)} disabled={acting}>Cancelar</button>
               <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#dc2626" }} disabled={acting} onClick={() => void confirmRevokeAprobacion()}>{acting ? "Procesando…" : "Revocar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HU #12577 (Feature #12565) AC1/AC2 — decidir (aprobar/rechazar) la solicitud de
+          revocatoria activa radicada por el gestor (HU #12572) sobre este trámite Aprobado. */}
+      {decideRevocationTarget && (
+        <div
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Decidir revocatoria"
+        >
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Decidir revocatoria</h2>
+            <p className="mt-2 text-sm opacity-80">Trámite {decideRevocationTarget.referenceNumber}</p>
+            <p className="mt-2 text-xs opacity-70">
+              El gestor solicitó revocar este trámite. Aprobar lo revoca; rechazar lo deja Aprobado
+              para que el gestor pueda reintentar.
+            </p>
+
+            {/* Feature #12565 — motivo + soporte que cargó el gestor al solicitar: antes de esto el
+                OT decidía sin poder verlos. */}
+            <div
+              className="mt-3 rounded-xl border p-3 text-xs"
+              style={{ borderColor: "#DFE5ED", background: "rgba(85,126,255,0.05)" }}
+            >
+              <p className="font-semibold" style={{ color: "#162744" }}>
+                Motivo de la solicitud
+              </p>
+              {decideRevocationDetailLoading ? (
+                <p className="mt-1 opacity-60">Cargando…</p>
+              ) : (
+                <p className="mt-1 whitespace-pre-wrap opacity-80">
+                  {decideRevocationDetail?.reason?.trim() || "El gestor no registró un motivo."}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleVerSoporteRevocatoria()}
+                disabled={decideRevocationDetailLoading || !decideRevocationDetail?.supportDocumentId}
+                className="mt-2 font-semibold underline disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ color: "#557EFF" }}
+              >
+                Ver documento de soporte (PDF)
+              </button>
+            </div>
+
+            <fieldset className="mt-4">
+              <legend className="text-xs font-semibold" style={{ color: "#162744" }}>Decisión</legend>
+              {/* Selector de modo, NO un botón de acción: fondo tenue en vez del mismo azul/rojo
+                  sólido del botón de confirmar de abajo, para que no se lean como "dos aprobar". */}
+              <div
+                className="mt-2 flex gap-1 rounded-xl border p-1 text-xs font-semibold"
+                style={{ borderColor: "#DFE5ED" }}
+                role="group"
+                aria-label="Decisión sobre la solicitud de revocatoria"
+              >
+                <button
+                  type="button"
+                  aria-pressed={decideRevocationMode === "approve"}
+                  onClick={() => {
+                    setDecideRevocationMode("approve");
+                    setDecideRevocationFieldError(null);
+                  }}
+                  className="flex-1 rounded-lg px-3 py-1.5"
+                  style={
+                    decideRevocationMode === "approve"
+                      ? { background: "rgba(85,126,255,0.12)", color: "#3B5BDB" }
+                      : { color: "#64748b" }
+                  }
+                >
+                  Aprobar
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={decideRevocationMode === "reject"}
+                  onClick={() => setDecideRevocationMode("reject")}
+                  className="flex-1 rounded-lg px-3 py-1.5"
+                  style={
+                    decideRevocationMode === "reject"
+                      ? { background: "rgba(220,38,38,0.1)", color: "#dc2626" }
+                      : { color: "#64748b" }
+                  }
+                >
+                  Rechazar
+                </button>
+              </div>
+            </fieldset>
+
+            <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
+              Motivo {decideRevocationMode === "reject" ? "(obligatorio)" : "(opcional)"}
+              <textarea
+                className={`mt-1 ${OT_INPUT_CLS}`}
+                rows={3}
+                value={decideRevocationReason}
+                onChange={(e) => {
+                  setDecideRevocationReason(e.target.value);
+                  if (decideRevocationFieldError) setDecideRevocationFieldError(null);
+                }}
+                placeholder={
+                  decideRevocationMode === "reject"
+                    ? "Indica por qué se rechaza la solicitud de revocatoria…"
+                    : "Motivo de la aprobación (opcional)…"
+                }
+                aria-label={
+                  decideRevocationMode === "reject"
+                    ? "Motivo del rechazo de la revocatoria"
+                    : "Motivo de la aprobación de la revocatoria"
+                }
+                aria-invalid={decideRevocationFieldError ? true : undefined}
+                aria-describedby={decideRevocationFieldError ? "decide-revocation-reason-error" : undefined}
+              />
+            </label>
+            {decideRevocationFieldError && (
+              <p
+                id="decide-revocation-reason-error"
+                role="alert"
+                className="mt-1 text-[11px] font-medium"
+                style={{ color: "#dc2626" }}
+              >
+                {decideRevocationFieldError}
+              </p>
+            )}
+
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                onClick={() => {
+                  setDecideRevocationTarget(null);
+                  setDecideRevocationReason("");
+                  setDecideRevocationFieldError(null);
+                }}
+                disabled={acting}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: decideRevocationMode === "reject" ? "#dc2626" : "#557EFF" }}
+                disabled={acting}
+                onClick={() => void confirmDecideRevocation()}
+              >
+                {acting
+                  ? "Procesando…"
+                  : decideRevocationMode === "reject"
+                    ? "Confirmar rechazo"
+                    : "Aprobar revocatoria"}
+              </button>
             </div>
           </div>
         </div>

@@ -75,6 +75,7 @@ describe("ClientProceduresSection — filtro de estado (HU #11946)", () => {
       quipuxReadOnly: false,
       transitOfficeId: OT_ID,
       featureFlags: [],
+      revocationWindowBusinessDays: null,
     });
     vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
     vi.mocked(searchOtClientProcedures).mockResolvedValue({

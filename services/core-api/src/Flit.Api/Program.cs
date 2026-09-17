@@ -89,6 +89,18 @@ builder.Services.PostConfigure<JwtBearerOptions>(
 builder.Services.AddAdminApplication();
 builder.Services.AddAdminInfrastructure();
 
+// HU #12576 (Feature #12565) — orquestador API-layer de la decisión OT sobre una solicitud de
+// revocatoria: compone Flit.Admin.Application (RevokeOtClientProcedureHandler, HU #12166) con
+// Flit.Tramites.* (IProcedureRevocationRequestRepository/IRevocationRequestNotifier); ninguno de los
+// dos módulos puede referenciar al otro, así que vive en Flit.Api (mismo criterio que la composición
+// inline de AdminOtEndpoints.ApproveClientProcedureAsync).
+builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.DecideRevocationRequestHandler>();
+builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.GetActiveRevocationRequestHandler>();
+
+// HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado OT: mismo criterio de
+// composición API-layer que la decisión de arriba (compone Admin + Tramites).
+builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.ListOtRevocationRequestsHandler>();
+
 // Handler de autorización por permisos del JWT (HU #10165).
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
@@ -296,6 +308,7 @@ app.MapTramitesActorEndpoints();
 // HU #11196 / #11197 — firma a posteriori: marcar el trámite y consultar si la opción aplica.
 app.MapTramitesFirmaPosteriorEndpoints();
 app.MapTramitesAttachmentEndpoints();
+app.MapTramitesRevocationRequestEndpoints(); // HU #12572 (Feature #12565) — solicitud de revocatoria de trámite Aprobado
 app.MapTramitesOcrEndpoints();
 app.MapTramitesParticipantEndpoints();
 app.MapTramitesBiometricaEndpoints();

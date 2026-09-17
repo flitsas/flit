@@ -15,7 +15,9 @@ export type EstadoTramite =
   | 'entregado'
   | 'aprobado'
   | 'rechazado'
-  // HU #12166 — el OT deshizo su propia aprobación. Final.
+  // HU #12166 — el OT deshizo su propia aprobación. Final. Tras el Feature #12566 la única vía
+  // es aprobar una solicitud de revocatoria del gestor (Feature #12565): libera placa/VIN y deja
+  // histórica la documentación anterior.
   | 'revocado'
   // HU #10870/#10874 — reabre la edición de un entregado/rechazado sin volver a borrador.
   | 'subsanacion';
@@ -237,4 +239,120 @@ export function estadoChipStyle(value: string | null | undefined): EstadoChipSty
     border: 'rgba(100,116,139,0.3)',
     accent: '#64748B',
   };
+}
+
+/**
+ * HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria (`ProcedureInstanceDetail
+ * .activeRevocationRequest`), ORTOGONAL al `EstadoTramite` (que permanece 'aprobado' durante todo el
+ * sub-flujo, ADR-0022): es un badge secundario, no el chip de estado. Solo los
+ * dos valores ACTIVOS que el backend puede devolver hoy (HU #12571) — `aprobada`/`rechazada` cierran
+ * el sub-flujo y dejan de ser "activos" (decisión que resuelve la HU #12576, todavía no implementada).
+ */
+export type RevocationRequestStatus = 'solicitada' | 'en_revision';
+
+export const REVOCATION_REQUEST_STATUSES: readonly RevocationRequestStatus[] = [
+  'solicitada',
+  'en_revision',
+] as const;
+
+/** Etiqueta del badge secundario de revocatoria. */
+export const REVOCATION_REQUEST_LABELS: Record<RevocationRequestStatus, string> = {
+  solicitada: 'Revocatoria solicitada',
+  en_revision: 'Revocatoria en revisión',
+};
+
+/**
+ * Tone semántico (`StatusBadge`, `@/components/atom/StatusBadge`) del badge secundario: reutiliza la
+ * paleta unificada de tones en vez de tintes propios, para que el badge se lea claramente como
+ * SECUNDARIO/distinto del chip sólido de estado (`estadoChipStyle`/`detalleEstadoHeader`).
+ */
+export const REVOCATION_REQUEST_TONES: Record<RevocationRequestStatus, 'warning' | 'info'> = {
+  solicitada: 'warning',
+  en_revision: 'info',
+};
+
+export function esRevocationRequestStatus(
+  value: string | null | undefined,
+): value is RevocationRequestStatus {
+  return !!value && (REVOCATION_REQUEST_STATUSES as readonly string[]).includes(value);
+}
+
+/** Label del badge de sub-estado de revocatoria; `null` si no hay solicitud activa. */
+export function revocationRequestLabel(value: string | null | undefined): string | null {
+  return esRevocationRequestStatus(value) ? REVOCATION_REQUEST_LABELS[value] : null;
+}
+
+/** Tone del badge de sub-estado de revocatoria; `null` si no hay solicitud activa. */
+export function revocationRequestTone(value: string | null | undefined): 'warning' | 'info' | null {
+  return esRevocationRequestStatus(value) ? REVOCATION_REQUEST_TONES[value] : null;
+}
+
+/**
+ * HU #12578 (Feature #12565) — los CUATRO sub-estados que puede tener un intento de revocatoria a lo
+ * largo de su vida (activos + cerrados), para la vista dedicada "Revocatorias". Distinto de
+ * {@link RevocationRequestStatus} (solo los DOS activos, para el badge secundario del detalle del
+ * trámite — HU #12575): ese badge deja de pintarse cuando la solicitud se cierra (el trámite vuelve a
+ * hablar por su `EstadoTramite`), pero el LISTADO dedicado sí necesita mostrar también los intentos ya
+ * decididos (`aprobada`/`rechazada`), así que amplía el vocabulario en vez de reutilizar el tipo tal
+ * cual.
+ */
+export type RevocationRequestListStatus = RevocationRequestStatus | 'aprobada' | 'rechazada';
+
+export const REVOCATION_REQUEST_LIST_STATUSES: readonly RevocationRequestListStatus[] = [
+  'solicitada',
+  'en_revision',
+  'aprobada',
+  'rechazada',
+] as const;
+
+/** Reutiliza los labels de los dos activos ({@link REVOCATION_REQUEST_LABELS}); añade los cerrados. */
+export const REVOCATION_REQUEST_LIST_LABELS: Record<RevocationRequestListStatus, string> = {
+  ...REVOCATION_REQUEST_LABELS,
+  aprobada: 'Revocatoria aprobada',
+  rechazada: 'Revocatoria rechazada',
+};
+
+/**
+ * Tone semántico por sub-estado del listado. Reutiliza `warning`/`info` de los activos
+ * ({@link REVOCATION_REQUEST_TONES}); `aprobada` cierra en verde (éxito) y `rechazada` en rojo
+ * (el trámite queda Aprobado sin cambios, pero el INTENTO no prosperó).
+ */
+export const REVOCATION_REQUEST_LIST_TONES: Record<
+  RevocationRequestListStatus,
+  'success' | 'warning' | 'danger' | 'info'
+> = {
+  ...REVOCATION_REQUEST_TONES,
+  aprobada: 'success',
+  rechazada: 'danger',
+};
+
+function esRevocationRequestListStatus(
+  value: string | null | undefined,
+): value is RevocationRequestListStatus {
+  return !!value && (REVOCATION_REQUEST_LIST_STATUSES as readonly string[]).includes(value);
+}
+
+/** Label del listado dedicado; cae al fallback titlecase de {@link estadoLabel} si no reconoce el valor. */
+export function revocationRequestListLabel(value: string | null | undefined): string {
+  return esRevocationRequestListStatus(value)
+    ? REVOCATION_REQUEST_LIST_LABELS[value]
+    : estadoLabel(value);
+}
+
+/** Tone del listado dedicado; `neutral` (StatusBadge) si no reconoce el valor. */
+export function revocationRequestListTone(
+  value: string | null | undefined,
+): 'success' | 'warning' | 'danger' | 'info' | 'neutral' {
+  return esRevocationRequestListStatus(value) ? REVOCATION_REQUEST_LIST_TONES[value] : 'neutral';
+}
+
+/**
+ * Color CSS (token `--badge-*-fg`) del indicativo liviano (ícono + texto) de las tablas de trámites —
+ * mismo tone semántico de {@link revocationRequestListTone}, pero como valor de color listo para un
+ * `style={{ color }}` en vez de un tone de `StatusBadge` (ese indicativo no usa StatusBadge a
+ * propósito: ver comentario en `TramitesTable.tsx`/`ClientProceduresTable.tsx`).
+ */
+export function revocationRequestListColor(value: string | null | undefined): string {
+  const tone = revocationRequestListTone(value);
+  return `var(--badge-${tone}-fg)`;
 }

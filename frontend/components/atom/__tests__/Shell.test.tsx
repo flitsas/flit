@@ -74,11 +74,56 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     expect(screen.getByRole("button", { name: "Usuarios" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reportes" })).toBeInTheDocument();
 
-    // Administración = submenú Reglas / Documentos / Requisitos
+    // Administración = submenú Reglas / Documentos / Requisitos / Configuración
     await userEvent.click(screen.getByRole("button", { name: "Administración" }));
     expect(screen.getByRole("button", { name: "Reglas" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Documentos" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Requisitos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Configuración" })).toBeInTheDocument();
+  });
+
+  // Pedido del usuario (2026-09-16) — modo Dashboard/QX, ventana de revocatoria (HU #12569) y
+  // feature flags operativos solo vivían en una ruta legacy sin enlace en ningún menú (solo por
+  // URL). "Configuración" es su punto de entrada real dentro de "Administración".
+  it("un Admin OT ve 'Configuración' dentro de Administración", async () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
+    );
+
+    renderShell();
+
+    expect(screen.queryByRole("button", { name: "Configuración" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Administración" }));
+    expect(screen.getByRole("button", { name: "Configuración" })).toBeInTheDocument();
+  });
+
+  // Pedido del usuario (2026-09-16): se retiró la entrada de dock "Revocatorias" del Admin OT —
+  // mismo criterio ya aplicado del lado gestor (HU #12578, AC2 revertido): el filtro "Revocado" del
+  // listado de trámites ya cubre ese caso de uso sin una pantalla aparte. Test negativo para que no
+  // reaparezca por accidente.
+  it("un Admin OT NO ve 'Revocatorias' dentro de Administración", async () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
+    );
+
+    renderShell();
+
+    await userEvent.click(screen.getByRole("button", { name: "Administración" }));
+    expect(screen.queryByRole("button", { name: "Revocatorias" })).not.toBeInTheDocument();
+  });
+
+  it("HU #12578 — un AdminCompany (no OT) no tiene el hub OT y por tanto no ve 'Revocatorias'", () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: "u1", role: "AdminCompany", email: "admin@empresa.local" }),
+    );
+
+    renderShell();
+
+    // Su "Administración" es la consola de compañía (RL, baúl…), no el hub OT: no hay OT_ADM_DOCK.
+    expect(screen.queryByRole("button", { name: "Revocatorias" })).not.toBeInTheDocument();
   });
 });
 

@@ -146,6 +146,26 @@ public sealed record OtClientProcedure
 
     /// <summary>Detalle (GET by id): decisión de prenda del trámite; <c>null</c> si no hay decisión.</summary>
     public OtClientProcedurePrenda? Prenda { get; init; }
+
+    /// <summary>
+    /// Feature #12565 — sub-estado ACTIVO ('solicitada' | 'en_revision') de la solicitud de revocatoria
+    /// del gestor; <c>null</c> si nunca se solicitó o ya se decidió (aprobada/rechazada). Alimenta el
+    /// indicativo "Revocatoria en curso" de la bandeja OT — no reemplaza "Decidir revocatoria".
+    /// </summary>
+    public string? RevocationRequestStatus { get; init; }
+
+    /// <summary>
+    /// Feature #12565 — decisión ('aprobada' | 'rechazada') del intento de revocatoria MÁS RECIENTE,
+    /// para el detalle del trámite (no la bandeja): sin esto, tras decidir, el trámite no dejaba rastro
+    /// de qué se decidió ni por qué. <c>null</c> si nunca se decidió una (nunca se solicitó, o la
+    /// solicitud sigue activa — ese caso lo cubre <see cref="RevocationRequestStatus"/>).
+    /// </summary>
+    public string? RevocationDecisionStatus { get; init; }
+    public DateTimeOffset? RevocationDecisionAt { get; init; }
+    /// <summary>Motivo con el que el gestor pidió la revocatoria (HU #12572, AC1).</summary>
+    public string? RevocationRequestReason { get; init; }
+    /// <summary>Motivo de la decisión del OT: obligatorio al rechazar, opcional al aprobar (HU #12577).</summary>
+    public string? RevocationDecisionReason { get; init; }
 }
 
 /// <summary>
