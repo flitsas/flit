@@ -65,16 +65,11 @@ export interface ClientProceduresTableProps {
   /** Feature #10587 — revocar la preasignación de un trámite. */
   onRevoke?: (row: OtClientProcedure) => void;
   /**
-   * HU #12166 (Feature #12156) — el OT deshace su propia aprobación (aprobado→revocado). Distinto
-   * de `onRevoke` (revoca una PREASIGNACIÓN antes de aprobar, HU #10655): mismo rótulo "Revocar" en
-   * el menú porque nunca coinciden en la misma fila (aprobar limpia plateFlowStatus).
-   */
-  onRevokeAprobacion?: (row: OtClientProcedure) => void;
-  /**
    * HU #12577 (Feature #12565) — decidir (aprobar/rechazar) la solicitud de revocatoria que el
-   * gestor haya radicado sobre este trámite Aprobado (HU #12572). Distinto de `onRevokeAprobacion`
-   * (acción UNILATERAL del OT, sin solicitud previa, HU #12166): las dos conviven en Aprobado
-   * hasta que la Feature #12566 retire la unilateral.
+   * gestor haya radicado sobre este trámite Aprobado (HU #12572). Desde la HU #12581
+   * (Feature #12566) es la ÚNICA acción del OT que lleva a Revocado: la revocación unilateral
+   * de HU #12166 ya no se ofrece. No confundir con `onRevoke`, que revoca una PREASIGNACIÓN
+   * antes de aprobar (HU #10655) y conserva el rótulo "Revocar".
    */
   onDecideRevocation?: (row: OtClientProcedure) => void;
   /** HU #12167 (Feature #12156) — corregir la placa dentro de la ventana de 1 hora (una única vez). */
@@ -402,7 +397,6 @@ export function ClientProceduresTable({
   onAdjuntarLt,
   onAssignPlate,
   onRevoke,
-  onRevokeAprobacion,
   onDecideRevocation,
   onUpdatePlate,
   consolidadoActingId = null,
@@ -462,12 +456,6 @@ export function ClientProceduresTable({
       onRevoke
     ) {
       items.push({ key: "revocar", label: "Revocar", icon: Undo2, onSelect: () => onRevoke(row) });
-    }
-
-    // HU #12168 AC1 — "Revocar" (la aprobación) solo existe en Aprobado: es la única transición que
-    // la máquina de estados permite desde ahí (aprobado→revocado), y solo el OT puede dispararla.
-    if (row.status === "aprobado" && onRevokeAprobacion) {
-      items.push({ key: "revocar-aprobacion", label: "Revocar", icon: Undo2, onSelect: () => onRevokeAprobacion(row) });
     }
 
     // HU #12577 (Feature #12565) AC1 — decidir la solicitud de revocatoria del gestor. La bandeja

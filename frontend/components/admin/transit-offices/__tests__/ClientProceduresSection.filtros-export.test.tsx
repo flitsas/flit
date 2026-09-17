@@ -26,7 +26,6 @@ vi.mock("@/lib/api/admin-ot", () => ({
   fetchOtProfile: vi.fn(),
   approveOtClientProcedure: vi.fn(),
   rejectOtClientProcedure: vi.fn(),
-  revokeOtClientProcedure: vi.fn(),
   generarOtConsolidadoMaestro: vi.fn(),
   fetchOtDocuments: vi.fn(),
   fetchOtAttachmentPreviewUrl: vi.fn(),

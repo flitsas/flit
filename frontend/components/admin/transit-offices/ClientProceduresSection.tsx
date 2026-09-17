@@ -19,7 +19,6 @@ import {
   generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
   rejectOtRevocationRequest,
-  revokeOtClientProcedure,
   searchOtClientProcedures,
 } from "@/lib/api/admin-ot";
 import type {
@@ -478,13 +477,10 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [assignMode, setAssignMode] = useState<"range" | "out">("range");
   const [revokeTarget, setRevokeTarget] = useState<OtClientProcedure | null>(null);
   const [revokePlateReason, setRevokePlateReason] = useState("");
-  // HU #12166 (Feature #12156) — revocar la APROBACIÓN (aprobado→revocado), distinto del revoke de
-  // preasignación de arriba.
-  const [revokeAprobacionTarget, setRevokeAprobacionTarget] = useState<OtClientProcedure | null>(null);
-  const [revokeAprobacionReason, setRevokeAprobacionReason] = useState("");
   // HU #12577 (Feature #12565) — decidir (aprobar/rechazar) la solicitud de revocatoria ACTIVA del
-  // trámite. Distinto de `revokeAprobacionTarget` de arriba (acción unilateral del OT, HU #12166):
-  // las dos conviven en Aprobado hasta que la Feature #12566 retire la unilateral.
+  // trámite. Desde la HU #12581 (Feature #12566) es la única vía del OT a Revocado: la revocación
+  // unilateral de HU #12166 ya no se ofrece. `revokeTarget` de arriba es otra cosa: la
+  // preasignación de placa (HU #10655).
   const [decideRevocationTarget, setDecideRevocationTarget] = useState<OtClientProcedure | null>(null);
   const [decideRevocationMode, setDecideRevocationMode] = useState<"approve" | "reject">("approve");
   const [decideRevocationReason, setDecideRevocationReason] = useState("");
@@ -1107,25 +1103,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
   };
 
-  // HU #12166 (Feature #12156) — revocar la aprobación: libera la placa (el trámite ya no cuenta
-  // como "en proceso" en el CF-01/CF-03 del backend) y marca el FUR/certificados como históricos.
-  // AC4: confirmación previa (el modal en sí) + registro de usuario/fecha/hora (lo hace el backend).
-  const confirmRevokeAprobacion = async () => {
-    if (!revokeAprobacionTarget) return;
-    setActing(true);
-    try {
-      const updated = await revokeOtClientProcedure(revokeAprobacionTarget.id, revokeAprobacionReason);
-      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-      setDetailProcedure((prev) => (prev && prev.id === updated.id ? updated : prev));
-      setRevokeAprobacionTarget(null);
-      setRevokeAprobacionReason("");
-      show("Trámite revocado.", "success");
-    } catch {
-      show("No se pudo revocar el trámite.", "error");
-    } finally {
-      setActing(false);
-    }
-  };
 
   // HU #12577 (Feature #12565) AC1 — abre el modal de decisión limpio, siempre en "Aprobar" por
   // defecto (es la decisión más común: honrar lo que el gestor pidió).
@@ -1190,7 +1167,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
    *
    * AC2: rechazar sin motivo NUNCA llama al backend — se valida aquí primero, igual que
    * `RevocationRequestModal` (HU #12574) del lado del gestor. Aprobar sí acepta motivo vacío (es
-   * opcional, mismo criterio que `revokeOtClientProcedure`/HU #12166).
+   * opcional, mismo criterio que la revocación de HU #12166 que este flujo reutiliza por dentro).
    */
   const confirmDecideRevocation = async () => {
     if (!decideRevocationTarget) return;
@@ -1623,11 +1600,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           onReject={(p) => void openReject(p)}
           onAssignPlate={!isReadOnly && !superAdmin ? openAssignPlate : undefined}
           onRevoke={!isReadOnly && !superAdmin ? (row) => { setRevokePlateReason(""); setRevokeTarget(row); } : undefined}
-          onRevokeAprobacion={
-            !isReadOnly && !superAdmin
-              ? (row) => { setRevokeAprobacionReason(""); setRevokeAprobacionTarget(row); }
-              : undefined
-          }
           onDecideRevocation={
             !isReadOnly && !superAdmin ? (row) => openDecideRevocation(row) : undefined
           }
@@ -1895,38 +1867,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <div className="mt-5 flex gap-3">
               <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setRevokeTarget(null)} disabled={acting}>Cancelar</button>
               <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#dc2626" }} disabled={acting || !revokePlateReason.trim()} onClick={() => void confirmRevokePlate()}>{acting ? "Procesando…" : "Revocar"}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* HU #12166 (Feature #12156) AC4 — confirmación previa a revocar la APROBACIÓN. Distinto del
-          modal de arriba (que revoca una preasignación de placa antes de aprobar). */}
-      {revokeAprobacionTarget && (
-        <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Revocar trámite"
-        >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#557EFF" }}>¿Revocar este trámite aprobado?</h2>
-            <p className="mt-2 text-sm opacity-80">Trámite {revokeAprobacionTarget.referenceNumber}</p>
-            <p className="mt-2 text-xs opacity-70">
-              Se libera la placa/VIN para una nueva radicación y el FUR/certificados vigentes quedan
-              marcados como históricos. Esta acción no se puede deshacer desde aquí.
-            </p>
-            <textarea
-              className={`mt-3 ${OT_INPUT_CLS}`}
-              rows={3}
-              value={revokeAprobacionReason}
-              onChange={(e) => setRevokeAprobacionReason(e.target.value)}
-              placeholder="Motivo de la revocación (opcional)…"
-              aria-label="Motivo de la revocación del trámite"
-            />
-            <div className="mt-5 flex gap-3">
-              <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setRevokeAprobacionTarget(null)} disabled={acting}>Cancelar</button>
-              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#dc2626" }} disabled={acting} onClick={() => void confirmRevokeAprobacion()}>{acting ? "Procesando…" : "Revocar"}</button>
             </div>
           </div>
         </div>
