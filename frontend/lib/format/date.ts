@@ -4,8 +4,19 @@
 // sin hora. Las bitácoras técnicas (webhooks, logs de integración, línea de tiempo del trámite)
 // CONSERVAN la hora: ahí el minuto es información de diagnóstico, no ruido.
 
-/** Zona horaria de operación (Colombia). Fija el día calendario del que habla el negocio. */
-const TZ = "America/Bogota";
+/**
+ * Zona horaria de operación (Colombia). Fija el día calendario del que habla el negocio.
+ *
+ * HU #12663 — se exporta para que NINGÚN punto de la app formatee una fecha con hora sin fijarla.
+ * Sin `timeZone`, `toLocaleString` e `Intl.DateTimeFormat` usan la zona del NAVEGADOR: quien se
+ * conecte desde fuera de Colombia ve horas que no son las del trámite.
+ *
+ * Solo aplica a INSTANTES. Una fecha de calendario (`AAAA-MM-DD`) no se convierte de zona: ver
+ * `formatFecha` y el defecto de la HU #11194.
+ */
+export const ZONA_COLOMBIA = "America/Bogota";
+
+const TZ = ZONA_COLOMBIA;
 
 const FECHA_CORTA = new Intl.DateTimeFormat("es-CO", {
   timeZone: TZ,

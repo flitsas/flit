@@ -15,7 +15,9 @@ import {
   useLiveOverview,
 } from "./useLiveOverview";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 export interface LiveNowPanelProps {
+
   tenantId?: string;
   stuckDays?: number;
   /** SuperAdmin sin compañía: no llama a la API y muestra el aviso. */
@@ -139,7 +141,7 @@ function LiveStat({ label, value, color, tooltip }: { label: string; value: numb
 
 function formatTime(iso: string): string {
   try {
-    return new Date(iso).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+    return new Date(iso).toLocaleTimeString("es-CO", { timeZone: ZONA_COLOMBIA, hour: "2-digit", minute: "2-digit" });
   } catch {
     return iso;
   }

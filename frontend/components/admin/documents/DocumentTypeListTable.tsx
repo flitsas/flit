@@ -7,7 +7,9 @@ import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
 import { Pagination } from "@/components/atom/Pagination";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 // Tabla paginada del catálogo de tipos de documento (HU #10198, AC1). Columnas:
+
 // Código, Nombre, Origen (cargue/autogenerado), Estado, Fecha de creación + acciones.
 // Paginación server-side: la tabla solo emite el cambio de página.
 export interface DocumentTypeListTableProps {
@@ -134,5 +136,5 @@ function formatDate(iso: string): string {
   if (Number.isNaN(parsed.getTime())) {
     return iso;
   }
-  return parsed.toLocaleDateString("es-CO", { year: "numeric", month: "2-digit", day: "2-digit" });
+  return parsed.toLocaleDateString("es-CO", { timeZone: ZONA_COLOMBIA, year: "numeric", month: "2-digit", day: "2-digit" });
 }

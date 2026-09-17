@@ -60,7 +60,9 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
+import { ZONA_COLOMBIA } from '@/lib/format/date';
 /**
+
  * Modal «Ver» — detalle del trámite radicado. Shell alineado al mockup (`DetalleTramiteModal`):
  * canvas #EEF5FF, header compuesto, toggles de trazabilidad, grid 4/8 y stepper ADR-0050.
  */
@@ -602,7 +604,7 @@ export function TramiteDetalleModal({
                   ) : null}
                   <p className="mt-1 text-[11px] opacity-70">
                     Decidido el{' '}
-                    {new Date(detail.lastRevocationDecision.decidedAt).toLocaleString('es-CO', {
+                    {new Date(detail.lastRevocationDecision.decidedAt).toLocaleString('es-CO', { timeZone: ZONA_COLOMBIA,
                       dateStyle: 'medium',
                       timeStyle: 'short',
                     })}
@@ -639,7 +641,7 @@ export function TramiteDetalleModal({
                 documentación anterior es histórica.
                 <p className="mt-1 text-[11px] opacity-70">
                   Decidido el{' '}
-                  {new Date(detail.lastRevocationDecision.decidedAt).toLocaleString('es-CO', {
+                  {new Date(detail.lastRevocationDecision.decidedAt).toLocaleString('es-CO', { timeZone: ZONA_COLOMBIA,
                     dateStyle: 'medium',
                     timeStyle: 'short',
                   })}

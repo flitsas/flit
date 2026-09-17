@@ -19,6 +19,7 @@ import {
 } from "@/lib/api/admin-runt-confirmation";
 import { UltimaCorridaResumen } from "./UltimaCorridaResumen";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 type Estado = "loading" | "error" | "ready";
 
 /** Lo que el usuario edita: texto en los numéricos para no pelear con el input a medio escribir. */
@@ -308,7 +309,7 @@ export function ConfirmacionRuntConfigPanel() {
           </button>
           {persistido?.updatedAt ? (
             <span className="text-[11px] text-[#59677D] dark:text-white/60">
-              Última modificación: {new Date(persistido.updatedAt).toLocaleString("es-CO")}
+              Última modificación: {new Date(persistido.updatedAt).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA })}
             </span>
           ) : null}
         </div>

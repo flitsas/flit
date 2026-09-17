@@ -11,7 +11,9 @@ import type { CompanyChildListItem, CompanyListItem } from "@/lib/api/types";
 import { LinkCompanyDialog } from "./LinkCompanyDialog";
 import { UnlinkCompanyDialog } from "./UnlinkCompanyDialog";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 export interface CompanyChildrenSectionProps {
+
   company: CompanyListItem;
 }
 
@@ -167,5 +169,5 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
 function formatDate(iso: string): string {
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return iso;
-  return parsed.toLocaleDateString("es-CO", { year: "numeric", month: "2-digit", day: "2-digit" });
+  return parsed.toLocaleDateString("es-CO", { timeZone: ZONA_COLOMBIA, year: "numeric", month: "2-digit", day: "2-digit" });
 }

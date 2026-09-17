@@ -14,7 +14,9 @@ import {
 import { fetchAdminAuditLog } from '@/lib/api/audit';
 import type { AdminAuditLogEntry, AdminAuditLogQuery, AdminAuditModule, AdminAuditTenantType } from '@/lib/api/types';
 
+import { ZONA_COLOMBIA } from '@/lib/format/date';
 /**
+
  * Módulo "Auditoría" (HU #10680). Pantalla SuperAdmin-only, montada DENTRO del Shell SPA
  * (nunca aislada), que consulta el rastro unificado de auditoría administrativa/seguridad
  * — GET /api/v1/superadmin/audit (HU #10679) — con filtros server-side y paginación.
@@ -45,7 +47,7 @@ function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }
 
 /** Acorta un uuid a sus primeros 8 caracteres para no romper el layout de la tabla. */
