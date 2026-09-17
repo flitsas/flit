@@ -64,6 +64,14 @@ const aprobadoConPlaca: OtClientProcedure = {
   plateAssignedAt: new Date(Date.now() - 60_000).toISOString(),
 };
 
+/** Aprobado CON solicitud activa del gestor: el "Given" literal del AC2. */
+const aprobadoConSolicitud: OtClientProcedure = {
+  ...aprobadoConPlaca,
+  id: "proc-aprobado-2",
+  referenceNumber: "RAD-2026-779",
+  revocationRequestStatus: "solicitada",
+};
+
 /** Preasignado: el "Revocar" que sigue vivo es el de la PLACA (HU #10655), no el del trámite. */
 const preasignado: OtClientProcedure = {
   id: "proc-preasignado-1",
@@ -130,13 +138,17 @@ describe("ClientProceduresSection — HU #12581 retiro del botón libre de revoc
     expect(screen.queryByRole("menuitem", { name: /^Revocar$/ })).not.toBeInTheDocument();
   });
 
-  it("AC2 en su lugar queda 'Decidir revocatoria' como única vía a Revocado", async () => {
+  it("AC2 con solicitud pendiente solo queda 'Decidir revocatoria', y accionable", async () => {
+    conFilas([aprobadoConSolicitud]);
     const user = userEvent.setup();
     renderSection();
     await abrirMenu(user);
 
     const revocatorias = await screen.findAllByRole("menuitem", { name: /revoca/i });
     expect(revocatorias.map((m) => m.textContent?.trim())).toEqual(["Decidir revocatoria"]);
+    // Habilitada: el gestor sí la solicitó. Sin solicitud se ofrece deshabilitada con motivo
+    // (HU #12577) — lo que nunca reaparece es el "Revocar" libre del AC1.
+    expect(revocatorias[0]).not.toBeDisabled();
   });
 
   it("AC3 'Actualizar placa' (HU #12167) sigue presente y habilitada en la misma pantalla", async () => {
