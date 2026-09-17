@@ -10,7 +10,7 @@ import {
 } from '@/lib/tramites/identidad-lectura';
 import type { BiometricValidation, IdentityAuditEvent } from '@/lib/api/types/procedure-runtime';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 /**
 
  * HU #12186 — la validación de identidad de UNA persona, contada para quien gestiona el trámite.
@@ -226,7 +226,7 @@ function Hito({ hito, vigente }: { hito: HitoIdentidad; vigente: boolean }) {
 
 function fecha(iso: string): string {
   try {
-    return new Date(iso).toLocaleString('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' });
+    return formatFechaHora(new Date(iso));
   } catch {
     return iso;
   }

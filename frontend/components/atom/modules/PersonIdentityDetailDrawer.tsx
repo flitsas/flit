@@ -26,7 +26,7 @@ import type {
   PersonBiometricValidationsResponse,
 } from '@/lib/api/types/procedure-runtime';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 /**
 
  * Detalle multi-validación por persona (HU #11273 / CF-06 / ADR-0040).
@@ -54,7 +54,7 @@ function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  return formatFechaHora(d);
 }
 
 export interface PersonIdentityDetailDrawerProps {

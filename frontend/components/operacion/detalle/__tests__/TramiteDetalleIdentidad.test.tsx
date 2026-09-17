@@ -131,7 +131,7 @@ describe('TramiteDetalleIdentidad', () => {
 
     const fila = (await screen.findByText('Comprador')).closest('li') as HTMLElement;
     expect(within(fila).getByText('Aprobado')).toBeInTheDocument();
-    expect(within(fila).getByText('2026/06/20')).toBeInTheDocument();
+    expect(within(fila).getByText('20/06/2026 10:30')).toBeInTheDocument();
   });
 
   it('traspaso: un renglón por parte, con estados distintos y sin mezclar datos entre partes', async () => {
@@ -156,8 +156,10 @@ describe('TramiteDetalleIdentidad', () => {
     expect(within(filaVendedor).getByText('Aprobado')).toBeInTheDocument();
     expect(within(filaComprador).getByText('En proceso')).toBeInTheDocument();
     // Sin `validatedAt` (aún no aprobada), la fecha bajo la etiqueta cae a `createdAt`: informa
-    // cuándo se envió, no inventa una validación que no ha ocurrido.
-    expect(within(filaComprador).getByText('2026/06/20')).toBeInTheDocument();
+    // cuándo se envió, no inventa una validación que no ha ocurrido. Con la hora del formato
+    // estándar (Épica #12552) el fallback se distingue: 10:00 es `createdAt`, 10:30 sería
+    // `validatedAt`. Antes, sin hora, los dos casos se veían igual y la prueba no lo comprobaba.
+    expect(within(filaComprador).getByText('20/06/2026 10:00')).toBeInTheDocument();
   });
 
   it('traspaso: la parte sin validación ni acreditación por baúl queda "Sin iniciar", no oculta', async () => {

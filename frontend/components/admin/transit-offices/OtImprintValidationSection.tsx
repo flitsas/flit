@@ -21,7 +21,7 @@ import {
 import { ApiError } from "@/lib/api/types";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 type ViewPhase = "idle" | "loading" | "error" | "empty" | "ready";
 
 type HistoryPhase = "idle" | "loading" | "error" | "empty" | "ready";
@@ -589,10 +589,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
 function formatDateTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA,
-    dateStyle: "short",
-    timeStyle: "short",
-  });
+  return formatFechaHora(date);
 }
 
 function shortHash(hash: string): string {

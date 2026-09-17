@@ -12,7 +12,7 @@ import {
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { DeedsFormPanel, type DeedEditingRef } from "../deeds/DeedsFormPanel";
 import { saveDeed, fetchDeedDetail, type DeedFormInput } from "@/lib/api/admin-deeds";
-import { formatFecha } from "@/lib/format/date";
+import { formatFechaCalendario } from "@/lib/format/date";
 import { digitsOnly } from "@/lib/format/currency";
 import type {
   LegalRepresentativeCompanySummary,
@@ -566,7 +566,7 @@ function DeedBlock({
                   />
                 </div>
                 <p className="mt-0.5 font-mono text-[10px] opacity-60">
-                  {formatFecha(deed.vigenciaDesde)} – {formatFecha(deed.vigenciaHasta)}
+                  {formatFechaCalendario(deed.vigenciaDesde)} – {formatFechaCalendario(deed.vigenciaHasta)}
                 </p>
               </div>
 

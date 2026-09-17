@@ -28,7 +28,7 @@ import {
 } from "./detalle/ot-detalle-visual";
 import { formatOtProcedureStatus, procedureStatusChip } from "./ot-utils";
 
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 /**
 
  * Bloques del detalle. Ya no son pasos de un recorrido sino acordeones independientes; el nombre
@@ -297,10 +297,7 @@ export function ClientProcedureDetailModal({
             {row.revocationDecisionAt ? (
               <p className="mt-0.5 opacity-80">
                 Decidido el{" "}
-                {new Date(row.revocationDecisionAt).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA,
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                {formatFechaHora(new Date(row.revocationDecisionAt))}
               </p>
             ) : null}
           </div>

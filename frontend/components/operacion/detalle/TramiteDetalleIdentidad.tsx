@@ -10,7 +10,7 @@ import {
   COPY_SECCION_FUERA_DE_ALCANCE,
   describirErrorDeSeccion,
 } from '@/lib/tramites/network-scope';
-import { formatFecha } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 import type {
   BiometricEstado,
   BiometricParte,
@@ -160,7 +160,7 @@ function FilaValidacion({
           <span className="block text-xs font-medium text-[#162744] dark:text-white">{fila.label}</span>
           {fila.timestamp ? (
             <span className="block text-xs text-[#162744]/70 dark:text-white/70">
-              {formatFecha(fila.timestamp)}
+              {formatFechaHora(fila.timestamp)}
             </span>
           ) : null}
         </span>

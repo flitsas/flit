@@ -33,7 +33,7 @@ import { tramitesClient } from "@/lib/api/tramites-client";
 import type { InstanceSummary } from "@/lib/api/types/procedure-runtime";
 import { estadoLabel } from "@/lib/tramites/estados";
 
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 /** Fases de la vista. `idle` = todavía no se consultó nada (distinto de vacío). */
 
 type Phase = "idle" | "loading" | "error" | "empty" | "ready";
@@ -61,7 +61,7 @@ function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA, dateStyle: "short", timeStyle: "short" });
+  return formatFechaHora(date);
 }
 
 /** Forma canónica de la placa en el cliente: sin espacios y en mayúscula (el servidor repite). */

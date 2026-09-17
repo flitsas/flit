@@ -5,7 +5,7 @@
 // y la acción disponible se deciden aquí una sola vez. El backend calcula el estado en
 // `AdminIdentityVigencia` y ahora devuelve también hasta cuándo es válida.
 
-import { formatFecha } from "@/lib/format/date";
+import { formatFechaCalendario, formatFechaHora } from "@/lib/format/date";
 
 /** Estados que expone el backend (`AdminIdentityVigencia`). */
 export type AdminIdentityStatus = "valid" | "expired" | "pending" | "none";
@@ -80,7 +80,7 @@ export function vigenciaLabel(
   validUntil: string | null | undefined,
 ): string | null {
   if ((status ?? "none") !== "valid" || !validUntil) return null;
-  const fecha = formatFecha(validUntil, "");
+  const fecha = formatFechaHora(validUntil, "");
   return fecha ? `Válida hasta ${fecha}` : null;
 }
 
@@ -122,7 +122,7 @@ export function firmaBaulRotulo(
   vigenteHasta: string | null | undefined,
 ): string {
   if (!vigente) return "Firma del baúl: sin firma vigente";
-  const fecha = vigenteHasta ? formatFecha(vigenteHasta, "") : "";
+  const fecha = vigenteHasta ? formatFechaCalendario(vigenteHasta, "") : "";
   return fecha ? `Firma del baúl: vigente hasta ${fecha}` : "Firma del baúl: vigente";
 }
 

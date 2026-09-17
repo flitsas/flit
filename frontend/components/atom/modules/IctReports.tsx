@@ -59,7 +59,7 @@ import { SchedulingPanel } from "./_reportes/scheduling/SchedulingPanel";
 import type { SchedulePresetConsulta } from "./_reportes/scheduling/ScheduleForm";
 import { IctQueriesTab } from "./_ict/IctQueriesTab";
 
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 type TabId = "novedades" | "atascados" | "jobs" | "webhooks" | "consultas";
 
 /**
@@ -521,11 +521,10 @@ function useReportTotal(tab: TabId, total: number | undefined, onTotal: (tab: Ta
   }, [tab, total, onTotal]);
 }
 
-const dateTimeFmt = new Intl.DateTimeFormat("es-CO", { timeZone: ZONA_COLOMBIA, dateStyle: "short", timeStyle: "short" });
 
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : dateTimeFmt.format(d);
+  return Number.isNaN(d.getTime()) ? "—" : formatFechaHora(d);
 }
 
 /**

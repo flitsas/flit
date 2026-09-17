@@ -1,6 +1,6 @@
 "use client";
 
-import { formatFecha } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
 
 /** Muestra los últimos 6 caracteres visibles de una URL (HU #10219 AC1). */
@@ -86,9 +86,10 @@ export function plateUpdateRemainingLabel(plateAssignedAt: string): string {
   return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
-// HU #11018 — formato de negocio unico: AÑO/MES/DIA, sin hora.
+// Epica #12552 — formato unico de instante: DD/MM/YYYY HH:mm en hora de Colombia.
+// Sustituye el criterio de la HU #11018 (AÑO/MES/DIA sin hora) por decision del negocio.
 export function formatOtDate(iso: string): string {
-  return formatFecha(iso, iso);
+  return formatFechaHora(iso, iso);
 }
 
 export const OT_RULE_FIELDS = [

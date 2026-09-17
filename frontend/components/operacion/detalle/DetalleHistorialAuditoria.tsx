@@ -5,11 +5,11 @@ import type { StatusHistory } from '@/lib/api/types/procedure-runtime';
 import { estadoLabel } from '@/lib/tramites/estados';
 import { DETALLE_BLUE, DETALLE_CARD, DETALLE_NAVY, DETALLE_BORDER } from './detalle-visual';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 function fmt(iso: string): string {
 
   try {
-    return new Date(iso).toLocaleString('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' });
+    return formatFechaHora(new Date(iso));
   } catch {
     return iso;
   }

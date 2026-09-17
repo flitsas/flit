@@ -8,7 +8,7 @@ import {
   type NotificationTestMailbox,
 } from "@/lib/api/admin-plataforma-notificaciones";
 
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 export interface NotificacionBuzonPruebasSectionProps {
 
   mailbox: NotificationTestMailbox | null;
@@ -170,7 +170,7 @@ export function NotificacionBuzonPruebasSection({
                 <span className="font-semibold">{mailbox.testRecipientEmail}</span>
                 <span className="ml-2 text-[11px] text-[#59677D] dark:text-white/55">
                   {mailbox.lastTestSentAt
-                    ? `Última prueba enviada: ${new Date(mailbox.lastTestSentAt).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA })}`
+                    ? `Última prueba enviada: ${formatFechaHora(new Date(mailbox.lastTestSentAt))}`
                     : "Sin envíos de prueba todavía."}
                 </span>
               </p>

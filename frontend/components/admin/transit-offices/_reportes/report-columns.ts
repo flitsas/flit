@@ -98,14 +98,13 @@ export function estadoMeta(estado: string): EstadoMeta {
 // `formatInt` y `plural` viven en el kit compartido: los usan las dos consolas de consultas, y dos
 // formateadores de número acaban enseñando «1.284» en un informe y «1284» en el otro.
 import {
-  formatDate,
   formatDateTime,
   formatDays,
   formatInt,
   plural,
 } from "@/components/consultas/format";
 
-export { formatDate, formatDateTime, formatDays, formatInt, plural };
+export { formatDateTime, formatDays, formatInt, plural };
 
 const intFmt = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 });
 const numFmt = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 });
@@ -186,7 +185,7 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     id: "radicado_en",
     label: "Radicado el",
     group: "Tiempos",
-    value: (r) => formatDate(r.radicadoEn),
+    value: (r) => formatDateTime(r.radicadoEn),
     raw: (r) => bogotaDay(r.radicadoEn),
     width: 13,
     sort: OT_REPORT_SORT.radicado,
@@ -204,7 +203,7 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     id: "decidido_en",
     label: "Decidido el",
     group: "Tiempos",
-    value: (r) => formatDate(r.decididoEn),
+    value: (r) => formatDateTime(r.decididoEn),
     raw: (r) => bogotaDay(r.decididoEn),
     width: 13,
     sort: OT_REPORT_SORT.decidido,

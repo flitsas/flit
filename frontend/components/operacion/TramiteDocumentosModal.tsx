@@ -13,7 +13,7 @@ import {
   isAuditUnavailable,
   isScopeRejection,
 } from '@/lib/tramites/network-scope';
-import { formatFecha } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 import type { ProcedureAttachment } from '@/lib/api/types/procedure-runtime';
 import { findConsolidadoAttachment } from './ExpedienteVisor';
 
@@ -357,7 +357,7 @@ export function TramiteDocumentosModal({
                       {documentLabel(d.tipo)}
                     </p>
                     <p className="truncate text-xs opacity-60">
-                      {d.filename} · {formatFecha(d.uploadedAt)}
+                      {d.filename} · {formatFechaHora(d.uploadedAt)}
                     </p>
                   </div>
                   {/* Mismo par de botones de icono que el módulo de OT (`OtDocumentosTab`): ojo para
