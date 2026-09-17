@@ -71,6 +71,7 @@ import {
   Image as ImageIcon,
   BadgeCheck,
   Timer,
+  Settings,
 } from "lucide-react";
 
 export type ModuleId =
@@ -493,6 +494,16 @@ export function Shell({
         icon: Fingerprint,
         active: isOtHubSegmentActive(pathname, "imprint-validation"),
         onClick: () => goOtHub("imprint-validation"),
+      },
+      {
+        // Pedido del usuario (2026-09-16) — modo Dashboard/QX, ventana de revocatoria (HU #12569) y
+        // feature flags operativos: sin esta entrada, esos ajustes solo eran alcanzables escribiendo
+        // a mano la URL de una pestaña legacy sin enlace en ningún menú.
+        key: OT_ADM_DOCK.configuracion,
+        label: "Configuración",
+        icon: Settings,
+        active: isOtHubSegmentActive(pathname, "configuracion"),
+        onClick: () => goOtHub("configuracion"),
       },
     );
   }

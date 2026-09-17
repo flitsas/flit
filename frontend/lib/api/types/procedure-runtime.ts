@@ -28,7 +28,12 @@ export type InstanceStatus =
   | 'revocado'
   // HU #10870 — reabre la edición de un entregado/rechazado sin volver a borrador; re-radicar
   // (subsanacion → entregado) es la única transición permitida desde aquí (HU #10874, AC2).
-  | 'subsanacion';
+  | 'subsanacion'
+  // HU #12166 (Feature #12156) — Aprobado→Revocado (unilateral del OT o vía revocatoria solicitada,
+  // Feature #12565): libera placa/VIN, la documentación anterior queda histórica. Faltaba en este
+  // vocabulario — sin él, cualquier `switch`/lookup tipado sobre `InstanceStatus` no podía distinguir
+  // 'revocado' de un estado desconocido cualquiera.
+  | 'revocado';
 
 /**
  * ADR-0059 — estado desde el que el OT rechazó por última vez (`entregado` | `preasignacion`), o
@@ -38,6 +43,83 @@ export type InstanceStatus =
 export type RejectedFrom = 'entregado' | 'preasignacion';
 
 
+
+/**
+ * HU #12573 (Feature #12565) — gates del botón "Solicitar revocatoria" (AC1-AC3), YA RESUELTOS por el
+ * backend con la MISMA regla de negocio que el gate de creación de la solicitud (`RevocationRequestGate`,
+ * HU #12571/#12572): fuente FLIT (no ICT/migrado) + ventana en días hábiles desde la aprobación
+ * ORIGINAL. Evita reimplementar el cálculo de días hábiles en el cliente. Solo viene poblado cuando
+ * `status === 'aprobado'` — en cualquier otro estado (o en la vista de red, que no la calcula) llega
+ * `null`/`undefined`.
+ */
+export interface RevocationEligibility {
+  /** AC1/AC3 — el trámite fue creado en FLIT (no integración ICT ni foto migrada de V1). */
+  sourceSupported: boolean;
+  /** Fecha límite de la ventana, ya calculada en días hábiles. `null` = sin ventana configurada = sin límite. */
+  windowExpiresAt: string | null;
+  /** AC3 — `true` si hay ventana configurada y ya venció (motivo "Ventana de revocatoria vencida"). */
+  windowExpired: boolean;
+}
+
+/**
+ * HU #12575 (Feature #12565, AC1) — los dos únicos valores que el backend considera ACTIVOS
+ * (`ProcedureRevocationRequestStatus.EsActivo`, HU #12571): una fila `aprobada`/`rechazada` ya no es
+ * "activa" y por tanto nunca llega en {@link ActiveRevocationRequest} (decisión que resuelve la
+ * HU #12576, todavía no implementada).
+ */
+export type ActiveRevocationRequestStatus = 'solicitada' | 'en_revision';
+
+/**
+ * HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria sobre un trámite `aprobado`,
+ * ORTOGONAL al `status` del trámite (que permanece 'aprobado' durante todo el sub-flujo, ADR-0022):
+ * mismo precedente que `PlateFlowStatus` para la ruta de placa. Gobierna el badge secundario del
+ * detalle. `null`/ausente en `ProcedureInstanceDetail.activeRevocationRequest` = no hay solicitud
+ * activa ahora mismo.
+ */
+export interface ActiveRevocationRequest {
+  status: ActiveRevocationRequestStatus;
+  attemptNumber: number;
+  requestedAt: string;
+}
+
+/**
+ * Feature #12565 — decisión del OT sobre el intento de revocatoria MÁS RECIENTE, para el detalle del
+ * trámite (gestor y OT) incluso después de que el sub-flujo ya se cerró. Ausente/null cuando nunca se
+ * solicitó una revocatoria o cuando la solicitud sigue activa (ver {@link ActiveRevocationRequest}).
+ */
+export interface RevocationDecision {
+  /** 'aprobada' | 'rechazada' */
+  status: 'aprobada' | 'rechazada';
+  attemptNumber: number;
+  requestedAt: string;
+  decidedAt: string;
+  /** Motivo con el que el gestor pidió la revocatoria. */
+  reason: string | null;
+  /** Motivo de la decisión del OT: obligatorio al rechazar, opcional al aprobar. */
+  decisionReason: string | null;
+}
+
+/**
+ * HU #12574 (Feature #12565) — payload del Paso 2 del modal de revocatoria: motivo + los 2 checks
+ * de confirmación (AC1/AC2 del texto de copy) + el documento de soporte (PDF, "el certificado" es
+ * el mismo adjunto obligatorio, no un segundo documento). Viaja como multipart/form-data
+ * (POST /instances/{id}/revocation-requests, HU #12572 — el archivo no cabe en JSON).
+ */
+export interface RequestRevocationInput {
+  reason: string;
+  confirmAccuracy: boolean;
+  confirmConsequences: boolean;
+  file: File;
+}
+
+/** Cuerpo 201 de POST /instances/{id}/revocation-requests (espejo de `RequestRevocationResult` backend). */
+export interface RequestRevocationResult {
+  id: string;
+  procedureInstanceId: string;
+  attemptNumber: number;
+  status: string;
+  requestedAt: string;
+}
 
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {
@@ -251,6 +333,12 @@ export interface InstanceSummary {
    * acción de pausar/reanudar en la UI (paridad v1). null/'' para trámites de plataforma.
    */
   origin?: string | null;
+  /**
+   * Feature #12565 — sub-estado ACTIVO ('solicitada' | 'en_revision') de la solicitud de revocatoria
+   * del trámite; null si nunca se solicitó o ya se decidió. Alimenta el indicativo "Revocatoria en
+   * curso" de la fila (no reemplaza el detalle del modal, que trae `activeRevocationRequest` completo).
+   */
+  revocationRequestStatus?: string | null;
 }
 
 /** Fuente por la que el trámite entró a FLIT (HU #11056). No existe fuente "QX": Quipux es salida. */
@@ -456,11 +544,22 @@ export interface ProcedureInstanceDetail {
    * está cubierto por `statusHistory`. `undefined`/vacío en consumidores previos a este campo.
    */
   events?: ProcedureInstanceEvent[];
+  /** Ver {@link RevocationEligibility}. */
+  revocationEligibility?: RevocationEligibility | null;
+  /** Ver {@link ActiveRevocationRequest}. */
+  activeRevocationRequest?: ActiveRevocationRequest | null;
+  /** Ver {@link RevocationDecision}. */
+  lastRevocationDecision?: RevocationDecision | null;
 }
 
 /** Ver `ProcedureInstanceDetail.events`. */
 export interface ProcedureInstanceEvent {
-  tipo: 'reasignar_gestor_admin' | 'reenvio_validacion_admin';
+  tipo:
+    | 'reasignar_gestor_admin'
+    | 'reenvio_validacion_admin'
+    | 'revocatoria_solicitada'
+    | 'revocatoria_aprobada'
+    | 'revocatoria_rechazada';
   createdAt: string;
   createdByName: string | null;
   // reasignar_gestor_admin
@@ -476,6 +575,20 @@ export interface ProcedureInstanceEvent {
   correoDestino?: string | null;
   /** Compañía de quien ejecutó el evento (ya nombrado en `createdByName`). */
   createdByCompania?: string | null;
+  // revocatoria_solicitada (HU #12575, Feature #12565) — payload de RequestRevocationHandler
+  // (HU #12572): número de intento y motivo escrito por el Administrador.
+  revocationAttemptNumber?: number | null;
+  revocationReason?: string | null;
+  /**
+   * Correo de quien EJECUTÓ el evento — a diferencia de `reasignar_gestor_admin`/
+   * `reenvio_validacion_admin` (que hablan de un TERCERO), aquí el ejecutor ES el Administrador que
+   * solicitó la revocatoria, así que su correo es el dato relevante de "Correo" en la tarjeta.
+   */
+  createdByEmail?: string | null;
+  // revocatoria_aprobada / revocatoria_rechazada (Feature #12565) — motivo de la DECISIÓN del OT,
+  // distinto de `revocationReason` (motivo original del gestor al pedirla). Reutilizan
+  // `revocationAttemptNumber` de arriba.
+  revocationDecisionReason?: string | null;
 }
 
 /** Item del body de PATCH /instances/{id}/field-values. */

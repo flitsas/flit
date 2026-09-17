@@ -10,4 +10,5 @@ public sealed record OtProfileResponse(
     string OperationMode,
     bool QuipuxReadOnly,
     Guid TransitOfficeId,
-    IReadOnlyList<OtFeatureFlagResponse> FeatureFlags);
+    IReadOnlyList<OtFeatureFlagResponse> FeatureFlags,
+    int? RevocationWindowBusinessDays = null);

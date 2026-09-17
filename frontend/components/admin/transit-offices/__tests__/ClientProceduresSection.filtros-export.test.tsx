@@ -109,6 +109,7 @@ beforeEach(() => {
     quipuxReadOnly: false,
     transitOfficeId: OT_ID,
     featureFlags: [],
+    revocationWindowBusinessDays: null,
   });
   vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
   vi.mocked(fetchOtBandejaHealth).mockResolvedValue({
@@ -127,6 +128,7 @@ beforeEach(() => {
     aprobados: 0,
     rechazados: 0,
     revocados: 0,
+    solicitudesRevocatoria: 0,
   });
   vi.mocked(searchOtClientProcedures).mockResolvedValue(pagina([tramite(1)], 1));
 });

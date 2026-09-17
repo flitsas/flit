@@ -28,6 +28,9 @@ public sealed class GetOtBandejaCountersResult
     public int Rechazados { get; init; }
     /// <summary>HU #12166/#12168 (Feature #12156) — Aprobados que el organismo revocó.</summary>
     public int Revocados { get; init; }
+
+    /// <summary>Pedido del usuario (2026-09-16) — Aprobados con solicitud de revocatoria ACTIVA.</summary>
+    public int SolicitudesRevocatoria { get; init; }
 }
 
 /// <summary>
@@ -69,6 +72,7 @@ public sealed class GetOtBandejaCountersHandler
             Aprobados = counters.Aprobados,
             Rechazados = counters.Rechazados,
             Revocados = counters.Revocados,
+            SolicitudesRevocatoria = counters.SolicitudesRevocatoria,
         };
     }
 }

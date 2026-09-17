@@ -355,6 +355,8 @@ public sealed class RequestTenantResolverTests
             // HU #12418 (Feature #12366, ADR-0060 D2) — herencia de marca ya autenticado, FUERA de
             // /api/v1/tramites. Mismo motivo que /api/v1/company/branding arriba.
             ("/api/v1/me/branding", TenantEnforcementMiddleware.RouteMatch.Exact),
+            // HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado gestor.
+            ("/api/v1/tramites/revocation-requests", TenantEnforcementMiddleware.RouteMatch.Exact),
         });
         routes.Should().OnlyContain(r =>
             r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal)

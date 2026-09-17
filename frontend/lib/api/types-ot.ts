@@ -16,10 +16,17 @@ export interface OtProfile {
   quipuxReadOnly: boolean;
   transitOfficeId: string;
   featureFlags: OtFeatureFlag[];
+  /**
+   * HU #12568/#12569 — ventana de revocatoria en días hábiles. `null` = sin configurar = sin
+   * límite (nunca se sustituye por un default numérico).
+   */
+  revocationWindowBusinessDays: number | null;
 }
 
 export interface UpdateOtProfileRequest {
   operationMode?: OtOperationMode;
+  /** Enviar `null` deja la ventana sin límite (HU #12569). Entero ≥ 1 en cualquier otro caso. */
+  revocationWindowBusinessDays?: number | null;
 }
 
 /** Requisitos configurables por OT (HU #10545 / #10546). */
@@ -117,6 +124,19 @@ export interface OtClientProcedure {
   comercial?: OtClientProcedureCommercial | null;
   /** Decisión de prenda del trámite; ausente si no hay decisión registrada. */
   prenda?: OtClientProcedurePrenda | null;
+  /**
+   * Feature #12565 — sub-estado ACTIVO ('solicitada' | 'en_revision') de la solicitud de revocatoria
+   * del gestor; null si nunca se solicitó o ya se decidió. Indicativo de la bandeja OT.
+   */
+  revocationRequestStatus?: string | null;
+  /**
+   * Feature #12565 — decisión ('aprobada' | 'rechazada') del intento de revocatoria MÁS RECIENTE, para
+   * el detalle del trámite. Null si nunca se decidió una (o la solicitud sigue activa).
+   */
+  revocationDecisionStatus?: string | null;
+  revocationDecisionAt?: string | null;
+  revocationRequestReason?: string | null;
+  revocationDecisionReason?: string | null;
 }
 
 export interface OtClientProcedureVehicleSnapshot {
@@ -167,6 +187,12 @@ export interface OtClientProcedurePagedResult {
 export interface OtClientProceduresParams {
   /** Estado del ciclo de vida; varios separados por coma (ADR-0059: cada tarjeta es un estado). */
   status?: string;
+  /**
+   * Feature #12565 — filtro de la tarjeta "Solicitudes de revocatoria": trámites
+   * con una solicitud de revocatoria ACTIVA (`solicitada`/`en_revision`). No es un estado del ciclo de vida (el trámite sigue en `aprobado`)
+   * sino del sub-flujo de revocatoria, así que viaja aparte de `status`.
+   */
+  hasActiveRevocationRequest?: boolean;
   procedureTypeId?: string;
   vin?: string;
   placa?: string;
@@ -212,6 +238,8 @@ export interface OtBandejaCounters {
   rechazados: number;
   /** HU #12166/#12168 (Feature #12156) — trámites Aprobados que el OT revocó. */
   revocados: number;
+  /** Pedido del usuario (2026-09-16) — Aprobados con solicitud de revocatoria ACTIVA. */
+  solicitudesRevocatoria: number;
 }
 
 export interface OtBandejaHealth {
@@ -271,6 +299,77 @@ export interface OtApiLogsParams {
   minResponseCode?: number;
   page?: number;
   pageSize?: number;
+}
+
+/**
+ * HU #12577 (Feature #12565) — body de POST .../revocation-requests/approve|reject.
+ * Aprobar: motivo OPCIONAL. Rechazar: OBLIGATORIO (422 `motivo_requerido` si falta — el
+ * formulario ya bloquea el envío en cliente antes de llegar aquí, AC2).
+ */
+export interface DecideOtRevocationRequestBody {
+  reason?: string;
+}
+
+/**
+ * HU #12577 (Feature #12565) — respuesta de decidir la solicitud de revocatoria ACTIVA de un
+ * trámite Aprobado. `procedure` solo viene al aprobar (el trámite queda `revocado`, reutiliza
+ * HU #12166); al rechazar es `null` porque el trámite permanece `aprobado` sin cambios.
+ */
+/**
+ * HU #12578 (Feature #12565) — fila del listado dedicado "Revocatorias" del lado OT. MISMA forma que
+ * `RevocationRequestListItem` del lado gestor (`lib/api/types/revocation-requests.ts`): el backend
+ * comparte el DTO entre las dos respuestas. Se declara aparte, siguiendo la misma convención
+ * `Ot*`/independiente de este archivo (sin acoplar el cliente OT al del gestor).
+ */
+export interface OtRevocationRequestListItem {
+  revocationRequestId: string;
+  procedureInstanceId: string;
+  referenceNumber: string;
+  placa: string | null;
+  transitOfficeId: string | null;
+  transitOfficeName: string | null;
+  /** 'solicitada' | 'en_revision' | 'aprobada' | 'rechazada'. */
+  status: string;
+  attemptNumber: number;
+  requestedAt: string;
+  decidedAt: string | null;
+}
+
+export interface OtRevocationRequestListResult {
+  items: OtRevocationRequestListItem[];
+  total: number;
+  skip: number;
+  take: number;
+}
+
+export interface OtRevocationRequestListParams {
+  /** Sub-estados a incluir (OR), separados por coma en el querystring. Vacío/omitido = todos. */
+  statuses?: string[];
+  requestedFrom?: string;
+  requestedTo?: string;
+  skip?: number;
+  take?: number;
+}
+
+/**
+ * Feature #12565 — motivo + documento de soporte de la solicitud de revocatoria ACTIVA de un trámite,
+ * para el modal "Decidir revocatoria" del OT. `supportDocumentId` se abre con
+ * `fetchOtAttachmentPreviewUrl` (mismo mecanismo que "Ver documentos").
+ */
+export interface OtActiveRevocationRequestDetail {
+  revocationRequestId: string;
+  attemptNumber: number;
+  reason: string | null;
+  supportDocumentId: string | null;
+  requestedAt: string;
+}
+
+export interface OtRevocationRequestDecision {
+  procedure: OtClientProcedure | null;
+  revocationRequestId: string;
+  attemptNumber: number;
+  /** 'aprobada' | 'rechazada' */
+  status: string;
 }
 
 export interface RejectOtClientProcedureRequest {

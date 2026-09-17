@@ -39,4 +39,22 @@ public enum NotificationTrigger
     /// HU #11485 — encolado tras POST assign-plate (Flujo B, arista preasignado→asignado).
     /// </summary>
     PlateAssigned,
+
+    /// <summary>
+    /// Solicitud de revocatoria recibida (plantilla <c>tramites.revocatoria-solicitada</c>).
+    /// HU #12579 (Feature #12565) — encolado por <c>RevocationRequestNotificationEnqueuer.NotifyAsync</c>.
+    /// </summary>
+    RevocationRequestSolicitada,
+
+    /// <summary>
+    /// Decisión de revocatoria: aprobada (plantilla <c>tramites.revocatoria-aprobada</c>).
+    /// HU #12579 (Feature #12565) — encolado por <c>RevocationRequestNotificationEnqueuer.NotifyDecisionAsync</c>.
+    /// </summary>
+    RevocationRequestAprobada,
+
+    /// <summary>
+    /// Decisión de revocatoria: rechazada (plantilla <c>tramites.revocatoria-rechazada</c>).
+    /// HU #12579 (Feature #12565) — encolado por <c>RevocationRequestNotificationEnqueuer.NotifyDecisionAsync</c>.
+    /// </summary>
+    RevocationRequestRechazada,
 }

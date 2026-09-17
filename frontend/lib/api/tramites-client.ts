@@ -40,6 +40,8 @@ import type {
   IniciarPrevalidacionResult,
   PrendaData,
   PrendaInput,
+  RequestRevocationInput,
+  RequestRevocationResult,
   InstanceSummary,
   InstanceEstadoCountsResponse,
   InstancesResponse,
@@ -137,6 +139,11 @@ function mapPreflight(dto: PreflightSnapshotDto): PreflightSnapshot {
     createdAt: dto.createdAt,
   };
 }
+import type {
+  RevocationRequestListItem,
+  RevocationRequestListParams,
+  RevocationRequestListResponse,
+} from './types/revocation-requests';
 import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
 import { resolveApiBase } from './base-url';
@@ -648,6 +655,38 @@ async function listPlateHistory(params: {
   return { items, total: res?.total ?? items.length };
 }
 
+/**
+ * HU #12578 (Feature #12565) — vista dedicada "Revocatorias" del lado gestor.
+ * `GET /api/v1/tramites/revocation-requests`, tenant-scoped por `X-Tenant-Id` (mismo patrón que el
+ * resto de `/api/v1/tramites/...`). `statuses` viaja como `estado` separado por comas (mismo criterio
+ * tolerante que `ParseEstados` del backend); vacío/omitido = todos los sub-estados.
+ */
+async function listRevocationRequests(
+  params: RevocationRequestListParams = {},
+  tenantId?: string,
+): Promise<RevocationRequestListResponse> {
+  const qs = new URLSearchParams();
+  if (params.statuses?.length) qs.set('estado', params.statuses.join(','));
+  if (params.requestedFrom) qs.set('requestedFrom', params.requestedFrom);
+  if (params.requestedTo) qs.set('requestedTo', params.requestedTo);
+  if (params.transitOfficeId) qs.set('transitOfficeId', params.transitOfficeId);
+  if (params.skip !== undefined) qs.set('skip', String(params.skip));
+  if (params.take !== undefined) qs.set('take', String(params.take));
+  const query = qs.toString();
+
+  const res = await request<RevocationRequestListResponse>(
+    `/api/v1/tramites/revocation-requests${query ? `?${query}` : ''}`,
+    { headers: tenantHeader(tenantId) },
+  );
+  const items: RevocationRequestListItem[] = res?.items ?? [];
+  return {
+    items,
+    total: res?.total ?? items.length,
+    skip: res?.skip ?? params.skip ?? 0,
+    take: res?.take ?? params.take ?? 20,
+  };
+}
+
 async function listInstancesPage(
   params: ListInstancesParams,
 ): Promise<{ items: InstanceSummary[]; total: number }> {
@@ -759,6 +798,14 @@ export const tramitesClient = {
    * completa desde Excel, y unos cientos de valores no caben en una query string.</p>
    */
   searchInstances: (params: ListInstancesParams = {}) => searchInstances(params),
+
+  /**
+   * HU #12578 (Feature #12565) — vista dedicada "Revocatorias" del lado gestor: listado filtrado a
+   * trámites con solicitud de revocatoria en cualquier sub-estado (AC1), con los mismos filtros del
+   * listado general (fecha, OT, estado).
+   */
+  listRevocationRequests: (params: RevocationRequestListParams = {}, tenantId?: string) =>
+    listRevocationRequests(params, tenantId),
 
   // ── HU #12362 / #12358 — lectura consolidada de la red (cabeza de grupo) ──────────────────────
   //
@@ -2408,6 +2455,41 @@ export const tramitesClient = {
       `/api/v1/tramites/instances/${instanceId}/cancelar-subsanacion`,
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
+
+  /**
+   * HU #12574 (Feature #12565) — envía la solicitud de revocatoria del Paso 2 del modal: motivo +
+   * documento de soporte (PDF) + los 2 checks de confirmación (AC1/AC2). Multipart (campo `file`):
+   * NO usa `request()` (fija Content-Type: application/json) — mismo patrón que
+   * `adminCargarConsolidado`/`analyzeDocument` de este archivo. Los checks viajan como texto
+   * "true"/"false" (mismo binding `[FromForm] bool` que exige el backend, ver
+   * RevocationRequestEndpoints.ParseBool).
+   *
+   * Errores llegan como `TramitesApiError` con `.status`/`.problem.title` — el código de negocio
+   * viaja en `title`: 404 not_found | 409 tramite_no_aprobado | 409 solicitud_activa_existente |
+   * 422 motivo_requerido | confirmacion_exactitud_requerida | confirmacion_consecuencias_requerida |
+   * documento_requerido | documento_formato_invalido | documento_muy_grande | ventana_vencida |
+   * origen_no_soportado.
+   */
+  requestRevocation: async (
+    instanceId: string,
+    input: RequestRevocationInput,
+    tenantId?: string,
+  ): Promise<RequestRevocationResult> => {
+    const form = new FormData();
+    form.append('reason', input.reason);
+    form.append('confirmAccuracy', input.confirmAccuracy ? 'true' : 'false');
+    form.append('confirmConsequences', input.confirmConsequences ? 'true' : 'false');
+    form.append('file', input.file);
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/instances/${instanceId}/revocation-requests`),
+      { method: 'POST', headers: tenantHeader(tenantId), body: form },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
+    }
+    return (await res.json()) as RequestRevocationResult;
+  },
 
   // ── Admin · Trámites · Gestión avanzada (Feature #12155, HU #12163) ──────────────────
   // Los 6 endpoints administrativos de HU #12158-#12162, todos gateados por permiso en el

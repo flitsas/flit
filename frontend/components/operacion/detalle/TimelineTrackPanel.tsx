@@ -18,6 +18,12 @@ export interface TimelineTrackNode {
   };
   /** El hito vigente (p. ej. el último estado del trámite) se marca con la etiqueta "Vigente". */
   isActive?: boolean;
+  /**
+   * Epoch ms del hito, SOLO para que quien combine nodos de varias fuentes (estado + eventos) pueda
+   * intercalarlos en orden cronológico real — ver `mergeTimelineNodesByTimestamp` en
+   * `timeline-mappers.ts`. El panel no lo lee ni lo pinta.
+   */
+  timestamp?: number;
 }
 
 export interface TimelineTrackPanelProps {

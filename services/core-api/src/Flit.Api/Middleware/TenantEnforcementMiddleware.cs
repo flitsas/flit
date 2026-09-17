@@ -247,6 +247,13 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // igual que /api/v1/company/branding; se declara aquí para que la enumeración de rutas de la
         // épica Marca Blanca la reconozca como tenant-scoped. Exact: sin rutas hijas.
         new("/api/v1/me/branding", RouteMatch.Exact),
+        // HU #12578 (Feature #12565) — GET .../revocation-requests: listado dedicado "Revocatorias"
+        // del lado gestor. Lee [FromHeader(Name = "X-Tenant-Id")] igual que el POST hermano de HU
+        // #12572 (ya cubierto por /instances, Prefix); esta ruta es TOP-LEVEL (no cuelga de
+        // /instances) así que necesita su propia entrada — sin ella el middleware no la intercepta y
+        // el endpoint confiaría en el X-Tenant-Id crudo del cliente (mismo defecto de fondo que Bug
+        // #12554/#12558/#12564).
+        new("/api/v1/tramites/revocation-requests", RouteMatch.Exact),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

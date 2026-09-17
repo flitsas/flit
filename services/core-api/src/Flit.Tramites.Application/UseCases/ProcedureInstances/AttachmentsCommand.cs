@@ -62,6 +62,11 @@ public static class AttachmentRules
         // HU #10604 (R19) / #10697 — paz y salvo RNMC. RNMC ya NO bloquea el envío al OT (la medida
         // correctiva es informativa): este adjunto queda como OPCIONAL informativo, no como requisito.
         "paz_salvo_rnmc",
+        // HU #12572 (Feature #12565) — documento de soporte de una solicitud de revocatoria de un
+        // trámite Aprobado. Se sube por su propio endpoint (RequestRevocationHandler, fuera de
+        // AllowsUploadInState: el trámite está 'aprobado', no en borrador), pero se registra en este
+        // set para que el inventario de tipos siga siendo la fuente única de verdad del catálogo.
+        "revocatoria_soporte",
         // Escritura del representante legal CARGADA por el gestor, cuando el representante capturado
         // no está en el módulo de representantes de la compañía y por tanto no tiene escritura que el
         // sistema pueda apalancar del directorio. Un código por rol (misma convención que

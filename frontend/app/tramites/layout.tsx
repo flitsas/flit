@@ -25,9 +25,15 @@ export default function TramitesLayout({ children }: { children: ReactNode }) {
 
   // Modo inmersivo: ruta /tramites/[instanceId] (2 segmentos, el 2º no es
   // "nuevo"). /tramites → 1 segmento; /tramites/nuevo/x → 3 segmentos.
+  // HU #12578 — /tramites/revocatorias es un LISTADO (vista dedicada "Revocatorias"), no el wizard
+  // inmersivo de un trámite puntual, aunque tenga 2 segmentos igual que /tramites/[instanceId]: se
+  // excluye explícitamente para que use el mismo contenedor de listado que /tramites.
   const segments = pathname.split('/').filter(Boolean);
   const immersive =
-    segments.length === 2 && segments[0] === 'tramites' && segments[1] !== 'nuevo';
+    segments.length === 2 &&
+    segments[0] === 'tramites' &&
+    segments[1] !== 'nuevo' &&
+    segments[1] !== 'revocatorias';
 
   const { modules: accessibleModules, loading: modulesLoading } = useAccessibleModules(authed);
   const accessibleCodes = accessibleModules.map((m) => m.code);

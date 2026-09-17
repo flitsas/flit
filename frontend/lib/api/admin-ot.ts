@@ -12,6 +12,7 @@ import type {
   OtBandejaHealth,
   OtClientProcedure,
   OtClientProcedurePagedResult,
+  OtActiveRevocationRequestDetail,
   OtBandejaCounters,
   OtClientProceduresParams,
   OtDocumentPrecedenceListResult,
@@ -20,6 +21,9 @@ import type {
   OtFeatureFlag,
   OtProfile,
   OtRequirements,
+  OtRevocationRequestDecision,
+  OtRevocationRequestListParams,
+  OtRevocationRequestListResult,
   OtRule,
   OtRulesListResult,
   OtWebhook,
@@ -216,6 +220,91 @@ export function revokeOtClientProcedure(
     method: "POST",
     body: reason?.trim() ? { reason: reason.trim() } : undefined,
     query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
+}
+
+/**
+ * HU #12577 (Feature #12565) — aprueba la solicitud de revocatoria ACTIVA del trámite (reutiliza
+ * íntegro el Aprobado→Revocado de HU #12166 en el backend). Motivo OPCIONAL (auditoría, mismo
+ * criterio que `revokeOtClientProcedure`). 404 si el trámite no existe o si no hay una solicitud
+ * activa (`solicitada`/`en_revision`) para decidir; 409 `INVALID_STATE` si el trámite ya no está
+ * Aprobado.
+ */
+export function approveOtRevocationRequest(
+  id: string,
+  reason?: string,
+  scope?: OtApiScope,
+): Promise<OtRevocationRequestDecision> {
+  return apiFetch<OtRevocationRequestDecision>(
+    `${base}/client-procedures/${id}/revocation-requests/approve`,
+    {
+      method: "POST",
+      body: reason?.trim() ? { reason: reason.trim() } : undefined,
+      query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    },
+  );
+}
+
+/**
+ * HU #12577 (Feature #12565) — rechaza la solicitud de revocatoria ACTIVA del trámite; este
+ * permanece Aprobado y el gestor puede reintentar (HU #12572). Motivo OBLIGATORIO — el backend
+ * responde 422 `motivo_requerido` sin él (AC2), pero el formulario ya bloquea el envío en cliente
+ * antes de llamar aquí.
+ */
+export function rejectOtRevocationRequest(
+  id: string,
+  reason: string,
+  scope?: OtApiScope,
+): Promise<OtRevocationRequestDecision> {
+  return apiFetch<OtRevocationRequestDecision>(
+    `${base}/client-procedures/${id}/revocation-requests/reject`,
+    {
+      method: "POST",
+      body: { reason: reason.trim() },
+      query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    },
+  );
+}
+
+/**
+ * Feature #12565 — motivo + documento de soporte de la solicitud de revocatoria ACTIVA, para que el
+ * modal "Decidir revocatoria" los muestre antes de aprobar/rechazar. 404 (mapeado a excepción por
+ * `apiFetch`) si el trámite no tiene una solicitud activa — el caller solo la llama al abrir ese modal,
+ * cuando ya se sabe que la hay (indicativo de la bandeja, `revocationRequestStatus`).
+ */
+export function fetchActiveOtRevocationRequestDetail(
+  id: string,
+  scope?: OtApiScope,
+): Promise<OtActiveRevocationRequestDetail> {
+  return apiFetch<OtActiveRevocationRequestDetail>(
+    `${base}/client-procedures/${id}/revocation-requests/active`,
+    {
+      query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    },
+  );
+}
+
+/**
+ * HU #12578 (Feature #12565) — vista dedicada "Revocatorias" del lado OT: TODOS los intentos de
+ * solicitud de revocatoria de los trámites del organismo, en cualquier sub-estado. `scope` sigue el
+ * MISMO mecanismo que el resto de la bandeja (`?transitOfficeId=` para el override de SuperAdmin; para
+ * Admin OT el backend resuelve su organismo desde el perfil). `statuses` viaja como `estado`
+ * separado por comas — un solo valor de querystring, no repetido (a diferencia de `apiFetch` con
+ * arrays), porque el binding del backend es `[FromQuery] string? estado`.
+ */
+export function fetchOtRevocationRequests(
+  params: OtRevocationRequestListParams = {},
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtRevocationRequestListResult> {
+  const { statuses, ...rest } = params;
+  return apiFetch<OtRevocationRequestListResult>(`${base}/revocation-requests`, {
+    query: {
+      ...rest,
+      ...(statuses?.length ? { estado: statuses.join(",") } : {}),
+      ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
+    },
+    signal,
   });
 }
 

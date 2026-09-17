@@ -1,7 +1,9 @@
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.Notifications.Preview;
 using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Tramites.Domain.RevocationRequests;
 
 namespace Flit.Infrastructure.Notifications;
 
@@ -48,6 +50,12 @@ public static class NotificationSampleRenderer
             AsignacionPlacaEmailComposer.TemplateId => channel == NotificationChannel.TenantApi
                 ? AsignacionPlacaEmailPreviewSample.BuildRenting(baseUrl)
                 : AsignacionPlacaEmailPreviewSample.BuildFlit(baseUrl, effectiveTheme),
+            RevocationRequestNotificationEnqueuer.TemplateKey => ComposeRevocationRequest(
+                RevocationRequestEmailMilestone.Solicitada, channel, baseUrl),
+            RevocationRequestNotificationEnqueuer.DecisionTemplateKeyAprobada => ComposeRevocationRequest(
+                RevocationRequestEmailMilestone.Aprobada, channel, baseUrl),
+            RevocationRequestNotificationEnqueuer.DecisionTemplateKeyRechazada => ComposeRevocationRequest(
+                RevocationRequestEmailMilestone.Rechazada, channel, baseUrl),
             _ => throw new InvalidOperationException(
                 $"El catálogo resolvió el id '{templateId}' pero no hay muestra registrada para él."),
         };
@@ -70,6 +78,11 @@ public static class NotificationSampleRenderer
             : TramiteCambioEstadoEmailComposer.ComposeFlit(model, baseUrl, theme);
     }
 
+    private static (string Subject, string Html) ComposeRevocationRequest(
+        string milestone, NotificationChannel channel, string baseUrl) =>
+        channel == NotificationChannel.TenantApi
+            ? RevocationRequestEmailPreviewSample.BuildRenting(milestone, baseUrl)
+            : RevocationRequestEmailPreviewSample.BuildFlit(milestone, baseUrl);
 
     private static (string Subject, string Html) ToTuple(
         Flit.Modules.Security.Application.Auth.ComposedEmail email) =>

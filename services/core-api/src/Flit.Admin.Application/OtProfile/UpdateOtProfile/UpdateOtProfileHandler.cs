@@ -50,6 +50,16 @@ public sealed class UpdateOtProfileHandler
                 $"Valor inválido. Valores permitidos: {OtOperationModes.Dashboard}, {OtOperationModes.Quipux}."));
         }
 
+        // HU #12568 AC3: null es válido (AC2, "sin límite"); solo se rechaza un valor numérico
+        // presente que sea ≤ 0. No hay tope superior de negocio en esta HU (el "N días" del AC1
+        // es un límite operativo, no una regla de validación del backend).
+        if (request.RevocationWindowBusinessDays is int revocationWindowDays && revocationWindowDays <= 0)
+        {
+            errors.Add(new OtProfileValidationError(
+                "revocation_window_business_days",
+                "Debe ser un entero mayor a 0, o no enviarse/null para dejar la ventana sin límite."));
+        }
+
         if (errors.Count > 0)
         {
             return UpdateOtProfileResult.Invalid(errors);
@@ -67,6 +77,7 @@ public sealed class UpdateOtProfileHandler
             operationMode,
             quipuxReadOnly,
             command.ChangedBy,
+            request.RevocationWindowBusinessDays,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return UpdateOtProfileResult.Success(OtProfileMapper.ToResponse(saved));

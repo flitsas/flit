@@ -83,6 +83,7 @@ describe("ClientProceduresSection — guía de dígito de preferencia (HU #10805
       quipuxReadOnly: false,
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
+      revocationWindowBusinessDays: null,
     });
     vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
     vi.mocked(searchOtClientProcedures).mockResolvedValue({
