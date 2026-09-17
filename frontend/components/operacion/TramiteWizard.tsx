@@ -81,14 +81,12 @@ import { formatDateOnly } from '@/lib/format/date-only';
 import {
   tramitesClient,
   getDuplicateActiveProcedureId,
+  getOrganismoRuntNoHabilitado,
   getVehicleStateBlock,
   isTransitOfficeUnavailable,
   isVehicleBodyTypeMissing,
   type VehicleStateBlockInfo,
 } from '@/lib/api/tramites-client';
-// HU #10806 — ¿la ruta de preasignación de placa está activa para esta compañía en el organismo
-// elegido? Es la misma consulta que hace el paso del FUR antes de ofrecer la placa preasignada.
-import { getPlatePreassignStatus } from '@/lib/api/admin-plate-ranges';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import {
@@ -119,6 +117,8 @@ import type {
   FieldValue,
   FieldValueInput,
   InstanceStatus,
+  MatriculaRuta,
+  PreflightPreviewTransitOffice,
   PreflightSnapshot,
   ProcedureConfiguration,
   ProcedureInstanceSummary,
@@ -235,6 +235,14 @@ const SECRETARIA_LISTA_VACIA =
 function nombreDelTramite(tipoNombre: string | null | undefined): string {
   const nombre = tipoNombre?.trim();
   return nombre ? `el trámite de ${nombre.toLowerCase()}` : 'el trámite';
+}
+
+/**
+ * Epic #12550 — Ruta Corta ante un organismo que la compañía no tiene habilitado. Se nombra el
+ * organismo porque es lo único accionable: pedir la habilitación de ESE convenio.
+ */
+function organismoRuntNoHabilitadoMensaje(organismo: string): string {
+  return `El vehículo tiene la placa preasignada ante «${organismo}» y tu compañía no tiene habilitado ese organismo de tránsito. No es posible crear la matrícula hasta que se habilite el convenio.`;
 }
 
 const ORGANISMO_NO_DISPONIBLE =
@@ -3187,13 +3195,6 @@ function ConsultaStep({
     };
   }, [muestraRadicacion, caps.declaraOrganismoDestino]);
 
-  const secretariaListaGateOk =
-    !eligeSecretaria || (secretariasLoaded && secretarias.length > 0);
-
-  useEffect(() => {
-    onSecretariaListaGateChange?.(secretariaListaGateOk);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [secretariaListaGateOk]);
 
   /**
    * Dígito de preferencia de placa (HU #10805) declarado aquí, donde lo ubica el diseño. Es el MISMO
@@ -3202,12 +3203,22 @@ function ConsultaStep({
    * —en la consola del organismo esas placas salen marcadas y ordenadas primero—. No enruta nada:
    * el trámite cae por preasignación por NO llevar placa, no por este dígito.
    *
-   * `preasignacionActiva` (HU #10806) responde si la ruta está viva para esta compañía en ESE
-   * organismo; sin ella el OT no asigna desde un rango y el dígito no tendría a quién guiar.
-   * `null` = todavía consultando.
+   * Epic #12550 — el dígito ya NO depende de que el organismo tenga inventario de placas
+   * (decisión B de #12549): el trámite entra en Preasignación igual y el OT lo asigna fuera de rango
+   * si hace falta. Por eso desapareció la consulta a `getPlatePreassignStatus` y el campo
+   * `plate_route_active` que la acompañaba.
    */
   const [digitoPlaca, setDigitoPlaca] = useState('');
-  const [preasignacionActiva, setPreasignacionActiva] = useState<boolean | null>(null);
+
+  /**
+   * Epic #12550 — ruta de la matrícula que decidió el RUNT en la consulta del paso 1, con el
+   * organismo resuelto en Ruta Corta. Solo vive mientras el trámite no existe; con trámite creado la
+   * ruta se lee de la placa (`vehiculoConPlacaRunt`) y el organismo del expediente.
+   */
+  const [rutaRunt, setRutaRunt] = useState<{
+    route: MatriculaRuta;
+    transitOffice: PreflightPreviewTransitOffice | null;
+  } | null>(null);
 
   /**
    * AC2 (HU #10799) — el vehículo YA tiene placa según el RUNT: la preasignación no aplica en
@@ -3222,6 +3233,29 @@ function ConsultaStep({
   const vehiculoConPlacaRunt = placaRunt !== '';
 
   /**
+   * Epic #12550 (ADR-0059 §Ruta Corta) — Ruta Corta: el vehículo ya tiene placa según el RUNT y el
+   * trámite llega al organismo en Entregado. Con la consulta recién hecha lo dice el preview; con un
+   * borrador ya creado lo dice la placa del RUNT, que es exactamente la misma señal. Solo aplica a
+   * los tipos que piden placa (`muestraDigitoPlaca`): en un radicado de cuenta la placa siempre existe
+   * y no es una «ruta».
+   */
+  const rutaCorta = muestraDigitoPlaca && (rutaRunt?.route === 'corta' || vehiculoConPlacaRunt);
+  /** Organismo de la Ruta Corta: el resuelto por el preview o, con trámite creado, el del expediente. */
+  const organismoRutaCorta =
+    rutaRunt?.transitOffice?.name ??
+    fieldValues.find((f) => f.fieldKey === 'transit_office_name')?.valueText?.trim() ??
+    null;
+
+  // Epic #12550 — en Ruta Corta la lista no gatea nada: el organismo ya lo trajo el RUNT.
+  const secretariaListaGateOk =
+    !eligeSecretaria || rutaCorta || (secretariasLoaded && secretarias.length > 0);
+
+  useEffect(() => {
+    onSecretariaListaGateChange?.(secretariaListaGateOk);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secretariaListaGateOk]);
+
+  /**
    * HU #11628 — el dígito de preferencia exige una elección consciente cuando el selector está
    * realmente en juego: paso de matrícula (`muestraRadicacion`), sin placa del RUNT, organismo ya
    * elegido y preasignación activa para ese organismo/compañía. `digitoPlaca === ''` es EXCLUSIVAMENTE
@@ -3233,7 +3267,8 @@ function ConsultaStep({
     muestraDigitoPlaca,
     vehiculoConPlacaRunt,
     transitOfficeId,
-    preasignacionActiva,
+    // Epic #12550 — la preasignación está siempre disponible en la Ruta Larga (decisión B).
+    preasignacionActiva: true,
     digitoPlacaUiValue: digitoPlaca,
   });
   const digitoPlacaGateOk = !digitoPlacaSinDecidir;
@@ -3455,17 +3490,13 @@ function ConsultaStep({
         });
         setPreviewSnapshot(result.preflight);
         setFieldValues(result.vehicleFields);
+        // Epic #12550 — la ruta la decide el RUNT: se guarda tal cual la devolvió el preview (con el
+        // organismo resuelto en Ruta Corta) y la tarjeta de radicación toma su forma a partir de ella.
+        setRutaRunt(result.route ? { route: result.route, transitOffice: result.transitOffice } : null);
         // AC2 (HU #10799) — el vehículo consultado ya trae placa del RUNT: lo que se hubiera
         // declarado sobre otro VIN deja de aplicar. Se borra la preferencia (también la anotada
-        // para la creación) y se apaga la ruta, o viajaría un `plate_route_active` en true que el
-        // trigger leería al radicar un trámite que no necesita que le asignen placa.
-        if (result.vehicleFields.some(
-          (f) => f.fieldKey === 'plate' && (f.valueText ?? '').trim() !== '',
-        )) {
-          setPreasignacionActiva(null);
-          if (digitoPlaca) handleDigitoPlaca('');
-          upsertLocal([{ fieldKey: 'plate_route_active', valueText: 'false' }]);
-        }
+        // para la creación): en Ruta Corta no hay dígito que guiar.
+        if (result.route === 'corta' && digitoPlaca) handleDigitoPlaca('');
         // Un 200 con el semáforo en rojo NO es una excepción: sin esto el shell solo sabría que
         // "hay consulta" y habilitaría Continuar aunque el vehículo no exista en el RUNT.
         const previewChecks = result.preflight?.checks ?? [];
@@ -3499,11 +3530,17 @@ function ConsultaStep({
       // puede crear el trámite, así que "Continuar" vuelve a deshabilitarse.
       onPreviewDone?.(null);
       setPreviewSnapshot(null);
+      setRutaRunt(null);
       // AC1 (HU #10882) — el preflight puede bloquear por duplicidad (409 DUPLICATE_ACTIVE_PROCEDURE,
       // HU #10876): en vez del error genérico, se ofrece el aviso con "Retomar" (AC2).
       const duplicateId = getDuplicateActiveProcedureId(err);
+      const organismoRunt = getOrganismoRuntNoHabilitado(err);
       if (duplicateId) {
         setDuplicateInstanceId(duplicateId);
+      } else if (organismoRunt) {
+        // Epic #12550 — Ruta Corta ante un organismo que la compañía no tiene habilitado. No es
+        // subsanable desde el trámite: la matrícula se radica ante ese organismo o no se crea.
+        setError(organismoRuntNoHabilitadoMensaje(organismoRunt));
       } else if (isVehicleBodyTypeMissing(err)) {
         // El vehículo no tiene carrocería que cambiar. Se avisa aquí, con el trámite todavía sin
         // crear, para que el gestor pueda escoger otro tipo sin arrastrar un expediente abierto.
@@ -3564,18 +3601,20 @@ function ConsultaStep({
   useEffect(() => {
     if (!deferred) return;
     if (!pendingPreview) return;
-    if (eligeSecretaria && !transitOfficeId) {
+    // Epic #12550 — en Ruta Corta el organismo lo fija el RUNT: no se exige ni se envía el elegido.
+    const eligeAqui = eligeSecretaria && !rutaCorta;
+    if (eligeAqui && !transitOfficeId) {
       onPreviewDone?.(null);
       return;
     }
     onPreviewDone?.({
       ...pendingPreview,
-      transitOfficeId: eligeSecretaria ? transitOfficeId : undefined,
+      transitOfficeId: eligeAqui ? transitOfficeId : undefined,
     });
     // `onPreviewDone` es un callback del shell recreado en cada render: incluirlo re-emitiría en
-    // bucle. Lo que gobierna la emisión es la consulta y el organismo.
+    // bucle. Lo que gobierna la emisión es la consulta, la ruta y el organismo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deferred, pendingPreview, eligeSecretaria, transitOfficeId]);
+  }, [deferred, pendingPreview, eligeSecretaria, rutaCorta, transitOfficeId]);
 
   // Seguimiento post-HU #12131/#12129 — «sin prenda que levantar» ya no bloquea (backend: check
   // `prenda_ausente` en warn), pero enterarse solo por la lista de "Advertencias de la verificación"
@@ -3619,49 +3658,6 @@ function ConsultaStep({
     });
     onPendingFieldValues?.(items);
   };
-
-  useEffect(() => {
-    // Sin organismo no hay nada que consultar. El estado vuelve a "cargando" al cambiar de
-    // organismo desde el propio selector, no aquí: así el efecto solo escribe el resultado.
-    if (!muestraDigitoPlaca || !transitOfficeId || vehiculoConPlacaRunt) return;
-    let active = true;
-    /**
-     * HU #10806 (Alternativa C) — la decisión de ruta se persiste como `plate_route_active`. Desde
-     * ADR-0059 la ruta la decide el estado del trámite (preasignacion / entregado) y no un trigger,
-     * así que el campo es solo informativo; se conserva hasta que la Epic #12550 rehaga este paso.
-     */
-    const persistRouteActive = (enabled: boolean) => {
-      if (deferred) {
-        upsertLocal([{ fieldKey: 'plate_route_active', valueText: String(enabled) }]);
-        return;
-      }
-      if (!instanceId) return;
-      void tramitesClient
-        .patchFieldValues(instanceId, [
-          { formFieldId: null, fieldKey: 'plate_route_active', valueText: String(enabled), valueJson: null },
-        ])
-        .catch(() => {
-          /* no bloquear el paso si la persistencia falla; el submit sigue decidiendo la ruta */
-        });
-    };
-    getPlatePreassignStatus(transitOfficeId)
-      .then((s) => {
-        if (!active) return;
-        setPreasignacionActiva(s.enabled);
-        persistRouteActive(s.enabled);
-      })
-      .catch(() => {
-        // Mismo criterio que el paso del FUR ante un fallo de esta consulta: no bloquear el flujo.
-        if (!active) return;
-        setPreasignacionActiva(true);
-        persistRouteActive(true);
-      });
-    return () => {
-      active = false;
-    };
-    // `upsertLocal` se recrea en cada render; lo que gobierna la consulta es el organismo elegido.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [muestraDigitoPlaca, transitOfficeId, vehiculoConPlacaRunt, deferred, instanceId]);
 
   /**
    * HU #10805 — dígito de preferencia. Sin trámite todavía se anota en memoria y viaja con la
@@ -3902,10 +3898,66 @@ function ConsultaStep({
     </WizardAccordion>
   ) : null;
 
+  /**
+   * Epic #12550 — chip de ruta de la matrícula, con la explicación de a dónde llega el trámite. Solo
+   * en los tipos que piden placa y con el vehículo ya identificado: antes de consultar no hay ruta.
+   */
+  const rutaChip = muestraDigitoPlaca && hasVehicleData ? (
+    <div
+      className="mb-3 flex flex-wrap items-center gap-2"
+      data-testid="ruta-matricula"
+      data-ruta={rutaCorta ? 'corta' : 'larga'}
+    >
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold"
+        style={rutaCorta
+          ? { color: '#007A71', borderColor: 'rgba(0,169,157,.4)', background: 'rgba(0,169,157,.14)' }
+          : { color: '#8A5400', borderColor: 'rgba(224,138,0,.4)', background: 'rgba(224,138,0,.16)' }}
+      >
+        <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
+        {rutaCorta ? 'Ruta Corta' : 'Ruta Larga'}
+      </span>
+      <span className="text-xs opacity-70">
+        {rutaCorta
+          ? 'El vehículo ya tiene placa asignada según el RUNT. Llegará al organismo listo para su decisión.'
+          : 'El vehículo no tiene placa. El organismo la asignará en Preasignación.'}
+      </span>
+    </div>
+  ) : null;
+
   const radicacionCard = muestraRadicacion && (hasVehicleData || secretariaAntesDeConsultar) ? (
     <>
         <div id="wizard-ot-radicacion">
         <WizardAccordion title="Organismo de Tránsito y Radicación" defaultOpen>
+          {rutaChip}
+          {rutaCorta ? (
+            /* Epic #12550 — Ruta Corta: placa y organismo vienen del RUNT y no se editan. Sin
+               selector de secretaría ni dígito: no hay nada que el gestor deba decidir aquí. */
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="min-w-0">
+                <span className={`mb-1 block ${WIZARD_LABEL}`}>Placa</span>
+                <p
+                  className="rounded-xl border border-dashed px-3 py-2 font-mono text-sm font-semibold tracking-widest opacity-90"
+                  data-testid="ruta-corta-placa"
+                >
+                  {placaRunt || '—'}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <span className={`mb-1 block ${WIZARD_LABEL}`}>Organismo de tránsito</span>
+                <p
+                  className="rounded-xl border border-dashed px-3 py-2 text-sm opacity-90"
+                  data-testid="ruta-corta-organismo"
+                >
+                  {organismoRutaCorta ?? 'El RUNT no reporta el organismo: se radicará en la secretaría que elijas en el paso final.'}
+                </p>
+                <p className="mt-1 text-xs leading-tight opacity-70">
+                  Los dos vienen del RUNT y no se pueden modificar.
+                </p>
+              </div>
+            </div>
+          ) : (
+          <>
           <p className="text-xs opacity-70 mb-3">
             {secretariaAntesDeConsultar
               ? 'Selecciona la secretaría de DESTINO: es donde quedará radicada la cuenta y quien aprueba el trámite. Escógela antes de consultar el vehículo.'
@@ -3927,10 +3979,9 @@ function ConsultaStep({
                 // el id viaja a la creación desde aquí y allí se valida.
                 setTransitOfficeId(id);
                 setError(null);
-                // La preasignación es del organismo: al cambiarlo, el estado vuelve a "consultando"
-                // y la preferencia de dígito se reinicia (también la ya anotada para la creación),
-                // o viajaría una preferencia que el organismo nuevo quizá ni atiende.
-                setPreasignacionActiva(null);
+                // Al cambiar de organismo la preferencia de dígito se reinicia (también la ya
+                // anotada para la creación), o viajaría una preferencia que el organismo nuevo
+                // quizá ni atiende.
                 if (digitoPlaca) handleDigitoPlaca('');
                 handleOrganismo(id);
               }}
@@ -4000,12 +4051,12 @@ function ConsultaStep({
                   id="consulta-digito-placa"
                   value={digitoPlaca}
                   onChange={(e) => handleDigitoPlaca(e.target.value)}
-                  disabled={readOnly || !transitOfficeId || preasignacionActiva !== true}
+                  disabled={readOnly || !transitOfficeId}
                   required={isPlateDigitDecisionRequired({
                     muestraDigitoPlaca,
                     vehiculoConPlacaRunt,
                     transitOfficeId,
-                    preasignacionActiva,
+                    preasignacionActiva: true,
                   })}
                   aria-describedby="consulta-digito-placa-nota"
                   aria-invalid={digitoPlacaSinDecidir}
@@ -4019,9 +4070,10 @@ function ConsultaStep({
                     <option key={i} value={String(i)}>{`Termina en ${i}`}</option>
                   ))}
                 </select>
-                {/* Cinco estados, porque un selector apagado (o sin decidir) sin explicación se lee
-                    como un fallo: falta el organismo · consultando · sin preasignación · sin decidir
-                    (bloquea Continuar) · disponible. */}
+                {/* Tres estados, porque un selector apagado (o sin decidir) sin explicación se lee
+                    como un fallo: falta el organismo · sin decidir (bloquea Continuar) · disponible.
+                    Epic #12550 — ya no hay «consultando» ni «sin inventario»: la Ruta Larga entra en
+                    Preasignación con o sin rango del organismo. */}
                 <p
                   id="consulta-digito-placa-nota"
                   role={digitoPlacaSinDecidir ? 'alert' : undefined}
@@ -4029,14 +4081,10 @@ function ConsultaStep({
                   style={{ color: digitoPlacaSinDecidir ? '#B45309' : undefined, opacity: digitoPlacaSinDecidir ? 1 : 0.7 }}
                 >
                   {!transitOfficeId
-                    ? 'Elige primero la secretaría: la preasignación depende del organismo donde radiques.'
-                    : preasignacionActiva === null
-                      ? 'Consultando si el organismo tiene preasignación de placa…'
-                      : preasignacionActiva === false
-                        ? 'Este organismo (o tu compañía) no tiene inventario de placas activo. Si radicas sin placa, el trámite quedará en Preasignación hasta que el organismo la asigne.'
-                        : digitoPlacaSinDecidir
-                          ? 'Elige un dígito o indica que no tienes preferencia: es obligatorio para continuar.'
-                          : 'Si radicas sin placa, indica el número en el que prefieres que termine. El organismo lo toma como guía; podrás cambiarlo en el paso final.'}
+                    ? 'Elige primero la secretaría: es el organismo que asignará la placa.'
+                    : digitoPlacaSinDecidir
+                      ? 'Elige un dígito o indica que no tienes preferencia: es obligatorio para continuar.'
+                      : 'Indica el número en el que prefieres que termine la placa. El organismo lo toma como guía al asignarla en Preasignación; podrás cambiarlo en el paso final.'}
                 </p>
               </>
             )}
@@ -4044,6 +4092,8 @@ function ConsultaStep({
           )}
 
           </div>
+          </>
+          )}
         </WizardAccordion>
         </div>
     </>

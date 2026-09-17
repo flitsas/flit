@@ -101,6 +101,25 @@ export interface PreflightPreviewResult {
   preflight: PreflightSnapshot;
   /** Atributos del vehículo hidratados por la consulta, en la forma que ya pinta el wizard. */
   vehicleFields: FieldValue[];
+  /**
+   * Epic #12550 — ruta de la matrícula inicial que decide el RUNT: `corta` si el vehículo ya tiene
+   * placa (llega al organismo en Entregado), `larga` si no (Preasignación). `null` fuera de matrícula.
+   */
+  route: MatriculaRuta | null;
+  /**
+   * Organismo ante el que se radica la Ruta Corta: el que reporta el RUNT, ya resuelto contra los
+   * habilitados de la compañía. `null` en Ruta Larga (lo elige el gestor).
+   */
+  transitOffice: PreflightPreviewTransitOffice | null;
+}
+
+export type MatriculaRuta = 'corta' | 'larga';
+
+export interface PreflightPreviewTransitOffice {
+  id: string;
+  code: string;
+  name: string;
+  cityName: string | null;
 }
 
 /** Trámite recién creado al avanzar al paso 2, con su preflight ya persistido. */
