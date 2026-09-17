@@ -60,7 +60,8 @@ public sealed class OtBandejaFiltrosTests
         ids.Should().NotContain("organismo");
         ids.Should().NotContain(OtQueryFieldCatalog.Revisor);
         ids.Should().Contain(OtBandejaQueryFieldCatalog.Empresa);
-        ids.Should().Contain(OtBandejaQueryFieldCatalog.SubEstadoPlaca);
+        // ADR-0059 — el eje «sub-estado de placa» desapareció: la ruta de placa se filtra con «Estado».
+        ids.Should().NotContain("sub_estado_placa");
     }
 
     /// <summary>
@@ -224,29 +225,22 @@ public sealed class OtBandejaFiltrosTests
     }
 
     /// <summary>
-    /// «Sin ruta de placa» es la AUSENCIA de valor, no un valor: se pide como una opción más y tiene
-    /// que poder combinarse con las reales.
+    /// ADR-0059 — el estado admite lista: una tarjeta o un enlace profundo pueden pedir varios a la vez.
     /// </summary>
     [Fact]
-    public async Task AC3_RutaDePlaca_SinRutaSeCombinaConLosValoresReales()
+    public async Task AC3_Estado_AdmiteVariosValores()
     {
         var db = await SembrarEscenarioAsync();
 
-        var soloSinRuta = await BuscarAsync(db,
+        var bandeja = await BuscarAsync(db,
         [
             new QueryCondition(
-                OtBandejaQueryFieldCatalog.SubEstadoPlaca, QueryOperator.EsAlguno, ["sin_ruta"]),
-        ]);
-        soloSinRuta.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000001", "FT1-0000003"]);
-
-        var mezcla = await BuscarAsync(db,
-        [
-            new QueryCondition(
-                OtBandejaQueryFieldCatalog.SubEstadoPlaca,
+                OtBandejaQueryFieldCatalog.Estado,
                 QueryOperator.EsAlguno,
-                ["sin_ruta", PlateFlowStatus.Preasignado]),
+                [TramiteEstado.Entregado, TramiteEstado.Aprobado]),
         ]);
-        mezcla.Data.Select(p => p.ReferenceNumber)
+
+        bandeja.Data.Select(p => p.ReferenceNumber)
             .Should().BeEquivalentTo(["FT1-0000001", "FT2-0000002", "FT1-0000003"]);
     }
 
@@ -255,23 +249,19 @@ public sealed class OtBandejaFiltrosTests
     /// separado es justo la forma en que dejan de serlo sin que nadie lo note.
     /// </summary>
     [Fact]
-    public async Task AC3_RutaDePlaca_LaNegacionEsElComplementoExacto()
+    public async Task AC3_Estado_LaNegacionEsElComplementoExacto()
     {
         var db = await SembrarEscenarioAsync();
 
         var son = await BuscarAsync(db,
         [
             new QueryCondition(
-                OtBandejaQueryFieldCatalog.SubEstadoPlaca,
-                QueryOperator.EsAlguno,
-                [PlateFlowStatus.Preasignado]),
+                OtBandejaQueryFieldCatalog.Estado, QueryOperator.EsAlguno, [TramiteEstado.Entregado]),
         ]);
         var noSon = await BuscarAsync(db,
         [
             new QueryCondition(
-                OtBandejaQueryFieldCatalog.SubEstadoPlaca,
-                QueryOperator.NoEsNinguno,
-                [PlateFlowStatus.Preasignado]),
+                OtBandejaQueryFieldCatalog.Estado, QueryOperator.NoEsNinguno, [TramiteEstado.Entregado]),
         ]);
 
         var todos = await BuscarAsync(db, []);
@@ -596,7 +586,6 @@ public sealed class OtBandejaFiltrosTests
                 Consecutivo = 2,
                 Status = TramiteEstado.Entregado,
                 TransitOfficeId = TransitOffice,
-                PlateFlowStatus = PlateFlowStatus.Preasignado,
                 Prioritario = true,
                 CreatedByUserId = Guid.NewGuid(),
                 CreatedAt = new DateTimeOffset(2026, 3, 10, 10, 0, 0, TimeSpan.Zero),

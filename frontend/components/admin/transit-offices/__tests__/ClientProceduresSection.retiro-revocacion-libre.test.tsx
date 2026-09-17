@@ -1,8 +1,8 @@
 // HU #12581 (Feature #12566) — retiro del botón libre "Revocar" del dashboard OT.
 // AC1: en un trámite Aprobado la fila ya NO ofrece la acción "Revocar" libre.
 // AC2: en su lugar solo queda "Decidir revocatoria" (Feature #12565), la única vía a Revocado.
-// AC3: la misma pantalla conserva intactas "Actualizar placa" (HU #12167) y el "Revocar" de la
-// PREASIGNACIÓN de placa (HU #10655), que comparte rótulo pero es otra acción.
+// AC3: la misma pantalla conserva intactas "Actualizar placa" (HU #12167) y la acción de placa
+// que ADR-0059 renombró a "Liberar placa" (devuelve un `asignado` a `preasignacion`).
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -51,7 +51,7 @@ import {
   searchOtClientProcedures,
 } from "@/lib/api/admin-ot";
 
-/** Aprobado con placa asignada hace un minuto: la ventana de corrección de HU #12167 sigue abierta. */
+/** Aprobado sin solicitud del gestor: el caso del AC1. */
 const aprobadoConPlaca: OtClientProcedure = {
   id: "proc-aprobado-1",
   clientTenantId: "client-tenant-aaaa",
@@ -61,7 +61,6 @@ const aprobadoConPlaca: OtClientProcedure = {
   referenceNumber: "RAD-2026-777",
   status: "aprobado",
   createdAt: "2026-06-23T09:00:00Z",
-  plateAssignedAt: new Date(Date.now() - 60_000).toISOString(),
 };
 
 /** Aprobado CON solicitud activa del gestor: el "Given" literal del AC2. */
@@ -72,17 +71,21 @@ const aprobadoConSolicitud: OtClientProcedure = {
   revocationRequestStatus: "solicitada",
 };
 
-/** Preasignado: el "Revocar" que sigue vivo es el de la PLACA (HU #10655), no el del trámite. */
-const preasignado: OtClientProcedure = {
-  id: "proc-preasignado-1",
+/**
+ * Asignado con placa puesta hace un minuto: ADR-0059 movió AQUÍ las dos acciones de placa del OT
+ * —«Liberar placa» y «Actualizar placa» (HU #12167, ventana de 1 h aún abierta)—, que antes
+ * colgaban del sub-estado de placa de un Entregado/Aprobado.
+ */
+const asignado: OtClientProcedure = {
+  id: "proc-asignado-1",
   clientTenantId: "client-tenant-aaaa",
   clientTenantName: "Flota Andina S.A.S.",
   procedureTypeId: "matricula_inicial-type-id",
   procedureTypeName: "Matrícula inicial",
   referenceNumber: "RAD-2026-778",
-  status: "en_revision_ot",
+  status: "asignado",
   createdAt: "2026-06-23T09:00:00Z",
-  plateFlowStatus: "preasignado",
+  plateAssignedAt: new Date(Date.now() - 60_000).toISOString(),
 };
 
 function renderSection() {
@@ -133,9 +136,13 @@ describe("ClientProceduresSection — HU #12581 retiro del botón libre de revoc
     renderSection();
     await abrirMenu(user);
 
-    // El menú ya cargó (AC2 comprueba su contenido); aquí lo que importa es la ausencia.
-    expect(await screen.findByRole("menuitem", { name: /Decidir revocatoria/i })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /^Revocar$/ })).not.toBeInTheDocument();
+    // Se comprueba sobre el inventario real del menú, no con un `queryBy` a secas: tras ADR-0059
+    // ningún ítem se llama ya "Revocar", así que una aserción de ausencia suelta pasaría igual
+    // aunque el botón libre siguiera ahí con otro rótulo.
+    const items = await screen.findAllByRole("menuitem");
+    const rotulos = items.map((i) => i.textContent?.trim());
+    expect(rotulos).toContain("Decidir revocatoria");
+    expect(rotulos).not.toContain("Revocar");
   });
 
   it("AC2 con solicitud pendiente solo queda 'Decidir revocatoria', y accionable", async () => {
@@ -151,7 +158,8 @@ describe("ClientProceduresSection — HU #12581 retiro del botón libre de revoc
     expect(revocatorias[0]).not.toBeDisabled();
   });
 
-  it("AC3 'Actualizar placa' (HU #12167) sigue presente y habilitada en la misma pantalla", async () => {
+  it("AC3 'Actualizar placa' (HU #12167) sigue presente y habilitada", async () => {
+    conFilas([asignado]);
     const user = userEvent.setup();
     renderSection();
     await abrirMenu(user);
@@ -161,12 +169,12 @@ describe("ClientProceduresSection — HU #12581 retiro del botón libre de revoc
     expect(actualizar).not.toBeDisabled();
   });
 
-  it("AC3 el 'Revocar' de la PREASIGNACIÓN de placa (HU #10655) no se ve afectado", async () => {
-    conFilas([preasignado]);
+  it("AC3 la acción de placa del OT (ADR-0059: «Liberar placa») no se ve afectada", async () => {
+    conFilas([asignado]);
     const user = userEvent.setup();
     renderSection();
     await abrirMenu(user);
 
-    expect(await screen.findByRole("menuitem", { name: /^Revocar$/ })).toBeInTheDocument();
+    expect(await screen.findByRole("menuitem", { name: /Liberar placa/i })).toBeInTheDocument();
   });
 });

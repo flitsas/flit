@@ -253,7 +253,7 @@ describe("ClientProceduresSection — HU #12577 decidir revocatoria", () => {
     await waitFor(() =>
       expect(approveOtRevocationRequest).toHaveBeenCalledWith("proc-aprobado-1", "", undefined),
     );
-    expect(await screen.findByRole("status", { name: "Estado: Revocado OT" })).toBeInTheDocument();
+    expect(await screen.findByRole("status", { name: "Estado: Revocado" })).toBeInTheDocument();
   });
 
   // Con la acción ya gateada por `revocationRequestStatus`, un 404 aquí solo puede venir de una

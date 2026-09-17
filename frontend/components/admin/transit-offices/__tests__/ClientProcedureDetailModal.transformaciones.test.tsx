@@ -24,7 +24,6 @@ const BASE: OtClientProcedure = {
   clientTenantName: "Empresa Demo",
   referenceNumber: "RAD-0001",
   status: "entregado",
-  plateFlowStatus: null,
   soatEstado: "vigente",
   createdAt: "2026-08-01T00:00:00Z",
   placa: "ABC123",

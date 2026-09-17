@@ -50,7 +50,7 @@ const mocks = vi.hoisted(() => ({
   setMandateSigner: vi.fn(),
   listFirmas: vi.fn(),
   listParticipantes: vi.fn(),
-  completePlateFlow: vi.fn(),
+  enviarAlOt: vi.fn(),
   submitInstance: vi.fn(),
   iniciarBiometric: vi.fn(),
   simulateBiometric: vi.fn(),
@@ -207,7 +207,7 @@ beforeEach(() => {
   mocks.setMandateSigner.mockResolvedValue(undefined);
   mocks.listFirmas.mockResolvedValue([]);
   mocks.listParticipantes.mockResolvedValue([]);
-  mocks.completePlateFlow.mockResolvedValue({ warningMessage: null });
+  mocks.enviarAlOt.mockResolvedValue({ warningMessage: null });
   mocks.submitInstance.mockResolvedValue({ id: INSTANCE, status: 'entregado' });
   mocks.setPriority.mockResolvedValue({ id: INSTANCE, prioritario: true });
   plateMocks.getPlatePreassignStatus.mockResolvedValue({ enabled: true });
@@ -696,7 +696,7 @@ describe('FirmaFurStep — inventario: acciones del cierre del trámite', () => 
   });
 
   it('con la placa ya asignada por el OT no pinta el cierre del gestor en el resumen', async () => {
-    mocks.getInstance.mockResolvedValue({ ...DETALLE, plateFlowStatus: 'asignado' });
+    mocks.getInstance.mockResolvedValue({ ...DETALLE, status: 'asignado' });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     await screen.findByRole('region', { name: 'Consolidado del trámite' });

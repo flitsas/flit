@@ -13,6 +13,30 @@ public static class TramiteEstadoErrores
     /// <summary>RF04 — el trámite está en estado final (aprobado/anulado): ni transiciones ni edición (422).</summary>
     public const string EstadoFinal = "estado_final";
 
+    /// <summary>
+    /// ADR-0059 — el destino es un estado de la ruta de placa (<c>preasignacion</c>/<c>asignado</c>) y el
+    /// tipo de trámite NO pide placa (<c>gate_profile.requiresPlateRequest = false</c>) (422).
+    /// </summary>
+    public const string TransicionRequierePlaca = "transicion_requiere_placa";
+
+    /// <summary>
+    /// ADR-0059 — el tipo pide placa y el trámite no la tiene: no puede radicarse directo a
+    /// <c>entregado</c>, la Ruta Larga entra por <c>preasignacion</c>. Quipux está exento (ADR-0051) (422).
+    /// </summary>
+    public const string TransicionRequierePreasignacion = "transicion_requiere_preasignacion";
+
+    /// <summary>
+    /// ADR-0059 — la presencia de placa no cuadra con el destino: se intentó radicar a
+    /// <c>preasignacion</c> teniendo placa, o pasar a <c>asignado</c> sin ella (422).
+    /// </summary>
+    public const string TransicionPlacaIncoherente = "transicion_placa_incoherente";
+
+    /// <summary>ADR-0059 — la arista de placa (asignar, liberar, rechazar en preasignación) es exclusiva del OT (422).</summary>
+    public const string TransicionSoloOt = "transicion_solo_ot";
+
+    /// <summary>ADR-0059 — la arista (radicar sin placa, enviar al OT) es exclusiva del gestor (422).</summary>
+    public const string TransicionSoloGestor = "transicion_solo_gestor";
+
     /// <summary>RF03 — gate Borrador→Preparado: la validación de identidad no está aprobada/vigente (422).</summary>
     public const string IdentidadNoAprobada = "identidad_no_aprobada";
 

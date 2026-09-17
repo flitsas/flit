@@ -155,7 +155,6 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.OnlyOwnVehiclesOtros = settings.OnlyOwnVehiclesOtros;
         policy.SignatureVaultEnabled = settings.SignatureVaultEnabled;
         policy.PlatePreassignEnabled = settings.PlatePreassignEnabled;
-        policy.PlateFlowSkipToTerminado = settings.PlateFlowSkipToTerminado;
         policy.ValidateSoatWithRunt = settings.ValidateSoatWithRunt;
         policy.NotificationChannel = TenantSettingsCodes.ToDb(settings.NotificationChannel);
         policy.PersonalizedDocumentsEnabled = settings.PersonalizedDocumentsEnabled;
@@ -186,7 +185,6 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         SignatureVaultEnabled = entity.SignatureVaultEnabled,
         PlatePreassignEnabled = entity.PlatePreassignEnabled,
         ValidateSoatWithRunt = entity.ValidateSoatWithRunt,
-        PlateFlowSkipToTerminado = entity.PlateFlowSkipToTerminado,
         NotificationChannel = TenantSettingsCodes.ParseChannelDb(entity.NotificationChannel),
         PersonalizedDocumentsEnabled = entity.PersonalizedDocumentsEnabled,
         TramiteApprovedEmailsEnabled = entity.TramiteApprovedEmailsEnabled,

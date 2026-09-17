@@ -5,21 +5,12 @@ namespace Flit.Admin.Domain.OtClientProcedures;
 /// <summary>Filtros y ordenamiento de trámites de clientes OT (HU #10217 AC1/AC5).</summary>
 public sealed class OtClientProcedureFilter
 {
-    public string? Status { get; init; }
-
     /// <summary>
-    /// Sub-estado de la ruta de placa. Acepta varios separados por coma
-    /// (<c>asignado,terminado</c>) y el valor especial <c>sin_ruta</c> para los trámites que NO
-    /// están en ruta de placa (columna nula).
-    ///
-    /// <para>
-    /// Existe porque las tarjetas de la cabecera se pulsan para filtrar, y tres de ellas —"Sin
-    /// asignar placa", "Con placa asignada" y "Sin gestión"— no son estados del ciclo de vida sino
-    /// del sub-flujo de placa. Sin este filtro, pulsarlas habría llevado a una lista que no era la
-    /// que la tarjeta acababa de contar.
-    /// </para>
+    /// Estado del ciclo de vida. Acepta varios separados por coma (<c>preasignacion,asignado</c>):
+    /// desde ADR-0059 la ruta de placa vive en <c>status</c>, así que las tarjetas de la cabecera y
+    /// el desplegable filtran por el estado real y no hace falta un eje de sub-estado.
     /// </summary>
-    public string? PlateFlowStatus { get; init; }
+    public string? Status { get; init; }
 
     /// <summary>
     /// Pedido del usuario (2026-09-16) — filtro de la tarjeta "Solicitudes de revocatoria": trámites
@@ -63,9 +54,9 @@ public sealed class OtClientProcedureFilter
     /// y valores. Se resuelven en <c>WHERE</c> sobre el universo de trámites con grant vigente, no
     /// sobre la página ya cargada.
     ///
-    /// <para>Conviven con los filtros sueltos de arriba en vez de sustituirlos: <c>Status</c> y
-    /// <c>PlateFlowStatus</c> los sigue mandando la tira de tarjetas de la cabecera, que no es un
-    /// filtro que el usuario escriba sino un atajo a un recuento ya hecho.</para>
+    /// <para>Conviven con los filtros sueltos de arriba en vez de sustituirlos: <c>Status</c> lo
+    /// sigue mandando la tira de tarjetas de la cabecera, que no es un filtro que el usuario escriba
+    /// sino un atajo a un recuento ya hecho.</para>
     ///
     /// <para>El endpoint rechaza con 400 cualquier campo que no esté en
     /// <c>OtBandejaQueryFieldCatalog</c>; el repositorio, por su parte, ignora el desconocido en vez

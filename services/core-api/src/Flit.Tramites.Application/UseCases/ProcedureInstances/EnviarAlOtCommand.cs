@@ -6,15 +6,17 @@ using Flit.Tramites.Domain.Tramites.Estados;
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
-/// Gestor/radicador en sub-estado <c>asignado</c>: marca checks opcionales (SOAT / impuesto) y
-/// avanza a <c>terminado</c> para que el OT pueda aprobar/rechazar.
+/// «Enviar al OT» (ADR-0059, HU #12597): el gestor, con el trámite en <see cref="TramiteEstado.Asignado"/>,
+/// marca los checks opcionales (SOAT / impuesto) y lo pasa a <see cref="TramiteEstado.Entregado"/> para
+/// que el organismo decida. Sustituye al «Procesar» del sub-estado <c>asignado → terminado</c>.
 /// </summary>
-public sealed record CompletePlateFlowRequest(
+public sealed record EnviarAlOtRequest(
     bool? SoatPagado = null,
     bool? ImpuestoDepartamentalPagado = null);
 
-public sealed class CompletePlateFlowHandler(
+public sealed class EnviarAlOtHandler(
     IProcedureInstanceRepository repo,
+    ITramiteLifecycleService lifecycle,
     ValidateSoatViaRuntHandler? soatValidator = null,
     ISoatRuntValidationPolicy? soatPolicy = null)
 {
@@ -24,8 +26,8 @@ public sealed class CompletePlateFlowHandler(
     public const string SoatNoVigente = "soat_no_vigente";
 
     /// <summary>
-    /// El trámite avanzó a Terminado SIN SOAT vigente porque la compañía tiene activa la opción de
-    /// continuar. No es un error: el gestor tiene que enterarse de que lo envió al OT así.
+    /// El trámite se envió al OT SIN SOAT vigente porque la compañía tiene activa la opción de
+    /// continuar. No es un error: el gestor tiene que enterarse de que lo envió así.
     /// </summary>
     public const string SoatNoVigenteAdvertencia = "soat_no_vigente_advertencia";
 
@@ -36,20 +38,17 @@ public sealed class CompletePlateFlowHandler(
         Guid id,
         Guid tenantId,
         Guid? changedBy,
-        CompletePlateFlowRequest request,
+        EnviarAlOtRequest request,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
+
         var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found", null);
 
-        if (instance.Status != TramiteEstado.Entregado)
-            return (null, TramiteEstadoErrores.TransicionNoPermitida, null);
-
-        if (instance.PlateFlowStatus != PlateFlowStatus.Asignado)
-            return (null, "plate_flow_not_asignado", null);
-
-        if (!PlateFlowStateMachine.IsValidTransition(PlateFlowStatus.Asignado, PlateFlowStatus.Terminado))
+        // Solo desde 'asignado' (HU #12597 AC5): en preasignacion no hay placa y en entregado ya se envió.
+        if (instance.Status != TramiteEstado.Asignado)
             return (null, TramiteEstadoErrores.TransicionNoPermitida, null);
 
         // Validación del SOAT contra el RUNT al procesar. La consulta se hace SIEMPRE que haya
@@ -86,27 +85,28 @@ public sealed class CompletePlateFlowHandler(
 
         var now = DateTimeOffset.UtcNow;
 
-        // Fase 1 — escribir checks ESTANDO en asignado (el trigger de inmutabilidad solo lo
-        // permite en ese sub-estado) y persistir antes de cambiar plate_flow_status.
-        UpsertBoolField(instance, tenantId, id, PlateFlowCheckFields.SoatPagado, request.SoatPagado, now);
-        UpsertBoolField(instance, tenantId, id, PlateFlowCheckFields.ImpuestoDepartamentalPagado, request.ImpuestoDepartamentalPagado, now);
+        // Fase 1 — escribir checks ESTANDO en asignado (el trigger de inmutabilidad de field_values solo
+        // los admite en ese estado) y persistir antes de mover el status.
+        UpsertBoolField(instance, tenantId, id, EnvioOtCheckFields.SoatPagado, request.SoatPagado, now);
+        UpsertBoolField(instance, tenantId, id, EnvioOtCheckFields.ImpuestoDepartamentalPagado, request.ImpuestoDepartamentalPagado, now);
 
         if (!await repo.SaveChangesWithConcurrencyGuardAsync(ct))
             return (null, TramiteEstadoErrores.ConflictoConcurrencia, null);
 
-        // Fase 2 — avanzar a terminado (mismo patrón que AssignPlate: preasignado→asignado).
-        instance.PlateFlowStatus = PlateFlowStatus.Terminado;
-        instance.UpdatedAt = now;
-        instance.UpdatedBy = changedBy;
+        // Fase 2 — asignado → entregado por el ciclo de vida (historial + notificación + política).
+        var outcome = await lifecycle.TransitionAsync(
+            new TramiteTransitionCommand(
+                id, tenantId, TramiteEstado.Entregado,
+                "Enviado al organismo de tránsito con placa asignada.", changedBy, TramiteActor.Gestor),
+            ct).ConfigureAwait(false);
+        if (!outcome.Success)
+            return (null, outcome.ErrorCode, null);
 
-        if (!await repo.SaveChangesWithConcurrencyGuardAsync(ct))
-            return (null, TramiteEstadoErrores.ConflictoConcurrencia, null);
-
-        return (CreateProcedureInstanceHandler.ToSummary(instance), null, warning);
+        return (CreateProcedureInstanceHandler.ToSummary(outcome.Instance!), null, warning);
     }
 
     /// <summary>
-    /// Gate del SOAT al procesar: la opción activa PERMITE continuar sin SOAT vigente; apagada
+    /// Gate del SOAT al enviar: la opción activa PERMITE continuar sin SOAT vigente; apagada
     /// (default) bloquea. Solo aplica cuando la consulta al RUNT respondió con un resultado.
     /// </summary>
     public static bool DebeBloquearPorSoatNoVigente(

@@ -36,7 +36,7 @@ const mocks = vi.hoisted(() => ({
   listBiometricExpediente: vi.fn(),
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
-  completePlateFlow: vi.fn(),
+  enviarAlOt: vi.fn(),
   getConsultationConfig: vi.fn(),
   // AC4 — el historial tiene su propio método, sin parámetro de tenant en la firma.
   listPlateHistory: vi.fn(),

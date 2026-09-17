@@ -156,7 +156,7 @@ public sealed class ImprontaManualStampApplierTests
         var instance = InstanceTraspasoReady();
         instance.ProcedureType = ProcedureTypeFixture.Matricula;
         instance.Plate = null;
-        instance.PlateFlowStatus = PlateFlowStatus.Preasignado;
+        instance.Status = TramiteEstado.Preasignacion;
         instance.Actors.Clear();
         instance.BiometricValidations.Clear();
         AddOwnerWithIdentity(instance, "comprador", "CC", "200");

@@ -53,8 +53,6 @@ public sealed record InstanceSummaryDto(
     // OJO: es el valor CRUDO. La columna "Fuente" del listado NO lo usa directo, sino `Fuente` (abajo),
     // que además contempla los trámites migrados de V1.
     string? Origin = null,
-    // Sub-estado de placa (null | preasignado | asignado | terminado), ortogonal a Estado (HU11037).
-    string? PlateFlowStatus = null,
                                               // HU #11056 — columnas de seguimiento del listado. Todo se DERIVA del grafo que ya
                                               // carga ListWithSummaryGraphAsync; lo único que cuesta una consulta extra es el
                                               // nombre del gestor (resuelto en lote, nunca por fila).
@@ -98,7 +96,11 @@ public sealed record InstanceSummaryDto(
                                               // Feature #12565 — sub-estado ACTIVO ('solicitada' | 'en_revision') de la solicitud
                                               // de revocatoria del trámite; null si nunca se solicitó o ya se decidió. Alimenta el
                                               // indicativo "Revocatoria en curso" del listado (no reemplaza el detalle del modal).
-    string? RevocationRequestStatus = null);
+    string? RevocationRequestStatus = null,
+                                              // ADR-0059 (HU #12597) — estado desde el que el OT rechazó por última vez
+                                              // (entregado | preasignacion). El gestor pinta «Rechazado preasignación» cuando
+                                              // vale preasignacion; null si nunca se rechazó o ya se subsanó.
+    string? RejectedFrom = null);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -265,7 +267,6 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             // Solo tiene sentido mostrar la nota cuando está pausado; se limpia al reanudar de todos modos.
             e.IsPaused ? e.PausedObservation : null,
             e.Origin,
-            e.PlateFlowStatus,
             e.UpdatedAt,
             string.IsNullOrWhiteSpace(gestorNombre) ? null : gestorNombre.Trim(),
             TramiteFuente.Desde(e.Origin, e.IsMigrated),
@@ -282,7 +283,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             TramiteMarcas.TienePrenda(prendaVigente, e.TypeCode),
             TramiteMarcas.TieneTransformacion(fv, e.TypeCode),
             Flit.Tramites.Domain.RuntConfirmation.RuntConfirmedColumn.Derive(e.Status, e.RuntConfirmedAt, e.RuntAttempts, e.RuntFlag),
-            revocationRequestStatus);
+            revocationRequestStatus,
+            RejectedFrom: e.RejectedFrom);
     }
 
     /// <summary>

@@ -629,6 +629,8 @@ export function TramiteWizard(props: Props) {
   const [radicado, setRadicado] = useState<{
     placa: string | null;
     referencia: string | null;
+    /** Estado real tras radicar (ADR-0059): `preasignacion` en Ruta Larga, `entregado` en el resto. */
+    estado: string | null;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   /**
@@ -1269,7 +1271,10 @@ export function TramiteWizard(props: Props) {
         return;
       }
 
-      await tramitesClient.transitionInstance(instanceId, 'entregado');
+      // ADR-0059 — el destino de la radicación lo decide el backend (`/submit`): Entregado si el
+      // trámite lleva placa, Preasignación si es matrícula inicial sin placa (Ruta Larga). Pedir
+      // `entregado` a secas dejaba la Ruta Larga en 422 (`transicion_requiere_placa`).
+      const radicada = await tramitesClient.submitInstance(instanceId);
       telemetry.trackComplete();
       // Flujo del diseño: al radicar se abre el modal de trámite completado en vez de salir de
       // golpe con un toast. El gestor confirma qué quedó radicado y sale desde el CTA. La
@@ -1279,6 +1284,7 @@ export function TramiteWizard(props: Props) {
       setRadicado({
         placa: placaRadicada,
         referencia: referenceNumber ?? state.detail?.referenceNumber ?? null,
+        estado: radicada.status,
       });
       setSubmitting(false);
     } catch (err) {
@@ -2009,7 +2015,7 @@ export function TramiteWizard(props: Props) {
                     fullReadOnly
                       ? 'Entrega el trámite al organismo de tránsito'
                       : canRadicar
-                        ? 'Prepara y radica el trámite en un solo paso (queda en entregado)'
+                        ? 'Prepara y radica el trámite en un solo paso'
                         : 'Disponible cuando el cliente valide su identidad'
                   }
                 >
@@ -2315,8 +2321,12 @@ export function TramiteWizard(props: Props) {
               La placa la asigna el organismo de tránsito.
             </p>
           ) : null}
+          {/* ADR-0059 — el acuse nombra el estado real: en Ruta Larga el trámite NO queda entregado
+              sino en Preasignación, a la espera de que el organismo asigne la placa. */}
           <p className="mt-4 text-xs opacity-70">
-            El trámite fue validado y enviado correctamente al organismo de tránsito.
+            {radicado?.estado === 'preasignacion'
+              ? 'El trámite quedó en Preasignación: el organismo de tránsito asignará la placa.'
+              : 'El trámite fue validado y enviado correctamente al organismo de tránsito.'}
           </p>
           <button
             type="button"
@@ -3643,10 +3653,9 @@ function ConsultaStep({
     if (!muestraDigitoPlaca || !transitOfficeId || vehiculoConPlacaRunt) return;
     let active = true;
     /**
-     * HU #10806 (Alternativa C) — la decisión de ruta se persiste como `plate_route_active`: es la
-     * fuente que consume el trigger de BD para fijar `plate_flow_status = 'preasignado'` al radicar
-     * sin placa. El paso del FUR hace exactamente esto al abrir su sección; aquí se anota con el
-     * resto de lo capturado y viaja con la creación del trámite.
+     * HU #10806 (Alternativa C) — la decisión de ruta se persiste como `plate_route_active`. Desde
+     * ADR-0059 la ruta la decide el estado del trámite (preasignacion / entregado) y no un trigger,
+     * así que el campo es solo informativo; se conserva hasta que la Epic #12550 rehaga este paso.
      */
     const persistRouteActive = (enabled: boolean) => {
       if (deferred) {
@@ -4051,7 +4060,7 @@ function ConsultaStep({
                     : preasignacionActiva === null
                       ? 'Consultando si el organismo tiene preasignación de placa…'
                       : preasignacionActiva === false
-                        ? 'Este organismo (o tu compañía) no tiene preasignación de placa activa: el trámite se entregará de forma estándar.'
+                        ? 'Este organismo (o tu compañía) no tiene inventario de placas activo. Si radicas sin placa, el trámite quedará en Preasignación hasta que el organismo la asigne.'
                         : digitoPlacaSinDecidir
                           ? 'Elige un dígito o indica que no tienes preferencia: es obligatorio para continuar.'
                           : 'Si radicas sin placa, indica el número en el que prefieres que termine. El organismo lo toma como guía; podrás cambiarlo en el paso final.'}

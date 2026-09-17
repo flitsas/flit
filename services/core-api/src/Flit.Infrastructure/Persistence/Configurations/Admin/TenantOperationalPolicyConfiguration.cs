@@ -29,7 +29,6 @@ internal sealed class TenantOperationalPolicyConfiguration
         builder.Property(x => x.OnlyOwnVehiclesOtros).HasDefaultValue(false);
         builder.Property(x => x.SignatureVaultEnabled).HasDefaultValue(false);
         builder.Property(x => x.PlatePreassignEnabled).HasDefaultValue(false);
-        builder.Property(x => x.PlateFlowSkipToTerminado).HasDefaultValue(false);
         builder.Property(x => x.ValidateSoatWithRunt).HasDefaultValue(false);
 
         builder.Property(x => x.NotificationChannel)

@@ -18,11 +18,14 @@ public sealed class GetOtBandejaCountersQuery
 public sealed class GetOtBandejaCountersResult
 {
     public bool TransitOfficeResolved { get; init; }
-    public int SinAsignarPlaca { get; init; }
-    public int ConPlacaAsignada { get; init; }
+    /// <summary>ADR-0059 — radicados sin placa: cola de "asignar placa".</summary>
+    public int Preasignacion { get; init; }
+    /// <summary>ADR-0059 — con placa asignada; el gestor gestiona SOAT/impuestos y envía al OT.</summary>
+    public int Asignados { get; init; }
+    /// <summary>Entregados a la espera de la decisión del organismo.</summary>
+    public int PorDecidir { get; init; }
     public int Aprobados { get; init; }
     public int Rechazados { get; init; }
-    public int SinGestion { get; init; }
     /// <summary>HU #12166/#12168 (Feature #12156) — Aprobados que el organismo revocó.</summary>
     public int Revocados { get; init; }
 
@@ -63,11 +66,11 @@ public sealed class GetOtBandejaCountersHandler
         return new GetOtBandejaCountersResult
         {
             TransitOfficeResolved = true,
-            SinAsignarPlaca = counters.SinAsignarPlaca,
-            ConPlacaAsignada = counters.ConPlacaAsignada,
+            Preasignacion = counters.Preasignacion,
+            Asignados = counters.Asignados,
+            PorDecidir = counters.PorDecidir,
             Aprobados = counters.Aprobados,
             Rechazados = counters.Rechazados,
-            SinGestion = counters.SinGestion,
             Revocados = counters.Revocados,
             SolicitudesRevocatoria = counters.SolicitudesRevocatoria,
         };

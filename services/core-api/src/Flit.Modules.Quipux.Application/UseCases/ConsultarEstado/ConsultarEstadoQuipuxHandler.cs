@@ -354,7 +354,7 @@ public sealed class ConsultarEstadoQuipuxHandler
         var outcome = await _lifecycle.TransitionAsync(
             new TramiteTransitionCommand(
                 submission.ProcedureInstanceId, submission.TenantId, destino, reason,
-                ChangedByUserId: null, PlateFlowStatus: null, Metadata: metadata),
+                ChangedByUserId: null, Actor: TramiteActor.Quipux, Metadata: metadata),
             cancellationToken);
 
         return outcome.Success ? (true, null) : (false, outcome.ErrorCode);

@@ -7,7 +7,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
-import { estadoLabel } from '@/lib/tramites/estados';
+import { estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import {
   DETALLE_BLUE,
   DETALLE_GREEN,
@@ -26,7 +26,10 @@ export interface DetalleEstadoHeader {
   pendiente: boolean;
 }
 
-export function detalleEstadoHeader(estado: InstanceStatus): DetalleEstadoHeader {
+export function detalleEstadoHeader(
+  estado: InstanceStatus,
+  rejectedFrom: string | null | undefined = null,
+): DetalleEstadoHeader {
   switch (estado) {
     case 'aprobado':
       return {
@@ -46,25 +49,44 @@ export function detalleEstadoHeader(estado: InstanceStatus): DetalleEstadoHeader
       };
     case 'rechazado':
       return {
-        label: estadoLabel(estado),
+        // ADR-0059 — «Rechazado preasignación» cuando el OT rechazó desde la cola de placa.
+        label: estadoLabelConOrigen(estado, rejectedFrom),
         color: DETALLE_RED,
         Icon: Ban,
-        alert: 'Trámite rechazado por el Organismo de Tránsito.',
+        alert:
+          rejectedFrom === 'preasignacion'
+            ? 'Trámite rechazado por el Organismo de Tránsito antes de asignar placa. Al subsanarlo y radicarlo de nuevo vuelve a la cola de placa.'
+            : 'Trámite rechazado por el Organismo de Tránsito.',
         pendiente: false,
       };
-    // Feature #12565 — sin este caso, 'revocado' caía al `default` de abajo: chip ámbar de
-    // "pendiente" (Icon de alerta) y el aviso "Trámite pendiente por aprobación...", los DOS
-    // incorrectos para un trámite que ya terminó su ciclo (y que además duplicaban el aviso propio
-    // de la decisión de revocatoria, `lastRevocationDecision`, en `TramiteDetalleModal`). `alert:
-    // null` a propósito: ese aviso específico es responsabilidad de `lastRevocationDecision`, que
-    // sabe el motivo y la fecha — este genérico no aportaría nada más que ruido repetido.
+    // Feature #12565 — el aviso se mantiene aquí (es el contrato de esta función, y hay quien la
+    // usa sin el detalle a mano), pero `TramiteDetalleModal` lo suprime cuando
+    // `lastRevocationDecision` ya anunció la revocatoria con su motivo y su fecha: si no, saldrían
+    // dos avisos seguidos diciendo lo mismo.
     case 'revocado':
       return {
         label: estadoLabel(estado),
         color: DETALLE_RED,
         Icon: Ban,
-        alert: null,
+        alert: 'Aprobación revocada por el Organismo de Tránsito. La placa quedó liberada.',
         pendiente: false,
+      };
+    // ADR-0059 — ruta de placa: dos esperas distintas, y las dos se dicen.
+    case 'preasignacion':
+      return {
+        label: estadoLabel(estado),
+        color: '#0891B2',
+        Icon: Clock,
+        alert: 'Radicado sin placa: el Organismo de Tránsito debe asignarla.',
+        pendiente: true,
+      };
+    case 'asignado':
+      return {
+        label: estadoLabel(estado),
+        color: '#4F46E5',
+        Icon: Check,
+        alert: 'Placa asignada por el Organismo de Tránsito. Gestiona el SOAT y los impuestos y envía el trámite al OT.',
+        pendiente: true,
       };
     case 'borrador':
       return {

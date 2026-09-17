@@ -8,10 +8,10 @@ namespace Flit.Tramites.Domain.Tramites.Estados;
 /// <param name="ToStatus">Estado destino (<see cref="TramiteEstado"/>).</param>
 /// <param name="Reason">Motivo (RF05). Obligatorio para <c>anulado</c> y <c>rechazado</c>.</param>
 /// <param name="ChangedByUserId">Usuario que ejecuta la transición (claim <c>sub</c>); null si es un proceso automático.</param>
-/// <param name="PlateFlowStatus">
-/// Feature #10587 / HU #10785 — sub-estado interno de placa a fijar en la MISMA transición (solo en la
-/// entrega al OT): <c>preasignado</c> (Flujo B), <c>asignado</c> (Flujo A) o <c>null</c> (ruta estándar).
-/// Ortogonal al status global. Se ignora fuera de <c>ToStatus == Entregado</c>.
+/// <param name="Actor">
+/// ADR-0059 — quién pide la transición. Solo las aristas de la ruta de placa lo miran
+/// (<see cref="TramiteTransitionPolicy"/>); el default <see cref="TramiteActor.Gestor"/> cubre a los
+/// endpoints de la empresa. Quipux y el OT deben declararse.
 /// </param>
 /// <param name="MandateSignerId">
 /// ADR-0036 §D9 (HU #10916) — firmante del mandato elegido explícitamente por el aprobador, cuando hay
@@ -31,7 +31,7 @@ public sealed record TramiteTransitionCommand(
     string ToStatus,
     string? Reason,
     Guid? ChangedByUserId,
-    string? PlateFlowStatus = null,
+    TramiteActor Actor = TramiteActor.Gestor,
     Guid? MandateSignerId = null,
     string? Metadata = null);
 
@@ -55,7 +55,8 @@ public sealed record TramiteTransitionOutcome(
 
 /// <summary>
 /// Servicio ÚNICO de ciclo de vida del trámite (ADR-0022). TODAS las transiciones de
-/// <c>procedure_instances.status</c> pasan por aquí: valida la máquina (<see cref="TramiteStateMachine"/>),
+/// <c>procedure_instances.status</c> pasan por aquí: valida la política (<see cref="TramiteTransitionPolicy"/>
+/// sobre <see cref="TramiteStateMachine"/>),
 /// aplica los gates de negocio (RF03: identidad aprobada + documentos obligatorios para Borrador→Preparado),
 /// bloquea estados finales (RF04), registra historial vía <see cref="ITramiteTransitionRecorder"/> (RF05)
 /// y encola la notificación vía <see cref="ITramiteTransitionPublisher"/> (RNF01) — todo en la MISMA
