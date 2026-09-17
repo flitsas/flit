@@ -141,7 +141,6 @@ public sealed class UpdateTenantSettingsHandler
             SignatureVaultEnabled = request.BaulFirmasActivo,
             PlatePreassignEnabled = request.PreasignacionPlacaActiva,
             ValidateSoatWithRunt = request.ValidarSoatConRunt,
-            PlateFlowSkipToTerminado = request.PlateFlowSkipToTerminado,
             NotificationChannel = channel,
             // HU #11357/#11362 (ADR-0043) — campo propio, ya no derivado del canal. Opcional: si el
             // request no lo envía, se conserva el valor previo (ver UpdateTenantSettingsRequest).

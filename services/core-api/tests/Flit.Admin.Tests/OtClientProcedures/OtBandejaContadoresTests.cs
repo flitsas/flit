@@ -35,7 +35,7 @@ public sealed class OtBandejaContadoresTests
 
     // ── Contadores ────────────────────────────────────────────────────────────────────
 
-    [Fact]
+    [Fact] // HU #12598 AC6 — una tarjeta por estado real (ADR-0059).
     public async Task CuentaCadaClaseSobreTodoElUniverso()
     {
         var db = NewDbName();
@@ -43,47 +43,31 @@ public sealed class OtBandejaContadoresTests
         await using (var seed = NewContext(db))
         {
             SeedEscenarioBase(seed);
-            // Ruta de placa: dos esperando placa, uno ya con ella y otro terminado.
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-1", PlateFlowStatus.Preasignado);
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-2", PlateFlowStatus.Preasignado);
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-3", PlateFlowStatus.Asignado);
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-4", PlateFlowStatus.Terminado);
-            // Fuera de la ruta de placa: nadie los ha tocado.
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-5", plateFlowStatus: null);
+            // Cola de placa: dos esperando placa, uno ya con ella (en manos del gestor).
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Preasignacion, "R-1");
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Preasignacion, "R-2");
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Asignado, "R-3");
+            // Cola de decisión.
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-4");
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-5");
             // Desenlaces.
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Aprobado, "R-6", plateFlowStatus: null);
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Rechazado, "R-7", plateFlowStatus: null);
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Aprobado, "R-6");
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Rechazado, "R-7");
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Revocado, "R-8");
+            // Lo que el organismo no ve: ni cuenta.
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Borrador, "R-9");
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Preparado, "R-10");
         }
 
         var counters = await Contar(db);
 
         counters.TransitOfficeResolved.Should().BeTrue();
-        counters.SinAsignarPlaca.Should().Be(2);
-        counters.ConPlacaAsignada.Should().Be(2);
-        counters.SinGestion.Should().Be(1);
+        counters.Preasignacion.Should().Be(2);
+        counters.Asignados.Should().Be(1);
+        counters.PorDecidir.Should().Be(2);
         counters.Aprobados.Should().Be(1);
         counters.Rechazados.Should().Be(1);
-    }
-
-    // "Sin gestión" es lo que NADIE ha empezado. Un trámite ya preasignado sí se está gestionando
-    // —el organismo tiene que ponerle placa—, así que contarlo ahí inflaría la tarjeta que
-    // precisamente dice "esto está parado".
-    [Fact]
-    public async Task SinGestion_NoIncluyeLosQueYaEstanEnRutaDePlaca()
-    {
-        var db = NewDbName();
-
-        await using (var seed = NewContext(db))
-        {
-            SeedEscenarioBase(seed);
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-1", PlateFlowStatus.Preasignado);
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-2", plateFlowStatus: null);
-        }
-
-        var counters = await Contar(db);
-
-        counters.SinGestion.Should().Be(1);
-        counters.SinAsignarPlaca.Should().Be(1);
+        counters.Revocados.Should().Be(1);
     }
 
     // El conteo tiene que mirar el MISMO universo que la lista: si contara distinto, la tarjeta
@@ -97,7 +81,7 @@ public sealed class OtBandejaContadoresTests
         await using (var seed = NewContext(db))
         {
             SeedEscenarioBase(seed);
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-CON", plateFlowStatus: null);
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-CON");
 
             // Empresa dirigida al mismo organismo pero SIN grant: su trámite ya entregado sigue
             // visible y contado (HU #12350 AC7) junto al de la empresa con convenio.
@@ -126,7 +110,7 @@ public sealed class OtBandejaContadoresTests
 
         var counters = await Contar(db);
 
-        counters.SinGestion.Should().Be(2, "R-CON (con convenio) y R-SIN (entregado sin convenio) cuentan por igual");
+        counters.PorDecidir.Should().Be(2, "R-CON (con convenio) y R-SIN (entregado sin convenio) cuentan por igual");
     }
 
     [Fact]
@@ -144,71 +128,55 @@ public sealed class OtBandejaContadoresTests
         // Resuelto y en cero: es distinto de "el tenant no tiene organismo", que la tira pinta
         // con guiones en vez de con ceros.
         counters.TransitOfficeResolved.Should().BeTrue();
-        counters.SinAsignarPlaca.Should().Be(0);
-        counters.ConPlacaAsignada.Should().Be(0);
-        counters.SinGestion.Should().Be(0);
+        counters.Preasignacion.Should().Be(0);
+        counters.Asignados.Should().Be(0);
+        counters.PorDecidir.Should().Be(0);
     }
 
-    // ── Filtro de sub-estado de placa ─────────────────────────────────────────────────
+    // ── Filtro de estado (una tarjeta = un estado; varios por coma para enlaces profundos) ──────
 
     [Fact]
-    public async Task FiltraPorUnSubEstadoDePlaca()
+    public async Task FiltraPorUnEstado()
     {
         var db = await SeedRutaDePlacaAsync();
 
-        var bandeja = await Listar(db, plateFlowStatus: PlateFlowStatus.Preasignado);
+        var bandeja = await Listar(db, status: TramiteEstado.Preasignacion);
 
         bandeja.TotalCount.Should().Be(1);
         bandeja.Data.Should().OnlyContain(p => p.ReferenceNumber == "R-PRE");
     }
 
-    // La tarjeta "Con placa asignada" cuenta dos sub-estados a la vez: el filtro tiene que aceptar
-    // los dos en una sola petición o la lista no coincidiría con la cifra.
     [Fact]
-    public async Task FiltraPorVariosSubEstadosSeparadosPorComa()
+    public async Task FiltraPorVariosEstadosSeparadosPorComa()
     {
         var db = await SeedRutaDePlacaAsync();
 
-        var bandeja = await Listar(db, plateFlowStatus: "asignado,terminado");
+        var bandeja = await Listar(db, status: "preasignacion, asignado");
 
         bandeja.TotalCount.Should().Be(2);
-        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo("R-ASI", "R-TER");
-    }
-
-    // `sin_ruta` no es un valor de la columna sino su AUSENCIA: es lo que hace pulsable la tarjeta
-    // "Sin gestión", que cuenta justo los que no entraron en la ruta de placa.
-    [Fact]
-    public async Task FiltraLosQueNoEstanEnRutaDePlaca()
-    {
-        var db = await SeedRutaDePlacaAsync();
-
-        var bandeja = await Listar(db, plateFlowStatus: "sin_ruta");
-
-        bandeja.TotalCount.Should().Be(1);
-        bandeja.Data.Should().OnlyContain(p => p.ReferenceNumber == "R-NULA");
+        bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo("R-PRE", "R-ASI");
     }
 
     [Fact]
-    public async Task SinFiltroDePlaca_DevuelveTodaLaBandeja()
+    public async Task SinFiltroDeEstado_DevuelveTodaLaBandeja()
     {
         var db = await SeedRutaDePlacaAsync();
 
-        var bandeja = await Listar(db, plateFlowStatus: null);
+        var bandeja = await Listar(db, status: null);
 
-        bandeja.TotalCount.Should().Be(4);
+        bandeja.TotalCount.Should().Be(3);
     }
 
-    /// <summary>Los cuatro sub-estados posibles, uno de cada, todos entregados y con convenio.</summary>
+    /// <summary>Un trámite en cada estado de la cola del organismo, todos con convenio.</summary>
     private static async Task<string> SeedRutaDePlacaAsync()
     {
         var db = NewDbName();
 
         await using var seed = NewContext(db);
         SeedEscenarioBase(seed);
-        SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-PRE", PlateFlowStatus.Preasignado);
-        SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-ASI", PlateFlowStatus.Asignado);
-        SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-TER", PlateFlowStatus.Terminado);
-        SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-NULA", plateFlowStatus: null);
+        SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Preasignacion, "R-PRE");
+        SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Asignado, "R-ASI");
+        SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "R-ENT");
 
         await Task.CompletedTask;
         return db;
@@ -224,7 +192,7 @@ public sealed class OtBandejaContadoresTests
             TestContext.Current.CancellationToken);
     }
 
-    private static async Task<ListOtClientProceduresResult> Listar(string db, string? plateFlowStatus)
+    private static async Task<ListOtClientProceduresResult> Listar(string db, string? status)
     {
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
@@ -233,7 +201,7 @@ public sealed class OtBandejaContadoresTests
             new ListOtClientProceduresQuery
             {
                 OtTenantId = OtTenant,
-                PlateFlowStatus = plateFlowStatus,
+                Status = status,
             },
             TestContext.Current.CancellationToken);
     }
@@ -288,8 +256,7 @@ public sealed class OtBandejaContadoresTests
         FlitDbContext ctx,
         Guid id,
         string status,
-        string reference,
-        string? plateFlowStatus)
+        string reference)
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
@@ -298,7 +265,6 @@ public sealed class OtBandejaContadoresTests
             ProcedureTypeId = ProcedureTypeA,
             ReferenceNumber = reference,
             Status = status,
-            PlateFlowStatus = plateFlowStatus,
             TransitOfficeId = TransitOffice,
             CreatedByUserId = Guid.NewGuid(),
             CreatedAt = DateTimeOffset.UtcNow,

@@ -39,10 +39,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.transitionInstance.mockResolvedValue({ id: 'inst-1', status: 'anulado' });
   mocks.startSubsanacion.mockResolvedValue({ id: 'inst-1', status: 'rechazado' });
-  // Instancia mínima: sin ruta de placa (plateFlowStatus null) → no se pinta el panel de SOAT.
+  // Instancia mínima: sin origen de rechazo.
   mocks.getInstance.mockResolvedValue({
     fieldValues: [],
-    plateFlowStatus: null,
     subsanacionActiva: false,
   });
 });
@@ -61,7 +60,6 @@ describe('EstadoAcciones — el backend manda', () => {
     mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['anulado', 'borrador']));
     mocks.getInstance.mockResolvedValue({
       fieldValues: [],
-      plateFlowStatus: null,
       status: 'rechazado',
       subsanacionActiva: false,
     });
@@ -79,7 +77,6 @@ describe('EstadoAcciones — el backend manda', () => {
     );
     mocks.getInstance.mockResolvedValue({
       fieldValues: [],
-      plateFlowStatus: null,
       status: 'rechazado',
       subsanacionActiva: true,
     });
@@ -94,7 +91,6 @@ describe('EstadoAcciones — el backend manda', () => {
     mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['anulado', 'borrador']));
     mocks.getInstance.mockResolvedValue({
       fieldValues: [],
-      plateFlowStatus: null,
       status: 'rechazado',
       subsanacionActiva: false,
     });
@@ -116,7 +112,6 @@ describe('EstadoAcciones — el backend manda', () => {
     mocks.getWizardState.mockResolvedValue(wizardWith('entregado', ['aprobado', 'rechazado']));
     mocks.getInstance.mockResolvedValue({
       fieldValues: [],
-      plateFlowStatus: null,
       status: 'entregado',
       subsanacionActiva: false,
     });
@@ -164,7 +159,6 @@ describe('EstadoAcciones — el backend manda', () => {
     mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['anulado', 'borrador']));
     mocks.getInstance.mockResolvedValue({
       fieldValues: [],
-      plateFlowStatus: null,
       status: 'rechazado',
       subsanacionActiva: false,
     });

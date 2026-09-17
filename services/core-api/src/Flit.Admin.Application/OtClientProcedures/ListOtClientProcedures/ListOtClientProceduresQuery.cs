@@ -8,10 +8,8 @@ public sealed class ListOtClientProceduresQuery
 
     public Guid? TransitOfficeId { get; init; }
 
+    /// <summary>Estado del ciclo de vida; varios separados por coma (ADR-0059).</summary>
     public string? Status { get; init; }
-
-    /// <summary>Sub-estado de placa; varios por coma y `sin_ruta` para los que no la tienen.</summary>
-    public string? PlateFlowStatus { get; init; }
 
     public Guid? ProcedureTypeId { get; init; }
 

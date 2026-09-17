@@ -48,6 +48,7 @@ function slicesOf(resumen: OtReportSummary): EstadoSlice[] {
     aprobado: resumen.aprobados,
     rechazado: resumen.rechazados,
     anulado: resumen.anulados,
+    revocado: resumen.revocados,
     otro: resumen.otros,
   };
 

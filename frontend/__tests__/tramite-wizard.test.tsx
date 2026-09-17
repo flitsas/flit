@@ -682,10 +682,10 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await waitFor(() =>
       expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'preparado'),
     );
-    await waitFor(() =>
-      expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'entregado'),
-    );
-    expect(mocks.submitInstance).not.toHaveBeenCalled();
+    // ADR-0059: el destino (Entregado / Preasignación) lo decide el backend en `/submit`; el
+    // wizard ya no pide `entregado` a secas.
+    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    expect(mocks.transitionInstance).not.toHaveBeenCalledWith('inst-1', 'entregado');
     expect(mocks.finalizeDraft).not.toHaveBeenCalled();
 
     // Flujo del diseño: al radicar se abre el acuse de "trámite completado" en vez de salir con
@@ -742,14 +742,14 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await waitFor(() =>
       expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'preparado'),
     );
-    expect(mocks.transitionInstance).not.toHaveBeenCalledWith('inst-1', 'entregado');
+    expect(mocks.submitInstance).not.toHaveBeenCalled();
     expect(
       await screen.findByText(/No se puede radicar/i),
     ).toBeInTheDocument();
     expect(onExit).not.toHaveBeenCalled();
   });
 
-  it('N 03 dos pasos — en `preparado` el botón "Finalizar y enviar trámite" transiciona a entregado, avisa y sale', async () => {
+  it('N 03 dos pasos — en `preparado` el botón "Finalizar y enviar trámite" radica por /submit, avisa y sale', async () => {
     // Instancia existente ya preparada: wizard en solo lectura con la acción de radicar.
     const PREPARADO: WizardState = {
       ...TRASPASO_WIZARD,
@@ -761,7 +761,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     };
     mocks.getWizardState.mockResolvedValue(PREPARADO);
     mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'preparado', draftFinalizedAt: null, fieldValues: [], actors: [] });
-    mocks.transitionInstance.mockResolvedValue({ id: 'inst-1', status: 'entregado' });
+    mocks.submitInstance.mockResolvedValue({ id: 'inst-1', status: 'entregado' });
     const onExit = vi.fn();
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-1" onExit={onExit} />);
@@ -776,17 +776,44 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await waitFor(() => {
       expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
     });
-    await waitFor(() =>
-      expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'entregado'),
-    );
-    expect(mocks.submitInstance).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    expect(mocks.transitionInstance).not.toHaveBeenCalledWith('inst-1', 'entregado');
 
     // Acuse de radicación del diseño: la salida al listado la dispara el CTA, no la transición.
     await screen.findByText('¡Trámite completado!');
+    expect(
+      screen.getByText(/enviado correctamente al organismo de tránsito/),
+    ).toBeInTheDocument();
     expect(onExit).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: /Ir al listado de trámites/ }));
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('ADR-0059 — Ruta Larga: si /submit deja el trámite en `preasignacion`, el acuse lo dice', async () => {
+    const PREPARADO: WizardState = {
+      ...TRASPASO_WIZARD,
+      canSubmit: true,
+      blockers: [],
+      status: 'preparado',
+      allowedTransitions: ['entregado', 'preasignacion'],
+      steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
+    };
+    mocks.getWizardState.mockResolvedValue(PREPARADO);
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'preparado', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    mocks.submitInstance.mockResolvedValue({ id: 'inst-1', status: 'preasignacion' });
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={vi.fn()} />);
+
+    const radicar = await screen.findByRole('button', { name: /Finalizar y enviar trámite/ });
+    await waitFor(() => expect(radicar).toBeEnabled());
+    await user.click(radicar);
+    await screen.findByText('Confirmar radicación');
+    await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
+
+    await screen.findByText('¡Trámite completado!');
+    expect(screen.getByText(/quedó en Preasignación/)).toBeInTheDocument();
+    expect(screen.getByText(/La placa la asigna el organismo de tránsito/)).toBeInTheDocument();
   });
 
   it('N 03 — Radicar bloquea si el consolidado queda incompleto', async () => {

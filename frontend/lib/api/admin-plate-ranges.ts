@@ -130,8 +130,9 @@ export function assignPlateToProcedure(
   });
 }
 
-export function revokeProcedurePlate(instanceId: string, reason: string): Promise<unknown> {
-  return apiFetch(`${base}/procedures/${instanceId}/revoke`, { method: "POST", body: { reason } });
+/** ADR-0059 (HU #12602) — «Liberar placa»: asignado → preasignacion; la placa sigue en el expediente. */
+export function releaseProcedurePlate(instanceId: string, reason: string): Promise<unknown> {
+  return apiFetch(`${base}/procedures/${instanceId}/release-plate`, { method: "POST", body: { reason } });
 }
 
 /** HU #12167 (Feature #12156) — corrige la placa dentro de la hora siguiente a la asignación (una única vez). */

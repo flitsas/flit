@@ -30,8 +30,8 @@ describe("TramitesProcedureList", () => {
     expect(screen.getByText("REF-001")).toBeInTheDocument();
     expect(screen.getByText(/Matrícula inicial/)).toBeInTheDocument();
     expect(screen.getByText(/Flota Andina S\.A\.S\./)).toBeInTheDocument();
-    // formatOtProcedureStatus("entregado") === "Pendiente OT"
-    expect(screen.getByText("Pendiente OT")).toBeInTheDocument();
+    // ADR-0059 — formatOtProcedureStatus("entregado") === "Entregado" (nombre real, sin sufijo «OT»).
+    expect(screen.getByText("Entregado")).toBeInTheDocument();
   });
 
   it("muestra Aprobar/Rechazar cuando el trámite está entregado y hay permisos", () => {

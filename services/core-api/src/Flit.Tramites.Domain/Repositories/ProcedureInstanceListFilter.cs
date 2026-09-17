@@ -50,6 +50,10 @@ public sealed record ProcedureInstanceListFilter
     /// ventana", que es una respuesta distinta y silenciosamente incompleta.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Estados a incluir (OR). Admite el pseudo-estado <c>TramiteEstado.FiltroRechazadoPreasignacion</c>
+    /// (ADR-0059): rechazado con <c>rejected_from = preasignacion</c>.
+    /// </summary>
     public IReadOnlyList<string>? Estados { get; init; }
 
     /// <summary>Familia del trámite (código de <c>ProcedureFamilyCodes</c>). Misma razón que

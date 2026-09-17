@@ -42,7 +42,7 @@ import {
 import {
   assignPlateToProcedure,
   listPlateDetails,
-  revokeProcedurePlate,
+  releaseProcedurePlate,
   updateProcedurePlate,
   type PlateDetail,
 } from "@/lib/api/admin-plate-ranges";
@@ -50,7 +50,8 @@ import { OT_INPUT_CLS } from "./ot-form-styles";
 import { plateUpdateRemainingLabel } from "./ot-utils";
 import {
   OtBandejaCountersStrip,
-  filtrosDeContador,
+  contadorDeEstado,
+  estadoDeContador,
   type OtCounterKey,
 } from "./OtBandejaCounters";
 import { formatDocumentWithType } from "@/lib/display/document-number";
@@ -95,14 +96,18 @@ const EXPORT_PAGE_SIZE = 100;
  * un estado de fuera—; esta constante existe para que el desplegable y la precarga desde la URL
  * no puedan discrepar entre sí.
  */
+// ADR-0059 — los estados se nombran como son (decisión del PO: sin sufijo «OT»), y la cola de
+// placa entra como dos estados reales.
 const FILTROS_ESTADO_OT = [
-  { value: "entregado", label: "Pendiente OT" },
-  { value: "aprobado", label: "Aprobado OT" },
-  { value: "rechazado", label: "Rechazado OT" },
+  { value: "preasignacion", label: "Preasignación" },
+  { value: "asignado", label: "Asignado" },
+  { value: "entregado", label: "Entregado" },
+  { value: "aprobado", label: "Aprobado" },
+  { value: "rechazado", label: "Rechazado" },
   // HU #12166/#12168 (Feature #12156) — a diferencia de Anulado, Revocado SÍ entra en
   // TramiteEstado.RecibidosPorOrganismo (el OT revocó su propia aprobación; ver el comentario en
   // esa constante en el backend), así que también puede filtrarse aquí.
-  { value: "revocado", label: "Revocado OT" },
+  { value: "revocado", label: "Revocado" },
 ] as const;
 
 /** La bandeja abre por la cola de decisión: es el trabajo que el organismo tiene pendiente. */
@@ -380,8 +385,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [page, setPage] = useState(1);
   // N 03 — `entregado` reemplaza a pending_ot como estado en cola de decisión OT.
   const [statusFilter, setStatusFilter] = useState(ESTADO_POR_DEFECTO);
-  /** Sub-estado de placa; lo fijan las tarjetas de la cabecera, no el panel de búsqueda. */
-  const [plateFlowFilter, setPlateFlowFilter] = useState("");
   const [counters, setCounters] = useState<OtBandejaCounters | null>(null);
   const [contadorActivo, setContadorActivo] = useState<OtCounterKey | "">("");
   const [sortBy, setSortBy] = useState("createdAt");
@@ -607,7 +610,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     // el backend ya lo devuelve vacío, pero el <select> se quedaría en un valor sin <option> que
     // lo represente — se vería en blanco junto a una lista vacía, y eso se lee como un fallo de
     // carga en vez de como un filtro que no existe.
-    if (statusParam && esEstadoDeBandeja(statusParam)) setStatusFilter(statusParam);
+    if (statusParam && esEstadoDeBandeja(statusParam)) {
+      setStatusFilter(statusParam);
+      // ADR-0059 — cada tarjeta es un estado: si la URL trae uno, la tarjeta correspondiente se
+      // marca activa para que contar y filtrar sigan diciendo lo mismo.
+      setContadorActivo(contadorDeEstado(statusParam));
+    }
     setPage(1);
     /* eslint-enable react-hooks/set-state-in-effect */
     // Solo al montar: es una precarga desde la URL de entrada, no una sincronización continua.
@@ -624,7 +632,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const buildListQuery = useCallback(
     (): OtClientProceduresParams => ({
       status: statusFilter || undefined,
-      plateFlowStatus: plateFlowFilter || undefined,
       condiciones: appliedCondiciones.length > 0 ? appliedCondiciones : undefined,
       busqueda: busquedaAplicada.trim() || undefined,
       createdFrom: appliedCreatedFrom || undefined,
@@ -636,7 +643,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }),
     [
       statusFilter,
-      plateFlowFilter,
       appliedCondiciones,
       busquedaAplicada,
       appliedCreatedFrom,
@@ -646,6 +652,47 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       sortBy,
       sortDir,
     ],
+  );
+
+  /**
+   * ADR-0059 — cada tarjeta de la cabecera es un estado real, así que toda decisión del OT (asignar,
+   * liberar, aprobar, rechazar, revocar) mueve el trámite de una tarjeta a otra. La fila se parchea
+   * en sitio para no perder la página ni el filtro; los contadores se vuelven a pedir porque son un
+   * agregado sobre TODO lo accesible y no se pueden derivar de la página cargada.
+   */
+  const refreshCounters = useCallback(() => {
+    // Mismo blindaje que en `load`: la tira es orientativa y ni un fallo de red ni uno SÍNCRONO
+    // (el módulo sin esa función en una prueba) pueden interrumpir la decisión que acaba de cuajar.
+    try {
+      fetchOtBandejaCounters(undefined, transitOfficeId ? { transitOfficeId } : undefined)
+        .then(setCounters)
+        .catch(() => {
+          /* conserva el último valor conocido */
+        });
+    } catch {
+      /* idem */
+    }
+  }, [transitOfficeId]);
+
+  /**
+   * Fila tras una decisión del OT. Si la bandeja está filtrada por estado y el trámite acaba de
+   * salir de ese estado, la fila se retira en vez de quedarse pintada con un chip que ya no cuadra
+   * con la tarjeta activa: un «Aprobado» dentro de «Por decidir» confunde más que una fila menos.
+   * Sin filtro (o si sigue cabiendo) se parchea en sitio, para no perder página ni orden.
+   */
+  const reconciliarFila = useCallback(
+    (id: string, cambio: (r: OtClientProcedure) => OtClientProcedure) => {
+      const permitidos = statusFilter ? statusFilter.split(",").map((s) => s.trim()) : [];
+      setRows((prev) => {
+        const siguiente = prev.map((r) => (r.id === id ? cambio(r) : r));
+        if (permitidos.length === 0) return siguiente;
+        const fila = siguiente.find((r) => r.id === id);
+        if (!fila || permitidos.includes(fila.status)) return siguiente;
+        setTotalCount((t) => Math.max(0, t - 1));
+        return siguiente.filter((r) => r.id !== id);
+      });
+    },
+    [statusFilter],
   );
 
   const load = useCallback(
@@ -719,7 +766,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     // de estado del formulario retirado.
     if (draftCondiciones.some((c) => c.fieldId === "estado")) {
       setStatusFilter("");
-      setPlateFlowFilter("");
       setContadorActivo("");
     }
 
@@ -764,21 +810,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   }, []);
 
   /**
-   * Pulsar una tarjeta fija SU juego de filtros y suelta el de la anterior. El panel de búsqueda no
-   * se toca: son dos formas de acotar que conviven, y la tarjeta manda sobre el estado porque es la
-   * que el operador acaba de pulsar.
+   * Pulsar una tarjeta fija el estado del listado y suelta el de la anterior. El panel de búsqueda
+   * no se toca: son dos formas de acotar que conviven, y la tarjeta manda sobre el estado porque es
+   * la que el operador acaba de pulsar. ADR-0059: tarjeta = estado real.
    */
   const handleContadorSelect = (key: OtCounterKey | "") => {
-    const { status, plateFlowStatus } = filtrosDeContador(key);
     setContadorActivo(key);
-    setStatusFilter(key === "" ? ESTADO_POR_DEFECTO : status);
-    setPlateFlowFilter(plateFlowStatus);
+    setStatusFilter(key === "" ? ESTADO_POR_DEFECTO : estadoDeContador(key));
     setPage(1);
   };
 
   const clearFilters = useCallback(() => {
     setContadorActivo("");
-    setPlateFlowFilter("");
     setStatusFilter(ESTADO_POR_DEFECTO);
     setDraftCondiciones([]);
     setAppliedCondiciones([]);
@@ -896,7 +939,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       // en 'asignado', así que adjuntar antes fallaba con estado_invalido; tras aprobar queda
       // 'aprobado' (válido para la LT). El consolidado se genera on-demand y toma la LT vigente.
       const updated = await approveOtClientProcedure(target.id, mandateSignerId);
-      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      reconciliarFila(updated.id, () => updated);
+      refreshCounters();
 
       if (ltFile) {
         try {
@@ -1004,14 +1048,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       // HU #10800 — del rango (outOfRange=false) o fuera de rango (outOfRange=true).
       const placaAsignada = plateInput.trim().toUpperCase();
       await assignPlateToProcedure(assignTarget.id, placaAsignada, assignMode === "out");
-      // HU #10785 — el status global permanece 'entregado'; avanza el sub-estado interno de placa.
-      // La placa se refleja YA: es el dato que el operador acaba de escribir y el que viene a ver.
+      // ADR-0059 — preasignacion → asignado es una transición real. La placa se refleja YA: es el
+      // dato que el operador acaba de escribir y el que viene a ver.
       const conPlaca = (r: OtClientProcedure): OtClientProcedure => ({
         ...r,
         placa: placaAsignada,
-        plateFlowStatus: "asignado",
+        status: "asignado",
       });
-      setRows((prev) => prev.map((r) => (r.id === assignTarget.id ? conPlaca(r) : r)));
+      reconciliarFila(assignTarget.id, conPlaca);
+      refreshCounters();
       // El detalle abierto es un objeto de estado APARTE del de la fila: sin esto seguía enseñando
       // «Sin preasignar» hasta cerrar el modal y recargar la bandeja, y el operador no sabía si la
       // asignación había cuajado.
@@ -1034,25 +1079,25 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     if (!revokeTarget || !revokePlateReason.trim()) return;
     setActing(true);
     try {
-      await revokeProcedurePlate(revokeTarget.id, revokePlateReason.trim());
-      // HU #10785 — el status global permanece 'entregado'; el sub-estado vuelve a 'preasignado'.
+      await releaseProcedurePlate(revokeTarget.id, revokePlateReason.trim());
+      // ADR-0059 — «Liberar placa»: asignado → preasignacion (transición real, con historial).
       //
-      // Aquí NO se limpia `placa`: revocar libera la placa en el inventario y devuelve el sub-estado,
-      // pero deja el field_value 'plate' escrito, así que el trámite sigue trayendo la placa en la
-      // siguiente lectura. Ponerla a null la borraría de la pantalla y la haría reaparecer al
-      // refrescar — la UI no debe fingir un borrado que el servidor no hace. Esa asimetría del
-      // backend está pendiente de definición por el equipo.
-      const revocado = (r: OtClientProcedure): OtClientProcedure => ({
+      // Aquí NO se limpia `placa`: liberar suelta la reserva del inventario y devuelve el trámite a
+      // la cola de placa, pero deja el field_value 'plate' escrito (HU #12077), así que el trámite
+      // sigue trayendo la placa en la siguiente lectura. La UI no finge un borrado que el servidor
+      // no hace.
+      const liberado = (r: OtClientProcedure): OtClientProcedure => ({
         ...r,
-        plateFlowStatus: "preasignado",
+        status: "preasignacion",
       });
-      setRows((prev) => prev.map((r) => (r.id === revokeTarget.id ? revocado(r) : r)));
-      setDetailProcedure((prev) => (prev && prev.id === revokeTarget.id ? revocado(prev) : prev));
+      reconciliarFila(revokeTarget.id, liberado);
+      refreshCounters();
+      setDetailProcedure((prev) => (prev && prev.id === revokeTarget.id ? liberado(prev) : prev));
       setRevokeTarget(null);
       setRevokePlateReason("");
-      show("Preasignación revocada.", "success");
+      show("Placa liberada: el trámite vuelve a Preasignación.", "success");
     } catch {
-      show("No se pudo revocar la preasignación.", "error");
+      show("No se pudo liberar la placa.", "error");
     } finally {
       setActing(false);
     }
@@ -1066,7 +1111,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     setActing(true);
     try {
       const updated = await revokeOtClientProcedure(revokeAprobacionTarget.id, revokeAprobacionReason);
-      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      reconciliarFila(updated.id, () => updated);
+      refreshCounters();
       setDetailProcedure((prev) => (prev && prev.id === updated.id ? updated : prev));
       setRevokeAprobacionTarget(null);
       setRevokeAprobacionReason("");
@@ -1256,7 +1302,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         reason: rejectReason.trim(),
         rejectionReasonIds: rejectReasonIds.length > 0 ? rejectReasonIds : undefined,
       });
-      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      reconciliarFila(updated.id, () => updated);
+      refreshCounters();
       setRejectTarget(null);
       setDetailProcedure(null);
       setRejectReason("");
@@ -1721,22 +1768,25 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-label="Revocar preasignación"
+          aria-label="Liberar placa"
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Revocar preasignación</h2>
-            <p className="mt-2 text-sm opacity-80">{revokeTarget.referenceNumber}</p>
+            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Liberar placa</h2>
+            <p className="mt-1 text-xs opacity-70">
+              El trámite vuelve a Preasignación para asignarle otra placa. La placa actual queda liberada en el inventario.
+            </p>
+            <p className="mt-2 text-sm opacity-80">{revokeTarget.referenceNumber}{revokeTarget.placa ? ` · ${revokeTarget.placa}` : ""}</p>
             <textarea
               className={`mt-3 ${OT_INPUT_CLS}`}
               rows={3}
               value={revokePlateReason}
               onChange={(e) => setRevokePlateReason(e.target.value)}
-              placeholder="Motivo de la revocación…"
-              aria-label="Motivo de la revocación"
+              placeholder="Motivo para liberar la placa…"
+              aria-label="Motivo para liberar la placa"
             />
             <div className="mt-5 flex gap-3">
               <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setRevokeTarget(null)} disabled={acting}>Cancelar</button>
-              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#dc2626" }} disabled={acting || !revokePlateReason.trim()} onClick={() => void confirmRevokePlate()}>{acting ? "Procesando…" : "Revocar"}</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#dc2626" }} disabled={acting || !revokePlateReason.trim()} onClick={() => void confirmRevokePlate()}>{acting ? "Liberando…" : "Liberar placa"}</button>
             </div>
           </div>
         </div>

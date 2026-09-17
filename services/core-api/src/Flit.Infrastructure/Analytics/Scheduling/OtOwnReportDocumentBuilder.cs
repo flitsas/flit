@@ -32,6 +32,7 @@ internal sealed class OtOwnReportDocumentBuilder(IOtMetricsReadRepository repo)
         ["en_subsanacion"] = "En subsanación",
         ["rechazado"] = "Rechazado",
         ["anulado"] = "Anulado",
+        ["revocado"] = "Revocado",
         ["otro"] = "Otro",
     };
 

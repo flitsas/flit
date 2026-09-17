@@ -110,6 +110,18 @@ public sealed class TramitesQueryConditionsTests
     // ── AC1 / AC4 — forma del catálogo ───────────────────────────────────────────────────────
 
     [Fact]
+    public void Adr0059_ElEstadoOfreceLaRutaLargaYElRevocado()
+    {
+        // Mismo vocabulario que Consultas: un estado que existe en la base pero no en el catálogo
+        // no se puede pedir, y el listado «filtrado» oculta trámites sin decirlo.
+        var estado = TramitesQueryFieldCatalog.Find(TramitesQueryFieldCatalog.Estado)!;
+        var valores = estado.Options.Select(o => o.Value).ToList();
+
+        valores.Should().ContainInOrder("preparado", "preasignacion", "asignado", "entregado");
+        valores.Should().Contain(["revocado", "subsanacion"]);
+    }
+
+    [Fact]
     public void ElCatalogoCubreLosCamposPedidos()
     {
         var ids = TramitesQueryFieldCatalog.Fields.Select(f => f.Id).ToList();

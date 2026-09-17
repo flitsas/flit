@@ -36,6 +36,9 @@ public sealed class StartSubsanacionHandler(IProcedureInstanceRepository repo)
         var now = DateTimeOffset.UtcNow;
         instance.SubsanacionActiva = true;
         instance.SubsanacionCount += 1;
+        // ADR-0059 (HU #12597 AC6) — el distintivo «Rechazado preasignación» sirve para priorizar; una vez
+        // el gestor toma el trámite en subsanación, ya no hay nada que priorizar.
+        instance.RejectedFrom = null;
         instance.UpdatedAt = now;
         instance.UpdatedBy = changedBy;
 

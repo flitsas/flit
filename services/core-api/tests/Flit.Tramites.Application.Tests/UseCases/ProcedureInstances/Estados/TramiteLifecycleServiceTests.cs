@@ -48,7 +48,13 @@ public sealed class TramiteLifecycleServiceTests
             prendaRepo: StubPrendaRepo(PrendaDecision.Registrar));
     }
 
-    private ProcedureInstance Wire(string status, bool conGates = false)
+    /// <summary>
+    /// Matrícula con placa del RUNT (Ruta Corta, ADR-0059): los tests de este archivo ejercitan los gates
+    /// de preparación/entrega, no la ruta de placa, así que la placa va puesta para que
+    /// <c>preparado → entregado</c> siga siendo la arista bajo prueba. La Ruta Larga (sin placa →
+    /// <c>preasignacion</c>) se cubre en <see cref="TramiteLifecycleServicePlateRouteTests"/>.
+    /// </summary>
+    private ProcedureInstance Wire(string status, bool conGates = false, bool conPlaca = true)
     {
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
@@ -62,6 +68,18 @@ public sealed class TramiteLifecycleServiceTests
             Status = status,
             CreatedAt = DateTimeOffset.UtcNow,
         };
+        if (conPlaca)
+        {
+            i.FieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = id,
+                FieldKey = "plate",
+                ValueText = "ABC123",
+                Source = "consultation",
+            });
+        }
         if (conGates)
         {
             foreach (var t in new[] { "factura", "aduana", "impronta" })
@@ -1007,8 +1025,9 @@ public sealed class TramiteLifecycleServiceTests
         ConVin(i, "1HGCM82633A004352");
         _repo.FindTramitesByVinAsync(i.TenantId, "1HGCM82633A004352", i.Id, Arg.Any<CancellationToken>())
             .Returns(new List<VinTramiteExistente>());
+        // La placa (fixture Ruta Corta) estaba ya en el baseline: el único campo corregido es el VIN.
         _repo.GetLatestSubsanacionMetadataAsync(i.Id, i.TenantId, Arg.Any<CancellationToken>())
-            .Returns(BaselineMetadata(new Dictionary<string, string?> { ["vin"] = "VINANTERIORCORREG" }));
+            .Returns(BaselineMetadata(new Dictionary<string, string?> { ["vin"] = "VINANTERIORCORREG", ["plate"] = "ABC123" }));
 
         var outcome = await Transition(i, TramiteEstado.Entregado);
 
@@ -1069,7 +1088,7 @@ public sealed class TramiteLifecycleServiceTests
         var i = WireEnSubsanacion();
         ConVin(i, "1HGCM82633A004352");
         _repo.GetLatestSubsanacionMetadataAsync(i.Id, i.TenantId, Arg.Any<CancellationToken>())
-            .Returns(BaselineMetadata(new Dictionary<string, string?> { ["vin"] = "1HGCM82633A004352" }));
+            .Returns(BaselineMetadata(new Dictionary<string, string?> { ["vin"] = "1HGCM82633A004352", ["plate"] = "ABC123" }));
 
         var outcome = await Transition(i, TramiteEstado.Entregado);
 

@@ -1,6 +1,6 @@
 import { bogotaDay, type XlsxCell } from '@/lib/xlsx';
 import { formatFecha } from '@/lib/format/date';
-import { estadoLabel } from '@/lib/tramites/estados';
+import { estadoLabelConOrigen } from '@/lib/tramites/estados';
 import {
   FIRMA_TEXTO,
   FUENTE_LABEL,
@@ -431,7 +431,8 @@ const CAMPO_FECHA_ACTUALIZACION: TramitesExportField = {
 
 const CAMPO_VIN = { ...campoTexto('vin', 'VIN', (row) => row.vin, 20), sort: 'vin' };
 const CAMPO_VEHICULO = campoTexto('vehiculo', 'Marca / modelo', (row) => vehiculo(row), 24);
-const CAMPO_ESTADO = { ...campoTexto('estado', 'Estado', (row) => estadoLabel(row.estado), 16), sort: 'estado' };
+// ADR-0059 — el export dice lo mismo que el chip: «Rechazado preasignación» cuando aplica.
+const CAMPO_ESTADO = { ...campoTexto('estado', 'Estado', (row) => estadoLabelConOrigen(row.estado, row.rejectedFrom), 22), sort: 'estado' };
 const CAMPO_PASO = campoTexto('paso', 'Paso', (row) => `${row.pasoActual}/${row.totalPasos}`, 8);
 const CAMPO_PASO_NOMBRE = campoTexto('pasoNombre', 'Nombre del paso', (row) => stepLabel(row), 26);
 
