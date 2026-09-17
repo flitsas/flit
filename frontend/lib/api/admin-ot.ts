@@ -206,27 +206,11 @@ export function rejectOtClientProcedure(
   });
 }
 
-/**
- * HU #12166 (Feature #12156) — el OT revoca su propia aprobación (aprobado→revocado): libera la
- * placa y habilita re-radicar con el mismo VIN/placa. Distinto de `revokeProcedurePlate`
- * (`admin-plate-ranges.ts`, HU #10655), que revoca una PREASIGNACIÓN antes de aprobar.
- */
-export function revokeOtClientProcedure(
-  id: string,
-  reason?: string,
-  scope?: OtApiScope,
-): Promise<OtClientProcedure> {
-  return apiFetch<OtClientProcedure>(`${base}/client-procedures/${id}/revoke`, {
-    method: "POST",
-    body: reason?.trim() ? { reason: reason.trim() } : undefined,
-    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
-  });
-}
 
 /**
  * HU #12577 (Feature #12565) — aprueba la solicitud de revocatoria ACTIVA del trámite (reutiliza
  * íntegro el Aprobado→Revocado de HU #12166 en el backend). Motivo OPCIONAL (auditoría, mismo
- * criterio que `revokeOtClientProcedure`). 404 si el trámite no existe o si no hay una solicitud
+ * criterio que la revocación de HU #12166). 404 si el trámite no existe o si no hay una solicitud
  * activa (`solicitada`/`en_revision`) para decidir; 409 `INVALID_STATE` si el trámite ya no está
  * Aprobado.
  */
