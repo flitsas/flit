@@ -43,7 +43,13 @@ import {
   rangoDePeriodo,
   type RangoSobre,
 } from './TramitesFiltrosBar';
-import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
+import {
+  estadoChipStyle,
+  estadoLabel,
+  revocationRequestListColor,
+  revocationRequestListLabel,
+  type EstadoTramite,
+} from '@/lib/tramites/estados';
 import {
   TRAMITES_COLUMNS,
   TRAMITES_SELECTABLE_COLUMNS,
@@ -462,7 +468,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    * todas las compañías y ninguno es «de la red»; su alcance lo pone el servidor por rol. Un
    * cliente sin jerarquía solo recibe filas de su propio tenant, así que para él nunca se activa.
    */
-  const { tenantId: tenantDelUsuario, isSuperAdmin: esSuperAdmin, isAdminCompany } = usePermissions();
+  const { tenantId: tenantDelUsuario, isSuperAdmin: esSuperAdmin } = usePermissions();
   const currentTenantId = esSuperAdmin ? null : tenantDelUsuario;
 
   // HU #11054 / HU #11055 — consulta de documentos desde el listado, sin abrir el wizard. Se guarda
@@ -773,6 +779,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       aprobado: 0,
       rechazado: 0,
       subsanacion: 0,
+      revocado: 0,
     };
     for (const key of Object.keys(c) as EstadoTramite[]) c[key] = estadoCounts[key] ?? 0;
     return c;
@@ -1293,25 +1300,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                   </button>
                 ) : null
               }
-              revocationRequestsLink={
-                // HU #12578 (Feature #12565, AC2) — entrada a la vista dedicada "Revocatorias",
-                // visible SOLO para el Administrador de compañía (mismo gate que
-                // `RevocationRequestButton` de HU #12573): un Operario o perfil interno FLIT no la
-                // ve en absoluto, no solo deshabilitada.
-                isAdminCompany ? (
-                  <button
-                    type="button"
-                    onClick={() => router.push('/tramites/revocatorias')}
-                    aria-label="Ver solicitudes de revocatoria"
-                    title="Revocatorias"
-                    className={controlCls(false)}
-                    data-testid="tramites-revocatorias-link"
-                  >
-                    <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    Revocatorias
-                  </button>
-                ) : null
-              }
+              // HU #12578 (Feature #12565, AC2) — el botón "Revocatorias" que abría la vista dedicada
+              // se retira del toolbar: el filtro "Revocado" del EstadoFunnel ya cubre ese caso de uso
+              // directo en el listado principal, sin una pantalla aparte (pedido del usuario
+              // 2026-09-16). La ruta /tramites/revocatorias no se borra aquí — queda fuera de alcance.
             />
             </>
           }
@@ -2268,6 +2260,17 @@ function TramiteRow({
         : 'Ver';
   const actionIcon = consultaMode ? Eye : async?.ready ? FileCheck : abreAsistente ? Play : Eye;
   const plateHint = plateFlowHint(item.plateFlowStatus);
+  /**
+   * Pedido del usuario (2026-09-16): "Pausado", el sub-estado de revocatoria y la nota de placa
+   * podían apilarse los tres a la vez bajo el chip de Estado, sin jerarquía entre ellos — se
+   * muestra UNO SOLO, el de mayor prioridad, en vez de competir por espacio y atención.
+   * Revocatoria primero (es lo más urgente/accionable: alguien está esperando una decisión o ya
+   * la recibió), Pausado segundo (bloquea el trámite), placa asignada al final (es informativo,
+   * no accionable). El resto de sub-estados siguen disponibles en el detalle del trámite.
+   */
+  const muestraRevocacion = !!item.revocationRequestStatus && item.revocationRequestStatus !== 'aprobada';
+  const muestraPausado = !muestraRevocacion && !!item.isPaused;
+  const muestraPlaca = !muestraRevocacion && !muestraPausado && !!plateHint;
   const puedeProcesar =
     !consultaMode && item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
   // HU #12163 — acciones avanzadas del administrador (Cambiar estado, Anular, Consolidado,
@@ -2546,25 +2549,20 @@ function TramiteRow({
     // una línea en un "No aplica" repetido en todas las filas.
     // El chip de estado se inyecta más abajo (solo si la columna `estado` está oculta), para
     // reutilizar EXACTAMENTE la misma celda —popover de rechazo incluido— en vez de duplicarla.
+    // Pedido del usuario (2026-09-16): el progreso de pasos ya NO se apila aquí ni se muda a
+    // ninguna otra celda por defecto — solo informa mientras el trámite se está armando
+    // (Borrador/Preparado); en cuanto pasa a Entregado es SIEMPRE X/X (completo) y competía sin
+    // aportar nada con el chip de Estado, que es el dato que sí importa en esa etapa. Sigue
+    // disponible como columna propia («Paso», grupo Desglose adicional) para quien la active.
     tramite: (
-      <span className="flex min-w-0 flex-col items-start gap-1">
-        <span
-          className="block break-words leading-snug text-xs font-semibold text-[#162744] dark:text-white"
-          // Los nombres de OTROS son largos («Levantamiento de prenda») y la celda es angosta, así
-          // que envuelven en vez de cortarse: es el rótulo que distingue un trámite de otro. El
-          // `title` se conserva para el caso extremo de una palabra sola más ancha que la celda.
-          title={tramiteLabel(item)}
-        >
-          {tramiteLabel(item)}
-        </span>
-        {!shows('paso') ? (
-          <span className="flex min-w-0 items-start gap-1 text-[10px] opacity-55">
-            <span className="shrink-0 font-mono tabular-nums">
-              {item.pasoActual}/{item.totalPasos}
-            </span>
-            <span className="break-words leading-snug">{stepLabel(item)}</span>
-          </span>
-        ) : null}
+      <span
+        className="block min-w-0 break-words leading-snug text-xs font-semibold text-[#162744] dark:text-white"
+        // Los nombres de OTROS son largos («Levantamiento de prenda») y la celda es angosta, así
+        // que envuelven en vez de cortarse: es el rótulo que distingue un trámite de otro. El
+        // `title` se conserva para el caso extremo de una palabra sola más ancha que la celda.
+        title={tramiteLabel(item)}
+      >
+        {tramiteLabel(item)}
       </span>
     ),
     propietario: (
@@ -2711,8 +2709,9 @@ function TramiteRow({
           </div>
         ) : null}
         </span>
-        {/* ICT — "Pausado" (solo texto, sin ícono): apilado bajo el estado; no invade Organismo. */}
-        {item.isPaused ? (
+        {/* ICT — "Pausado" (solo texto, sin ícono): apilado bajo el estado; no invade Organismo.
+            Solo se pinta si no hay revocatoria activa (ver `muestraPausado` — uno a la vez). */}
+        {muestraPausado ? (
           <span
             className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-xs font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
             title={item.pausedObservation ?? 'Trámite pausado'}
@@ -2725,10 +2724,30 @@ function TramiteRow({
             Pausado
           </span>
         ) : null}
-        {plateHint ? (
+        {/* Feature #12565 — indicativo de revocatoria en la fila. Icono + texto, no un StatusBadge
+            sólido: junto al chip de Estado principal, un segundo pill del mismo peso visual competía
+            por la atención en vez de leerse como algo secundario. Incluye `rechazada`: sin esto, un
+            intento rechazado no dejaba NINGÚN rastro en el listado (el trámite vuelve a verse como un
+            Aprobado cualquiera). `aprobada` se excluye explícitamente: es el estado del intento MÁS
+            RECIENTE (el backend ya no lo filtra antes de ordenar por intento), pero ese desenlace ya
+            se ve solo — el trámite pasa a Revocado — y mostrar "Revocatoria aprobada" al lado sería
+            ruido, no información nueva. Es la de MAYOR prioridad del grupo (`muestraRevocacion`):
+            gana sobre "Pausado" y sobre la nota de placa. */}
+        {muestraRevocacion ? (
+          <span
+            className="inline-flex items-center gap-1 text-[11px] font-semibold"
+            style={{ color: revocationRequestListColor(item.revocationRequestStatus) }}
+            title={`Sub-estado de revocatoria: ${revocationRequestListLabel(item.revocationRequestStatus)}`}
+          >
+            <Undo2 className="h-3 w-3" aria-hidden="true" />
+            {revocationRequestListLabel(item.revocationRequestStatus)}
+          </span>
+        ) : null}
+        {/* Nota de placa: la de MENOR prioridad — solo se ve si no hay revocatoria ni pausa. */}
+        {muestraPlaca ? (
           <span
             className="text-xs leading-tight text-[#162744]/45 dark:text-white/40 truncate"
-            title={plateHint}
+            title={plateHint ?? undefined}
           >
             {plateHint}
           </span>

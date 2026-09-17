@@ -1385,6 +1385,52 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     expect(screen.queryByText('Pausado')).toBeNull();
   });
 
+  // Pedido del usuario (2026-09-16): "Pausado", el sub-estado de revocatoria y la nota de placa
+  // podían aparecer los tres a la vez bajo el chip de Estado sin jerarquía entre ellos. Ahora se
+  // muestra UNO SOLO: revocatoria > pausado > placa asignada.
+  it('con revocatoria Y pausado a la vez, solo se ve el sub-estado de revocatoria', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...item,
+        estado: 'aprobado',
+        isPaused: true,
+        pausedObservation: 'En espera de liquidación',
+        revocationRequestStatus: 'rechazada',
+      },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    expect(screen.getByText('Revocatoria rechazada')).toBeInTheDocument();
+    expect(screen.queryByText('Pausado')).not.toBeInTheDocument();
+  });
+
+  it('con pausado Y placa asignada (sin revocatoria), solo se ve "Pausado"', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...item,
+        isPaused: true,
+        plateFlowStatus: 'asignado',
+      },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    expect(screen.getByText('Pausado')).toBeInTheDocument();
+    expect(screen.queryByText('Placa asignada por el OT')).not.toBeInTheDocument();
+  });
+
+  it('sin revocatoria ni pausa, la nota de placa asignada sí se ve', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([{ ...item, plateFlowStatus: 'asignado' }]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    expect(screen.getByText('Placa asignada por el OT')).toBeInTheDocument();
+  });
+
   it('en un borrador ICT el menú de acciones ofrece "Pausar" y al elegirlo llama a pauseInstance (optimista → "Reanudar")', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
@@ -1809,6 +1855,10 @@ describe('TramitesTable — rótulo del trámite', () => {
  * ADR-0050 — el rótulo del paso sale del recorrido del TIPO, no de una lista por familia.
  * La lista de OTROS estaba vacía, así que esas filas mostraban «—» pasara lo que pasara.
  */
+// Pedido del usuario (2026-09-16) — el progreso de pasos ya NO se apila en "Trámite / Estado" ni
+// en ninguna otra celda por defecto: solo informa mientras el trámite se arma (Borrador/Preparado)
+// y, una vez Entregado, es SIEMPRE X/X — competía sin aportar nada con el chip de Estado. Sigue
+// disponible como columna propia («Paso», Desglose adicional) para quien la active.
 describe('TramitesTable — paso en curso', () => {
   function conPaso(
     modalidad: InstanceSummary['modalidad'],
@@ -1819,30 +1869,44 @@ describe('TramitesTable — paso en curso', () => {
     return [{ ...base, modalidad, pasoNombre, pasoActual, totalPasos: 5 }];
   }
 
-  it('muestra el nombre del paso que manda el servidor', async () => {
+  it('sin activar la columna "Paso", el progreso no aparece en ninguna celda', async () => {
     mocks.listInstances.mockResolvedValue(conPaso('OTROS', 'Decisión de prenda'));
     render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('P0001');
+    expect(screen.queryByText('2/5')).not.toBeInTheDocument();
+    expect(screen.queryByText('Decisión de prenda')).not.toBeInTheDocument();
+  });
+
+  it('con la columna "Paso" activada, muestra el nombre del paso que manda el servidor', async () => {
+    mocks.listInstances.mockResolvedValue(conPaso('OTROS', 'Decisión de prenda'));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+    await activarColumnas('Paso');
 
     // Acotado al bloque del progreso: hay otros «—» en la fila (vehículo, organismo).
     const progreso = await screen.findByText('2/5');
     expect(progreso.parentElement).toHaveTextContent('Decisión de prenda');
   });
 
-  it('sin nombre del servidor cae al respaldo por familia', async () => {
+  it('con la columna "Paso" activada, sin nombre del servidor cae al respaldo por familia', async () => {
     // Expediente de un backend anterior al campo: matrícula sí tiene lista de respaldo.
     mocks.listInstances.mockResolvedValue(conPaso('MATRICULAS', null, 1));
     render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+    await activarColumnas('Paso');
 
     const progreso = await screen.findByText('1/5');
     expect(progreso.parentElement).toHaveTextContent('Consulta VIN');
   });
 
-  it('sin nombre y sin respaldo no rompe: muestra un guion', async () => {
+  it('con la columna "Paso" activada, sin nombre y sin respaldo no rompe: muestra un guion', async () => {
     mocks.listInstances.mockResolvedValue(conPaso('OTROS', null));
     render(<ToastProvider><TramitesTable /></ToastProvider>);
-
     await screen.findByText('P0001');
-    const progreso = screen.getByText('2/5');
+    await activarColumnas('Paso');
+
+    const progreso = await screen.findByText('2/5');
     expect(progreso.parentElement?.textContent).toContain('—');
   });
 });
@@ -1977,9 +2041,10 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
   });
 });
 
-// HU #12578 (Feature #12565, AC2) — la entrada a la vista dedicada "Revocatorias" solo la ve el
-// Administrador de compañía (mismo gate que RevocationRequestButton de HU #12573), no cualquier rol.
-describe('TramitesTable — HU #12578 entrada a "Revocatorias" (AC2)', () => {
+// HU #12578 (Feature #12565, AC2) — el enlace "Revocatorias" del toolbar se retiró (pedido del
+// usuario 2026-09-16): el filtro "Revocado" del EstadoFunnel ya cubre ese caso de uso sin una
+// pantalla aparte. Se deja un test negativo para que no reaparezca por accidente.
+describe('TramitesTable — HU #12578 sin entrada a "Revocatorias" en el toolbar', () => {
   function makeToken(payload: Record<string, unknown>): string {
     const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
     const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -1990,20 +2055,11 @@ describe('TramitesTable — HU #12578 entrada a "Revocatorias" (AC2)', () => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it('un Administrador de compañía SÍ ve el enlace "Revocatorias"', async () => {
+  it('un Administrador de compañía NO ve el enlace "Revocatorias" en el toolbar', async () => {
     window.localStorage.setItem(
       TOKEN_STORAGE_KEY,
       makeToken({ sub: 'u1', role: 'AdminCompany', email: 'admin@empresa.local' }),
     );
-    mocks.listInstances.mockResolvedValue(makeInstances(1));
-    render(<ToastProvider><TramitesTable /></ToastProvider>);
-
-    await screen.findByText('P0001');
-    expect(screen.getByTestId('tramites-revocatorias-link')).toBeInTheDocument();
-  });
-
-  it('sin rol de Administrador de compañía NO ve el enlace "Revocatorias"', async () => {
-    // Sin token en localStorage (default de este archivo): usePermissions().isAdminCompany = false.
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
