@@ -214,6 +214,8 @@ public static class OtReportEstado
     public const string EnSubsanacion = "en_subsanacion";
     public const string Rechazado = "rechazado";
     public const string Anulado = "anulado";
+    /// <summary>ADR-0059 (HU #12166) — aprobado y luego revocado por el organismo: cerrado, pero no a favor.</summary>
+    public const string Revocado = "revocado";
 
     /// <summary>Radicado y de vuelta en un estado previo a la radicación: no debería ocurrir, pero si ocurre se ve.</summary>
     public const string Otro = "otro";
@@ -277,6 +279,7 @@ public sealed record OtReportSummaryDto(
     int EnSubsanacion,
     int Rechazados,
     int Anulados,
+    int Revocados,
     int Otros,
     int Decididos,
     int Devoluciones,

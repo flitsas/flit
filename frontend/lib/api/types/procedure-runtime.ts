@@ -17,9 +17,15 @@ export type InstanceStatus =
   | 'borrador'
   | 'anulado'
   | 'preparado'
+  // ADR-0059 (Epic #12549) — ruta de placa de la matrícula inicial: radicado sin placa (el OT la
+  // asigna) y con placa asignada (el gestor gestiona SOAT/impuestos y envía al OT).
+  | 'preasignacion'
+  | 'asignado'
   | 'entregado'
   | 'aprobado'
   | 'rechazado'
+  // HU #12166 — el OT deshizo su propia aprobación. Final.
+  | 'revocado'
   // HU #10870 — reabre la edición de un entregado/rechazado sin volver a borrador; re-radicar
   // (subsanacion → entregado) es la única transición permitida desde aquí (HU #10874, AC2).
   | 'subsanacion'
@@ -30,11 +36,13 @@ export type InstanceStatus =
   | 'revocado';
 
 /**
- * Sub-estado INTERNO de la ruta de placa (Feature #10587 / HU #10785), ORTOGONAL a
- * {@link InstanceStatus}: mientras avanza, el trámite permanece en `entregado`. `null`/ausente =
- * trámite sin ruta de placa. Gobierna el badge secundario, el panel de SOAT y las acciones del OT.
+ * ADR-0059 — estado desde el que el OT rechazó por última vez (`entregado` | `preasignacion`), o
+ * `null` si el trámite no está rechazado o ya se tomó en subsanación. Activa el distintivo
+ * «Rechazado preasignación» del gestor.
  */
-export type PlateFlowStatus = 'preasignado' | 'asignado' | 'terminado';
+export type RejectedFrom = 'entregado' | 'preasignacion';
+
+
 
 /**
  * HU #12573 (Feature #12565) — gates del botón "Solicitar revocatoria" (AC1-AC3), YA RESUELTOS por el
@@ -187,8 +195,6 @@ export interface ProcedureInstanceSummary {
   id: string;
   referenceNumber: string;
   status: InstanceStatus;
-  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
-  plateFlowStatus?: PlateFlowStatus | null;
   procedureTypeId: string;
   tenantId: string;
   createdAt: string;
@@ -198,12 +204,12 @@ export interface ProcedureInstanceSummary {
 }
 
 /**
- * Respuesta de POST /instances/{id}/plate-flow/complete. El trámite avanzó a Terminado, pero puede
- * hacerlo con salvedades: p. ej. la compañía permite continuar sin SOAT vigente
+ * Respuesta de POST /instances/{id}/enviar-al-ot (ADR-0059). El trámite pasó a Entregado, pero
+ * puede hacerlo con salvedades: p. ej. la compañía permite continuar sin SOAT vigente
  * (`warningCode = 'soat_no_vigente_advertencia'`). La UI debe mostrar `warningMessage` aunque la
  * llamada haya sido exitosa.
  */
-export interface CompletePlateFlowResult {
+export interface EnviarAlOtResult {
   instance: ProcedureInstanceSummary | null;
   warningCode: string | null;
   warningMessage: string | null;
@@ -249,8 +255,8 @@ export interface InstanceSummary {
    */
   runtConfirmed?: RuntConfirmedValue | null;
   estado: InstanceStatus;
-  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
-  plateFlowStatus?: PlateFlowStatus | null;
+  /** ADR-0059 — origen del último rechazo; `preasignacion` pinta «Rechazado preasignación». */
+  rejectedFrom?: RejectedFrom | null;
   placa: string | null;
   vin: string | null;
   vehiculoMarca: string | null;
@@ -506,8 +512,8 @@ export interface ProcedureInstanceDetail {
   id: string;
   referenceNumber: string;
   status: InstanceStatus;
-  /** Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado). */
-  plateFlowStatus?: PlateFlowStatus | null;
+  /** ADR-0059 — origen del último rechazo; `preasignacion` pinta «Rechazado preasignación». */
+  rejectedFrom?: RejectedFrom | null;
   procedureTypeId: string;
   tenantId: string;
   createdAt: string;

@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { ClientProceduresTable } from "../ClientProceduresTable";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 
-// Gate visual OT: Aprobar/Rechazar solo en ruta estándar o Terminado.
-// Uso: <ClientProceduresTable rows={[{ plateFlowStatus: 'terminado' }]} />
+// ADR-0059 (HU #12602 AC3–AC5) — el menú por fila ofrece SOLO lo que aplica en cada estado real:
+// entregado decide; preasignacion asigna placa o rechaza; asignado corrige o libera la placa.
 
 function row(over: Partial<OtClientProcedure>): OtClientProcedure {
   return {
@@ -29,6 +29,8 @@ const baseProps = {
   showApprovalActions: true,
   onAssignPlate: vi.fn(),
   onRevoke: vi.fn(),
+  onUpdatePlate: vi.fn(),
+  onAdjuntarLt: vi.fn(),
 };
 
 /** Abre el menú de acciones de la primera fila: la decisión del OT vive ahí. */
@@ -36,65 +38,75 @@ async function abrirAcciones() {
   await userEvent.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
 }
 
-describe("ClientProceduresTable — gate visual Terminado", () => {
-  it("muestra Aprobar y Rechazar en Terminado", async () => {
+describe("ClientProceduresTable — acciones por estado real (ADR-0059)", () => {
+  it("AC5 — en entregado ofrece Aprobar y Rechazar y muestra los checks del gestor; sin chip «Terminado» ni tooltip", async () => {
     render(
       <ClientProceduresTable
         {...baseProps}
-        rows={[row({ plateFlowStatus: "terminado", soatPagado: true })]}
+        rows={[row({ status: "entregado", soatPagado: true, impuestoDepartamentalPagado: true })]}
       />,
     );
     await abrirAcciones();
-    expect(screen.getByRole("menuitem", { name: /aprobar/i })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /rechazar/i })).toBeInTheDocument();
-    // El sello de SOAT y el aviso de proceso NO son acciones: siguen a la vista en la fila.
+    expect(screen.getByRole("menuitem", { name: /^aprobar$/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /^rechazar$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /asignar placa/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /liberar placa/i })).not.toBeInTheDocument();
+    // Los checks del gestor NO son acciones: siguen a la vista en la fila.
     expect(screen.getByText("SOAT")).toBeInTheDocument();
+    expect(screen.getByText("Impuesto")).toBeInTheDocument();
+    expect(screen.queryByText(/terminado/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/esperando proceso del gestor/i)).not.toBeInTheDocument();
   });
 
-  it("oculta acciones y muestra aviso en Asignado", async () => {
+  it("AC4 — en asignado ofrece Actualizar placa (con minutos) y Liberar placa; ni Aprobar, ni Rechazar, ni Adjuntar LT", async () => {
     render(
       <ClientProceduresTable
         {...baseProps}
-        rows={[row({ plateFlowStatus: "asignado" })]}
+        rows={[row({ status: "asignado", placa: "ABC123", plateAssignedAt: new Date().toISOString() })]}
       />,
     );
     await abrirAcciones();
-    expect(screen.queryByRole("menuitem", { name: /aprobar/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /rechazar/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/esperando proceso del gestor/i)).toBeInTheDocument();
-  });
-
-  it("oculta Aprobar/Rechazar en Sin asignar (preasignado) sin aviso de gestor", async () => {
-    render(
-      <ClientProceduresTable
-        {...baseProps}
-        rows={[row({ plateFlowStatus: "preasignado" })]}
-      />,
-    );
-    await abrirAcciones();
-    expect(screen.queryByRole("menuitem", { name: /aprobar/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /rechazar/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /actualizar placa \(\d+ min\)/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /liberar placa/i })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /^aprobar$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /^rechazar$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /adjuntar lt/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/esperando proceso del gestor/i)).not.toBeInTheDocument();
   });
 
-  it("muestra Aprobar y Rechazar en la ruta estándar", async () => {
+  it("AC3 — en preasignacion ofrece Asignar placa y Rechazar; ni Aprobar ni Adjuntar LT", async () => {
     render(
       <ClientProceduresTable
         {...baseProps}
-        rows={[row({ plateFlowStatus: null })]}
+        rows={[row({ status: "preasignacion", placa: null })]}
       />,
     );
     await abrirAcciones();
-    expect(screen.getByRole("menuitem", { name: /aprobar/i })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /rechazar/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /asignar placa/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /^rechazar$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /^aprobar$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /adjuntar lt/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /liberar placa/i })).not.toBeInTheDocument();
   });
 
-  it("no muestra badges SOAT/Impuesto fuera de Terminado", async () => {
+  it("el chip de estado usa el nombre real (Preasignación / Asignado), sin sufijo «OT» ni badge secundario", () => {
     render(
       <ClientProceduresTable
         {...baseProps}
-        rows={[row({ plateFlowStatus: "asignado", soatPagado: true, impuestoDepartamentalPagado: true })]}
+        rows={[row({ status: "preasignacion" }), row({ id: "id-2", referenceNumber: "FT1-0000002", status: "asignado" })]}
+      />,
+    );
+    expect(screen.getByText("Preasignación")).toBeInTheDocument();
+    expect(screen.getByText("Asignado")).toBeInTheDocument();
+    expect(screen.queryByText(/sin asignar/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/pendiente ot/i)).not.toBeInTheDocument();
+  });
+
+  it("no muestra badges SOAT/Impuesto fuera de entregado", () => {
+    render(
+      <ClientProceduresTable
+        {...baseProps}
+        rows={[row({ status: "asignado", soatPagado: true, impuestoDepartamentalPagado: true })]}
       />,
     );
     expect(screen.queryByText("SOAT")).not.toBeInTheDocument();

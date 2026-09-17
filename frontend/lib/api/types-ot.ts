@@ -59,11 +59,6 @@ export interface OtClientProcedure {
   /** `matricula_inicial` | `traspaso`. Determina qué causales de rechazo ofrece el modal. */
   familia?: string;
   /**
-   * Sub-estado interno de la ruta de placa (null | preasignado | asignado | terminado),
-   * ortogonal al status (que permanece en 'entregado').
-   */
-  plateFlowStatus?: string | null;
-  /**
    * HU #12165/#12167 (Feature #12156) — momento en que el OT asignó la placa. Base de la ventana
    * de 1 hora para corregirla (`updateProcedurePlate`). `null` si nunca se asignó por este flujo.
    */
@@ -82,9 +77,9 @@ export interface OtClientProcedure {
    * Dígito de preferencia de placa (0-9) indicado al radicar sin placa. Guía para el OT.
    */
   platePreferredLastDigit?: string | null;
-  /** Check opcional del gestor; badge en bandeja OT solo en Terminado. */
+  /** Check opcional del gestor al «Enviar al OT»; badge en bandeja OT en `entregado`. */
   soatPagado?: boolean;
-  /** Check opcional del gestor; badge en bandeja OT solo en Terminado. */
+  /** Check opcional del gestor al «Enviar al OT»; badge en bandeja OT en `entregado`. */
   impuestoDepartamentalPagado?: boolean;
   transitOfficeId?: string | null;
   createdAt: string;
@@ -190,19 +185,11 @@ export interface OtClientProcedurePagedResult {
 }
 
 export interface OtClientProceduresParams {
+  /** Estado del ciclo de vida; varios separados por coma (ADR-0059: cada tarjeta es un estado). */
   status?: string;
   /**
-   * Sub-estado de la ruta de placa. Varios separados por coma (`asignado,terminado`) y el valor
-   * especial `sin_ruta` para los trámites que no están en ruta de placa.
-   *
-   * Lo usan las tarjetas de la cabecera al pulsarse: tres de ellas cuentan por sub-estado de placa,
-   * no por estado del ciclo de vida, y sin esto llevarían a una lista distinta de la que contaron.
-   */
-  plateFlowStatus?: string;
-  /**
-   * Pedido del usuario (2026-09-16) — filtro de la tarjeta "Solicitudes de revocatoria": trámites
-   * con una solicitud de revocatoria ACTIVA (`solicitada`/`en_revision`). Igual criterio que
-   * {@link plateFlowStatus}: no es un estado del ciclo de vida (el trámite sigue en `aprobado`)
+   * Feature #12565 — filtro de la tarjeta "Solicitudes de revocatoria": trámites
+   * con una solicitud de revocatoria ACTIVA (`solicitada`/`en_revision`). No es un estado del ciclo de vida (el trámite sigue en `aprobado`)
    * sino del sub-flujo de revocatoria, así que viaja aparte de `status`.
    */
   hasActiveRevocationRequest?: boolean;
@@ -236,18 +223,19 @@ export interface OtClientProceduresParams {
 /** Diagnóstico de la bandeja OT (HU #10540/#10541 — R09): entregados con/sin grant vigente. */
 /**
  * Contadores de la cabecera de la bandeja OT: cuánto trabajo hay de cada clase, sobre TODO lo
- * accesible y no sobre la página cargada.
- *
- * Las clases NO son excluyentes ni suman el total: las dos de placa miran el sub-estado y las tres
- * de decisión miran el estado del trámite. Un entregado con placa asignada cuenta en dos.
+ * accesible y no sobre la página cargada. ADR-0059 — cada clase es un estado real del ciclo de
+ * vida, así que son excluyentes entre sí.
  */
 export interface OtBandejaCounters {
   transitOfficeResolved: boolean;
-  sinAsignarPlaca: number;
-  conPlacaAsignada: number;
+  /** Radicados sin placa: cola de «asignar placa». */
+  preasignacion: number;
+  /** Con placa asignada; el gestor gestiona SOAT/impuestos y envía al OT. */
+  asignados: number;
+  /** Entregados a la espera de la decisión del organismo. */
+  porDecidir: number;
   aprobados: number;
   rechazados: number;
-  sinGestion: number;
   /** HU #12166/#12168 (Feature #12156) — trámites Aprobados que el OT revocó. */
   revocados: number;
   /** Pedido del usuario (2026-09-16) — Aprobados con solicitud de revocatoria ACTIVA. */

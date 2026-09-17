@@ -70,7 +70,6 @@ function fila(overrides: Partial<InstanceSummary> = {}): InstanceSummary {
     updatedAt: "2026-08-05T09:00:00Z",
     gestorNombre: "Gestora Uno",
     subsanacionActiva: false,
-    plateFlowStatus: null,
     ultimoRechazoMotivo: null,
     isPaused: false,
     pausedObservation: null,

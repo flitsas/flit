@@ -127,7 +127,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         var (dayStart, dayEnd) = BogotaDayRange(todayBogota, todayBogota);
 
         var todayTransitions = await QueryTransitions(transitOfficeId, tenantIds, filter, dayStart, dayEnd)
-            .Select(h => h.ToStatus)
+            .Select(h => new { h.FromStatus, h.ToStatus })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -135,8 +135,10 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             transitOfficeId, tenantIds, filter, cancellationToken).ConfigureAwait(false);
 
         return new OtDayMovementDto(
-            EntregadosHoy: todayTransitions.Count(s => s == TramiteEstado.Entregado),
-            DecididosHoy: todayTransitions.Count(IsDecision),
+            // ADR-0059 — "entregados" = radicaciones (llegadas al organismo, a entregado o a
+            // preasignacion); «Enviar al OT» (asignado → entregado) no es una llegada nueva.
+            EntregadosHoy: todayTransitions.Count(t => TramiteEstado.EsRadicacion(t.FromStatus, t.ToStatus)),
+            DecididosHoy: todayTransitions.Count(t => IsDecision(t.ToStatus)),
             PendientesTotal: pendientesTotal,
             TiempoMedianoDecisionHoras: Median(decisionHours));
     }
@@ -198,9 +200,10 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         DateTimeOffset from,
         DateTimeOffset to)
     {
-        // Última entrega anterior a cada decisión: el reloj de la decisión arranca ahí.
+        // Última llegada al organismo anterior a cada decisión: el reloj de la decisión arranca ahí
+        // (entregado para decidir, preasignacion para asignar placa — ADR-0059).
         var deliveries = history
-            .Where(h => h.ToStatus == TramiteEstado.Entregado)
+            .Where(h => TramiteEstado.EsLlegadaAlOrganismo(h.ToStatus))
             .GroupBy(h => h.InstanceId)
             .ToDictionary(g => g.Key, g => g.Select(h => h.ChangedAt).OrderBy(d => d).ToList());
 
@@ -269,7 +272,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                 continue;
             }
 
-            if (h.ToStatus == TramiteEstado.Entregado)
+            if (TramiteEstado.EsLlegadaAlOrganismo(h.ToStatus))
             {
                 if (!entregadosPorEmpresa.TryGetValue(tenantId, out var set))
                 {
@@ -426,7 +429,6 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                         (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                         (p.ProcedureType != null ? p.ProcedureType.Name : ""),
                         p.Status,
-                        p.PlateFlowStatus,
                         p.Prioritario,
                         p.SubsanacionActiva,
                         p.IsPaused))
@@ -499,7 +501,6 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         string Familia,
         string TipoTramite,
         string Status,
-        string? PlateFlowStatus,
         bool Prioritario,
         bool SubsanacionActiva,
         bool IsPaused);
@@ -548,7 +549,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             }
 
             var radicacion = events.FirstOrDefault(e =>
-                e.ToStatus == TramiteEstado.Entregado && e.ChangedAt >= from && e.ChangedAt <= to);
+                TramiteEstado.EsLlegadaAlOrganismo(e.ToStatus) && e.ChangedAt >= from && e.ChangedAt <= to);
 
             if (radicacion is null)
             {
@@ -559,7 +560,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 
             var decision = posteriores.LastOrDefault(e => IsDecision(e.ToStatus));
             var ultimaRadicacion = posteriores
-                .LastOrDefault(e => e.ToStatus == TramiteEstado.Entregado
+                .LastOrDefault(e => TramiteEstado.EsLlegadaAlOrganismo(e.ToStatus)
                     && (decision is null || e.ChangedAt <= decision.ChangedAt));
 
             // El reloj arranca en la ÚLTIMA radicación previa a la decisión: es el turno que el
@@ -593,8 +594,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     /// trámite del universo cae en exactamente uno, y por eso el desglose del informe suma el total.
     /// </summary>
     private static string ResolveReportEstado(ReportInstanceRow instance) =>
-        OtEstadoResolver.Resolve(
-            instance.Status, instance.SubsanacionActiva, instance.IsPaused, instance.PlateFlowStatus);
+        OtEstadoResolver.Resolve(instance.Status, instance.SubsanacionActiva, instance.IsPaused);
 
     private static OtReportSummaryDto BuildReportSummary(
         IReadOnlyList<ReportRow> rows,
@@ -623,6 +623,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             EnSubsanacion: rows.Count(r => r.EstadoOt == OtReportEstado.EnSubsanacion),
             Rechazados: rows.Count(r => r.EstadoOt == OtReportEstado.Rechazado),
             Anulados: rows.Count(r => r.EstadoOt == OtReportEstado.Anulado),
+            Revocados: rows.Count(r => r.EstadoOt == OtReportEstado.Revocado),
             Otros: rows.Count(r => r.EstadoOt == OtReportEstado.Otro),
             Decididos: rows.Count(r => r.DecididoEn is not null),
             Devoluciones: devoluciones,
@@ -956,7 +957,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                     .ConfigureAwait(false);
 
                 var deliveries = history
-                    .Where(h => h.ToStatus == TramiteEstado.Entregado)
+                    .Where(h => TramiteEstado.EsLlegadaAlOrganismo(h.ToStatus))
                     .GroupBy(h => h.InstanceId)
                     .ToDictionary(g => g.Key, g => g.Select(h => h.ChangedAt).OrderBy(d => d).ToList());
 
@@ -1316,13 +1317,13 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 
             var transitions = await QueryTransitions(
                 transitOfficeId, tenantIds, filter, dayStart, dayEnd)
-                .Select(h => new { h.ProcedureInstanceId, h.ToStatus })
+                .Select(h => new { h.ProcedureInstanceId, h.FromStatus, h.ToStatus })
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
             var ids = transitions
                 .Where(t => bucket == OtDrilldownBuckets.EntregadosHoy
-                    ? t.ToStatus == TramiteEstado.Entregado
+                    ? TramiteEstado.EsRadicacion(t.FromStatus, t.ToStatus)
                     : IsDecision(t.ToStatus))
                 .Select(t => t.ProcedureInstanceId)
                 .Distinct()
@@ -1413,15 +1414,17 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     /// </summary>
     private sealed record PendingRow(
         Guid Id,
-        string? PlateFlowStatus,
+        string Status,
         bool Prioritario,
         bool IsPaused,
         double DaysWaiting);
 
-    private static bool IsPorRevisar(PendingRow p) => p.PlateFlowStatus is null && !p.IsPaused;
+    // ADR-0059 — los buckets salen del estado real: entregado = por revisar; preasignacion = esperando
+    // placa; asignado (o pausado) = en espera del cliente.
+    private static bool IsPorRevisar(PendingRow p) => p.Status == TramiteEstado.Entregado && !p.IsPaused;
 
     private static bool IsEsperandoPlaca(PendingRow p) =>
-        p.PlateFlowStatus == PlateFlowStatus.Preasignado && !p.IsPaused;
+        p.Status == TramiteEstado.Preasignacion && !p.IsPaused;
 
     private static bool IsEnEsperaDelCliente(PendingRow p) =>
         !IsPorRevisar(p) && !IsEsperandoPlaca(p);
@@ -1444,11 +1447,11 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         CancellationToken cancellationToken)
     {
         var pendientes = await QueryInstances(transitOfficeId, tenantIds, filter)
-            .Where(p => p.Status == TramiteEstado.Entregado)
+            .Where(p => TramiteEstado.PendientesDelOrganismo.Contains(p.Status))
             .Select(p => new
             {
                 p.Id,
-                p.PlateFlowStatus,
+                p.Status,
                 p.Prioritario,
                 p.IsPaused,
                 p.CreatedAt,
@@ -1458,11 +1461,11 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 
         var pendingIds = pendientes.Select(p => p.Id).ToList();
 
-        // Momento en que cada pendiente entró a 'entregado' — de ahí sale la antigüedad.
+        // Momento en que cada pendiente llegó por última vez al organismo — de ahí sale la antigüedad.
         var deliveredAt = await _context.ProcedureInstanceStatusHistories
             .AsNoTracking()
             .Where(h => pendingIds.Contains(h.ProcedureInstanceId)
-                && h.ToStatus == TramiteEstado.Entregado)
+                && TramiteEstado.EstadosDeLlegadaAlOrganismo.Contains(h.ToStatus))
             .GroupBy(h => h.ProcedureInstanceId)
             .Select(g => new { InstanceId = g.Key, At = g.Max(h => h.ChangedAt) })
             .ToDictionaryAsync(x => x.InstanceId, x => x.At, cancellationToken)
@@ -1473,7 +1476,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         return pendientes
             .Select(p => new PendingRow(
                 p.Id,
-                p.PlateFlowStatus,
+                p.Status,
                 p.Prioritario,
                 p.IsPaused,
                 (now - (deliveredAt.TryGetValue(p.Id, out var at) ? at : p.CreatedAt)).TotalDays))
@@ -1549,7 +1552,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             .ConfigureAwait(false);
 
         var deliveries = history
-            .Where(h => h.ToStatus == TramiteEstado.Entregado)
+            .Where(h => TramiteEstado.EsLlegadaAlOrganismo(h.ToStatus))
             .GroupBy(h => h.InstanceId)
             .ToDictionary(g => g.Key, g => g.Select(h => h.ChangedAt).OrderBy(d => d).ToList());
 

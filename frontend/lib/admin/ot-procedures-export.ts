@@ -17,13 +17,6 @@ import type { OtClientProcedure } from '@/lib/api/types-ot';
 import { OT_PROCEDURES_COLUMNS } from './ot-procedures-columns';
 import { formatOtProcedureStatus } from '@/components/admin/transit-offices/ot-utils';
 
-/** Cómo se lee la ruta de placa en el archivo. Vacío si el trámite no está en esa ruta. */
-const RUTA_PLACA_LABEL: Record<string, string> = {
-  preasignado: 'Placa preasignada',
-  asignado: 'Placa asignada',
-  terminado: 'Terminado',
-};
-
 export interface OtProcedureExportField {
   id: string;
   label: string;
@@ -124,8 +117,7 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
       width: 26,
     },
   ],
-  // Lo mismo con el estado: el estado del trámite y su ruta de placa son dos ejes distintos, y en
-  // la bandeja se leen juntos solo porque comparten sitio.
+  // ADR-0059 — la ruta de placa ya vive en el estado: una sola columna, con el nombre real.
   estado: [
     {
       id: 'estado',
@@ -133,14 +125,6 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
       value: (r) => formatOtProcedureStatus(r.status),
       raw: (r) => formatOtProcedureStatus(r.status),
       width: 16,
-    },
-    {
-      id: 'rutaPlaca',
-      label: 'Ruta de placa',
-      value: (r) => (r.plateFlowStatus ? (RUTA_PLACA_LABEL[r.plateFlowStatus] ?? r.plateFlowStatus) : ''),
-      raw: (r) =>
-        r.plateFlowStatus ? (RUTA_PLACA_LABEL[r.plateFlowStatus] ?? r.plateFlowStatus) : null,
-      width: 18,
     },
   ],
   fechaRadicacion: [

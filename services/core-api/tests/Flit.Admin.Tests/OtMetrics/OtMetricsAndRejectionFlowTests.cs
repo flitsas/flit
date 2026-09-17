@@ -219,12 +219,11 @@ public sealed class OtMetricsAndRejectionFlowTests
         {
             SeedScope(seed);
             SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "REF-1");
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "REF-2",
-                plateFlowStatus: PlateFlowStatus.Preasignado);
+            // ADR-0059 — la ruta de placa son estados reales.
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Preasignacion, "REF-2");
             // Placa asignada = esperando SOAT del cliente; pausado = origen ICT. Ninguno es
             // accionable por el organismo.
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "REF-3",
-                plateFlowStatus: PlateFlowStatus.Asignado);
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Asignado, "REF-3");
             SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "REF-4", isPaused: true);
             // Un aprobado no está pendiente.
             SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Aprobado, "REF-5");
@@ -396,8 +395,7 @@ public sealed class OtMetricsAndRejectionFlowTests
         {
             SeedScope(seed);
             SeedProcedure(seed, porRevisar, TramiteEstado.Entregado, "REF-1");
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "REF-2",
-                plateFlowStatus: PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Preasignacion, "REF-2");
             seed.SaveChanges();
         }
 
@@ -565,7 +563,6 @@ public sealed class OtMetricsAndRejectionFlowTests
         Guid id,
         string status,
         string reference = "REF-001",
-        string? plateFlowStatus = null,
         bool isPaused = false,
         bool prioritario = false,
         string modalidad = "MATRICULAS")
@@ -577,7 +574,6 @@ public sealed class OtMetricsAndRejectionFlowTests
             ProcedureTypeId = ProcedureType,
             ReferenceNumber = reference,
             Status = status,
-            PlateFlowStatus = plateFlowStatus,
             IsPaused = isPaused,
             Prioritario = prioritario,
             TransitOfficeId = TransitOffice,

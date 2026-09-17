@@ -76,6 +76,7 @@ function informe(
       enSubsanacion: 0,
       rechazados: 0,
       anulados: 0,
+      revocados: 0,
       otros: 0,
       ...composicion,
       decididos: 0,
@@ -143,30 +144,33 @@ describe("OtDashboard — actividad reciente y bienvenida", () => {
     expect(fetchOtReport).toHaveBeenCalledTimes(1);
   });
 
-  it("AC2 — agrupa los ocho estados del OT en aprobados, rechazados, sin decisión y anulados", async () => {
+  it("AC2 — agrupa los nueve estados del OT en aprobados, rechazados, sin decisión, revocados y anulados", async () => {
     fetchOtReport.mockResolvedValue(
       informe(CON_MOVIMIENTO, {
-        aprobados: 4,
-        esperandoPlaca: 1, // expediente ya aprobado: cuenta como aprobado
+        aprobados: 5,
+        esperandoPlaca: 1, // ADR-0059: radicado sin placa, el organismo aún no revisó → sin decisión
         rechazados: 1,
         enSubsanacion: 1, // rechazo con subsanación abierta: sigue siendo rechazo
-        enRevision: 2,
+        enRevision: 1,
         esperandoCliente: 1, // sin veredicto todavía
+        revocados: 1, // se aprobó y se deshizo: grupo propio
         anulados: 0,
       }),
     );
     render(<OtDashboard />);
 
     const tarjeta = await screen.findByTestId("ot-inicio-composicion");
-    // 4+1 aprobados, 1+1 rechazados, 2+1 sin decisión → 10 recibidos.
+    // 5 aprobados, 1+1 rechazados, 1+1+1 sin decisión, 1 revocado → 11 recibidos.
     expect(tarjeta).toHaveTextContent("Aprobados");
     expect(tarjeta).toHaveTextContent("Rechazados");
     expect(tarjeta).toHaveTextContent("Sin decisión");
-    expect(tarjeta).toHaveTextContent("10 recibidos en total");
-    // El centro es el % de aprobados: 5 de 10.
-    expect(tarjeta).toHaveTextContent("50.0 %");
-    expect(tarjeta).toHaveTextContent("20.0 %"); // rechazados
-    expect(tarjeta).toHaveTextContent("30.0 %"); // sin decisión
+    expect(tarjeta).toHaveTextContent("Revocados");
+    expect(tarjeta).toHaveTextContent("11 recibidos en total");
+    // El centro es el % de aprobados: 5 de 11.
+    expect(tarjeta).toHaveTextContent("45.5 %");
+    expect(tarjeta).toHaveTextContent("18.2 %"); // rechazados
+    expect(tarjeta).toHaveTextContent("27.3 %"); // sin decisión
+    expect(tarjeta).toHaveTextContent("9.1 %"); // revocados
     // Un grupo en cero no ocupa un color del anillo.
     expect(tarjeta).not.toHaveTextContent("Anulados");
   });

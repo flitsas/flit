@@ -30,7 +30,6 @@ public sealed class ListOtClientProceduresHandler
             new OtClientProcedureFilter
             {
                 Status = query.Status,
-                PlateFlowStatus = query.PlateFlowStatus,
                 HasActiveRevocationRequest = query.HasActiveRevocationRequest,
                 ProcedureTypeId = query.ProcedureTypeId,
                 Vin = query.Vin,

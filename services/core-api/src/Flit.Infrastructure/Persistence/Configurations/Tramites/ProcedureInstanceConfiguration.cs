@@ -118,6 +118,13 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .IsRequired()
             .HasDefaultValue(0);
 
+        // ADR-0059 (HU #12597) — origen del último rechazo (entregado | preasignacion). Columna agregada
+        // por migración SQL cruda (115-HU12597-rejected-from.sql; la tabla está ExcludeFromMigrations);
+        // aquí solo se mapea. La escribe el ciclo de vida al entrar a 'rechazado'.
+        builder.Property(x => x.RejectedFrom)
+            .HasColumnName("rejected_from")
+            .HasMaxLength(20);
+
         // Baseline del diff de re-radicación. Antes viajaba en el metadata de una fila
         // rechazado→rechazado del historial, que el timeline pintaba como un rechazo repetido.
         builder.Property(x => x.SubsanacionBaseline)
@@ -140,13 +147,6 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("consolidado_wizard_vigente")
             .IsRequired()
             .HasDefaultValue(false);
-
-        // Feature #10587 / HU #10785 — sub-estado interno de placa, ortogonal al status global
-        // (que permanece en 'entregado'). Columna agregada por migración SQL cruda (la tabla está
-        // ExcludeFromMigrations); aquí solo se mapea para el modelo EF. Nullable: null = sin ruta de placa.
-        builder.Property(x => x.PlateFlowStatus)
-            .HasColumnName("plate_flow_status")
-            .HasMaxLength(20);
 
         // HU #12165 (Feature #12156) — ventana de 1 hora de corrección de placa por el OT (HU
         // #12167). Columnas agregadas por migración SQL cruda (la tabla está ExcludeFromMigrations);

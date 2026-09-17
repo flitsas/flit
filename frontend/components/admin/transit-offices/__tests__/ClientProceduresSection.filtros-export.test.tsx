@@ -40,7 +40,7 @@ vi.mock("@/lib/api/tramites-client", () => ({
 vi.mock("@/lib/api/admin-plate-ranges", () => ({
   assignPlateToProcedure: vi.fn(),
   listPlateDetails: vi.fn().mockResolvedValue([]),
-  revokeProcedurePlate: vi.fn(),
+  releaseProcedurePlate: vi.fn(),
   updateProcedurePlate: vi.fn(),
 }));
 
@@ -122,11 +122,11 @@ beforeEach(() => {
   });
   vi.mocked(fetchOtBandejaCounters).mockResolvedValue({
     transitOfficeResolved: true,
-    sinAsignarPlaca: 0,
-    conPlacaAsignada: 0,
+    preasignacion: 0,
+    asignados: 0,
+    porDecidir: 0,
     aprobados: 0,
     rechazados: 0,
-    sinGestion: 0,
     revocados: 0,
     solicitudesRevocatoria: 0,
   });
@@ -304,9 +304,9 @@ describe("Bandeja OT — descarga a Excel (HU #12220)", () => {
     // «Empresa / Gestor» es UNA celda en pantalla y DOS columnas en la hoja.
     expect(ids).toContain("empresa");
     expect(ids).toContain("gestor");
-    // Lo mismo con el estado y su ruta de placa.
+    // El estado va en su columna; la ruta de placa ya ES el estado (ADR-0059), sin columna aparte.
     expect(ids).toContain("estado");
-    expect(ids).toContain("rutaPlaca");
+    expect(ids).not.toContain("rutaPlaca");
     // Sin repeticiones: una columna aparece una sola vez aunque dos celdas la aportaran.
     expect(new Set(ids).size).toBe(ids.length);
   });

@@ -159,7 +159,7 @@ public sealed class FirmarImprontaManualSiListaHandlerTests
         var instance = InstanceTraspasoReady(instanceId, tenantId);
         instance.ProcedureType = ProcedureTypeFixture.Matricula;
         instance.Plate = "ABC123";
-        instance.PlateFlowStatus = Flit.Tramites.Domain.Tramites.Estados.PlateFlowStatus.Preasignado;
+        instance.Status = TramiteEstado.Preasignacion; // ADR-0059: la preasignación es un estado del trámite
         var attachment = ImprontaAttachment(tenantId, instanceId);
         instance.Attachments.Add(attachment);
         _repo.GetByIdWithFurGraphAsync(instanceId, tenantId, Arg.Any<CancellationToken>()).Returns(instance);

@@ -6,7 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
 import { SeccionCargando, SeccionError } from '@/components/operacion/detalle/primitivos';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { estadoChipStyle, estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import { tramiteLabel, vehiculo } from '@/lib/tramites/tramites-row-labels';
 import type {
   InstanceSummary,
@@ -109,7 +109,7 @@ export function TramiteTrackingModal({
             className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold"
             style={{ background: chip.bg, color: chip.color, borderColor: chip.border }}
           >
-            {estadoLabel(item.estado)}
+            {estadoLabelConOrigen(item.estado, item.rejectedFrom)}
           </span>
           <span className="text-xs text-[#162744]/60 dark:text-white/50">
             {[item.placa?.trim(), tramiteLabel(item)].filter(Boolean).join(' · ')}

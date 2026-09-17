@@ -21,7 +21,6 @@ function baseSettings(overrides: Partial<TenantSettings> = {}): TenantSettings {
     },
     baulFirmasActivo: false,
     preasignacionPlacaActiva: false,
-    plateFlowSkipToTerminado: false,
     enrutamientoSMTP: 'FLIT_SMTP',
     notificationTarget: 'RADICADOR',
     metodosRecaudo: [],

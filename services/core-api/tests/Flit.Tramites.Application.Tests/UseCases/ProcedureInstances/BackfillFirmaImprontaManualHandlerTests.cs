@@ -123,7 +123,7 @@ public sealed class BackfillFirmaImprontaManualHandlerTests
         var instanceNoLista = InstanceListaParaFirmar(idNoLista, tenantId);
         instanceNoLista.ProcedureType = ProcedureTypeFixture.Matricula;
         instanceNoLista.Plate = "ABC123";
-        instanceNoLista.PlateFlowStatus = PlateFlowStatus.Preasignado;
+        instanceNoLista.Status = TramiteEstado.Preasignacion; // ADR-0059: la preasignación es un estado del trámite
         var attNoLista = ImprontaAttachment(tenantId, idNoLista);
         instanceNoLista.Attachments.Add(attNoLista);
         _repo.GetByIdWithFurGraphAsync(idNoLista, tenantId, Arg.Any<CancellationToken>()).Returns(instanceNoLista);

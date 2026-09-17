@@ -197,6 +197,7 @@ const REPORT: OtReport = {
     enSubsanacion: 4,
     rechazados: 0,
     anulados: 0,
+    revocados: 0,
     otros: 0,
     decididos: 22,
     devoluciones: 6,

@@ -377,7 +377,8 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         foreach (var instance in instances)
         {
             var eventos = porInstancia.GetValueOrDefault(instance.Id) ?? [];
-            var radicacion = eventos.FirstOrDefault(e => e.ToStatus == TramiteEstado.Entregado);
+            // ADR-0059 — la radicación es la primera llegada al organismo (entregado o preasignacion).
+            var radicacion = eventos.FirstOrDefault(e => TramiteEstado.EsLlegadaAlOrganismo(e.ToStatus));
             var posteriores = radicacion is null
                 ? []
                 : eventos.Where(e => e.ChangedAt >= radicacion.ChangedAt).ToList();

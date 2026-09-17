@@ -306,6 +306,8 @@ export function FirmaFurStep({
     fieldValues: FieldValue[];
     actors: Actor[];
     status: InstanceStatus;
+    /** ADR-0059 — origen del último rechazo para el chip del resumen. */
+    rejectedFrom: string | null;
     statusHistory: StatusHistory[];
   } | null>(null);
   /** Contacto completo (teléfono/dirección/ciudad) desde GET actors — el detalle de instancia no lo trae. */
@@ -355,6 +357,7 @@ export function FirmaFurStep({
         fieldValues: d.fieldValues ?? [],
         actors: d.actors ?? [],
         status: d.status,
+        rejectedFrom: d.rejectedFrom ?? null,
         statusHistory: d.statusHistory ?? [],
       });
       setActorsContact(actors);
@@ -703,6 +706,7 @@ export function FirmaFurStep({
         partesBiometricas={partesBiometricas}
         rotulosPorRol={rotulosPorRol}
         status={detail?.status ?? 'borrador'}
+        rejectedFrom={detail?.rejectedFrom ?? null}
         placa={fv('plate')}
         vehiculo={[fv('vehicle_brand'), fv('vehicle_line'), fv('vehicle_year')]
           .filter(Boolean)
@@ -884,8 +888,8 @@ export function PlacaPreasignadaSection({
     // HU #10806 — consulta el estado de la ruta antes de ofrecer el selector: si no está habilitada,
     // se avisa (el trámite se entregará estándar) en vez de simular que preasigna.
     // HU #10806 (Alternativa C) — persiste la decisión de ruta en borrador como field_value
-    // `plate_route_active`. Es la fuente que consume el trigger de BD para fijar automáticamente
-    // `plate_flow_status = 'preasignado'` al radicar sin placa, aunque el binario del API esté desfasado.
+    // `plate_route_active`. Desde ADR-0059 la ruta la decide el estado del trámite (no un trigger),
+    // así que el campo es solo informativo; se conserva hasta que la Epic #12550 rehaga este paso.
     const persistRouteActive = (enabled: boolean) => {
       void tramitesClient
         .patchFieldValues(instanceId, [
@@ -1044,13 +1048,15 @@ export function PlacaPreasignadaSection({
     return null;
   }
 
-  // HU #10806 (AC3) — la ruta de placa NO está habilitada para esta compañía/OT: avisar que el
-  // trámite se entregará de forma estándar, en vez de mostrar el selector como si preasignara.
+  // HU #10806 (AC3) → ADR-0059 — sin inventario de rangos habilitado no hay placa que elegir aquí;
+  // la ruta NO cambia por eso: una matrícula sin placa queda en Preasignación hasta que el organismo
+  // la asigne (la configuración de preasignación solo gobierna el inventario de rangos).
   if (preassignEnabled === false) {
     return shell(
       <p className="mt-2 text-xs opacity-80" role="status">
-        La preasignación de placa no está habilitada para este organismo de tránsito o tu compañía. El
-        trámite se entregará de forma estándar (sin asignación de placa por el OT).
+        Este organismo de tránsito o tu compañía no tienen inventario de placas habilitado para elegir
+        una aquí. Si radicas sin placa, el trámite quedará en Preasignación hasta que el organismo la
+        asigne.
       </p>,
     );
   }

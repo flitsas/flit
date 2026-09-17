@@ -34,12 +34,6 @@ public sealed class TenantOperationalPolicy
     public bool PlatePreassignEnabled { get; set; }
 
     /// <summary>
-    /// Con placa completa/rango al radicar, omite el paso gestor (Asignado) y aterriza en Terminado.
-    /// No afecta la ruta Sin asignar (preasignación por dígito).
-    /// </summary>
-    public bool PlateFlowSkipToTerminado { get; set; }
-
-    /// <summary>
     /// Al procesar en sub-estado asignado se consulta el SOAT en el RUNT y, sin SOAT vigente, el
     /// avance se detiene. Desactivada, el hallazgo solo se informa y el tramite continua.
     /// </summary>

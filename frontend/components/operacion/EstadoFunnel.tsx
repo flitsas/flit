@@ -4,7 +4,9 @@ import {
   ESTADO_CHIP_STYLES,
   ESTADO_ICONO,
   ESTADO_LABELS,
-  type EstadoTramite,
+  FILTRO_RECHAZADO_PREASIGNACION,
+  RECHAZADO_PREASIGNACION_LABEL,
+  type EstadoFiltro,
 } from '@/lib/tramites/estados';
 /**
  * Tira de KPIs por estado de la pantalla principal de trámites: una tarjeta única
@@ -13,29 +15,50 @@ import {
  * Labels/colores desde `lib/tramites/estados.ts`.
  */
 
-// Orden del ciclo de vida: borrador → preparado → entregado → aprobado, con la
-// reapertura (subsanación) y los desenlaces (rechazado/anulado) al final.
-// La ruta de placa (Feature #10587 / HU #10785) NO añade tarjetas: su progreso es un sub-estado
-// interno que vive bajo 'entregado' (se muestra como badge secundario en la fila).
-const FUNNEL_ORDER: EstadoTramite[] = [
+// Orden del ciclo de vida: borrador → preparado → preasignación → asignado → entregado →
+// aprobado, con la reapertura (subsanación), los desenlaces (rechazado, rechazado desde
+// preasignación, revocado, anulado) al final.
+//
+// ADR-0059 — la ruta de placa son estados reales y por eso tienen tarjeta. «Rechazado
+// preasignación» no es un estado sino un pseudo-filtro (rechazado + rejectedFrom): el gestor lo
+// pidió como tarjeta propia para priorizar los rechazos que hay que volver a mandar a la cola de
+// placa. Comparte icono y color con Rechazado a propósito: sigue siendo un rechazo.
+const FUNNEL_ORDER: EstadoFiltro[] = [
   'borrador',
   'preparado',
+  'preasignacion',
+  'asignado',
   'entregado',
   'aprobado',
   'subsanacion',
   'rechazado',
-  'anulado',
-  // Feature #12565 — el desenlace de una revocatoria (unilateral del OT o vía solicitud): faltaba
-  // tarjeta/filtro para él, aunque el backend ya lo traía en el conteo por estado.
+  FILTRO_RECHAZADO_PREASIGNACION,
   'revocado',
+  'anulado',
 ];
 
+function estiloDe(estado: EstadoFiltro) {
+  return estado === FILTRO_RECHAZADO_PREASIGNACION
+    ? ESTADO_CHIP_STYLES.rechazado
+    : ESTADO_CHIP_STYLES[estado];
+}
+
+function iconoDe(estado: EstadoFiltro) {
+  return estado === FILTRO_RECHAZADO_PREASIGNACION ? ESTADO_ICONO.rechazado : ESTADO_ICONO[estado];
+}
+
+function labelDe(estado: EstadoFiltro) {
+  return estado === FILTRO_RECHAZADO_PREASIGNACION
+    ? RECHAZADO_PREASIGNACION_LABEL
+    : ESTADO_LABELS[estado];
+}
+
 export interface EstadoFunnelProps {
-  /** Conteo por estado (calculado sobre el total de trámites). */
-  counts: Record<EstadoTramite, number>;
+  /** Conteo por estado (calculado sobre el total de trámites). El pseudo-estado puede faltar (0). */
+  counts: Partial<Record<EstadoFiltro, number>>;
   /** Estado actualmente filtrado; vacío = todos. */
-  selected?: EstadoTramite | '';
-  onSelect?: (estado: EstadoTramite | '') => void;
+  selected?: EstadoFiltro | '';
+  onSelect?: (estado: EstadoFiltro | '') => void;
 }
 
 /** Tira de KPIs clicable: el filtro por estado vive aquí, no en "+ Filtro". */
@@ -44,11 +67,11 @@ export function EstadoFunnel({ counts, selected = '', onSelect }: EstadoFunnelPr
     <div
       role="group"
       aria-label="Estados de los trámites"
-      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-8 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
+      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-6 xl:grid-cols-11 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
     >
       {FUNNEL_ORDER.map((estado) => {
-        const style = ESTADO_CHIP_STYLES[estado];
-        const label = ESTADO_LABELS[estado];
+        const style = estiloDe(estado);
+        const label = labelDe(estado);
         const count = counts[estado] ?? 0;
         const activo = selected === estado;
         return (
@@ -66,14 +89,16 @@ export function EstadoFunnel({ counts, selected = '', onSelect }: EstadoFunnelPr
                 dice el estado y el conteo. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={ESTADO_ICONO[estado]}
+              src={iconoDe(estado)}
               alt=""
               aria-hidden="true"
               width={28}
               height={28}
               className="h-7 w-7 shrink-0"
             />
-            <span className="max-w-full truncate text-xs font-medium opacity-70 text-[#162744] dark:text-white/70">
+            {/* Hasta dos líneas: «Rechazado preasignación» no cabe en una y truncarlo dejaba
+                «Rechazado pre…», que no se distingue de la tarjeta de al lado. */}
+            <span className="line-clamp-2 max-w-full text-center text-xs font-medium leading-tight opacity-70 text-[#162744] dark:text-white/70">
               {label}
             </span>
             <span
