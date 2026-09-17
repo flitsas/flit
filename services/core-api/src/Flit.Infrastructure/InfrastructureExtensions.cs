@@ -117,6 +117,12 @@ public static class InfrastructureExtensions
             ImprintSignatureValidationRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
+        // HU #12571 (Feature #12565) — persistencia de solicitudes de revocatoria de trámite Aprobado.
+        services.AddScoped<IProcedureRevocationRequestRepository, ProcedureRevocationRequestRepository>();
+        // HU #12572/#12576/#12579 (Feature #12565) — sink del sub-flujo de revocatoria: bitácora +
+        // cola real de correo (ver XML doc de la clase).
+        services.AddScoped<Flit.Tramites.Domain.Integration.IRevocationRequestNotifier,
+            RevocationRequestNotificationEnqueuer>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
         // HU #12520 (Feature #12519) — plantillas XLSX de carga masiva de trámites.
@@ -778,6 +784,9 @@ public static class InfrastructureExtensions
             PlateAssignmentEmailModelProjectorService>();
         // HU #11487 — worker de la cola de avisos de correo al asignar placa (ADR-0046).
         services.AddHostedService<PlateAssignmentEmailDispatchProcessor>();
+        // HU #12579 (Feature #12565, ADR-0046 Opción B extendido) — worker de la cola de avisos de
+        // correo por hito del sub-flujo de revocatoria (solicitada|aprobada|rechazada).
+        services.AddHostedService<RevocationRequestEmailDispatchProcessor>();
         // HU #12210 (Feature #12201, I3) — worker de lotes XLSX de generación documental. Reclama
         // lotes queued (y los processing atascados: reaper R5) y delega el recorrido en el runner de
         // Application, que invoca los MISMOS handlers de la generación individual.

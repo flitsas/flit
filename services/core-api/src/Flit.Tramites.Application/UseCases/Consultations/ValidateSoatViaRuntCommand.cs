@@ -44,10 +44,9 @@ public sealed class ValidateSoatViaRuntHandler(
         if (instance is null)
             return (null, "instance_not_found");
 
-        // La validación de SOAT es exclusiva del paso post-asignación de placa: el trámite está
-        // 'entregado' con el sub-estado interno de placa en 'asignado' (HU #10785).
-        if (!string.Equals(instance.Status, TramiteEstado.Entregado, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(instance.PlateFlowStatus, PlateFlowStatus.Asignado, StringComparison.OrdinalIgnoreCase))
+        // La validación de SOAT es exclusiva del paso post-asignación de placa: el trámite está en
+        // 'asignado' (ADR-0059), gestionando SOAT e impuestos antes de «Enviar al OT».
+        if (!string.Equals(instance.Status, TramiteEstado.Asignado, StringComparison.OrdinalIgnoreCase))
             return (null, "invalid_state");
 
         var template = await catalogRepo.GetConsultationTemplateByCodeAsync(TemplateCode, ct);

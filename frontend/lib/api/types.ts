@@ -226,11 +226,6 @@ export interface TenantSettings {
   baulFirmasActivo: boolean;
   /** Preasignación de placa activa (Feature #10587, matrícula inicial). */
   preasignacionPlacaActiva: boolean;
-  /**
-   * Con placa completa/rango al radicar → Terminado directo (omite paso Asignado del gestor).
-   * Default false.
-   */
-  plateFlowSkipToTerminado?: boolean;
   /** Opción activa: permite continuar aunque el RUNT no reporte SOAT vigente. Apagada: bloquea. */
   validarSoatConRunt?: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
@@ -261,11 +256,6 @@ export interface TenantSettingsUpdate {
   baulFirmasActivo: boolean;
   /** Preasignación de placa activa (Feature #10587, matrícula inicial). */
   preasignacionPlacaActiva: boolean;
-  /**
-   * Con placa completa/rango al radicar → Terminado directo (omite paso Asignado del gestor).
-   * Default false.
-   */
-  plateFlowSkipToTerminado?: boolean;
   /** Opción activa: permite continuar aunque el RUNT no reporte SOAT vigente. Apagada: bloquea. */
   validarSoatConRunt?: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
@@ -504,15 +494,22 @@ export interface CategoryMetrics {
 /** Respuesta de GET /api/v1/analytics/overview (RF01, RF02). */
 export interface AnalyticsOverviewResponse {
   tenantId: string;
-  from: string;
-  to: string;
+  /** BUG #12588 — null cuando la consulta no acotó por fecha (universo completo). */
+  from: string | null;
+  to: string | null;
   categories: CategoryMetrics[];
 }
 
-/** Query params del overview. `tenantId` solo lo honra el backend para SuperAdmin (AC1). */
+/**
+ * Query params del overview. `tenantId` solo lo honra el backend para SuperAdmin (AC1).
+ *
+ * BUG #12588 — `from`/`to` son opcionales y se acotan por separado. Omitir los dos devuelve TODOS
+ * los trámites del tenant, que es como arranca el dashboard: el filtro del backend es por fecha de
+ * creación, así que cualquier rango esconde lo radicado antes aunque siga en curso.
+ */
 export interface AnalyticsOverviewParams {
-  from: string;
-  to: string;
+  from?: string;
+  to?: string;
   tenantId?: string;
 }
 

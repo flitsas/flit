@@ -2,13 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import {
-  estadoChipStyle,
-  estadoLabel,
-  plateFlowChipStyle,
-  plateFlowLabel,
-} from '@/lib/tramites/estados';
-import type { PlateFlowStatus } from '@/lib/api/types/procedure-runtime';
+import { estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 /**
@@ -55,9 +49,8 @@ export function EstadoAcciones({
 }) {
   const [status, setStatus] = useState<string | null>(null);
   const [subsanacionActiva, setSubsanacionActiva] = useState(false);
-  // Feature #10587 / HU #10785 — sub-estado interno de placa (ortogonal al status; el trámite sigue
-  // en 'entregado'). Gobierna el badge secundario.
-  const [plateFlowStatus, setPlateFlowStatus] = useState<PlateFlowStatus | null>(null);
+  // ADR-0059 — origen del último rechazo: «Rechazado preasignación» se distingue en el chip.
+  const [rejectedFrom, setRejectedFrom] = useState<string | null>(null);
   const [allowed, setAllowed] = useState<string[]>([]);
   const [pending, setPending] = useState<AccionConfig | null>(null);
   const [motivo, setMotivo] = useState('');
@@ -79,7 +72,7 @@ export function EstadoAcciones({
       .getInstance(instanceId)
       .then((d) => {
         if (!active) return;
-        setPlateFlowStatus(d?.plateFlowStatus ?? null);
+        setRejectedFrom(d?.rejectedFrom ?? null);
         if (d?.subsanacionActiva != null) setSubsanacionActiva(!!d.subsanacionActiva);
         if (d?.status) setStatus(d.status);
       })
@@ -160,24 +153,8 @@ export function EstadoAcciones({
             fontWeight: 600,
           }}
         >
-          {estadoLabel(status)}
+          {estadoLabelConOrigen(status, rejectedFrom)}
         </span>
-        {plateFlowChipStyle(plateFlowStatus) ? (
-          <span
-            title="Progreso de la placa (sub-estado interno; el trámite sigue en Entregado)"
-            style={{
-              background: plateFlowChipStyle(plateFlowStatus)!.bg,
-              color: plateFlowChipStyle(plateFlowStatus)!.color,
-              border: `1px solid ${plateFlowChipStyle(plateFlowStatus)!.border}`,
-              borderRadius: 999,
-              padding: '2px 10px',
-              fontSize: 12,
-              fontWeight: 600,
-            }}
-          >
-            {plateFlowLabel(plateFlowStatus)}
-          </span>
-        ) : null}
         {subsanacionActiva ? (
           <span
             title="Subsanación activa: el trámite permanece en Rechazado mientras se corrige"

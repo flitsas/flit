@@ -9,7 +9,8 @@ internal static class OtProfileMapper
         profile.OperationMode,
         profile.QuipuxReadOnly,
         profile.TransitOfficeId,
-        profile.FeatureFlags.Select(ToFlagResponse).ToList());
+        profile.FeatureFlags.Select(ToFlagResponse).ToList(),
+        profile.RevocationWindowBusinessDays);
 
     public static OtFeatureFlagResponse ToFlagResponse(OtFeatureFlag flag) => new(
         flag.Id,

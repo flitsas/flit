@@ -31,6 +31,7 @@ internal static class OtQueryReportColumns
         ["en_subsanacion"] = "En subsanación",
         ["rechazado"] = "Rechazado",
         ["anulado"] = "Anulado",
+        ["revocado"] = "Revocado",
         ["otro"] = "Otro",
     };
 

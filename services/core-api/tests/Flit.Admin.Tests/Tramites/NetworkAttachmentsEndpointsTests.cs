@@ -115,17 +115,23 @@ public sealed class NetworkAttachmentsEndpointsTests : IClassFixture<NetworkAtta
     }
 
     [Fact]
-    public async Task Policy_explicita_operador_de_la_cabeza_con_tramites_read_accede_sin_ser_AdminCompany()
+    public async Task Operador_de_la_cabeza_con_tramites_read_403_network_role_required_sin_auditar_ni_tocar_almacenamiento()
     {
-        // La vista consolidada está abierta a todo usuario de la cabeza: un rol que no es AdminCompany
-        // pero sí tiene «Ver trámites» lista y descarga igual que el administrador.
+        // HU #12652 — la vista consolidada ya NO está abierta a todo usuario de la cabeza: el slug
+        // «Ver trámites» pasa la policy de la ruta, pero el GroupHeadReadFilter del grupo exige el rol
+        // AdminCompany; un Operador de la cabeza recibe 403 network_role_required en listado y descarga,
+        // sin desenlace auditado y sin tocar el almacenamiento (antes de la HU este caso respondía 200).
         var client = ClientFor(P, role: "Operador");
 
         var list = await client.GetAsync($"{NetworkBase}/{ChildProcedure}/attachments", TestContext.Current.CancellationToken);
         var download = await client.GetAsync($"{NetworkBase}/{ChildProcedure}/attachments/{AttOk}/download", TestContext.Current.CancellationToken);
 
-        list.StatusCode.Should().Be(HttpStatusCode.OK);
-        download.StatusCode.Should().Be(HttpStatusCode.OK);
+        list.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        download.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await list.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain(NetworkScopePolicy.RoleRequired);
+        (await download.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain(NetworkScopePolicy.RoleRequired);
+        await _factory.AuditWriter.DidNotReceive().WriteAsync(Arg.Any<NetworkAccessAuditEntry>(), Arg.Any<CancellationToken>());
+        await _factory.Storage.DidNotReceive().OpenReadAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

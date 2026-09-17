@@ -5,6 +5,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ImprintSignatures;
 using Flit.Tramites.Application.UseCases.ProcedureTypes;
+using Flit.Tramites.Domain.RevocationRequests;
 using Flit.Tramites.Domain.Services;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,10 @@ public static class DependencyInjection
     public static IServiceCollection AddTramitesApplication(this IServiceCollection services)
     {
         services.AddScoped<IProcedureTypeValidator, ProcedureTypeValidator>();
+        // HU #12571 (Feature #12565) — calculador de días hábiles para la ventana de revocatoria.
+        // Sin estado ni dependencias: Singleton (ver justificación de la implementación en
+        // IBusinessDayCalculator sobre por qué es una versión simple sin festivos colombianos).
+        services.AddSingleton<IBusinessDayCalculator, BusinessDayCalculator>();
 
         services.AddScoped<CreateProcedureTypeHandler>();
         services.AddScoped<ListProcedureTypesHandler>();
@@ -70,7 +75,7 @@ public static class DependencyInjection
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // ICT (paridad v1) — pausar/reanudar trámites ICT desde la UI de FLIT (individual + masivo).
         services.AddScoped<PauseProcedureInstanceHandler>();
-        services.AddScoped<CompletePlateFlowHandler>();
+        services.AddScoped<EnviarAlOtHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
         // HU #10536 — marcar trámite como prioritario (ordenamiento con primacía en los listados).
@@ -328,6 +333,12 @@ public static class DependencyInjection
         // HU #11462 — resolución de destinatarios del aviso de cambio de estado (ADR-0045).
         services.AddScoped<Notifications.ITramiteNotificationRecipientResolver,
             Notifications.TramiteNotificationRecipientResolver>();
+
+        // HU #12572 (Feature #12565) — endpoint de solicitud de revocatoria.
+        services.AddScoped<UseCases.RevocationRequests.RequestRevocationHandler>();
+
+        // HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado gestor.
+        services.AddScoped<UseCases.RevocationRequests.ListRevocationRequestsHandler>();
 
         // HU #12148 — validación OT de firma digital de impronta manual.
         services.AddScoped<ListImprintSignaturesByPlacaHandler>();

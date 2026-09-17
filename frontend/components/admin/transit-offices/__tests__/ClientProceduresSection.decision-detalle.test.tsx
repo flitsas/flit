@@ -30,7 +30,7 @@ vi.mock("@/lib/api/ot-metrics", () => ({ fetchRejectionReasons: vi.fn().mockReso
 vi.mock("@/lib/api/admin-plate-ranges", () => ({
   listPlateDetails: vi.fn().mockResolvedValue([]),
   assignPlateToProcedure: vi.fn(),
-  revokeProcedurePlate: vi.fn(),
+  releaseProcedurePlate: vi.fn(),
 }));
 
 vi.mock("@/lib/api/admin-mandate-signers", () => ({ fetchMandateSigners: vi.fn() }));
@@ -49,7 +49,7 @@ vi.mock("@/lib/api/tramites-client", () => ({
   },
 }));
 
-import { assignPlateToProcedure, revokeProcedurePlate } from "@/lib/api/admin-plate-ranges";
+import { assignPlateToProcedure, releaseProcedurePlate } from "@/lib/api/admin-plate-ranges";
 import {
   fetchOtBandejaCounters,
   fetchOtBandejaHealth,
@@ -117,6 +117,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
       quipuxReadOnly: false,
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
+      revocationWindowBusinessDays: null,
     });
     vi.mocked(fetchOtBandejaHealth).mockResolvedValue({
       transitOfficeResolved: true,
@@ -128,12 +129,13 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     });
     vi.mocked(fetchOtBandejaCounters).mockResolvedValue({
       transitOfficeResolved: true,
-      sinAsignarPlaca: 0,
-      conPlacaAsignada: 0,
+      preasignacion: 0,
+      asignados: 0,
+      porDecidir: 1,
       aprobados: 0,
       rechazados: 0,
-      sinGestion: 1,
       revocados: 0,
+      solicitudesRevocatoria: 0,
     });
     vi.mocked(fetchOtDocuments).mockResolvedValue({
       data: [
@@ -202,15 +204,17 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     expect(screen.getByRole("menuitem", { name: "Detalle del trámite" })).toBeInTheDocument();
   });
 
-  it("AC5 — un trámite que aún no admite decisión avisa y deshabilita los botones", async () => {
-    // En ruta de placa, el organismo no decide hasta que el gestor termina (Asignado → Terminado).
-    const enRuta = { ...ENTREGADO, plateFlowStatus: "asignado" };
+  it("AC5 — un trámite en asignado (ADR-0059) avisa que espera al gestor y deshabilita la decisión", async () => {
+    // En la cola de placa el organismo no decide: en `asignado` la pelota está en el gestor
+    // (SOAT, impuestos, enviar al OT). El estado ya no es 'entregado', así que el aviso es el del
+    // estado y el pendiente lo explica.
+    const enRuta = { ...ENTREGADO, status: "asignado" };
     prepararBandeja(enRuta);
     const user = userEvent.setup();
     renderSection();
 
     const dialog = await abrirDetalle(user, "RAD-2026-101");
-    expect(within(dialog).getByText(/Pendiente proceso del gestor/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/gestione SOAT e impuestos/i)).toBeInTheDocument();
 
     const aprobar = within(dialog).getByRole("button", { name: "Aprobar trámite" });
     expect(aprobar).toBeDisabled();
@@ -219,8 +223,20 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     const describedBy = aprobar.getAttribute("aria-describedby");
     expect(describedBy).toBeTruthy();
     expect(document.getElementById(describedBy!)).toHaveTextContent(
-      /Pendiente proceso del gestor/i,
+      /solo decide sobre los que tiene entregados/i,
     );
+  });
+
+  it("ADR-0059 — en preasignacion el detalle permite rechazar pero no aprobar, igual que la fila", async () => {
+    prepararBandeja({ ...ENTREGADO, status: "preasignacion", placa: null });
+    const user = userEvent.setup();
+    renderSection();
+
+    const dialog = await abrirDetalle(user, "RAD-2026-101");
+    expect(within(dialog).getByText(/Pendiente asignar placa por el OT/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/solo se aprueba una vez entregado/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Aprobar trámite" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Rechazar trámite" })).toBeEnabled();
   });
 
   it("AC5 — un trámite ya resuelto dice que no admite decisión", async () => {
@@ -251,6 +267,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
       quipuxReadOnly: true,
       transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       featureFlags: [],
+      revocationWindowBusinessDays: null,
     });
     const user = userEvent.setup();
     renderSection();
@@ -285,7 +302,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
   });
 
   it("escribir la placa a asignar tampoco recarga el detalle", async () => {
-    prepararBandeja({ ...ENTREGADO, plateFlowStatus: "preasignado", placa: null });
+    prepararBandeja({ ...ENTREGADO, status: "preasignacion", placa: null });
     const user = userEvent.setup();
     renderSection(OT_ID);
 
@@ -303,14 +320,14 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     // Defecto reportado tras la validación en DEV: el detalle es un objeto de estado APARTE del de
     // la fila, así que seguía enseñando «Sin preasignar» hasta cerrar el modal y recargar la
     // bandeja. El operador se quedaba esperando algo que ya había ocurrido.
-    const sinPlaca = { ...ENTREGADO, plateFlowStatus: "preasignado", placa: null };
+    const sinPlaca = { ...ENTREGADO, status: "preasignacion", placa: null };
     prepararBandeja(sinPlaca);
     // El backend devuelve el trámite ya con placa en la siguiente lectura, como en producción.
     vi.mocked(assignPlateToProcedure).mockImplementation(async () => {
       vi.mocked(fetchOtClientProcedure).mockResolvedValue({
         ...sinPlaca,
         placa: "XYZ987",
-        plateFlowStatus: "asignado",
+        status: "asignado",
       });
     });
     const user = userEvent.setup();
@@ -335,7 +352,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
   });
 
   it("el acordeón que el operador tenía abierto sobrevive a la asignación de placa", async () => {
-    prepararBandeja({ ...ENTREGADO, plateFlowStatus: "preasignado", placa: null });
+    prepararBandeja({ ...ENTREGADO, status: "preasignacion", placa: null });
     vi.mocked(assignPlateToProcedure).mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderSection(OT_ID);
@@ -357,14 +374,13 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     expect(actores).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("revocar devuelve la fila a «Sin asignar» y NO finge que la placa se borró", async () => {
-    // Revocar libera la placa en el inventario y devuelve el sub-estado, pero el backend deja el
-    // field_value 'plate' escrito: el trámite sigue trayendo la placa en la siguiente lectura. Si la
-    // UI la borrara de forma optimista, desaparecería para reaparecer al refrescar — el usuario vería
-    // dos verdades distintas de la misma pantalla. Esa asimetría del backend está pendiente de
-    // definición por el equipo; hasta entonces la bandeja muestra lo que el servidor dice.
-    prepararBandeja({ ...ENTREGADO, plateFlowStatus: "asignado", placa: "OTV120" });
-    vi.mocked(revokeProcedurePlate).mockResolvedValue(undefined);
+  it("HU #12602 AC6 — liberar la placa devuelve el trámite a Preasignación y lo saca de «Asignados»", async () => {
+    // Liberar suelta la reserva del inventario y devuelve el trámite a la cola de placa; el backend
+    // deja el field_value 'plate' escrito (HU #12077) y la fila NO la borra de forma optimista
+    // (`liberado` solo cambia el estado). Con la bandeja filtrada por estado, el trámite ya no
+    // pertenece a la tarjeta activa y se retira en vez de quedarse con un chip que no cuadra.
+    prepararBandeja({ ...ENTREGADO, status: "asignado", placa: "OTV120" });
+    vi.mocked(releaseProcedurePlate).mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderSection(OT_ID);
 
@@ -372,16 +388,38 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     await user.click(
       screen.getByRole("button", { name: "Acciones del trámite RAD-2026-101" }),
     );
-    await user.click(await screen.findByRole("menuitem", { name: "Revocar" }));
+    // AC4 — en asignado el menú ofrece Actualizar placa y Liberar placa; ni Aprobar, ni Rechazar, ni Adjuntar LT.
+    expect(await screen.findByRole("menuitem", { name: "Liberar placa" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Aprobar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Rechazar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Adjuntar LT" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Liberar placa" }));
 
-    const revocar = await screen.findByRole("dialog", { name: "Revocar preasignación" });
-    await user.type(within(revocar).getByRole("textbox"), "Placa mal digitada");
-    await user.click(within(revocar).getByRole("button", { name: "Revocar" }));
+    const liberar = await screen.findByRole("dialog", { name: "Liberar placa" });
+    await user.type(within(liberar).getByRole("textbox"), "Placa mal digitada");
+    await user.click(within(liberar).getByRole("button", { name: "Liberar placa" }));
 
-    // El sub-estado sí vuelve atrás, y esa parte se ve sin recargar.
-    expect(await screen.findByText("Sin asignar")).toBeInTheDocument();
-    // La placa sigue donde el servidor la deja: la pantalla no se contradice al refrescar.
-    expect(screen.getByText("OTV120")).toBeInTheDocument();
+    expect(releaseProcedurePlate).toHaveBeenCalledWith("proc-1", "Placa mal digitada");
+    // Preasignación no es la tarjeta activa: la fila se va sin recargar y sin fingir que la placa
+    // se borró (cuando reaparezca bajo «Preasignación» traerá OTV120, como la deja el servidor).
+    await waitFor(() => expect(screen.queryByText("RAD-2026-101")).not.toBeInTheDocument());
+  });
+
+  it("HU #12602 AC3 — en preasignacion el menú ofrece Asignar placa y Rechazar; ni Aprobar ni Adjuntar LT", async () => {
+    prepararBandeja({ ...ENTREGADO, status: "preasignacion", placa: null });
+    const user = userEvent.setup();
+    renderSection(OT_ID);
+
+    await screen.findByText("RAD-2026-101");
+    await user.click(
+      screen.getByRole("button", { name: "Acciones del trámite RAD-2026-101" }),
+    );
+    expect(await screen.findByRole("menuitem", { name: "Asignar placa" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Rechazar" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Detalle del trámite" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Aprobar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Adjuntar LT" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Liberar placa" })).not.toBeInTheDocument();
   });
 
   it("la bandeja se actualiza con un botón, sin recargar la página", async () => {
@@ -404,7 +442,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     // reporta el problema, así que es donde se espera el remedio.
     prepararBandeja({
       ...ENTREGADO,
-      plateFlowStatus: "preasignado",
+      status: "preasignacion",
       placa: null,
       platePreferredLastDigit: "3",
     });

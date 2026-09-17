@@ -450,3 +450,132 @@ describe("Dashboard — cuerpo dinámico del slide de bienvenida (Opción A)", (
     expect(await screen.findByText(GENERIC_BODY)).toBeInTheDocument();
   });
 });
+
+// ── BUG #12588 (defecto 4) — el dashboard arranca SIN rango de fechas ────────
+//
+// Antes partía del mes en curso (`defaultRange`, AC2 de la HU #10247). Como el backend acota por
+// fecha de CREACIÓN, todo lo radicado antes quedaba fuera de las tarjetas aunque siguiera en curso,
+// y QA lo reportó como un total mal calculado. No era un error de conteo: era otro universo.
+describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getToken.mockReturnValue("token");
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
+    mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
+    mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
+    mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
+    mocks.getActiveBanners.mockResolvedValue([]);
+  });
+
+  it("al abrir, pide el overview sin from ni to (universo completo)", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+    const [params] = mocks.fetchAnalyticsOverview.mock.calls[0];
+    expect(params.from).toBeFalsy();
+    expect(params.to).toBeFalsy();
+  });
+
+  it("al abrir, las estadísticas biométricas tampoco se acotan por fecha", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    await waitFor(() => expect(mocks.listTenantBiometricValidations).toHaveBeenCalled());
+    const [params] = mocks.listTenantBiometricValidations.mock.calls[0];
+    expect(params.createdFrom).toBeUndefined();
+    expect(params.createdTo).toBeUndefined();
+  });
+
+  it("los inputs de fecha arrancan vacíos", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    expect(await screen.findByLabelText(/Desde/i)).toHaveValue("");
+    expect(screen.getByLabelText(/Hasta/i)).toHaveValue("");
+  });
+
+  it("al poner una fecha, sí se acota: el filtro sigue disponible", async () => {
+    const user = userEvent.setup();
+    render(<Dashboard onNewTramite={noop} />);
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+
+    await user.type(await screen.findByLabelText(/Desde/i), "2026-09-01");
+
+    await waitFor(() => {
+      const ultima = mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0];
+      expect(ultima.from).toBe("2026-09-01");
+    });
+    // Un solo extremo NO es un rango a medio llenar: acota por ese lado y el otro queda abierto.
+    expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].to).toBeFalsy();
+  });
+
+  it("«Todo el periodo» devuelve a la vista sin acotar y queda deshabilitado ahí", async () => {
+    const user = userEvent.setup();
+    render(<Dashboard onNewTramite={noop} />);
+
+    const limpiar = await screen.findByRole("button", { name: /Todo el periodo/i });
+    // Ya se está mostrando todo al abrir: no hay nada que limpiar.
+    expect(limpiar).toBeDisabled();
+
+    await user.type(await screen.findByLabelText(/Desde/i), "2026-09-01");
+    await waitFor(() => expect(limpiar).not.toBeDisabled());
+
+    await user.click(limpiar);
+
+    expect(await screen.findByLabelText(/Desde/i)).toHaveValue("");
+    await waitFor(() => {
+      expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].from).toBeFalsy();
+    });
+  });
+});
+
+// ── Tarjetas KPI: el rótulo se lee entero ────────────────────────────────────
+//
+// El título compartía fila con el icono dentro de un `min-w-0` con `truncate`, así que solo
+// disponía de `ancho − 48px` y en pantalla se veían «Total Trá…», «Otros Trá…» y «Completa…».
+// Ahora ocupa la fila completa y el icono baja a la del número.
+describe("Dashboard — rótulos de las tarjetas KPI", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getToken.mockReturnValue("token");
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
+    mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
+    mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
+    mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
+    mocks.getActiveBanners.mockResolvedValue([]);
+  });
+
+  it.each(["Total Trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
+    "«%s» se renderiza completo, sin recortar",
+    async (label) => {
+      render(<Dashboard onNewTramite={noop} />);
+
+      const rotulo = await screen.findByText(label);
+      expect(rotulo).toBeInTheDocument();
+      // `truncate` corta por CSS sin tocar el texto, así que el nodo tiene que llevar el
+      // tratamiento de dos líneas y NO la clase que recortaba.
+      expect(rotulo).toHaveClass("line-clamp-2");
+      expect(rotulo).not.toHaveClass("truncate");
+    },
+  );
+
+  it("el rótulo respeta el piso tipográfico de 12px de la línea base", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const rotulo = await screen.findByText("Total Trámites");
+    expect(rotulo).toHaveClass("text-xs");
+    expect(rotulo.className).not.toMatch(/text-\[1[01]px\]/);
+  });
+
+  it("la cifra no se trunca: recortarla mostraría un conteo falso", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const cifra = await screen.findByText("7");
+    expect(cifra).toHaveClass("tabular-nums");
+    expect(cifra).not.toHaveClass("truncate");
+  });
+});

@@ -2713,12 +2713,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("personalized_documents_enabled");
 
-                    b.Property<bool>("PlateFlowSkipToTerminado")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("plate_flow_skip_to_terminado");
-
                     b.Property<bool>("PlatePreassignEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -3295,6 +3289,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("quipux_read_only");
+
+                    b.Property<int?>("RevocationWindowBusinessDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("revocation_window_business_days");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
@@ -7842,11 +7840,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("plate_assigned_at");
 
-                    b.Property<string>("PlateFlowStatus")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("plate_flow_status");
-
                     b.Property<DateTimeOffset?>("PlateUpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("plate_updated_at");
@@ -7867,6 +7860,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("reference_number");
+
+                    b.Property<string>("RejectedFrom")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("rejected_from");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()

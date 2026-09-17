@@ -30,6 +30,7 @@ import {
   COMPANY_QUERY_COLUMNS,
   COMPANY_QUERY_PRESETS,
   defaultCompanyQueryColumns,
+  estadoEmpresa,
 } from "@/components/atom/modules/_reportes/consultas/company-columns";
 
 const FIELDS: QueryField[] = [
@@ -327,6 +328,17 @@ describe("Guardar y exportar", () => {
 });
 
 describe("Columnas de la empresa", () => {
+  it("ADR-0059 — etiqueta y colorea los estados de la Ruta Larga y el revocado", () => {
+    // Antes la consulta mostraba el valor crudo («preasignacion») y el gris de «desconocido». Es el
+    // mismo trámite que en /tramites: mismo nombre y mismo acento.
+    expect(estadoEmpresa("preasignacion")).toEqual({ label: "Preasignación", color: "#E08A00" });
+    expect(estadoEmpresa("asignado")).toEqual({ label: "Asignado", color: "#6366F1" });
+    expect(estadoEmpresa("revocado")).toEqual({ label: "Revocado", color: "#8B5CF6" });
+    expect(estadoEmpresa("subsanacion").label).toBe("En subsanación");
+    // Un estado que no existe sigue saliendo tal cual, sin romper la celda.
+    expect(estadoEmpresa("otro").label).toBe("otro");
+  });
+
   it("deja la celda de tipo de traspaso vacía en las matrículas iniciales", () => {
     const columna = COMPANY_QUERY_COLUMNS.find((c) => c.id === "tipo_traspaso")!;
 

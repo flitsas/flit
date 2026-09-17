@@ -1,3 +1,4 @@
+using System.Data;
 using System.Data.Common;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Dtos;
@@ -51,7 +52,8 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
         WHERE pi.tenant_id = @tenant
           AND pi.deleted_at IS NULL
-          AND pi.created_at::date BETWEEN @from AND @to
+          AND (@from::date IS NULL OR pi.created_at::date >= @from::date)
+          AND (@to::date   IS NULL OR pi.created_at::date <= @to::date)
         GROUP BY 1, pi.status
         ORDER BY 1, pi.status;
         """;
@@ -64,7 +66,8 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         FROM tramites.procedure_instances pi
         JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
         WHERE pi.deleted_at IS NULL
-          AND pi.created_at::date BETWEEN @from AND @to
+          AND (@from::date IS NULL OR pi.created_at::date >= @from::date)
+          AND (@to::date   IS NULL OR pi.created_at::date <= @to::date)
         GROUP BY 1, pi.status
         ORDER BY 1, pi.status;
         """;
@@ -176,7 +179,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
     // ── IAnalyticsReadRepository ──────────────────────────────────────────────────────────────────────
 
     public async Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(
-        Guid? tenantId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
+        Guid? tenantId, DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default)
     {
         if (tenantId.HasValue)
         {
@@ -184,8 +187,8 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             {
                 await using var cmd = CreateCommand(conn, tx, OverviewSql);
                 AddParam(cmd, "tenant", tenantId.Value);
-                AddParam(cmd, "from", fromDate);
-                AddParam(cmd, "to", toDate);
+                AddDateParam(cmd, "from", fromDate);
+                AddDateParam(cmd, "to", toDate);
                 return await ReadCategoryMetricsAsync(cmd, ct).ConfigureAwait(false);
             }, ct).ConfigureAwait(false);
         }
@@ -193,8 +196,8 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         // SuperAdmin global: consulta sin GUC ni filtro de tenant → agrega todas las compañías.
         var conn = await OpenGlobalConnectionAsync(ct).ConfigureAwait(false);
         await using var globalCmd = CreateCommand(conn, null!, OverviewGlobalSql);
-        AddParam(globalCmd, "from", fromDate);
-        AddParam(globalCmd, "to", toDate);
+        AddDateParam(globalCmd, "from", fromDate);
+        AddDateParam(globalCmd, "to", toDate);
         return await ReadCategoryMetricsAsync(globalCmd, ct).ConfigureAwait(false);
     }
 
@@ -439,6 +442,20 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         cmd.Transaction = tx;
         cmd.CommandText = sql;
         return cmd;
+    }
+
+    /// <summary>
+    /// BUG #12588 — parámetro de fecha OPCIONAL. Va tipado siempre: un <see cref="DBNull"/> sin
+    /// <c>DbType</c> deja al proveedor sin forma de inferir el tipo y la consulta revienta al
+    /// prepararse, no al leerse. Con el tipo puesto, el <c>IS NULL</c> del SQL resuelve como debe.
+    /// </summary>
+    private static void AddDateParam(DbCommand cmd, string name, DateOnly? value)
+    {
+        var p = cmd.CreateParameter();
+        p.ParameterName = name;
+        p.DbType = DbType.Date;
+        p.Value = (object?)value ?? DBNull.Value;
+        cmd.Parameters.Add(p);
     }
 
     private static void AddParam(DbCommand cmd, string name, object value)

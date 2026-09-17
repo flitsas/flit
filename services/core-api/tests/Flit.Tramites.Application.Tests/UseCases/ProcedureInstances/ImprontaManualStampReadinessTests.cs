@@ -66,7 +66,7 @@ public sealed class ImprontaManualStampReadinessTests
     {
         var instance = Matricula();
         AddCompradorVigente(instance);
-        instance.PlateFlowStatus = PlateFlowStatus.Preasignado;
+        instance.Status = TramiteEstado.Preasignacion;
 
         var (ready, reason) = await ImprontaManualStampReadiness.EvaluateAsync(
             instance, _repo, ct: TestContext.Current.CancellationToken);
@@ -81,7 +81,7 @@ public sealed class ImprontaManualStampReadinessTests
         var instance = Matricula();
         AddCompradorVigente(instance);
         instance.Plate = " ";
-        instance.PlateFlowStatus = PlateFlowStatus.Preasignado;
+        instance.Status = TramiteEstado.Preasignacion;
 
         var (ready, reason) = await ImprontaManualStampReadiness.EvaluateAsync(
             instance, _repo, ct: TestContext.Current.CancellationToken);
@@ -96,7 +96,7 @@ public sealed class ImprontaManualStampReadinessTests
         var instance = Matricula();
         AddCompradorVigente(instance);
         instance.Plate = "ABC123";
-        instance.PlateFlowStatus = PlateFlowStatus.Asignado;
+        instance.Status = TramiteEstado.Asignado;
 
         var (ready, reason) = await ImprontaManualStampReadiness.EvaluateAsync(
             instance, _repo, ct: TestContext.Current.CancellationToken);

@@ -23,20 +23,14 @@ public static class PlateAssignmentEmailModelProjector
         var comprador = FindActor(actors, "comprador");
         var ciudad = TramiteEmailCityResolver.Resolve(fieldValues, comprador);
         var secretaria = Get(fieldValues, "transit_office_name")?.Trim() ?? string.Empty;
-        var estado = NormalizeEstado(instance.PlateFlowStatus);
-
+        // ADR-0059 — este correo solo lo dispara la arista preasignacion → asignado (ADR-0046): el estado
+        // que se comunica al cliente es, por definición, el de placa asignada.
         return new AsignacionPlacaEmailModel(
             ClienteNombre: comprador?.FullName?.Trim() ?? string.Empty,
             Placa: instance.Plate?.Trim() ?? string.Empty,
-            EstadoActual: estado,
+            EstadoActual: DefaultEstadoAsignado,
             Ciudad: ciudad,
             SecretariaTransito: secretaria);
-    }
-
-    private static string NormalizeEstado(string? plateFlowStatus)
-    {
-        var value = plateFlowStatus?.Trim();
-        return string.IsNullOrEmpty(value) ? DefaultEstadoAsignado : value;
     }
 
     private static ProcedureInstanceActor? FindActor(

@@ -104,6 +104,18 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
 
     /// <summary>
+    /// Feature #12565 — sub-estado de revocatoria RELEVANTE para el indicativo del listado: ACTIVO
+    /// (<c>solicitada</c>/<c>en_revision</c>) o <c>rechazada</c> — esta última porque el trámite vuelve
+    /// a verse como un "Aprobado" cualquiera y sin el indicativo no queda ningún rastro en el listado de
+    /// que ya se intentó. <c>aprobada</c> se omite a propósito: ese desenlace ya se ve solo, el trámite
+    /// pasa a <c>revocado</c>. Mapa id→estado; una instancia sin nada que mostrar se omite. Mismo
+    /// patrón que <see cref="ListInstanceIdsConPrendaVigenteAsync"/>: una consulta por listado, sin
+    /// filtro de tenant (los ids ya vienen acotados por el caller).
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetRevocationBadgeStatusesAsync(
+        IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve el nombre (razón social) de cada tenant indicado, para la columna "Compañía" del
     /// listado multi-tenant del SuperAdmin (#1). Devuelve un mapa id→nombre; ids sin tenant se omiten.
     /// </summary>

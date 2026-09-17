@@ -9,11 +9,6 @@ import {
   X,
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import {
-  getPlatePreassignStatus,
-  listAvailablePlatesForCompany,
-  type PlateDetail,
-} from '@/lib/api/admin-plate-ranges';
 import MatriculaResumen, { ResumenCard } from './MatriculaResumen';
 import ExpedienteTimeline from './ExpedienteTimeline';
 import ExpedienteVisor from './ExpedienteVisor';
@@ -306,6 +301,8 @@ export function FirmaFurStep({
     fieldValues: FieldValue[];
     actors: Actor[];
     status: InstanceStatus;
+    /** ADR-0059 — origen del último rechazo para el chip del resumen. */
+    rejectedFrom: string | null;
     statusHistory: StatusHistory[];
   } | null>(null);
   /** Contacto completo (teléfono/dirección/ciudad) desde GET actors — el detalle de instancia no lo trae. */
@@ -355,6 +352,7 @@ export function FirmaFurStep({
         fieldValues: d.fieldValues ?? [],
         actors: d.actors ?? [],
         status: d.status,
+        rejectedFrom: d.rejectedFrom ?? null,
         statusHistory: d.statusHistory ?? [],
       });
       setActorsContact(actors);
@@ -682,7 +680,6 @@ export function FirmaFurStep({
         {modalidad === 'matricula_inicial' && organismo.id && (
           <PlacaPreasignadaSection
             instanceId={instanceId}
-            organismoId={organismo.id}
             plateValue={fv('plate')}
             plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
             preferredDigitValue={fv('plate_preferred_last_digit')}
@@ -703,6 +700,7 @@ export function FirmaFurStep({
         partesBiometricas={partesBiometricas}
         rotulosPorRol={rotulosPorRol}
         status={detail?.status ?? 'borrador'}
+        rejectedFrom={detail?.rejectedFrom ?? null}
         placa={fv('plate')}
         vehiculo={[fv('vehicle_brand'), fv('vehicle_line'), fv('vehicle_year')]
           .filter(Boolean)
@@ -835,16 +833,22 @@ export function FirmaFurStep({
   );
 }
 
-// ── Placa preasignada (Flujo A, HU #10799) ────────────────────────────
+// ── Placa (Epic #12550 — ruta decidida por el RUNT) ───────────────────
 
 /**
- * Sección explícita del paso FUR para elegir la placa preasignada del rango del OT (Flujo A). Reemplaza
- * la antigua fase modal. No aplica si el VIN ya tiene placa del RUNT (source 'consultation', AC2). Si no
- * hay placas disponibles, informa que el OT la asignará (Flujo B, AC3). Con buscador para rangos grandes.
+ * Tarjeta «Placa» del paso FUR en matrícula inicial. Desde la Epic #12550 (ADR-0059 §Ruta Corta) la
+ * placa NO la elige el gestor: o ya la trajo el RUNT (Ruta Corta, solo lectura) o la asigna el
+ * organismo en Preasignación (Ruta Larga, donde lo único que se declara es el dígito de preferencia,
+ * HU #10805). El selector de placas del inventario del OT (HU #10799/#10806) se retiró: elegir una
+ * placa aquí dejaba el trámite con placa antes de radicar y lo mandaba a Entregado saltándose la
+ * asignación del organismo, que es justo lo que #12549 puso en manos del OT. El inventario de rangos
+ * sigue vivo en la consola del organismo, que es quien asigna.
+ *
+ * Un borrador anterior al cambio puede llegar con una placa elegida por el gestor (`source: 'user'`):
+ * se muestra y se ofrece SOLO quitarla, para devolverlo a la Ruta Larga; nunca cambiarla por otra.
  */
 export function PlacaPreasignadaSection({
   instanceId,
-  organismoId,
   plateValue,
   plateSource,
   preferredDigitValue = '',
@@ -852,7 +856,6 @@ export function PlacaPreasignadaSection({
   onRefresh,
 }: {
   instanceId: string;
-  organismoId: string;
   plateValue: string;
   plateSource: string;
   /** HU #10805 — dígito de preferencia persistido (field_value `plate_preferred_last_digit`). */
@@ -860,90 +863,20 @@ export function PlacaPreasignadaSection({
   readOnly: boolean;
   onRefresh?: () => void;
 }) {
-  const [plates, setPlates] = useState<PlateDetail[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [changing, setChanging] = useState(false);
   // HU #10805 — dígito de preferencia (0-9) para radicar sin placa: guía para el OT al asignar.
   const [preferredDigit, setPreferredDigit] = useState(() => preferredDigitValue ?? '');
   const [savingDigit, setSavingDigit] = useState(false);
-  // HU #10806 (AC3) — ¿la ruta de preasignación está activa para esta compañía/OT? null = cargando.
-  const [preassignEnabled, setPreassignEnabled] = useState<boolean | null>(null);
 
   const placa = plateValue.trim();
-  // AC2 — el VIN ya tiene placa del RUNT (no la eligió el usuario): no aplica la preasignación.
+  // Ruta Corta — la placa la trajo la consulta del RUNT (no la eligió nadie).
   const vinTienePlacaRunt = placa !== '' && plateSource === 'consultation';
+  // Borrador anterior a la Epic #12550 con una placa elegida por el gestor desde el inventario.
   const placaElegida = placa !== '' && plateSource === 'user';
-  const mostrarSelector = !readOnly && !vinTienePlacaRunt && (!placaElegida || changing);
 
-  useEffect(() => {
-    if (!mostrarSelector) return;
-    let active = true;
-    // HU #10806 — consulta el estado de la ruta antes de ofrecer el selector: si no está habilitada,
-    // se avisa (el trámite se entregará estándar) en vez de simular que preasigna.
-    // HU #10806 (Alternativa C) — persiste la decisión de ruta en borrador como field_value
-    // `plate_route_active`. Es la fuente que consume el trigger de BD para fijar automáticamente
-    // `plate_flow_status = 'preasignado'` al radicar sin placa, aunque el binario del API esté desfasado.
-    const persistRouteActive = (enabled: boolean) => {
-      void tramitesClient
-        .patchFieldValues(instanceId, [
-          { formFieldId: null, fieldKey: 'plate_route_active', valueText: String(enabled) },
-        ])
-        .catch(() => {
-          /* no bloquear el wizard si la persistencia falla; el submit sigue decidiendo la ruta */
-        });
-    };
-    getPlatePreassignStatus(organismoId)
-      .then((s) => {
-        if (active) {
-          setPreassignEnabled(s.enabled);
-          persistRouteActive(s.enabled);
-        }
-      })
-      .catch(() => {
-        // Ante un fallo de la consulta, no bloquear el flujo: se asume habilitada (default previo).
-        if (active) {
-          setPreassignEnabled(true);
-          persistRouteActive(true);
-        }
-      });
-    listAvailablePlatesForCompany(organismoId)
-      .then((data) => {
-        if (active) {
-          setPlates(data);
-          setLoaded(true);
-        }
-      })
-      .catch(() => {
-        if (active) setLoaded(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [organismoId, mostrarSelector, instanceId]);
-
-  const pick = async (plate: string) => {
-    setSaving(true);
-    setError(null);
-    try {
-      await tramitesClient.patchFieldValues(instanceId, [
-        { formFieldId: null, fieldKey: 'plate', valueText: plate },
-      ]);
-      await tramitesClient.generarFur(instanceId);
-      setChanging(false);
-      onRefresh?.();
-    } catch {
-      setError('No se pudo asignar la placa. Inténtalo de nuevo.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // HU #10806 (AC1) — deshacer la selección de placa: limpia el field `plate` (='') y reabre el
-  // selector + el dígito de preferencia. Sin placa, DecideAsync enruta por preasignación (Flujo B),
-  // así que esto es lo que permite volver a la ruta sin placa o al dígito tras haber elegido una.
+  // Quitar una placa elegida por el gestor (borradores antiguos): limpia `plate` (='') y regenera el
+  // FUR. Sin placa, el trámite vuelve a la Ruta Larga y el organismo la asigna en Preasignación.
   const clearPlate = async () => {
     setSaving(true);
     setError(null);
@@ -952,7 +885,6 @@ export function PlacaPreasignadaSection({
         { formFieldId: null, fieldKey: 'plate', valueText: '' },
       ]);
       await tramitesClient.generarFur(instanceId);
-      setChanging(true);
       onRefresh?.();
     } catch {
       setError('No se pudo quitar la placa. Inténtalo de nuevo.');
@@ -979,22 +911,18 @@ export function PlacaPreasignadaSection({
     }
   };
 
-  const filtered = query.trim()
-    ? plates.filter((p) => p.plate.toLowerCase().includes(query.trim().toLowerCase()))
-    : plates;
-
   // Tarjeta siempre abierta (rediseño): en la propuesta, «Organismo de tránsito y preasignación de
   // placa» es una tarjeta fija, no un desplegable — el gestor la necesita visible junto al organismo,
   // no detrás de un clic. Mismo tratamiento que `ResumenCard` de `MatriculaResumen`.
   const shell = (children: ReactNode) => (
-    <section aria-label="Placa preasignada" className={WIZARD_CARD}>
+    <section aria-label="Placa" className={WIZARD_CARD}>
       <div className="mb-3 flex items-center gap-2">
         <span
           className="h-4 w-1 shrink-0 rounded-full"
           style={{ background: '#557EFF' }}
           aria-hidden="true"
         />
-        <WizardCardHeader title="Placa preasignada" level="h4" className="" />
+        <WizardCardHeader title="Placa" level="h4" className="" />
       </div>
       {children}
     </section>
@@ -1002,113 +930,60 @@ export function PlacaPreasignadaSection({
 
   if (vinTienePlacaRunt) {
     return shell(
-      <p className="mt-2 text-xs opacity-80">
-        El vehículo ya tiene placa asignada según el RUNT (
-        <span className="font-mono font-semibold">{placa}</span>
-        ). No aplica la preasignación de placa.
+      <p className="mt-2 text-xs opacity-80" data-testid="fur-placa-ruta-corta">
+        El vehículo ya tiene la placa <span className="font-mono font-semibold">{placa}</span>{' '}
+        asignada según el RUNT. Llegará al organismo listo para su decisión; la placa y el organismo no
+        se pueden modificar.
       </p>,
     );
   }
 
-  if (placaElegida && !changing) {
+  if (placaElegida) {
     return shell(
-      <div className="mt-2 flex items-center gap-3">
+      <div className="mt-2 flex flex-col gap-2">
         <p className="text-xs opacity-80">
-          Placa seleccionada: <span className="font-mono font-semibold">{placa}</span>
+          Placa elegida antes del cambio de reglas: <span className="font-mono font-semibold">{placa}</span>.
+          Desde ahora la placa la asigna el organismo de tránsito en Preasignación.
         </p>
+        {error && (
+          <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+            {error}
+          </p>
+        )}
         {!readOnly && (
-          <>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => setChanging(true)}
-              className="rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
-            >
-              Cambiar
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void clearPlate()}
-              className="rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
-            >
-              Quitar placa
-            </button>
-          </>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void clearPlate()}
+            className="self-start rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
+          >
+            Quitar placa
+          </button>
         )}
       </div>,
     );
   }
 
-  if (!mostrarSelector) {
-    return null;
-  }
-
-  // HU #10806 (AC3) — la ruta de placa NO está habilitada para esta compañía/OT: avisar que el
-  // trámite se entregará de forma estándar, en vez de mostrar el selector como si preasignara.
-  if (preassignEnabled === false) {
-    return shell(
-      <p className="mt-2 text-xs opacity-80" role="status">
-        La preasignación de placa no está habilitada para este organismo de tránsito o tu compañía. El
-        trámite se entregará de forma estándar (sin asignación de placa por el OT).
-      </p>,
-    );
-  }
-
   return shell(
-    <div className="mt-2 flex flex-col gap-3">
+    <div className="mt-2 flex flex-col gap-3" data-testid="fur-placa-ruta-larga">
       <p className="text-xs opacity-70">
-        Selecciona una placa del rango asignado por el organismo de tránsito. Si no seleccionas ninguna, el
-        trámite se enviará al OT para que asigne la placa.
+        El vehículo no tiene placa. El organismo de tránsito la asignará en Preasignación.
       </p>
       {error && (
         <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
           {error}
         </p>
       )}
-      {loaded && plates.length === 0 ? (
-        <p className="text-xs opacity-80">
-          No hay placas disponibles en el rango; el trámite se enviará al OT para que asigne la placa.
-        </p>
-      ) : (
-        <>
-          {/* El anillo de foco va en el contenedor (el input pinta el borde de todo el grupo),
-              con `focus-within:ring-2`: así el buscador sí da una señal clara al tabular. */}
-          <div className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] px-3 py-2 transition focus-within:border-[#557EFF] focus-within:ring-2 focus-within:ring-[#557EFF]/20 dark:border-white/15">
-            <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar placa…"
-              aria-label="Buscar placa disponible"
-              className="w-full bg-transparent text-xs outline-none focus:ring-0"
-            />
-          </div>
-          <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
-            {filtered.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                disabled={saving}
-                onClick={() => void pick(p.plate)}
-                className="rounded-xl border p-2 text-center font-mono text-xs font-semibold hover:border-[#557EFF] disabled:opacity-50"
-              >
-                {p.plate}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
       {/* HU #10805 — dígito de preferencia para radicar sin placa (guía para el OT; opcional). */}
       <label className="mt-1 flex flex-col gap-1 text-xs font-semibold">
         Dígito de preferencia (opcional)
         <span className="text-xs font-normal opacity-70">
-          Si radicas sin placa, indica el número en el que prefieres que termine. El OT lo toma como
-          guía: puede asignar una placa que termine en ese dígito u otra.
+          Indica el número en el que prefieres que termine la placa. El OT lo toma como guía: puede
+          asignar una placa que termine en ese dígito u otra.
         </span>
         <select
           value={preferredDigit}
-          disabled={savingDigit}
+          disabled={readOnly || savingDigit}
           onChange={(e) => void saveDigit(e.target.value)}
           aria-label="Dígito de preferencia de placa"
           className="mt-1 w-44 rounded-lg border px-2 py-1 text-xs"
@@ -1121,16 +996,6 @@ export function PlacaPreasignadaSection({
           ))}
         </select>
       </label>
-
-      {changing && placa !== '' && (
-        <button
-          type="button"
-          onClick={() => setChanging(false)}
-          className="self-start rounded-lg border px-3 py-1 text-xs font-semibold"
-        >
-          Cancelar
-        </button>
-      )}
     </div>,
   );
 }

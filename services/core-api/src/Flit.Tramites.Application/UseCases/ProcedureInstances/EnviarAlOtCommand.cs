@@ -1,0 +1,204 @@
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Estados;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
+
+/// <summary>
+/// «Enviar al OT» (ADR-0059, HU #12597): el gestor, con el trámite en <see cref="TramiteEstado.Asignado"/>,
+/// marca los checks opcionales (SOAT / impuesto) y lo pasa a <see cref="TramiteEstado.Entregado"/> para
+/// que el organismo decida. Sustituye al «Procesar» del sub-estado <c>asignado → terminado</c>.
+///
+/// <para>HU #12116 — al quedar entregado reintenta la firma automática de la impronta manual (best-effort):
+/// si la identidad de los propietarios quedó vigente después de que el OT asignó la placa, el trámite no
+/// debe llegar al organismo con la impronta sin sello a la espera del consolidado.</para>
+/// </summary>
+public sealed record EnviarAlOtRequest(
+    bool? SoatPagado = null,
+    bool? ImpuestoDepartamentalPagado = null);
+
+public sealed class EnviarAlOtHandler(
+    IProcedureInstanceRepository repo,
+    ITramiteLifecycleService lifecycle,
+    ValidateSoatViaRuntHandler? soatValidator = null,
+    ISoatRuntValidationPolicy? soatPolicy = null,
+    FirmarImprontaManualSiListaHandler? firmaImpronta = null,
+    ILogger<EnviarAlOtHandler>? logger = null)
+{
+    /// <summary>
+    /// El RUNT no reporta un SOAT vigente y la compañía tiene apagada la opción de continuar sin él.
+    /// </summary>
+    public const string SoatNoVigente = "soat_no_vigente";
+
+    /// <summary>
+    /// El trámite se envió al OT SIN SOAT vigente porque la compañía tiene activa la opción de
+    /// continuar. No es un error: el gestor tiene que enterarse de que lo envió así.
+    /// </summary>
+    public const string SoatNoVigenteAdvertencia = "soat_no_vigente_advertencia";
+
+    private readonly ISoatRuntValidationPolicy _soatPolicy =
+        soatPolicy ?? NullSoatRuntValidationPolicy.Instance;
+    private readonly ILogger<EnviarAlOtHandler> _logger =
+        logger ?? NullLogger<EnviarAlOtHandler>.Instance;
+
+    public async Task<(ProcedureInstanceSummary? Result, string? Error, string? Warning)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        Guid? changedBy,
+        EnviarAlOtRequest request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
+        if (instance is null)
+            return (null, "not_found", null);
+
+        // Solo desde 'asignado' (HU #12597 AC5): en preasignacion no hay placa y en entregado ya se envió.
+        if (instance.Status != TramiteEstado.Asignado)
+            return (null, TramiteEstadoErrores.TransicionNoPermitida, null);
+
+        // Validación del SOAT contra el RUNT al procesar. La consulta se hace SIEMPRE que haya
+        // validador (así el estado del SOAT queda registrado y el gestor lo ve). El bloqueo es el
+        // default: con la opción APAGADA, un SOAT no vigente detiene el avance; con la opción
+        // ACTIVA se deja continuar, pero devolviendo advertencia: enviar al OT un trámite sin SOAT
+        // vigente no puede pasar en silencio.
+        string? warning = null;
+        if (soatValidator is not null)
+        {
+            var permiteContinuarSinSoatVigente =
+                await _soatPolicy.IsEnabledAsync(tenantId, ct).ConfigureAwait(false);
+            var (soat, soatError) = await soatValidator.HandleAsync(id, tenantId, ct).ConfigureAwait(false);
+
+            // Un fallo de la consulta (proveedor caído, plantilla ausente) no puede convertirse en
+            // un bloqueo silencioso del trámite: solo bloquea un SOAT que el RUNT dice que no está
+            // vigente. Si no se pudo consultar, se sigue.
+            if (DebeBloquearPorSoatNoVigente(
+                    permiteContinuarSinSoatVigente,
+                    soatError is null,
+                    soat?.Vigente))
+            {
+                return (null, SoatNoVigente, null);
+            }
+
+            if (DebeAdvertirSoatNoVigente(
+                    permiteContinuarSinSoatVigente,
+                    soatError is null,
+                    soat?.Vigente))
+            {
+                warning = SoatNoVigenteAdvertencia;
+            }
+        }
+
+        var now = DateTimeOffset.UtcNow;
+
+        // Fase 1 — escribir checks ESTANDO en asignado (el trigger de inmutabilidad de field_values solo
+        // los admite en ese estado) y persistir antes de mover el status.
+        UpsertBoolField(instance, tenantId, id, EnvioOtCheckFields.SoatPagado, request.SoatPagado, now);
+        UpsertBoolField(instance, tenantId, id, EnvioOtCheckFields.ImpuestoDepartamentalPagado, request.ImpuestoDepartamentalPagado, now);
+
+        if (!await repo.SaveChangesWithConcurrencyGuardAsync(ct))
+            return (null, TramiteEstadoErrores.ConflictoConcurrencia, null);
+
+        // Fase 2 — asignado → entregado por el ciclo de vida (historial + notificación + política).
+        var outcome = await lifecycle.TransitionAsync(
+            new TramiteTransitionCommand(
+                id, tenantId, TramiteEstado.Entregado,
+                "Enviado al organismo de tránsito con placa asignada.", changedBy, TramiteActor.Gestor),
+            ct).ConfigureAwait(false);
+        if (!outcome.Success)
+            return (null, outcome.ErrorCode, null);
+
+        // HU #12116 — mismo disparador best-effort que Submit/AssignPlate: idempotente si ya se firmó
+        // al asignar la placa (AlreadyStamped) y «no lista» si aún falta identidad. Nunca cambia la
+        // respuesta del envío; el fallo queda logueado/trazado dentro del handler.
+        if (firmaImpronta is not null)
+        {
+            try
+            {
+                await firmaImpronta
+                    .HandleAsync(id, tenantId, FirmaImprontaAutomaticaOrigen.EnvioOt, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                EnviarAlOtLog.FirmaImprontaOmitida(_logger, ex, id, tenantId);
+            }
+        }
+
+        return (CreateProcedureInstanceHandler.ToSummary(outcome.Instance!), null, warning);
+    }
+
+    /// <summary>
+    /// Gate del SOAT al enviar: la opción activa PERMITE continuar sin SOAT vigente; apagada
+    /// (default) bloquea. Solo aplica cuando la consulta al RUNT respondió con un resultado.
+    /// </summary>
+    public static bool DebeBloquearPorSoatNoVigente(
+        bool permiteContinuarSinSoatVigente,
+        bool consultaRespondio,
+        bool? soatVigente) =>
+        !permiteContinuarSinSoatVigente
+        && consultaRespondio
+        && soatVigente == false;
+
+    /// <summary>
+    /// Contracara del gate: cuando la opción activa deja pasar un SOAT no vigente, el trámite avanza
+    /// pero la UI tiene que decirlo. Nunca advierte si el RUNT no respondió.
+    /// </summary>
+    public static bool DebeAdvertirSoatNoVigente(
+        bool permiteContinuarSinSoatVigente,
+        bool consultaRespondio,
+        bool? soatVigente) =>
+        permiteContinuarSinSoatVigente
+        && consultaRespondio
+        && soatVigente == false;
+
+    private void UpsertBoolField(
+        ProcedureInstance instance,
+        Guid tenantId,
+        Guid instanceId,
+        string key,
+        bool? value,
+        DateTimeOffset now)
+    {
+        if (value is null)
+            return;
+
+        var text = value.Value ? "true" : "false";
+        var existing = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, key, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            existing.ValueText = text;
+            existing.Source = "user";
+            existing.UpdatedAt = now;
+            return;
+        }
+
+        var fieldValue = new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = instanceId,
+            FieldKey = key,
+            ValueText = text,
+            Source = "user",
+            CreatedAt = now,
+        };
+        instance.FieldValues.Add(fieldValue);
+        // PK store-generated (uuidv7) con Id ya seteado: Added explícito para forzar INSERT.
+        // Sin esto EF infiere Modified → UPDATE de 0 filas → DbUpdateConcurrencyException.
+        repo.Add(fieldValue);
+    }
+}
+
+/// <summary>Logging source-generado (CA1848) de «Enviar al OT». NUNCA incluye PII.</summary>
+internal static partial class EnviarAlOtLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "La firma automática de impronta del trámite {InstanceId} (tenant {TenantId}) se omitió al enviar al OT por una excepción no controlada.")]
+    public static partial void FirmaImprontaOmitida(ILogger logger, Exception ex, Guid instanceId, Guid tenantId);
+}

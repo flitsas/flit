@@ -72,7 +72,8 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
         ("PATCH", "/api/v1/tramites/instances/{id}/current-step"),
         ("POST", "/api/v1/tramites/instances/{id}/submit"),
         ("PUT", "/api/v1/tramites/instances/{id}/pause"),
-        ("POST", "/api/v1/tramites/instances/{id}/plate-flow/complete"),
+        ("POST", "/api/v1/tramites/instances/{id}/enviar-al-ot"),
+        ("POST", "/api/v1/tramites/instances/{id}/plate-flow/complete"), // alias legado de enviar-al-ot (ADR-0059)
         ("POST", "/api/v1/tramites/instances/{id}/subsanar"),
         ("POST", "/api/v1/tramites/instances/{id}/cancelar-subsanacion"),
         ("POST", "/api/v1/tramites/instances/{id}/transition"),
@@ -103,6 +104,8 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
         ("POST", "/api/v1/tramites/instances/{id}/participants/{any}/reinvite"),
         ("POST", "/api/v1/tramites/instances/{id}/preflight"),
         ("POST", "/api/v1/tramites/instances/{id}/rnmc"),
+        // HU #12572 (Feature #12565) — solicitud de revocatoria del gestor.
+        ("POST", "/api/v1/tramites/instances/{id}/revocation-requests"),
         // Gestión avanzada (F15) — fuera del TenantEnforcementMiddleware; el guard resuelve el alcance por BD.
         ("POST", "/api/v1/admin/tramites/{id}/anular"),
         ("POST", "/api/v1/admin/tramites/{id}/estado"),
@@ -272,7 +275,9 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
         // Las rutas de carga de archivo declaran multipart/form-data: con otro Content-Type el
         // enrutamiento (AcceptsMatcherPolicy) responde 415 antes de elegir endpoint, así que el guard
         // se ejercita con el tipo correcto (y un archivo vacío que jamás llega al handler).
-        if (route.EndsWith("/attachments", StringComparison.Ordinal) || route.EndsWith("/consolidado/cargar", StringComparison.Ordinal))
+        if (route.EndsWith("/attachments", StringComparison.Ordinal)
+            || route.EndsWith("/consolidado/cargar", StringComparison.Ordinal)
+            || route.EndsWith("/revocation-requests", StringComparison.Ordinal))
         {
             var form = new MultipartFormDataContent();
             form.Add(new ByteArrayContent([1, 2, 3]), "file", "vacio.pdf");

@@ -6,7 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
 import { SeccionCargando, SeccionError } from '@/components/operacion/detalle/primitivos';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { estadoChipStyle, estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import { tramiteLabel, vehiculo } from '@/lib/tramites/tramites-row-labels';
 import type {
   InstanceSummary,
@@ -109,7 +109,7 @@ export function TramiteTrackingModal({
             className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold"
             style={{ background: chip.bg, color: chip.color, borderColor: chip.border }}
           >
-            {estadoLabel(item.estado)}
+            {estadoLabelConOrigen(item.estado, item.rejectedFrom)}
           </span>
           <span className="text-xs text-[#162744]/60 dark:text-white/50">
             {[item.placa?.trim(), tramiteLabel(item)].filter(Boolean).join(' · ')}
@@ -317,6 +317,36 @@ function eventoALinea(e: ProcedureInstanceEvent, index: number): ItemLinea {
       titulo: 'Reasignación de gestor',
       quien,
       motivo: `De ${e.previousAssignedToName || 'sin gestor asignado'} a ${e.newAssignedToName || '—'}`,
+    };
+  }
+
+  if (e.tipo === 'revocatoria_solicitada') {
+    // El ejecutor ES quien solicitó (a diferencia de los otros dos tipos, que hablan de un tercero).
+    const solicitadoPor = e.createdByName ? `Solicitado por ${e.createdByName}` : 'Solicitado por administrador';
+    return {
+      key,
+      kind: 'evento',
+      fecha: e.createdAt,
+      titulo: `Solicitud de revocatoria${e.revocationAttemptNumber ? ` · Intento ${e.revocationAttemptNumber}` : ''}`,
+      quien: solicitadoPor,
+      motivo: e.revocationReason?.trim() || 'Sin motivo adicional registrado',
+    };
+  }
+
+  if (e.tipo === 'revocatoria_aprobada' || e.tipo === 'revocatoria_rechazada') {
+    // HU #12577 — el ejecutor ES el OT que decidió, igual que en revocatoria_solicitada el ejecutor
+    // es quien pidió (a diferencia de reasignar/reenvío, que hablan de un tercero).
+    const aprobada = e.tipo === 'revocatoria_aprobada';
+    const decididoPor = e.createdByName
+      ? `${aprobada ? 'Aprobada' : 'Rechazada'} por ${e.createdByName}`
+      : `${aprobada ? 'Aprobada' : 'Rechazada'} por el organismo de tránsito`;
+    return {
+      key,
+      kind: 'evento',
+      fecha: e.createdAt,
+      titulo: `Revocatoria ${aprobada ? 'aprobada' : 'rechazada'}${e.revocationAttemptNumber ? ` · Intento ${e.revocationAttemptNumber}` : ''}`,
+      quien: decididoPor,
+      motivo: e.revocationDecisionReason?.trim() || 'Sin motivo adicional registrado',
     };
   }
 

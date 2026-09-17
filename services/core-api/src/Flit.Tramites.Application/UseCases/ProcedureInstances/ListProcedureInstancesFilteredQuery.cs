@@ -219,6 +219,10 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
         IReadOnlySet<Guid> conPrenda = await repo.ListInstanceIdsConPrendaVigenteAsync(
             instances.Select(i => i.Id).ToList(), ct) ?? new HashSet<Guid>();
 
+        // Feature #12565 — mismo indicativo de revocatoria activa que el listado sin filtros.
+        IReadOnlyDictionary<Guid, string> revocacionesActivas = await repo.GetRevocationBadgeStatusesAsync(
+            instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
+
         var items = instances
             .Select(e => ListProcedureInstancesHandler.ToSummary(
                 e,
@@ -226,7 +230,8 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                 firmaBaul,
-                conPrenda.Contains(e.Id)))
+                conPrenda.Contains(e.Id),
+                revocacionesActivas.GetValueOrDefault(e.Id)))
             .ToList();
 
         return items;
@@ -234,9 +239,9 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
 }
 
 /// <summary>
-/// Conteo por estado para la tira de KPIs del listado. Devuelve SIEMPRE las siete claves del
-/// vocabulario —con cero donde no hay filas— para que la tira pinte las siete tarjetas sin que el
-/// cliente tenga que rellenar huecos.
+/// Conteo por estado para la tira de KPIs del listado. Devuelve SIEMPRE todas las claves del
+/// vocabulario (más el pseudo-estado «rechazado desde preasignación», ADR-0059) —con cero donde no
+/// hay filas— para que la tira pinte sus tarjetas sin que el cliente tenga que rellenar huecos.
 /// </summary>
 public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRepository repo)
 {
@@ -280,6 +285,9 @@ public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRep
         foreach (var estado in TramiteEstado.Todos)
             resultado[estado] = conteos.GetValueOrDefault(estado);
         resultado[TramiteEstado.Subsanacion] = conteos.GetValueOrDefault(TramiteEstado.Subsanacion);
+        // ADR-0059 — subconjunto de rechazado que el gestor prioriza; también con cero cuando no hay.
+        resultado[TramiteEstado.FiltroRechazadoPreasignacion] =
+            conteos.GetValueOrDefault(TramiteEstado.FiltroRechazadoPreasignacion);
 
         return resultado;
     }

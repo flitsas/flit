@@ -180,7 +180,6 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                 (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                 (p.ProcedureType != null ? p.ProcedureType.Name : ""),
                 p.Status,
-                p.PlateFlowStatus,
                 p.Prioritario,
                 p.SubsanacionActiva,
                 p.IsPaused,
@@ -278,14 +277,15 @@ internal sealed class OtQueryRepository : IOtQueryRepository
         {
             var eventos = porInstancia.GetValueOrDefault(instance.Id) ?? [];
 
-            var radicacion = eventos.FirstOrDefault(e => e.ToStatus == TramiteEstado.Entregado);
+            // ADR-0059 — llegada al organismo: entregado (decidir) o preasignacion (asignar placa).
+            var radicacion = eventos.FirstOrDefault(e => TramiteEstado.EsLlegadaAlOrganismo(e.ToStatus));
             var posteriores = radicacion is null
                 ? []
                 : eventos.Where(e => e.ChangedAt >= radicacion.ChangedAt).ToList();
 
             var decision = posteriores.LastOrDefault(e => IsDecision(e.ToStatus));
             var ultimaRadicacion = posteriores
-                .LastOrDefault(e => e.ToStatus == TramiteEstado.Entregado
+                .LastOrDefault(e => TramiteEstado.EsLlegadaAlOrganismo(e.ToStatus)
                     && (decision is null || e.ChangedAt <= decision.ChangedAt));
 
             var horas = decision is not null && ultimaRadicacion is not null
@@ -320,8 +320,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
 
             rows.Add(new QueryRow(
                 Instance: instance,
-                EstadoOt: OtEstadoResolver.Resolve(
-                    instance.Status, instance.SubsanacionActiva, instance.IsPaused, instance.PlateFlowStatus),
+                EstadoOt: OtEstadoResolver.Resolve(instance.Status, instance.SubsanacionActiva, instance.IsPaused),
                 RadicadoEn: radicacion?.ChangedAt,
                 UltimaRadicacionEn: ultimaRadicacion?.ChangedAt,
                 DecididoEn: decision?.ChangedAt,
@@ -829,7 +828,6 @@ internal sealed class OtQueryRepository : IOtQueryRepository
         string Familia,
         string TipoTramite,
         string Status,
-        string? PlateFlowStatus,
         bool Prioritario,
         bool SubsanacionActiva,
         bool IsPaused,

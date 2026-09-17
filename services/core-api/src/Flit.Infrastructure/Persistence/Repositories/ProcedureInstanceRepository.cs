@@ -354,6 +354,33 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return ids.ToHashSet();
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetRevocationBadgeStatusesAsync(
+        IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default)
+    {
+        if (instanceIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = instanceIds.Distinct().ToList();
+
+        // Bug: filtrar por estado ANTES de buscar el intento más reciente hacía que un trámite con
+        // intento 1 rechazado + intento 2 aprobado (revocado) siguiera mostrando "Revocatoria
+        // rechazada" en el listado — el intento 2 (aprobada) quedaba fuera del WHERE y el 1 (rechazada,
+        // ya obsoleto) ganaba por ser el único candidato. Ahora se trae el estado del intento de MAYOR
+        // AttemptNumber SIN filtrar por estado (así 'aprobada' compite en igualdad para saber cuál es
+        // el más reciente); el caller (frontend) decide no pintar nada cuando ese último es 'aprobada'
+        // (ese desenlace ya se ve solo, el trámite pasa a 'revocado').
+        var rows = await db.ProcedureRevocationRequests
+            .AsNoTracking()
+            .Where(r => distinct.Contains(r.ProcedureInstanceId))
+            .Select(r => new { r.ProcedureInstanceId, r.AttemptNumber, r.Status })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.ProcedureInstanceId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.AttemptNumber).First().Status);
+    }
+
     public async Task<IReadOnlyDictionary<Guid, string>> GetTenantNamesAsync(
         IReadOnlyCollection<Guid> tenantIds, CancellationToken ct)
     {
@@ -1991,10 +2018,12 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     {
         query = ApplyListFilters(query, filter);
 
-        // GROUP BY en SQL: se traen tantas filas como estados existan (siete), no los expedientes.
+        // GROUP BY en SQL: se traen tantas filas como estados existan, no los expedientes. El origen
+        // del rechazo entra en la clave para poder sumar aparte «rechazado desde preasignación»
+        // (ADR-0059) sin una segunda consulta.
         var conteos = await query
-            .GroupBy(x => x.Status)
-            .Select(g => new { Estado = g.Key, Total = g.Count() })
+            .GroupBy(x => new { x.Status, x.RejectedFrom })
+            .Select(g => new { Estado = g.Key.Status, g.Key.RejectedFrom, Total = g.Count() })
             .ToListAsync(ct);
 
         // Clave normalizada a minúsculas: el vocabulario persistido lo es, pero un dato histórico con
@@ -2004,6 +2033,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         {
             var clave = (c.Estado ?? string.Empty).ToLowerInvariant();
             resultado[clave] = resultado.GetValueOrDefault(clave) + c.Total;
+
+            if (clave == TramiteEstado.Rechazado
+                && string.Equals(c.RejectedFrom, TramiteEstado.Preasignacion, StringComparison.OrdinalIgnoreCase))
+            {
+                resultado[TramiteEstado.FiltroRechazadoPreasignacion] =
+                    resultado.GetValueOrDefault(TramiteEstado.FiltroRechazadoPreasignacion) + c.Total;
+            }
         }
 
         return resultado;
@@ -2197,8 +2233,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 .Select(e => e.Trim().ToLowerInvariant())
                 .Distinct()
                 .ToList();
-            if (normalizados.Count > 0)
+
+            // ADR-0059 — «Rechazado preasignación» no es un status: es rechazado con rejected_from =
+            // preasignacion. Se traduce aquí, en OR con los estados reales pedidos, para que la tarjeta
+            // del listado se pueda pulsar como cualquier otra.
+            var rechazadoPreasignacion = normalizados.Remove(TramiteEstado.FiltroRechazadoPreasignacion);
+            if (rechazadoPreasignacion && normalizados.Count > 0)
+            {
+                query = query.Where(x =>
+                    normalizados.Contains(x.Status.ToLower())
+                    || (x.Status == TramiteEstado.Rechazado && x.RejectedFrom == TramiteEstado.Preasignacion));
+            }
+            else if (rechazadoPreasignacion)
+            {
+                query = query.Where(x =>
+                    x.Status == TramiteEstado.Rechazado && x.RejectedFrom == TramiteEstado.Preasignacion);
+            }
+            else if (normalizados.Count > 0)
+            {
                 query = query.Where(x => normalizados.Contains(x.Status.ToLower()));
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Modalidad))

@@ -84,6 +84,7 @@ internal sealed class OtProfileRepository : IOtProfileRepository
         string operationMode,
         bool quipuxReadOnly,
         Guid? changedBy,
+        int? revocationWindowBusinessDays,
         Guid? transitOfficeId = null,
         CancellationToken cancellationToken = default) =>
         ExecuteInTenantScopeAsync(
@@ -124,6 +125,10 @@ internal sealed class OtProfileRepository : IOtProfileRepository
 
                 entity.OperationMode = operationMode;
                 entity.QuipuxReadOnly = quipuxReadOnly;
+                // HU #12568 AC2: se asigna tal cual — null incluido — sin caer al valor previo.
+                // A diferencia de OperationMode/QuipuxReadOnly, para este campo "null" es un
+                // valor de negocio explícito ("sin límite"), no un "no tocar este campo".
+                entity.RevocationWindowBusinessDays = revocationWindowBusinessDays;
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -167,6 +172,7 @@ internal sealed class OtProfileRepository : IOtProfileRepository
             TransitOfficeId = entity.TransitOfficeId,
             OperationMode = entity.OperationMode,
             QuipuxReadOnly = entity.QuipuxReadOnly,
+            RevocationWindowBusinessDays = entity.RevocationWindowBusinessDays,
             FeatureFlags = flags.Select(f => new OtFeatureFlag
             {
                 Id = f.Id,

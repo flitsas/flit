@@ -67,6 +67,7 @@ describe("AdminTransitOfficesPage — refactor adminOT", () => {
       quipuxReadOnly: false,
       transitOfficeId: "ot-own-id",
       featureFlags: [],
+      revocationWindowBusinessDays: null,
     });
 
     render(<AdminTransitOfficesPage />);

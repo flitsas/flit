@@ -62,6 +62,11 @@ public static class AttachmentRules
         // HU #10604 (R19) / #10697 — paz y salvo RNMC. RNMC ya NO bloquea el envío al OT (la medida
         // correctiva es informativa): este adjunto queda como OPCIONAL informativo, no como requisito.
         "paz_salvo_rnmc",
+        // HU #12572 (Feature #12565) — documento de soporte de una solicitud de revocatoria de un
+        // trámite Aprobado. Se sube por su propio endpoint (RequestRevocationHandler, fuera de
+        // AllowsUploadInState: el trámite está 'aprobado', no en borrador), pero se registra en este
+        // set para que el inventario de tipos siga siendo la fuente única de verdad del catálogo.
+        "revocatoria_soporte",
         // Escritura del representante legal CARGADA por el gestor, cuando el representante capturado
         // no está en el módulo de representantes de la compañía y por tanto no tiene escritura que el
         // sistema pueda apalancar del directorio. Un código por rol (misma convención que
@@ -116,20 +121,18 @@ public static class AttachmentRules
     /// <summary>
     /// ¿Se permite cargar este tipo de adjunto en este estado? Regla general: editable como
     /// borrador (<see cref="TramiteEstado.PermiteEdicionDatos"/> — borrador, rechazado+flag, o
-    /// legado <c>subsanacion</c>). Excepción de la ruta de placa (HU #10785): la evidencia de SOAT
-    /// se puede cargar con el trámite <c>entregado</c> y el sub-estado interno de placa en
-    /// <c>asignado</c>, para desbloquear la aprobación del OT.
+    /// legado <c>subsanacion</c>). Excepción de la ruta de placa (ADR-0059): la evidencia de SOAT
+    /// se puede cargar con el trámite en <c>asignado</c>, que es donde el gestor gestiona SOAT e
+    /// impuestos antes de «Enviar al OT».
     /// <para>La Licencia de Tránsito que emite el OT NO pasa por aquí: tiene su propio gate de estado
     /// en <see cref="AdjuntarLicenciaTransitoHandler"/>, que acepta <c>entregado</c> y <c>aprobado</c>.</para>
     /// </summary>
     public static bool AllowsUploadInState(
         string status,
-        string? plateFlowStatus,
         string? tipo,
         bool subsanacionActiva = false) =>
         TramiteEstado.PermiteEdicionDatos(status, subsanacionActiva)
-        || (string.Equals(status, TramiteEstado.Entregado, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(plateFlowStatus, PlateFlowStatus.Asignado, StringComparison.OrdinalIgnoreCase)
+        || (string.Equals(status, TramiteEstado.Asignado, StringComparison.OrdinalIgnoreCase)
             && IsSoatEvidenceTipo(tipo));
 
     /// <summary>
@@ -197,7 +200,7 @@ public sealed class UploadAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo, instance.SubsanacionActiva))
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, input.Tipo, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -314,7 +317,7 @@ public sealed class PresignAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo, instance.SubsanacionActiva))
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, input.Tipo, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -357,7 +360,7 @@ public sealed class RegisterAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo, instance.SubsanacionActiva))
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, input.Tipo, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();

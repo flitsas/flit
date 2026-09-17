@@ -10,6 +10,23 @@ public static class TramiteEstado
     public const string Borrador = "borrador";
     public const string Anulado = "anulado";
     public const string Preparado = "preparado";
+
+    /// <summary>
+    /// ADR-0059 (Epic #12549) — Ruta Larga de matrícula inicial: el trámite se radicó SIN placa y espera
+    /// que el Organismo de Tránsito se la asigne. UI: «Preasignación». Exclusivo de los tipos con
+    /// <c>gate_profile.requiresPlateRequest = true</c> (ver <see cref="TramiteTransitionPolicy"/>).
+    /// Sustituye al sub-estado <c>preasignado</c> de la Feature #10587, retirado en la HU #12603.
+    /// </summary>
+    public const string Preasignacion = "preasignacion";
+
+    /// <summary>
+    /// ADR-0059 (Epic #12549) — el OT ya asignó la placa; el gestor gestiona SOAT e impuestos SIN salir
+    /// de este estado y, cuando termina, «Envía al OT» (→ <see cref="Entregado"/>). Sustituye al
+    /// sub-estado <c>asignado</c> de la Feature #10587. El antiguo <c>'terminado'</c> desaparece: ES
+    /// <see cref="Entregado"/>.
+    /// </summary>
+    public const string Asignado = "asignado";
+
     public const string Entregado = "entregado";
     public const string Aprobado = "aprobado";
     public const string Rechazado = "rechazado";
@@ -31,13 +48,28 @@ public static class TramiteEstado
     /// </summary>
     public const string Subsanacion = "subsanacion";
 
-    // Feature #10587 (matrícula inicial): la ruta de placa NO introduce estados de trámite. El
-    // progreso de placa vive en un sub-estado interno ortogonal al status global (que permanece en
-    // 'entregado'); ver <see cref="PlateFlowStatus"/> y <see cref="PlateFlowStateMachine"/> (HU #10785).
+    /// <summary>
+    /// ADR-0059 — pseudo-estado de FILTRO (no es un estado del trámite ni entra en <see cref="Todos"/>):
+    /// «rechazado desde preasignación» = <see cref="Rechazado"/> con <c>rejected_from = preasignacion</c>.
+    /// El gestor lo pide como una tarjeta más del listado para priorizar esos rechazos.
+    /// </summary>
+    public const string FiltroRechazadoPreasignacion = "rechazado_preasignacion";
 
     /// <summary>Todos los estados válidos (para validación de entrada y checks DDL).</summary>
     public static readonly IReadOnlyList<string> Todos =
-        [Borrador, Anulado, Preparado, Entregado, Aprobado, Rechazado, Revocado];
+        [Borrador, Anulado, Preparado, Preasignacion, Asignado, Entregado, Aprobado, Rechazado, Revocado];
+
+    /// <summary>
+    /// Estados de la RUTA DE PLACA (ADR-0059): solo los alcanza un tipo que pide placa. Un trámite en
+    /// cualquiera de ellos ya está en manos del organismo (<see cref="RecibidosPorOrganismo"/>), sigue
+    /// «en proceso» para duplicidad (<see cref="EstadosEnProceso"/>) y retiene la placa
+    /// (<see cref="OcupaPlaca"/>).
+    /// </summary>
+    public static readonly IReadOnlyList<string> EstadosDeRutaDePlaca = [Preasignacion, Asignado];
+
+    /// <summary>¿<paramref name="estado"/> pertenece a la ruta de placa? Ver <see cref="EstadosDeRutaDePlaca"/>.</summary>
+    public static bool EsEstadoDeRutaDePlaca(string? estado) =>
+        estado is not null && EstadosDeRutaDePlaca.Contains(estado, StringComparer.Ordinal);
 
     /// <summary>Estados FINALES (RF04): sin transiciones posteriores ni edición de datos.</summary>
     public static readonly IReadOnlyList<string> Finales = [Aprobado, Anulado, Revocado];
@@ -70,11 +102,16 @@ public static class TramiteEstado
     /// no lo haya. Además la revocación es una decisión que el propio organismo tomó (deshace su
     /// aprobación), así que ocultársela sería peor que el "precio" que sí se acepta para Anulado.</para>
     ///
+    /// <para><see cref="Preasignacion"/> y <see cref="Asignado"/> (ADR-0059) SÍ entran: el trámite ya
+    /// se radicó y es el organismo quien trabaja la cola de placa (asignar / liberar / rechazar). Lo que
+    /// NO puede hacer en ellos es decidir (aprobar), que sigue siendo exclusivo de
+    /// <see cref="Entregado"/>; esa restricción vive en <see cref="TramiteStateMachine"/>.</para>
+    ///
     /// <para>Ojo al ampliar <see cref="Todos"/>: un estado nuevo NO es visible para el organismo hasta
     /// que se añada aquí explícitamente. Es el lado seguro por defecto.</para>
     /// </summary>
     public static readonly IReadOnlyList<string> RecibidosPorOrganismo =
-        [Entregado, Aprobado, Rechazado, Subsanacion, Revocado];
+        [Preasignacion, Asignado, Entregado, Aprobado, Rechazado, Subsanacion, Revocado];
 
     /// <summary>
     /// ¿El trámite ya está en manos del organismo de tránsito? Ver
@@ -84,17 +121,44 @@ public static class TramiteEstado
         estado is not null && RecibidosPorOrganismo.Contains(estado, StringComparer.Ordinal);
 
     /// <summary>
+    /// Estados en los que el trámite LLEGA al organismo para que actúe (ADR-0059): <see cref="Entregado"/>
+    /// (decidir) y <see cref="Preasignacion"/> (asignar placa). Una fila de historial hacia uno de ellos
+    /// es una "entrega" para los relojes y recuentos del organismo; <see cref="Asignado"/> no lo es: ahí
+    /// la pelota está en el gestor.
+    /// </summary>
+    public static readonly IReadOnlyList<string> EstadosDeLlegadaAlOrganismo = [Preasignacion, Entregado];
+
+    /// <summary>¿Una transición hacia <paramref name="toStatus"/> pone el trámite en manos del organismo?</summary>
+    public static bool EsLlegadaAlOrganismo(string? toStatus) =>
+        toStatus is not null && EstadosDeLlegadaAlOrganismo.Contains(toStatus, StringComparer.Ordinal);
+
+    /// <summary>
+    /// ¿La transición es una RADICACIÓN (el gestor radica o re-radica)? Desde <see cref="Preparado"/> o
+    /// <see cref="Rechazado"/> hacia un estado de llegada. Deja fuera <c>asignado → entregado</c>
+    /// («Enviar al OT»): ese trámite ya se radicó.
+    /// </summary>
+    public static bool EsRadicacion(string? from, string? to) =>
+        from is Preparado or Rechazado && EsLlegadaAlOrganismo(to);
+
+    /// <summary>
+    /// Estados en los que el trámite sigue ABIERTO en la bandeja del organismo (sin decisión final):
+    /// la cola de placa completa y la de decisión. Universo de los "pendientes" de métricas e informes.
+    /// </summary>
+    public static readonly IReadOnlyList<string> PendientesDelOrganismo = [Preasignacion, Asignado, Entregado];
+
+    /// <summary>
     /// Estados "en proceso" (CF-01, HU #10876): activan el bloqueo de duplicidad de trámite por
     /// familia. Los estados finales (<see cref="Aprobado"/>, <see cref="Rechazado"/>,
     /// <see cref="Anulado"/>) NO cuentan por sí solos. Un <see cref="Rechazado"/> con
     /// <c>subsanacion_activa</c> SÍ cuenta (ver <see cref="EstaEnProceso"/>).
     /// </summary>
-    public static readonly IReadOnlyList<string> EstadosEnProceso = [Borrador, Preparado, Entregado];
+    public static readonly IReadOnlyList<string> EstadosEnProceso =
+        [Borrador, Preparado, Preasignacion, Asignado, Entregado];
 
     /// <summary>
     /// Estados que LIBERAN la placa: un trámite en estos estados ya no la retiene y la placa puede
-    /// asignarse a otro trámite. Cualquier otro estado (borrador, preparado, entregado, aprobado) la
-    /// mantiene ocupada — una placa no puede estar viva en dos trámites a la vez.
+    /// asignarse a otro trámite. Cualquier otro estado (borrador, preparado, preasignacion, asignado,
+    /// entregado, aprobado) la mantiene ocupada — una placa no puede estar viva en dos trámites a la vez.
     /// </summary>
     public static readonly IReadOnlyList<string> EstadosQueLiberanPlaca = [Rechazado, Anulado, Revocado];
 

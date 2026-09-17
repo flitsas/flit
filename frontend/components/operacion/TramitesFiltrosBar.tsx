@@ -519,6 +519,12 @@ export interface TramitesFiltrosBarProps {
    */
   bulkUploadAction?: ReactNode;
 
+  /**
+   * HU #12578 (Feature #12565) — entrada a la vista dedicada "Revocatorias". Último control de la
+   * fila (después de "Carga masiva"): el contenedor (`TramitesTable`) ya decide su visibilidad por
+   * rol (`isAdminCompany`, AC2) — aquí solo se pinta lo que llega.
+   */
+  revocationRequestsLink?: ReactNode;
 }
 
 /**
@@ -554,6 +560,7 @@ export function TramitesFiltrosBar({
   columnSelector,
   exportAction,
   bulkUploadAction,
+  revocationRequestsLink,
 }: TramitesFiltrosBarProps) {
   return (
     <>
@@ -600,6 +607,7 @@ export function TramitesFiltrosBar({
       {columnSelector}
       {exportAction}
       {bulkUploadAction}
+      {revocationRequestsLink}
     </>
   );
 }

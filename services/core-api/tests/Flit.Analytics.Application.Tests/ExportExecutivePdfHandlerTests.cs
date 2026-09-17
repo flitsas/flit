@@ -23,7 +23,7 @@ public sealed class ExportExecutivePdfHandlerTests
     {
         public int RequestedLimit { get; private set; }
 
-        public Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(Guid? t, DateOnly f, DateOnly to, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(Guid? t, DateOnly? f, DateOnly? to, CancellationToken ct = default) =>
             Task.FromResult(categories);
         public Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(Guid? t, DateOnly f, DateOnly to, int limit, CancellationToken ct = default)
         {

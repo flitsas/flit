@@ -35,6 +35,18 @@ public static class BulkTramitesTemplateCatalog
     public const string ListsSheetName = "Listas";
     public const int MaxRows = 50;
 
+    /// <summary>
+    /// Topes de Excel para los textos de una validación de datos (mensaje emergente y mensaje de
+    /// error, con sus títulos). No están en el esquema OOXML —el validador de Microsoft da el
+    /// archivo por bueno— pero Excel de escritorio los aplica al abrir: si un <c>prompt</c> pasa de
+    /// 255 no lo trunca, pide «reparar» y descarta las validaciones de la hoja (Bug #12651, reportado
+    /// por QA con la guía de <c>{actor}_representante_documento</c>, de 339 a 393 caracteres).
+    /// Se deja margen igual que <c>StandaloneBatchRowContract.MaxGuiaLength</c>; un test lo vigila.
+    /// </summary>
+    public const int MaxPromptLength = 250;
+    public const int MaxErrorLength = 225;
+    public const int MaxTitleLength = 32;
+
     public const string FilaHeader = "fila";
     public const string TipoTramiteHeader = "tipo_tramite";
 
@@ -82,6 +94,8 @@ public static class BulkTramitesTemplateCatalog
             "numero_documento",
             $"Número de documento del {rol}, sin puntos ni guiones. El nombre NO se pide: se toma "
                 + "de la consulta al RUNT con este documento, igual que en el paso de actores.");
+        // La guía completa no cabe en el emergente de Excel (Bug #12651): la celda muestra la
+        // versión corta y la larga queda en la hoja «Instrucciones».
         yield return ActorColumn(
             prefijo,
             RepresentanteDocumentoSuffix,
@@ -89,7 +103,12 @@ public static class BulkTramitesTemplateCatalog
                 + "firmar, cuando la empresa tiene varios registrados en el directorio. Si se deja "
                 + "vacío, se toma el representante principal. La empresa y su representante deben "
                 + "estar registrados en el directorio de representantes legales; si no, el trámite "
-                + "queda por retomar.");
+                + "queda por retomar.") with
+            {
+                Ayuda = "Solo si el actor es una empresa (NIT) con varios representantes legales en "
+                    + "el directorio: cédula del que debe firmar. Vacío = el principal. Si la empresa "
+                    + "o el representante no están en el directorio, el trámite queda por retomar.",
+            };
         yield return ActorColumn(prefijo, "email", $"Correo electrónico del {rol}, para el envío de la validación de identidad. Obligatorio.");
         yield return ActorColumn(prefijo, "celular", $"Celular del {rol}. Obligatorio.");
         yield return ActorColumn(prefijo, "ciudad", $"Ciudad de residencia del {rol}. Obligatoria.");

@@ -249,4 +249,17 @@ public sealed class AdaptacionEstructuraV2Tests
         RegistrationStateMap.Instance.IsAmbiguous(9).Should().BeFalse();
         m.Warnings.Should().NotContain(w => w.Contains("no tiene equivalente exacto"));
     }
+
+    [Theory] // ADR-0059 (HU #12603) — Sent y Assigned de V1 tienen equivalente exacto en V2.
+    [InlineData(4, TramiteEstado.Preasignacion)]
+    [InlineData(5, TramiteEstado.Asignado)]
+    public void SentYAssignedDeV1SonLaRutaDePlacaEnV2YYaNoSonAmbiguos(int estadoV1, string esperado)
+    {
+        var m = RegistrationMapper.Map(Matricula(estado: estadoV1), Contexto());
+
+        m.FinalStatus.Should().Be(esperado);
+        TramiteEstado.EsEstadoDeRutaDePlaca(m.FinalStatus).Should().BeTrue();
+        RegistrationStateMap.Instance.IsAmbiguous(estadoV1).Should().BeFalse();
+        m.Warnings.Should().NotContain(w => w.Contains("no tiene equivalente exacto"));
+    }
 }

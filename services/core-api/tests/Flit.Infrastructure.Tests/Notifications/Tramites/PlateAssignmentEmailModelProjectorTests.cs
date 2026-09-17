@@ -15,7 +15,7 @@ public sealed class PlateAssignmentEmailModelProjectorTests
         {
             ProcedureType = ProcedureTypeFixture.Matricula,
             Plate = "ABC123",
-            PlateFlowStatus = "asignado",
+            Status = "asignado",
             TransitOfficeId = Guid.NewGuid(),
         };
         var actors = new List<ProcedureInstanceActor>
@@ -34,14 +34,14 @@ public sealed class PlateAssignmentEmailModelProjectorTests
         model.ClienteNombre.Should().Be("Comprador Test");
         model.Ciudad.Should().Be("Medellín");
         model.SecretariaTransito.Should().Be("Secretaría de Movilidad");
-        model.EstadoActual.Should().Be("asignado");
+        model.EstadoActual.Should().Be(PlateAssignmentEmailModelProjector.DefaultEstadoAsignado);
     }
 
     [Fact]
     public void FieldValuesIncompletos_NoLanzaYUsaDefaults()
     {
         var instance = new ProcedureInstance {
-        ProcedureType = ProcedureTypeFixture.Matricula, Plate = null, PlateFlowStatus = null };
+        ProcedureType = ProcedureTypeFixture.Matricula, Plate = null };
         var model = PlateAssignmentEmailModelProjector.Project(instance, [], new Dictionary<string, string?>());
 
         model.Placa.Should().BeEmpty();

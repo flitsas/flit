@@ -47,12 +47,26 @@ public static class RequestTenantResolver
     /// emite un claim por cada rol activo en orden no determinístico, así que se evalúan TODOS los claims
     /// de tipo <see cref="AdminAuthorization.RoleClaimType"/> o <c>role_code</c> (no solo el primero).
     /// </summary>
-    public static bool IsSuperAdmin(ClaimsPrincipal user)
+    public static bool IsSuperAdmin(ClaimsPrincipal user) => HasRole(user, AdminAuthorization.SuperAdminRole);
+
+    /// <summary>
+    /// HU #12652 — <c>true</c> si ALGUNO de los claims de rol (<see cref="AdminAuthorization.RoleClaimType"/>
+    /// o <c>role_code</c>, uno por rol activo) es <paramref name="role"/> (sin distinguir mayúsculas).
+    /// Misma regla multi-rol que <see cref="IsSuperAdmin"/>, sin ir a la base.
+    /// </summary>
+    public static bool HasRole(ClaimsPrincipal user, string role)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(role);
+        return RoleValues(user).Any(v => string.Equals(v, role, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Valores de TODOS los claims de rol del JWT (<c>role</c> y <c>role_code</c>), sin deduplicar.</summary>
+    public static IEnumerable<string> RoleValues(ClaimsPrincipal user)
     {
         ArgumentNullException.ThrowIfNull(user);
-        return user.Claims.Any(c =>
-            (c.Type == AdminAuthorization.RoleClaimType || c.Type == RoleCodeClaimType)
-            && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+        return user.Claims
+            .Where(c => c.Type == AdminAuthorization.RoleClaimType || c.Type == RoleCodeClaimType)
+            .Select(c => c.Value);
     }
 
     /// <summary>

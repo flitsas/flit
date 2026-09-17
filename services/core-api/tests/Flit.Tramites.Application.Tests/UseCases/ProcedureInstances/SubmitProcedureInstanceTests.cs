@@ -18,9 +18,12 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
 /// <summary>
 /// Radicar (N 03): el submit orquesta el lifecycle service — borrador→preparado (gate RF03)
-/// + preparado→entregado (gates OT). Usa el servicio REAL con puertos fake: los asserts de
+/// + radicación (gates OT). Usa el servicio REAL con puertos fake: los asserts de
 /// historial/notificación se hacen sobre los registros capturados (la escritura física del
 /// historial es del recorder de HU-2).
+/// <para>ADR-0059 (HU #12597): la fixture de matrícula pide placa (<c>requiresPlateRequest</c>), así
+/// que <see cref="FullyGated"/> SIN placa radica a <c>preasignacion</c> (Ruta Larga) y
+/// <see cref="ConPlaca"/> a <c>entregado</c> (Ruta Corta).</para>
 /// </summary>
 public sealed class SubmitProcedureInstanceTests
 {
@@ -53,7 +56,7 @@ public sealed class SubmitProcedureInstanceTests
             _recorder,
             _publisher);
         _sut = new SubmitProcedureInstanceHandler(
-            lifecycle, _repo, NullPlatePreassignPolicy.Instance, NullLogger<SubmitProcedureInstanceHandler>.Instance);
+            lifecycle, _repo, NullLogger<SubmitProcedureInstanceHandler>.Instance);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) =>
@@ -114,6 +117,21 @@ public sealed class SubmitProcedureInstanceTests
         return i;
     }
 
+    /// <summary>Ruta Corta: placa del RUNT o digitada ya presente en el expediente.</summary>
+    private static ProcedureInstance ConPlaca(ProcedureInstance instance, string plate = "ABC123")
+    {
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            FieldKey = "plate",
+            ValueText = plate,
+            Source = "consultation",
+        });
+        return instance;
+    }
+
     private static ProcedureType PublishedType(Guid id) =>
         new()
         {
@@ -128,7 +146,7 @@ public sealed class SubmitProcedureInstanceTests
 
     private void Wire(ProcedureInstance instance, CancellationToken ct)
     {
-        _repo.GetByIdAsync(instance.Id, instance.TenantId, ct).Returns(instance);
+        _repo.GetByIdWithDetailsAsync(instance.Id, instance.TenantId, ct).Returns(instance);
         _repo.GetByIdWithWizardGraphAsync(instance.Id, instance.TenantId, ct).Returns(instance);
         _typeRepo.GetByIdAsync(instance.ProcedureTypeId, ct).Returns(PublishedType(instance.ProcedureTypeId));
     }
@@ -137,7 +155,7 @@ public sealed class SubmitProcedureInstanceTests
     public async Task HandleAsync_NotFound_ReturnsNotFound()
     {
         var ct = TestContext.Current.CancellationToken;
-        _repo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct)
+        _repo.GetByIdWithDetailsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct)
             .Returns((ProcedureInstance?)null);
 
         var (result, error) = await _sut.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), changedBy: null, ct);
@@ -211,11 +229,11 @@ public sealed class SubmitProcedureInstanceTests
         var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().BeNull();
-        result!.Status.Should().Be(TramiteEstado.Entregado);
+        result!.Status.Should().Be(TramiteEstado.Preasignacion);
     }
 
     [Fact]
-    public async Task HandleAsync_BorradorConGates_EncadenaPreparadoYEntregado()
+    public async Task HandleAsync_BorradorConGates_EncadenaPreparadoYRadica()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
@@ -227,9 +245,9 @@ public sealed class SubmitProcedureInstanceTests
 
         error.Should().BeNull();
         result.Should().NotBeNull();
-        result!.Status.Should().Be(TramiteEstado.Entregado);
+        result!.Status.Should().Be(TramiteEstado.Preasignacion);
         result.SubmittedAt.Should().NotBeNull();
-        instance.Status.Should().Be(TramiteEstado.Entregado);
+        instance.Status.Should().Be(TramiteEstado.Preasignacion);
         instance.SubmittedAt.Should().NotBeNull();
 
         // Dos transiciones = dos registros de historial y dos notificaciones, en orden.
@@ -237,13 +255,13 @@ public sealed class SubmitProcedureInstanceTests
         _recorder.Records[0].Should().Match<Flit.Tramites.Domain.Tramites.Estados.TramiteTransitionRecord>(r =>
             r.FromStatus == TramiteEstado.Borrador && r.ToStatus == TramiteEstado.Preparado);
         _recorder.Records[1].Should().Match<Flit.Tramites.Domain.Tramites.Estados.TramiteTransitionRecord>(r =>
-            r.FromStatus == TramiteEstado.Preparado && r.ToStatus == TramiteEstado.Entregado);
+            r.FromStatus == TramiteEstado.Preparado && r.ToStatus == TramiteEstado.Preasignacion);
         _publisher.Published.Should().HaveCount(2);
         await _repo.Received(2).SaveChangesWithConcurrencyGuardAsync(ct);
     }
 
     [Fact]
-    public async Task HandleAsync_DesdePreparado_SoloEntrega()
+    public async Task HandleAsync_DesdePreparado_SoloRadica()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
@@ -255,9 +273,9 @@ public sealed class SubmitProcedureInstanceTests
         var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().BeNull();
-        result!.Status.Should().Be(TramiteEstado.Entregado);
+        result!.Status.Should().Be(TramiteEstado.Preasignacion);
         _recorder.Records.Should().ContainSingle(r =>
-            r.FromStatus == TramiteEstado.Preparado && r.ToStatus == TramiteEstado.Entregado);
+            r.FromStatus == TramiteEstado.Preparado && r.ToStatus == TramiteEstado.Preasignacion);
     }
 
     private static readonly Guid BogotaOfficeId =
@@ -340,74 +358,108 @@ public sealed class SubmitProcedureInstanceTests
         error.Should().BeNull();
         // El id se promueve a la columna para el motor de reglas OT y los listados.
         instance.TransitOfficeId.Should().Be(BogotaOfficeId);
-        instance.Status.Should().Be(TramiteEstado.Entregado);
+        instance.Status.Should().Be(TramiteEstado.Preasignacion);
     }
 
-    [Theory] // submit deja status 'entregado'; sub-estado varía por ruta (incl. Terminado directo).
-    [InlineData(PlateRouteDecision.Asignado, PlateFlowStatus.Asignado)]
-    [InlineData(PlateRouteDecision.Preasignado, PlateFlowStatus.Preasignado)]
-    [InlineData(PlateRouteDecision.Terminado, PlateFlowStatus.Terminado)]
-    [InlineData(PlateRouteDecision.Standard, null)]
-    public async Task HandleAsync_RutaDePlaca_QuedaEntregadoConSubEstado(
-        PlateRouteDecision decision, string? expectedSubStatus)
+    // ── ADR-0059 / HU #12597 — destino de la radicación ───────────────────────────
+
+    [Fact] // AC1 — matrícula (pide placa) sin placa → preasignacion, historial preparado → preasignacion.
+    public async Task HandleAsync_MatriculaSinPlaca_RadicaAPreasignacion()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = FullyGated(id, tenantId);
-        SeleccionarOt(instance, BogotaOfficeId);
+        instance.Status = TramiteEstado.Preparado;
         Wire(instance, ct);
-        _grantGate.IsEnabledForTenantAsync(tenantId, BogotaOfficeId, Arg.Any<CancellationToken>())
-            .Returns(true);
 
-        var lifecycle = new TramiteLifecycleService(
-            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher);
-        var handler = new SubmitProcedureInstanceHandler(
-            lifecycle, _repo, new FakePlatePolicy(decision), NullLogger<SubmitProcedureInstanceHandler>.Instance);
-
-        var (result, error) = await handler.HandleAsync(id, tenantId, changedBy: null, ct);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().BeNull();
-        result.Should().NotBeNull();
-        instance.Status.Should().Be(TramiteEstado.Entregado);
-        instance.PlateFlowStatus.Should().Be(expectedSubStatus);
+        result!.Status.Should().Be(TramiteEstado.Preasignacion);
+        instance.SubmittedAt.Should().NotBeNull();
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == TramiteEstado.Preparado && r.ToStatus == TramiteEstado.Preasignacion);
+        _publisher.Published.Should().ContainSingle(r => r.ToStatus == TramiteEstado.Preasignacion);
     }
 
-    [Fact] // HU #10806 (AC4) — compañía con preasignación activa pero OT mal configurado: la radicación
-           // se BLOQUEA con plate_route_misconfigured, en vez de degradar a estándar en silencio.
-    public async Task HandleAsync_RutaMalConfigurada_BloqueaRadicacion()
+    [Theory] // AC2 — con placa (RUNT o digitada) → entregado directo, sin pasar por asignado.
+    [InlineData("consultation")]
+    [InlineData("user")]
+    public async Task HandleAsync_MatriculaConPlaca_RadicaAEntregadoDirecto(string source)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        instance.FieldValues.Single(f => f.FieldKey == "plate").Source = source;
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+        _recorder.Records.Select(r => r.ToStatus).Should().Equal(TramiteEstado.Preparado, TramiteEstado.Entregado);
+    }
+
+    [Fact] // AC3 — traspaso (no pide placa): entregado, sin consultar ninguna configuración de preasignación.
+    public async Task HandleAsync_Traspaso_RadicaAEntregado()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = FullyGated(id, tenantId);
-        SeleccionarOt(instance, BogotaOfficeId);
+        instance.ProcedureType = ProcedureTypeFixture.Traspaso;
+        instance.Status = TramiteEstado.Preparado;
         Wire(instance, ct);
-        _grantGate.IsEnabledForTenantAsync(tenantId, BogotaOfficeId, Arg.Any<CancellationToken>())
-            .Returns(true);
 
-        var lifecycle = new TramiteLifecycleService(
-            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher);
-        var handler = new SubmitProcedureInstanceHandler(
-            lifecycle, _repo, new FakePlatePolicy(PlateRouteDecision.Blocked), NullLogger<SubmitProcedureInstanceHandler>.Instance);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
-        var (result, error) = await handler.HandleAsync(id, tenantId, changedBy: null, ct);
-
-        error.Should().Be("plate_route_misconfigured");
-        result.Should().BeNull();
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
     }
 
-    private sealed class FakePlatePolicy(PlateRouteDecision decision) : IPlatePreassignPolicy
+    [Theory] // AC7 — re-radicar desde rechazado (subsanación activa): la placa decide el destino.
+    [InlineData(false, "preasignacion")]
+    [InlineData(true, "entregado")]
+    public async Task HandleAsync_ReRadicarDesdeRechazado_LaPlacaDecideElDestino(bool conPlaca, string destino)
     {
-        public Task<PlateRouteResult> DecideAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default) =>
-            Task.FromResult(decision switch
-            {
-                PlateRouteDecision.Asignado => PlateRouteResult.Reserved,
-                PlateRouteDecision.Terminado => PlateRouteResult.ReservedSkipToTerminado,
-                PlateRouteDecision.Preasignado => PlateRouteResult.NoPlate,
-                PlateRouteDecision.Blocked => PlateRouteResult.Misconfigured,
-                _ => PlateRouteResult.NotEnabled,
-            });
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        if (conPlaca)
+            ConPlaca(instance);
+        instance.Status = TramiteEstado.Rechazado;
+        instance.SubsanacionActiva = true;
+        instance.RejectedFrom = TramiteEstado.Preasignacion;
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(destino);
+        instance.SubsanacionActiva.Should().BeFalse("re-radicar cierra la ventana de subsanación");
+        instance.RejectedFrom.Should().BeNull("al salir de rechazado la marca se limpia");
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == TramiteEstado.Rechazado && r.ToStatus == destino);
+    }
+
+    [Fact] // AC5 (HU #12596) — rechazado SIN subsanación activa no se re-radica por ningún atajo.
+    public async Task HandleAsync_RechazadoSinSubsanacion_NoReRadica()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        instance.Status = TramiteEstado.Rechazado;
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        result.Should().BeNull();
+        error.Should().Be(TramiteEstadoErrores.TransicionNoPermitida);
+        instance.Status.Should().Be(TramiteEstado.Rechazado);
     }
 
     [Fact]
@@ -447,7 +499,7 @@ public sealed class SubmitProcedureInstanceTests
     }
 
     [Fact]
-    public async Task HandleAsync_SinFur_TransitionsToEntregado()
+    public async Task HandleAsync_SinFur_Radica()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
@@ -459,11 +511,11 @@ public sealed class SubmitProcedureInstanceTests
         var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().BeNull();
-        result!.Status.Should().Be(TramiteEstado.Entregado);
+        result!.Status.Should().Be(TramiteEstado.Preasignacion);
     }
 
     [Fact]
-    public async Task HandleAsync_SinOrganismo_TransitionsToEntregado()
+    public async Task HandleAsync_SinOrganismo_Radica()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
@@ -475,7 +527,7 @@ public sealed class SubmitProcedureInstanceTests
         var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().BeNull();
-        result!.Status.Should().Be(TramiteEstado.Entregado);
+        result!.Status.Should().Be(TramiteEstado.Preasignacion);
     }
 
     // ── HU #10431 — autoría (changed_by) en la radicación ─────────────────────────
@@ -526,7 +578,9 @@ public sealed class SubmitProcedureInstanceTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var instance = FullyGated(id, tenantId);
+        // ADR-0059: con placa la radicación entra directo a entregado; sin placa iría a preasignación
+        // y la firma la dispararía el OT al asignar la placa.
+        var instance = ConPlaca(FullyGated(id, tenantId));
         Wire(instance, ct);
 
         var lifecycle = new TramiteLifecycleService(
@@ -535,8 +589,7 @@ public sealed class SubmitProcedureInstanceTests
             _repo, Substitute.For<IExpedienteConsolidadoMerger>(), Substitute.For<IAttachmentStorage>(),
             Substitute.For<IImprontaManualStamper>());
         var sutConFirma = new SubmitProcedureInstanceHandler(
-            lifecycle, _repo, NullPlatePreassignPolicy.Instance,
-            NullLogger<SubmitProcedureInstanceHandler>.Instance, firmaImpronta);
+            lifecycle, _repo, NullLogger<SubmitProcedureInstanceHandler>.Instance, firmaImpronta);
 
         var (result, error) = await sutConFirma.HandleAsync(id, tenantId, changedBy: null, ct);
 

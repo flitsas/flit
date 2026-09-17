@@ -450,11 +450,19 @@ services:
     working_dir: /app/gateway
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+<<<<<<< HEAD
       ASPNETCORE_URLS: http://+:${GATEWAY_PORT:-5002}
       Cors__AllowedOrigins__0: ${CORS_ORIGIN:-https://qa.flitsas.online}
       # Segundo origen: el dominio de marca blanca sirve el MISMO front (mismo
       # contenedor, otro vhost de nginx) y por tanto llama al mismo gateway.
       Cors__AllowedOrigins__1: ${CORS_ORIGIN_MARCA_BLANCA:-https://marcablancaqa.flitsas.online}
+=======
+      ASPNETCORE_URLS: http://+:${GATEWAY_PORT:-4002}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN:-https://dev.flitsas.online}
+      # Segundo origen: el dominio de marca blanca sirve el MISMO front (mismo
+      # contenedor, otro vhost de nginx) y por tanto llama al mismo gateway.
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_MARCA_BLANCA:-https://marcablancadev.flitsas.online}
+>>>>>>> origin/develop
       # Destinos internos del YARP: apuntan al puerto interno de cada servicio.
       # (sobrescriben appsettings.json, que trae los puertos por defecto)
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-5003}/

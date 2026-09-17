@@ -69,12 +69,6 @@ public sealed class TenantSettings
     public bool PlatePreassignEnabled { get; init; }
 
     /// <summary>
-    /// Omite Asignado (checks gestor) cuando hay placa completa al radicar → Terminado
-    /// (<c>plate_flow_skip_to_terminado</c>).
-    /// </summary>
-    public bool PlateFlowSkipToTerminado { get; init; }
-
-    /// <summary>
     /// Al procesar en sub-estado asignado se valida el SOAT contra el RUNT y, sin SOAT vigente, el
     /// avance se detiene. Desactivada, el hallazgo solo se informa.
     /// </summary>
@@ -170,7 +164,6 @@ public sealed class TenantSettings
         OnlyOwnVehiclesOtros = false,
         SignatureVaultEnabled = false,
         PlatePreassignEnabled = false,
-        PlateFlowSkipToTerminado = false,
         ValidateSoatWithRunt = false,
         NotificationChannel = NotificationChannel.FlitSmtp,
         PersonalizedDocumentsEnabled = false,

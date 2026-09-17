@@ -73,6 +73,20 @@ public sealed class SubsanacionSinTransicionTests
         instance.SubsanacionCount.Should().Be(1);
     }
 
+    [Fact] // ADR-0059 (HU #12597 AC6) — tomar el trámite en subsanación limpia el distintivo «Rechazado preasignación».
+    public async Task Activar_limpiaElOrigenDelRechazo()
+    {
+        var instance = Rechazado(Guid.NewGuid(), Guid.NewGuid());
+        instance.RejectedFrom = TramiteEstado.Preasignacion;
+        ArrangeCommit(instance);
+        var sut = new StartSubsanacionHandler(_repo);
+
+        await sut.HandleAsync(instance.Id, instance.TenantId, Guid.NewGuid(), ct: Ct);
+
+        instance.SubsanacionActiva.Should().BeTrue();
+        instance.RejectedFrom.Should().BeNull();
+    }
+
     [Fact]
     public async Task Activar_guardaElBaselineDeCamposEnLaInstancia()
     {

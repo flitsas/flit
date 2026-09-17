@@ -48,7 +48,21 @@ public sealed record PreflightPreviewDto(
     IReadOnlyList<PreflightCheckDto> Checks,
     string? Provider,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<PreflightPreviewFieldDto> VehicleFields);
+    IReadOnlyList<PreflightPreviewFieldDto> VehicleFields,
+    /// <summary>
+    /// Epic #12550 — ruta de la matrícula inicial que decide el RUNT (<see cref="MatriculaRuta"/>):
+    /// <c>corta</c> con placa, <c>larga</c> sin ella. <c>null</c> fuera de matrícula inicial.
+    /// </summary>
+    string? Route = null,
+    /// <summary>
+    /// Organismo ante el que se radica la Ruta Corta: el que el RUNT reporta para el vehículo, ya
+    /// resuelto contra los habilitados de la compañía. <c>null</c> en Ruta Larga (lo elige el gestor) y
+    /// en la Corta cuando el RUNT no dijo organismo (el gestor lo elige, caso no visto en capturas).
+    /// </summary>
+    PreflightPreviewTransitOfficeDto? TransitOffice = null);
+
+/// <summary>Organismo resuelto para la Ruta Corta, en la forma que el paso 1 pinta y la creación reconfirma.</summary>
+public sealed record PreflightPreviewTransitOfficeDto(Guid Id, string Code, string Name, string? CityName);
 
 /// <summary>
 /// Consulta de vehículo ya resuelta, lista para inyectarse en <see cref="RunPreflightHandler"/> cuando
@@ -331,6 +345,28 @@ public sealed class RunPreflightPreviewHandler(
         if (vehicleStateBlock is not null)
             return (null, VehicleStatePolicy.ErrorCode, null, vehicleStateBlock);
 
+        // Epic #12550 (HU #12648) — la ruta la decide el RUNT: con placa el trámite va por la Ruta
+        // Corta ante el organismo que el RUNT reporta. Se resuelve AQUÍ, con el vehículo ya libre de
+        // bloqueos registrales, para que el gestor vea placa y organismo antes de crear nada y para que
+        // un organismo no habilitado corte antes de gastar más consultas. En Ruta Larga no hay nada
+        // que resolver: el gestor elige la secretaría.
+        string? route = null;
+        PreflightPreviewTransitOfficeDto? organismoRutaCorta = null;
+        if (esMatricula)
+        {
+            var (ruta, organismo, bloqueoRuta) = await ResolverRutaMatriculaAsync(
+                request.TenantId, vehicleFields, ct).ConfigureAwait(false);
+            if (bloqueoRuta is not null)
+                return (null, VehicleStatePolicy.OrganismoRuntNoHabilitadoErrorCode, null, bloqueoRuta);
+
+            route = ruta;
+            organismoRutaCorta = organismo is null
+                ? null
+                : new PreflightPreviewTransitOfficeDto(organismo.Id, organismo.Code, organismo.Name, organismo.CityName);
+            vehicleChecks.Add(RunPreflightHandler.BuildRutaMatriculaCheck(ruta, PlacaDe(vehicleFields), organismo?.Name));
+            checks.Add(vehicleChecks[^1]);
+        }
+
         // Cambio de carrocería sobre un vehículo que el RUNT no reporta con ninguna. Se comprueba AQUÍ
         // y no solo al crear el trámite porque este es el momento en que el gestor todavía puede
         // escoger otro tipo: enterarse después es enterarse con el expediente ya abierto. Sin respuesta
@@ -400,11 +436,61 @@ public sealed class RunPreflightPreviewHandler(
                 checks,
                 provider,
                 DateTimeOffset.UtcNow,
-                vehicleFields.Select(f => new PreflightPreviewFieldDto(f.FieldKey, f.ValueText, f.ValueJson)).ToList()),
+                vehicleFields.Select(f => new PreflightPreviewFieldDto(f.FieldKey, f.ValueText, f.ValueJson)).ToList(),
+                route,
+                organismoRutaCorta),
             null,
             null,
             null);
     }
+
+    /// <summary>
+    /// Epic #12550 — ruta y organismo de una matrícula inicial a partir de lo hidratado por el RUNT.
+    /// Ruta Corta ⇔ hay placa. Con placa y nombre de organismo, este se resuelve contra los OT
+    /// habilitados de la compañía (por nombre, como el traspaso en HU #10659) y debe ser operable; si no
+    /// lo es, bloqueo <see cref="VehicleStatePolicy.OrganismoRuntNoHabilitadoErrorCode"/> con el nombre
+    /// en <see cref="VehicleStateBlock.Detalle"/>. Con placa y SIN nombre no se bloquea (no hay nada que
+    /// validar): el gestor elige el organismo, igual que en la Ruta Larga.
+    /// </summary>
+    internal static async Task<(string Ruta, ResolvedTransitOffice? Organismo, VehicleStateBlock? Bloqueo)> ResolverRutaMatriculaAsync(
+        ITransitOfficeResolver resolver,
+        IOtOperabilityGate operability,
+        Guid tenantId,
+        IReadOnlyList<HydratedField> vehicleFields,
+        CancellationToken ct)
+    {
+        var placa = PlacaDe(vehicleFields);
+        var ruta = MatriculaRuta.Por(!string.IsNullOrWhiteSpace(placa));
+        if (ruta == MatriculaRuta.Larga)
+            return (ruta, null, null);
+
+        var runtName = vehicleFields
+            .FirstOrDefault(f => string.Equals(f.FieldKey, TransitOfficeFieldKeys.Name, StringComparison.OrdinalIgnoreCase))
+            ?.ValueText?.Trim();
+        if (string.IsNullOrWhiteSpace(runtName))
+            return (ruta, null, null);
+
+        var match = await resolver.ResolveEnabledByNameAsync(tenantId, runtName, ct).ConfigureAwait(false);
+        if (match is null || !await operability.IsOperableAsync(match.Id, ct).ConfigureAwait(false))
+        {
+            return (ruta, null, new VehicleStateBlock(
+                VehicleStatePolicy.VehicleStatusOrganismoRuntNoHabilitado,
+                VehicleStatePolicy.ProcedureTypeMatriculaInicial,
+                VehicleStateSource.Runt,
+                runtName));
+        }
+
+        return (ruta, match, null);
+    }
+
+    private Task<(string Ruta, ResolvedTransitOffice? Organismo, VehicleStateBlock? Bloqueo)> ResolverRutaMatriculaAsync(
+        Guid tenantId, IReadOnlyList<HydratedField> vehicleFields, CancellationToken ct) =>
+        ResolverRutaMatriculaAsync(transitOfficeResolver, _otOperability, tenantId, vehicleFields, ct);
+
+    internal static string? PlacaDe(IReadOnlyList<HydratedField> vehicleFields) =>
+        vehicleFields
+            .FirstOrDefault(f => string.Equals(f.FieldKey, VehicleFieldKeys.Plate, StringComparison.OrdinalIgnoreCase))
+            ?.ValueText?.Trim();
 
     /// <summary>
     /// HU #11200 (AC1/AC2/AC3) — comprueba que el organismo donde el RUNT dice que está matriculado el

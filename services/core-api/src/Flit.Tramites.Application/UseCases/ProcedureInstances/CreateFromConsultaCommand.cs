@@ -148,11 +148,34 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
         if (entraPorVin ? vin is null : plate is null)
             return (null, "identificador_requerido", null, null);
 
+        // Epic #12550 (HU #12648) — la consulta del paso 1 se consume AQUÍ, antes de validar la
+        // secretaría, porque en matrícula inicial decide la ruta: con placa (Ruta Corta) el organismo es
+        // el que el RUNT reporta y lo que envíe el cliente se ignora; sin placa (Ruta Larga) lo elige el
+        // gestor, como siempre. Sin token (expirado / otra instancia) no hay forma de saber la ruta antes
+        // de crear: se exige la secretaría como hasta ahora y el preflight de abajo consulta de nuevo.
+        var precomputed = previewStore.TryTake(request.TenantId, request.PreviewToken);
+        var rutaCorta = esMatricula && precomputed is not null
+            && !string.IsNullOrWhiteSpace(RunPreflightPreviewHandler.PlacaDe(precomputed.HydratedFields));
+
         // HU #11199 (AC1/AC3) — la secretaría elegida en el paso 1 se re-confirma aquí, no se copia del
         // preview: entre la consulta y el avance al paso 2 pudieron revocar el grant o desactivar el
         // organismo, y este es el punto donde la elección se vuelve permanente.
         ResolvedTransitOffice? secretaria = null;
-        if (exigeSecretaria)
+        if (rutaCorta)
+        {
+            // El organismo del RUNT se re-resuelve (no se copia del preview) por el mismo motivo de
+            // arriba: el grant pudo cambiar entre la consulta y el avance. Sin nombre en la respuesta
+            // del RUNT se cae a la secretaría elegida por el gestor (caso no visto en capturas).
+            var (_, organismo, bloqueoRuta) = await RunPreflightPreviewHandler.ResolverRutaMatriculaAsync(
+                transitOfficeResolver, _otOperability, request.TenantId, precomputed!.HydratedFields, ct)
+                .ConfigureAwait(false);
+            if (bloqueoRuta is not null)
+                return (null, VehicleStatePolicy.OrganismoRuntNoHabilitadoErrorCode, null, bloqueoRuta);
+
+            secretaria = organismo;
+        }
+
+        if (exigeSecretaria && secretaria is null)
         {
             if (request.TransitOfficeId is not { } elegido || elegido == Guid.Empty)
                 return (null, TransitOfficeSelectionPolicy.RequiredErrorCode, null, null);
@@ -194,7 +217,8 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
                 request.TenantId,
                 ProcedureTypeId: null,
                 request.CreatedByUserId,
-                request.TransitOfficeId,
+                // En Ruta Corta manda el organismo del RUNT, no el que envíe el cliente.
+                secretaria?.Id ?? request.TransitOfficeId,
                 Modalidad: request.Modalidad,
                 ProcedureTypeCode: procedureType?.Code),
             ct);
@@ -287,8 +311,7 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
 
         // Preflight autoritativo sobre la instancia real, reusando la consulta del paso 1: hidrata los
         // atributos del vehículo, fija el OT en traspaso y persiste el snapshot, sin segunda llamada al
-        // proveedor externo. Sin token (expirado / otra instancia del servicio) consulta de nuevo.
-        var precomputed = previewStore.TryTake(request.TenantId, request.PreviewToken);
+        // proveedor externo (la consulta se consumió arriba; sin token consulta de nuevo).
         var (preflight, preflightError, existingId, vehicleState) =
             await preflightHandler.HandleAsync(summary.Id, request.TenantId, precomputed, ct);
 

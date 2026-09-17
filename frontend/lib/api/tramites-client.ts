@@ -40,6 +40,8 @@ import type {
   IniciarPrevalidacionResult,
   PrendaData,
   PrendaInput,
+  RequestRevocationInput,
+  RequestRevocationResult,
   InstanceSummary,
   InstanceEstadoCountsResponse,
   InstancesResponse,
@@ -69,7 +71,7 @@ import type {
   ProcedureInstanceDetail,
   ReconcileIdentityResult,
   ProcedureInstanceSummary,
-  CompletePlateFlowResult,
+  EnviarAlOtResult,
   RuntPersonLookupInput,
   RuntPersonLookupResult,
   ValidateSoatResult,
@@ -117,6 +119,9 @@ interface PreflightSnapshotDto {
 interface PreflightPreviewDto extends PreflightSnapshotDto {
   previewToken: string;
   vehicleFields?: Array<{ fieldKey: string; valueText?: string | null; valueJson?: string | null }>;
+  /** Epic #12550 — `corta` | `larga` en matrícula inicial; ausente/null en el resto. */
+  route?: string | null;
+  transitOffice?: { id: string; code: string; name: string; cityName?: string | null } | null;
 }
 
 function mapChecks(dtos: PreflightSnapshotDto['checks']): PreflightSnapshot['checks'] {
@@ -137,6 +142,11 @@ function mapPreflight(dto: PreflightSnapshotDto): PreflightSnapshot {
     createdAt: dto.createdAt,
   };
 }
+import type {
+  RevocationRequestListItem,
+  RevocationRequestListParams,
+  RevocationRequestListResponse,
+} from './types/revocation-requests';
 import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
@@ -413,6 +423,23 @@ export function isVehicleBodyTypeMissing(err: unknown): boolean {
   return (problem as { title?: unknown }).title === 'VEHICLE_BODY_TYPE_MISSING';
 }
 
+/**
+ * Epic #12550 — Ruta Corta ante un organismo que la compañía no tiene habilitado (422
+ * `organismo_runt_no_habilitado`). Devuelve el nombre del organismo que reporta el RUNT, o `null` si
+ * el error es otro. No es subsanable desde el trámite: la matrícula se radica ante ese organismo o no
+ * se crea.
+ */
+export function getOrganismoRuntNoHabilitado(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return null;
+  const { title, transitOfficeName } = problem as { title?: unknown; transitOfficeName?: unknown };
+  if (title !== 'organismo_runt_no_habilitado') return null;
+  return typeof transitOfficeName === 'string' && transitOfficeName.trim() !== ''
+    ? transitOfficeName
+    : 'el organismo reportado por el RUNT';
+}
+
 export function isTransitOfficeUnavailable(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const { status, problem } = err as { status?: unknown; problem?: unknown };
@@ -642,6 +669,38 @@ async function listPlateHistory(params: {
   return { items, total: res?.total ?? items.length };
 }
 
+/**
+ * HU #12578 (Feature #12565) — vista dedicada "Revocatorias" del lado gestor.
+ * `GET /api/v1/tramites/revocation-requests`, tenant-scoped por `X-Tenant-Id` (mismo patrón que el
+ * resto de `/api/v1/tramites/...`). `statuses` viaja como `estado` separado por comas (mismo criterio
+ * tolerante que `ParseEstados` del backend); vacío/omitido = todos los sub-estados.
+ */
+async function listRevocationRequests(
+  params: RevocationRequestListParams = {},
+  tenantId?: string,
+): Promise<RevocationRequestListResponse> {
+  const qs = new URLSearchParams();
+  if (params.statuses?.length) qs.set('estado', params.statuses.join(','));
+  if (params.requestedFrom) qs.set('requestedFrom', params.requestedFrom);
+  if (params.requestedTo) qs.set('requestedTo', params.requestedTo);
+  if (params.transitOfficeId) qs.set('transitOfficeId', params.transitOfficeId);
+  if (params.skip !== undefined) qs.set('skip', String(params.skip));
+  if (params.take !== undefined) qs.set('take', String(params.take));
+  const query = qs.toString();
+
+  const res = await request<RevocationRequestListResponse>(
+    `/api/v1/tramites/revocation-requests${query ? `?${query}` : ''}`,
+    { headers: tenantHeader(tenantId) },
+  );
+  const items: RevocationRequestListItem[] = res?.items ?? [];
+  return {
+    items,
+    total: res?.total ?? items.length,
+    skip: res?.skip ?? params.skip ?? 0,
+    take: res?.take ?? params.take ?? 20,
+  };
+}
+
 async function listInstancesPage(
   params: ListInstancesParams,
 ): Promise<{ items: InstanceSummary[]; total: number }> {
@@ -753,6 +812,14 @@ export const tramitesClient = {
    * completa desde Excel, y unos cientos de valores no caben en una query string.</p>
    */
   searchInstances: (params: ListInstancesParams = {}) => searchInstances(params),
+
+  /**
+   * HU #12578 (Feature #12565) — vista dedicada "Revocatorias" del lado gestor: listado filtrado a
+   * trámites con solicitud de revocatoria en cualquier sub-estado (AC1), con los mismos filtros del
+   * listado general (fecha, OT, estado).
+   */
+  listRevocationRequests: (params: RevocationRequestListParams = {}, tenantId?: string) =>
+    listRevocationRequests(params, tenantId),
 
   // ── HU #12362 / #12358 — lectura consolidada de la red (cabeza de grupo) ──────────────────────
   //
@@ -1254,18 +1321,19 @@ export const tramitesClient = {
     ),
 
   /**
-   * Gestor en Asignado: checks opcionales + avanza a Terminado.
+   * ADR-0059 — «Enviar al OT»: gestor en Asignado marca los checks opcionales (SOAT / impuesto) y el
+   * trámite pasa a Entregado para la decisión del organismo.
    *
    * El trámite puede avanzar CON salvedades (p. ej. la compañía permite continuar sin SOAT vigente):
    * en ese caso llega `warningMessage` y la UI debe mostrarlo aunque la operación haya salido bien.
    */
-  completePlateFlow: (
+  enviarAlOt: (
     instanceId: string,
     body: { soatPagado?: boolean; impuestoDepartamentalPagado?: boolean } = {},
     tenantId?: string,
   ) =>
-    request<CompletePlateFlowResult>(
-      `/api/v1/tramites/instances/${instanceId}/plate-flow/complete`,
+    request<EnviarAlOtResult>(
+      `/api/v1/tramites/instances/${instanceId}/enviar-al-ot`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
@@ -1582,6 +1650,15 @@ export const tramitesClient = {
         valueJson: f.valueJson ?? null,
         source: 'consultation',
       })),
+      route: dto.route === 'corta' || dto.route === 'larga' ? dto.route : null,
+      transitOffice: dto.transitOffice
+        ? {
+            id: dto.transitOffice.id,
+            code: dto.transitOffice.code,
+            name: dto.transitOffice.name,
+            cityName: dto.transitOffice.cityName ?? null,
+          }
+        : null,
     };
   },
 
@@ -2402,6 +2479,41 @@ export const tramitesClient = {
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
 
+  /**
+   * HU #12574 (Feature #12565) — envía la solicitud de revocatoria del Paso 2 del modal: motivo +
+   * documento de soporte (PDF) + los 2 checks de confirmación (AC1/AC2). Multipart (campo `file`):
+   * NO usa `request()` (fija Content-Type: application/json) — mismo patrón que
+   * `adminCargarConsolidado`/`analyzeDocument` de este archivo. Los checks viajan como texto
+   * "true"/"false" (mismo binding `[FromForm] bool` que exige el backend, ver
+   * RevocationRequestEndpoints.ParseBool).
+   *
+   * Errores llegan como `TramitesApiError` con `.status`/`.problem.title` — el código de negocio
+   * viaja en `title`: 404 not_found | 409 tramite_no_aprobado | 409 solicitud_activa_existente |
+   * 422 motivo_requerido | confirmacion_exactitud_requerida | confirmacion_consecuencias_requerida |
+   * documento_requerido | documento_formato_invalido | documento_muy_grande | ventana_vencida |
+   * origen_no_soportado.
+   */
+  requestRevocation: async (
+    instanceId: string,
+    input: RequestRevocationInput,
+    tenantId?: string,
+  ): Promise<RequestRevocationResult> => {
+    const form = new FormData();
+    form.append('reason', input.reason);
+    form.append('confirmAccuracy', input.confirmAccuracy ? 'true' : 'false');
+    form.append('confirmConsequences', input.confirmConsequences ? 'true' : 'false');
+    form.append('file', input.file);
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/instances/${instanceId}/revocation-requests`),
+      { method: 'POST', headers: tenantHeader(tenantId), body: form },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
+    }
+    return (await res.json()) as RequestRevocationResult;
+  },
+
   // ── Admin · Trámites · Gestión avanzada (Feature #12155, HU #12163) ──────────────────
   // Los 6 endpoints administrativos de HU #12158-#12162, todos gateados por permiso en el
   // BACKEND (SuperAdmin bypassa). El frontend no repite esa validación aquí: solo condiciona la
@@ -2550,6 +2662,12 @@ const TRANSITION_ERROR_COPY: Record<string, string> = {
   motivo_requerido: 'Debes indicar el motivo para esta transición.',
   conflicto_concurrencia: 'El trámite fue modificado por otro usuario, recarga e intenta de nuevo.',
   estado_desconocido: 'El estado destino no es válido.',
+  // ADR-0059 — Ruta Larga de matrícula inicial (estados Preasignación / Asignado).
+  transicion_requiere_placa: 'El trámite no tiene placa: debe pasar por Preasignación para que el organismo la asigne.',
+  transicion_requiere_preasignacion: 'La matrícula inicial sin placa se radica en Preasignación, no directamente en Entregado.',
+  transicion_placa_incoherente: 'La placa del trámite no es coherente con el estado solicitado.',
+  transicion_solo_ot: 'Esta transición solo puede hacerla el organismo de tránsito.',
+  transicion_solo_gestor: 'Esta transición solo puede hacerla el gestor de la empresa.',
 };
 
 /**

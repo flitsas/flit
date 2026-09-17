@@ -1183,7 +1183,10 @@ paths:
         - bearerAuth: []
       responses:
         "200":
-          description: Perfil OT (operationMode, quipuxReadOnly, transitOfficeId, featureFlags).
+          description: >
+            Perfil OT (operationMode, quipuxReadOnly, transitOfficeId, featureFlags,
+            revocationWindowBusinessDays). `revocationWindowBusinessDays` es la ventana de
+            revocatoria en días hábiles (HU #12568); `null` = sin configurar = sin límite.
         "401":
           description: No autenticado.
         "403":
@@ -1191,12 +1194,39 @@ paths:
     patch:
       tags: [Admin · OT]
       operationId: adminOtPatchProfile
-      summary: Actualizar modo Dashboard/QX
+      summary: Actualizar modo Dashboard/QX y ventana de revocatoria
       security:
         - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operationMode:
+                  type: string
+                  enum: [dashboard, quipux]
+                quipuxReadOnly:
+                  type: boolean
+                revocationWindowBusinessDays:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  description: >
+                    Ventana de revocatoria en días hábiles (HU #12568). Enviar `null` (o
+                    borrar el valor) la deja sin límite — no se sustituye por ningún default
+                    numérico. Un valor ≤ 0 o no numérico responde 422 con el campo señalado.
       responses:
         "200":
           description: Perfil actualizado.
+        "422":
+          description: >
+            Payload inválido — p. ej. operationMode fuera de catálogo o
+            revocationWindowBusinessDays ≤ 0.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/admin/ot/imprint-signatures:
     get:
@@ -3691,6 +3721,9 @@ paths:
 
         Solo una cabeza de grupo con hijos puede llamarla: un cliente sin jerarquía o un SuperAdmin
         reciben 403 `network_scope_required` (el SuperAdmin ya tiene el listado global por sus rutas).
+        HU #12652 — y solo con el rol AdminCompany de la cabeza: cualquier otro rol de la cabeza
+        (Radicador, Operador, …) recibe 403 `network_role_required` sin ejecutar la consulta; multi-rol
+        con AdminCompany pasa. Aplica a TODAS las rutas `/api/v1/tramites/network/**`.
         `childTenantId` fuera del conjunto de lectura responde 403 `network_child_out_of_scope` sin
         ejecutar la consulta.
 
@@ -3777,7 +3810,8 @@ paths:
           description: Sin token válido.
         "403":
           description: >
-            `network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin) o
+            `network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin),
+            `network_role_required` (cabeza sin rol AdminCompany — HU #12652) o
             `network_child_out_of_scope` (`childTenantId` fuera del conjunto de lectura).
           content:
             application/json:
@@ -3817,7 +3851,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` o `network_child_out_of_scope`."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -3853,7 +3887,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` o `network_child_out_of_scope`."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -3888,7 +3922,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required`: la petición no tiene alcance de grupo."
+          description: "`network_scope_required` (la petición no tiene alcance de grupo) o `network_role_required` (cabeza sin rol AdminCompany, HU #12652)."
           content:
             application/json:
               schema:
@@ -3936,6 +3970,7 @@ paths:
           description: Sin token válido.
         "403":
           description: >
+            `network_role_required` (cabeza sin rol AdminCompany — HU #12652),
             `network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin o interruptor
             `group_read_scope` apagado) o `network_documents_disabled` (cabeza CONCESION con
             `network_documents_concesion` apagado). Sin permiso `tramites.read`: 403 sin cuerpo.
@@ -3988,7 +4023,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` o `network_documents_disabled`; sin permiso `tramites.read`: 403 sin cuerpo."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_documents_disabled`; sin permiso `tramites.read`: 403 sin cuerpo."
           content:
             application/json:
               schema:
@@ -4023,12 +4058,25 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - $ref: "#/components/parameters/NetworkStatsFrom"
-        - $ref: "#/components/parameters/NetworkStatsTo"
+        # BUG #12588 — no se reutilizan NetworkStatsFrom/NetworkStatsTo: esas siguen siendo
+        # obligatorias en el resto de rutas de stats (series y rankings, que sin ventana no
+        # significan nada). Solo el overview admite consultar el universo completo.
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: >
+            Fecha inicial inclusiva (YYYY-MM-DD) — HU #12359. Omitirlo NO acota por ese extremo: sin `from` ni `to` la respuesta cubre el universo completo (BUG #12588). El filtro es por fecha de creación del trámite.
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: >
+            Fecha final inclusiva (YYYY-MM-DD) — HU #12359. Omitirlo NO acota por ese extremo: sin `from` ni `to` la respuesta cubre el universo completo (BUG #12588). El filtro es por fecha de creación del trámite.
         - $ref: "#/components/parameters/NetworkStatsChildTenantId"
       responses:
         "200":
-          description: Métricas agregadas de la red en el periodo.
+          description: Métricas agregadas de la red; del periodo indicado o del universo completo.
           content:
             application/json:
               schema:
@@ -4042,7 +4090,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin) o `network_child_out_of_scope`."
+          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin), `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -4085,7 +4133,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` o `network_child_out_of_scope`."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -4123,7 +4171,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` o `network_child_out_of_scope`."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -4188,7 +4236,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin) o `network_child_out_of_scope`."
+          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin), `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -4239,7 +4287,7 @@ paths:
         "401":
           description: Sin token válido.
         "403":
-          description: "`network_scope_required`, `network_child_out_of_scope` o rol insuficiente."
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany, HU #12652) o `network_child_out_of_scope`."
           content:
             application/json:
               schema:
@@ -5783,23 +5831,26 @@ paths:
       operationId: analyticsOverview
       summary: Métricas por categoría/estado del tenant en un rango de fechas (RF01, RF02, RF07)
       description: >
-        Devuelve conteos de trámites por categoría (matriculas/traspasos/otros) y estado para
-        el rango [from, to]. El tenant se toma del claim JWT `tenant_id` (AC1); un SuperAdmin
-        puede indicar `tenantId` por query para consultar otra compañía (AC2). Requiere JWT con
-        rol de empresa o SuperAdmin (AdminCompany).
+        Devuelve conteos de trámites por categoría (matriculas/traspasos/otros) y estado. El tenant
+        se toma del claim JWT `tenant_id` (AC1); un SuperAdmin puede indicar `tenantId` por query para
+        consultar otra compañía (AC2). Requiere JWT con rol de empresa o SuperAdmin (AdminCompany).
+        `from` y `to` son opcionales y se acotan por separado; sin ninguno de los dos la respuesta
+        cubre TODOS los trámites del tenant (BUG #12588), que es como arranca el dashboard.
       security:
         - bearerAuth: []
       parameters:
         - name: from
           in: query
-          required: true
+          required: false
           schema: { type: string, format: date }
-          description: Fecha inicial inclusiva (YYYY-MM-DD).
+          description: >
+            Fecha inicial inclusiva (YYYY-MM-DD). Omitirlo NO acota por ese extremo: sin `from` ni `to` la respuesta cubre el universo completo (BUG #12588). El filtro es por fecha de creación del trámite.
         - name: to
           in: query
-          required: true
+          required: false
           schema: { type: string, format: date }
-          description: Fecha final inclusiva (YYYY-MM-DD).
+          description: >
+            Fecha final inclusiva (YYYY-MM-DD). Omitirlo NO acota por ese extremo: sin `from` ni `to` la respuesta cubre el universo completo (BUG #12588). El filtro es por fecha de creación del trámite.
         - name: tenantId
           in: query
           required: false
@@ -12321,7 +12372,7 @@ components:
           description: >
             El mismo objeto que devuelve `GET /api/v1/tramites/instances/{id}` al propio cliente
             (id, referenceNumber, status, procedureTypeId, tenantId, createdAt, submittedAt,
-            completedAt, fieldValues, statusHistory, actors, draftFinalizedAt, plateFlowStatus,
+            completedAt, fieldValues, statusHistory, actors, draftFinalizedAt, rejectedFrom,
             currentStep, subsanacionActiva, subsanacionCount, prioritario, events).
           additionalProperties: true
       required: [tenantId, instance]
@@ -12389,15 +12440,15 @@ components:
         más `scope`. `tenantId` es la cabeza o el hijo acotado por `childTenantId`.
       properties:
         tenantId: { type: string, format: uuid }
-        from: { type: string, format: date }
-        to: { type: string, format: date }
+        from: { type: string, format: date, nullable: true }
+        to: { type: string, format: date, nullable: true }
         categories:
           type: array
           items:
             $ref: "#/components/schemas/CategoryMetrics"
         scope:
           $ref: "#/components/schemas/NetworkScope"
-      required: [tenantId, from, to, categories, scope]
+      required: [tenantId, categories, scope]
 
     NetworkTopProducersResponse:
       type: object
@@ -12576,7 +12627,13 @@ components:
       properties:
         id: { type: string, format: uuid }
         referenceNumber: { type: string }
-        status: { type: string, example: draft }
+        status:
+          type: string
+          example: borrador
+          description: >
+            Estado global (ADR-0059): borrador, preparado, preasignacion, asignado, entregado,
+            aprobado, rechazado, revocado, anulado o subsanacion. 'preasignacion' y 'asignado' son la
+            Ruta Larga de matrícula inicial (radicada sin placa; el organismo la asigna).
         procedureTypeId: { type: string, format: uuid }
         tenantId: { type: string, format: uuid }
         createdAt: { type: string, format: date-time }
@@ -12585,14 +12642,15 @@ components:
           format: date-time
           nullable: true
           description: Fecha de radicación (Draft→Submitted). Null mientras es borrador.
-        plateFlowStatus:
+        rejectedFrom:
           type: string
           nullable: true
-          enum: [preasignado, asignado]
+          enum: [preasignacion, entregado]
           description: >
-            Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al status
-            global (que permanece en 'entregado'): null (sin ruta de placa), 'preasignado' (entregado
-            al OT, esperando placa) o 'asignado' (placa registrada; pendiente de SOAT + recepción del OT).
+            ADR-0059 (Epic #12549) — estado desde el que el organismo rechazó el trámite. Solo tiene
+            valor en 'rechazado'; 'preasignacion' distingue el rechazo previo a la placa (el gestor
+            debe corregir y volver a pedirla). Sustituye al sub-estado 'plateFlowStatus' de
+            HU #10785: la ruta de placa son ahora los estados globales 'preasignacion' y 'asignado'.
         draftFinalizedAt:
           type: string
           format: date-time
@@ -13471,13 +13529,14 @@ components:
       type: object
       properties:
         tenantId: { type: string, format: uuid }
-        from: { type: string, format: date }
-        to: { type: string, format: date }
+        # BUG #12588 — null cuando la consulta no acotó por fecha (universo completo).
+        from: { type: string, format: date, nullable: true }
+        to: { type: string, format: date, nullable: true }
         categories:
           type: array
           items:
             $ref: "#/components/schemas/CategoryMetrics"
-      required: [tenantId, from, to, categories]
+      required: [tenantId, categories]
 
     TopProducer:
       type: object

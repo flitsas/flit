@@ -36,6 +36,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getDuplicateActiveProcedureId: () => null,
   getVehicleStateBlock: () => null,
   isTransitOfficeUnavailable: () => transitOfficeUnavailable.value,
+  // Epic #12550 — organismo del RUNT no habilitado (Ruta Corta); null = no es ese error.
+  getOrganismoRuntNoHabilitado: () => null,
   isVehicleBodyTypeMissing: () => false,
   isVehiclePrendaMissing: () => false,
 }));

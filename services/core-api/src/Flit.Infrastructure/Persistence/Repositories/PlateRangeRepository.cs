@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Microsoft.EntityFrameworkCore;
@@ -11,10 +12,18 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class PlateRangeRepository : IPlateRangeRepository
 {
     private readonly FlitDbContext _context;
+    // Bug local 2026-09-16 (preasignación de placa — hijas de Concesión/Marca Blanca): opcional para
+    // no romper los ~64 sitios que construyen este repositorio a mano con `new PlateRangeRepository(ctx)`
+    // (mismo patrón que IPlateRangeRepository en OtClientProcedureRepository). Si es null, el criterio
+    // de grant cae al comportamiento previo (solo grant propio del tenant).
+    private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
 
-    public PlateRangeRepository(FlitDbContext context)
+    public PlateRangeRepository(
+        FlitDbContext context,
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _effectiveOffices = effectiveOffices;
     }
 
     public Task<CreatePlateRangeResult> CreateRangeAsync(
@@ -201,6 +210,18 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
                     cancellationToken)
                 .ConfigureAwait(false);
 
+            // Bug local 2026-09-16 — una hija de Concesión/Marca Blanca NUNCA tiene grant propio
+            // (TransitGrantMutationGuard lo prohíbe); su OT habilitado es el efectivo de la jerarquía
+            // (mismo criterio que decide qué OT ve en el wizard). Solo se consulta si el grant directo
+            // no alcanzó, para no pagar el costo extra en el caso común (tenant sin padre).
+            if (!grant && _effectiveOffices is not null)
+            {
+                var effectiveOfficeIds = await _effectiveOffices
+                    .ListEffectiveOfficeIdsAsync(companyTenantId, cancellationToken)
+                    .ConfigureAwait(false);
+                grant = effectiveOfficeIds.Contains(transitOfficeId);
+            }
+
             var otAllows = await _context.OtRequirements
                 .AsNoTracking()
                 .Where(r => r.TransitOfficeId == transitOfficeId)
@@ -250,6 +271,35 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
                 .Select(p => p.TenantId)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
+
+            // Bug local 2026-09-16 — hijas de Concesión/Marca Blanca con flag propio pero sin grant
+            // directo: elegibles si este OT está en su lista efectiva (jerarquía). No duplica las que
+            // ya entraron por grant directo (grantedTenantIds las cubre arriba).
+            if (_effectiveOffices is not null)
+            {
+                var candidateChildTenantIds = await _context.TenantOperationalPolicies
+                    .AsNoTracking()
+                    .Where(p => p.PlatePreassignEnabled && !grantedTenantIds.Contains(p.TenantId))
+                    .Join(
+                        _context.Tenants.AsNoTracking().Where(t => t.ParentTenantId != null),
+                        p => p.TenantId,
+                        t => t.Id,
+                        (p, t) => t.Id)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                foreach (var candidateId in candidateChildTenantIds)
+                {
+                    var effectiveOfficeIds = await _effectiveOffices
+                        .ListEffectiveOfficeIdsAsync(candidateId, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (effectiveOfficeIds.Contains(transitOfficeId))
+                    {
+                        eligibleIds.Add(candidateId);
+                    }
+                }
+            }
+
             if (eligibleIds.Count == 0)
             {
                 return Array.Empty<EligibleCompany>();

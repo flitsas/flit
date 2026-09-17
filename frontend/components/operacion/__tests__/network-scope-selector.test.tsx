@@ -45,7 +45,7 @@ const mocks = vi.hoisted(() => ({
   startSubsanacion: vi.fn(),
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
-  completePlateFlow: vi.fn(),
+  enviarAlOt: vi.fn(),
   adminListGestoresDisponibles: vi.fn(),
 }));
 
@@ -643,5 +643,65 @@ describe('HU #12363 — AC7: el listado no es el control de acceso (contrato del
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * HU #12652 — Alcance de red exclusivo del administrador de la cabeza (listado de trámites).
+ *
+ * Uso de ejemplo: un Radicador de la cabeza (JWT con `is_group_parent: true` y `role: Radicador`)
+ * abre Trámites: ni selector ni columna «Cliente», llamadas idénticas a las de un usuario sin
+ * jerarquía y ninguna lectura de `tramites.scope`. Con `roles: [Radicador, AdminCompany]` (multi-rol)
+ * el selector sí aparece.
+ */
+describe('HU #12652 — el selector de alcance exige rol AdminCompany en la cabeza', () => {
+  it('AC3/AC4 — Radicador de cabeza: sin selector, sin columna «Cliente», rutas propias y sin leer tramites.scope', async () => {
+    setToken({
+      sub: 'user-radicador',
+      role: 'Radicador',
+      tenant_id: CABEZA,
+      tenant_type: 'CONCESION',
+      is_group_parent: true,
+      permissions: [],
+    });
+    prefs.get.mockImplementation(async (scope: string) =>
+      scope === 'tramites.scope' ? { scope, value: { mode: 'network', childTenantId: HIJO } } : null,
+    );
+    renderTable();
+    await screen.findByText('AAA111');
+    expect(screen.queryByTestId('network-scope-select')).not.toBeInTheDocument();
+    expect(cabeceras()).not.toContain('Cliente');
+    expect(llamadasHechas()).toEqual([
+      'getConsultationConfig',
+      'listFilterFields',
+      'listInstances',
+      'searchEstadoCounts',
+      'searchInstances',
+    ]);
+    expect(mocks.searchNetworkInstances).not.toHaveBeenCalled();
+    expect(fetchNetworkChildren).not.toHaveBeenCalled();
+    expect(prefs.get.mock.calls.map(([s]) => s)).not.toContain('tramites.scope');
+    expect(prefs.put.mock.calls.map(([s]) => s)).not.toContain('tramites.scope');
+  });
+
+  it('AC5 — multi-rol Radicador + AdminCompany (claim `roles`): el selector se ofrece con las hijas', async () => {
+    setToken({
+      sub: 'user-multirol',
+      role: ['Radicador', 'AdminCompany'],
+      roles: [
+        { id: 'r-rad', code: 'Radicador' },
+        { id: 'r-adm', code: 'AdminCompany' },
+      ],
+      tenant_id: CABEZA,
+      tenant_type: 'CONCESION',
+      is_group_parent: true,
+      permissions: [],
+    });
+    renderTable();
+    await screen.findByText('AAA111');
+    expect(await screen.findByTestId('network-scope-select')).toBeInTheDocument();
+    await waitFor(() => expect(fetchNetworkChildren).toHaveBeenCalled());
   });
 });
