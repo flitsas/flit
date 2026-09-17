@@ -512,6 +512,19 @@ export interface TramitesFiltrosBarProps {
   /** HU #12104 — "Exportar a Excel", el último control: actúa sobre lo que los demás acotaron. */
   exportAction?: ReactNode;
 
+  /**
+   * HU #12521 — "Carga masiva". Va junto a "Exportar" y no junto al CTA "Nuevo trámite" porque el
+   * CTA es la acción principal y debe quedar sola: dos mosaicos del mismo peso compiten y ninguno
+   * se lee como el camino por defecto.
+   */
+  bulkUploadAction?: ReactNode;
+
+  /**
+   * HU #12578 (Feature #12565) — entrada a la vista dedicada "Revocatorias". Último control de la
+   * fila (después de "Carga masiva"): el contenedor (`TramitesTable`) ya decide su visibilidad por
+   * rol (`isAdminCompany`, AC2) — aquí solo se pinta lo que llega.
+   */
+  revocationRequestsLink?: ReactNode;
 }
 
 /**
@@ -546,6 +559,8 @@ export function TramitesFiltrosBar({
   empezarDeCeroDisabled = false,
   columnSelector,
   exportAction,
+  bulkUploadAction,
+  revocationRequestsLink,
 }: TramitesFiltrosBarProps) {
   return (
     <>
@@ -591,6 +606,8 @@ export function TramitesFiltrosBar({
 
       {columnSelector}
       {exportAction}
+      {bulkUploadAction}
+      {revocationRequestsLink}
     </>
   );
 }

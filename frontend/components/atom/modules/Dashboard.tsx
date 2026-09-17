@@ -20,19 +20,31 @@ import {
   FileText,
   CheckCircle,
   Car,
+  Layers,
 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { fetchActiveModules, fetchAnalyticsOverview, fetchMonthlyTrend } from "@/lib/api/analytics";
-import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import {
+  fetchActiveModules,
+  fetchAnalyticsOverview,
+  fetchMonthlyTrend,
+  fetchNetworkAnalyticsOverview,
+  fetchNetworkMonthlyTrend,
+} from "@/lib/api/analytics";
+import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import { tramitesClient } from "@/lib/api/tramites-client";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
 import { useActiveBanners } from "@/hooks/useActiveBanners";
 import { bannerAmbientGradient, useDominantColor } from "@/hooks/useDominantColor";
+import { useNetworkScope } from "@/hooks/useNetworkScope";
+import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
+import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
+import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
+import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
-import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
+import { isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
 import { ApiError } from "@/lib/api/types";
 import type {
   ActiveModulesResponse,
@@ -81,36 +93,18 @@ function buildChartData(items: MonthlyTrendPoint[]) {
 
 function countCompleted(categories: CategoryMetrics[]): number {
   return categories.reduce(
-    (sum, cat) => sum + (cat.byStatus.find((s) => s.status === "completed")?.count ?? 0),
+    (sum, cat) => sum + (cat.byStatus.find((s) => s.status === "aprobado")?.count ?? 0),
     0,
   );
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Borrador",
-  submitted: "Enviado",
-  in_review: "En revisión",
-  pending_ot: "Pendiente OT",
-  approved_ot: "Aprobado OT",
-  completed: "Completado",
-  cancelled: "Cancelado",
-  rejected_ot: "Rechazado",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: "#557EFF",
-  submitted: "#00DBD5",
-  in_review: "#F9AC00",
-  pending_ot: "#8CC63F",
-  approved_ot: "#00DBD5",
-  completed: "#8CC63F",
-  cancelled: "#FF4E00",
-  rejected_ot: "#FF4E00",
-};
-
-function describeError(error: unknown): string {
+function describeError(error: unknown, networkActive = false): string {
   if (error instanceof ApiError) {
-    if (error.status === 403) return "No tienes acceso a las métricas de esa compañía.";
+    if (error.status === 403) {
+      return networkActive
+        ? "No tienes acceso a las métricas de la red."
+        : "No tienes acceso a las métricas de esa compañía.";
+    }
     if (error.status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión.";
   }
   return "No se pudieron cargar las métricas del dashboard.";
@@ -208,7 +202,21 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const [tenantId, setTenantId] = useState("");
 
   // Rango de fechas de las métricas (KPIs, distribución general, validaciones biométricas) — visible a todos los roles.
-  const [range, setRange] = useState<DateRange>(() => defaultRange());
+  /**
+   * BUG #12588 — arranca SIN rango: el total tiene que ser el número real de trámites del tenant.
+   * Antes partía del mes en curso, y como el backend filtra por fecha de CREACIÓN, todo lo radicado
+   * antes quedaba fuera de las tarjetas aunque siguiera en curso; QA lo leyó como un conteo mal
+   * calculado. El filtro sigue disponible para acotar a mano.
+   */
+  const [range, setRange] = useState<DateRange>(() => sinRango());
+
+  // HU #12364 — alcance de red de una cabeza de grupo: el MISMO control y la MISMA preferencia
+  // (`tramites.scope`) que el listado de trámites (AC5). Para quien no es cabeza el hook no hace
+  // ninguna llamada y `networkActive` es siempre falso: las llamadas de abajo quedan como hoy (AC4).
+  const net = useNetworkScope();
+  const networkActive = net.networkActive;
+  const networkChildTenantId = net.scope.childTenantId;
+  const networkReady = net.ready;
 
   // Datos de la API
   const [overview, setOverview] = useState<AnalyticsOverviewResponse | null>(null);
@@ -259,13 +267,14 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
     setIsSuper(isSuperAdmin(payload));
   }, []);
 
-  // Cargar catálogo de compañías para el selector SuperAdmin
+  // Cargar catálogo COMPLETO de compañías para el selector SuperAdmin (paginado internamente:
+  // el buscador filtra en cliente y no puede encontrar lo que nunca llegó al navegador).
   useEffect(() => {
     if (!isSuper) return;
     const controller = new AbortController();
-    fetchCompaniesIndex({ pageSize: 100, estadoActivo: true }, controller.signal)
-      .then((res) => {
-        if (!controller.signal.aborted) setCompanies(res.data);
+    fetchAllCompanies({ estadoActivo: true }, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setCompanies(data);
       })
       .catch(() => { /* silencioso: el selector queda vacío, el dashboard sigue operativo */ });
     return () => controller.abort();
@@ -278,7 +287,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
     async function load() {
       setStatus("loading");
 
-      if (!isValidRange(range)) {
+      if (!isValidOptionalRange(range)) {
         setErrorMessage("La fecha inicial no puede ser posterior a la fecha final.");
         setStatus("error");
         return;
@@ -291,24 +300,39 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       const tid = tenantId || undefined;
 
       try {
-        const [overviewRes, trendRes] = await Promise.all([
-          fetchAnalyticsOverview({ from: monthRange.from, to: monthRange.to, tenantId: tid }, controller.signal),
-          fetchMonthlyTrend({ from: trendRange.from, to: trendRange.to, tenantId: tid }, controller.signal),
-        ]);
+        // HU #12364 AC1 — con la red activa las mismas dos consultas van a `network/stats/*`
+        // (con `childTenantId` si se eligió un hijo); con alcance propio, llamadas idénticas a hoy.
+        const [overviewRes, trendRes] = networkActive
+          ? await Promise.all([
+              fetchNetworkAnalyticsOverview(
+                { from: monthRange.from, to: monthRange.to, childTenantId: networkChildTenantId },
+                controller.signal,
+              ),
+              fetchNetworkMonthlyTrend(
+                { from: trendRange.from, to: trendRange.to, childTenantId: networkChildTenantId },
+                controller.signal,
+              ),
+            ])
+          : await Promise.all([
+              fetchAnalyticsOverview({ from: monthRange.from, to: monthRange.to, tenantId: tid }, controller.signal),
+              fetchMonthlyTrend({ from: trendRange.from, to: trendRange.to, tenantId: tid }, controller.signal),
+            ]);
         if (controller.signal.aborted) return;
         setOverview(overviewRes);
         setTrend(trendRes.items);
         setStatus("ready");
       } catch (err) {
         if (controller.signal.aborted || (err as Error).name === "AbortError") return;
-        setErrorMessage(describeError(err));
+        setErrorMessage(describeError(err, networkActive));
         setStatus("error");
       }
     }
 
+    // La cabeza espera a conocer su alcance guardado para no pedir «lo propio» y luego «la red».
+    if (!networkReady) return () => controller.abort();
     void load();
     return () => controller.abort();
-  }, [range, tenantId, reloadKey]);
+  }, [range, tenantId, reloadKey, networkActive, networkChildTenantId, networkReady]);
 
   // Cargar KPIs de validaciones biométricas (card "Validaciones Biométricas"), independiente
   // del overview de analytics.
@@ -325,14 +349,17 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       }
       setBiometricStatus("loading");
 
-      if (!isValidRange(range)) {
+      if (!isValidOptionalRange(range)) {
         setBiometricErrorMessage("La fecha inicial no puede ser posterior a la fecha final.");
         setBiometricStatus("error");
         return;
       }
 
-      const createdFrom = `${range.from}T00:00:00`;
-      const createdTo = `${range.to}T23:59:59`;
+      // BUG #12588 — sin extremo no se manda el filtro: estas estadísticas siguen al mismo rango que
+      // las tarjetas, así que sin rango cuentan todo. `createdFrom`/`createdTo` ya eran opcionales en
+      // el cliente (la consulta hermana de «por vencer» nunca los manda).
+      const createdFrom = range.from ? `${range.from}T00:00:00` : undefined;
+      const createdTo = range.to ? `${range.to}T23:59:59` : undefined;
 
       try {
         const [statsRes, expiringRes] = await Promise.all([
@@ -411,6 +438,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   }, [slides.length]);
   const matriculas = categories.find((c) => c.category === "matriculas")?.total ?? 0;
   const traspasos = categories.find((c) => c.category === "traspasos")?.total ?? 0;
+  const otros = categories.find((c) => c.category === "otros")?.total ?? 0;
   const completados = countCompleted(categories);
 
   // Distribución consolidada por estado de TODAS las categorías (no solo traspasos).
@@ -460,13 +488,6 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   // biometricStats, etc. tienen su propio status independiente).
   const comingSoonStatus: UiStatus =
     activeModulesStatus === "ready" ? (comingSoonModules.length > 0 ? "ready" : "empty") : activeModulesStatus;
-  // "Empty" cubre dos causas distintas: sin compañía elegida (SuperAdmin) vs. ningún módulo
-  // adicional activado para la compañía concreta — cada una con su propio mensaje, mismo patrón
-  // que `emptyMessage` de biometricStatus arriba.
-  const comingSoonEmptyMessage =
-    isSuper && !tenantId
-      ? "Selecciona una compañía para ver sus módulos activos."
-      : "Tu compañía no tiene módulos adicionales activados.";
 
   // Defensivo: si un banner falla después de posicionar el índice en él (p. ej. `onError` de la
   // última imagen visible), `slides` puede encoger antes de que el índice se reacomode.
@@ -548,7 +569,13 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           ) : (
             <span className="sr-only">{s.name}</span>
           )}
-          <div className="flex items-center justify-between mt-3 relative px-6 pb-5">
+          {/* Fijos al fondo del contenedor (`absolute inset-x-0 bottom-0`), no distribuidos por
+              flex: con `flex flex-col justify-between` estos controles eran el único hijo "en
+              flujo" cuando el slide es un banner (el enlace de arriba es `absolute inset-0`, o no
+              hay nada más que un `sr-only`), así que `justify-between` los anclaba arriba en vez
+              de abajo (Bug #12584, defecto 2). Al posicionarlos de forma absoluta dejan de
+              depender del alto del contenido vecino. */}
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-6 pb-5">
             <div className="flex gap-1">
               {slides.map((_, i) => (
                 <button
@@ -566,15 +593,17 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setSlide((v) => (v - 1 + slides.length) % slides.length)}
+                disabled={slides.length <= 1}
                 aria-label="Anterior"
-                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25"
+                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
               >
                 <ChevronLeft className="h-3 w-3" />
               </button>
               <button
                 onClick={() => setSlide((v) => (v + 1) % slides.length)}
+                disabled={slides.length <= 1}
                 aria-label="Siguiente"
-                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25"
+                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
               >
                 <ChevronRight className="h-3 w-3" />
               </button>
@@ -585,7 +614,12 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
         {/* KPIs 2×2 (con filtro de fechas y selector de compañía para SuperAdmin encima) */}
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
-            <DateRangeFilter value={range} onChange={setRange} disabled={status === "loading"} />
+            <DateRangeFilter
+              value={range}
+              onChange={setRange}
+              disabled={status === "loading"}
+              permiteSinRango
+            />
             {isSuper && (
               <CompanySelector
                 companies={companies}
@@ -595,29 +629,63 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 defaultLabel="Todas las compañías"
               />
             )}
+            {/* HU #12364 — solo para una cabeza de red (AC4: nadie más lo ve). */}
+            {net.isGroupParent && (
+              <NetworkScopeSelector
+                scope={net.scope}
+                onChange={net.setScope}
+                hijos={net.children}
+                childrenStatus={net.childrenStatus}
+                disabled={net.saving}
+                testId="dashboard-network-scope-select"
+              />
+            )}
           </div>
           {/* KPIs de Trámites — solo visibles si el módulo está habilitado para el tenant
               (AC1: `true` por defecto mientras carga, evita ocultar la sección con parpadeo). */}
           {tramitesModuleEnabled !== false && (
-            <div className="grid grid-cols-2 gap-3 flex-1">
+            <div className="grid grid-cols-3 gap-3 flex-1">
               {[
                 { label: "Total Trámites", value: totalTramites, icon: FileText, color: "#557EFF" },
                 { label: "Matrículas", value: matriculas, icon: Car, color: "#00DBD5" },
                 { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00" },
+                { label: "Otros Trámites", value: otros, icon: Layers, color: "#162744" },
                 { label: "Completados", value: completados, icon: CheckCircle, color: "#8CC63F" },
               ].map((k) => {
                 const Icon = k.icon;
                 const isError = status === "error";
                 return (
+                  // El título ocupa la fila completa y el icono baja a la del número. Antes
+                  // compartía fila con el icono dentro de un `min-w-0` con `truncate`, así que solo
+                  // disponía de `ancho − 48px` y con la rejilla en 3 columnas los rótulos largos se
+                  // cortaban en pantalla («Total Trá…», «Otros Trá…», «Completa…»). Recuperados esos
+                  // 48px, el rótulo más largo cabe y el tamaño sube al piso tipográfico de 12px.
                   <div
                     key={k.label}
-                    className="rounded-2xl p-4 flex items-center justify-between bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
+                    className="rounded-2xl p-3 flex flex-col gap-2 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
                   >
-                    <div>
-                      <p className="text-[11px] opacity-70 font-medium">{k.label}</p>
+                    <div className="min-w-0">
+                      {/* line-clamp-2 en vez de truncate: si algún día entra un rótulo más largo,
+                          se parte en dos líneas en vez de perder texto por el borde. */}
+                      <p className="text-xs opacity-70 font-medium leading-tight line-clamp-2">
+                        {k.label}
+                      </p>
+                      {/* AC1 — cada indicador dice que es de la red (texto, no solo color). */}
+                      {networkActive && (
+                        <NetworkScopeBadge
+                          scope={net.scope}
+                          hijos={net.children}
+                          className="mt-1"
+                          testId={`kpi-red-${k.label}`}
+                        />
+                      )}
+                    </div>
+                    {/* `items-end`: la cifra y el icono se alinean por su base, no por su centro —
+                        con alturas tan distintas (24px vs 36px) centrarlos descuadraba la fila. */}
+                    <div className="flex items-end justify-between gap-2">
                       {isError ? (
                         <p
-                          className="text-xl font-bold mt-1 flex items-center gap-1.5"
+                          className="text-xl font-bold flex items-center gap-1.5 min-w-0"
                           style={{ color: "#FF4E00" }}
                           title={errorMessage ?? "No se pudo cargar este indicador."}
                         >
@@ -626,16 +694,18 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                           <span className="sr-only">Error al cargar {k.label.toLowerCase()}</span>
                         </p>
                       ) : (
-                        <p className="text-3xl font-bold mt-1" style={{ color: k.color }}>
+                        // `tabular-nums` y sin truncar: recortar un conteo mostraría una cifra
+                        // falsa. Mismo criterio que la tira de contadores del OT.
+                        <p className="text-2xl font-bold leading-none tabular-nums" style={{ color: k.color }}>
                           {status === "loading" ? "—" : k.value}
                         </p>
                       )}
-                    </div>
-                    <div
-                      className="h-11 w-11 rounded-xl grid place-items-center"
-                      style={{ background: isError ? "#FF4E001A" : `${k.color}1A` }}
-                    >
-                      <Icon className="h-5 w-5" style={{ color: isError ? "#FF4E00" : k.color }} />
+                      <div
+                        className="h-9 w-9 rounded-xl grid place-items-center shrink-0"
+                        style={{ background: isError ? "#FF4E001A" : `${k.color}1A` }}
+                      >
+                        <Icon className="h-4 w-4" style={{ color: isError ? "#FF4E00" : k.color }} />
+                      </div>
                     </div>
                   </div>
                 );
@@ -647,35 +717,37 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
 
       {/* Módulos aún no habilitados para el tenant ("Próximamente") — HU #12253. Estado
           aislado (comingSoonStatus): un fallo al consultar los flags no bloquea el resto
-          del dashboard (AC5). */}
-      <UiStateBoundary
-        status={comingSoonStatus}
-        errorMessage={activeModulesErrorMessage}
-        onRetry={retry}
-        emptyMessage={comingSoonEmptyMessage}
-        skeletonRows={1}
-        className="shrink-0"
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
-          {comingSoonModules.map((m) => (
-            <div
-              key={m.key}
-              className="rounded-2xl p-4 flex items-center gap-3 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
-            >
+          del dashboard (AC5). Sin nada que anunciar (ni módulos por activar ni una compañía
+          elegida) la sección no ocupa espacio: ni tarjetas ni mensaje de estado vacío. */}
+      {comingSoonStatus !== "empty" && (
+        <UiStateBoundary
+          status={comingSoonStatus}
+          errorMessage={activeModulesErrorMessage}
+          onRetry={retry}
+          skeletonRows={1}
+          className="shrink-0"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
+            {comingSoonModules.map((m) => (
               <div
-                className="h-11 w-11 rounded-xl grid place-items-center shrink-0"
-                style={{ background: "#7D87981A" }}
+                key={m.key}
+                className="rounded-2xl p-4 flex items-center gap-3 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
               >
-                <Clock className="h-5 w-5" style={{ color: "#7D8798" }} aria-hidden="true" />
+                <div
+                  className="h-11 w-11 rounded-xl grid place-items-center shrink-0"
+                  style={{ background: "#7D87981A" }}
+                >
+                  <Clock className="h-5 w-5" style={{ color: "#7D8798" }} aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold">{m.label}</p>
+                  <p className="text-[11px] opacity-70 font-medium">Próximamente</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-bold">{m.label}</p>
-                <p className="text-[11px] opacity-70 font-medium">Próximamente</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </UiStateBoundary>
+            ))}
+          </div>
+        </UiStateBoundary>
+      )}
 
       {/* Fila inferior: Distribución general + Validaciones Biométricas (cada una con su propio estado) + gráfica mensual (chartStatus) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -692,13 +764,16 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             >
               {/* Distribución general de trámites por estado (las 4 categorías, no solo traspasos) */}
               <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
-                <h2 className="text-sm font-bold mb-3">Distribución General de Trámites</h2>
+                <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+                  Distribución General de Trámites
+                  {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="distribucion-red" />}
+                </h2>
                 {globalFunnel.length === 0 ? (
                   <p className="text-xs opacity-50 mt-2">Sin trámites en el rango seleccionado.</p>
                 ) : (
                   <ul className="space-y-2">
                     {globalFunnel.map((f, i) => {
-                      const color = STATUS_COLORS[f.status] ?? "#557EFF";
+                      const color = estadoChipStyle(f.status).accent;
                       return (
                         <li
                           key={f.status}
@@ -711,7 +786,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                             {i + 1}
                           </span>
                           <span className="flex-1 text-xs font-medium">
-                            {STATUS_LABELS[f.status] ?? f.status}
+                            {estadoLabel(f.status)}
                           </span>
                           <span className="text-base font-bold" style={{ color }}>
                             {f.count}
@@ -734,7 +809,16 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           >
             {/* Validaciones Biométricas: KPIs + aviso de próximas a vencer */}
             <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
-              <h2 className="text-sm font-bold mb-3">Validaciones Biométricas</h2>
+              <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+                Validaciones Biométricas
+                {/* Sin ruta de red para biometría: sigue siendo del cliente propio y se rotula
+                    para que no se lea como agregado de la red (AC1). */}
+                {networkActive && (
+                  <span className="text-[11px] font-medium opacity-70" data-testid="biometria-solo-propia">
+                    {ETIQUETA_SOLO_COMPANIA_PROPIA}
+                  </span>
+                )}
+              </h2>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: "Total", value: biometricStats?.total ?? 0, color: "#557EFF" },
@@ -775,7 +859,10 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             skeletonRows={3}
           >
             <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
-              <h2 className="text-sm font-bold mb-3">Seguimiento operativo</h2>
+              <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+                Seguimiento operativo
+                {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="seguimiento-red" />}
+              </h2>
               <div className="h-[280px] -mx-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>

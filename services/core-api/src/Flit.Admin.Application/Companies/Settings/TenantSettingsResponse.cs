@@ -17,9 +17,7 @@ public sealed record TenantSettingsResponse(
     IReadOnlyDictionary<string, ConsultationProviderChoice> ConsultationProviderConfig,
     // Feature #10587 — preasignación de placa por compañía.
     bool PreasignacionPlacaActiva,
-    // Sub-flujo post-radicación: con placa completa, omitir Asignado → Terminado.
-    bool PlateFlowSkipToTerminado,
-    // Validación del SOAT ante el RUNT al procesar (sub-estado asignado).
+    // Validación del SOAT ante el RUNT al «Enviar al OT» (estado asignado, ADR-0059).
     bool ValidarSoatConRunt,
     AvaluoProviderConfigDto AvaluoProviderConfig,
     // FEATURE 02 — fuente de comparendos (internal | external).

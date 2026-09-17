@@ -5,9 +5,17 @@
 // compartido al detalle de trámites. El dashboard original (HU #10247/#10248)
 // se recoloca en la pestaña "Resumen general" sin duplicarse.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarClock, ShieldQuestion } from "lucide-react";
+import { CalendarClock, Network, ShieldQuestion } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
-import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import { useNetworkScope } from "@/hooks/useNetworkScope";
+import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
+import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
+import {
+  COPY_CAMBIA_A_COMPANIA_PROPIA,
+  COPY_SOLO_COMPANIA_PROPIA,
+  type NetworkScopePreference,
+} from "@/lib/tramites/network-scope";
+import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import type { AnalyticsCategory, CompanyListItem } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
 import { ExportButtons } from "./_reportes/ExportButtons";
@@ -47,6 +55,13 @@ const TAB_QUERY_PARAM = "reportesTab";
 /** Pestañas con exportaciones (Excel/PDF ejecutivo con los filtros activos). */
 const EXPORT_TABS: ReadonlyArray<TabId> = ["resumen", "operacion", "productividad"];
 
+/**
+ * HU #12364 — pestañas con ruta de red (#12359: overview, monthly-trend, productivity/top). Las
+ * demás consumen endpoints que solo existen para el cliente propio; con la red activa NO se llaman
+ * con datos de otro alcance: se muestra el aviso «disponible solo para tu compañía».
+ */
+const NETWORK_TABS: ReadonlyArray<TabId> = ["resumen", "productividad"];
+
 /** Segmento seleccionado en cualquier gráfica → detalle lateral (drill-down). */
 interface SelectedSegment {
   category?: AnalyticsCategory;
@@ -80,6 +95,12 @@ function initialFilters(): ReportFilters {
 
 export function Reportes() {
   const { permissions, isSuperAdmin: isSuper } = usePermissions();
+
+  // HU #12364 — el MISMO selector y la MISMA preferencia (`tramites.scope`) que Trámites y el
+  // Dashboard (AC5). Para quien no es cabeza no hay selector ni cambio alguno (AC4).
+  const net = useNetworkScope();
+  const networkActive = net.networkActive;
+  const networkScope: NetworkScopePreference | undefined = networkActive ? net.scope : undefined;
 
   const visibleTabs = useMemo(
     () =>
@@ -137,9 +158,9 @@ export function Reportes() {
   useEffect(() => {
     if (!isSuper) return;
     const controller = new AbortController();
-    fetchCompaniesIndex({ pageSize: 100, estadoActivo: true }, controller.signal)
-      .then((res) => {
-        if (!controller.signal.aborted) setCompanies(res.data);
+    fetchAllCompanies({ estadoActivo: true }, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setCompanies(data);
       })
       .catch(() => {
         /* silencioso */
@@ -154,9 +175,17 @@ export function Reportes() {
   // creación, con la consulta guardada ya fijada. Null = el panel se abre en modo normal.
   const [schedulePreset, setSchedulePreset] = useState<SchedulePresetConsulta | null>(null);
 
-  // Drill-down compartido: cualquier gráfica abre el panel lateral de detalle.
+  // Drill-down compartido: cualquier gráfica abre el panel lateral de detalle. Con la red activa
+  // no se abre: el detalle usa `/analytics/procedures`, que no tiene ruta de red (AC6: tampoco se
+  // ofrece desde aquí ningún documento de un cliente hijo).
   const [segment, setSegment] = useState<SelectedSegment | null>(null);
-  const openSegment = useCallback((next: SelectedSegment) => setSegment(next), []);
+  const openSegment = useCallback(
+    (next: SelectedSegment) => {
+      if (networkActive) return;
+      setSegment(next);
+    },
+    [networkActive],
+  );
   const activeSegmentKey = segment ? `${segment.category ?? ""}:${segment.status ?? ""}` : undefined;
 
   // Sin ninguna pestaña visible → estado vacío amable (§3).
@@ -203,6 +232,16 @@ export function Reportes() {
           companies={companies}
           onlyCompany={activeTab === "consultas"}
         />
+        {net.isGroupParent && (
+          <NetworkScopeSelector
+            scope={net.scope}
+            onChange={net.setScope}
+            hijos={net.children}
+            childrenStatus={net.childrenStatus}
+            disabled={net.saving}
+            testId="reportes-network-scope-select"
+          />
+        )}
         {canManageScheduling && (
           <button
             type="button"
@@ -214,7 +253,7 @@ export function Reportes() {
             Programación y alertas
           </button>
         )}
-        {activeTab && EXPORT_TABS.includes(activeTab) && (
+        {activeTab && EXPORT_TABS.includes(activeTab) && !networkActive && (
           <div className="ml-auto">
             <ExportButtons
               range={filters.range}
@@ -225,7 +264,26 @@ export function Reportes() {
             />
           </div>
         )}
+        {/* HU #12364 — sin ruta de red para el Excel analítico ni el PDF ejecutivo: se ocultan en
+            vez de llamar a las rutas propias con un alcance que no es el suyo. Texto visible +
+            title, no solo tooltip. */}
+        {activeTab && EXPORT_TABS.includes(activeTab) && networkActive && (
+          <p
+            className="ml-auto text-[11px] font-medium opacity-70"
+            title={COPY_CAMBIA_A_COMPANIA_PROPIA}
+            data-testid="reportes-export-no-disponible-red"
+          >
+            Exportar: {COPY_SOLO_COMPANIA_PROPIA.toLowerCase()}
+          </p>
+        )}
       </div>
+
+      {networkScope && (
+        <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="reportes-alcance-red">
+          <NetworkScopeBadge scope={networkScope} hijos={net.children} testId="reportes-red-badge" />
+          <span className="opacity-70">Los indicadores corresponden a la red, no solo a tu compañía.</span>
+        </div>
+      )}
 
       {!rangeValid && activeTab !== "consultas" ? (
         <div
@@ -235,6 +293,22 @@ export function Reportes() {
           <p className="text-sm font-medium">La fecha inicial no puede ser posterior a la fecha final.</p>
           <p className="text-xs opacity-70">Corrige el rango de fechas para volver a consultar las métricas.</p>
         </div>
+      ) : !net.ready ? (
+        // La cabeza espera a conocer su alcance guardado: así ninguna pestaña pide primero «lo
+        // propio» para luego pedir «la red». Para quien no es cabeza `ready` es inmediato.
+        <div role="status" aria-busy="true" aria-live="polite" className="rounded-2xl border p-8 bg-white dark:bg-[#0B0F14]">
+          <span className="sr-only">Cargando alcance…</span>
+        </div>
+      ) : networkActive && activeTab && !NETWORK_TABS.includes(activeTab) ? (
+        <div
+          role="status"
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
+          data-testid="reportes-tab-no-disponible-red"
+        >
+          <Network className="h-8 w-8 text-[#557EFF]" aria-hidden="true" />
+          <p className="text-sm font-medium">{COPY_SOLO_COMPANIA_PROPIA}</p>
+          <p className="text-xs opacity-70">{COPY_CAMBIA_A_COMPANIA_PROPIA}</p>
+        </div>
       ) : (
         <div className="pr-1">
           {activeTab === "resumen" && (
@@ -243,6 +317,8 @@ export function Reportes() {
               needsCompany={needsCompany}
               onDrillDown={openSegment}
               activeSegmentKey={activeSegmentKey}
+              networkScope={networkScope}
+              networkChildren={net.children}
             />
           )}
           {activeTab === "operacion" && (
@@ -250,7 +326,9 @@ export function Reportes() {
           )}
           {activeTab === "ot" && <OrganismoTab filters={filters} needsCompany={needsCompany} />}
           {activeTab === "uso" && <UsoTab filters={filters} needsCompany={needsCompany} />}
-          {activeTab === "productividad" && <ProductividadTab filters={filters} />}
+          {activeTab === "productividad" && (
+            <ProductividadTab filters={filters} networkScope={networkScope} networkChildren={net.children} />
+          )}
           {activeTab === "consultas" && (
             <ConsultasTab
               tenantId={filters.tenantId || undefined}
@@ -283,7 +361,7 @@ export function Reportes() {
         />
       )}
 
-      {segment && (
+      {segment && !networkActive && (
         <ProcedureDetailPanel
           key={activeSegmentKey}
           category={segment.category}

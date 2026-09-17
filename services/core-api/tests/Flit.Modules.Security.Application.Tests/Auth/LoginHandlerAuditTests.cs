@@ -75,7 +75,7 @@ public sealed class LoginHandlerAuditTests
         _passwordHasher.Verify("DemoPass1!", "hash").Returns(true);
         _jwtTokenIssuer.IssueToken(
                 Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(),
                 Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 
@@ -148,7 +148,7 @@ public sealed class LoginHandlerAuditTests
         _passwordHasher.Verify(password, "hash").Returns(true);
         _jwtTokenIssuer.IssueToken(
                 Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(),
                 Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 

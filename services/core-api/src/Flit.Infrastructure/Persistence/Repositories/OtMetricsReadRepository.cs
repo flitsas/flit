@@ -1,5 +1,6 @@
 using Flit.Admin.Domain.OtMetrics;
 using Flit.Infrastructure.Analytics.Scheduling;
+using Flit.Tramites.Domain.RevocationRequests;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.EntityFrameworkCore;
 
@@ -52,11 +53,20 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                 var pendientes = await LoadPendingAsync(
                     transitOfficeId, tenantIds, filter, cancellationToken).ConfigureAwait(false);
 
+                // Pedido del usuario (2026-09-16) — una solicitud de revocatoria ACTIVA
+                // (`solicitada`/`en_revision`) también es una decisión pendiente del organismo, pero
+                // vive sobre un trámite en `aprobado`, así que `LoadPendingAsync` (solo `entregado`)
+                // nunca la ve. Se cuenta aparte y se suma a `porRevisar`: aparecía "Esperan mi
+                // decisión: 0" con una revocatoria esperando, que es justo el cuello de botella que se
+                // quería evitar (el organismo tenía que adivinar que existía entrando a "Aprobados").
+                var solicitudesRevocatoria = await CountActiveRevocationRequestsAsync(
+                    transitOfficeId, tenantIds, filter, cancellationToken).ConfigureAwait(false);
+
                 // Esperas: solo se exponen las accionables por el organismo. `asignado` (esperando
                 // SOAT del cliente) y los pausados se agregan en un único número sin desglosar.
-                var porRevisar = pendientes.Count(IsPorRevisar);
+                var porRevisar = pendientes.Count(IsPorRevisar) + solicitudesRevocatoria;
                 var esperandoPlaca = pendientes.Count(IsEsperandoPlaca);
-                var enEsperaDelCliente = pendientes.Count - porRevisar - esperandoPlaca;
+                var enEsperaDelCliente = pendientes.Count - pendientes.Count(IsPorRevisar) - esperandoPlaca;
 
                 var aging = new OtAgingDto(
                     Hasta1Dia: pendientes.Count(IsHasta1Dia),
@@ -66,7 +76,11 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                     PrioritariosEstancados: pendientes.Count(IsPrioritarioEstancado));
 
                 var movimiento = await BuildDayMovementAsync(
-                    transitOfficeId, tenantIds, filter, pendientes.Count, cancellationToken)
+                    transitOfficeId,
+                    tenantIds,
+                    filter,
+                    pendientes.Count + solicitudesRevocatoria,
+                    cancellationToken)
                     .ConfigureAwait(false);
 
                 return new OtOperationalPanelDto(
@@ -75,6 +89,29 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                     aging);
             },
             cancellationToken);
+
+    /// <summary>
+    /// Pedido del usuario (2026-09-16) — trámites (dentro del alcance del panel) con una solicitud de
+    /// revocatoria ACTIVA. Cuenta trámites DISTINTOS: el índice único activo-por-instancia
+    /// (<c>uq_procedure_revocation_requests_active_per_instance</c>) ya garantiza a lo sumo una fila
+    /// activa por trámite, pero <c>Distinct()</c> deja la intención explícita sin depender de ese
+    /// detalle de esquema.
+    /// </summary>
+    private async Task<int> CountActiveRevocationRequestsAsync(
+        Guid transitOfficeId,
+        IReadOnlyList<Guid> tenantIds,
+        OtMetricsFilter filter,
+        CancellationToken cancellationToken) =>
+        await QueryInstances(transitOfficeId, tenantIds, filter)
+            .Where(p => p.Status == TramiteEstado.Aprobado
+                && _context.ProcedureRevocationRequests.Any(r =>
+                    r.ProcedureInstanceId == p.Id
+                    && (r.Status == ProcedureRevocationRequestStatus.Solicitada
+                        || r.Status == ProcedureRevocationRequestStatus.EnRevision)))
+            .Select(p => p.Id)
+            .Distinct()
+            .CountAsync(cancellationToken)
+            .ConfigureAwait(false);
 
     private async Task<OtDayMovementDto> BuildDayMovementAsync(
         Guid transitOfficeId,
@@ -90,7 +127,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         var (dayStart, dayEnd) = BogotaDayRange(todayBogota, todayBogota);
 
         var todayTransitions = await QueryTransitions(transitOfficeId, tenantIds, filter, dayStart, dayEnd)
-            .Select(h => h.ToStatus)
+            .Select(h => new { h.FromStatus, h.ToStatus })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -98,8 +135,10 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             transitOfficeId, tenantIds, filter, cancellationToken).ConfigureAwait(false);
 
         return new OtDayMovementDto(
-            EntregadosHoy: todayTransitions.Count(s => s == TramiteEstado.Entregado),
-            DecididosHoy: todayTransitions.Count(IsDecision),
+            // ADR-0059 — "entregados" = radicaciones (llegadas al organismo, a entregado o a
+            // preasignacion); «Enviar al OT» (asignado → entregado) no es una llegada nueva.
+            EntregadosHoy: todayTransitions.Count(t => TramiteEstado.EsRadicacion(t.FromStatus, t.ToStatus)),
+            DecididosHoy: todayTransitions.Count(t => IsDecision(t.ToStatus)),
             PendientesTotal: pendientesTotal,
             TiempoMedianoDecisionHoras: Median(decisionHours));
     }
@@ -161,9 +200,10 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         DateTimeOffset from,
         DateTimeOffset to)
     {
-        // Última entrega anterior a cada decisión: el reloj de la decisión arranca ahí.
+        // Última llegada al organismo anterior a cada decisión: el reloj de la decisión arranca ahí
+        // (entregado para decidir, preasignacion para asignar placa — ADR-0059).
         var deliveries = history
-            .Where(h => h.ToStatus == TramiteEstado.Entregado)
+            .Where(h => TramiteEstado.EsLlegadaAlOrganismo(h.ToStatus))
             .GroupBy(h => h.InstanceId)
             .ToDictionary(g => g.Key, g => g.Select(h => h.ChangedAt).OrderBy(d => d).ToList());
 
@@ -232,7 +272,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                 continue;
             }
 
-            if (h.ToStatus == TramiteEstado.Entregado)
+            if (TramiteEstado.EsLlegadaAlOrganismo(h.ToStatus))
             {
                 if (!entregadosPorEmpresa.TryGetValue(tenantId, out var set))
                 {
@@ -389,7 +429,6 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                         (p.ProcedureType != null ? p.ProcedureType.Family : ""),
                         (p.ProcedureType != null ? p.ProcedureType.Name : ""),
                         p.Status,
-                        p.PlateFlowStatus,
                         p.Prioritario,
                         p.SubsanacionActiva,
                         p.IsPaused))
@@ -462,7 +501,6 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         string Familia,
         string TipoTramite,
         string Status,
-        string? PlateFlowStatus,
         bool Prioritario,
         bool SubsanacionActiva,
         bool IsPaused);
@@ -511,7 +549,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             }
 
             var radicacion = events.FirstOrDefault(e =>
-                e.ToStatus == TramiteEstado.Entregado && e.ChangedAt >= from && e.ChangedAt <= to);
+                TramiteEstado.EsLlegadaAlOrganismo(e.ToStatus) && e.ChangedAt >= from && e.ChangedAt <= to);
 
             if (radicacion is null)
             {
@@ -522,7 +560,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 
             var decision = posteriores.LastOrDefault(e => IsDecision(e.ToStatus));
             var ultimaRadicacion = posteriores
-                .LastOrDefault(e => e.ToStatus == TramiteEstado.Entregado
+                .LastOrDefault(e => TramiteEstado.EsLlegadaAlOrganismo(e.ToStatus)
                     && (decision is null || e.ChangedAt <= decision.ChangedAt));
 
             // El reloj arranca en la ÚLTIMA radicación previa a la decisión: es el turno que el
@@ -556,8 +594,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     /// trámite del universo cae en exactamente uno, y por eso el desglose del informe suma el total.
     /// </summary>
     private static string ResolveReportEstado(ReportInstanceRow instance) =>
-        OtEstadoResolver.Resolve(
-            instance.Status, instance.SubsanacionActiva, instance.IsPaused, instance.PlateFlowStatus);
+        OtEstadoResolver.Resolve(instance.Status, instance.SubsanacionActiva, instance.IsPaused);
 
     private static OtReportSummaryDto BuildReportSummary(
         IReadOnlyList<ReportRow> rows,
@@ -586,6 +623,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             EnSubsanacion: rows.Count(r => r.EstadoOt == OtReportEstado.EnSubsanacion),
             Rechazados: rows.Count(r => r.EstadoOt == OtReportEstado.Rechazado),
             Anulados: rows.Count(r => r.EstadoOt == OtReportEstado.Anulado),
+            Revocados: rows.Count(r => r.EstadoOt == OtReportEstado.Revocado),
             Otros: rows.Count(r => r.EstadoOt == OtReportEstado.Otro),
             Decididos: rows.Count(r => r.DecididoEn is not null),
             Devoluciones: devoluciones,
@@ -919,7 +957,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                     .ConfigureAwait(false);
 
                 var deliveries = history
-                    .Where(h => h.ToStatus == TramiteEstado.Entregado)
+                    .Where(h => TramiteEstado.EsLlegadaAlOrganismo(h.ToStatus))
                     .GroupBy(h => h.InstanceId)
                     .ToDictionary(g => g.Key, g => g.Select(h => h.ChangedAt).OrderBy(d => d).ToList());
 
@@ -1279,13 +1317,13 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 
             var transitions = await QueryTransitions(
                 transitOfficeId, tenantIds, filter, dayStart, dayEnd)
-                .Select(h => new { h.ProcedureInstanceId, h.ToStatus })
+                .Select(h => new { h.ProcedureInstanceId, h.FromStatus, h.ToStatus })
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
             var ids = transitions
                 .Where(t => bucket == OtDrilldownBuckets.EntregadosHoy
-                    ? t.ToStatus == TramiteEstado.Entregado
+                    ? TramiteEstado.EsRadicacion(t.FromStatus, t.ToStatus)
                     : IsDecision(t.ToStatus))
                 .Select(t => t.ProcedureInstanceId)
                 .Distinct()
@@ -1312,10 +1350,59 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         };
 
         var matched = pendientes.Where(predicate).ToList();
+        var bucketIds = matched.Select(p => p.Id).ToList();
+        var bucketWaiting = matched.ToDictionary(p => p.Id, p => p.DaysWaiting);
 
-        return (
-            matched.Select(p => p.Id).ToList(),
-            matched.ToDictionary(p => p.Id, p => p.DaysWaiting));
+        // Pedido del usuario (2026-09-16) — mismo criterio que sumó las revocatorias activas al
+        // conteo de "Esperan mi decisión" (`GetOperationalPanelAsync`): el drill-down de ESE mismo
+        // bloque (y el de "Pendientes en total", que es la cola completa) tiene que abrir las mismas
+        // filas que contó, o el número de la tarjeta y lo que se ve al abrirla divergirían.
+        if (bucket is OtDrilldownBuckets.PorRevisar or OtDrilldownBuckets.Pendientes)
+        {
+            var revocaciones = await LoadActiveRevocationRowsAsync(
+                transitOfficeId, tenantIds, filter, cancellationToken).ConfigureAwait(false);
+
+            foreach (var (id, daysWaiting) in revocaciones)
+            {
+                bucketIds.Add(id);
+                bucketWaiting[id] = daysWaiting;
+            }
+        }
+
+        return (bucketIds, bucketWaiting);
+    }
+
+    /// <summary>
+    /// Trámites (dentro del alcance) con una solicitud de revocatoria ACTIVA, con la antigüedad
+    /// contada desde que se pidió (no desde que se entregó, que para estos ya no importa: el
+    /// organismo lo aprobó hace tiempo — lo que espera decisión AHORA es la revocatoria).
+    /// </summary>
+    private async Task<List<(Guid Id, double DaysWaiting)>> LoadActiveRevocationRowsAsync(
+        Guid transitOfficeId,
+        IReadOnlyList<Guid> tenantIds,
+        OtMetricsFilter filter,
+        CancellationToken cancellationToken)
+    {
+        var solicitados = await QueryInstances(transitOfficeId, tenantIds, filter)
+            .Where(p => p.Status == TramiteEstado.Aprobado)
+            .Select(p => new
+            {
+                p.Id,
+                RequestedAt = _context.ProcedureRevocationRequests
+                    .Where(r => r.ProcedureInstanceId == p.Id
+                        && (r.Status == ProcedureRevocationRequestStatus.Solicitada
+                            || r.Status == ProcedureRevocationRequestStatus.EnRevision))
+                    .Select(r => (DateTimeOffset?)r.RequestedAt)
+                    .FirstOrDefault(),
+            })
+            .Where(p => p.RequestedAt != null)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var now = DateTimeOffset.UtcNow;
+        return solicitados
+            .Select(p => (p.Id, (now - p.RequestedAt!.Value).TotalDays))
+            .ToList();
     }
 
     // ── Pendientes: una sola definición para el panel y para el drill-down ────────────────────
@@ -1327,15 +1414,17 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     /// </summary>
     private sealed record PendingRow(
         Guid Id,
-        string? PlateFlowStatus,
+        string Status,
         bool Prioritario,
         bool IsPaused,
         double DaysWaiting);
 
-    private static bool IsPorRevisar(PendingRow p) => p.PlateFlowStatus is null && !p.IsPaused;
+    // ADR-0059 — los buckets salen del estado real: entregado = por revisar; preasignacion = esperando
+    // placa; asignado (o pausado) = en espera del cliente.
+    private static bool IsPorRevisar(PendingRow p) => p.Status == TramiteEstado.Entregado && !p.IsPaused;
 
     private static bool IsEsperandoPlaca(PendingRow p) =>
-        p.PlateFlowStatus == PlateFlowStatus.Preasignado && !p.IsPaused;
+        p.Status == TramiteEstado.Preasignacion && !p.IsPaused;
 
     private static bool IsEnEsperaDelCliente(PendingRow p) =>
         !IsPorRevisar(p) && !IsEsperandoPlaca(p);
@@ -1358,11 +1447,11 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         CancellationToken cancellationToken)
     {
         var pendientes = await QueryInstances(transitOfficeId, tenantIds, filter)
-            .Where(p => p.Status == TramiteEstado.Entregado)
+            .Where(p => TramiteEstado.PendientesDelOrganismo.Contains(p.Status))
             .Select(p => new
             {
                 p.Id,
-                p.PlateFlowStatus,
+                p.Status,
                 p.Prioritario,
                 p.IsPaused,
                 p.CreatedAt,
@@ -1372,11 +1461,11 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 
         var pendingIds = pendientes.Select(p => p.Id).ToList();
 
-        // Momento en que cada pendiente entró a 'entregado' — de ahí sale la antigüedad.
+        // Momento en que cada pendiente llegó por última vez al organismo — de ahí sale la antigüedad.
         var deliveredAt = await _context.ProcedureInstanceStatusHistories
             .AsNoTracking()
             .Where(h => pendingIds.Contains(h.ProcedureInstanceId)
-                && h.ToStatus == TramiteEstado.Entregado)
+                && TramiteEstado.EstadosDeLlegadaAlOrganismo.Contains(h.ToStatus))
             .GroupBy(h => h.ProcedureInstanceId)
             .Select(g => new { InstanceId = g.Key, At = g.Max(h => h.ChangedAt) })
             .ToDictionaryAsync(x => x.InstanceId, x => x.At, cancellationToken)
@@ -1387,7 +1476,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         return pendientes
             .Select(p => new PendingRow(
                 p.Id,
-                p.PlateFlowStatus,
+                p.Status,
                 p.Prioritario,
                 p.IsPaused,
                 (now - (deliveredAt.TryGetValue(p.Id, out var at) ? at : p.CreatedAt)).TotalDays))
@@ -1463,7 +1552,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             .ConfigureAwait(false);
 
         var deliveries = history
-            .Where(h => h.ToStatus == TramiteEstado.Entregado)
+            .Where(h => TramiteEstado.EsLlegadaAlOrganismo(h.ToStatus))
             .GroupBy(h => h.InstanceId)
             .ToDictionary(g => g.Key, g => g.Select(h => h.ChangedAt).OrderBy(d => d).ToList());
 

@@ -416,16 +416,18 @@ function Bienvenida({
             <button
               type="button"
               onClick={() => setActual((i) => (i - 1 + mensajes.length) % mensajes.length)}
+              disabled={mensajes.length <= 1}
               aria-label="Mensaje anterior"
-              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
             >
               <ChevronLeft className="h-3 w-3" aria-hidden="true" />
             </button>
             <button
               type="button"
               onClick={() => setActual((i) => (i + 1) % mensajes.length)}
+              disabled={mensajes.length <= 1}
               aria-label="Mensaje siguiente"
-              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25"
+              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
             >
               <ChevronRight className="h-3 w-3" aria-hidden="true" />
             </button>
@@ -543,18 +545,20 @@ function Actividad({ estado, serie }: { estado: Estado; serie: OtReportSeriesPoi
  * Agrupación de lo recibido en el periodo, en las tres palabras con las que el organismo habla de un
  * trámite: lo aprobó, lo rechazó, o todavía no lo decidió.
  *
- * El backend expone ocho estados propios del OT y aquí se doblan a cuatro grupos. El detalle de qué
+ * El backend expone nueve estados propios del OT y aquí se doblan a cinco grupos. El detalle de qué
  * entra en cada uno va en el tooltip de la fila, porque la agrupación tiene juicio dentro y quien la
  * lea tiene derecho a verlo:
  *
- * - «Esperando placa» es un expediente YA aprobado al que le falta la placa, así que cuenta como
- *   aprobado. Ponerlo en «sin decisión» diría que el organismo no se ha pronunciado, y sí lo hizo.
+ * - «Esperando placa» (ADR-0059) es un trámite radicado sin placa que el organismo aún no revisó: la
+ *   placa se asigna ANTES de la revisión, así que cuenta como sin decisión.
  * - «En subsanación» es un rechazo con la subsanación abierta: el verdicto fue en contra aunque el
  *   trámite vaya a volver.
  * - «Esperando al cliente» es el grupo con menos filo: cae ahí tanto un trámite pausado a la espera
  *   de la empresa como uno ya con placa asignada. Se cuenta como sin decisión y el tooltip lo dice.
+ * - «Revocados» va aparte: se aprobó y el organismo lo deshizo. Sumarlo a aprobados mentiría y
+ *   sumarlo a rechazados escondería que hubo una aprobación de por medio.
  *
- * El desglose fino de los ocho estados vive en la consola de Reportes; aquí se busca la lectura de
+ * El desglose fino de los nueve estados vive en la consola de Reportes; aquí se busca la lectura de
  * un vistazo.
  */
 function composicionDelPeriodo(resumen: OtReportSummary) {
@@ -563,8 +567,8 @@ function composicionDelPeriodo(resumen: OtReportSummary) {
       id: "aprobados",
       name: "Aprobados",
       color: "#8CC63F",
-      value: resumen.aprobados + resumen.esperandoPlaca,
-      hint: "Aprobados y los que ya tienen el expediente aprobado a la espera de asignar placa.",
+      value: resumen.aprobados,
+      hint: "Aprobados por el organismo.",
     },
     {
       id: "rechazados",
@@ -577,8 +581,16 @@ function composicionDelPeriodo(resumen: OtReportSummary) {
       id: "sin-decision",
       name: "Sin decisión",
       color: "#557EFF",
-      value: resumen.enRevision + resumen.esperandoCliente + resumen.otros,
-      hint: "En revisión y los que esperan algo de la empresa (SOAT, impuestos o trámite pausado).",
+      value:
+        resumen.enRevision + resumen.esperandoPlaca + resumen.esperandoCliente + resumen.otros,
+      hint: "En revisión, esperando placa y los que esperan algo de la empresa (SOAT, impuestos o trámite pausado).",
+    },
+    {
+      id: "revocados",
+      name: "Revocados",
+      color: "#8B5CF6",
+      value: resumen.revocados,
+      hint: "Aprobados que el organismo revocó después.",
     },
     {
       id: "anulados",

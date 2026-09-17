@@ -12,6 +12,7 @@ using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Domain.Enums;
 using Flit.Queries.Domain;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -141,6 +142,19 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.Events)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
+    // HU #12358 — detalle consolidado de la red: mismo grafo que la sobrecarga Guid, alcance por
+    // TenantScope (vacío ⇒ WHERE 1=0). AsNoTracking: solo lectura por contrato (AC1 «en solo lectura»).
+    public Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, TenantScope scope, CancellationToken ct) =>
+        db.ProcedureInstances
+            .AsNoTracking()
+            .Include(x => x.ProcedureType)
+            .Include(x => x.FieldValues)
+            .Include(x => x.StatusHistory)
+            .Include(x => x.Actors)
+            .Include(x => x.Events)
+            .WhereTenantInScope(scope, x => x.TenantId)
+            .FirstOrDefaultAsync(x => x.Id == id && x.DeletedAt == null, ct);
+
     public Task<ProcedureInstance?> GetByIdWithActorsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.ProcedureType)
@@ -210,6 +224,34 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.ProcedureType)
             .Include(x => x.Signatures)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+
+    // HU #12116 — cross-tenant a propósito (backfill de plataforma): la fila de auditoría vigente
+    // se resuelve con el query filter propio de VehicleSignatureImprintConfiguration
+    // (DeletedAt == null), y el WHERE compara contra Attachments (sin query filter propio: los
+    // adjuntos que ya no aplican se borran, no se marcan).
+    public async Task<IReadOnlyList<(Guid InstanceId, Guid TenantId)>> ListImprontaManualBackfillCandidatesAsync(
+        int limit, CancellationToken ct)
+    {
+        var signedAttachmentIds = db.VehicleSignatureImprints
+            .Where(v => v.AttachmentId != null)
+            .Select(v => v.AttachmentId!.Value);
+
+        var rows = await db.ProcedureInstances
+            .AsNoTracking()
+            .Where(i => i.DeletedAt == null
+                && (i.Status == TramiteEstado.Entregado || i.Status == TramiteEstado.Aprobado)
+                && i.Attachments.Any(a =>
+                    a.Tipo == "impronta"
+                    && (a.Provider == null || a.Provider.ToLower() != Flit.Tramites.Domain.Documents.AttachmentProviders.Kyverum)
+                    && !signedAttachmentIds.Contains(a.Id)))
+            .OrderBy(i => i.CreatedAt)
+            .Take(limit)
+            .Select(i => new { i.Id, i.TenantId })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows.Select(r => (r.Id, r.TenantId)).ToList();
+    }
 
     public Task<ProcedureInstance?> GetByIdWithFurGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
@@ -312,6 +354,33 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return ids.ToHashSet();
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetRevocationBadgeStatusesAsync(
+        IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default)
+    {
+        if (instanceIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = instanceIds.Distinct().ToList();
+
+        // Bug: filtrar por estado ANTES de buscar el intento más reciente hacía que un trámite con
+        // intento 1 rechazado + intento 2 aprobado (revocado) siguiera mostrando "Revocatoria
+        // rechazada" en el listado — el intento 2 (aprobada) quedaba fuera del WHERE y el 1 (rechazada,
+        // ya obsoleto) ganaba por ser el único candidato. Ahora se trae el estado del intento de MAYOR
+        // AttemptNumber SIN filtrar por estado (así 'aprobada' compite en igualdad para saber cuál es
+        // el más reciente); el caller (frontend) decide no pintar nada cuando ese último es 'aprobada'
+        // (ese desenlace ya se ve solo, el trámite pasa a 'revocado').
+        var rows = await db.ProcedureRevocationRequests
+            .AsNoTracking()
+            .Where(r => distinct.Contains(r.ProcedureInstanceId))
+            .Select(r => new { r.ProcedureInstanceId, r.AttemptNumber, r.Status })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.ProcedureInstanceId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.AttemptNumber).First().Status);
+    }
+
     public async Task<IReadOnlyDictionary<Guid, string>> GetTenantNamesAsync(
         IReadOnlyCollection<Guid> tenantIds, CancellationToken ct)
     {
@@ -347,6 +416,30 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Where(r => !string.IsNullOrWhiteSpace(r.DisplayName))
             .ToDictionary(r => r.Id, r => r.DisplayName);
     }
+
+    public async Task<IReadOnlyDictionary<Guid, string>> GetUserEmailsAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct)
+    {
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = userIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (distinct.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var rows = await db.Users
+            .Where(u => distinct.Contains(u.Id))
+            .Select(u => new { u.Id, u.Email })
+            .ToListAsync(ct);
+
+        return rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.Email))
+            .ToDictionary(r => r.Id, r => r.Email);
+    }
+
+    public Task<IReadOnlyDictionary<Guid, string>> GetUserCompaniasAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct) =>
+        ResolveCompaniasDeUsuariosAsync(userIds.Where(id => id != Guid.Empty).Distinct().ToList(), ct);
 
     public async Task<IReadOnlyDictionary<string, bool>> ListFirmaBaulVigenciaKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateOnly hoy, CancellationToken ct)
@@ -1455,6 +1548,12 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public async Task<AddProcedureInstanceOutcome> AddWithUniqueReferenceAsync(ProcedureInstance instance, CancellationToken ct)
     {
+        // HU #12406 — el trámite conserva el padre que tenía la compañía radicadora al crearse. Se
+        // lee de identity.tenants.parent_tenant_id en este mismo DbContext y viaja en el MISMO INSERT
+        // que el trámite y su historial (un solo SaveChanges = una sola transacción); nunca se
+        // recalcula después (AfterSaveBehavior.Throw + trigger de inmutabilidad en la base).
+        instance.ParentTenantIdAtCreation = await ParentTenantIdOfAsync(db, instance.TenantId, ct);
+
         await db.ProcedureInstances.AddAsync(instance, ct);
 
         try
@@ -1482,6 +1581,18 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         }
     }
 
+
+    /// <summary>
+    /// HU #12406 — padre actual de la compañía radicadora (<c>null</c> si no tiene o no existe; la
+    /// FK de <c>tenant_id</c> se encarga del tenant inexistente). Compartido con
+    /// <see cref="AdminProcedureInstanceRepository"/> para que los dos puntos de creación escriban lo mismo.
+    /// </summary>
+    internal static Task<Guid?> ParentTenantIdOfAsync(FlitDbContext db, Guid tenantId, CancellationToken ct) =>
+        db.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => t.ParentTenantId)
+            .FirstOrDefaultAsync(ct);
 
     private static bool IsReferenceUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg
@@ -1781,6 +1892,22 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         if (tenantId is { } tid)
             baseQuery = baseQuery.Where(x => x.TenantId == tid);
 
+        return await ListPageWithSummaryGraphAsync(baseQuery, skip, take, filter, sortBy, direction, ct);
+    }
+
+    /// <summary>
+    /// Núcleo compartido de las dos sobrecargas de <c>ListWithSummaryGraphFilteredAsync</c>: recibe la
+    /// consulta ya acotada por tenant y aplica filtros, conteo total, orden, grafo y página.
+    /// </summary>
+    private async Task<(IReadOnlyList<ProcedureInstance> Items, int Total)> ListPageWithSummaryGraphAsync(
+        IQueryable<ProcedureInstance> baseQuery,
+        int skip,
+        int take,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct)
+    {
         baseQuery = ApplyListFilters(baseQuery, filter);
 
         var total = await baseQuery.CountAsync(ct);
@@ -1814,6 +1941,25 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return (items, total);
     }
 
+    // HU #12358 — listado consolidado de la red. Único cambio frente a la sobrecarga Guid?: el alcance
+    // entra por WhereTenantInScope (conjunto vacío ⇒ cero filas, nunca «sin filtro»). Filtros, orden,
+    // paginación y grafo son EXACTAMENTE los mismos (núcleo compartido arriba).
+    public async Task<(IReadOnlyList<ProcedureInstance> Items, int Total)> ListWithSummaryGraphFilteredAsync(
+        TenantScope scope,
+        int skip,
+        int take,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct)
+    {
+        var baseQuery = db.ProcedureInstances.AsNoTracking()
+            .Where(x => x.DeletedAt == null)
+            .WhereTenantInScope(scope, x => x.TenantId);
+
+        return await ListPageWithSummaryGraphAsync(baseQuery, skip, take, filter, sortBy, direction, ct);
+    }
+
     /// <summary>
     /// Aplica los filtros de <see cref="ProcedureInstanceListFilter"/>. VIN/placa comparan por IGUALDAD
     /// case-insensitive (<c>ToUpper() == ...</c>, mismo criterio de <see cref="FindTramitesByVinAsync"/>);
@@ -1832,12 +1978,52 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         if (tenantId is { } tid)
             query = query.Where(x => x.TenantId == tid);
 
+        return await CountByStatusAsync(query, filter, ct);
+    }
+
+    // HU #12358 — conteo por estado del universo consolidado de la red (alcance por WhereTenantInScope).
+    public async Task<IReadOnlyDictionary<string, int>> CountByStatusFilteredAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct)
+    {
+        var query = db.ProcedureInstances.AsNoTracking()
+            .Where(x => x.DeletedAt == null)
+            .WhereTenantInScope(scope, x => x.TenantId);
+
+        return await CountByStatusAsync(query, filter, ct);
+    }
+
+    // HU #12361 — hijos alcanzados por las estadísticas de la red (DISTINCT tenant_id bajo el filtro).
+    public async Task<IReadOnlyList<Guid>> ListTenantIdsWithMatchesAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct)
+    {
+        var query = db.ProcedureInstances.AsNoTracking()
+            .Where(x => x.DeletedAt == null)
+            .WhereTenantInScope(scope, x => x.TenantId);
+
+        return await ApplyListFilters(query, filter)
+            .Select(x => x.TenantId)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
+    /// <summary>Núcleo compartido de las dos sobrecargas de <c>CountByStatusFilteredAsync</c>.</summary>
+    private async Task<IReadOnlyDictionary<string, int>> CountByStatusAsync(
+        IQueryable<ProcedureInstance> query,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct)
+    {
         query = ApplyListFilters(query, filter);
 
-        // GROUP BY en SQL: se traen tantas filas como estados existan (siete), no los expedientes.
+        // GROUP BY en SQL: se traen tantas filas como estados existan, no los expedientes. El origen
+        // del rechazo entra en la clave para poder sumar aparte «rechazado desde preasignación»
+        // (ADR-0059) sin una segunda consulta.
         var conteos = await query
-            .GroupBy(x => x.Status)
-            .Select(g => new { Estado = g.Key, Total = g.Count() })
+            .GroupBy(x => new { x.Status, x.RejectedFrom })
+            .Select(g => new { Estado = g.Key.Status, g.Key.RejectedFrom, Total = g.Count() })
             .ToListAsync(ct);
 
         // Clave normalizada a minúsculas: el vocabulario persistido lo es, pero un dato histórico con
@@ -1847,6 +2033,13 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         {
             var clave = (c.Estado ?? string.Empty).ToLowerInvariant();
             resultado[clave] = resultado.GetValueOrDefault(clave) + c.Total;
+
+            if (clave == TramiteEstado.Rechazado
+                && string.Equals(c.RejectedFrom, TramiteEstado.Preasignacion, StringComparison.OrdinalIgnoreCase))
+            {
+                resultado[TramiteEstado.FiltroRechazadoPreasignacion] =
+                    resultado.GetValueOrDefault(TramiteEstado.FiltroRechazadoPreasignacion) + c.Total;
+            }
         }
 
         return resultado;
@@ -2040,8 +2233,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 .Select(e => e.Trim().ToLowerInvariant())
                 .Distinct()
                 .ToList();
-            if (normalizados.Count > 0)
+
+            // ADR-0059 — «Rechazado preasignación» no es un status: es rechazado con rejected_from =
+            // preasignacion. Se traduce aquí, en OR con los estados reales pedidos, para que la tarjeta
+            // del listado se pueda pulsar como cualquier otra.
+            var rechazadoPreasignacion = normalizados.Remove(TramiteEstado.FiltroRechazadoPreasignacion);
+            if (rechazadoPreasignacion && normalizados.Count > 0)
+            {
+                query = query.Where(x =>
+                    normalizados.Contains(x.Status.ToLower())
+                    || (x.Status == TramiteEstado.Rechazado && x.RejectedFrom == TramiteEstado.Preasignacion));
+            }
+            else if (rechazadoPreasignacion)
+            {
+                query = query.Where(x =>
+                    x.Status == TramiteEstado.Rechazado && x.RejectedFrom == TramiteEstado.Preasignacion);
+            }
+            else if (normalizados.Count > 0)
+            {
                 query = query.Where(x => normalizados.Contains(x.Status.ToLower()));
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Modalidad))

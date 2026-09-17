@@ -1183,7 +1183,10 @@ paths:
         - bearerAuth: []
       responses:
         "200":
-          description: Perfil OT (operationMode, quipuxReadOnly, transitOfficeId, featureFlags).
+          description: >
+            Perfil OT (operationMode, quipuxReadOnly, transitOfficeId, featureFlags,
+            revocationWindowBusinessDays). `revocationWindowBusinessDays` es la ventana de
+            revocatoria en días hábiles (HU #12568); `null` = sin configurar = sin límite.
         "401":
           description: No autenticado.
         "403":
@@ -1191,12 +1194,39 @@ paths:
     patch:
       tags: [Admin · OT]
       operationId: adminOtPatchProfile
-      summary: Actualizar modo Dashboard/QX
+      summary: Actualizar modo Dashboard/QX y ventana de revocatoria
       security:
         - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operationMode:
+                  type: string
+                  enum: [dashboard, quipux]
+                quipuxReadOnly:
+                  type: boolean
+                revocationWindowBusinessDays:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  description: >
+                    Ventana de revocatoria en días hábiles (HU #12568). Enviar `null` (o
+                    borrar el valor) la deja sin límite — no se sustituye por ningún default
+                    numérico. Un valor ≤ 0 o no numérico responde 422 con el campo señalado.
       responses:
         "200":
           description: Perfil actualizado.
+        "422":
+          description: >
+            Payload inválido — p. ej. operationMode fuera de catálogo o
+            revocationWindowBusinessDays ≤ 0.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/admin/ot/imprint-signatures:
     get:
@@ -3672,6 +3702,634 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/network/instances:
+    get:
+      operationId: tramitesNetworkListInstances
+      tags: [Tramites, Red]
+      summary: Listado consolidado de trámites de la red (cabeza de grupo)
+      description: >
+        Feature #12257 / HU #12358 — vista consolidada de la red de una cabeza de grupo (Concesión o
+        Marca Blanca). Ruta NUEVA y separada del listado propio: `/api/v1/tramites/instances` no
+        cambia ni recibe parámetros para ampliar el alcance.
+
+
+        El alcance lo calcula el servidor desde la base de datos (`TenantScope`): la cabeza obtiene
+        sus trámites y los de sus clientes hijos vigentes, cada fila con `tenantId` y `companiaNombre`
+        del cliente dueño. Un cliente ajeno a la red nunca aparece. Desvincular a un hijo surte efecto
+        en la siguiente petición, sin renovar el token.
+
+
+        Solo una cabeza de grupo con hijos puede llamarla: un cliente sin jerarquía o un SuperAdmin
+        reciben 403 `network_scope_required` (el SuperAdmin ya tiene el listado global por sus rutas).
+        HU #12652 — y solo con el rol AdminCompany de la cabeza: cualquier otro rol de la cabeza
+        (Radicador, Operador, …) recibe 403 `network_role_required` sin ejecutar la consulta; multi-rol
+        con AdminCompany pasa. Aplica a TODAS las rutas `/api/v1/tramites/network/**`.
+        `childTenantId` fuera del conjunto de lectura responde 403 `network_child_out_of_scope` sin
+        ejecutar la consulta.
+
+
+        SIEMPRE paginada: sin `skip`/`take` responde la primera página con el tope del servidor (200);
+        un `take` mayor cae al tope. Mismos filtros, orden y fila que el listado propio. Nunca entrega
+        contenido de documentos ni direcciones prefirmadas.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: childTenantId
+          in: query
+          required: false
+          description: Acota a un cliente de la red (puede ser la propia cabeza). Fuera del alcance ⇒ 403.
+          schema: { type: string, format: uuid }
+        - name: estado
+          in: query
+          required: false
+          description: Estados separados por coma (OR). Valores fuera del vocabulario se descartan.
+          schema: { type: string }
+        - name: modalidad
+          in: query
+          required: false
+          schema: { type: string }
+        - name: organismoTransito
+          in: query
+          required: false
+          description: Nombre del organismo de tránsito, por subcadena.
+          schema: { type: string }
+        - name: tipoCodigo
+          in: query
+          required: false
+          schema: { type: string }
+        - name: busqueda
+          in: query
+          required: false
+          schema: { type: string }
+        - name: prioritario
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: createdFrom
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: createdTo
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: updatedFrom
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: updatedTo
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: sortBy
+          in: query
+          required: false
+          description: Misma lista blanca que el listado propio; un valor no reconocido cae al orden por defecto.
+          schema: { type: string }
+        - name: sortDir
+          in: query
+          required: false
+          schema: { type: string, enum: [asc, desc], default: desc }
+        - name: skip
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: take
+          in: query
+          required: false
+          description: Tamaño de página. Fuera del rango 1..200 cae al tope de 200.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 200 }
+      responses:
+        "200":
+          description: Página del listado consolidado dentro del alcance de la cabeza (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkProcedureListResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: >
+            `network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin),
+            `network_role_required` (cabeza sin rol AdminCompany — HU #12652) o
+            `network_child_out_of_scope` (`childTenantId` fuera del conjunto de lectura).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/instances/search:
+    post:
+      operationId: tramitesNetworkSearchInstances
+      tags: [Tramites, Red]
+      summary: Listado consolidado de la red filtrado con la gramática de consultas
+      description: >
+        HU #12358 — mismo cuerpo que `POST /api/v1/tramites/instances/search` (condiciones del catálogo
+        de trámites + filtros sueltos + orden + paginación) más `childTenantId`. Misma policy,
+        paginación y respuesta que `GET /api/v1/tramites/network/instances`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NetworkTramitesSearchRequest"
+      responses:
+        "200":
+          description: Página del listado consolidado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkProcedureListResponse"
+        "400":
+          description: Campo u operador fuera del catálogo de condiciones.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/instances/estado-counts:
+    post:
+      operationId: tramitesNetworkInstanceEstadoCounts
+      tags: [Tramites, Red]
+      summary: Conteo por estado del universo consolidado de la red
+      description: >
+        HU #12358 — tira de KPIs del universo consolidado bajo las mismas condiciones que
+        `/network/instances/search`. `estado` se ignora (las tarjetas dicen cuántos hay de CADA estado).
+        Devuelve siempre las siete claves del vocabulario más `subsanacion`, con cero donde no hay filas.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NetworkTramitesSearchRequest"
+      responses:
+        "200":
+          description: Conteo por estado (clave = estado, valor = total).
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: { type: integer }
+        "400":
+          description: Campo u operador fuera del catálogo de condiciones.
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/instances/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: tramitesNetworkGetInstance
+      tags: [Tramites, Red]
+      summary: Detalle consolidado (solo lectura) de un trámite de la red
+      description: >
+        HU #12358 — el cliente dueño (`tenantId`, `tenantName`) y EXACTAMENTE el mismo detalle que ve
+        el propio hijo por `GET /api/v1/tramites/instances/{id}` (`instance`: campos, valores, actores,
+        historial de estado y eventos administrativos), en solo lectura. Nunca incluye contenido de
+        documentos ni direcciones prefirmadas de almacenamiento (AC5): el único canal de contenido es
+        la descarga proxeada de la HU #12410. Un id fuera del conjunto de lectura responde 404 escueto
+        (no se distingue «ajeno» de «no existe»).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Detalle consolidado del trámite.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkProcedureDetailResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required` (la petición no tiene alcance de grupo) o `network_role_required` (cabeza sin rol AdminCompany, HU #12652)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El trámite no existe o no está en el conjunto de lectura de la cabeza.
+
+  /api/v1/tramites/network/instances/{id}/attachments:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: tramitesNetworkListInstanceAttachments
+      tags: [Tramites, Red]
+      summary: Metadatos de los documentos de un trámite de la red (solo lectura, sin direcciones)
+      description: >
+        HU #12410 — el MISMO `AttachmentDto` que ve el propio hijo por `GET /api/v1/tramites/instances/{id}/attachments`
+        (id, tipo, filename, mimetype, sizeBytes, sha256, source, uploadedAt, provider, digitallySigned), para un
+        trámite de un cliente hijo del conjunto de lectura de la cabeza. Nunca incluye `storagePath`, direcciones
+        prefirmadas ni previsualización: el único canal de contenido es `…/attachments/{attachmentId}/download`.
+        El modelo de anexos no tiene «versión» (no se expone). El tenant del trámite se resuelve en el servidor
+        (dueño real del trámite) y jamás se toma de `X-Tenant-Id`. Clase CONCESION: 403 `network_documents_disabled`
+        mientras el interruptor `network_documents_concesion` esté apagado (valor por defecto). Un trámite
+        inexistente, ajeno o fuera del conjunto de lectura responde 404 escueto `{ "error": "not_found" }`, idéntico
+        en los tres casos (anti-enumeración). Cada listado deja UN registro `network.attachments.list` en la
+        auditoría de acceso consolidado (HU #12361) con trámite, hijo y resultado (`ok` / `forbidden` / `not_found`).
+        Policy explícita: exige el permiso RBAC `tramites.read` en el JWT (SuperAdmin hace bypass del permiso
+        pero sigue recibiendo 403 `network_scope_required`); sin el permiso responde 403 sin cuerpo y sin auditar.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Documentos del trámite (metadatos). Mismo shape que el listado propio.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attachments:
+                    type: array
+                    items: { $ref: "#/components/schemas/AttachmentDto" }
+        "401":
+          description: Sin token válido.
+        "403":
+          description: >
+            `network_role_required` (cabeza sin rol AdminCompany — HU #12652),
+            `network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin o interruptor
+            `group_read_scope` apagado) o `network_documents_disabled` (cabeza CONCESION con
+            `network_documents_concesion` apagado). Sin permiso `tramites.read`: 403 sin cuerpo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "`{ \"error\": \"not_found\" }` — trámite inexistente, ajeno o fuera del conjunto de lectura."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/instances/{id}/attachments/{attachmentId}/download:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: attachmentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: tramitesNetworkDownloadInstanceAttachment
+      tags: [Tramites, Red]
+      summary: Descarga proxeada (por transmisión) de un documento de un trámite de la red
+      description: >
+        HU #12410 — la API abre el binario con el tenant DUEÑO del trámite (comprobado contra el conjunto de
+        lectura de la cabeza) y lo sirve por transmisión con `Content-Disposition: attachment; filename=…` y el
+        `Content-Type` del documento; el cliente nunca recibe una dirección de almacenamiento. No existe
+        `preview-url` de red (la URL prefirmada de S3 es un portador anónimo). Mismas reglas de clase e
+        interruptores que el listado. Trámite inexistente/ajeno, documento inexistente o binario perdido
+        responden el MISMO 404 escueto `{ "error": "not_found" }`. Cada descarga (servida o rechazada) deja UN
+        registro `network.attachments.download` con `attachmentId` en la auditoría de acceso consolidado.
+        La auditoría de la descarga es FAIL-CLOSED: si el registro no puede persistirse, el binario NO se entrega
+        y se responde 503 `{ "error": "audit_unavailable" }` (el listado de metadatos y las demás lecturas de red
+        siguen best-effort). Policy explícita: exige el permiso RBAC `tramites.read` en el JWT.
+        Las rutas propias `GET /api/v1/tramites/instances/{id}/attachments/{attachmentId}/download` y `…/preview-url`
+        no cambian.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Binario del documento.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_documents_disabled`; sin permiso `tramites.read`: 403 sin cuerpo."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "`{ \"error\": \"not_found\" }` — trámite inexistente/ajeno, documento inexistente o binario perdido."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: "`{ \"error\": \"audit_unavailable\" }` — no se pudo registrar el acceso; el documento no se entrega (fail-closed)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/stats/overview:
+    get:
+      operationId: tramitesNetworkStatsOverview
+      tags: [Tramites, Red]
+      summary: Métricas por categoría/estado del universo consolidado de la red (cabeza de grupo)
+      description: >
+        HU #12359 — la MISMA forma que `GET /api/v1/analytics/overview` (`tenantId`, `from`, `to`,
+        `categories`) sobre el conjunto de lectura de la cabeza (padre y sus hijos) resuelto en el servidor,
+        más `scope.tenantIds` (los clientes efectivamente consultados). `childTenantId` acota a UN cliente
+        de la red (puede ser la propia cabeza); uno fuera del conjunto de lectura responde 403
+        `network_child_out_of_scope` SIN ejecutar la consulta (AC5). El conjunto viaja a la base como un
+        único parámetro de arreglo (`tenant_id = ANY(@tenants)`, AC3); un conjunto vacío no devuelve
+        filas (AC4). Las rutas de `/api/v1/analytics` no cambian (AC6/AC7). Cada petición deja un
+        registro en la auditoría de acceso consolidado (`network.stats.overview`, HU #12361).
+      security:
+        - bearerAuth: []
+      parameters:
+        # BUG #12588 — no se reutilizan NetworkStatsFrom/NetworkStatsTo: esas siguen siendo
+        # obligatorias en el resto de rutas de stats (series y rankings, que sin ventana no
+        # significan nada). Solo el overview admite consultar el universo completo.
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: >
+            Fecha inicial inclusiva (YYYY-MM-DD) — HU #12359. Omitirlo NO acota por ese extremo: sin `from` ni `to` la respuesta cubre el universo completo (BUG #12588). El filtro es por fecha de creación del trámite.
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: >
+            Fecha final inclusiva (YYYY-MM-DD) — HU #12359. Omitirlo NO acota por ese extremo: sin `from` ni `to` la respuesta cubre el universo completo (BUG #12588). El filtro es por fecha de creación del trámite.
+        - $ref: "#/components/parameters/NetworkStatsChildTenantId"
+      responses:
+        "200":
+          description: Métricas agregadas de la red; del periodo indicado o del universo completo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkAnalyticsOverviewResponse"
+        "400":
+          description: Rango inválido (`from` posterior a `to`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin), `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/stats/productivity/top:
+    get:
+      operationId: tramitesNetworkStatsTopProducers
+      tags: [Tramites, Red]
+      summary: Top de radicadores de la red por trámites enviados (cabeza de grupo)
+      description: >
+        HU #12359 — la MISMA forma que `GET /api/v1/analytics/productivity/top` (`items`) sobre el
+        conjunto de lectura de la cabeza, más `scope.tenantIds`. Ranking único por usuario sobre toda la
+        red (un gestor que radique en varios clientes del conjunto es una sola fila). Mismo `limit`
+        (por defecto 5, máximo 50) y mismas reglas de `childTenantId` que `/network/stats/overview`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 5, minimum: 1, maximum: 50 }
+          description: Tamaño del ranking (por defecto 5; por encima de 50 cae al tope).
+        - $ref: "#/components/parameters/NetworkStatsChildTenantId"
+      responses:
+        "200":
+          description: Ranking de productividad de la red en el periodo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkTopProducersResponse"
+        "400":
+          description: Rango inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/stats/monthly-trend:
+    get:
+      operationId: tramitesNetworkStatsMonthlyTrend
+      tags: [Tramites, Red]
+      summary: Tendencia mensual de trámites por categoría del universo consolidado de la red
+      description: >
+        HU #12359 — la MISMA forma que `GET /api/v1/analytics/monthly-trend` (`items` con
+        `year`, `month`, `category`, `total`) sobre el conjunto de lectura de la cabeza, más
+        `scope.tenantIds`. Un punto por (año, mes, categoría) sumando los clientes del conjunto.
+        Mismas reglas de `childTenantId` que `/network/stats/overview`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - $ref: "#/components/parameters/NetworkStatsChildTenantId"
+      responses:
+        "200":
+          description: Tendencia mensual de la red en el periodo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkMonthlyTrendResponse"
+        "400":
+          description: Rango inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/reports/procedures:
+    get:
+      operationId: tramitesNetworkReportsProcedures
+      tags: [Tramites, Red]
+      summary: Reporte detallado de la red, paginado, filtrable por cliente hijo o agregado (cabeza de grupo)
+      description: >
+        HU #12360 — los MISMOS filtros y paginación que `GET /api/v1/detailed-report/procedures` (rango de
+        fechas obligatorio; organismo, tipo, categoría, estado, radicado, documento, nombre, transformación,
+        leasing; `page`/`pageSize` con tope 100) sobre el conjunto de lectura de la cabeza (padre y sus
+        hijos) resuelto en el servidor. Cada fila lleva el cliente dueño (`tenantId`, `tenantName`) y los
+        totales se desglosan además por cliente (`summary.byTenant`) (AC1). `childTenantId` acota a UN
+        cliente de la red (puede ser la propia cabeza) y los totales son solo de ese cliente (AC2); uno
+        fuera del conjunto de lectura responde 403 `network_child_out_of_scope` SIN ejecutar la consulta
+        (AC3). El conjunto viaja a la base como un único parámetro de arreglo (`tenant_id = ANY(@tenants)`);
+        un conjunto vacío produce un reporte sin registros, nunca uno sin filtro (AC4). Ni el listado ni la
+        exportación incluyen contenido ni enlaces de documentos generados o anexos (AC6). Las rutas de
+        `/api/v1/detailed-report` no cambian ni reciben parámetros nuevos (AC7). Cada petición deja un
+        registro en la auditoría de acceso consolidado (`network.reports.procedures`, HU #12361) con los
+        filtros de texto libre registrados solo por nombre.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - $ref: "#/components/parameters/NetworkStatsChildTenantId"
+        - $ref: "#/components/parameters/NetworkReportTransitOfficeId"
+        - $ref: "#/components/parameters/NetworkReportProcedureTypeId"
+        - $ref: "#/components/parameters/NetworkReportCategory"
+        - $ref: "#/components/parameters/NetworkReportStatus"
+        - $ref: "#/components/parameters/NetworkReportReferenceNumber"
+        - $ref: "#/components/parameters/NetworkReportPersonDocument"
+        - $ref: "#/components/parameters/NetworkReportPersonName"
+        - $ref: "#/components/parameters/NetworkReportHasTransformation"
+        - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, default: 1, minimum: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+          description: Tamaño de página (por defecto 20; por encima de 100 cae al tope).
+      responses:
+        "200":
+          description: Página del reporte detallado de la red.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkDetailedProceduresPage"
+        "400":
+          description: Rango inválido (`from` posterior a `to`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required` (sin alcance de grupo: cliente sin jerarquía, SuperAdmin), `network_role_required` (cabeza sin rol AdminCompany) o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network/reports/procedures/export:
+    get:
+      operationId: tramitesNetworkReportsExportExcel
+      tags: [Tramites, Red]
+      summary: Exporta a Excel el reporte detallado de la red con el mismo filtro que el listado
+      description: >
+        HU #12360 — XLSX generado con el MISMO generador OpenXml que `GET /api/v1/detailed-report/procedures/export`
+        y las mismas columnas precedidas por «Compañía» (razón social del cliente dueño de cada fila). Usa la
+        misma consulta y el mismo filtro resuelto que `/network/reports/procedures` para la misma petición:
+        el archivo contiene exactamente los registros de la consulta y ninguno de un cliente ajeno a la red
+        (AC5). Sin registros responde un archivo solo con la cabecera (AC4). Mismas reglas de
+        `childTenantId` y mismos filtros (sin paginación). Requiere rol de administrador de compañía.
+        Registra `network.reports.export` en la auditoría de acceso consolidado.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - $ref: "#/components/parameters/NetworkStatsChildTenantId"
+        - $ref: "#/components/parameters/NetworkReportTransitOfficeId"
+        - $ref: "#/components/parameters/NetworkReportProcedureTypeId"
+        - $ref: "#/components/parameters/NetworkReportCategory"
+        - $ref: "#/components/parameters/NetworkReportStatus"
+        - $ref: "#/components/parameters/NetworkReportReferenceNumber"
+        - $ref: "#/components/parameters/NetworkReportPersonDocument"
+        - $ref: "#/components/parameters/NetworkReportPersonName"
+        - $ref: "#/components/parameters/NetworkReportHasTransformation"
+        - $ref: "#/components/parameters/NetworkReportIsLeasing"
+      responses:
+        "200":
+          description: Archivo `reporte_red_{from}_{to}.xlsx` (hoja «Reporte detallado»).
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Rango inválido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`network_scope_required`, `network_role_required` (cabeza sin rol AdminCompany, HU #12652) o `network_child_out_of_scope`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/network-access-audit/mine:
+    get:
+      operationId: tramitesNetworkAccessAuditMine
+      tags: [Tramites, Red]
+      summary: Quién de la cabeza de red accedió a los datos de mi cliente (cliente hijo)
+      description: >
+        HU #12361 — el cliente HIJO consulta la auditoría del acceso consolidado sobre SUS datos
+        (`tramites.network_access_audit`): cada listado, estadística, detalle o descarga de una cabeza de
+        red que alcanzó alguno de sus trámites, con el usuario, la cabeza, el recurso, el instante y el
+        resultado (incluidos los intentos rechazados). El tenant sale del token (ruta runtime tenant-scoped),
+        nunca del header. Solo identificadores: ninguna respuesta lleva placa, documento ni nombre.
+        Paginación acotada en servidor (`take` máximo 200). Un SuperAdmin sin `X-Tenant-Id` responde 403
+        `tenant_required` (usa `/api/v1/admin/platform/network-access-audit`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkAccessAuditFrom"
+        - $ref: "#/components/parameters/NetworkAccessAuditTo"
+        - $ref: "#/components/parameters/NetworkAccessAuditResource"
+        - $ref: "#/components/parameters/NetworkAccessAuditPage"
+        - $ref: "#/components/parameters/NetworkAccessAuditTake"
+      responses:
+        "200":
+          description: Página de accesos consolidados sobre los datos del cliente autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkAccessAuditPage"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: "`tenant_required`: la petición no tiene un cliente resuelto."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/instances/{id}/actors:
     get:
       operationId: tramitesGetActors
@@ -5173,23 +5831,26 @@ paths:
       operationId: analyticsOverview
       summary: Métricas por categoría/estado del tenant en un rango de fechas (RF01, RF02, RF07)
       description: >
-        Devuelve conteos de trámites por categoría (matriculas/traspasos/otros) y estado para
-        el rango [from, to]. El tenant se toma del claim JWT `tenant_id` (AC1); un SuperAdmin
-        puede indicar `tenantId` por query para consultar otra compañía (AC2). Requiere JWT con
-        rol de empresa o SuperAdmin (AdminCompany).
+        Devuelve conteos de trámites por categoría (matriculas/traspasos/otros) y estado. El tenant
+        se toma del claim JWT `tenant_id` (AC1); un SuperAdmin puede indicar `tenantId` por query para
+        consultar otra compañía (AC2). Requiere JWT con rol de empresa o SuperAdmin (AdminCompany).
+        `from` y `to` son opcionales y se acotan por separado; sin ninguno de los dos la respuesta
+        cubre TODOS los trámites del tenant (BUG #12588), que es como arranca el dashboard.
       security:
         - bearerAuth: []
       parameters:
         - name: from
           in: query
-          required: true
+          required: false
           schema: { type: string, format: date }
-          description: Fecha inicial inclusiva (YYYY-MM-DD).
+          description: >
+            Fecha inicial inclusiva (YYYY-MM-DD). Omitirlo NO acota por ese extremo: sin `from` ni `to` la respuesta cubre el universo completo (BUG #12588). El filtro es por fecha de creación del trámite.
         - name: to
           in: query
-          required: true
+          required: false
           schema: { type: string, format: date }
-          description: Fecha final inclusiva (YYYY-MM-DD).
+          description: >
+            Fecha final inclusiva (YYYY-MM-DD). Omitirlo NO acota por ese extremo: sin `from` ni `to` la respuesta cubre el universo completo (BUG #12588). El filtro es por fecha de creación del trámite.
         - name: tenantId
           in: query
           required: false
@@ -6333,6 +6994,39 @@ paths:
                   - $ref: "#/components/schemas/ErrorResponse"
         "502":
           description: Kyverum RUNT no disponible temporalmente (UPSTREAM_UNAVAILABLE, AC3).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/improntas/firmas/backfill:
+    post:
+      tags: [Admin · Improntas]
+      operationId: adminImprontasFirmasBackfill
+      summary: Firma la impronta manual de trámites que quedaron sin firmar (HU #12116)
+      description: >
+        Procesa hasta `limit` trámites entregados/aprobados (no eliminados) con adjunto activo
+        tipo "impronta" no-Kyverum sin fila vigente en vehicle_signature_imprints, e intenta
+        firmarlos con la misma lógica que el disparo automático al radicar/asignar placa.
+        Idempotente y re-ejecutable. Requiere rol SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+      responses:
+        "200":
+          description: Resumen del backfill.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackfillFirmaImprontaManualResult"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
           content:
             application/json:
               schema:
@@ -8507,7 +9201,7 @@ paths:
         required: true
         schema:
           type: string
-          enum: [tramites.columns, ot.procedures.columns]
+          enum: [tramites.columns, ot.procedures.columns, tramites.scope]
         description: >
           Lista blanca fija de scopes soportados. Cualquier otro valor responde 400.
       - in: header
@@ -8568,6 +9262,113 @@ paths:
         "401":
           description: No autenticado.
 
+  # ── Admin · Plataforma · Jerarquía de clientes (HU #12323, Feature #12254, ADR-0057) ──
+  /api/v1/admin/platform/network-access-audit:
+    get:
+      operationId: adminNetworkAccessAuditSearch
+      tags: ["Admin · Plataforma · Jerarquía de clientes"]
+      security:
+        - bearerAuth: []
+      summary: "Auditoría de accesos consolidados de una cabeza de red a los datos de un cliente"
+      description: >
+        HU #12361 — para responder el reclamo de un cliente hijo: qué usuarios de la Concesión accedieron
+        a sus datos (listados, estadísticas, detalle, listado y descarga de documentos), con el recurso,
+        el instante y el resultado de cada acceso (los intentos rechazados también quedan). `tenantId`
+        acota al cliente alcanzado (dueño del trámite o presente en `reachedTenantIds`); sin él se lista
+        toda la plataforma. Un registro por petición, nunca por trámite; solo identificadores. Solo rol
+        SuperAdmin. Paginación acotada en servidor (`take` máximo 200).
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Cliente hijo cuyos datos fueron alcanzados. Vacío = toda la plataforma.
+        - $ref: "#/components/parameters/NetworkAccessAuditFrom"
+        - $ref: "#/components/parameters/NetworkAccessAuditTo"
+        - $ref: "#/components/parameters/NetworkAccessAuditResource"
+        - $ref: "#/components/parameters/NetworkAccessAuditPage"
+        - $ref: "#/components/parameters/NetworkAccessAuditTake"
+      responses:
+        "200":
+          description: "Página de accesos consolidados, más reciente primero."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkAccessAuditPage"
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+
+  /api/v1/admin/platform/hierarchy-switches:
+    get:
+      operationId: adminHierarchySwitchesList
+      tags: ["Admin · Plataforma · Jerarquía de clientes"]
+      security:
+        - bearerAuth: []
+      summary: "Lista los interruptores globales de la jerarquía de clientes"
+      description: >
+        Devuelve el estado de `group_read_scope` (cabeza de grupo lee a sus hijos), `inherited_configuration`
+        (hijos heredan configuración del padre) y `network_documents_concesion` (HU #12410: una cabeza de
+        clase CONCESION puede listar y descargar documentos de la red; nace APAGADO). Se leen por petición y
+        sin caché: conmutar uno surte efecto en la siguiente petición sin despliegue ni nuevo token.
+        Ninguno reutiliza `is_group_parent`. Solo rol SuperAdmin.
+      responses:
+        "200":
+          description: "Interruptores ordenados por clave."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HierarchySwitchesListResponse"
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+
+  /api/v1/admin/platform/hierarchy-switches/{key}:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [group_read_scope, inherited_configuration, network_documents_concesion]
+        description: "Clave del interruptor. Cualquier otra clave responde 404."
+    put:
+      operationId: adminHierarchySwitchesSet
+      tags: ["Admin · Plataforma · Jerarquía de clientes"]
+      security:
+        - bearerAuth: []
+      summary: "Enciende o apaga un interruptor de la jerarquía sin despliegue"
+      description: >
+        Apagar `group_read_scope` hace que toda cabeza de grupo resuelva alcance propio (`Single`) en la
+        siguiente petición, dejando intactos `is_group_parent` y `parent_tenant_id`; reencenderlo devuelve
+        `Group` sin nuevo token. Encender `network_documents_concesion` (HU #12410, apagado por defecto) abre
+        `GET /api/v1/tramites/network/instances/{id}/attachments[/{attachmentId}/download]` a las cabezas de
+        clase CONCESION (MARCA_BLANCA no lo necesita). Los interruptores son independientes entre sí. La
+        operación queda en el rastro de auditoría administrativo (`module=config`, `operation=update`,
+        `entity=hierarchy_switch`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetHierarchySwitchRequest"
+      responses:
+        "200":
+          description: "Estado resultante del interruptor."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HierarchySwitchResponse"
+        "400": { description: "Body inválido (falta `isEnabled` o no es booleano)." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+        "404":
+          description: "Clave de interruptor desconocida (`HIERARCHY_SWITCH_NOT_FOUND`)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: HIERARCHY_SWITCH_NOT_FOUND }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -8576,6 +9377,110 @@ components:
       bearerFormat: JWT
 
   parameters:
+    NetworkStatsFrom:
+      name: from
+      in: query
+      required: true
+      schema: { type: string, format: date }
+      description: Fecha inicial inclusiva (YYYY-MM-DD) — HU #12359.
+    NetworkStatsTo:
+      name: to
+      in: query
+      required: true
+      schema: { type: string, format: date }
+      description: Fecha final inclusiva (YYYY-MM-DD) — HU #12359.
+    NetworkStatsChildTenantId:
+      name: childTenantId
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+      description: >
+        Cliente de la red al que acotar (puede ser la propia cabeza). Siempre subconjunto del alcance
+        resuelto en el servidor; uno fuera del conjunto de lectura responde 403 `network_child_out_of_scope`
+        sin ejecutar la consulta (HU #12359, AC5).
+    NetworkReportTransitOfficeId:
+      name: transitOfficeId
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+      description: Organismo de tránsito del trámite (HU #12360; mismo filtro que `/detailed-report/procedures`).
+    NetworkReportProcedureTypeId:
+      name: procedureTypeId
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+      description: Tipo de trámite.
+    NetworkReportCategory:
+      name: category
+      in: query
+      required: false
+      schema: { type: string, enum: [matriculas, traspasos, otros] }
+      description: Categoría (se normaliza a minúsculas).
+    NetworkReportStatus:
+      name: status
+      in: query
+      required: false
+      schema: { type: string }
+      description: Estado del trámite.
+    NetworkReportReferenceNumber:
+      name: referenceNumber
+      in: query
+      required: false
+      schema: { type: string }
+      description: Radicado (contiene). Se audita solo por nombre, nunca su valor.
+    NetworkReportPersonDocument:
+      name: personDocument
+      in: query
+      required: false
+      schema: { type: string }
+      description: Documento de la persona (contiene). Se audita solo por nombre, nunca su valor.
+    NetworkReportPersonName:
+      name: personName
+      in: query
+      required: false
+      schema: { type: string }
+      description: Nombre de la persona (contiene). Se audita solo por nombre, nunca su valor.
+    NetworkReportHasTransformation:
+      name: hasTransformation
+      in: query
+      required: false
+      schema: { type: boolean }
+    NetworkReportIsLeasing:
+      name: isLeasing
+      in: query
+      required: false
+      schema: { type: boolean }
+    NetworkAccessAuditFrom:
+      name: from
+      in: query
+      required: false
+      schema: { type: string, format: date-time }
+      description: Instante mínimo (inclusive) del acceso.
+    NetworkAccessAuditTo:
+      name: to
+      in: query
+      required: false
+      schema: { type: string, format: date-time }
+      description: Instante máximo (inclusive) del acceso.
+    NetworkAccessAuditResource:
+      name: resource
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [network.instances.search, network.instances.detail, network.stats.overview, network.attachments.list, network.attachments.download]
+      description: Acota a un recurso de la vista consolidada.
+    NetworkAccessAuditPage:
+      name: page
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, default: 1 }
+    NetworkAccessAuditTake:
+      name: take
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      description: Tamaño de página; se acota a 200 en servidor.
     # HU #10520 (RNF01) — header de tenant reutilizable por los endpoints operativos de documentos.
     TenantIdHeader:
       name: X-Tenant-Id
@@ -9211,7 +10116,7 @@ components:
       properties:
         scope:
           type: string
-          enum: [tramites.columns, ot.procedures.columns]
+          enum: [tramites.columns, ot.procedures.columns, tramites.scope]
         value:
           type: object
           additionalProperties: true
@@ -9719,11 +10624,13 @@ components:
         code: { type: string, description: Código único del tenant (inmutable). }
         tenantType:
           type: string
-          enum: [RENTING, CONCESIONARIO, FLIT]
+          enum: [RENTING, CONCESIONARIO, FLIT, CONCESION, MARCA_BLANCA]
           description: >-
             Tipo de compañía del catálogo B2B. La migración RestrictTenantTypeCatalog
             normalizó los tipos heredados (p.ej. standard, transit_office) a RENTING y
-            agregó el CHECK ck_tenants_tenant_type, por lo que la BD solo admite estos tres.
+            agregó el CHECK ck_tenants_tenant_type. HU #12406 amplía el catálogo con los
+            dos tipos de CABEZA de grupo (CONCESION | MARCA_BLANCA): la clase de la cabeza
+            es su tipo de compañía y la BD acopla is_group_parent a él.
         isTransitOffice:
           type: boolean
           description: >-
@@ -9774,7 +10681,10 @@ components:
           description: Código único del tenant. Alfanumérico con guion y guion bajo.
         tenantType:
           type: string
-          enum: [RENTING, CONCESIONARIO, FLIT]
+          enum: [RENTING, CONCESIONARIO, FLIT, CONCESION, MARCA_BLANCA]
+          description: >-
+            CONCESION y MARCA_BLANCA (HU #12406) crean una cabeza de grupo: la fila nace con
+            is_group_parent = true en la misma operación.
         estadoActivo: { type: boolean, default: true, description: Estado activo inicial. }
       required: [razonSocial, nit, code, tenantType]
 
@@ -9798,9 +10708,14 @@ components:
           type: string
           description: >-
             Tipo de compañía. Para cambiarlo debe ser del catálogo B2B (RENTING,
-            CONCESIONARIO, FLIT). Si coincide (ignorando mayúsculas) con el tipo actual
-            del tenant se preserva tal cual, lo que permite editar tenants con tipos
-            heredados (p.ej. standard, transit_office) sin alterar su tipo.
+            CONCESIONARIO, FLIT, CONCESION, MARCA_BLANCA). Si coincide (ignorando mayúsculas)
+            con el tipo actual del tenant se preserva tal cual, lo que permite editar tenants
+            con tipos heredados (p.ej. standard, transit_office) sin alterar su tipo.
+            HU #12406: entrar en CONCESION | MARCA_BLANCA marca la cabeza (is_group_parent)
+            y salir de ellos la desmarca, en la misma operación; el cambio de tipo queda
+            auditado (admin.tenant_config_audit_logs, valor anterior y nuevo). Si la cabeza
+            tiene compañías hijas vinculadas, cambiar su tipo devuelve 422 con error en
+            tenantType (la clase es inmutable mientras tenga hijos).
         estadoActivo: { type: boolean, default: true, description: Estado activo. }
         rowVersion:
           type: integer
@@ -10705,6 +11620,12 @@ components:
             - $ref: "#/components/schemas/ImprintSignatureValidationSummary"
           nullable: true
           description: Última fila de bitácora (HU #12176); null si nunca se validó.
+        reemplazada:
+          type: boolean
+          default: false
+          description: >
+            true cuando la fila corresponde a una impronta reemplazada/borrada por el gestor
+            (soft-delete: attachmentId null, conserva signedStoragePath histórico) — Bug #12594.
       required:
         [id, tenantId, procedureInstanceId, placa, moduleCode, publicKey, documentHash,
          signature, signedAt, wasSignedWithoutOwnerSignature]
@@ -10779,6 +11700,25 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
       required: [data, totalCount, page, pageSize]
+
+    BackfillFirmaImprontaManualResult:
+      type: object
+      description: >-
+        HU #12116 — resultado del backfill de firma automática de impronta manual.
+        `noListas` es un mapa motivo→cantidad (claves de ImprontaManualStampReadiness,
+        p. ej. "placa_pendiente", "propietarios_sin_identidad").
+      properties:
+        total: { type: integer }
+        firmadas: { type: integer }
+        yaFirmadas: { type: integer }
+        sinImprontaManual: { type: integer }
+        noListas:
+          type: object
+          additionalProperties: { type: integer }
+        fallidas: { type: integer }
+        limit: { type: integer }
+      required:
+        [total, firmadas, yaFirmadas, sinImprontaManual, noListas, fallidas, limit]
 
     CreateTransitOfficeRequest:
       type: object
@@ -11399,6 +12339,235 @@ components:
         documentCount: { type: integer, description: Documentos congelados en el snapshot. }
       required: [id, referenceNumber, status, snapshotAt, documentCount]
 
+    NetworkProcedureListResponse:
+      type: object
+      description: >
+        Página del listado consolidado de la red (HU #12358). Misma forma que el listado propio
+        (`items` + `total`); cada fila es la MISMA proyección de resumen del listado, y `tenantId` /
+        `companiaNombre` identifican al cliente dueño.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlateHistoryItem"
+        total:
+          type: integer
+          description: Total de trámites del universo consolidado que cumplen los filtros (para paginar).
+      required: [items, total]
+
+    NetworkProcedureDetailResponse:
+      type: object
+      description: Detalle consolidado en solo lectura de un trámite de la red (HU #12358).
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+          description: Cliente dueño del trámite.
+        tenantName:
+          type: string
+          nullable: true
+          description: Razón social del cliente dueño.
+        instance:
+          type: object
+          description: >
+            El mismo objeto que devuelve `GET /api/v1/tramites/instances/{id}` al propio cliente
+            (id, referenceNumber, status, procedureTypeId, tenantId, createdAt, submittedAt,
+            completedAt, fieldValues, statusHistory, actors, draftFinalizedAt, rejectedFrom,
+            currentStep, subsanacionActiva, subsanacionCount, prioritario, events).
+          additionalProperties: true
+      required: [tenantId, instance]
+
+    NetworkTramitesSearchRequest:
+      type: object
+      description: >
+        Cuerpo de `POST /api/v1/tramites/network/instances/search` y `/estado-counts` (HU #12358):
+        el mismo de `POST /api/v1/tramites/instances/search` más `childTenantId`.
+      properties:
+        childTenantId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Acota a un cliente de la red (puede ser la propia cabeza). Fuera del alcance ⇒ 403.
+        condiciones:
+          type: array
+          nullable: true
+          description: Condiciones con la gramática de Consultas (campo, operador, valor). Fuera del catálogo ⇒ 400.
+          items:
+            type: object
+            additionalProperties: true
+        vin: { type: string, nullable: true }
+        placa: { type: string, nullable: true }
+        vendedor: { type: string, nullable: true }
+        comprador: { type: string, nullable: true }
+        gestor: { type: string, nullable: true }
+        firmado: { type: boolean, nullable: true }
+        estado:
+          type: string
+          nullable: true
+          description: Estados separados por coma. Se ignora en `estado-counts`.
+        modalidad: { type: string, nullable: true }
+        organismoTransito: { type: string, nullable: true }
+        tipoCodigo: { type: string, nullable: true }
+        busqueda: { type: string, nullable: true }
+        prioritario: { type: boolean, nullable: true }
+        createdFrom: { type: string, format: date-time, nullable: true }
+        createdTo: { type: string, format: date-time, nullable: true }
+        updatedFrom: { type: string, format: date-time, nullable: true }
+        updatedTo: { type: string, format: date-time, nullable: true }
+        sortBy: { type: string, nullable: true }
+        sortDir: { type: string, nullable: true, enum: [asc, desc] }
+        skip: { type: integer, nullable: true, minimum: 0 }
+        take:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 200
+          description: Fuera del rango cae al tope de 200; ausente ⇒ primera página con el tope.
+
+    NetworkScope:
+      type: object
+      description: Alcance efectivo de una consulta de red (HU #12359) — los clientes que sí se consultaron.
+      properties:
+        tenantIds:
+          type: array
+          items: { type: string, format: uuid }
+      required: [tenantIds]
+
+    NetworkAnalyticsOverviewResponse:
+      type: object
+      description: >
+        Respuesta de `GET /api/v1/tramites/network/stats/overview` (HU #12359): `AnalyticsOverviewResponse`
+        más `scope`. `tenantId` es la cabeza o el hijo acotado por `childTenantId`.
+      properties:
+        tenantId: { type: string, format: uuid }
+        from: { type: string, format: date, nullable: true }
+        to: { type: string, format: date, nullable: true }
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryMetrics"
+        scope:
+          $ref: "#/components/schemas/NetworkScope"
+      required: [tenantId, categories, scope]
+
+    NetworkTopProducersResponse:
+      type: object
+      description: Respuesta de `GET /api/v1/tramites/network/stats/productivity/top` (HU #12359).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TopProducer"
+        scope:
+          $ref: "#/components/schemas/NetworkScope"
+      required: [items, scope]
+
+    NetworkMonthlyTrendPoint:
+      type: object
+      properties:
+        year: { type: integer, example: 2026 }
+        month: { type: integer, minimum: 1, maximum: 12, example: 9 }
+        category: { type: string, enum: [matriculas, traspasos, otros] }
+        total: { type: integer, example: 42 }
+      required: [year, month, category, total]
+
+    NetworkMonthlyTrendResponse:
+      type: object
+      description: Respuesta de `GET /api/v1/tramites/network/stats/monthly-trend` (HU #12359).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkMonthlyTrendPoint"
+        scope:
+          $ref: "#/components/schemas/NetworkScope"
+      required: [items, scope]
+
+    NetworkDetailedProcedureRow:
+      type: object
+      description: >
+        Fila del reporte detallado de la red (HU #12360): las columnas del trámite de
+        `/detailed-report/procedures` más el cliente dueño. Sin documentos ni enlaces (AC6).
+      properties:
+        tenantId: { type: string, format: uuid, description: Cliente dueño del trámite (cabeza o hijo). }
+        tenantName: { type: string, description: Razón social del cliente dueño. }
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        procedureTypeName: { type: string }
+        category: { type: string, enum: [matriculas, traspasos, otros] }
+        status: { type: string }
+        createdByDisplayName: { type: string }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        personDocument: { type: string }
+        personFullName: { type: string }
+        hasTransformation: { type: boolean }
+        transformationDetail: { type: string, nullable: true }
+        isLeasing: { type: boolean }
+        paymentType: { type: string }
+        transferType: { type: string, nullable: true }
+      required: [tenantId, tenantName, id, referenceNumber, procedureTypeName, category, status, createdByDisplayName, personDocument, personFullName, hasTransformation, isLeasing, paymentType]
+
+    NetworkTenantCount:
+      type: object
+      properties:
+        tenantId: { type: string, format: uuid }
+        tenantName: { type: string }
+        count: { type: integer }
+      required: [tenantId, tenantName, count]
+
+    NetworkDetailedReportSummary:
+      type: object
+      description: Totales del reporte de red (HU #12360); con `childTenantId`, `byTenant` tiene una sola entrada y los totales son solo de ese cliente (AC2).
+      properties:
+        totalCount: { type: integer }
+        byStatus:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string }
+              count: { type: integer }
+            required: [status, count]
+        byCategory:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              count: { type: integer }
+            required: [label, count]
+        byProcedureType:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              count: { type: integer }
+            required: [label, count]
+        byTenant:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkTenantCount"
+      required: [totalCount, byStatus, byCategory, byProcedureType, byTenant]
+
+    NetworkDetailedProceduresPage:
+      type: object
+      description: Respuesta de `GET /api/v1/tramites/network/reports/procedures` (HU #12360).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkDetailedProcedureRow"
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        summary:
+          $ref: "#/components/schemas/NetworkDetailedReportSummary"
+        scope:
+          $ref: "#/components/schemas/NetworkScope"
+      required: [items, totalCount, page, pageSize, summary, scope]
+
     PlateHistoryResponse:
       type: object
       description: >
@@ -11458,7 +12627,13 @@ components:
       properties:
         id: { type: string, format: uuid }
         referenceNumber: { type: string }
-        status: { type: string, example: draft }
+        status:
+          type: string
+          example: borrador
+          description: >
+            Estado global (ADR-0059): borrador, preparado, preasignacion, asignado, entregado,
+            aprobado, rechazado, revocado, anulado o subsanacion. 'preasignacion' y 'asignado' son la
+            Ruta Larga de matrícula inicial (radicada sin placa; el organismo la asigna).
         procedureTypeId: { type: string, format: uuid }
         tenantId: { type: string, format: uuid }
         createdAt: { type: string, format: date-time }
@@ -11467,14 +12642,15 @@ components:
           format: date-time
           nullable: true
           description: Fecha de radicación (Draft→Submitted). Null mientras es borrador.
-        plateFlowStatus:
+        rejectedFrom:
           type: string
           nullable: true
-          enum: [preasignado, asignado]
+          enum: [preasignacion, entregado]
           description: >
-            Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al status
-            global (que permanece en 'entregado'): null (sin ruta de placa), 'preasignado' (entregado
-            al OT, esperando placa) o 'asignado' (placa registrada; pendiente de SOAT + recepción del OT).
+            ADR-0059 (Epic #12549) — estado desde el que el organismo rechazó el trámite. Solo tiene
+            valor en 'rechazado'; 'preasignacion' distingue el rechazo previo a la placa (el gestor
+            debe corregir y volver a pedirla). Sustituye al sub-estado 'plateFlowStatus' de
+            HU #10785: la ruta de placa son ahora los estados globales 'preasignacion' y 'asignado'.
         draftFinalizedAt:
           type: string
           format: date-time
@@ -12353,13 +13529,14 @@ components:
       type: object
       properties:
         tenantId: { type: string, format: uuid }
-        from: { type: string, format: date }
-        to: { type: string, format: date }
+        # BUG #12588 — null cuando la consulta no acotó por fecha (universo completo).
+        from: { type: string, format: date, nullable: true }
+        to: { type: string, format: date, nullable: true }
         categories:
           type: array
           items:
             $ref: "#/components/schemas/CategoryMetrics"
-      required: [tenantId, from, to, categories]
+      required: [tenantId, categories]
 
     TopProducer:
       type: object
@@ -13110,3 +14287,75 @@ components:
             $ref: "#/components/schemas/AlertEventDto"
         totalCount: { type: integer }
       required: [items, totalCount]
+
+    # ── Admin · Plataforma · Jerarquía de clientes (HU #12323) ──────────────────
+    HierarchySwitchResponse:
+      type: object
+      description: Estado de un interruptor global de la jerarquía de clientes (`identity.hierarchy_switches`).
+      properties:
+        key:
+          type: string
+          enum: [group_read_scope, inherited_configuration, network_documents_concesion]
+        isEnabled: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+        updatedBy:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario (claim sub) que conmutó el interruptor por última vez; null = seed de la migración.
+      required: [key, isEnabled, updatedAt, updatedBy]
+
+    NetworkAccessAuditRow:
+      type: object
+      description: >
+        HU #12361 — un acceso consolidado (una petición) de una cabeza de red a datos de sus hijos.
+        Solo identificadores: nunca placa, documento ni nombre.
+      properties:
+        id: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time, description: Instante en que se entregó la respuesta auditada. }
+        actorUserId: { type: string, format: uuid, nullable: true, description: Usuario de la cabeza que ejecutó la petición. }
+        actorTenantId: { type: string, format: uuid, description: Cliente cabeza de red del actor. }
+        reachedTenantIds:
+          type: array
+          items: { type: string, format: uuid }
+          description: Clientes hijos DISTINTOS alcanzados por el resultado (nunca vacío; nunca la cabeza).
+        resource:
+          type: string
+          enum: [network.instances.search, network.instances.detail, network.stats.overview, network.attachments.list, network.attachments.download]
+        procedureId: { type: string, format: uuid, nullable: true, description: Trámite consultado o del documento descargado; null en listados. }
+        procedureTenantId: { type: string, format: uuid, nullable: true, description: Hijo dueño del trámite; null en listados. }
+        attachmentId: { type: string, format: uuid, nullable: true, description: Documento descargado; null salvo en descargas. }
+        result:
+          type: string
+          enum: [ok, forbidden, not_found]
+          description: forbidden = intento rechazado por autorización (también queda registrado).
+      required: [id, occurredAt, actorUserId, actorTenantId, reachedTenantIds, resource, procedureId, procedureTenantId, attachmentId, result]
+
+    NetworkAccessAuditPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkAccessAuditRow"
+        total: { type: integer }
+        page: { type: integer }
+        take: { type: integer, description: Tamaño efectivo de página (acotado a 200). }
+      required: [items, total, page, take]
+
+    HierarchySwitchesListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/HierarchySwitchResponse"
+      required: [items]
+
+    SetHierarchySwitchRequest:
+      type: object
+      properties:
+        isEnabled:
+          type: boolean
+          description: true = encendido; false = apagado (degradación segura, sin tocar la jerarquía).
+      required: [isEnabled]

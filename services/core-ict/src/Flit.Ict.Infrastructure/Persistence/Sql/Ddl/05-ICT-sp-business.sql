@@ -273,23 +273,43 @@ BEGIN
                 WHERE id = rec.id_master;
             END IF;
 
-            -- Secretaría habilitada para la compañía (grant positivo v2). RELAJADO PARA ICT (decisión de
-            -- negocio 2026-07-24): el cliente de integración YA sabe con qué secretarías trabaja, así que el
-            -- flujo ICT NO exige el grant admin.tenant_transit_office_grants (a diferencia del wizard v2).
-            -- Se sigue validando que la secretaría EXISTA y esté ACTIVA (bloque de arriba, líneas 44-49).
-            -- TODO(ICT-GRANT): validación más segura y sin fricción — como el tenant_id ya viaja en el token
-            -- ICT, derivar la compañía del token y validar contra SUS grants habilitados, en vez de confiar
-            -- ciegamente en el traffic_secretary_code que envía el cliente.
+            -- Secretaría habilitada para la compañía (grant positivo v2, HU #12517).
+            -- Si el código existe y está activo en catálogo (bloque de tipos 1/2 más arriba) pero no hay
+            -- grant is_enabled para el tenant del lote, es novedad distinta a "no es valido o no esta activo".
+            UPDATE ict.external_integration_master eim
+            SET business_comments_validation = business_comments_validation
+                || ' traffic_secretary_code no esta habilitado para la compania;'
+            WHERE eim.id = rec.id_master
+              AND eim.traffic_secretary_code <> ''
+              AND EXISTS (
+                    SELECT 1 FROM catalogs.transit_offices ts
+                    WHERE ts.code = eim.traffic_secretary_code AND ts.is_active = true)
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM catalogs.transit_offices ts
+                    JOIN admin.tenant_transit_office_grants g
+                      ON g.transit_office_id = ts.id
+                     AND g.tenant_id = rec.tenant_id
+                     AND g.is_enabled = true
+                    WHERE ts.code = eim.traffic_secretary_code
+                      AND ts.is_active = true);
         END IF;
 
-        -- Placa activa (traspasos 3/4).
+        -- Placa activa (traspasos 3/4, HU #12518): solo familia TRASPASO del mismo tenant.
+        -- Anulado, rechazado y aprobado no bloquean (alineado a CF-01 / wizard: no están "en proceso").
         IF rec.transaction_type IN (3, 4) THEN
             IF EXISTS (
                 SELECT 1 FROM tramites.procedure_instances pi
+                JOIN tramites.procedure_types pt
+                  ON pt.id = pi.procedure_type_id
                 JOIN tramites.procedure_instance_field_values fv
                   ON fv.procedure_instance_id = pi.id AND fv.field_key = 'plate'
-                WHERE fv.value_text = (SELECT plate FROM ict.external_integration_master WHERE id = rec.id_master)
-                  AND pi.status NOT IN ('anulado', 'rechazado') AND pi.deleted_at IS NULL
+                WHERE pi.tenant_id = rec.tenant_id
+                  AND pt.family = 'TRASPASO'
+                  AND upper(btrim(fv.value_text)) = upper(btrim(
+                        (SELECT plate FROM ict.external_integration_master WHERE id = rec.id_master)))
+                  AND pi.status NOT IN ('anulado', 'rechazado', 'aprobado')
+                  AND pi.deleted_at IS NULL
             ) THEN
                 UPDATE ict.external_integration_master
                 SET business_comments_validation = business_comments_validation || ' Ya existe un tramite activo para la placa;'

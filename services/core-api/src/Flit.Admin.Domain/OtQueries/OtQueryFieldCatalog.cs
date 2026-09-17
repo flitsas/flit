@@ -71,6 +71,7 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
         new("aprobado", "Aprobado"),
         new("rechazado", "Rechazado"),
         new("anulado", "Anulado"),
+        new("revocado", "Revocado"),
     ];
 
     private static readonly QueryFieldOptionDto[] SiNoOptions =

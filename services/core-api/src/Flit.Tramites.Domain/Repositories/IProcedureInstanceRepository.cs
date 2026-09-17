@@ -1,5 +1,6 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.ReadModels;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Domain.Repositories;
@@ -35,6 +36,15 @@ public interface IProcedureInstanceRepository
         Guid tenantId, string placaNormalizada, Guid excludeInstanceId, CancellationToken ct = default);
 
     Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12358 (Feature #12257) — detalle en solo lectura para la vista consolidada de la red:
+    /// el mismo grafo que <see cref="GetByIdWithDetailsAsync(Guid, Guid, CancellationToken)"/> pero
+    /// acotado por <see cref="TenantScope"/> (<c>WhereTenantInScope</c>: conjunto de lectura vacío
+    /// ⇒ cero filas, nunca «sin filtro»). Sobrecarga NUEVA: la firma <c>Guid tenantId</c> existente
+    /// no cambia ni de forma ni de semántica (AC6/AC9).
+    /// </summary>
+    Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, TenantScope scope, CancellationToken ct = default);
 
     /// <summary>
     /// Carga la instancia con únicamente sus <c>Actors</c>. Query lean para operaciones
@@ -94,6 +104,18 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
 
     /// <summary>
+    /// Feature #12565 — sub-estado de revocatoria RELEVANTE para el indicativo del listado: ACTIVO
+    /// (<c>solicitada</c>/<c>en_revision</c>) o <c>rechazada</c> — esta última porque el trámite vuelve
+    /// a verse como un "Aprobado" cualquiera y sin el indicativo no queda ningún rastro en el listado de
+    /// que ya se intentó. <c>aprobada</c> se omite a propósito: ese desenlace ya se ve solo, el trámite
+    /// pasa a <c>revocado</c>. Mapa id→estado; una instancia sin nada que mostrar se omite. Mismo
+    /// patrón que <see cref="ListInstanceIdsConPrendaVigenteAsync"/>: una consulta por listado, sin
+    /// filtro de tenant (los ids ya vienen acotados por el caller).
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetRevocationBadgeStatusesAsync(
+        IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve el nombre (razón social) de cada tenant indicado, para la columna "Compañía" del
     /// listado multi-tenant del SuperAdmin (#1). Devuelve un mapa id→nombre; ids sin tenant se omiten.
     /// </summary>
@@ -107,6 +129,23 @@ public interface IProcedureInstanceRepository
     /// usuario o con nombre vacío se omiten, y la columna cae al identificador de la fila.
     /// </summary>
     Task<IReadOnlyDictionary<Guid, string>> GetUserDisplayNamesAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bug #12526 — correo de cada usuario indicado, mismo criterio que
+    /// <see cref="GetUserDisplayNamesAsync"/> (una sola consulta, ids sin correo se omiten). Para la
+    /// columna "Correo" de la Línea de tiempo del trámite (quién ejecutó cada transición de estado).
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetUserEmailsAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bug #12526 / HU #12184 — compañía (razón social) de cada usuario indicado, mismo criterio y misma
+    /// resolución de tenant efectivo que ya usa <c>GetStatusHistoryPageAsync</c> internamente. Se expone
+    /// como método público independiente para que otros consumidores (Línea de tiempo del trámite) la
+    /// reutilicen sin duplicar la lógica de <c>home_tenant_id</c> + fallback de asignación de rol.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetUserCompaniasAsync(
         IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
 
     /// <summary>
@@ -495,6 +534,22 @@ public interface IProcedureInstanceRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// HU #12358 (Feature #12257) — listado consolidado de la red: idéntico a
+    /// <see cref="ListWithSummaryGraphFilteredAsync(Guid?, int, int, ProcedureInstanceListFilter, ProcedureInstanceSortBy, SortDirection, CancellationToken)"/>
+    /// (mismos filtros, orden y grafo) pero el alcance se aplica con <see cref="TenantScope"/> vía
+    /// <c>WhereTenantInScope</c>: {padre} ∪ hijos para una cabeza, un conjunto de lectura vacío ⇒
+    /// cero filas. Sobrecarga NUEVA; la firma <c>Guid?</c> existente (null = TODOS) no se toca.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstance> Items, int Total)> ListWithSummaryGraphFilteredAsync(
+        TenantScope scope,
+        int skip,
+        int take,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Conteo por ESTADO del ciclo de vida, aplicando <paramref name="filter"/> sobre TODO el universo
     /// (no sobre una página): un <c>GROUP BY status</c> en SQL, sin cargar entidades ni el grafo.
     /// <para>
@@ -511,6 +566,26 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<IReadOnlyDictionary<string, int>> CountByStatusFilteredAsync(
         Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12358 (Feature #12257) — conteo por estado del universo consolidado de la red, acotado por
+    /// <see cref="TenantScope"/> (<c>WhereTenantInScope</c>). Sobrecarga NUEVA; la firma <c>Guid?</c>
+    /// existente no cambia.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, int>> CountByStatusFilteredAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12361 (Feature #12257) — clientes DISTINTOS del alcance que tienen al menos un trámite que
+    /// cumple el filtro (<c>SELECT DISTINCT tenant_id</c>, sin cargar entidades). Alimenta la auditoría
+    /// de acceso consolidado de las estadísticas: los conteos por estado no dicen a qué hijos alcanzan.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListTenantIdsWithMatchesAsync(
+        TenantScope scope,
         ProcedureInstanceListFilter filter,
         CancellationToken ct = default);
 
@@ -545,6 +620,16 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<IReadOnlyList<ReadModels.GestorOption>> ListAvailableGestoresAsync(
         Guid tenantId, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12116 — candidatos para el backfill de firma automática de impronta manual: trámites
+    /// <c>entregado</c>/<c>aprobado</c> (no eliminados) con un adjunto activo tipo <c>impronta</c>
+    /// NO Kyverum sin fila activa en <c>vehicle_signature_imprints</c> para ese adjunto. Cross-tenant
+    /// (acción de plataforma, RLS decorativo): no filtra por tenant. Solo lectura, tope
+    /// <paramref name="limit"/>, orden por antigüedad para procesar primero los más rezagados.
+    /// </summary>
+    Task<IReadOnlyList<(Guid InstanceId, Guid TenantId)>> ListImprontaManualBackfillCandidatesAsync(
+        int limit, CancellationToken ct = default);
 }
 
 /// <summary>Opciones de filtro que salen de los datos del tenant, no de una lista fija.</summary>

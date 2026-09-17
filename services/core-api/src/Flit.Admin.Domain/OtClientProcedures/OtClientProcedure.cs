@@ -27,13 +27,6 @@ public sealed record OtClientProcedure
     /// </summary>
     public string Familia { get; init; } = string.Empty;
 
-    /// <summary>
-    /// Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al <see cref="Status"/>
-    /// (que permanece en 'entregado'): <c>null</c> (sin ruta de placa), <c>preasignado</c> (esperando placa)
-    /// o <c>asignado</c> (placa registrada). Gobierna las acciones del OT (Asignar/Revocar placa).
-    /// </summary>
-    public string? PlateFlowStatus { get; init; }
-
     /// <summary>HU #12165/#12167 (Feature #12156) — base de la ventana de 1 hora para corregir la placa.</summary>
     public DateTimeOffset? PlateAssignedAt { get; init; }
 
@@ -43,8 +36,8 @@ public sealed record OtClientProcedure
     /// <summary>
     /// HU #10804 (Feature #10587) — estado del SOAT del vehículo (field_value <c>soat_estado</c>) en la
     /// ruta de placa: <c>null</c>/<c>unknown</c>/<c>vencido</c> = sin evidencia; <c>vigente</c> = registrado.
-    /// Gobierna (junto con <see cref="PlateFlowStatus"/>) si el OT puede ver Aprobar/Rechazar: solo con la
-    /// placa <c>asignado</c> Y el SOAT <c>vigente</c>. El gate DURO de aprobación ya vive en el backend.
+    /// Informativo para el OT (ADR-0059): la decisión solo existe en <c>entregado</c>, y llegar ahí desde
+    /// <c>asignado</c> ya pasó por el gate SOAT del gestor.
     /// </summary>
     public string? SoatEstado { get; init; }
 
@@ -56,10 +49,10 @@ public sealed record OtClientProcedure
     /// </summary>
     public string? PlatePreferredLastDigit { get; init; }
 
-    /// <summary>Checks opcionales del gestor (visibles en dashboard OT solo en Terminado).</summary>
+    /// <summary>Check opcional del gestor al «Enviar al OT» (visible en el dashboard OT en <c>entregado</c>).</summary>
     public bool SoatPagado { get; init; }
 
-    /// <summary>Checks opcionales del gestor (visibles en dashboard OT solo en Terminado).</summary>
+    /// <summary>Check opcional del gestor al «Enviar al OT» (visible en el dashboard OT en <c>entregado</c>).</summary>
     public bool ImpuestoDepartamentalPagado { get; init; }
 
     public Guid? TransitOfficeId { get; init; }
@@ -153,6 +146,26 @@ public sealed record OtClientProcedure
 
     /// <summary>Detalle (GET by id): decisión de prenda del trámite; <c>null</c> si no hay decisión.</summary>
     public OtClientProcedurePrenda? Prenda { get; init; }
+
+    /// <summary>
+    /// Feature #12565 — sub-estado ACTIVO ('solicitada' | 'en_revision') de la solicitud de revocatoria
+    /// del gestor; <c>null</c> si nunca se solicitó o ya se decidió (aprobada/rechazada). Alimenta el
+    /// indicativo "Revocatoria en curso" de la bandeja OT — no reemplaza "Decidir revocatoria".
+    /// </summary>
+    public string? RevocationRequestStatus { get; init; }
+
+    /// <summary>
+    /// Feature #12565 — decisión ('aprobada' | 'rechazada') del intento de revocatoria MÁS RECIENTE,
+    /// para el detalle del trámite (no la bandeja): sin esto, tras decidir, el trámite no dejaba rastro
+    /// de qué se decidió ni por qué. <c>null</c> si nunca se decidió una (nunca se solicitó, o la
+    /// solicitud sigue activa — ese caso lo cubre <see cref="RevocationRequestStatus"/>).
+    /// </summary>
+    public string? RevocationDecisionStatus { get; init; }
+    public DateTimeOffset? RevocationDecisionAt { get; init; }
+    /// <summary>Motivo con el que el gestor pidió la revocatoria (HU #12572, AC1).</summary>
+    public string? RevocationRequestReason { get; init; }
+    /// <summary>Motivo de la decisión del OT: obligatorio al rechazar, opcional al aprobar (HU #12577).</summary>
+    public string? RevocationDecisionReason { get; init; }
 }
 
 /// <summary>

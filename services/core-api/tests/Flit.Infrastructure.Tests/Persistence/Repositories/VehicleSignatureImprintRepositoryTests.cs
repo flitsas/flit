@@ -13,7 +13,7 @@ public sealed class VehicleSignatureImprintRepositoryTests
     private static readonly Guid InstanceId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
     [Fact]
-    public async Task FindByDocumentHashAsync_IgnoresSoftDeletedRow()
+    public async Task FindActiveByInstanceAndHashAsync_IgnoresSoftDeletedRow()
     {
         var dbName = Guid.NewGuid().ToString();
         const string hash = "sha-soft-deleted";
@@ -27,13 +27,14 @@ public sealed class VehicleSignatureImprintRepositoryTests
         await using var ctx = NewContext(dbName);
         var repo = new VehicleSignatureImprintRepository(ctx);
 
-        var found = await repo.FindByDocumentHashAsync(hash, TestContext.Current.CancellationToken);
+        var found = await repo.FindActiveByInstanceAndHashAsync(
+            InstanceId, hash, TestContext.Current.CancellationToken);
 
         found.Should().BeNull("soft-deleted no cuenta para idempotencia activa");
     }
 
     [Fact]
-    public async Task FindByDocumentHashAsync_ReturnsActiveRow()
+    public async Task FindActiveByInstanceAndHashAsync_ReturnsActiveRow()
     {
         var dbName = Guid.NewGuid().ToString();
         const string hash = "sha-active";
@@ -49,10 +50,47 @@ public sealed class VehicleSignatureImprintRepositoryTests
         await using var ctx = NewContext(dbName);
         var repo = new VehicleSignatureImprintRepository(ctx);
 
-        var found = await repo.FindByDocumentHashAsync(hash, TestContext.Current.CancellationToken);
+        var found = await repo.FindActiveByInstanceAndHashAsync(
+            InstanceId, hash, TestContext.Current.CancellationToken);
 
         found.Should().NotBeNull();
         found!.Id.Should().Be(activeId);
+    }
+
+    [Fact]
+    public async Task FindActiveByInstanceAndHashAsync_DoesNotMatchSameHashInOtherInstance()
+    {
+        // Bug #12594 (D1): la unicidad es por (procedure_instance_id, document_hash). Una fila activa
+        // con el mismo hash pero de OTRO trámite no debe considerarse "ya auditada" para este.
+        var dbName = Guid.NewGuid().ToString();
+        const string hash = "sha-shared-across-instances";
+        var otherInstanceId = Guid.NewGuid();
+
+        await using (var seed = NewContext(dbName))
+        {
+            seed.VehicleSignatureImprints.Add(new VehicleSignatureImprint
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantId,
+                ProcedureInstanceId = otherInstanceId,
+                ModuleCode = "tramites",
+                PrivateKey = "pk",
+                PublicKey = "pub",
+                DocumentHash = hash,
+                Signature = "sig",
+                SignedAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(dbName);
+        var repo = new VehicleSignatureImprintRepository(ctx);
+
+        var found = await repo.FindActiveByInstanceAndHashAsync(
+            InstanceId, hash, TestContext.Current.CancellationToken);
+
+        found.Should().BeNull("el hash ya auditado pertenece a otro trámite, no bloquea el actual");
     }
 
     [Fact]
@@ -68,7 +106,24 @@ public sealed class VehicleSignatureImprintRepositoryTests
             seed.ProcedureInstances.Add(InstanceWithPlate("POV420"));
             seed.ProcedureInstances.Add(InstanceWithPlate("ZZZ999", otherId));
             seed.VehicleSignatureImprints.Add(Row("h1", id: activeId));
-            seed.VehicleSignatureImprints.Add(Row("h2", id: deletedId, deletedAt: DateTimeOffset.UtcNow));
+            // Soft-delete conserva signed_storage_path (snapshot histórico) — SoftDeleteImprintAudits
+            // solo anula attachment_id y marca deleted_at; nunca borra el path del PDF firmado.
+            seed.VehicleSignatureImprints.Add(new VehicleSignatureImprint
+            {
+                Id = deletedId,
+                TenantId = TenantId,
+                ProcedureInstanceId = InstanceId,
+                ModuleCode = "tramites",
+                PrivateKey = "pk",
+                PublicKey = "pub",
+                DocumentHash = "h2",
+                Signature = "sig",
+                SignedAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+                DeletedAt = DateTimeOffset.UtcNow,
+                AttachmentId = null,
+                SignedStoragePath = "snap/impronta-historica.pdf",
+            });
             seed.VehicleSignatureImprints.Add(new VehicleSignatureImprint
             {
                 Id = Guid.NewGuid(),
@@ -97,6 +152,66 @@ public sealed class VehicleSignatureImprintRepositoryTests
             row.Placa.Trim().ToUpperInvariant().Should().Be("POV420");
             row.PublicKey.Should().NotBeNullOrWhiteSpace();
         }
+
+        // Bug #12594 (H2): la fila soft-deleted se marca Reemplazada=true; la vigente, false.
+        // Y conserva SignedStoragePath para que "Ver PDF" siga habilitado en el histórico.
+        rows.Single(x => x.Id == activeId).Reemplazada.Should().BeFalse();
+        var replaced = rows.Single(x => x.Id == deletedId);
+        replaced.Reemplazada.Should().BeTrue();
+        replaced.SignedStoragePath.Should().Be("snap/impronta-historica.pdf");
+    }
+
+    [Fact]
+    public async Task ListByPlacaAsync_MatchesFieldValuesPlate_WhenProcedurePlateIsNull()
+    {
+        // Bug #12525: OT busca por placa del PDF (field_values) aunque Plate denormalizada sea null.
+        var dbName = Guid.NewGuid().ToString();
+        var imprintId = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+
+        await using (var seed = NewContext(dbName))
+        {
+            seed.ProcedureInstances.Add(new ProcedureInstance
+            {
+                Id = instanceId,
+                TenantId = TenantId,
+                ProcedureTypeId = Guid.NewGuid(),
+                ReferenceNumber = "FLIT-FV-PLATE",
+                Plate = null,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantId,
+                ProcedureInstanceId = instanceId,
+                FieldKey = "plate",
+                ValueText = "  abc123 ",
+            });
+            seed.VehicleSignatureImprints.Add(new VehicleSignatureImprint
+            {
+                Id = imprintId,
+                TenantId = TenantId,
+                ProcedureInstanceId = instanceId,
+                ModuleCode = "tramites",
+                PrivateKey = "pk",
+                PublicKey = "pub",
+                DocumentHash = "hash-fv",
+                Signature = "sig",
+                SignedAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(dbName);
+        var repo = new VehicleSignatureImprintRepository(ctx);
+
+        var rows = await repo.ListByPlacaAsync("ABC123", TestContext.Current.CancellationToken);
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(imprintId);
+        rows[0].Placa.Trim().ToUpperInvariant().Should().Be("ABC123");
     }
 
     [Fact]
@@ -109,7 +224,9 @@ public sealed class VehicleSignatureImprintRepositoryTests
         await using (var seed = NewContext(dbName))
         {
             seed.ProcedureInstances.Add(InstanceWithPlate("ABC123"));
-            seed.VehicleSignatureImprints.Add(Row("deleted-hash", id: deletedId, deletedAt: deletedAt));
+            seed.VehicleSignatureImprints.Add(Row(
+                "deleted-hash", id: deletedId, deletedAt: deletedAt,
+                signedStoragePath: "snap/impronta-historica.pdf"));
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -120,6 +237,9 @@ public sealed class VehicleSignatureImprintRepositoryTests
 
         found.Should().NotBeNull();
         found!.DeletedAt.Should().Be(deletedAt);
+        // Bug #12594 (H2): GetByIdAsync ignora el filtro global de DeletedAt, así que
+        // GetImprintSignaturePreviewUrlHandler puede seguir sirviendo el snapshot histórico.
+        found.SignedStoragePath.Should().Be("snap/impronta-historica.pdf");
     }
 
     private static ProcedureInstance InstanceWithPlate(string plate, Guid? id = null) =>
@@ -136,7 +256,8 @@ public sealed class VehicleSignatureImprintRepositoryTests
     private static VehicleSignatureImprint Row(
         string documentHash,
         Guid? id = null,
-        DateTimeOffset? deletedAt = null) =>
+        DateTimeOffset? deletedAt = null,
+        string? signedStoragePath = null) =>
         new()
         {
             Id = id ?? Guid.NewGuid(),
@@ -150,6 +271,7 @@ public sealed class VehicleSignatureImprintRepositoryTests
             SignedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
             DeletedAt = deletedAt,
+            SignedStoragePath = signedStoragePath,
         };
 
     private static FlitDbContext NewContext(string dbName) =>

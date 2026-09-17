@@ -18,11 +18,22 @@ import {
   Pause,
   Play,
   Star,
+  Undo2,
+  Upload,
   X,
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { usePermissions } from '@/hooks/usePermissions';
+import {
+  ETIQUETA_CLIENTE_HIJO,
+  ETIQUETA_CLIENTE_PROPIO,
+  ETIQUETA_SOLO_CONSULTA,
+  isNetworkReadOnly,
+  partirSeleccionPorAlcance,
+  textoExcluidosRed,
+} from '@/lib/tramites/network-scope';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
@@ -32,9 +43,21 @@ import {
   rangoDePeriodo,
   type RangoSobre,
 } from './TramitesFiltrosBar';
-import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
+import {
+  ESTADOS_TRAMITE,
+  FILTRO_RECHAZADO_PREASIGNACION,
+  estadoChipStyle,
+  estadoLabel,
+  estadoLabelConOrigen,
+  esRechazadoDesdePreasignacion,
+  type EstadoFiltro,
+  revocationRequestListColor,
+  revocationRequestListLabel,
+} from '@/lib/tramites/estados';
 import {
   TRAMITES_COLUMNS,
+  TRAMITES_SELECTABLE_COLUMNS,
+  applyNetworkScopeColumns,
   TRAMITES_COLUMN_KEYS,
   TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
@@ -59,6 +82,8 @@ import {
   vehiculo,
 } from '@/lib/tramites/tramites-row-labels';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
+import { useNetworkScope } from '@/hooks/useNetworkScope';
+import { NetworkScopeSelector } from './NetworkScopeSelector';
 import { useNavigableModules } from '@/hooks/useNavigableModules';
 import { controlCls } from './tramites-control-styles';
 import { StatusBadge } from '@/components/atom/StatusBadge';
@@ -98,17 +123,6 @@ import { IdentidadParteTrackingModal } from './IdentidadParteTrackingModal';
 const SERVER_LIST_TAKE = 200;
 
 /**
- * Texto corto y discreto del sub-estado de placa (debajo del chip de estado). Exportada porque
- * `TramiteDetalleModal` reutiliza el mismo texto en su banner contextual — no se duplica.
- */
-export function plateFlowHint(status: string | null | undefined): string | null {
-  if (status === 'asignado') return 'Placa asignada por el OT';
-  if (status === 'preasignado') return 'Esperando placa del OT';
-  if (status === 'terminado') return 'Listo para el OT';
-  return null;
-}
-
-/**
  * Track A — vista completa del listado de "Trámites en curso": toolbar de
  * filtros (búsqueda + modalidad + estado) + tabla. Lista las instancias del
  * tenant (GET /instances) y filtra client-side sobre el array (máx ~200 del
@@ -117,13 +131,20 @@ export function plateFlowHint(status: string | null | undefined): string | null 
  * Actualizar y cada vez que cambia `refreshKey`.
  */
 
-// N 03 (RF01) — chip de estado con los 6 estados de negocio en español; labels/colores
-// desde la fuente única lib/tramites/estados.ts (fallback titlecase para valores desconocidos).
+// N 03 (RF01) — chip de estado de negocio en español; labels/colores desde la fuente única
+// lib/tramites/estados.ts (fallback titlecase para valores desconocidos). ADR-0059: un rechazo
+// desde la cola de placa se distingue en el label («Rechazado preasignación») sin cambiar el color.
 const estadoChip = (
   estado: InstanceStatus,
+  rejectedFrom: string | null | undefined,
 ): { label: string; bg: string; color: string; border: string } => {
   const style = estadoChipStyle(estado);
-  return { label: estadoLabel(estado), bg: style.bg, color: style.color, border: style.border };
+  return {
+    label: estadoLabelConOrigen(estado, rejectedFrom),
+    bg: style.bg,
+    color: style.color,
+    border: style.border,
+  };
 };
 
 type Chip = { label: string; bg: string; color: string; border: string };
@@ -307,9 +328,12 @@ interface TramitesTableProps {
    * como en el diseño. Antes esta vista decidía la modalidad en un diálogo previo.
    */
   onNewTramite?: () => void;
+
+  /** HU #12521 — abre el modal de carga masiva por Excel. */
+  onBulkUpload?: () => void;
 }
 
-export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTableProps) {
+export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: TramitesTableProps) {
   const router = useRouter();
   const [items, setItems] = useState<InstanceSummary[]>([]);
   /** Conteo por estado del UNIVERSO filtrado — lo sirve el backend, no se deriva de `items`. */
@@ -337,7 +361,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // aparte del filtro `modalidad` del listado: son cosas distintas (crear vs filtrar).
   // ADR-0050 — el campo `modalidad` de la fila transporta ya la FAMILIA del tipo.
   const [modalidad, setModalidad] = useState<'' | ProcedureFamily>('');
-  const [estado, setEstado] = useState<'' | InstanceStatus>('');
+  // ADR-0059 — además de los estados reales, la tira ofrece «Rechazado preasignación», un
+  // pseudo-estado que el servidor traduce a rechazado + rejectedFrom = preasignacion.
+  const [estado, setEstado] = useState<'' | EstadoFiltro>('');
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
   // HU #10536 — filtro "solo prioritarios".
   const [soloPrioritarios, setSoloPrioritarios] = useState(false);
@@ -397,14 +423,21 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
    * Es un cálculo derivado: NO se toca la preferencia guardada, así que al volver a "Todos" o a
    * "Traspaso" la columna reaparece sin que el usuario tenga que reactivarla.
    */
-  const effectiveColumns = useMemo(
-    () =>
-      // En matrículas el titular es el comprador y la columna 'propietario' sale vacía.
-      modalidad === 'MATRICULAS'
-        ? visibleColumns.filter((k) => k !== 'propietario')
-        : visibleColumns,
-    [visibleColumns, modalidad],
-  );
+  /**
+   * HU #12363 — alcance de lectura de la cabeza de red (propio | toda la red | un hijo). Para quien
+   * no es cabeza el hook no hace ninguna llamada y `networkActive` es siempre falso: la tabla hace
+   * exactamente las mismas llamadas que hoy (AC1).
+   */
+  const red = useNetworkScope();
+  const { networkActive, ready: alcanceListo } = red;
+  const childTenantId = networkActive ? red.scope.childTenantId : undefined;
+  const effectiveColumns = useMemo(() => {
+    // HU #12363 — «Cliente» entra SOLO con el alcance de red y sale con cualquier otro (aunque una
+    // preferencia guardada la trajera): la manda el alcance, no el selector de columnas.
+    const conAlcance = applyNetworkScopeColumns(visibleColumns, networkActive);
+    // En matrículas el titular es el comprador y la columna 'propietario' sale vacía.
+    return modalidad === 'MATRICULAS' ? conAlcance.filter((k) => k !== 'propietario') : conAlcance;
+  }, [visibleColumns, modalidad, networkActive]);
   /**
    * ¿El gestor cambió las columnas respecto al default? Es lo que marca "Columnas" en azul, con el
    * mismo criterio que "Periodo" y "+ Filtro": el azul dice "aquí hay algo aplicado". Antes el
@@ -431,6 +464,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
   }, []);
+  /**
+   * HU #12362 — tenant del usuario, con el que `isNetworkReadOnly` decide si una fila es de un
+   * cliente hijo (modo consulta). Para el SuperAdmin va en `null` a propósito: ve trámites de
+   * todas las compañías y ninguno es «de la red»; su alcance lo pone el servidor por rol. Un
+   * cliente sin jerarquía solo recibe filas de su propio tenant, así que para él nunca se activa.
+   */
+  const { tenantId: tenantDelUsuario, isSuperAdmin: esSuperAdmin } = usePermissions();
+  const currentTenantId = esSuperAdmin ? null : tenantDelUsuario;
 
   // HU #11054 / HU #11055 — consulta de documentos desde el listado, sin abrir el wizard. Se guarda
   // el trámite elegido (no solo su id) porque el panel se titula con el radicado y el SuperAdmin
@@ -440,6 +481,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // Frente C, etapa 1 — modal de detalle para trámites YA RADICADOS (estado ≠ 'borrador'). El
   // borrador sigue navegando al asistente; ver `TramiteRow.handleOpen`.
   const [detalleTramite, setDetalleTramite] = useState<InstanceSummary | null>(null);
+  /** HU #12362 — el detalle abierto es de un cliente hijo: solo consulta. */
+  const detalleConsulta = isNetworkReadOnly(detalleTramite, currentTenantId);
   /**
    * Ruta al asistente de pasos. Vive aquí y no en cada llamador porque el `?t=` del SuperAdmin
    * (trámite de OTRA compañía) tiene que viajar igual desde la fila y desde el modal de detalle.
@@ -566,7 +609,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     };
   }, []);
 
-  /** Modal Procesar (Asignado → Terminado) desde la tabla. */
+  /** Modal «Enviar al OT» (ADR-0059: asignado → entregado) desde la tabla. */
   const [processTarget, setProcessTarget] = useState<InstanceSummary | null>(null);
   const [soatPagado, setSoatPagado] = useState(false);
   const [impuestoPagado, setImpuestoPagado] = useState(false);
@@ -592,23 +635,25 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setProcessError(null);
     setProcessWarning(null);
     try {
-      const res = await tramitesClient.completePlateFlow(
+      const res = await tramitesClient.enviarAlOt(
         processTarget.id,
         { soatPagado, impuestoDepartamentalPagado: impuestoPagado },
         isAdmin ? processTarget.tenantId : undefined,
       );
+      // El trámite ya está en Entregado: la fila lo refleja al instante y acto seguido se recarga
+      // la página con sus contadores, para que salga del filtro «Asignado» si está activo y la
+      // tira de KPIs no se quede vieja (un «Entregado» dentro de «Asignado» confunde).
       setItems((prev) =>
-        prev.map((it) =>
-          it.id === processTarget.id ? { ...it, plateFlowStatus: 'terminado' } : it,
-        ),
+        prev.map((it) => (it.id === processTarget.id ? { ...it, estado: 'entregado' } : it)),
       );
+      void load();
       if (res?.warningMessage) {
         setProcessWarning(res.warningMessage);
       } else {
         setProcessTarget(null);
       }
     } catch (err) {
-      setProcessError(err instanceof Error ? err.message : 'No se pudo marcar como Terminado.');
+      setProcessError(err instanceof Error ? err.message : 'No se pudo enviar el trámite al OT.');
     } finally {
       setProcessActing(false);
     }
@@ -662,7 +707,30 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     sortDir,
   ]);
 
+  /**
+   * HU #12363 — una página del listado según el ALCANCE. Con la red activa se usan las rutas
+   * `network/**` (mismo cuerpo más `childTenantId`); con el alcance propio la llamada es idéntica a
+   * la de siempre. Es un único punto de decisión para que la tabla y el export no puedan divergir.
+   */
+  const buscarPagina = useCallback(
+    (query: ListInstancesParams) =>
+      networkActive
+        ? tramitesClient.searchNetworkInstances({ ...query, childTenantId })
+        : tramitesClient.searchInstances(query),
+    [networkActive, childTenantId],
+  );
+  const contarEstados = useCallback(
+    (query: ListInstancesParams) =>
+      networkActive
+        ? tramitesClient.searchNetworkEstadoCounts({ ...query, childTenantId })
+        : tramitesClient.searchEstadoCounts(query),
+    [networkActive, childTenantId],
+  );
+
   const load = useCallback(async () => {
+    // HU #12363 — la cabeza espera a conocer su alcance guardado: si no, pediría primero «lo propio»
+    // y acto seguido «la red», y la primera respuesta se pintaría para desaparecer al instante.
+    if (!alcanceListo) return;
     setLoading(true);
     setError(null);
     try {
@@ -673,10 +741,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
       // Las dos llamadas van en paralelo: la tabla y la tira de KPIs son independientes y
       // encadenarlas solo sumaría latencia. Los conteos no pueden salir de `data` — esa es la
       // PÁGINA, y la tira habla del universo entero.
-      const [page1, counts] = await Promise.all([
-        tramitesClient.searchInstances(query),
-        tramitesClient.searchEstadoCounts(query),
-      ]);
+      const [page1, counts] = await Promise.all([buscarPagina(query), contarEstados(query)]);
       setItems(page1.items);
       setTotal(page1.total);
       setEstadoCounts(counts);
@@ -692,7 +757,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     } finally {
       setLoading(false);
     }
-  }, [buildListQuery, page, pageSize]);
+  }, [alcanceListo, buildListQuery, buscarPagina, contarEstados, page, pageSize]);
 
   useEffect(() => {
     // Carga/refresca al montar y al cambiar refreshKey: los setState de `load`
@@ -710,16 +775,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
    * tarjetas sigan diciendo a dónde puede moverse el gestor después de elegir una.
    */
   const estadoCountsMostrados = useMemo(() => {
-    const c: Record<EstadoTramite, number> = {
-      borrador: 0,
-      anulado: 0,
-      preparado: 0,
-      entregado: 0,
-      aprobado: 0,
-      rechazado: 0,
-      subsanacion: 0,
-    };
-    for (const key of Object.keys(c) as EstadoTramite[]) c[key] = estadoCounts[key] ?? 0;
+    // Se construye desde el catálogo: un estado nuevo (ADR-0059 añadió tres) entra aquí solo. El
+    // pseudo-estado «rechazado desde preasignación» lo cuenta el servidor aparte (subconjunto de
+    // rechazado) y se pinta como una tarjeta más.
+    const c = {} as Record<EstadoFiltro, number>;
+    for (const key of ESTADOS_TRAMITE) c[key] = estadoCounts[key] ?? 0;
+    c[FILTRO_RECHAZADO_PREASIGNACION] = estadoCounts[FILTRO_RECHAZADO_PREASIGNACION] ?? 0;
     return c;
   }, [estadoCounts]);
 
@@ -772,7 +833,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 
       // La primera página se pide aparte porque de ella sale el `total` con el que se sabe cuántas
       // quedan. Se guarda para reusarla como página 1 del recorrido en vez de volver a pedirla.
-      const primeraPagina = await tramitesClient.searchInstances({
+      const primeraPagina = await buscarPagina({
         ...base,
         skip: 0,
         take: SERVER_LIST_TAKE,
@@ -789,7 +850,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
             pagina === 1
               ? primeraPagina.items
               : (
-                  await tramitesClient.searchInstances({
+                  await buscarPagina({
                     ...base,
                     skip: (pagina - 1) * pageSize,
                     take: pageSize,
@@ -822,7 +883,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     } finally {
       setExporting(false);
     }
-  }, [buildListQuery, effectiveColumns]);
+  }, [buildListQuery, buscarPagina, effectiveColumns]);
 
 
   // HU #10536 — sin orden explicito por columna, el backend devuelve los prioritarios primero. Al
@@ -858,7 +919,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setModalidad(v);
     setPage(1);
   };
-  const handleEstadoChange = (v: '' | InstanceStatus) => {
+  const handleEstadoChange = (v: '' | EstadoFiltro) => {
     setEstado(v);
     setPage(1);
   };
@@ -888,6 +949,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // al siguiente refetch ni recargar la pagina para ver el efecto de haber marcado la prioridad.
   const handleTogglePriority = useCallback(
     async (id: string, next: boolean, tenantId: string) => {
+      // HU #12362 — red de seguridad: una fila de la red no monta el control, pero si llegara por
+      // un atajo, ni se toca el estado local ni se llama al servidor.
+      if (isNetworkReadOnly({ tenantId }, currentTenantId)) return;
       setItems((prev) =>
         prev.map((it) => (it.id === id ? { ...it, prioritario: next } : it)),
       );
@@ -899,7 +963,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         );
       }
     },
-    [isAdmin],
+    [isAdmin, currentTenantId],
   );
 
   // HU #11055 — visor del consolidado. El resumen ya trae el id del adjunto, así que no hace falta
@@ -925,6 +989,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // Solo aplica a borradores origin='ict' (el botón solo se muestra ahí). Al reanudar se limpia la nota.
   const handleTogglePause = useCallback(
     async (id: string, next: boolean, tenantId: string) => {
+      if (isNetworkReadOnly({ tenantId }, currentTenantId)) return; // HU #12362
       setItems((prev) =>
         prev.map((it) =>
           it.id === id
@@ -940,7 +1005,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         );
       }
     },
-    [isAdmin],
+    [isAdmin, currentTenantId],
   );
 
   // ICT (paridad v1 pause-unpause-massive) — selección múltiple para pausa/reanudación en lote.
@@ -955,13 +1020,28 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
+  /**
+   * HU #12362 (AC6) — de la selección, cuáles son PROPIOS (accionables) y cuántos son de la red
+   * (excluidos). La barra ofrece las acciones solo si hay propios y dice cuántos quedaron fuera.
+   */
+  const seleccionPorAlcance = useMemo(
+    () => partirSeleccionPorAlcance(items, selectedIds, currentTenantId),
+    [items, selectedIds, currentTenantId],
+  );
+
   const handleBulkPause = useCallback(
     async (paused: boolean) => {
       if (selectedIds.size === 0) return;
+      // HU #12362 — solo los propios: ni actualización optimista ni llamada para los de la red.
+      const propiosIds = new Set(seleccionPorAlcance.propios.map((it) => it.id));
+      if (propiosIds.size === 0) {
+        setSelectedIds(new Set());
+        return;
+      }
       // Optimista sobre las filas seleccionadas (solo tienen sentido las ICT en borrador).
       setItems((prev) =>
         prev.map((it) =>
-          selectedIds.has(it.id) && it.origin === 'ict' && it.estado === 'borrador'
+          propiosIds.has(it.id) && it.origin === 'ict' && it.estado === 'borrador'
             ? { ...it, isPaused: paused, pausedObservation: paused ? it.pausedObservation ?? null : null }
             : it,
         ),
@@ -970,7 +1050,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
       // X-Tenant-Id, así que se agrupa por tenant y se llama una vez por compañía.
       const byTenant = new Map<string, string[]>();
       for (const it of items) {
-        if (!selectedIds.has(it.id)) continue;
+        if (!propiosIds.has(it.id)) continue;
         const arr = byTenant.get(it.tenantId) ?? [];
         arr.push(it.id);
         byTenant.set(it.tenantId, arr);
@@ -987,7 +1067,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         setSelectedIds(new Set());
       }
     },
-    [selectedIds, items, isAdmin, load],
+    [selectedIds, items, isAdmin, load, seleccionPorAlcance],
   );
 
   const hasServerFilters =
@@ -1122,6 +1202,22 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           soloPrioritarios={soloPrioritarios}
           onPrioritariosChange={handlePrioritariosChange}
           actions={
+            <>
+              {/* HU #12363 — solo existe para una cabeza de grupo (AC1). Va delante de la búsqueda:
+                  el alcance acota TODO lo demás. Al cambiarlo se vuelve a la página 1, como con
+                  cualquier otro criterio; el resto de filtros se conserva. */}
+              {red.isGroupParent ? (
+                <NetworkScopeSelector
+                  scope={red.scope}
+                  onChange={(next) => {
+                    red.setScope(next);
+                    setPage(1);
+                  }}
+                  hijos={red.children}
+                  childrenStatus={red.childrenStatus}
+                  disabled={red.saving}
+                />
+              ) : null}
             <TramitesFiltrosBar
               rangoSobre={rangoSobre}
               onRangoSobreChange={setRangoSobre}
@@ -1160,7 +1256,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
               empezarDeCeroDisabled={!hasActiveFilters && !hasDraftFilters}
               columnSelector={
                 <ColumnSelector
-                  columns={TRAMITES_COLUMNS}
+                  // HU #12363 — sin «Cliente»: esa la enciende el alcance de red, no el usuario.
+                  columns={TRAMITES_SELECTABLE_COLUMNS}
                   visible={visibleColumns}
                   onChange={setVisibleColumns}
                   label="Columnas"
@@ -1182,7 +1279,32 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                   {exporting ? 'Exportando…' : 'Exportar'}
                 </button>
               }
+              bulkUploadAction={
+                onBulkUpload ? (
+                  <button
+                    type="button"
+                    onClick={() => onBulkUpload()}
+                    disabled={blockNew.matricula && blockNew.traspaso}
+                    aria-label="Cargar trámites de forma masiva desde un archivo Excel"
+                    title={
+                      blockNew.matricula && blockNew.traspaso
+                        ? 'La compañía tiene bloqueada la creación de trámites.'
+                        : 'Carga masiva desde Excel'
+                    }
+                    className={controlCls(false)}
+                    data-testid="tramites-carga-masiva"
+                  >
+                    <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+                    Carga masiva
+                  </button>
+                ) : null
+              }
+              // HU #12578 (Feature #12565, AC2) — el botón "Revocatorias" que abría la vista dedicada
+              // se retira del toolbar: el filtro "Revocado" del EstadoFunnel ya cubre ese caso de uso
+              // directo en el listado principal, sin una pantalla aparte (pedido del usuario
+              // 2026-09-16). La ruta /tramites/revocatorias no se borra aquí — queda fuera de alcance.
             />
+            </>
           }
         />
 
@@ -1254,20 +1376,35 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
             <span className="font-semibold text-[#162744] dark:text-white">
               {`${selectedIds.size} seleccionado${selectedIds.size === 1 ? '' : 's'}`}
             </span>
-            <button
-              type="button"
-              onClick={() => void handleBulkPause(true)}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
-            >
-              <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBulkPause(false)}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-            >
-              <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
-            </button>
+            {/* HU #12362 (AC6) — las acciones solo existen si hay trámites PROPIOS en la selección;
+                los de la red se cuentan aparte, con su motivo, para que la exclusión no sea muda. */}
+            {seleccionPorAlcance.propios.length > 0 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleBulkPause(true)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
+                >
+                  <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleBulkPause(false)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                >
+                  <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
+                </button>
+              </>
+            ) : null}
+            {seleccionPorAlcance.excluidos > 0 ? (
+              <span
+                role="status"
+                className="inline-flex items-center gap-1 text-[#162744]/70 dark:text-white/70"
+              >
+                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                {textoExcluidosRed(seleccionPorAlcance.excluidos)}
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={clearSelection}
@@ -1314,6 +1451,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           onVerHistorialPlaca={verHistorialPlaca}
           isAdmin={isAdmin}
           onAdminActionSuccess={() => void load()}
+          currentTenantId={currentTenantId}
         />
       </div>
 
@@ -1344,6 +1482,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
         instanceId={detalleTramite?.id ?? null}
         tenantId={isAdmin ? detalleTramite?.tenantId : undefined}
         item={detalleTramite}
+        // HU #12362 — trámite de un cliente hijo: solo lectura y sin gestión de documentos.
+        readOnly={detalleConsulta}
+        consultaMode={detalleConsulta}
         // Subsanar desde el detalle: el modal enciende el flag y delega el salto al asistente aquí,
         // que es donde vive la ruta con el `?t=` del SuperAdmin.
         onAbrirAsistente={(it) => {
@@ -1386,15 +1527,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="procesar-plate-title" className="text-lg font-semibold" style={{ color: '#162744' }}>
-              Procesar trámite
+              Enviar al organismo de tránsito
             </h2>
             <p className="mt-1 text-sm opacity-80">
               {processTarget.referenceNumber}
               {processTarget.placa ? ` · ${processTarget.placa}` : ''}
             </p>
             <p className="mt-2 text-xs opacity-70">
-              El OT ya asignó la placa. Marca los checks opcionales si aplican y pasa a Terminado
-              para que el OT pueda aprobar o rechazar.
+              El OT ya asignó la placa. Marca los checks opcionales si aplican y envía el trámite
+              al organismo para que pueda aprobar o rechazar.
             </p>
             <div className="mt-4 space-y-2">
               <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -1419,7 +1560,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
               </label>
             </div>
             {processError ? (
-              <InlineAlert tone="warning" title="No se pudo procesar el trámite" className="mt-4">
+              <InlineAlert tone="warning" title="No se pudo enviar el trámite" className="mt-4">
                 {processError}
               </InlineAlert>
             ) : null}
@@ -1455,7 +1596,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                     disabled={processActing}
                     onClick={() => void confirmProcesar()}
                   >
-                    {processActing ? 'Procesando…' : 'Marcar como Terminado'}
+                    {processActing ? 'Enviando…' : 'Enviar al OT'}
                   </button>
                 </>
               )}
@@ -1662,6 +1803,7 @@ function TableBody({
   onVerHistorialPlaca,
   isAdmin,
   onAdminActionSuccess,
+  currentTenantId,
 }: {
   loading: boolean;
   error: string | null;
@@ -1714,6 +1856,8 @@ function TableBody({
   isAdmin: boolean;
   /** HU #12163 — refresca la tabla tras una acción administrativa avanzada exitosa. */
   onAdminActionSuccess: () => void;
+  /** HU #12362 — tenant del usuario (null para SuperAdmin); decide el modo consulta por fila. */
+  currentTenantId: string | null;
 }) {
   if (loading) {
     // Carga de la pantalla principal del módulo: va con el loader de marca y no con barras de
@@ -1894,6 +2038,7 @@ function TableBody({
                 onVerHistorialPlaca={onVerHistorialPlaca}
                 isAdmin={isAdmin}
                 onAdminActionSuccess={onAdminActionSuccess}
+                currentTenantId={currentTenantId}
               />
             ))}
           </tbody>
@@ -2035,6 +2180,7 @@ function TramiteRow({
   onVerHistorialPlaca,
   isAdmin,
   onAdminActionSuccess,
+  currentTenantId,
 }: {
   item: InstanceSummary;
   /** Claves visibles (selector de columnas) — misma lista/orden que usa la cabecera. */
@@ -2068,7 +2214,19 @@ function TramiteRow({
   /** HU #12163 — ver doc de `TableBody`. */
   isAdmin: boolean;
   onAdminActionSuccess: () => void;
+  /** HU #12362 — ver doc de `TableBody`. */
+  currentTenantId: string | null;
 }) {
+  // HU #12362 — trámite de un cliente HIJO visto por la cabeza de red: se consulta, no se toca.
+  // Ninguna acción de escritura se monta (ni deshabilitada) y la apertura va SIEMPRE al detalle.
+  const consultaMode = isNetworkReadOnly(item, currentTenantId);
+  const tenantNameRed = (item as { tenantName?: string | null }).tenantName ?? item.companiaNombre;
+  // HU #12363 — «propio» por TENANT (no por procedencia): en el alcance de red la cabeza también
+  // recibe sus propios trámites, y la celda «Cliente» tiene que decirle cuáles son suyos.
+  const esFilaPropia =
+    !!currentTenantId &&
+    !!item.tenantId &&
+    item.tenantId.trim().toLowerCase() === currentTenantId.trim().toLowerCase();
   // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
   // trae el id del adjunto): el botón NUNCA dispara una generación.
   const consolidadoDisponible = !!item.consolidadoAttachmentId;
@@ -2080,7 +2238,7 @@ function TramiteRow({
   // firma"/"Listo para radicar"); el resto usa el chip base de estado. `ready` promueve la acción a
   // "Radicar" cuando la identidad ya quedó aprobada y los gates están listos.
   const async = asyncStatus(item);
-  const chip = async?.chip ?? estadoChip(item.estado);
+  const chip = async?.chip ?? estadoChip(item.estado, item.rejectedFrom);
   // HU #11668 — solo los chips derivados de la identidad llevan ayuda; el chip base de estado
   // (radicado, entregado…) no habla de acreditación y no debe crecerle un tooltip.
   const ayudaIdentidad = async?.ayuda ?? null;
@@ -2089,18 +2247,38 @@ function TramiteRow({
   // subsanación: el estado sigue siendo `rechazado`, pero el trámite se está corrigiendo, y tanto
   // "Re-radicar" como "Cancelar la subsanación" solo existen dentro del asistente.
   const abreAsistente =
-    isDraft || !!item.subsanacionActiva || item.estado === 'subsanacion';
-  const actionLabel = async?.ready ? 'Radicar' : abreAsistente ? 'Continuar' : 'Ver';
-  const actionIcon = async?.ready ? FileCheck : abreAsistente ? Play : Eye;
-  const plateHint = plateFlowHint(item.plateFlowStatus);
-  const puedeProcesar =
-    item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
+    !consultaMode && (isDraft || !!item.subsanacionActiva || item.estado === 'subsanacion');
+  // HU #12362 — en consulta la acción es SIEMPRE «Ver»: aunque el borrador del hijo tenga la
+  // identidad aprobada y `canSubmit`, la cabeza no radica por él (eso es escritura).
+  const actionLabel = consultaMode
+    ? 'Ver'
+    : async?.ready
+      ? 'Radicar'
+      : abreAsistente
+        ? 'Continuar'
+        : 'Ver';
+  const actionIcon = consultaMode ? Eye : async?.ready ? FileCheck : abreAsistente ? Play : Eye;
+  /**
+   * "Pausado" y el sub-estado de revocatoria podían apilarse bajo el chip de Estado sin
+   * jerarquía entre ellos — se muestra UNO SOLO, el de mayor prioridad. Revocatoria primero
+   * (es lo accionable: alguien espera una decisión o acaba de recibirla), Pausado después
+   * (bloquea el trámite). El resto sigue disponible en el detalle.
+   *
+   * ADR-0059 retiró la nota de placa de esta terna: el sub-estado de placa ya no existe como
+   * dato aparte, ahora es el propio `estado` y lo dice el chip principal.
+   */
+  const muestraRevocacion =
+    !!item.revocationRequestStatus && item.revocationRequestStatus !== 'aprobada';
+  const muestraPausado = !muestraRevocacion && !!item.isPaused;
+  // ADR-0059 — «Enviar al OT» solo en asignado: la placa ya está y la pelota es del gestor.
+  const puedeEnviarAlOt = !consultaMode && item.estado === 'asignado';
   // HU #12163 — acciones avanzadas del administrador (Cambiar estado, Anular, Consolidado,
   // Reenviar validación, Reasignar gestor), gateadas por permiso (AC1) y por estado (AC2).
   const { items: adminActionItems, modals: adminActionModals } = useAdminTramiteAcciones({
     item,
     isAdmin,
     onChanged: onAdminActionSuccess,
+    consultaMode,
   });
   const actionItems: ActionsMenuItem[] = [
     {
@@ -2111,7 +2289,7 @@ function TramiteRow({
       onSelect: () => handleOpen(),
     },
     // ICT (paridad v1) — pausar/reanudar como acción del menú (solo borradores origin='ict').
-    ...(isIctDraft
+    ...(isIctDraft && !consultaMode
       ? [
           {
             key: 'pausa',
@@ -2121,11 +2299,11 @@ function TramiteRow({
           },
         ]
       : []),
-    ...(puedeProcesar
+    ...(puedeEnviarAlOt
       ? [
           {
-            key: 'procesar',
-            label: 'Procesar',
+            key: 'enviar-al-ot',
+            label: 'Enviar al OT',
             icon: CheckCircle2,
             attention: true,
             onSelect: () => onProcesar(item),
@@ -2133,12 +2311,18 @@ function TramiteRow({
         ]
       : []),
     // HU #11054 — documentos del expediente sin entrar al wizard.
-    {
-      key: 'documentos',
-      label: 'Ver documentos',
-      icon: FileText,
-      onSelect: () => onVerDocumentos(item),
-    },
+    // HU #12362 — en modo consulta se OMITE: el panel abre vistas previas prefirmadas y descargas
+    // por la ruta propia; los documentos de la red solo se consultan desde el detalle (AC3, #12411).
+    ...(!consultaMode
+      ? [
+          {
+            key: 'documentos',
+            label: 'Ver documentos',
+            icon: FileText,
+            onSelect: () => onVerDocumentos(item),
+          },
+        ]
+      : []),
     // HU #12196 — atajo al historial de ESTA placa. Se OMITE por completo si el usuario no tiene
     // el módulo (`historial-placa` fuera de sus módulos navegables): enseñar un destino al que el
     // gate va a rebotar no informa de nada, solo promete acceso.
@@ -2161,7 +2345,7 @@ function TramiteRow({
       : []),
     // HU #11055 — el negocio pidió la acción "sólo visible si ya se encuentra generado": se OMITE
     // cuando no hay consolidado, en vez de mostrarse deshabilitada. Así nunca dispara una generación.
-    ...(consolidadoDisponible
+    ...(consolidadoDisponible && !consultaMode
       ? [
           {
             key: 'consolidado',
@@ -2240,7 +2424,18 @@ function TramiteRow({
     radicado: (
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex min-w-0 items-center gap-2">
-          {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila). */}
+          {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila).
+              HU #12362 — en modo consulta la estrella es solo informativa: no hay botón. */}
+          {consultaMode ? (
+            item.prioritario ? (
+              <Star
+                className="h-4 w-4 shrink-0"
+                style={{ color: '#F59E0B', fill: '#F59E0B' }}
+                role="img"
+                aria-label="Trámite prioritario"
+              />
+            ) : null
+          ) : (
           <button
             type="button"
             onClick={(e) => {
@@ -2266,6 +2461,7 @@ function TramiteRow({
               aria-hidden="true"
             />
           </button>
+          )}
           {/* Acceso por teclado/lector de pantalla a la fila: el `<tr>` ya no es focuseable (una
               tabla semántica no puede tener `role="button"` en la fila), así que el radicado
               lleva el mismo `handleOpen`/aria-label de antes en un botón real. El aspecto en
@@ -2282,6 +2478,27 @@ function TramiteRow({
             {item.referenceNumber}
           </button>
         </span>
+        {/* HU #12362 — distintivo perceptible sin depender del color: texto + icono, y el nombre
+            del cliente hijo dueño del trámite cuando viaja en la fila. */}
+        {consultaMode ? (
+          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <StatusBadge
+              tone="neutral"
+              ariaLabel={`${ETIQUETA_SOLO_CONSULTA}: trámite de un cliente de la red`}
+              label={
+                <span className="inline-flex items-center gap-1">
+                  <Eye className="h-3 w-3" aria-hidden="true" />
+                  {ETIQUETA_SOLO_CONSULTA}
+                </span>
+              }
+            />
+            {tenantNameRed ? (
+              <span className="block truncate text-[10px] opacity-70" title={tenantNameRed}>
+                {tenantNameRed}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
         {!shows('fechaCreacion') ? (
           <span className="block truncate text-[10px] opacity-55">
             Creación: {shortDate(item.createdAt)}
@@ -2331,25 +2548,20 @@ function TramiteRow({
     // una línea en un "No aplica" repetido en todas las filas.
     // El chip de estado se inyecta más abajo (solo si la columna `estado` está oculta), para
     // reutilizar EXACTAMENTE la misma celda —popover de rechazo incluido— en vez de duplicarla.
+    // Pedido del usuario (2026-09-16): el progreso de pasos ya NO se apila aquí ni se muda a
+    // ninguna otra celda por defecto — solo informa mientras el trámite se está armando
+    // (Borrador/Preparado); en cuanto pasa a Entregado es SIEMPRE X/X (completo) y competía sin
+    // aportar nada con el chip de Estado, que es el dato que sí importa en esa etapa. Sigue
+    // disponible como columna propia («Paso», grupo Desglose adicional) para quien la active.
     tramite: (
-      <span className="flex min-w-0 flex-col items-start gap-1">
-        <span
-          className="block break-words leading-snug text-xs font-semibold text-[#162744] dark:text-white"
-          // Los nombres de OTROS son largos («Levantamiento de prenda») y la celda es angosta, así
-          // que envuelven en vez de cortarse: es el rótulo que distingue un trámite de otro. El
-          // `title` se conserva para el caso extremo de una palabra sola más ancha que la celda.
-          title={tramiteLabel(item)}
-        >
-          {tramiteLabel(item)}
-        </span>
-        {!shows('paso') ? (
-          <span className="flex min-w-0 items-start gap-1 text-[10px] opacity-55">
-            <span className="shrink-0 font-mono tabular-nums">
-              {item.pasoActual}/{item.totalPasos}
-            </span>
-            <span className="break-words leading-snug">{stepLabel(item)}</span>
-          </span>
-        ) : null}
+      <span
+        className="block min-w-0 break-words leading-snug text-xs font-semibold text-[#162744] dark:text-white"
+        // Los nombres de OTROS son largos («Levantamiento de prenda») y la celda es angosta, así
+        // que envuelven en vez de cortarse: es el rótulo que distingue un trámite de otro. El
+        // `title` se conserva para el caso extremo de una palabra sola más ancha que la celda.
+        title={tramiteLabel(item)}
+      >
+        {tramiteLabel(item)}
       </span>
     ),
     propietario: (
@@ -2414,6 +2626,22 @@ function TramiteRow({
                 ayuda={ayudaIdentidad}
                 tipId={`identidad-ayuda-${item.id}`}
               />
+            ) : esRechazadoDesdePreasignacion(item.estado, item.rejectedFrom) ? (
+              /* ADR-0059 — el distintivo va en DOS líneas: el chip dice «Rechazado» (mismo ancho que
+                 cualquier otro estado, sin invadir la columna vecina) y el origen va debajo, en el
+                 mismo tono. El nombre accesible sigue siendo el completo. */
+              <span className="flex flex-col items-start gap-0.5">
+                <StatusBadge
+                  label={estadoLabel(item.estado)}
+                  ariaLabel={chip.label}
+                  bg={chip.bg}
+                  color={chip.color}
+                  border={chip.border}
+                />
+                <span className="text-[11px] font-medium leading-none" style={{ color: chip.color }}>
+                  desde Preasignación
+                </span>
+              </span>
             ) : (
               <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
             )}
@@ -2496,8 +2724,9 @@ function TramiteRow({
           </div>
         ) : null}
         </span>
-        {/* ICT — "Pausado" (solo texto, sin ícono): apilado bajo el estado; no invade Organismo. */}
-        {item.isPaused ? (
+        {/* ICT — "Pausado" (solo texto, sin ícono): apilado bajo el estado; no invade Organismo.
+            Solo se pinta si no hay revocatoria activa (ver `muestraPausado` — uno a la vez). */}
+        {muestraPausado ? (
           <span
             className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-xs font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
             title={item.pausedObservation ?? 'Trámite pausado'}
@@ -2510,12 +2739,23 @@ function TramiteRow({
             Pausado
           </span>
         ) : null}
-        {plateHint ? (
+        {/* Feature #12565 — indicativo de revocatoria en la fila. Icono + texto, no un StatusBadge
+            sólido: junto al chip de Estado principal, un segundo pill del mismo peso visual competía
+            por la atención en vez de leerse como algo secundario. Incluye `rechazada`: sin esto, un
+            intento rechazado no dejaba NINGÚN rastro en el listado (el trámite vuelve a verse como un
+            Aprobado cualquiera). `aprobada` se excluye explícitamente: es el estado del intento MÁS
+            RECIENTE (el backend ya no lo filtra antes de ordenar por intento), pero ese desenlace ya
+            se ve solo — el trámite pasa a Revocado — y mostrar "Revocatoria aprobada" al lado sería
+            ruido, no información nueva. Es la de MAYOR prioridad del grupo (`muestraRevocacion`):
+            gana sobre "Pausado" y sobre la nota de placa. */}
+        {muestraRevocacion ? (
           <span
-            className="text-xs leading-tight text-[#162744]/45 dark:text-white/40 truncate"
-            title={plateHint}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold"
+            style={{ color: revocationRequestListColor(item.revocationRequestStatus) }}
+            title={`Sub-estado de revocatoria: ${revocationRequestListLabel(item.revocationRequestStatus)}`}
           >
-            {plateHint}
+            <Undo2 className="h-3 w-3" aria-hidden="true" />
+            {revocationRequestListLabel(item.revocationRequestStatus)}
           </span>
         ) : null}
       </span>
@@ -2564,6 +2804,22 @@ function TramiteRow({
     fuente: (
       <span className="block truncate text-xs text-[#162744]/90 dark:text-white/80">
         {FUENTE_LABEL[item.fuente ?? 'dashboard']}
+      </span>
+    ),
+    // HU #12363 (AC3) — solo se pinta con el alcance de red. Nombre del cliente dueño del trámite
+    // y, debajo, si es propio o de la red: la distinción va en TEXTO, no solo en el color ni en el
+    // distintivo «Solo consulta» de la celda de radicado.
+    cliente: (
+      <span className="block min-w-0" data-testid={`tramite-cliente-${item.id}`}>
+        <span
+          className="block break-words leading-snug text-xs font-semibold text-[#162744] dark:text-white"
+          title={tenantNameRed ?? undefined}
+        >
+          {tenantNameRed ?? '—'}
+        </span>
+        <span className="block truncate text-[10px] opacity-55">
+          {esFilaPropia ? ETIQUETA_CLIENTE_PROPIO : ETIQUETA_CLIENTE_HIJO}
+        </span>
       </span>
     ),
     // HU #12183 — marcas de prenda y transformación. INFORMATIVAS: no son botones, no filtran y no
@@ -2650,8 +2906,16 @@ function TramiteRow({
               type="checkbox"
               checked={selected}
               onChange={() => onToggleSelect(item.id)}
-              aria-label={`Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`}
-              title="Seleccionar para pausar/reanudar en lote"
+              aria-label={
+                consultaMode
+                  ? `Seleccionar el trámite ${item.referenceNumber} (solo consulta: queda excluido de las acciones masivas)`
+                  : `Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`
+              }
+              title={
+                consultaMode
+                  ? 'Solo consulta: queda excluido de las acciones masivas'
+                  : 'Seleccionar para pausar/reanudar en lote'
+              }
               className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
             />
           ) : null}
@@ -2683,8 +2947,8 @@ function TramiteRow({
           ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
           items={actionItems}
           className="bg-white dark:bg-[#162744]"
-          attention={puedeProcesar}
-          attentionHint="Pendiente por procesar: el OT ya asignó la placa"
+          attention={puedeEnviarAlOt}
+          attentionHint="Pendiente por enviar al OT: la placa ya está asignada"
         />
       </td>
       {/* ICT — confirmación FLIT (Modal con blur/overlay/CTA degradado) al continuar un trámite

@@ -9,6 +9,7 @@ import {
   canReadLogQx,
   decodeJwtPayload,
   isAdminCompany,
+  isGroupParent,
   isOtAdmin,
   isSuperAdmin,
   TOKEN_STORAGE_KEY,
@@ -71,6 +72,7 @@ import {
   Image as ImageIcon,
   BadgeCheck,
   Timer,
+  Settings,
 } from "lucide-react";
 
 export type ModuleId =
@@ -163,7 +165,9 @@ function useCurrentUser() {
       tenantName: payload.tenant_name ?? null,
       isSuperAdmin: isSuperAdmin(payload),
       isAdminCompany: isAdminCompany(payload),
+      isGroupParent: isGroupParent(payload),
       isOtAdmin: isOtAdmin(payload),
+      tenantId: (payload.tenant_id as string) ?? null,
       canReadLogQx: canReadLogQx(payload),
       canReadIctLogs: canReadIctLogs(payload),
       canManageBanners: canManageBanners(payload),
@@ -493,6 +497,16 @@ export function Shell({
         active: isOtHubSegmentActive(pathname, "imprint-validation"),
         onClick: () => goOtHub("imprint-validation"),
       },
+      {
+        // Pedido del usuario (2026-09-16) — modo Dashboard/QX, ventana de revocatoria (HU #12569) y
+        // feature flags operativos: sin esta entrada, esos ajustes solo eran alcanzables escribiendo
+        // a mano la URL de una pestaña legacy sin enlace en ningún menú.
+        key: OT_ADM_DOCK.configuracion,
+        label: "Configuración",
+        icon: Settings,
+        active: isOtHubSegmentActive(pathname, "configuracion"),
+        onClick: () => goOtHub("configuracion"),
+      },
     );
   }
 
@@ -505,9 +519,19 @@ export function Shell({
       label: "Administración",
       icon: Building2,
       // AdminCompany: /admin/companies redirige al configurador de su tenant (HU #11228).
-      active: pathname.startsWith("/admin/companies"),
+      // `/children` es «Red de clientes»: no marcar Administración como activa ahí.
+      active: pathname.startsWith("/admin/companies") && !pathname.includes("/children"),
       onClick: () => router.push("/admin/companies"),
     });
+    if (currentUser.isGroupParent && currentUser.tenantId) {
+      entries.push({
+        key: "admin-network",
+        label: "Red de clientes",
+        icon: Building2,
+        active: pathname.includes("/admin/companies/") && pathname.endsWith("/children"),
+        onClick: () => router.push(`/admin/companies/${currentUser.tenantId}/children`),
+      });
+    }
   }
 
   // LOG QX (HU #10795): trazabilidad Quipux. Agrupador "Integraciones" (ex Soporte),

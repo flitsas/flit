@@ -30,7 +30,6 @@ const PROCEDURE: OtClientProcedure = {
   gestorNombre: "Laura Gil",
   referenceNumber: "OT-2026-10021",
   status: "entregado",
-  plateFlowStatus: null,
   soatEstado: "vigente",
   createdAt: "2026-08-01T00:00:00Z",
   placa: "ABC123",

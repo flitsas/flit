@@ -34,7 +34,7 @@ public static class ImprontaManualStampReadiness
         {
             if (string.IsNullOrWhiteSpace(instance.Plate))
                 return (false, PlacaPendiente);
-            if (string.Equals(instance.PlateFlowStatus, PlateFlowStatus.Preasignado, StringComparison.Ordinal))
+            if (string.Equals(instance.Status, TramiteEstado.Preasignacion, StringComparison.Ordinal))
                 return (false, PlacaPreasignado);
         }
 

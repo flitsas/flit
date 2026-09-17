@@ -145,6 +145,16 @@ public sealed class RegeneracionDocumentalTrazaTests
             Escrituras.Add(new Escritura(tenantId, procedureInstanceId, origen, codigoError, detalle));
             return Task.FromResult(true);
         }
+
+        public Task<bool> EscribirFalloAsync(
+            Guid tenantId,
+            Guid procedureInstanceId,
+            string origen,
+            string codigoError,
+            string? detalle,
+            string tipoEvento,
+            CancellationToken cancellationToken = default) =>
+            EscribirFalloAsync(tenantId, procedureInstanceId, origen, codigoError, detalle, cancellationToken);
     }
 
     private sealed class LoggerEspia : ILogger<RegenerarDocumentosTrazadoHandler>

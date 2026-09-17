@@ -40,6 +40,8 @@ import type {
   IniciarPrevalidacionResult,
   PrendaData,
   PrendaInput,
+  RequestRevocationInput,
+  RequestRevocationResult,
   InstanceSummary,
   InstanceEstadoCountsResponse,
   InstancesResponse,
@@ -69,7 +71,7 @@ import type {
   ProcedureInstanceDetail,
   ReconcileIdentityResult,
   ProcedureInstanceSummary,
-  CompletePlateFlowResult,
+  EnviarAlOtResult,
   RuntPersonLookupInput,
   RuntPersonLookupResult,
   ValidateSoatResult,
@@ -117,6 +119,9 @@ interface PreflightSnapshotDto {
 interface PreflightPreviewDto extends PreflightSnapshotDto {
   previewToken: string;
   vehicleFields?: Array<{ fieldKey: string; valueText?: string | null; valueJson?: string | null }>;
+  /** Epic #12550 — `corta` | `larga` en matrícula inicial; ausente/null en el resto. */
+  route?: string | null;
+  transitOffice?: { id: string; code: string; name: string; cityName?: string | null } | null;
 }
 
 function mapChecks(dtos: PreflightSnapshotDto['checks']): PreflightSnapshot['checks'] {
@@ -137,12 +142,69 @@ function mapPreflight(dto: PreflightSnapshotDto): PreflightSnapshot {
     createdAt: dto.createdAt,
   };
 }
+import type {
+  RevocationRequestListItem,
+  RevocationRequestListParams,
+  RevocationRequestListResponse,
+} from './types/revocation-requests';
 import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
+import type {
+  NetworkChildFilter,
+  NetworkInstanceDetail,
+  NetworkInstanceSummary,
+} from '@/lib/tramites/network-scope';
 
 export { DEV_TENANT_ID, DEV_USER_ID };
+
+/** Sobre de `GET /api/v1/tramites/network/instances/{id}` (`NetworkProcedureDetailResponse`). */
+interface NetworkProcedureDetailResponse {
+  tenantId: string;
+  tenantName?: string | null;
+  instance: ProcedureInstanceDetail;
+}
+
+/**
+ * Aplana el sobre del detalle de red al shape del detalle propio. Tolera una respuesta ya plana
+ * (sin `instance`) para no romper a un backend que aún no envuelva — el sobre es la forma canónica.
+ */
+export function desenvolverDetalleDeRed(
+  res: NetworkProcedureDetailResponse | (ProcedureInstanceDetail & { tenantName?: string | null }),
+): NetworkInstanceDetail {
+  const sobre = res as Partial<NetworkProcedureDetailResponse>;
+  const instance: ProcedureInstanceDetail =
+    sobre.instance && typeof sobre.instance === 'object'
+      ? sobre.instance
+      : (res as ProcedureInstanceDetail);
+  const tenantId = sobre.tenantId ?? instance.tenantId;
+  return {
+    ...instance,
+    tenantId,
+    tenantName: sobre.tenantName ?? '',
+    fromNetwork: true,
+  };
+}
+
+/** Hijo de la red visible para el selector de alcance (id + nombre; HU #12555/#12556). */
+export interface NetworkChildItem {
+  id: string;
+  nombre: string;
+}
+
+/**
+ * Hijos de la red para el selector de alcance — ruta no-admin (HU #12555/#12556).
+ *
+ * `GET /api/v1/tramites/network/children`: mismo grupo `network/**` que el resto de esta capa
+ * (`GroupHeadReadFilter` + `NetworkAccessAuditFilter`), así que NO manda tenant en la ruta ni
+ * `X-Tenant-Id` — el servidor resuelve la cabeza desde el JWT. `200 []` si la cabeza no tiene hijos;
+ * `403` (`network_scope_required`) si quien llama no es cabeza de grupo. Ese 403 ya NO es un fallo
+ * de red — es responsabilidad del llamador (ver `useNetworkScope`) decidir qué hacer con él.
+ */
+export function fetchNetworkChildren(signal?: AbortSignal): Promise<NetworkChildItem[]> {
+  return request<NetworkChildItem[]>('/api/v1/tramites/network/children', { signal });
+}
 
 // La API vive en otro origen (api.<env>.flitsas.online); el CD inyecta
 // NEXT_PUBLIC_API_BASE_URL (la MISMA variable que usa lib/api/client.ts). Sin variable
@@ -361,6 +423,23 @@ export function isVehicleBodyTypeMissing(err: unknown): boolean {
   return (problem as { title?: unknown }).title === 'VEHICLE_BODY_TYPE_MISSING';
 }
 
+/**
+ * Epic #12550 — Ruta Corta ante un organismo que la compañía no tiene habilitado (422
+ * `organismo_runt_no_habilitado`). Devuelve el nombre del organismo que reporta el RUNT, o `null` si
+ * el error es otro. No es subsanable desde el trámite: la matrícula se radica ante ese organismo o no
+ * se crea.
+ */
+export function getOrganismoRuntNoHabilitado(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return null;
+  const { title, transitOfficeName } = problem as { title?: unknown; transitOfficeName?: unknown };
+  if (title !== 'organismo_runt_no_habilitado') return null;
+  return typeof transitOfficeName === 'string' && transitOfficeName.trim() !== ''
+    ? transitOfficeName
+    : 'el organismo reportado por el RUNT';
+}
+
 export function isTransitOfficeUnavailable(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const { status, problem } = err as { status?: unknown; problem?: unknown };
@@ -379,6 +458,49 @@ export function isRuesPreviewUnavailable(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const { status } = err as { status?: unknown };
   return status === 503;
+}
+
+/**
+ * Nombre de archivo de una cabecera `Content-Disposition` (`filename="x.pdf"` o
+ * `filename*=UTF-8''x%20y.pdf`). Cadena vacía si no viene.
+ */
+export function parseContentDispositionFilename(cd: string | null | undefined): string {
+  const header = cd ?? '';
+  const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(header);
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  const raw = (star?.[1] ?? plain?.[1] ?? '').trim();
+  if (!raw) return '';
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    // raw no era URI-encoded; se usa tal cual.
+    return raw;
+  }
+}
+
+/**
+ * GET binario con token: devuelve blob + filename/mimetype resueltos de la respuesta. Lo comparten
+ * la descarga propia (`downloadAttachment`) y la de red (`downloadNetworkAttachment`, HU #12411).
+ * Un fallo lleva `status` para que quien llama distinga rechazo de alcance (403/404) de error técnico.
+ */
+async function downloadBinary(
+  path: string,
+  headers: HeadersInit,
+  fallbackFilename: string,
+): Promise<{ blob: Blob; filename: string; mimetype: string }> {
+  const res = await fetch(apiUrl(path), { headers });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new TramitesApiError(
+      res.status,
+      `${res.status} ${res.statusText}${body ? ': ' + body : ''}`,
+      parseProblem(body),
+    );
+  }
+  const blob = await res.blob();
+  const mimetype = res.headers.get('content-type') ?? 'application/octet-stream';
+  const filename = parseContentDispositionFilename(res.headers.get('content-disposition'));
+  return { blob, filename: filename || fallbackFilename, mimetype };
 }
 
 // Exportado para que otros clientes del mismo dominio (p. ej. lib/api/ui-preferences.ts)
@@ -433,6 +555,19 @@ function jwtTenantId(): string | undefined {
   return decodeJwtPayload(getToken())?.tenant_id ?? undefined;
 }
 
+/** Epic #12543 — documento de T&C vigente (GET /terms-acceptances/current). */
+export interface ProcedureTermsInfo {
+  url: string;
+}
+
+/** Epic #12543 — aceptación registrada (POST /terms-acceptances → 201). */
+export interface ProcedureTermsAcceptance {
+  id: string;
+  procedureTypeCode: string;
+  termsUrl: string;
+  acceptedAt: string;
+}
+
 /**
  * Headers de runtime: Bearer del JWT + X-Tenant-Id resuelto. La resolución del tenant es:
  * explícito → tenant activo (superadmin abriendo otra compañía) → tenant del JWT (company-user).
@@ -442,6 +577,12 @@ function jwtTenantId(): string | undefined {
 // Exportado por el mismo motivo que `request`: es el único lugar que resuelve Bearer +
 // X-Tenant-Id (explícito → tenant activo → JWT), y otros clientes (ui-preferences.ts) lo
 // necesitan tal cual, sin duplicar la resolución de tenant.
+/** Solo `Authorization`, sin `X-Tenant-Id`: para las rutas `network/**` (el alcance va en el JWT). */
+function authOnlyHeader(): HeadersInit {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export function tenantHeader(tenantId?: string): HeadersInit {
   const headers: Record<string, string> = {};
   const token = getToken();
@@ -526,6 +667,38 @@ async function listPlateHistory(params: {
   );
   const items = normalizeInstances(res?.items);
   return { items, total: res?.total ?? items.length };
+}
+
+/**
+ * HU #12578 (Feature #12565) — vista dedicada "Revocatorias" del lado gestor.
+ * `GET /api/v1/tramites/revocation-requests`, tenant-scoped por `X-Tenant-Id` (mismo patrón que el
+ * resto de `/api/v1/tramites/...`). `statuses` viaja como `estado` separado por comas (mismo criterio
+ * tolerante que `ParseEstados` del backend); vacío/omitido = todos los sub-estados.
+ */
+async function listRevocationRequests(
+  params: RevocationRequestListParams = {},
+  tenantId?: string,
+): Promise<RevocationRequestListResponse> {
+  const qs = new URLSearchParams();
+  if (params.statuses?.length) qs.set('estado', params.statuses.join(','));
+  if (params.requestedFrom) qs.set('requestedFrom', params.requestedFrom);
+  if (params.requestedTo) qs.set('requestedTo', params.requestedTo);
+  if (params.transitOfficeId) qs.set('transitOfficeId', params.transitOfficeId);
+  if (params.skip !== undefined) qs.set('skip', String(params.skip));
+  if (params.take !== undefined) qs.set('take', String(params.take));
+  const query = qs.toString();
+
+  const res = await request<RevocationRequestListResponse>(
+    `/api/v1/tramites/revocation-requests${query ? `?${query}` : ''}`,
+    { headers: tenantHeader(tenantId) },
+  );
+  const items: RevocationRequestListItem[] = res?.items ?? [];
+  return {
+    items,
+    total: res?.total ?? items.length,
+    skip: res?.skip ?? params.skip ?? 0,
+    take: res?.take ?? params.take ?? 20,
+  };
 }
 
 async function listInstancesPage(
@@ -639,6 +812,77 @@ export const tramitesClient = {
    * completa desde Excel, y unos cientos de valores no caben en una query string.</p>
    */
   searchInstances: (params: ListInstancesParams = {}) => searchInstances(params),
+
+  /**
+   * HU #12578 (Feature #12565) — vista dedicada "Revocatorias" del lado gestor: listado filtrado a
+   * trámites con solicitud de revocatoria en cualquier sub-estado (AC1), con los mismos filtros del
+   * listado general (fecha, OT, estado).
+   */
+  listRevocationRequests: (params: RevocationRequestListParams = {}, tenantId?: string) =>
+    listRevocationRequests(params, tenantId),
+
+  // ── HU #12362 / #12358 — lectura consolidada de la red (cabeza de grupo) ──────────────────────
+  //
+  // Mismo shape que las rutas propias más `tenantId`/`tenantName` del dueño de cada fila. NO viaja
+  // `X-Tenant-Id`: el alcance («yo + mis hijas») lo resuelve el servidor desde el JWT y una cabecera
+  // de tenant aquí sería una forma de pedir «otra compañía», que es justo lo que estas rutas no
+  // admiten. Cada ítem sale marcado `fromNetwork: true` para que `isNetworkReadOnly` lo reconozca
+  // por PROCEDENCIA aunque coincida el tenant. Sin tipos OpenAPI regenerados (encargo).
+  //
+  // HU #12363 — `childTenantId` (un hijo concreto) viaja en el CUERPO y es lo único de alcance que
+  // el cliente manda: el servidor lo intersecta con la red del JWT, así que un id ajeno devuelve
+  // cero filas, nunca datos de otra compañía (AC7). No se manda lista de tenants ni cabecera.
+
+  /** Listado consolidado de la red. `POST /api/v1/tramites/network/instances/search`. */
+  searchNetworkInstances: async (
+    params: ListInstancesParams & NetworkChildFilter = {},
+  ): Promise<{ items: NetworkInstanceSummary[]; total: number }> => {
+    const { filterTenantId: _tenant, ...body } = params;
+    const res = await request<{ items?: NetworkInstanceSummary[]; total?: number }>(
+      '/api/v1/tramites/network/instances/search',
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+    const items = normalizeInstances(res?.items).map((it) => ({
+      ...(it as NetworkInstanceSummary),
+      tenantName: (it as NetworkInstanceSummary).tenantName ?? it.companiaNombre ?? '',
+      fromNetwork: true as const,
+    }));
+    return { items, total: res?.total ?? items.length };
+  },
+
+  /** Conteo por estado del universo consolidado. Vacío ante fallo, como su gemelo propio. */
+  searchNetworkEstadoCounts: async (
+    params: ListInstancesParams & NetworkChildFilter = {},
+  ): Promise<Record<string, number>> => {
+    const { filterTenantId: _tenant, ...body } = params;
+    try {
+      return (
+        (await request<Record<string, number>>(
+          '/api/v1/tramites/network/instances/estado-counts',
+          { method: 'POST', body: JSON.stringify(body) },
+        )) ?? {}
+      );
+    } catch {
+      return {};
+    }
+  },
+
+  /**
+   * Detalle de un trámite de la red. `GET /api/v1/tramites/network/instances/{id}`.
+   *
+   * El contrato (`NetworkProcedureDetailResponse`, #12358) ENVUELVE el detalle:
+   * `{ tenantId, tenantName, instance }`, donde `instance` es el mismo objeto que devuelve
+   * `GET /instances/{id}` al propio cliente (actors, fieldValues, statusHistory, events…). Aquí se
+   * aplana a `ProcedureInstanceDetail & NetworkOwned` para que el modal y sus secciones lean el
+   * MISMO shape en consulta y en propio. Los `tenantId`/`tenantName` del sobre mandan sobre los de
+   * `instance` (son el dueño del trámite tal como lo resolvió la cabeza).
+   */
+  getNetworkInstance: async (id: string): Promise<NetworkInstanceDetail> => {
+    const res = await request<NetworkProcedureDetailResponse>(
+      `/api/v1/tramites/network/instances/${id}`,
+    );
+    return desenvolverDetalleDeRed(res);
+  },
 
   /**
    * HU #12106 — por qué se puede filtrar el listado. La barra se pinta a partir de esta respuesta,
@@ -1005,6 +1249,22 @@ export const tramitesClient = {
   // HU #10478 — proveedor primario de consulta resuelto para el tenant (por tipo). El wizard lo
   // consulta para adaptar la UI (ocultar el tipo de documento del propietario si el proveedor de
   // placa es Kyverum RUNT, que lo resuelve solo).
+  // Epic #12543 — Términos y Condiciones antes de abrir el asistente. El GET dice qué documento
+  // enlazar (la URL vive en el backend para que la evidencia y el enlace no diverjan); el POST
+  // deja la aceptación registrada (usuario, fecha UTC, tipo de trámite, IP) y SOLO su 201 habilita
+  // el formulario (RN-03). Lleva el tenant activo: el SuperAdmin acota la compañía en la que actúa.
+  getCurrentProcedureTerms: () =>
+    request<ProcedureTermsInfo>('/api/v1/tramites/terms-acceptances/current', {
+      headers: tenantHeader(),
+    }),
+
+  acceptProcedureTerms: (procedureTypeCode: string) =>
+    request<ProcedureTermsAcceptance>('/api/v1/tramites/terms-acceptances', {
+      method: 'POST',
+      headers: tenantHeader(),
+      body: JSON.stringify({ procedureTypeCode }),
+    }),
+
   getConsultationConfig: (tenantId?: string) =>
     request<ConsultationProvidersConfig>(
       `/api/v1/tramites/consultation-config`,
@@ -1061,18 +1321,19 @@ export const tramitesClient = {
     ),
 
   /**
-   * Gestor en Asignado: checks opcionales + avanza a Terminado.
+   * ADR-0059 — «Enviar al OT»: gestor en Asignado marca los checks opcionales (SOAT / impuesto) y el
+   * trámite pasa a Entregado para la decisión del organismo.
    *
    * El trámite puede avanzar CON salvedades (p. ej. la compañía permite continuar sin SOAT vigente):
    * en ese caso llega `warningMessage` y la UI debe mostrarlo aunque la operación haya salido bien.
    */
-  completePlateFlow: (
+  enviarAlOt: (
     instanceId: string,
     body: { soatPagado?: boolean; impuestoDepartamentalPagado?: boolean } = {},
     tenantId?: string,
   ) =>
-    request<CompletePlateFlowResult>(
-      `/api/v1/tramites/instances/${instanceId}/plate-flow/complete`,
+    request<EnviarAlOtResult>(
+      `/api/v1/tramites/instances/${instanceId}/enviar-al-ot`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
@@ -1260,38 +1521,52 @@ export const tramitesClient = {
   // GET descarga binaria de un adjunto. Devuelve el blob + filename/mimetype
   // (resueltos del Content-Disposition / Content-Type de la respuesta) para que
   // el consumidor dispare la descarga del navegador (blob → objectURL → anchor).
-  downloadAttachment: async (
+  downloadAttachment: (
     instanceId: string,
     attachmentId: string,
     tenantId?: string,
     fallbackFilename?: string,
-  ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
-    const res = await fetch(
-      apiUrl(`/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`),
-      { headers: tenantHeader(tenantId) },
+  ): Promise<{ blob: Blob; filename: string; mimetype: string }> =>
+    downloadBinary(
+      `/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`,
+      tenantHeader(tenantId),
+      fallbackFilename || attachmentId,
+    ),
+
+  // ── HU #12411 — documentos de un trámite de la red (cabeza de grupo), solo lectura ─────────────
+  //
+  // contrato B5 #12410. Mismas reglas que el resto de `network/**`: NO viaja `X-Tenant-Id` (el
+  // alcance lo resuelve el servidor desde el JWT) y no existe `preview-url` de red: «Ver» se hace
+  // con el MISMO binario de `download` re-empaquetado como blob en el navegador. Un 403
+  // (`network_documents_disabled` / `network_scope_required`) o un 404 (`not_found`,
+  // anti-enumeración) llegan como `TramitesApiError` con `status`, que `isScopeRejection` reconoce.
+
+  /** Adjuntos de un trámite de la red. `GET /api/v1/tramites/network/instances/{id}/attachments`. */
+  getNetworkAttachments: async (instanceId: string): Promise<ProcedureAttachment[]> => {
+    // contrato B5 #12410 — `AttachmentDto[]` sin `previewUrl`. Se admite también el sobre
+    // `{ attachments }` de la ruta propia por si el servidor los unifica.
+    const res = await request<ProcedureAttachment[] | AttachmentsResponse | undefined>(
+      `/api/v1/tramites/network/instances/${instanceId}/attachments`,
     );
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(
-        `${res.status} ${res.statusText}${body ? ': ' + body : ''}`,
-      );
-    }
-    const blob = await res.blob();
-    const mimetype =
-      res.headers.get('content-type') ?? 'application/octet-stream';
-    // Content-Disposition: attachment; filename="fur.txt"  (o filename*=UTF-8'')
-    const cd = res.headers.get('content-disposition') ?? '';
-    const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
-    const plain = /filename="?([^";]+)"?/i.exec(cd);
-    const raw = star?.[1] ?? plain?.[1] ?? '';
-    let filename = raw.trim();
-    try {
-      filename = raw ? decodeURIComponent(raw.trim()) : '';
-    } catch {
-      // raw no era URI-encoded; se usa tal cual.
-    }
-    return { blob, filename: filename || fallbackFilename || attachmentId, mimetype };
+    if (Array.isArray(res)) return res;
+    return res?.attachments ?? [];
   },
+
+  /**
+   * Binario de un adjunto de la red.
+   * `GET /api/v1/tramites/network/instances/{id}/attachments/{attachmentId}/download`.
+   */
+  downloadNetworkAttachment: (
+    instanceId: string,
+    attachmentId: string,
+    fallbackFilename?: string,
+  ): Promise<{ blob: Blob; filename: string; mimetype: string }> =>
+    // contrato B5 #12410 — `Content-Disposition: attachment; filename=…`, sin `X-Tenant-Id`.
+    downloadBinary(
+      `/api/v1/tramites/network/instances/${instanceId}/attachments/${attachmentId}/download`,
+      authOnlyHeader(),
+      fallbackFilename || attachmentId,
+    ),
 
   // GET URL presignada de previsualización inline (ADR-0029). TTL ~10 min.
   // El backend valida tenant + ownership antes de emitir { url, expiresAt }.
@@ -1375,6 +1650,15 @@ export const tramitesClient = {
         valueJson: f.valueJson ?? null,
         source: 'consultation',
       })),
+      route: dto.route === 'corta' || dto.route === 'larga' ? dto.route : null,
+      transitOffice: dto.transitOffice
+        ? {
+            id: dto.transitOffice.id,
+            code: dto.transitOffice.code,
+            name: dto.transitOffice.name,
+            cityName: dto.transitOffice.cityName ?? null,
+          }
+        : null,
     };
   },
 
@@ -2195,6 +2479,41 @@ export const tramitesClient = {
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
 
+  /**
+   * HU #12574 (Feature #12565) — envía la solicitud de revocatoria del Paso 2 del modal: motivo +
+   * documento de soporte (PDF) + los 2 checks de confirmación (AC1/AC2). Multipart (campo `file`):
+   * NO usa `request()` (fija Content-Type: application/json) — mismo patrón que
+   * `adminCargarConsolidado`/`analyzeDocument` de este archivo. Los checks viajan como texto
+   * "true"/"false" (mismo binding `[FromForm] bool` que exige el backend, ver
+   * RevocationRequestEndpoints.ParseBool).
+   *
+   * Errores llegan como `TramitesApiError` con `.status`/`.problem.title` — el código de negocio
+   * viaja en `title`: 404 not_found | 409 tramite_no_aprobado | 409 solicitud_activa_existente |
+   * 422 motivo_requerido | confirmacion_exactitud_requerida | confirmacion_consecuencias_requerida |
+   * documento_requerido | documento_formato_invalido | documento_muy_grande | ventana_vencida |
+   * origen_no_soportado.
+   */
+  requestRevocation: async (
+    instanceId: string,
+    input: RequestRevocationInput,
+    tenantId?: string,
+  ): Promise<RequestRevocationResult> => {
+    const form = new FormData();
+    form.append('reason', input.reason);
+    form.append('confirmAccuracy', input.confirmAccuracy ? 'true' : 'false');
+    form.append('confirmConsequences', input.confirmConsequences ? 'true' : 'false');
+    form.append('file', input.file);
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/instances/${instanceId}/revocation-requests`),
+      { method: 'POST', headers: tenantHeader(tenantId), body: form },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
+    }
+    return (await res.json()) as RequestRevocationResult;
+  },
+
   // ── Admin · Trámites · Gestión avanzada (Feature #12155, HU #12163) ──────────────────
   // Los 6 endpoints administrativos de HU #12158-#12162, todos gateados por permiso en el
   // BACKEND (SuperAdmin bypassa). El frontend no repite esa validación aquí: solo condiciona la
@@ -2343,6 +2662,12 @@ const TRANSITION_ERROR_COPY: Record<string, string> = {
   motivo_requerido: 'Debes indicar el motivo para esta transición.',
   conflicto_concurrencia: 'El trámite fue modificado por otro usuario, recarga e intenta de nuevo.',
   estado_desconocido: 'El estado destino no es válido.',
+  // ADR-0059 — Ruta Larga de matrícula inicial (estados Preasignación / Asignado).
+  transicion_requiere_placa: 'El trámite no tiene placa: debe pasar por Preasignación para que el organismo la asigne.',
+  transicion_requiere_preasignacion: 'La matrícula inicial sin placa se radica en Preasignación, no directamente en Entregado.',
+  transicion_placa_incoherente: 'La placa del trámite no es coherente con el estado solicitado.',
+  transicion_solo_ot: 'Esta transición solo puede hacerla el organismo de tránsito.',
+  transicion_solo_gestor: 'Esta transición solo puede hacerla el gestor de la empresa.',
 };
 
 /**

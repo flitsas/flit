@@ -8,6 +8,7 @@ using Flit.Infrastructure.Persistence.Entities.Tramites;
 using Flit.Modules.Quipux.Domain.Envios;
 using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.RevocationRequests;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,6 +18,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();
+
+    // HU #12323 (ADR-0057) — interruptores globales de la jerarquía y bitácora append-only del
+    // vínculo padre-hija. La bitácora la escribe solo el trigger tr_tenants_hierarchy_audit.
+    public DbSet<HierarchySwitch> HierarchySwitches => Set<HierarchySwitch>();
+
+    public DbSet<TenantHierarchyAuditEntry> TenantHierarchyAuditEntries => Set<TenantHierarchyAuditEntry>();
 
     // Keyring de ASP.NET Data Protection persistido en Postgres (HU #10233): compartido entre
     // réplicas y estable entre reinicios, para poder descifrar el secreto HMAC del webhook Kyverum.
@@ -53,6 +60,19 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TenantWhitelistUser> TenantWhitelistUsers => Set<TenantWhitelistUser>();
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
+
+    /// <summary>HU #12407 — bloqueos de OT para cabezas Marca Blanca.</summary>
+    public DbSet<TenantTransitOfficeBlock> TenantTransitOfficeBlocks => Set<TenantTransitOfficeBlock>();
+
+    /// <summary>HU #12348 — rechazos auditados al crear trámite.</summary>
+    public DbSet<ProcedureRadicationGateDenial> ProcedureRadicationGateDenials =>
+        Set<ProcedureRadicationGateDenial>();
+
+    /// <summary>
+    /// HU #12361 — auditoría append-only del acceso consolidado de una cabeza de red a datos de sus
+    /// hijos (<c>tramites.network_access_audit</c>). Se escribe solo vía <c>NetworkAccessAuditWriter</c>.
+    /// </summary>
+    public DbSet<NetworkAccessAuditEntry> NetworkAccessAuditEntries => Set<NetworkAccessAuditEntry>();
 
     /// <summary>
     /// Convenio comercial compañía ↔ organismo. Distinto del grant de arriba, que es el permiso para
@@ -247,6 +267,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — outbox de cambios de estado del trámite (N 03 RNF01, ADR-0022)
     public DbSet<ProcedureStateChangeOutbox> ProcedureStateChangeOutbox => Set<ProcedureStateChangeOutbox>();
 
+    // Trámites — carga masiva por Excel (HU #12522, Feature #12519)
+    public DbSet<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatch> BulkTramitesBatches =>
+        Set<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatch>();
+    public DbSet<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow> BulkTramitesBatchRows =>
+        Set<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow>();
+
     // Trámites — cola de despachos de correo al cambio de estado (HU #11461, ADR-0045)
     public DbSet<ProcedureStateChangeEmailDispatch> ProcedureStateChangeEmailDispatches =>
         Set<ProcedureStateChangeEmailDispatch>();
@@ -266,6 +292,15 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Trámites — prenda / gravamen (IT-3, Feature #10585): agregado compañero con versionado por estado.
     public DbSet<ProcedureInstancePrenda> ProcedureInstancePrendas => Set<ProcedureInstancePrenda>();
+
+    // Trámites — solicitudes de revocatoria de un trámite Aprobado (HU #12570/#12571, Feature #12565):
+    // una fila por intento (attempt_number), ortogonal a TramiteEstado/TramiteStateMachine (ADR-0022).
+    public DbSet<ProcedureRevocationRequest> ProcedureRevocationRequests => Set<ProcedureRevocationRequest>();
+
+    // Trámites — cola de despachos de correo por hito del sub-flujo de revocatoria (HU #12579,
+    // Feature #12565, ADR-0046 Opción B extendido).
+    public DbSet<RevocationRequestEmailDispatch> RevocationRequestEmailDispatches =>
+        Set<RevocationRequestEmailDispatch>();
 
     // Trámites — avalúo comercial (Feature #10707): valores de referencia por VIN/placa y fuente.
     public DbSet<AvaluoMockValue> AvaluoMockValues => Set<AvaluoMockValue>();
@@ -307,6 +342,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Confirmación RUNT (Feature #12276) — configuración global de fila única, bitácora por corrida
     // e intentos por trámite. La marca del trámite vive en ProcedureInstance (runt_*).
+    // Epic #12543 — evidencia de aceptación de T&C por creación de trámite.
+    public DbSet<Flit.Tramites.Domain.TermsAcceptance.ProcedureTermsAcceptance> ProcedureTermsAcceptances =>
+        Set<Flit.Tramites.Domain.TermsAcceptance.ProcedureTermsAcceptance>();
+
     public DbSet<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationSettings> RuntConfirmationSettings =>
         Set<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationSettings>();
     public DbSet<Flit.Tramites.Domain.RuntConfirmation.RuntConfirmationRun> RuntConfirmationRuns =>

@@ -6,10 +6,12 @@ import { TramiteTrackingModal } from '@/components/operacion/TramiteTrackingModa
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
 const getStatusHistory = vi.fn();
+const getInstance = vi.fn();
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     getStatusHistory: (...args: unknown[]) => getStatusHistory(...args),
+    getInstance: (...args: unknown[]) => getInstance(...args),
   },
 }));
 
@@ -75,6 +77,9 @@ describe('TramiteTrackingModal', () => {
       page: 1,
       pageSize: 50,
     });
+
+    getInstance.mockReset();
+    getInstance.mockResolvedValue({ events: [] });
   });
 
   // ── La ficha ─────────────────────────────────────────────────────────────────────────────
@@ -91,12 +96,14 @@ describe('TramiteTrackingModal', () => {
     expect(within(ficha).getByText('6 de 6 · Entrega al organismo')).toBeInTheDocument();
   });
 
-  it('la ficha no cuesta ninguna consulta: solo se pide el historial', async () => {
+  it('la ficha no cuesta ninguna consulta: solo se piden el historial y los eventos administrativos', async () => {
     render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
 
     await screen.findByRole('region', { name: 'Resumen del trámite' });
     await waitFor(() => expect(getStatusHistory).toHaveBeenCalledTimes(1));
     expect(getStatusHistory).toHaveBeenCalledWith('inst-1', 1, 50, undefined);
+    await waitFor(() => expect(getInstance).toHaveBeenCalledTimes(1));
+    expect(getInstance).toHaveBeenCalledWith('inst-1', undefined);
   });
 
   it('en traspaso nombra vendedor y comprador, con su documento', async () => {
@@ -196,9 +203,133 @@ describe('TramiteTrackingModal', () => {
     expect(await screen.findByText(/sin red/)).toBeInTheDocument();
   });
 
+  it('si los eventos administrativos fallan, el historial de estados se sigue pintando', async () => {
+    // getInstance solo alimenta los eventos administrativos: si falla, degrada a [] sin tocar el
+    // historial de estados, que tiene su propio manejo de error independiente.
+    getInstance.mockRejectedValue(new Error('sin red'));
+    render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
+
+    const historial = await screen.findByRole('list', { name: 'Historial de estados del trámite' });
+    expect(within(historial).getByText(/Preparado desde Borrador/)).toBeInTheDocument();
+    expect(within(historial).getByText('Borrador')).toBeInTheDocument();
+    // No debe quedar visible el error de historial (ese solo aplica si falla getStatusHistory).
+    expect(screen.queryByText(/sin red/)).not.toBeInTheDocument();
+  });
+
+  it('un evento de reasignación de gestor aparece mezclado en el historial', async () => {
+    getInstance.mockResolvedValue({
+      events: [
+        {
+          tipo: 'reasignar_gestor_admin',
+          createdAt: '2026-08-27T16:10:00Z',
+          createdByName: 'Carlos Admin',
+          previousAssignedToName: 'Laura Restrepo',
+          newAssignedToName: 'Mario Gómez',
+        },
+      ],
+    });
+    render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
+
+    const historial = await screen.findByRole('list', { name: 'Historial de estados del trámite' });
+    expect(within(historial).getByText('Reasignación de gestor')).toBeInTheDocument();
+    expect(within(historial).getByText('Ejecutado por Carlos Admin')).toBeInTheDocument();
+    expect(within(historial).getByText('De Laura Restrepo a Mario Gómez')).toBeInTheDocument();
+  });
+
+  it('un evento de reenvío de validación aparece con el correo enmascarado', async () => {
+    getInstance.mockResolvedValue({
+      events: [
+        {
+          tipo: 'reenvio_validacion_admin',
+          createdAt: '2026-08-27T16:20:00Z',
+          createdByName: 'Carlos Admin',
+          partyRole: 'comprador',
+          emailActualizado: true,
+          correoDestino: 'laura.gomez@example.com',
+        },
+      ],
+    });
+    render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
+
+    const historial = await screen.findByRole('list', { name: 'Historial de estados del trámite' });
+    expect(within(historial).getByText('Reenvío de validación · Comprador')).toBeInTheDocument();
+    expect(within(historial).getByText('Ejecutado por Carlos Admin')).toBeInTheDocument();
+    expect(
+      within(historial).getByText('Correo: laura.gomez@example.com · Reenviado a un correo distinto del registrado'),
+    ).toBeInTheDocument();
+  });
+
+  // HU #12575 (Feature #12565, AC2) — la solicitud de revocatoria aparece mezclada en el historial,
+  // sin caer en el default de "reenvío de validación" (el bug que este branch explícito evita).
+  it('un evento de solicitud de revocatoria aparece mezclado en el historial', async () => {
+    getInstance.mockResolvedValue({
+      events: [
+        {
+          tipo: 'revocatoria_solicitada',
+          createdAt: '2026-08-27T16:30:00Z',
+          createdByName: 'Ana Administradora',
+          createdByEmail: 'ana.administradora@renting.com',
+          revocationAttemptNumber: 1,
+          revocationReason: 'Placa entregada con datos incorrectos',
+        },
+      ],
+    });
+    render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
+
+    const historial = await screen.findByRole('list', { name: 'Historial de estados del trámite' });
+    expect(within(historial).getByText('Solicitud de revocatoria · Intento 1')).toBeInTheDocument();
+    expect(within(historial).getByText('Solicitado por Ana Administradora')).toBeInTheDocument();
+    expect(within(historial).getByText('Placa entregada con datos incorrectos')).toBeInTheDocument();
+  });
+
+  // HU #12577 (Feature #12565) — la decisión del OT (aprobar o rechazar) deja su propio evento en el
+  // historial, distinto del de "Solicitud de revocatoria" (ese intento nunca cambia de estado).
+  it('un evento de revocatoria aprobada aparece mezclado en el historial', async () => {
+    getInstance.mockResolvedValue({
+      events: [
+        {
+          tipo: 'revocatoria_aprobada',
+          createdAt: '2026-08-27T16:40:00Z',
+          createdByName: 'Administrador OT Sabaneta',
+          createdByEmail: 'otsabaneta@flit.local',
+          revocationAttemptNumber: 1,
+          revocationDecisionReason: 'Soporte válido, se aprueba la revocatoria',
+        },
+      ],
+    });
+    render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
+
+    const historial = await screen.findByRole('list', { name: 'Historial de estados del trámite' });
+    expect(within(historial).getByText('Revocatoria aprobada · Intento 1')).toBeInTheDocument();
+    expect(within(historial).getByText('Aprobada por Administrador OT Sabaneta')).toBeInTheDocument();
+    expect(within(historial).getByText('Soporte válido, se aprueba la revocatoria')).toBeInTheDocument();
+  });
+
+  it('un evento de revocatoria rechazada aparece mezclado en el historial', async () => {
+    getInstance.mockResolvedValue({
+      events: [
+        {
+          tipo: 'revocatoria_rechazada',
+          createdAt: '2026-08-27T16:45:00Z',
+          createdByName: 'Administrador OT Sabaneta',
+          createdByEmail: 'otsabaneta@flit.local',
+          revocationAttemptNumber: 2,
+          revocationDecisionReason: 'Falta soporte suficiente para revocar.',
+        },
+      ],
+    });
+    render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
+
+    const historial = await screen.findByRole('list', { name: 'Historial de estados del trámite' });
+    expect(within(historial).getByText('Revocatoria rechazada · Intento 2')).toBeInTheDocument();
+    expect(within(historial).getByText('Rechazada por Administrador OT Sabaneta')).toBeInTheDocument();
+    expect(within(historial).getByText('Falta soporte suficiente para revocar.')).toBeInTheDocument();
+  });
+
   it('cerrado no consulta nada', async () => {
     render(<TramiteTrackingModal open={false} item={fila()} onClose={() => undefined} />);
     await waitFor(() => expect(getStatusHistory).not.toHaveBeenCalled());
+    expect(getInstance).not.toHaveBeenCalled();
   });
 
   it('sin fila no pinta nada', () => {

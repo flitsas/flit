@@ -1,7 +1,7 @@
 "use client";
 
 import { Lock, Pencil, Settings2 } from "lucide-react";
-import { isB2BTenantType } from "@/lib/api/types";
+import { isB2BTenantType, tenantTypeLabel } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -77,7 +77,11 @@ export function CompanyListTable({
                 {c.isTransitOffice ? (
                   <StatusBadge label="OT" tone="info" ariaLabel="Tipo: Organismo de Tránsito" />
                 ) : (
-                  <StatusBadge label="Empresa" tone="neutral" ariaLabel="Tipo: Empresa" />
+                  <StatusBadge
+                    label={tenantTypeLabel(c.tenantType)}
+                    tone="neutral"
+                    ariaLabel={`Tipo: ${tenantTypeLabel(c.tenantType)}`}
+                  />
                 )}
               </td>
               <td className="border-y px-4 py-3">

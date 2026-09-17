@@ -1,4 +1,5 @@
 using Flit.Queries.Domain;
+using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 
@@ -102,9 +103,9 @@ public static class ProcedureInstanceSortFields
             ["tipo_tramite"] = ProcedureInstanceSortBy.TipoTramite,
             ["tipoTramite"] = ProcedureInstanceSortBy.TipoTramite,
             ["fuente"] = ProcedureInstanceSortBy.Fuente,
-        ["vendedor"] = ProcedureInstanceSortBy.Vendedor,
-        ["organismo"] = ProcedureInstanceSortBy.Organismo,
-        ["compania"] = ProcedureInstanceSortBy.Compania,
+            ["vendedor"] = ProcedureInstanceSortBy.Vendedor,
+            ["organismo"] = ProcedureInstanceSortBy.Organismo,
+            ["compania"] = ProcedureInstanceSortBy.Compania,
         };
 
     /// <summary>
@@ -138,8 +139,29 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
     {
         var sortBy = ProcedureInstanceSortFields.Resolve(request.SortBy);
         var direction = request.SortDescending ? SortDirection.Descending : SortDirection.Ascending;
+        var filter = BuildFilter(request);
+        var take = ClampTake(request.Take);
 
-        var filter = new ProcedureInstanceListFilter
+        var (instances, total) = await repo.ListWithSummaryGraphFilteredAsync(
+            request.TenantId, Math.Max(0, request.Skip), take, filter, sortBy, direction, ct);
+
+        var items = await ToSummariesAsync(repo, instances, ct);
+        return (items, total);
+    }
+
+    /// <summary>
+    /// Tope de página acotado en el servidor: <c>&lt;= 0</c> o mayor que
+    /// <see cref="ListProcedureInstancesHandler.MaxItems"/> cae al máximo. Compartido con las rutas
+    /// consolidadas de la red (HU #12358, AC10) para que ninguna devuelva el conjunto completo.
+    /// </summary>
+    public static int ClampTake(int take) =>
+        take <= 0 || take > ListProcedureInstancesHandler.MaxItems
+            ? ListProcedureInstancesHandler.MaxItems
+            : take;
+
+    /// <summary>Traduce la solicitud al filtro del repositorio (mismo mapeo para la ruta propia y la de red).</summary>
+    internal static ProcedureInstanceListFilter BuildFilter(ProcedureInstanceListRequest request) =>
+        new()
         {
             Vin = request.Vin,
             Placa = request.Placa,
@@ -160,13 +182,15 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
             Condiciones = request.Condiciones,
         };
 
-        var take = request.Take <= 0 || request.Take > ListProcedureInstancesHandler.MaxItems
-            ? ListProcedureInstancesHandler.MaxItems
-            : request.Take;
-
-        var (instances, total) = await repo.ListWithSummaryGraphFilteredAsync(
-            request.TenantId, Math.Max(0, request.Skip), take, filter, sortBy, direction, ct);
-
+    /// <summary>
+    /// Enriquecimiento en lote (sin N+1) de una página ya cargada: nombres de compañía y gestor,
+    /// identidad vigente, vigencia del baúl y marca de prenda. Compartido con
+    /// <see cref="NetworkListProcedureInstancesHandler"/> (HU #12358) para que la fila consolidada
+    /// muestre EXACTAMENTE las mismas columnas derivadas que la fila propia.
+    /// </summary>
+    internal static async Task<IReadOnlyList<InstanceSummaryDto>> ToSummariesAsync(
+        IProcedureInstanceRepository repo, IReadOnlyList<ProcedureInstance> instances, CancellationToken ct)
+    {
         // Mismo enriquecimiento en lote (sin N+1) que ListProcedureInstancesHandler.HandleAsync.
         IReadOnlyDictionary<Guid, string> nombres =
             await repo.GetTenantNamesAsync(instances.Select(i => i.TenantId).ToList(), ct) ?? EmptyNames;
@@ -195,6 +219,10 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
         IReadOnlySet<Guid> conPrenda = await repo.ListInstanceIdsConPrendaVigenteAsync(
             instances.Select(i => i.Id).ToList(), ct) ?? new HashSet<Guid>();
 
+        // Feature #12565 — mismo indicativo de revocatoria activa que el listado sin filtros.
+        IReadOnlyDictionary<Guid, string> revocacionesActivas = await repo.GetRevocationBadgeStatusesAsync(
+            instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
+
         var items = instances
             .Select(e => ListProcedureInstancesHandler.ToSummary(
                 e,
@@ -202,17 +230,18 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                 firmaBaul,
-                conPrenda.Contains(e.Id)))
+                conPrenda.Contains(e.Id),
+                revocacionesActivas.GetValueOrDefault(e.Id)))
             .ToList();
 
-        return (items, total);
+        return items;
     }
 }
 
 /// <summary>
-/// Conteo por estado para la tira de KPIs del listado. Devuelve SIEMPRE las siete claves del
-/// vocabulario —con cero donde no hay filas— para que la tira pinte las siete tarjetas sin que el
-/// cliente tenga que rellenar huecos.
+/// Conteo por estado para la tira de KPIs del listado. Devuelve SIEMPRE todas las claves del
+/// vocabulario (más el pseudo-estado «rechazado desde preasignación», ADR-0059) —con cero donde no
+/// hay filas— para que la tira pinte sus tarjetas sin que el cliente tenga que rellenar huecos.
 /// </summary>
 public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRepository repo)
 {
@@ -256,6 +285,9 @@ public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRep
         foreach (var estado in TramiteEstado.Todos)
             resultado[estado] = conteos.GetValueOrDefault(estado);
         resultado[TramiteEstado.Subsanacion] = conteos.GetValueOrDefault(TramiteEstado.Subsanacion);
+        // ADR-0059 — subconjunto de rechazado que el gestor prioriza; también con cero cuando no hay.
+        resultado[TramiteEstado.FiltroRechazadoPreasignacion] =
+            conteos.GetValueOrDefault(TramiteEstado.FiltroRechazadoPreasignacion);
 
         return resultado;
     }

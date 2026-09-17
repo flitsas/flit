@@ -141,8 +141,8 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
                 && e.ProcedureInstanceId == instanceId
                 && e.CreatedBy == userId
                 && e.CreatedAt >= antes
-                // Habeas Data — el correo NUNCA viaja en claro en el payload del historial.
-                && e.Payload != null && !e.Payload.Contains("comprador@old.com")),
+                // El correo viaja en claro en el payload del historial (a pedido del producto).
+                && e.Payload != null && e.Payload.Contains("comprador@old.com")),
             Arg.Any<CancellationToken>());
         await _repo.Received(1).SaveChangesAsync(ct);
     }
@@ -332,7 +332,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
     }
 
     [Fact]
-    public async Task Cooldown_BloqueaElReenvio_MismoNucleoCompartidoQueElStandalone()
+    public async Task Resend_NoTieneCooldown_MismoNucleoCompartidoQueElStandalone()
     {
         var ct = TestContext.Current.CancellationToken;
         var instanceId = Guid.NewGuid();
@@ -342,30 +342,30 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var handler = BuildHandler();
 
         var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null);
-        var (result, error, _, cooldownMinutos) = await handler.HandleAsync(command, ct);
+        var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
-        error.Should().Be("reenvio_en_cooldown");
-        result.Should().BeNull();
-        cooldownMinutos.Should().BeGreaterThan(0).And.BeLessThanOrEqualTo(BiometricRules.ReenvioCooldownMinutos);
+        error.Should().BeNull();
+        result.Should().NotBeNull();
     }
 
     [Fact]
-    public async Task TopeDeReenvios_Bloquea_MismoNucleoCompartidoQueElStandalone()
+    public async Task Resend_NoTieneTope_AunConMuchosReenviosPrevios_MismoNucleoCompartidoQueElStandalone()
     {
         var ct = TestContext.Current.CancellationToken;
         var instanceId = Guid.NewGuid();
         _repo.GetByIdAsync(instanceId, _tenantId, Arg.Any<CancellationToken>())
             .Returns(Instance(instanceId, _tenantId, TramiteEstado.Entregado));
         var validation = SeedTramiteValidation(
-            instanceId, resendCount: BiometricRules.MaxReenvios, provider: BiometricProviders.Kyverum);
+            instanceId, resendCount: 50, provider: BiometricProviders.Kyverum);
+        StubKyverumOk();
         var handler = BuildHandler(isKyverum: true);
 
         var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
-        error.Should().Be("tope_reenvios");
-        result.Should().BeNull();
-        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        await _kyverum.Received(1).StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

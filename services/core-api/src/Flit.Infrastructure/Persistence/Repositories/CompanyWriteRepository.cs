@@ -1,7 +1,11 @@
+using System.Text.Json;
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.Create;
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -13,14 +17,27 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// de BD (<c>tr_tenants_audit</c>, <c>tr_tenants_row_version</c>) registran auditoría
 /// y versión automáticamente. La unicidad del <c>code</c> está garantizada por
 /// <c>uq_tenants_code</c>; el handler la valida antes para devolver un 422 amigable.
+/// <para>
+/// HU #12406: <c>is_group_parent</c> se escribe SIEMPRE junto con <c>tenant_type</c> como
+/// <see cref="HeadTenantTypes.IsHead"/> (CHECK <c>ck_tenants_group_parent_by_type</c>, fail-closed).
+/// El cambio de tipo deja además una fila en <c>admin.tenant_config_audit_logs</c>
+/// (<c>tenant</c>/<c>tenant_type</c>, valor anterior y nuevo) en el MISMO <c>SaveChanges</c>, y el
+/// rechazo del trigger de jerarquía (cabeza con hijos) se traduce a
+/// <see cref="CompanyHierarchyRejectedException"/> (checklist B12).
+/// </para>
 /// </summary>
 internal sealed class CompanyWriteRepository : ICompanyWriteRepository
 {
-    private readonly FlitDbContext _context;
+    internal const string AuditEntityName = "tenant";
+    internal const string AuditTenantTypeField = "tenant_type";
 
-    public CompanyWriteRepository(FlitDbContext context)
+    private readonly FlitDbContext _context;
+    private readonly IAuditContextAccessor _auditContext;
+
+    public CompanyWriteRepository(FlitDbContext context, IAuditContextAccessor? auditContext = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _auditContext = auditContext ?? NullAuditContextAccessor.Instance;
     }
 
     public Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default) =>
@@ -51,6 +68,8 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
             LegalName = company.LegalName,
             TaxId = company.TaxId,
             TenantType = company.TenantType,
+            // HU #12406 — la cabeza nace marcada en la misma fila (ck_tenants_group_parent_by_type).
+            IsGroupParent = company.IsGroupParent,
             IsActive = company.IsActive,
             CreatedAt = now,
             CreatedBy = company.CreatedBy,
@@ -132,13 +151,53 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
 
         if (changed)
         {
+            var now = DateTimeOffset.UtcNow;
+            var previousType = entity.TenantType;
+
             entity.LegalName = legalName;
             entity.TaxId = taxId;
             entity.TenantType = tenantType;
+            // HU #12406 — is_group_parent acompaña al tipo en la MISMA operación: true al entrar en
+            // un tipo de cabeza, false al salir. Si tiene hijos, la base rechaza (trigger).
+            entity.IsGroupParent = HeadTenantTypes.IsHead(tenantType);
             entity.IsActive = isActive;
-            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            entity.UpdatedAt = now;
             entity.UpdatedBy = changedBy;
-            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!string.Equals(previousType, tenantType, StringComparison.Ordinal))
+            {
+                // HU #12406 — el cambio de tipo (y con él, de clase de cabeza) queda registrado con
+                // valor anterior y nuevo, en la misma transacción que la fila.
+                _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = entity.Id,
+                    EntityName = AuditEntityName,
+                    FieldName = AuditTenantTypeField,
+                    OldValue = JsonSerializer.Serialize(previousType),
+                    NewValue = JsonSerializer.Serialize(tenantType),
+                    ChangedAt = now,
+                    ChangedBy = changedBy,
+                    ClientIp = _auditContext.ClientIp,
+                    Operation = AuditVocabulary.Operations.Update,
+                    Result = AuditVocabulary.Results.Success,
+                    Module = AuditVocabulary.Modules.Companies,
+                    TargetEntityType = "TENANT",
+                    TargetEntityId = entity.Id,
+                });
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (DbUpdateException ex) when (IsHierarchyRejection(ex, out var detail))
+            {
+                // Nada quedó escrito (ni el tipo ni la auditoría): se descarta el rastro en memoria.
+                _context.ChangeTracker.Clear();
+                throw new CompanyHierarchyRejectedException(tenantId, detail);
+            }
+
             // El trigger trg_row_version incrementa row_version en BD; recargar para que la
             // proyección devuelva la versión nueva (si no, una edición posterior del mismo
             // cliente daría un 409 falso al reenviar la versión vieja).
@@ -146,6 +205,24 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
         }
 
         return await ProjectAsync(entity, cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #12406 — <c>check_violation</c> (23514) de <c>tr_tenants_hierarchy</c>: la clase de una cabeza
+    /// con hijos es inmutable y una cabeza con hijos no deja de serlo. Otros 23514 (p.ej. el CHECK del
+    /// catálogo) no se enmascaran: el handler ya validó el catálogo antes.
+    /// </summary>
+    private static bool IsHierarchyRejection(DbUpdateException ex, out string detail)
+    {
+        if (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.CheckViolation } pg
+            && pg.MessageText.Contains("tiene hijos vinculados", StringComparison.Ordinal))
+        {
+            detail = pg.MessageText;
+            return true;
+        }
+
+        detail = string.Empty;
+        return false;
     }
 
     private async Task<CompanyListItem> ProjectAsync(

@@ -89,11 +89,26 @@ builder.Services.PostConfigure<JwtBearerOptions>(
 builder.Services.AddAdminApplication();
 builder.Services.AddAdminInfrastructure();
 
+// HU #12576 (Feature #12565) — orquestador API-layer de la decisión OT sobre una solicitud de
+// revocatoria: compone Flit.Admin.Application (RevokeOtClientProcedureHandler, HU #12166) con
+// Flit.Tramites.* (IProcedureRevocationRequestRepository/IRevocationRequestNotifier); ninguno de los
+// dos módulos puede referenciar al otro, así que vive en Flit.Api (mismo criterio que la composición
+// inline de AdminOtEndpoints.ApproveClientProcedureAsync).
+builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.DecideRevocationRequestHandler>();
+builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.GetActiveRevocationRequestHandler>();
+
+// HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado OT: mismo criterio de
+// composición API-layer que la decisión de arriba (compone Admin + Tramites).
+builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.ListOtRevocationRequestsHandler>();
+
 // Handler de autorización por permisos del JWT (HU #10165).
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 // Handler para la policy AdminCompany (roles de empresa + SuperAdmin bypass).
 builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHandler>();
+
+// HU #12345 — cabeza de grupo (AdminCompany + is_group_parent en BD).
+builder.Services.AddScoped<IAuthorizationHandler, GroupHeadCompanyAuthorizationHandler>();
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
@@ -200,6 +215,11 @@ app.UseAuthorization();
 // (necesita HttpContext.User) y ANTES de los endpoints. No toca parametrización ni portal público.
 app.UseMiddleware<Flit.Api.Middleware.TenantEnforcementMiddleware>();
 
+// HU #12358 (Feature #12257) — guard único de escritura para cabezas de grupo: la lectura consolidada de
+// la red no otorga escritura sobre los hijos. Va DESPUÉS del enforcement (usa el TenantScope de Items) y
+// cubre /api/v1/tramites/instances/{id}/** y /api/v1/admin/tramites/{id}/** en todos los verbos de escritura.
+app.UseMiddleware<Flit.Api.Middleware.TenantWriteGuardMiddleware>();
+
 app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
 
 // Liveness: el healthcheck de Docker (docker-compose.prod.yml) y el /ready del
@@ -220,6 +240,9 @@ app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
 app.MapUserUiPreferencesEndpoints();
 app.MapAdminCompaniesEndpoints();
+app.MapAdminCompanyChildrenEndpoints();
+app.MapAdminCompanyChildrenConfigEndpoints();
+app.MapAdminCompanyChildrenInvitationsEndpoints();
 app.MapAdminOtEndpoints();
 app.MapAdminOtMetricsEndpoints();
 app.MapAdminOtQueriesEndpoints();
@@ -232,6 +255,7 @@ app.MapAdminIctJobCatalogEndpoints();
 app.MapAdminPlataformaMandatosEndpoints();
 app.MapAdminOtMandatosEndpoints();
 app.MapAdminPlataformaFurEndpoints();
+app.MapAdminHierarchySwitchesEndpoints(); // HU #12323 — interruptores globales de jerarquía (SuperAdmin)
 app.MapAdminPlataformaNotificacionesEndpoints();
 app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
 app.MapAdminRuntConfirmationEndpoints();
@@ -261,6 +285,9 @@ app.MapAdminImprontasEndpoints();
 // Autorización por permiso (generacion-documental.*), no por policy de grupo.
 app.MapAdminGeneracionDocumentalEndpoints();
 app.MapTramitesEndpoints();
+app.MapBulkTramitesEndpoints();
+// Epic #12543 — aceptación de Términos y Condiciones antes de abrir el asistente.
+app.MapTramitesTermsAcceptanceEndpoints();
 app.MapTransfersEndpoints();
 
 // ── Runtime de trámites (rework #10128) ───────────────────────────────────────
@@ -273,10 +300,15 @@ app.MapPublicPortalEndpoints();
 // HU #12240 (Feature #12236) — banners promocionales: listado publico + imagen por streaming.
 app.MapPublicBannersEndpoints();
 app.MapTramitesInstanceEndpoints();
+// HU #12358 (Feature #12257) — vista consolidada de la red (solo lectura) bajo /api/v1/tramites/network.
+app.MapTramitesNetworkEndpoints();
+// HU #12361 (Feature #12257) — consulta de la auditoría de accesos consolidados (hijo + SuperAdmin).
+app.MapNetworkAccessAuditEndpoints();
 app.MapTramitesActorEndpoints();
 // HU #11196 / #11197 — firma a posteriori: marcar el trámite y consultar si la opción aplica.
 app.MapTramitesFirmaPosteriorEndpoints();
 app.MapTramitesAttachmentEndpoints();
+app.MapTramitesRevocationRequestEndpoints(); // HU #12572 (Feature #12565) — solicitud de revocatoria de trámite Aprobado
 app.MapTramitesOcrEndpoints();
 app.MapTramitesParticipantEndpoints();
 app.MapTramitesBiometricaEndpoints();

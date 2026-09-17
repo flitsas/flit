@@ -13,32 +13,36 @@ namespace Flit.Admin.Domain.OtClientProcedures;
 /// </para>
 ///
 /// <para>
-/// Las clases NO son excluyentes entre sí ni suman el total: <see cref="SinAsignarPlaca"/> y
-/// <see cref="ConPlacaAsignada"/> miran el sub-estado de placa, mientras que
-/// <see cref="Aprobados"/>, <see cref="Rechazados"/> y <see cref="SinGestion"/> miran el estado del
-/// ciclo de vida. Un trámite entregado con placa asignada cuenta en dos.
+/// ADR-0059 — desde que la ruta de placa vive en <c>status</c>, cada clase es UN estado del ciclo de
+/// vida: las tarjetas son excluyentes entre sí y pulsar una equivale a filtrar por ese estado.
 /// </para>
 /// </summary>
-/// <param name="SinAsignarPlaca">
-/// Entregados en ruta de placa que todavía no la tienen (sub-estado <c>preasignado</c>): es la cola
-/// concreta de "asignar placa" del organismo.
-/// </param>
-/// <param name="ConPlacaAsignada">
-/// Entregados con la placa ya puesta (sub-estado <c>asignado</c> o <c>terminado</c>).
-/// </param>
+/// <param name="Preasignacion">Radicados sin placa: la cola concreta de "asignar placa" del organismo.</param>
+/// <param name="Asignados">Con placa puesta por el organismo; la pelota está en el gestor (SOAT, impuestos, enviar al OT).</param>
+/// <param name="PorDecidir">Entregados a la espera de la decisión del organismo (aprobar / rechazar).</param>
 /// <param name="Aprobados">Trámites que el organismo aprobó.</param>
-/// <param name="Rechazados">Trámites que el organismo rechazó.</param>
-/// <param name="SinGestion">
-/// Entregados que el organismo no ha tocado: sin decisión y sin haber entrado en la ruta de placa.
-/// Es el trabajo que nadie ha empezado, y por eso la tarjeta que más urge mirar.
-/// </param>
-/// <param name="Revocados">
-/// HU #12166 (Feature #12156) — Aprobados que el organismo revocó (deshizo su propia aprobación).
+/// <param name="Rechazados">Trámites que el organismo rechazó (desde entregado o desde preasignación).</param>
+/// <param name="Revocados">HU #12166 (Feature #12156) — Aprobados que el organismo revocó.</param>
+/// <param name="SolicitudesRevocatoria">
+/// Feature #12565 — Aprobados con una solicitud de revocatoria ACTIVA
+/// (<c>solicitada</c>/<c>en_revision</c>): necesitan una decisión del organismo, a diferencia de
+/// <see cref="Revocados"/> (ya decidido, estado final) o una solicitud <c>rechazada</c> (ya
+/// decidida, el turno es del gestor).
+///
+/// <para>
+/// ÚNICA EXCEPCIÓN a la regla de arriba: no es un estado del ciclo de vida ni es excluyente con
+/// las demás — todo trámite con solicitud activa YA cuenta en <see cref="Aprobados"/>, porque el
+/// sub-flujo de revocatoria es ORTOGONAL al estado (ADR-0022: el trámite sigue <c>aprobado</c>
+/// mientras se decide). Existe aparte para que el organismo no tenga que abrir "Aprobados" fila
+/// por fila para notar cuál tiene una revocatoria esperando, y al pulsarla filtra por el
+/// sub-flujo, no por <c>status</c>.
+/// </para>
 /// </param>
 public sealed record OtBandejaCounters(
-    int SinAsignarPlaca,
-    int ConPlacaAsignada,
+    int Preasignacion,
+    int Asignados,
+    int PorDecidir,
     int Aprobados,
     int Rechazados,
-    int SinGestion,
-    int Revocados);
+    int Revocados,
+    int SolicitudesRevocatoria);

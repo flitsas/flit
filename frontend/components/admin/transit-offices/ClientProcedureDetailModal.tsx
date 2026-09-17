@@ -10,7 +10,6 @@ import {
   type OtProcedureAttachment,
 } from "@/lib/api/admin-ot";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
-import { puedeDecidirOt } from "@/lib/tramites/estados";
 import { OtDetalleAcordeon } from "./detalle/OtDetalleAcordeon";
 import { OtDetalleActores } from "./detalle/OtDetalleActores";
 import { OtDetalleShell } from "./detalle/OtDetalleShell";
@@ -27,7 +26,7 @@ import {
   OT_WARN,
   OT_WARN_TEXT,
 } from "./detalle/ot-detalle-visual";
-import { formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
+import { formatOtProcedureStatus, procedureStatusChip } from "./ot-utils";
 
 /**
  * Bloques del detalle. Ya no son pasos de un recorrido sino acordeones independientes; el nombre
@@ -169,18 +168,25 @@ export function ClientProcedureDetailModal({
     setAbiertos((prev) => ({ ...prev, [id]: !prev[id] }));
 
   /**
-   * Un trámite fuera de `entregado` ya fue resuelto (o nunca llegó): el organismo no decide sobre
-   * él. Es un bloqueo distinto de los pendientes —que sí se pueden subsanar— y por eso se nombra
-   * aparte antes de mezclarlo con ellos en la banda de aviso.
+   * ADR-0059 — lo que el organismo puede decidir depende del estado, y las dos decisiones no van
+   * juntas: aprobar solo en `entregado`; rechazar en `entregado` y también en `preasignacion`
+   * (devolver un trámite al que aún no le puso placa). Fuera de eso el trámite ya fue resuelto o
+   * está en manos del cliente. Es un bloqueo distinto de los pendientes —que sí se pueden subsanar—
+   * y por eso se nombra aparte antes de mezclarlo con ellos en la banda de aviso. Misma regla que
+   * el menú de la fila: el modal no puede negar lo que la fila ofrece.
    */
-  const bloqueo =
-    row.status === "entregado"
-      ? null
+  const puedeAprobar = row.status === "entregado";
+  const puedeRechazar = row.status === "entregado" || row.status === "preasignacion";
+  const bloqueo = puedeAprobar
+    ? null
+    : puedeRechazar
+      ? `El trámite está en «${formatOtProcedureStatus(row.status)}»: se puede rechazar, pero solo se aprueba una vez entregado.`
       : `El trámite está en «${formatOtProcedureStatus(row.status)}»: el organismo solo decide sobre los que tiene entregados.`;
 
-  const decidible = bloqueo === null && puedeDecidirOt(row.plateFlowStatus, row.soatEstado);
+  // Asignar placa, solo en preasignacion.
+  const decidible = puedeAprobar;
   const puedeAsignarPlaca =
-    showApprovalActions && Boolean(onAssignPlate) && row.plateFlowStatus === "preasignado";
+    showApprovalActions && Boolean(onAssignPlate) && row.status === "preasignacion";
   const hayPie = showApprovalActions && Boolean(onApprove || onReject);
 
   const avisos = [bloqueo, ...pendientesDelTramite(row, docs.length)].filter(
@@ -203,7 +209,7 @@ export function ClientProcedureDetailModal({
               rechazados, y sin el sello no habría forma de distinguirlos dentro del modal. */}
           <StatusBadge
             label={formatOtProcedureStatus(row.status)}
-            tone={procedureStatusTone(row.status)}
+            {...procedureStatusChip(row.status)}
           />
         </div>
         <p className="mt-1 text-[12px] text-slate-600 dark:text-white/60">
@@ -247,6 +253,57 @@ export function ClientProcedureDetailModal({
           </div>
         </div>
       ) : null}
+      {/* Feature #12565 — deja un rastro de la decisión de revocatoria en el detalle: sin esto, un
+          rechazo no dejaba huella (el trámite seguía Aprobado como si nunca se hubiera solicitado) y
+          una aprobación tampoco decía cuándo ni con qué motivo. Solo cuando el intento MÁS RECIENTE ya
+          se decidió — una solicitud activa la muestra el chip de Estado ("Revocatoria solicitada"). */}
+      {row.revocationDecisionStatus ? (
+        <div
+          className="mt-3 flex w-full items-start gap-2 rounded-xl px-3 py-2.5"
+          style={
+            row.revocationDecisionStatus === "aprobada"
+              ? {
+                  background: "var(--badge-danger-bg)",
+                  border: "1px solid var(--badge-danger-border)",
+                }
+              : { background: `${OT_WARN}1A`, border: `1px solid ${OT_WARN}55` }
+          }
+          role="status"
+        >
+          <AlertTriangle
+            className="mt-0.5 h-4 w-4 shrink-0"
+            style={{
+              color: row.revocationDecisionStatus === "aprobada" ? "var(--badge-danger-fg)" : OT_WARN,
+            }}
+            aria-hidden="true"
+          />
+          <div
+            className="text-[11.5px] font-medium"
+            style={{
+              color:
+                row.revocationDecisionStatus === "aprobada" ? "var(--badge-danger-fg)" : OT_WARN_TEXT,
+            }}
+          >
+            <strong>
+              {row.revocationDecisionStatus === "aprobada"
+                ? "Revocatoria aprobada: el trámite quedó Revocado."
+                : "Revocatoria rechazada: el trámite permanece Aprobado."}
+            </strong>
+            {row.revocationDecisionReason?.trim() ? (
+              <p className="mt-0.5">Motivo: {row.revocationDecisionReason}</p>
+            ) : null}
+            {row.revocationDecisionAt ? (
+              <p className="mt-0.5 opacity-80">
+                Decidido el{" "}
+                {new Date(row.revocationDecisionAt).toLocaleString("es-CO", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 
@@ -280,8 +337,8 @@ export function ClientProcedureDetailModal({
         <button
           type="button"
           onClick={() => onReject(row)}
-          disabled={!decidible}
-          aria-describedby={!decidible && avisos.length > 0 ? avisosId : undefined}
+          disabled={!puedeRechazar}
+          aria-describedby={!puedeRechazar && avisos.length > 0 ? avisosId : undefined}
           className="h-11 min-w-[200px] rounded-xl px-6 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           style={{ background: OT_ORANGE }}
         >

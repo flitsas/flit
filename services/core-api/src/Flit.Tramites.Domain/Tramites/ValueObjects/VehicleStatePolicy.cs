@@ -22,7 +22,15 @@ public enum VehicleStateSource
 /// (preflight/gate de radicación) hasta el endpoint, que lo traduce a las extensions RFC7807 del
 /// 422 <see cref="VehicleStatePolicy.ErrorCode"/>.
 /// </summary>
-public sealed record VehicleStateBlock(string VehicleStatus, string ProcedureType, VehicleStateSource Source);
+public sealed record VehicleStateBlock(
+    string VehicleStatus,
+    string ProcedureType,
+    VehicleStateSource Source,
+    /// <summary>
+    /// Dato que el mensaje al gestor necesita nombrar (Epic #12550): el organismo que el RUNT reporta
+    /// para el vehículo cuando la compañía no lo tiene habilitado. <c>null</c> en los bloqueos CF-03.
+    /// </summary>
+    string? Detalle = null);
 
 /// <summary>
 /// CF-03 (HU #10877) — constantes del gate de precondición registral: un trámite no puede iniciarse
@@ -45,4 +53,14 @@ public static class VehicleStatePolicy
 
     /// <summary><c>vehicleStatus</c> cuando la fuente del bloqueo es una matrícula APROBADA en FLIT (AC2).</summary>
     public const string VehicleStatusAprobadoFlit = "APROBADO_FLIT";
+
+    /// <summary>
+    /// Epic #12550 (HU #12648, ADR-0059 §Ruta Corta) — código de error 422 cuando el RUNT reporta el
+    /// vehículo con placa preasignada ante un organismo que la compañía no tiene habilitado: la Ruta
+    /// Corta radica ante ese organismo y no ante otro, así que el trámite no se puede crear.
+    /// </summary>
+    public const string OrganismoRuntNoHabilitadoErrorCode = "organismo_runt_no_habilitado";
+
+    /// <summary><c>vehicleStatus</c> del bloqueo anterior; <see cref="VehicleStateBlock.Detalle"/> lleva el nombre del organismo.</summary>
+    public const string VehicleStatusOrganismoRuntNoHabilitado = "ORGANISMO_RUNT_NO_HABILITADO";
 }

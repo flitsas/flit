@@ -66,6 +66,8 @@ public sealed class LoginHandler(
             snapshot.TenantName,
             snapshot.TenantTaxId,
             snapshot.EntityType,
+            snapshot.TenantType,
+            snapshot.IsGroupParent,
             snapshot.ActiveRoles,
             snapshot.PermissionSlugs);
 

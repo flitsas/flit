@@ -1,7 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { useDetalleConsolidado } from '@/components/operacion/ConsultaModeContext';
+import {
+  COPY_SECCION_FUERA_DE_ALCANCE,
+  actoresDesdeDetalleConsolidado,
+  describirErrorDeSeccion,
+} from '@/lib/tramites/network-scope';
 import type {
   FirmaParteEstado,
   ProcedureActor,
@@ -28,6 +34,12 @@ import { actorsOrderedByOrdinal } from '@/lib/tramites/ownership-share';
  * solo trae `actorType`/`documentType`/`documentNumber`/`fullName`/`email`; `ProcedureActor` además
  * trae `telefono`, `direccion`, `ciudad` y el `representanteLegal` embebido — lo que la propuesta
  * necesita pintar.
+ *
+ * HU #12362 (modo consulta) — EXCEPCIÓN: para un trámite de un cliente hijo `GET .../actors`
+ * responde 404 por diseño (anti-enumeración), así que no se llama. Los actores salen del detalle
+ * consolidado que el modal ya pidió (`ConsultaModeContext.detalle.actors`) vía
+ * `actoresDesdeDetalleConsolidado`: se pintan nombre, documento y correo; teléfono, dirección,
+ * ciudad, representante legal y porcentaje no viajan en ese embebido y no aparecen.
  *
  * La propuesta inventa teléfono/correo/dirección de ejemplo y dibuja una «firma digitalizada» como
  * un SVG a mano (función `Signature`) que no existe en el contrato: se omiten los dos. En su lugar,
@@ -177,19 +189,37 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
   const [actors, setActors] = useState<ProcedureActor[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fueraDeAlcance, setFueraDeAlcance] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // HU #12362 — en consulta la fuente es el detalle consolidado (sin llamada propia); si aun así
+  // llegara un 403/404 se describe como «fuera de tu alcance», no como error técnico.
+  const { consultaMode, detalle, detalleLoading, detalleError, reintentarDetalle } =
+    useDetalleConsolidado();
+  const actoresConsolidados = useMemo(
+    () => (consultaMode ? actoresDesdeDetalleConsolidado(detalle?.actors) : []),
+    [consultaMode, detalle],
+  );
 
   useEffect(() => {
+    // Consulta: nada que pedir — los actores ya vienen en el detalle consolidado.
+    if (consultaMode) return;
     let cancelled = false;
     const load = async () => {
       setLoading(true);
       setError(null);
+      setFueraDeAlcance(false);
       try {
         const res = await tramitesClient.getActors(instanceId, tenantId);
         if (!cancelled) setActors(res ?? []);
       } catch (e: unknown) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'No se pudieron cargar los actores del trámite.');
+          const d = describirErrorDeSeccion(
+            e,
+            consultaMode,
+            'No se pudieron cargar los actores del trámite.',
+          );
+          setError(d.mensaje);
+          setFueraDeAlcance(d.fueraDeAlcance);
           setActors([]);
         }
       } finally {
@@ -200,9 +230,12 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
     return () => {
       cancelled = true;
     };
-  }, [instanceId, tenantId, reloadKey]);
+  }, [instanceId, tenantId, reloadKey, consultaMode]);
 
-  if (loading) {
+  const cargando = consultaMode ? detalleLoading && !detalle : loading;
+  const mensajeError = consultaMode ? (detalle ? null : detalleError) : error;
+
+  if (cargando) {
     return (
       <TarjetaDetalle titulo="Actores del trámite">
         <SeccionCargando etiqueta="Cargando actores del trámite" />
@@ -210,20 +243,27 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
     );
   }
 
-  if (error) {
+  if (mensajeError) {
     return (
       <TarjetaDetalle titulo="Actores del trámite">
-        <SeccionError mensaje={error} onReintentar={() => setReloadKey((k) => k + 1)} />
+        <SeccionError
+          mensaje={mensajeError}
+          // En consulta el modal ya describió el error: el copy de alcance va sin reintento.
+          sinReintento={consultaMode ? mensajeError === COPY_SECCION_FUERA_DE_ALCANCE : fueraDeAlcance}
+          onReintentar={consultaMode ? reintentarDetalle : () => setReloadKey((k) => k + 1)}
+        />
       </TarjetaDetalle>
     );
   }
+
+  const fuente = consultaMode ? actoresConsolidados : actors;
 
   // Solo la familia TRASPASO tiene parte vendedora; en las demás interviene un único titular.
   const esTraspaso = item.modalidad === 'TRASPASO';
   // Múltiple Propietario (ADR-0053) — un lado puede traer 2..4 actores; se ordenan por `ordinal`
   // (ausente ⇒ 1, compatibilidad con actores persistidos antes de esta funcionalidad).
-  const vendedores = esTraspaso ? actoresDeRolOrdenados(actors, 'vendedor') : [];
-  const compradores = actoresDeRolOrdenados(actors, 'comprador');
+  const vendedores = esTraspaso ? actoresDeRolOrdenados(fuente, 'vendedor') : [];
+  const compradores = actoresDeRolOrdenados(fuente, 'comprador');
 
   // El representante legal se pinta SIEMPRE que la parte lo traiga, sea cual sea la modalidad. La
   // propuesta solo lo dibuja en matrícula inicial, pero eso es un límite de su maqueta, no del

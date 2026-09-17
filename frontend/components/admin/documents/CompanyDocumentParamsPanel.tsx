@@ -15,9 +15,13 @@ const STATES: CompanyDocumentParamState[] = ["OBLIGATORIO", "OPCIONAL", "OCULTO"
 
 export interface CompanyDocumentParamsPanelProps {
   tenantId: string;
+  networkHeadId?: string | null;
 }
 
-export function CompanyDocumentParamsPanel({ tenantId }: CompanyDocumentParamsPanelProps) {
+export function CompanyDocumentParamsPanel({
+  tenantId,
+  networkHeadId,
+}: CompanyDocumentParamsPanelProps) {
   const [items, setItems] = useState<CompanyDocumentParam[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +34,7 @@ export function CompanyDocumentParamsPanel({ tenantId }: CompanyDocumentParamsPa
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchCompanyDocumentParams(tenantId, signal);
+        const data = await fetchCompanyDocumentParams(tenantId, signal, networkHeadId);
         setItems(data);
       } catch {
         setError("No se pudieron cargar los parámetros documentales.");
@@ -38,7 +42,7 @@ export function CompanyDocumentParamsPanel({ tenantId }: CompanyDocumentParamsPa
         setLoading(false);
       }
     },
-    [tenantId],
+    [tenantId, networkHeadId],
   );
 
   useEffect(() => {
@@ -53,7 +57,7 @@ export function CompanyDocumentParamsPanel({ tenantId }: CompanyDocumentParamsPa
       setSaving(true);
       setError(null);
       try {
-        const saved = await upsertCompanyDocumentParam(tenantId, { documentTypeCode, state });
+        const saved = await upsertCompanyDocumentParam(tenantId, { documentTypeCode, state }, networkHeadId);
         setItems((prev) => {
           const rest = prev.filter((p) => p.documentTypeCode !== saved.documentTypeCode);
           return [...rest, saved].sort((a, b) => a.documentTypeCode.localeCompare(b.documentTypeCode));
@@ -64,7 +68,7 @@ export function CompanyDocumentParamsPanel({ tenantId }: CompanyDocumentParamsPa
         setSaving(false);
       }
     },
-    [tenantId],
+    [tenantId, networkHeadId],
   );
 
   const onAdd = useCallback(async () => {

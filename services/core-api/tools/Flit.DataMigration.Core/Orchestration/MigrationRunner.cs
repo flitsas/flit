@@ -279,8 +279,10 @@ public sealed class MigrationRunner(
             SystemUserId = target.SystemUserId,
             OwnerEntityId = target.OwnerEntityId,
             BuyerEntityId = target.BuyerEntityId,
-            // El organismo de V2 no es texto: gobierna la bandeja del OT y el grant OT<->empresa.
+            // Las dos columnas de V2 que no son texto y que gobiernan quién VE el trámite: el
+            // organismo (bandeja del OT) y la cabeza de grupo (vista consolidada de la red).
             TransitOffice = transitOffices.Resolve(record.Column("traffic_secretary_code")),
+            ParentTenantId = tenants.ParentOf(tenantId),
         };
 
         var mapped = request.Kind.Map(record, context);

@@ -1,6 +1,7 @@
 "use client";
 
 import { formatFecha } from "@/lib/format/date";
+import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
 
 /** Muestra los últimos 6 caracteres visibles de una URL (HU #10219 AC1). */
 export function maskTargetUrl(url: string): string {
@@ -15,24 +16,28 @@ export const OT_WEBHOOK_EVENT_TYPES = [
   { value: "procedure_state_changed", label: "Cambio estado trámite" },
 ] as const;
 
-// N 03 (ADR-0022) — vocabulario de estados de negocio: `entregado` = en cola de decisión OT.
-export const OT_PROCEDURE_STATUS_LABELS: Record<string, string> = {
-  entregado: "Pendiente OT",
-  aprobado: "Aprobado OT",
-  rechazado: "Rechazado OT",
-  // HU #12166 (Feature #12156) — el OT deshizo su propia aprobación.
-  revocado: "Revocado OT",
-};
-
+/**
+ * ADR-0059 (decisión del PO) — el organismo ve los estados con su nombre real, sin sufijo «OT»:
+ * la misma fuente única que el gestor (`lib/tramites/estados.ts`), así un estado se llama igual
+ * en las dos pantallas.
+ */
 export function formatOtProcedureStatus(status: string): string {
-  return OT_PROCEDURE_STATUS_LABELS[status] ?? status;
+  return estadoLabel(status);
 }
 
-export function procedureStatusTone(status: string): "success" | "warning" | "danger" | "neutral" {
-  if (status === "aprobado") return "success";
-  if (status === "rechazado" || status === "revocado") return "danger";
-  if (status === "entregado") return "warning";
-  return "neutral";
+/**
+ * ADR-0059 — el chip del organismo lleva EXACTAMENTE los colores del catálogo del gestor
+ * (`ESTADO_CHIP_STYLES`), no un tono semántico: con la paleta de cinco tonos, Preasignación y
+ * Asignado salían del mismo azul y el mismo estado se veía de un color en /tramites y de otro en
+ * la bandeja. Se pasa como estilo crudo a `StatusBadge`, igual que hace el listado del gestor.
+ */
+export function procedureStatusChip(status: string): {
+  bg: string;
+  color: string;
+  border: string;
+} {
+  const { bg, color, border } = estadoChipStyle(status);
+  return { bg, color, border };
 }
 
 /**

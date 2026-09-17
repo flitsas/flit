@@ -177,6 +177,8 @@ export const OT_REPORT_ESTADOS = {
   enSubsanacion: "en_subsanacion",
   rechazado: "rechazado",
   anulado: "anulado",
+  /** ADR-0059 (HU #12166) — aprobado y luego revocado por el organismo. */
+  revocado: "revocado",
   otro: "otro",
 } as const;
 
@@ -208,6 +210,7 @@ export interface OtReportSummary {
   enSubsanacion: number;
   rechazados: number;
   anulados: number;
+  revocados: number;
   otros: number;
   decididos: number;
   devoluciones: number;

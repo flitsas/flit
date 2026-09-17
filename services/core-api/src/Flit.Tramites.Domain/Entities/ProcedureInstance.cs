@@ -68,16 +68,6 @@ public sealed class ProcedureInstance
     public string? CurrentStep { get; set; }
 
     /// <summary>
-    /// Feature #10587 / HU #10785 — sub-estado INTERNO del flujo de asignación de placa, ortogonal al
-    /// <see cref="Status"/> global (que permanece en <c>entregado</c> durante todo el sub-flujo). Valores:
-    /// <c>null</c> (trámite sin ruta de placa, comportamiento estándar), <c>preasignado</c> (entregado al
-    /// OT, esperando placa) y <c>asignado</c> (placa registrada; pendiente de SOAT + recepción del OT).
-    /// Ver <see cref="Tramites.Estados.PlateFlowStatus"/>. Columna agregada por migración SQL cruda
-    /// (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
-    /// </summary>
-    public string? PlateFlowStatus { get; set; }
-
-    /// <summary>
     /// HU #12165 (Feature #12156) — momento exacto en que el OT asignó/actualizó por última vez la
     /// placa (<see cref="Plate"/>) vía <c>AssignPlateAsync</c>/<c>UpdatePlateAsync</c>. Base confiable
     /// para calcular la ventana de 1 hora de HU #12167: a diferencia de <see cref="UpdatedAt"/>, no lo
@@ -134,6 +124,15 @@ public sealed class ProcedureInstance
     public bool SubsanacionActiva { get; set; }
 
     /// <summary>
+    /// ADR-0059 (HU #12597) — estado desde el que el OT rechazó el trámite la última vez
+    /// (<c>entregado</c> | <c>preasignacion</c>). Lo escribe la transición a <c>rechazado</c>; se limpia al
+    /// activar la subsanación y al salir de <c>rechazado</c>. El gestor ve el distintivo «Rechazado
+    /// preasignación» cuando vale <c>preasignacion</c>. Columna por migración SQL cruda (tabla
+    /// ExcludeFromMigrations); aquí solo se mapea.
+    /// </summary>
+    public string? RejectedFrom { get; set; }
+
+    /// <summary>
     /// Cuántas veces se ha activado la subsanación en este expediente (contador monotónico).
     /// Columna por migración SQL cruda (tabla ExcludeFromMigrations).
     /// </summary>
@@ -184,6 +183,18 @@ public sealed class ProcedureInstance
     public string? Origin { get; set; }
 
     public string? ExternalRef { get; set; }
+
+    /// <summary>
+    /// HU #12406 — cabeza de grupo (<c>identity.tenants.id</c>) de la que colgaba la compañía
+    /// radicadora (<see cref="TenantId"/>) en el momento de crear el trámite. <c>null</c> = la
+    /// compañía no tenía padre. Es TRAZABILIDAD, no integridad referencial: sin FK a propósito, para
+    /// que sobreviva al desvínculo, al cambio de cabeza y al borrado del padre. Lo fija el punto de
+    /// persistencia del comando de creación en el mismo INSERT que el trámite, leyendo
+    /// <c>tenants.parent_tenant_id</c>; después es inmutable (EF: <c>AfterSaveBehavior.Throw</c>;
+    /// base: <c>tr_procedure_instances_parent_snapshot_immutable</c>). Ninguna ruta de escritura
+    /// posterior debe tocarlo. Columna agregada por migración SQL cruda (tabla ExcludeFromMigrations).
+    /// </summary>
+    public Guid? ParentTenantIdAtCreation { get; set; }
 
     /// <summary>
     /// Pausa del trámite (ICT — servicio v1 <c>pauseDraftProcess</c> y bandera <c>starts_procedure_in_paused</c>

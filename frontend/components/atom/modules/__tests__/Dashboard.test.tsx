@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   fetchAnalyticsOverview: vi.fn(),
   fetchMonthlyTrend: vi.fn(),
   fetchActiveModules: vi.fn(),
-  fetchCompaniesIndex: vi.fn(),
+  fetchAllCompanies: vi.fn(),
   listTenantBiometricValidations: vi.fn(),
   getToken: vi.fn(),
   decodeJwtPayload: vi.fn(),
@@ -35,12 +35,15 @@ vi.mock("@/lib/api/analytics", () => ({
   fetchMonthlyTrend: mocks.fetchMonthlyTrend,
   fetchActiveModules: mocks.fetchActiveModules,
 }));
-vi.mock("@/lib/api/admin-companies", () => ({ fetchCompaniesIndex: mocks.fetchCompaniesIndex }));
+vi.mock("@/lib/api/admin-companies", () => ({ fetchAllCompanies: mocks.fetchAllCompanies }));
 vi.mock("@/lib/api/tramites-client", () => ({
   tramitesClient: { listTenantBiometricValidations: mocks.listTenantBiometricValidations },
 }));
 vi.mock("@/lib/api/client", () => ({ getToken: mocks.getToken }));
-vi.mock("@/lib/auth/jwt", () => ({
+// HU #12364: el Dashboard monta `useNetworkScope` → `usePermissions`, que lee más helpers del
+// JWT; se conservan los reales y solo se sustituyen los dos que estos tests gobiernan.
+vi.mock("@/lib/auth/jwt", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/jwt")>()),
   decodeJwtPayload: mocks.decodeJwtPayload,
   isSuperAdmin: mocks.isSuperAdmin,
 }));
@@ -60,8 +63,8 @@ const FULL_OVERVIEW: AnalyticsOverviewResponse = {
   from: "2026-08-01",
   to: "2026-08-31",
   categories: [
-    { category: "matriculas", total: 5, byStatus: [{ status: "completed", count: 5 }] },
-    { category: "traspasos", total: 2, byStatus: [{ status: "submitted", count: 2 }] },
+    { category: "matriculas", total: 5, byStatus: [{ status: "aprobado", count: 5 }] },
+    { category: "traspasos", total: 2, byStatus: [{ status: "entregado", count: 2 }] },
     { category: "otros", total: 0, byStatus: [] },
   ],
 };
@@ -99,6 +102,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
     mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
     mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
     mocks.getActiveBanners.mockResolvedValue([]);
   });
 
@@ -114,10 +118,25 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
     expect(await screen.findByText("Seguimiento operativo")).toBeInTheDocument();
 
-    // Sin ningún módulo adicional activado (estado por defecto), no debe verse ninguna
-    // tarjeta "Próximamente" — la compañía no contrató Comparendos ni Resoluciones.
+    // Sin ningún módulo adicional activado (estado por defecto), la sección "Próximamente"
+    // no ocupa espacio: ni tarjeta, ni mensaje de estado vacío — la compañía no contrató
+    // Comparendos ni Resoluciones y no hay nada que anunciar.
+    await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalled());
     expect(screen.queryByText("Próximamente")).not.toBeInTheDocument();
-    expect(await screen.findByText("Tu compañía no tiene módulos adicionales activados.")).toBeInTheDocument();
+    expect(screen.queryByText("Tu compañía no tiene módulos adicionales activados.")).not.toBeInTheDocument();
+  });
+
+  it("BUG12588: mapea Otros Trámites y capitaliza los estados en la Distribución General (vocabulario ADR-0022)", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalled());
+    expect(await screen.findByText("Otros Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
+    // Labels de negocio capitalizados (estadoLabel), no los códigos crudos que persiste la BD.
+    expect(await screen.findByText("Aprobado")).toBeInTheDocument();
+    expect(screen.getByText("Entregado")).toBeInTheDocument();
+    expect(screen.queryByText("aprobado")).not.toBeInTheDocument();
+    expect(screen.queryByText("entregado")).not.toBeInTheDocument();
   });
 
   it("AC2: ComparendosModuleEnabled=true muestra la tarjeta Próximamente con el estilo de las tarjetas KPI existentes", async () => {
@@ -210,7 +229,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
   it("SuperAdmin en 'Todas las compañías': no llama al endpoint (no hay un tenant concreto) y no queda en error permanente", async () => {
     mocks.isSuperAdmin.mockReturnValue(true);
-    mocks.fetchCompaniesIndex.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 100 });
+    mocks.fetchAllCompanies.mockResolvedValue([]);
 
     render(<Dashboard onNewTramite={noop} />);
 
@@ -219,11 +238,11 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     // Para este endpoint (sin vista global) un tenantId vacío respondería 400 del backend —
     // antes de este fix eso dejaba la fila de "Próximamente" en error permanente sin importar
-    // qué se cambiara en configuración de compañía. Se explica con un mensaje, no con la
-    // alerta roja de error genérico.
-    expect(
-      await screen.findByText("Selecciona una compañía para ver sus módulos activos."),
-    ).toBeInTheDocument();
+    // qué se cambiara en configuración de compañía. Ahora, sin una compañía concreta elegida,
+    // la sección completa no ocupa espacio: ni tarjeta, ni mensaje, ni alerta de error.
+    await waitFor(() => expect(mocks.fetchAllCompanies).toHaveBeenCalled());
+    expect(screen.queryByText("Selecciona una compañía para ver sus módulos activos.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Próximamente")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
@@ -266,6 +285,10 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
     // Un solo punto de navegación: no hay más slides detrás del fijo.
     expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(1);
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    // Bug #12584 defecto 3: sin banners (un solo slide navegable), Anterior/Siguiente deben
+    // quedar deshabilitados — no hay a dónde moverse.
+    expect(screen.getByRole("button", { name: "Anterior" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Siguiente" })).toBeDisabled();
   });
 
   it("AC1 — los banners activos se agregan como slides después del fijo", async () => {
@@ -279,6 +302,8 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
     await waitFor(() =>
       expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(3),
     );
+    expect(screen.getByRole("button", { name: "Anterior" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Siguiente" })).toBeEnabled();
 
     // Avanza al primer banner (slide 2 de 3): sin enlace, no hay ningún <a> envolviendo el banner
     // ni título visible — el nombre solo viaja como texto accesible de la imagen (alt).
@@ -364,6 +389,7 @@ describe("Dashboard — cuerpo dinámico del slide de bienvenida (Opción A)", (
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchMonthlyTrend.mockResolvedValue(CAROUSEL_TREND);
     mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
     mocks.getActiveBanners.mockResolvedValue([]);
   });
 
@@ -422,5 +448,134 @@ describe("Dashboard — cuerpo dinámico del slide de bienvenida (Opción A)", (
     render(<Dashboard onNewTramite={vi.fn()} />);
 
     expect(await screen.findByText(GENERIC_BODY)).toBeInTheDocument();
+  });
+});
+
+// ── BUG #12588 (defecto 4) — el dashboard arranca SIN rango de fechas ────────
+//
+// Antes partía del mes en curso (`defaultRange`, AC2 de la HU #10247). Como el backend acota por
+// fecha de CREACIÓN, todo lo radicado antes quedaba fuera de las tarjetas aunque siguiera en curso,
+// y QA lo reportó como un total mal calculado. No era un error de conteo: era otro universo.
+describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getToken.mockReturnValue("token");
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
+    mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
+    mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
+    mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
+    mocks.getActiveBanners.mockResolvedValue([]);
+  });
+
+  it("al abrir, pide el overview sin from ni to (universo completo)", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+    const [params] = mocks.fetchAnalyticsOverview.mock.calls[0];
+    expect(params.from).toBeFalsy();
+    expect(params.to).toBeFalsy();
+  });
+
+  it("al abrir, las estadísticas biométricas tampoco se acotan por fecha", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    await waitFor(() => expect(mocks.listTenantBiometricValidations).toHaveBeenCalled());
+    const [params] = mocks.listTenantBiometricValidations.mock.calls[0];
+    expect(params.createdFrom).toBeUndefined();
+    expect(params.createdTo).toBeUndefined();
+  });
+
+  it("los inputs de fecha arrancan vacíos", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    expect(await screen.findByLabelText(/Desde/i)).toHaveValue("");
+    expect(screen.getByLabelText(/Hasta/i)).toHaveValue("");
+  });
+
+  it("al poner una fecha, sí se acota: el filtro sigue disponible", async () => {
+    const user = userEvent.setup();
+    render(<Dashboard onNewTramite={noop} />);
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+
+    await user.type(await screen.findByLabelText(/Desde/i), "2026-09-01");
+
+    await waitFor(() => {
+      const ultima = mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0];
+      expect(ultima.from).toBe("2026-09-01");
+    });
+    // Un solo extremo NO es un rango a medio llenar: acota por ese lado y el otro queda abierto.
+    expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].to).toBeFalsy();
+  });
+
+  it("«Todo el periodo» devuelve a la vista sin acotar y queda deshabilitado ahí", async () => {
+    const user = userEvent.setup();
+    render(<Dashboard onNewTramite={noop} />);
+
+    const limpiar = await screen.findByRole("button", { name: /Todo el periodo/i });
+    // Ya se está mostrando todo al abrir: no hay nada que limpiar.
+    expect(limpiar).toBeDisabled();
+
+    await user.type(await screen.findByLabelText(/Desde/i), "2026-09-01");
+    await waitFor(() => expect(limpiar).not.toBeDisabled());
+
+    await user.click(limpiar);
+
+    expect(await screen.findByLabelText(/Desde/i)).toHaveValue("");
+    await waitFor(() => {
+      expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].from).toBeFalsy();
+    });
+  });
+});
+
+// ── Tarjetas KPI: el rótulo se lee entero ────────────────────────────────────
+//
+// El título compartía fila con el icono dentro de un `min-w-0` con `truncate`, así que solo
+// disponía de `ancho − 48px` y en pantalla se veían «Total Trá…», «Otros Trá…» y «Completa…».
+// Ahora ocupa la fila completa y el icono baja a la del número.
+describe("Dashboard — rótulos de las tarjetas KPI", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getToken.mockReturnValue("token");
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
+    mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
+    mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
+    mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
+    mocks.getActiveBanners.mockResolvedValue([]);
+  });
+
+  it.each(["Total Trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
+    "«%s» se renderiza completo, sin recortar",
+    async (label) => {
+      render(<Dashboard onNewTramite={noop} />);
+
+      const rotulo = await screen.findByText(label);
+      expect(rotulo).toBeInTheDocument();
+      // `truncate` corta por CSS sin tocar el texto, así que el nodo tiene que llevar el
+      // tratamiento de dos líneas y NO la clase que recortaba.
+      expect(rotulo).toHaveClass("line-clamp-2");
+      expect(rotulo).not.toHaveClass("truncate");
+    },
+  );
+
+  it("el rótulo respeta el piso tipográfico de 12px de la línea base", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const rotulo = await screen.findByText("Total Trámites");
+    expect(rotulo).toHaveClass("text-xs");
+    expect(rotulo.className).not.toMatch(/text-\[1[01]px\]/);
+  });
+
+  it("la cifra no se trunca: recortarla mostraría un conteo falso", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const cifra = await screen.findByText("7");
+    expect(cifra).toHaveClass("tabular-nums");
+    expect(cifra).not.toHaveClass("truncate");
   });
 });

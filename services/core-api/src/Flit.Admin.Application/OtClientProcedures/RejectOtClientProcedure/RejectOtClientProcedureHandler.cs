@@ -12,11 +12,6 @@ namespace Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
 /// </summary>
 public sealed class RejectOtClientProcedureHandler
 {
-    // N 03 (ADR-0022): el OT decide sobre trámites en estado 'entregado' (antes pending_ot). La ruta de
-    // placa (Feature #10587 / HU #10785) NO cambia el status: el trámite siempre está 'entregado' cuando
-    // el OT decide (el progreso de placa es un sub-estado interno).
-    private const string EstadoEntregado = "entregado";
-
     private readonly IOtClientProcedureRepository _repository;
     private readonly IQuipuxReadOnlyGuard _quipuxReadOnlyGuard;
     private readonly IRejectionReasonRepository _rejectionReasons;
@@ -65,10 +60,10 @@ public sealed class RejectOtClientProcedureHandler
             return RejectOtClientProcedureResult.NotFound();
         }
 
-        if (!string.Equals(existing.Status, EstadoEntregado, StringComparison.Ordinal))
-        {
-            return RejectOtClientProcedureResult.InvalidState();
-        }
+        // ADR-0059: el rechazo sale de `entregado` Y de `preasignacion` (el OT puede devolver un
+        // trámite sin placa). Qué estados admiten la arista lo decide la política única del ciclo de
+        // vida, que el repositorio aplica con actor OT: si no existe, devuelve null → InvalidState.
+        // Repetir aquí un literal de estado es lo que dejó la Ruta Larga en 409.
 
         // Causales del catálogo: se validan contra la familia del tipo y su estado activo. Una
         // causal ajena o retirada devuelve 422 en vez de descartarse en silencio — descartarla

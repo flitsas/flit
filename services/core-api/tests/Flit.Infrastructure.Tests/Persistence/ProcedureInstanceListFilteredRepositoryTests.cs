@@ -33,22 +33,22 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
         string? vendedor = null, string? comprador = null, Guid? createdBy = null,
         DateTimeOffset? createdAt = null, DateTimeOffset? updatedAt = null, bool prioritario = false,
         string modalidad = "traspaso") => new()
-    {
-        ProcedureType = ProcedureTypeFixture.For(modalidad),
-        Id = Guid.NewGuid(),
-        TenantId = tenantId,
-        ProcedureTypeId = Guid.NewGuid(),
-        ReferenceNumber = reference,
-        Consecutivo = RadicadoFixture.ConsecutivoDe(reference),
-        Vin = vin,
-        Plate = plate,
-        VendedorNombre = vendedor,
-        CompradorNombre = comprador,
-        CreatedByUserId = createdBy ?? Guid.NewGuid(),
-        CreatedAt = createdAt ?? Base,
-        UpdatedAt = updatedAt,
-        Prioritario = prioritario,
-    };
+        {
+            ProcedureType = ProcedureTypeFixture.For(modalidad),
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = reference,
+            Consecutivo = RadicadoFixture.ConsecutivoDe(reference),
+            Vin = vin,
+            Plate = plate,
+            VendedorNombre = vendedor,
+            CompradorNombre = comprador,
+            CreatedByUserId = createdBy ?? Guid.NewGuid(),
+            CreatedAt = createdAt ?? Base,
+            UpdatedAt = updatedAt,
+            Prioritario = prioritario,
+        };
 
     private static ProcedureInstanceSignature FirmaCompraventa(string parte, string estado) => new()
     {
@@ -124,6 +124,47 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
             ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
 
         total.Should().Be(1);
+    }
+
+    [Fact] // ADR-0059 (HU #12601 AC3) — el pseudo-estado «rechazado desde preasignación» filtra por origen.
+    public async Task FiltraPorRechazadoDesdePreasignacion_SoloYEnOrConEstadosReales()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext("estado-rechazado-preasignacion");
+        var desdePreasignacion = EnEstado(TenantId, "R1", TramiteEstado.Rechazado);
+        desdePreasignacion.RejectedFrom = TramiteEstado.Preasignacion;
+        var desdeEntregado = EnEstado(TenantId, "R2", TramiteEstado.Rechazado);
+        desdeEntregado.RejectedFrom = TramiteEstado.Entregado;
+        db.ProcedureInstances.AddRange(
+            desdePreasignacion,
+            desdeEntregado,
+            EnEstado(TenantId, "R3", TramiteEstado.Rechazado),
+            EnEstado(TenantId, "R4", TramiteEstado.Preasignacion));
+        await db.SaveChangesAsync(ct);
+        var repo = new ProcedureInstanceRepository(db);
+
+        var (solo, totalSolo) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20,
+            new ProcedureInstanceListFilter { Estados = [TramiteEstado.FiltroRechazadoPreasignacion] },
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+        totalSolo.Should().Be(1);
+        solo.Single().ReferenceNumber.Should().Be("R1");
+
+        // En OR con un estado real: la tarjeta especial se combina como cualquier otra.
+        var (mezcla, totalMezcla) = await repo.ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 20,
+            new ProcedureInstanceListFilter
+            {
+                Estados = [TramiteEstado.FiltroRechazadoPreasignacion, TramiteEstado.Preasignacion],
+            },
+            ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+        totalMezcla.Should().Be(2);
+        mezcla.Select(i => i.ReferenceNumber).Should().BeEquivalentTo("R1", "R4");
+
+        // Y el conteo trae el subconjunto aparte, sin restarlo de 'rechazado'.
+        var conteos = await repo.CountByStatusFilteredAsync(TenantId, new ProcedureInstanceListFilter(), ct);
+        conteos[TramiteEstado.Rechazado].Should().Be(3);
+        conteos[TramiteEstado.FiltroRechazadoPreasignacion].Should().Be(1);
     }
 
     [Fact]
@@ -731,8 +772,10 @@ public sealed class ProcedureInstanceListFilteredRepositoryTests
         await db.SaveChangesAsync(ct);
         var repo = new ProcedureInstanceRepository(db);
 
+        // HU #12358 añadió la sobrecarga con TenantScope: el `null` literal se tipa explícitamente
+        // como Guid? (= TODOS los tenants, semántica intacta) para que la llamada no sea ambigua.
         var (items, total) = await repo.ListWithSummaryGraphFilteredAsync(
-            null, 0, 20, new ProcedureInstanceListFilter(), ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
+            (Guid?)null, 0, 20, new ProcedureInstanceListFilter(), ProcedureInstanceSortBy.Default, SortDirection.Descending, ct);
 
         total.Should().Be(2);
         items.Select(i => i.ReferenceNumber).Should().BeEquivalentTo(["DeTenantA", "DeTenantB"]);

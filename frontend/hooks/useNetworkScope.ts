@@ -1,0 +1,208 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePermissions } from '@/hooks/usePermissions';
+import { uiPreferencesClient } from '@/lib/api/ui-preferences';
+import { fetchNetworkChildren, TramitesApiError } from '@/lib/api/tramites-client';
+import {
+  DEFAULT_NETWORK_SCOPE,
+  parseNetworkScopePreference,
+  type NetworkScopePreference,
+} from '@/lib/tramites/network-scope';
+
+/** Un cliente hijo tal como lo ofrece el selector (id + nombre; nada más hace falta). */
+export interface NetworkChildOption {
+  id: string;
+  nombre: string;
+}
+
+/**
+ * `idle`: no aplica (no es cabeza). `loading`: pidiendo la lista. `ready`: lista disponible.
+ * `unavailable`: el endpoint falló por 5xx o error de red — el selector degrada a
+ * «Mi compañía | Toda la red» sin lista de hijos, NO a un error visible. Un 403
+ * (`network_scope_required`) NO cae aquí: significa que el caller no es cabeza de grupo pese al
+ * claim del JWT, y en ese caso el selector completo se oculta (ver `scopeDenied` más abajo).
+ */
+export type NetworkChildrenStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
+
+export interface UseNetworkScopeResult {
+  /**
+   * HU #12356 — ¿el usuario es cabeza de grupo (CONCESION | MARCA_BLANCA)? Si no, nada de esto aplica.
+   * HU #12652 — además exige rol AdminCompany: un Radicador/Operador de la cabeza recibe `false`.
+   */
+  isGroupParent: boolean;
+  /** Alcance vigente. Para quien no es cabeza es SIEMPRE el default (`own`). */
+  scope: NetworkScopePreference;
+  /** Cambia el alcance: optimista, persiste por usuario y revierte si el guardado falla. */
+  setScope: (next: NetworkScopePreference) => void;
+  /** `true` cuando el alcance es la red (entera o un hijo): la tabla debe usar las rutas `network/**`. */
+  networkActive: boolean;
+  /** Hijos de la red, ordenados por nombre. Vacío si no es cabeza o si la lista no está disponible. */
+  children: NetworkChildOption[];
+  childrenStatus: NetworkChildrenStatus;
+  /**
+   * `true` cuando ya se sabe con qué alcance arrancar: para quien no es cabeza, de inmediato; para
+   * la cabeza, cuando la preferencia respondió (o falló, en cuyo caso manda el default). La tabla
+   * espera a esto para no pedir primero «lo propio» y luego «la red» a un usuario que ya la había
+   * elegido.
+   */
+  ready: boolean;
+  /** `true` mientras se persiste un cambio (para deshabilitar el selector, no la tabla). */
+  saving: boolean;
+}
+
+const SCOPE = 'tramites.scope';
+
+/**
+ * HU #12363 — alcance de lectura de una cabeza de red (Feature #12257).
+ *
+ * Encapsula las tres cosas que la tabla (y #12364 en analítica/reportes) necesitan saber y que no
+ * deben calcular por su cuenta: si el usuario es cabeza (claim `is_group_parent` del JWT), qué hijos
+ * puede elegir y cuál es su alcance guardado. Para un usuario que NO es cabeza no hace NINGUNA
+ * llamada: su listado tiene que ser idéntico al de hoy (AC1), también en la red.
+ *
+ * La preferencia va por usuario al servidor (`/api/v1/me/ui-preferences/tramites.scope`), nunca a
+ * localStorage: dos usuarios del mismo cliente comparten navegador con más frecuencia de la que
+ * parece y la preferencia de uno no puede afectar al otro (AC5).
+ *
+ * HU #12555/#12556 — la lista de hijos sale de `GET /api/v1/tramites/network/children` (ruta
+ * no-admin, mismo `GroupHeadReadFilter` que el resto de `network/**`). Un 5xx/error de red degrada a
+ * «Propio | Red» sin lista (`childrenStatus='unavailable'`); un 403 (`network_scope_required`)
+ * significa que el caller no es cabeza pese al claim del JWT y oculta el selector entero.
+ */
+export function useNetworkScope(): UseNetworkScopeResult {
+  const { isGroupParent, tenantId, isSuperAdmin, isAdminCompany } = usePermissions();
+  // El SuperAdmin ve todas las compañías por rol, no por jerarquía: para él no hay «mi red».
+  // HU #12652 — el alcance de red es exclusivo del AdminCompany de la cabeza: un Radicador/Operador
+  // de la cabeza ve solo su compañía (sin selector, sin chip «Red», rutas propias). `isAdminCompany`
+  // recorre todos los claims de rol (multi-rol, HU #10506), así que Radicador + AdminCompany cuenta.
+  // Sin rol admin el hook tampoco lee `tramites.scope`: una preferencia `network` guardada en otra
+  // sesión no se aplica ni se pisa (AC4).
+  const esCabeza = isGroupParent && isAdminCompany && !isSuperAdmin && !!tenantId;
+
+  const [scope, setScopeState] = useState<NetworkScopePreference>(DEFAULT_NETWORK_SCOPE);
+  const [ready, setReady] = useState(!esCabeza);
+  const [saving, setSaving] = useState(false);
+  const [children, setChildren] = useState<NetworkChildOption[]>([]);
+  // Arranca ya en `loading` para la cabeza: el efecto de abajo no tiene que poner estado de forma
+  // síncrona (regla `react-hooks/set-state-in-effect`), solo resolverlo cuando llegue la lista.
+  const [childrenStatus, setChildrenStatus] = useState<NetworkChildrenStatus>(() =>
+    esCabeza ? 'loading' : 'idle',
+  );
+  // AC2 — 403 (`network_scope_required`) del endpoint de hijos: el claim `is_group_parent` del JWT
+  // dijo que sí, pero el servidor dice que no. No es una degradación de "lista no disponible": el
+  // selector entero deja de tener sentido, así que `isGroupParent` devuelto pasa a `false`.
+  // HU #12652 — el 403 `network_role_required` (rol sin alcance de red) se trata exactamente igual:
+  // cualquier 403 de `network/children` apaga la cabeza efectiva (defensa en profundidad).
+  const [scopeDenied, setScopeDenied] = useState(false);
+  // AC2 — un 403 del endpoint de hijos anula la cabeza efectiva: el claim del JWT quedó desfasado
+  // frente a lo que decide el servidor, y ese servidor manda.
+  const esCabezaEfectiva = esCabeza && !scopeDenied;
+  const scopeRef = useRef(scope);
+  useEffect(() => {
+    scopeRef.current = scope;
+  });
+
+  // Preferencia guardada — solo para la cabeza. Un fallo (red, 4xx) deja el default: el alcance
+  // propio es la degradación aceptable; la inaceptable sería abrir la red sin que el usuario la pida.
+  useEffect(() => {
+    if (!esCabeza) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await uiPreferencesClient.get(SCOPE);
+        if (!active) return;
+        setScopeState(parseNetworkScopePreference(res?.value));
+      } catch {
+        /* default */
+      } finally {
+        if (active) setReady(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [esCabeza]);
+
+  // Hijos de la red — solo para la cabeza. Un 5xx/error de red degrada el selector a sus dos
+  // opciones fijas; un 403 (`network_scope_required`) oculta el selector entero (ver `scopeDenied`).
+  useEffect(() => {
+    if (!esCabeza || !tenantId) return;
+    let active = true;
+    (async () => {
+      try {
+        const lista = await fetchNetworkChildren();
+        if (!active) return;
+        setChildren(
+          (lista ?? []).slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+        );
+        setChildrenStatus('ready');
+      } catch (err) {
+        if (!active) return;
+        setChildren([]);
+        // `network_scope_required` (no es cabeza) o `network_role_required` (HU #12652, rol sin
+        // alcance de red): en ambos el servidor niega la red y el selector desaparece.
+        if (err instanceof TramitesApiError && err.status === 403) {
+          setScopeDenied(true);
+          setChildrenStatus('idle');
+        } else {
+          setChildrenStatus('unavailable');
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [esCabeza, tenantId]);
+
+  const setScope = useCallback(
+    (next: NetworkScopePreference) => {
+      if (!esCabezaEfectiva) return;
+      const previous = scopeRef.current;
+      setScopeState(next);
+      setSaving(true);
+      (async () => {
+        try {
+          await uiPreferencesClient.put(SCOPE, {
+            mode: next.mode,
+            ...(next.childTenantId ? { childTenantId: next.childTenantId } : {}),
+          });
+        } catch {
+          setScopeState(previous);
+        } finally {
+          setSaving(false);
+        }
+      })();
+    },
+    [esCabezaEfectiva],
+  );
+
+  /**
+   * AC4 — el selector no ofrece ningún cliente ajeno a la red, y tampoco se FILTRA por uno: si la
+   * preferencia trae un hijo que ya no está en la lista (desvinculado), se lee como «toda la red».
+   * Con la lista no disponible no se puede comprobar y se respeta lo guardado.
+   */
+  const scopeEfectivo = useMemo<NetworkScopePreference>(() => {
+    if (!esCabezaEfectiva) return DEFAULT_NETWORK_SCOPE;
+    if (
+      scope.mode === 'network' &&
+      scope.childTenantId &&
+      childrenStatus === 'ready' &&
+      !children.some((c) => c.id === scope.childTenantId)
+    ) {
+      return { mode: 'network' };
+    }
+    return scope;
+  }, [esCabezaEfectiva, scope, children, childrenStatus]);
+
+  return {
+    isGroupParent: esCabezaEfectiva,
+    scope: scopeEfectivo,
+    setScope,
+    networkActive: esCabezaEfectiva && scopeEfectivo.mode === 'network',
+    children,
+    childrenStatus,
+    ready,
+    saving,
+  };
+}

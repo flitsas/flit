@@ -79,9 +79,12 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
     [
         new("borrador", "Borrador"),
         new("preparado", "Preparado"),
+        new("preasignacion", "Preasignación"),
+        new("asignado", "Asignado"),
         new("entregado", "Entregado al organismo"),
         new("aprobado", "Aprobado"),
         new("rechazado", "Rechazado"),
+        new("revocado", "Revocado"),
         new("anulado", "Anulado"),
         new("subsanacion", "En subsanación"),
     ];

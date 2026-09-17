@@ -10,7 +10,7 @@ import type {
   ProcedureActor,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
-import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import { actorsOrderedByOrdinal, validationsForActor, isCoveredByVaultForActor } from '@/lib/tramites/ownership-share';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
@@ -88,6 +88,8 @@ interface Props {
    */
   partesBiometricas?: BiometricParte[];
   status: InstanceStatus;
+  /** ADR-0059 — origen del último rechazo; el chip del resumen dice «Rechazado preasignación». */
+  rejectedFrom?: string | null;
   placa: string;
   vehiculo: string;
   vin: string;
@@ -653,6 +655,7 @@ export default function MatriculaResumen({
   locatario = null,
   rotulosPorRol,
   status,
+  rejectedFrom = null,
   placa,
   vehiculo,
   vin,
@@ -967,7 +970,7 @@ export default function MatriculaResumen({
                   </div>
                 ) : null}
                 <StatusBadge
-                  label={estadoLabel(status)}
+                  label={estadoLabelConOrigen(status, rejectedFrom)}
                   bg={estadoChipStyle(status).bg}
                   color={estadoChipStyle(status).color}
                   border={estadoChipStyle(status).border}

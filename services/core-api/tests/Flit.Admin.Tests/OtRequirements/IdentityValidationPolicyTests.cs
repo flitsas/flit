@@ -113,8 +113,13 @@ public sealed class IdentityValidationPolicyTests
             Guid tenantId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_offices);
 
+        public Task<string?> GetGrantSourceAsync(
+            Guid tenantId, Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+
         public Task<bool> AddGrantAsync(
             Guid tenantId, Guid transitOfficeId, Guid? createdBy, Guid? correlationId,
+            string source = TransitGrantSources.Client,
             CancellationToken cancellationToken = default) => Task.FromResult(true);
 
         public Task<bool> RemoveGrantAsync(

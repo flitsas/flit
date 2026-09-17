@@ -26,7 +26,6 @@ const settings: TenantSettings = {
   },
   baulFirmasActivo: true,
   preasignacionPlacaActiva: false,
-  plateFlowSkipToTerminado: false,
   validarSoatConRunt: false,
   // El canal que ANTES hacía visible el panel.
   enrutamientoSMTP: "TENANT_API",

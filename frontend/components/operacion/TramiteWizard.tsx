@@ -81,14 +81,12 @@ import { formatDateOnly } from '@/lib/format/date-only';
 import {
   tramitesClient,
   getDuplicateActiveProcedureId,
+  getOrganismoRuntNoHabilitado,
   getVehicleStateBlock,
   isTransitOfficeUnavailable,
   isVehicleBodyTypeMissing,
   type VehicleStateBlockInfo,
 } from '@/lib/api/tramites-client';
-// HU #10806 — ¿la ruta de preasignación de placa está activa para esta compañía en el organismo
-// elegido? Es la misma consulta que hace el paso del FUR antes de ofrecer la placa preasignada.
-import { getPlatePreassignStatus } from '@/lib/api/admin-plate-ranges';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import {
@@ -113,12 +111,15 @@ import {
   validateDocNumber,
 } from '@/lib/validation/fieldRules';
 import type {
+  ActiveRevocationRequest,
   ActorDocumentType,
   ActorRol,
   BiometricParte,
   FieldValue,
   FieldValueInput,
   InstanceStatus,
+  MatriculaRuta,
+  PreflightPreviewTransitOffice,
   PreflightSnapshot,
   ProcedureConfiguration,
   ProcedureInstanceSummary,
@@ -139,7 +140,7 @@ import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
 import { WizardHelpRail } from './WizardHelpRail';
 import { WizardModal } from './WizardModal';
 import { NuevoTramiteSelector } from './NuevoTramiteSelector';
-import { estadoLabel } from '@/lib/tramites/estados';
+import { estadoLabel, revocationRequestLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { InlineAlert } from '@/components/atom/InlineAlert';
@@ -215,6 +216,10 @@ type PendingConsulta = {
 const SECRETARIA_LISTA_AVISO =
   '¿No encuentras el organismo? Solicita al administrador la activación del convenio.';
 
+/** HU #12351 AC4 — lista efectiva vacía: no se puede continuar ni escribir otro OT. */
+const SECRETARIA_LISTA_VACIA =
+  'Tu compañía no tiene organismos de tránsito habilitados para radicar. Si perteneces a una red, contacta al administrador de la Concesión o Marca Blanca; de lo contrario, solicita la habilitación en la plataforma.';
+
 /**
  * HU #11200 (AC2/AC3) — el vehículo está matriculado en un organismo donde la compañía no puede
  * radicar. Se avisa en el paso 1, no al final: avanzar el trámite entero para descubrirlo al radicar
@@ -231,6 +236,14 @@ const SECRETARIA_LISTA_AVISO =
 function nombreDelTramite(tipoNombre: string | null | undefined): string {
   const nombre = tipoNombre?.trim();
   return nombre ? `el trámite de ${nombre.toLowerCase()}` : 'el trámite';
+}
+
+/**
+ * Epic #12550 — Ruta Corta ante un organismo que la compañía no tiene habilitado. Se nombra el
+ * organismo porque es lo único accionable: pedir la habilitación de ESE convenio.
+ */
+function organismoRuntNoHabilitadoMensaje(organismo: string): string {
+  return `El vehículo tiene la placa preasignada ante «${organismo}» y tu compañía no tiene habilitado ese organismo de tránsito. No es posible crear la matrícula hasta que se habilite el convenio.`;
 }
 
 const ORGANISMO_NO_DISPONIBLE =
@@ -480,11 +493,17 @@ export function TramiteWizard(props: Props) {
   // o no aplica (traspaso, VIN con placa RUNT, organismo sin preasignación activa), no hay nada que
   // exigir. `ConsultaStep` es quien decide si aplica y en qué momento cierra el gate.
   const [digitoPlacaGateOk, setDigitoPlacaGateOk] = useState(true);
+  const [secretariaListaGateOk, setSecretariaListaGateOk] = useState(true);
 
   // Estado de la instancia existente + sello de borrador finalizado (HU #10350). Se derivan
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
   const [draftFinalizedAt, setDraftFinalizedAt] = useState<string | null>(null);
+  // HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria (badge secundario en la franja
+  // de identidad), ORTOGONAL a `estadoTramite` (que sigue 'aprobado', ADR-0022). Se lee con el resto
+  // del detalle inicial. (El botón "Solicitar revocatoria"/AC1-AC3, HU #12573-#12574, ya no vive en
+  // el wizard — ver `TramiteDetalleModal.tsx` — así que no hace falta releer nada aquí tras un envío.)
+  const [activeRevocationRequest, setActiveRevocationRequest] = useState<ActiveRevocationRequest | null>(null);
   // HU #10874 (AC1) — historial de estados de la instancia: fuente única de datos del panel de
   // subsanación (motivo/checklist de la última transición a `subsanacion`). Loading/error propios
   // (no el `.catch` silencioso de arriba) porque sin ellos el panel no podría distinguir "cargando"
@@ -516,6 +535,7 @@ export function TramiteWizard(props: Props) {
         setDraftFinalizedAt(d.draftFinalizedAt ?? null);
         setStatusHistory(d.statusHistory ?? []);
         setReferenceNumber(d.referenceNumber ?? null);
+        setActiveRevocationRequest(d.activeRevocationRequest ?? null);
         setInstanceDetailError(null);
       })
       .catch((err) => {
@@ -617,6 +637,8 @@ export function TramiteWizard(props: Props) {
   const [radicado, setRadicado] = useState<{
     placa: string | null;
     referencia: string | null;
+    /** Estado real tras radicar (ADR-0059): `preasignacion` en Ruta Larga, `entregado` en el resto. */
+    estado: string | null;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   /**
@@ -1257,7 +1279,10 @@ export function TramiteWizard(props: Props) {
         return;
       }
 
-      await tramitesClient.transitionInstance(instanceId, 'entregado');
+      // ADR-0059 — el destino de la radicación lo decide el backend (`/submit`): Entregado si el
+      // trámite lleva placa, Preasignación si es matrícula inicial sin placa (Ruta Larga). Pedir
+      // `entregado` a secas dejaba la Ruta Larga en 422 (`transicion_requiere_placa`).
+      const radicada = await tramitesClient.submitInstance(instanceId);
       telemetry.trackComplete();
       // Flujo del diseño: al radicar se abre el modal de trámite completado en vez de salir de
       // golpe con un toast. El gestor confirma qué quedó radicado y sale desde el CTA. La
@@ -1267,6 +1292,7 @@ export function TramiteWizard(props: Props) {
       setRadicado({
         placa: placaRadicada,
         referencia: referenceNumber ?? state.detail?.referenceNumber ?? null,
+        estado: radicada.status,
       });
       setSubmitting(false);
     } catch (err) {
@@ -1351,6 +1377,7 @@ export function TramiteWizard(props: Props) {
     // HU #11628 — dígito de preferencia de placa sin declarar (ni dígito ni "sin preferencia") con
     // preasignación activa: no Continuar. `digitoPlacaGateOk` ya contempla los casos donde no aplica.
     (activeStep?.key === 'consulta_vin' && !digitoPlacaGateOk) ||
+    (activeStep?.key === 'consulta_vin' && !secretariaListaGateOk) ||
     // Trámites simultáneos incompletos (valor vacío o sin soporte): no Continuar.
     (isPrendaStep && !simultaneosGateOk) ||
     // Tipo de servicio: sin tipo elegido no se avanza del paso de requisitos; si el tipo es PÚBLICO,
@@ -1754,6 +1781,21 @@ export function TramiteWizard(props: Props) {
                 {estadoTramite === 'borrador' ? 'En borrador' : estadoLabel(estadoTramite)}
               </span>
             )}
+            {/* HU #12575 (Feature #12565, AC1) — badge SECUNDARIO de sub-estado de revocatoria:
+                ORTOGONAL al chip de arriba, que sigue diciendo "Aprobado" (ADR-0022). Mismo patrón
+                visual de la franja (glass, border-white/30) que el chip principal, con un tinte ámbar
+                para leerse como secundario/distinto — nunca un sistema de color nuevo. */}
+            {activeRevocationRequest && (
+              <span
+                role="status"
+                className="rounded-full border border-amber-200/50 bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-semibold"
+                aria-label={`Sub-estado de revocatoria: ${
+                  revocationRequestLabel(activeRevocationRequest.status) ?? 'en curso'
+                }`}
+              >
+                {revocationRequestLabel(activeRevocationRequest.status) ?? 'Revocatoria en curso'}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -1792,6 +1834,11 @@ export function TramiteWizard(props: Props) {
                   ) : null}
                 </>
               ) : undefined
+              // HU #12573/#12574 (Feature #12565) — el botón "Solicitar revocatoria" que vivía aquí
+              // se movió a `TramiteDetalleModal` (2026-09-16): `abreAsistente` en `TramitesTable`
+              // nunca es `true` para `aprobado`, así que este punto del wizard era inalcanzable por
+              // navegación normal (solo por URL directa con el GUID de la instancia). Ver
+              // `TramiteDetalleModal.tsx` (aviso "Trámite aprobado — solo visualización").
             }
           />
         </div>
@@ -1912,6 +1959,7 @@ export function TramiteWizard(props: Props) {
                 onPrioritarioChange={setPendingPrioritario}
                 onTipoServicioGateChange={setTipoServicioGateOk}
                 onDigitoPlacaGateChange={setDigitoPlacaGateOk}
+                onSecretariaListaGateChange={setSecretariaListaGateOk}
                 paqueteDocsStatus={paqueteDocsStatus}
                 onPaqueteStatusChange={setPaqueteDocsStatus}
                 onMarkDirty={() => setHasUnsavedChanges(true)}
@@ -1975,7 +2023,7 @@ export function TramiteWizard(props: Props) {
                     fullReadOnly
                       ? 'Entrega el trámite al organismo de tránsito'
                       : canRadicar
-                        ? 'Prepara y radica el trámite en un solo paso (queda en entregado)'
+                        ? 'Prepara y radica el trámite en un solo paso'
                         : 'Disponible cuando el cliente valide su identidad'
                   }
                 >
@@ -2281,8 +2329,12 @@ export function TramiteWizard(props: Props) {
               La placa la asigna el organismo de tránsito.
             </p>
           ) : null}
+          {/* ADR-0059 — el acuse nombra el estado real: en Ruta Larga el trámite NO queda entregado
+              sino en Preasignación, a la espera de que el organismo asigne la placa. */}
           <p className="mt-4 text-xs opacity-70">
-            El trámite fue validado y enviado correctamente al organismo de tránsito.
+            {radicado?.estado === 'preasignacion'
+              ? 'El trámite quedó en Preasignación: el organismo de tránsito asignará la placa.'
+              : 'El trámite fue validado y enviado correctamente al organismo de tránsito.'}
           </p>
           <button
             type="button"
@@ -2987,6 +3039,7 @@ function ConsultaStep({
   onPrioritarioChange,
   esMigrado = false,
   onDigitoPlacaGateChange,
+  onSecretariaListaGateChange,
 }: {
   step: WizardStep;
   /** ADR-0050 — capacidades del tipo: deciden si el vehículo entra por VIN o por placa. */
@@ -3014,6 +3067,8 @@ function ConsultaStep({
   esMigrado?: boolean;
   /** HU #11628 — Gate Continuar: dígito de preferencia de placa declarado (dígito o "sin preferencia"). */
   onDigitoPlacaGateChange?: (ok: boolean) => void;
+  /** HU #12351 AC4 — Gate Continuar: hay al menos un OT en la lista efectiva cuando aplica elegir secretaría. */
+  onSecretariaListaGateChange?: (ok: boolean) => void;
 }) {
   // ADR-0050 — por qué identificador entra el vehículo lo declara el tipo (`entryMode`), no el
   // nombre del paso. La clave sigue valiendo como respaldo para los borradores cuyo estado aún no
@@ -3121,6 +3176,8 @@ function ConsultaStep({
         : fieldValues.find((f) => f.fieldKey === 'transit_office_name')?.valueText?.trim() ?? null)
     : null;
   const [secretarias, setSecretarias] = useState<TransitOfficeOption[]>([]);
+  const [secretariasLoading, setSecretariasLoading] = useState(false);
+  const [secretariasLoaded, setSecretariasLoaded] = useState(false);
   const [secretariasError, setSecretariasError] = useState<string | null>(null);
   const [transitOfficeId, setTransitOfficeId] = useState('');
   /**
@@ -3143,18 +3200,28 @@ function ConsultaStep({
   useEffect(() => {
     if (!muestraRadicacion && !caps.declaraOrganismoDestino) return;
     let active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSecretariasLoading(true);
+    setSecretariasLoaded(false);
+    setSecretariasError(null);
     void tramitesClient
       .listTransitOffices()
       .then((list) => {
-        if (active) setSecretarias(list);
+        if (!active) return;
+        setSecretarias(list);
+        setSecretariasLoaded(true);
       })
       .catch(() => {
         if (active) setSecretariasError('No se pudieron cargar los organismos de tránsito.');
+      })
+      .finally(() => {
+        if (active) setSecretariasLoading(false);
       });
     return () => {
       active = false;
     };
   }, [muestraRadicacion, caps.declaraOrganismoDestino]);
+
 
   /**
    * Dígito de preferencia de placa (HU #10805) declarado aquí, donde lo ubica el diseño. Es el MISMO
@@ -3163,12 +3230,22 @@ function ConsultaStep({
    * —en la consola del organismo esas placas salen marcadas y ordenadas primero—. No enruta nada:
    * el trámite cae por preasignación por NO llevar placa, no por este dígito.
    *
-   * `preasignacionActiva` (HU #10806) responde si la ruta está viva para esta compañía en ESE
-   * organismo; sin ella el OT no asigna desde un rango y el dígito no tendría a quién guiar.
-   * `null` = todavía consultando.
+   * Epic #12550 — el dígito ya NO depende de que el organismo tenga inventario de placas
+   * (decisión B de #12549): el trámite entra en Preasignación igual y el OT lo asigna fuera de rango
+   * si hace falta. Por eso desapareció la consulta a `getPlatePreassignStatus` y el campo
+   * `plate_route_active` que la acompañaba.
    */
   const [digitoPlaca, setDigitoPlaca] = useState('');
-  const [preasignacionActiva, setPreasignacionActiva] = useState<boolean | null>(null);
+
+  /**
+   * Epic #12550 — ruta de la matrícula que decidió el RUNT en la consulta del paso 1, con el
+   * organismo resuelto en Ruta Corta. Solo vive mientras el trámite no existe; con trámite creado la
+   * ruta se lee de la placa (`vehiculoConPlacaRunt`) y el organismo del expediente.
+   */
+  const [rutaRunt, setRutaRunt] = useState<{
+    route: MatriculaRuta;
+    transitOffice: PreflightPreviewTransitOffice | null;
+  } | null>(null);
 
   /**
    * AC2 (HU #10799) — el vehículo YA tiene placa según el RUNT: la preasignación no aplica en
@@ -3183,6 +3260,29 @@ function ConsultaStep({
   const vehiculoConPlacaRunt = placaRunt !== '';
 
   /**
+   * Epic #12550 (ADR-0059 §Ruta Corta) — Ruta Corta: el vehículo ya tiene placa según el RUNT y el
+   * trámite llega al organismo en Entregado. Con la consulta recién hecha lo dice el preview; con un
+   * borrador ya creado lo dice la placa del RUNT, que es exactamente la misma señal. Solo aplica a
+   * los tipos que piden placa (`muestraDigitoPlaca`): en un radicado de cuenta la placa siempre existe
+   * y no es una «ruta».
+   */
+  const rutaCorta = muestraDigitoPlaca && (rutaRunt?.route === 'corta' || vehiculoConPlacaRunt);
+  /** Organismo de la Ruta Corta: el resuelto por el preview o, con trámite creado, el del expediente. */
+  const organismoRutaCorta =
+    rutaRunt?.transitOffice?.name ??
+    fieldValues.find((f) => f.fieldKey === 'transit_office_name')?.valueText?.trim() ??
+    null;
+
+  // Epic #12550 — en Ruta Corta la lista no gatea nada: el organismo ya lo trajo el RUNT.
+  const secretariaListaGateOk =
+    !eligeSecretaria || rutaCorta || (secretariasLoaded && secretarias.length > 0);
+
+  useEffect(() => {
+    onSecretariaListaGateChange?.(secretariaListaGateOk);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secretariaListaGateOk]);
+
+  /**
    * HU #11628 — el dígito de preferencia exige una elección consciente cuando el selector está
    * realmente en juego: paso de matrícula (`muestraRadicacion`), sin placa del RUNT, organismo ya
    * elegido y preasignación activa para ese organismo/compañía. `digitoPlaca === ''` es EXCLUSIVAMENTE
@@ -3194,7 +3294,8 @@ function ConsultaStep({
     muestraDigitoPlaca,
     vehiculoConPlacaRunt,
     transitOfficeId,
-    preasignacionActiva,
+    // Epic #12550 — la preasignación está siempre disponible en la Ruta Larga (decisión B).
+    preasignacionActiva: true,
     digitoPlacaUiValue: digitoPlaca,
   });
   const digitoPlacaGateOk = !digitoPlacaSinDecidir;
@@ -3416,17 +3517,13 @@ function ConsultaStep({
         });
         setPreviewSnapshot(result.preflight);
         setFieldValues(result.vehicleFields);
+        // Epic #12550 — la ruta la decide el RUNT: se guarda tal cual la devolvió el preview (con el
+        // organismo resuelto en Ruta Corta) y la tarjeta de radicación toma su forma a partir de ella.
+        setRutaRunt(result.route ? { route: result.route, transitOffice: result.transitOffice } : null);
         // AC2 (HU #10799) — el vehículo consultado ya trae placa del RUNT: lo que se hubiera
         // declarado sobre otro VIN deja de aplicar. Se borra la preferencia (también la anotada
-        // para la creación) y se apaga la ruta, o viajaría un `plate_route_active` en true que el
-        // trigger leería al radicar un trámite que no necesita que le asignen placa.
-        if (result.vehicleFields.some(
-          (f) => f.fieldKey === 'plate' && (f.valueText ?? '').trim() !== '',
-        )) {
-          setPreasignacionActiva(null);
-          if (digitoPlaca) handleDigitoPlaca('');
-          upsertLocal([{ fieldKey: 'plate_route_active', valueText: 'false' }]);
-        }
+        // para la creación): en Ruta Corta no hay dígito que guiar.
+        if (result.route === 'corta' && digitoPlaca) handleDigitoPlaca('');
         // Un 200 con el semáforo en rojo NO es una excepción: sin esto el shell solo sabría que
         // "hay consulta" y habilitaría Continuar aunque el vehículo no exista en el RUNT.
         const previewChecks = result.preflight?.checks ?? [];
@@ -3460,11 +3557,17 @@ function ConsultaStep({
       // puede crear el trámite, así que "Continuar" vuelve a deshabilitarse.
       onPreviewDone?.(null);
       setPreviewSnapshot(null);
+      setRutaRunt(null);
       // AC1 (HU #10882) — el preflight puede bloquear por duplicidad (409 DUPLICATE_ACTIVE_PROCEDURE,
       // HU #10876): en vez del error genérico, se ofrece el aviso con "Retomar" (AC2).
       const duplicateId = getDuplicateActiveProcedureId(err);
+      const organismoRunt = getOrganismoRuntNoHabilitado(err);
       if (duplicateId) {
         setDuplicateInstanceId(duplicateId);
+      } else if (organismoRunt) {
+        // Epic #12550 — Ruta Corta ante un organismo que la compañía no tiene habilitado. No es
+        // subsanable desde el trámite: la matrícula se radica ante ese organismo o no se crea.
+        setError(organismoRuntNoHabilitadoMensaje(organismoRunt));
       } else if (isVehicleBodyTypeMissing(err)) {
         // El vehículo no tiene carrocería que cambiar. Se avisa aquí, con el trámite todavía sin
         // crear, para que el gestor pueda escoger otro tipo sin arrastrar un expediente abierto.
@@ -3525,18 +3628,20 @@ function ConsultaStep({
   useEffect(() => {
     if (!deferred) return;
     if (!pendingPreview) return;
-    if (eligeSecretaria && !transitOfficeId) {
+    // Epic #12550 — en Ruta Corta el organismo lo fija el RUNT: no se exige ni se envía el elegido.
+    const eligeAqui = eligeSecretaria && !rutaCorta;
+    if (eligeAqui && !transitOfficeId) {
       onPreviewDone?.(null);
       return;
     }
     onPreviewDone?.({
       ...pendingPreview,
-      transitOfficeId: eligeSecretaria ? transitOfficeId : undefined,
+      transitOfficeId: eligeAqui ? transitOfficeId : undefined,
     });
     // `onPreviewDone` es un callback del shell recreado en cada render: incluirlo re-emitiría en
-    // bucle. Lo que gobierna la emisión es la consulta y el organismo.
+    // bucle. Lo que gobierna la emisión es la consulta, la ruta y el organismo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deferred, pendingPreview, eligeSecretaria, transitOfficeId]);
+  }, [deferred, pendingPreview, eligeSecretaria, rutaCorta, transitOfficeId]);
 
   // Seguimiento post-HU #12131/#12129 — «sin prenda que levantar» ya no bloquea (backend: check
   // `prenda_ausente` en warn), pero enterarse solo por la lista de "Advertencias de la verificación"
@@ -3580,50 +3685,6 @@ function ConsultaStep({
     });
     onPendingFieldValues?.(items);
   };
-
-  useEffect(() => {
-    // Sin organismo no hay nada que consultar. El estado vuelve a "cargando" al cambiar de
-    // organismo desde el propio selector, no aquí: así el efecto solo escribe el resultado.
-    if (!muestraDigitoPlaca || !transitOfficeId || vehiculoConPlacaRunt) return;
-    let active = true;
-    /**
-     * HU #10806 (Alternativa C) — la decisión de ruta se persiste como `plate_route_active`: es la
-     * fuente que consume el trigger de BD para fijar `plate_flow_status = 'preasignado'` al radicar
-     * sin placa. El paso del FUR hace exactamente esto al abrir su sección; aquí se anota con el
-     * resto de lo capturado y viaja con la creación del trámite.
-     */
-    const persistRouteActive = (enabled: boolean) => {
-      if (deferred) {
-        upsertLocal([{ fieldKey: 'plate_route_active', valueText: String(enabled) }]);
-        return;
-      }
-      if (!instanceId) return;
-      void tramitesClient
-        .patchFieldValues(instanceId, [
-          { formFieldId: null, fieldKey: 'plate_route_active', valueText: String(enabled), valueJson: null },
-        ])
-        .catch(() => {
-          /* no bloquear el paso si la persistencia falla; el submit sigue decidiendo la ruta */
-        });
-    };
-    getPlatePreassignStatus(transitOfficeId)
-      .then((s) => {
-        if (!active) return;
-        setPreasignacionActiva(s.enabled);
-        persistRouteActive(s.enabled);
-      })
-      .catch(() => {
-        // Mismo criterio que el paso del FUR ante un fallo de esta consulta: no bloquear el flujo.
-        if (!active) return;
-        setPreasignacionActiva(true);
-        persistRouteActive(true);
-      });
-    return () => {
-      active = false;
-    };
-    // `upsertLocal` se recrea en cada render; lo que gobierna la consulta es el organismo elegido.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [muestraDigitoPlaca, transitOfficeId, vehiculoConPlacaRunt, deferred, instanceId]);
 
   /**
    * HU #10805 — dígito de preferencia. Sin trámite todavía se anota en memoria y viaja con la
@@ -3864,10 +3925,57 @@ function ConsultaStep({
     </WizardAccordion>
   ) : null;
 
+  /**
+   * Epic #12550 — explicación de a dónde llega el trámite según lo que trajo el RUNT. Solo en los
+   * tipos que piden placa y con el vehículo ya identificado: antes de consultar no hay nada que decir.
+   * «Ruta Corta» / «Ruta Larga» son nombres internos de operación y NO se muestran al gestor
+   * (Samuel, 2026-09-17): el `data-ruta` queda para las pruebas.
+   */
+  const rutaChip = muestraDigitoPlaca && hasVehicleData ? (
+    <p
+      className="mb-3 text-xs opacity-70"
+      data-testid="ruta-matricula"
+      data-ruta={rutaCorta ? 'corta' : 'larga'}
+    >
+      {rutaCorta
+        ? 'El vehículo ya tiene placa asignada según el RUNT. Llegará al organismo listo para su decisión.'
+        : 'El vehículo no tiene placa. El organismo de tránsito la asignará en Preasignación.'}
+    </p>
+  ) : null;
+
   const radicacionCard = muestraRadicacion && (hasVehicleData || secretariaAntesDeConsultar) ? (
     <>
         <div id="wizard-ot-radicacion">
         <WizardAccordion title="Organismo de Tránsito y Radicación" defaultOpen>
+          {rutaChip}
+          {rutaCorta ? (
+            /* Epic #12550 — Ruta Corta: placa y organismo vienen del RUNT y no se editan. Sin
+               selector de secretaría ni dígito: no hay nada que el gestor deba decidir aquí. */
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="min-w-0">
+                <span className={`mb-1 block ${WIZARD_LABEL}`}>Placa</span>
+                <p
+                  className="rounded-xl border border-dashed px-3 py-2 font-mono text-sm font-semibold tracking-widest opacity-90"
+                  data-testid="ruta-corta-placa"
+                >
+                  {placaRunt || '—'}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <span className={`mb-1 block ${WIZARD_LABEL}`}>Organismo de tránsito</span>
+                <p
+                  className="rounded-xl border border-dashed px-3 py-2 text-sm opacity-90"
+                  data-testid="ruta-corta-organismo"
+                >
+                  {organismoRutaCorta ?? 'El RUNT no reporta el organismo: se radicará en la secretaría que elijas en el paso final.'}
+                </p>
+                <p className="mt-1 text-xs leading-tight opacity-70">
+                  Los dos vienen del RUNT y no se pueden modificar.
+                </p>
+              </div>
+            </div>
+          ) : (
+          <>
           <p className="text-xs opacity-70 mb-3">
             {secretariaAntesDeConsultar
               ? 'Selecciona la secretaría de DESTINO: es donde quedará radicada la cuenta y quien aprueba el trámite. Escógela antes de consultar el vehículo.'
@@ -3889,25 +3997,36 @@ function ConsultaStep({
                 // el id viaja a la creación desde aquí y allí se valida.
                 setTransitOfficeId(id);
                 setError(null);
-                // La preasignación es del organismo: al cambiarlo, el estado vuelve a "consultando"
-                // y la preferencia de dígito se reinicia (también la ya anotada para la creación),
-                // o viajaría una preferencia que el organismo nuevo quizá ni atiende.
-                setPreasignacionActiva(null);
+                // Al cambiar de organismo la preferencia de dígito se reinicia (también la ya
+                // anotada para la creación), o viajaría una preferencia que el organismo nuevo
+                // quizá ni atiende.
                 if (digitoPlaca) handleDigitoPlaca('');
                 handleOrganismo(id);
               }}
-              disabled={readOnly}
+              disabled={readOnly || secretariasLoading || secretarias.length === 0}
+              loading={secretariasLoading}
               describedBy="consulta-secretaria-aviso"
             />
             {/* Aviso ámbar mientras falta: sin secretaría la consulta no se habilita, y el botón
                 deshabilitado por sí solo no dice por qué. */}
-            {!transitOfficeId && (
+            {!transitOfficeId && secretarias.length > 0 && (
               <p className="mt-1.5 text-xs font-medium leading-tight" style={{ color: '#B45309' }}>
                 Aún no has seleccionado la secretaría de tránsito.
               </p>
             )}
+            {secretariasLoaded && secretarias.length === 0 && !secretariasError && (
+              <p
+                className="mt-1.5 text-xs font-medium leading-tight"
+                style={{ color: '#B45309' }}
+                role="alert"
+              >
+                {SECRETARIA_LISTA_VACIA}
+              </p>
+            )}
             <p id="consulta-secretaria-aviso" className="mt-1 text-xs leading-tight opacity-70">
-              {SECRETARIA_LISTA_AVISO}
+              {secretarias.length === 0 && secretariasLoaded
+                ? SECRETARIA_LISTA_VACIA
+                : SECRETARIA_LISTA_AVISO}
             </p>
             {secretariasError && (
               <p className="mt-1 text-xs leading-tight" style={{ color: '#E5484D' }}>
@@ -3950,12 +4069,12 @@ function ConsultaStep({
                   id="consulta-digito-placa"
                   value={digitoPlaca}
                   onChange={(e) => handleDigitoPlaca(e.target.value)}
-                  disabled={readOnly || !transitOfficeId || preasignacionActiva !== true}
+                  disabled={readOnly || !transitOfficeId}
                   required={isPlateDigitDecisionRequired({
                     muestraDigitoPlaca,
                     vehiculoConPlacaRunt,
                     transitOfficeId,
-                    preasignacionActiva,
+                    preasignacionActiva: true,
                   })}
                   aria-describedby="consulta-digito-placa-nota"
                   aria-invalid={digitoPlacaSinDecidir}
@@ -3969,9 +4088,10 @@ function ConsultaStep({
                     <option key={i} value={String(i)}>{`Termina en ${i}`}</option>
                   ))}
                 </select>
-                {/* Cinco estados, porque un selector apagado (o sin decidir) sin explicación se lee
-                    como un fallo: falta el organismo · consultando · sin preasignación · sin decidir
-                    (bloquea Continuar) · disponible. */}
+                {/* Tres estados, porque un selector apagado (o sin decidir) sin explicación se lee
+                    como un fallo: falta el organismo · sin decidir (bloquea Continuar) · disponible.
+                    Epic #12550 — ya no hay «consultando» ni «sin inventario»: la Ruta Larga entra en
+                    Preasignación con o sin rango del organismo. */}
                 <p
                   id="consulta-digito-placa-nota"
                   role={digitoPlacaSinDecidir ? 'alert' : undefined}
@@ -3979,14 +4099,10 @@ function ConsultaStep({
                   style={{ color: digitoPlacaSinDecidir ? '#B45309' : undefined, opacity: digitoPlacaSinDecidir ? 1 : 0.7 }}
                 >
                   {!transitOfficeId
-                    ? 'Elige primero la secretaría: la preasignación depende del organismo donde radiques.'
-                    : preasignacionActiva === null
-                      ? 'Consultando si el organismo tiene preasignación de placa…'
-                      : preasignacionActiva === false
-                        ? 'Este organismo (o tu compañía) no tiene preasignación de placa activa: el trámite se entregará de forma estándar.'
-                        : digitoPlacaSinDecidir
-                          ? 'Elige un dígito o indica que no tienes preferencia: es obligatorio para continuar.'
-                          : 'Si radicas sin placa, indica el número en el que prefieres que termine. El organismo lo toma como guía; podrás cambiarlo en el paso final.'}
+                    ? 'Elige primero la secretaría: es el organismo que asignará la placa.'
+                    : digitoPlacaSinDecidir
+                      ? 'Elige un dígito o indica que no tienes preferencia: es obligatorio para continuar.'
+                      : 'Indica el número en el que prefieres que termine la placa. El organismo lo toma como guía al asignarla en Preasignación; podrás cambiarlo en el paso final.'}
                 </p>
               </>
             )}
@@ -3994,6 +4110,8 @@ function ConsultaStep({
           )}
 
           </div>
+          </>
+          )}
         </WizardAccordion>
         </div>
     </>
@@ -4237,8 +4355,9 @@ function ConsultaStep({
               bare
               validadoEnRunt
               layout="pdf"
+              // Epic #12550 — con placa del RUNT el organismo también viene del RUNT y no se edita.
               onEditOrganismo={
-                isVin
+                isVin && !vehiculoConPlacaRunt
                   ? () => {
                       const el = document.getElementById('wizard-ot-radicacion');
                       el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -4462,6 +4581,7 @@ function StepBody({
   onPrioritarioChange,
   onTipoServicioGateChange,
   onDigitoPlacaGateChange,
+  onSecretariaListaGateChange,
   paqueteDocsStatus = 'idle',
   onPaqueteStatusChange,
   onMarkDirty,
@@ -4491,6 +4611,8 @@ function StepBody({
   onTipoServicioGateChange?: (ok: boolean) => void;
   /** HU #11628 — Gate Continuar: dígito de preferencia de placa declarado (dígito o "sin preferencia"). */
   onDigitoPlacaGateChange?: (ok: boolean) => void;
+  /** HU #12351 AC4 — Gate Continuar: lista efectiva de OT no vacía cuando el trámite elige secretaría. */
+  onSecretariaListaGateChange?: (ok: boolean) => void;
   preflight: PreflightSnapshot | null;
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
@@ -4580,6 +4702,7 @@ function StepBody({
           onPrioritarioChange={onPrioritarioChange}
           esMigrado={esMigrado}
           onDigitoPlacaGateChange={onDigitoPlacaGateChange}
+          onSecretariaListaGateChange={onSecretariaListaGateChange}
         />
       );
 

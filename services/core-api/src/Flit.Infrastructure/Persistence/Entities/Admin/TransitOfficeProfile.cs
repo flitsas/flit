@@ -13,6 +13,12 @@ public sealed class TransitOfficeProfile
 
     public bool QuipuxReadOnly { get; set; }
 
+    /// <summary>
+    /// Ventana de revocatoria en días hábiles (HU #12567/#12568). Nullable, sin default:
+    /// <c>null</c> = sin configurar = sin límite (ver migración HU12567_OtProfileRevocationWindow).
+    /// </summary>
+    public int? RevocationWindowBusinessDays { get; set; }
+
     public long RowVersion { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

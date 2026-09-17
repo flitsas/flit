@@ -11,6 +11,7 @@ import {
   fetchImprintSignaturePreviewUrl,
   fetchImprintSignatureValidations,
   fetchListImprintSignatures,
+  imprintEsReemplazada,
   imprintHasPdf,
   validateImprintSignature,
   type ImprintSignatureDto,
@@ -227,7 +228,24 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         key: "placa",
         header: "Placa",
         cellClassName: "font-mono font-semibold uppercase",
-        render: (row) => row.placa,
+        render: (row) => (
+          <div className="inline-flex items-center gap-1.5">
+            <span>{row.placa}</span>
+            {imprintEsReemplazada(row) ? (
+              <span
+                title="La impronta fue reemplazada después de firmarse; esta es la firma histórica."
+                data-testid={`ot-imprint-replaced-${row.id}`}
+              >
+                <StatusBadge
+                  label="Reemplazada"
+                  tone="warning"
+                  ariaLabel={`Impronta reemplazada de la placa ${row.placa}`}
+                  className="normal-case"
+                />
+              </span>
+            ) : null}
+          </div>
+        ),
       },
       {
         key: "moduleCode",

@@ -24,18 +24,18 @@ describe('tramites-client — mensajes de error del backend', () => {
     respondWith(409, { title: 'soat_no_vigente', status: 409, detail });
 
     await expect(
-      tramitesClient.completePlateFlow('inst-1', { soatPagado: true }),
+      tramitesClient.enviarAlOt('inst-1', { soatPagado: true }),
     ).rejects.toThrow(detail);
 
     globalThis.fetch = originalFetch;
   });
 
   it('cae al title cuando el problema no trae detalle', async () => {
-    respondWith(409, { title: 'plate_flow_not_asignado', status: 409 });
+    respondWith(422, { title: 'transicion_no_permitida', status: 422 });
 
     await expect(
-      tramitesClient.completePlateFlow('inst-1', { soatPagado: true }),
-    ).rejects.toThrow('plate_flow_not_asignado');
+      tramitesClient.enviarAlOt('inst-1', { soatPagado: true }),
+    ).rejects.toThrow('transicion_no_permitida');
 
     globalThis.fetch = originalFetch;
   });

@@ -7,6 +7,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.RevocationRequests;
 using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -218,12 +219,11 @@ public sealed class OtMetricsAndRejectionFlowTests
         {
             SeedScope(seed);
             SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "REF-1");
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "REF-2",
-                plateFlowStatus: PlateFlowStatus.Preasignado);
+            // ADR-0059 — la ruta de placa son estados reales.
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Preasignacion, "REF-2");
             // Placa asignada = esperando SOAT del cliente; pausado = origen ICT. Ninguno es
             // accionable por el organismo.
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "REF-3",
-                plateFlowStatus: PlateFlowStatus.Asignado);
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Asignado, "REF-3");
             SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "REF-4", isPaused: true);
             // Un aprobado no está pendiente.
             SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Aprobado, "REF-5");
@@ -239,6 +239,83 @@ public sealed class OtMetricsAndRejectionFlowTests
         panel.Cola.PorRevisar.Should().Be(1);
         panel.Cola.EsperandoAsignarPlaca.Should().Be(1);
         panel.Cola.EnEsperaDelCliente.Should().Be(2);
+    }
+
+    [Fact] // Pedido del usuario (2026-09-16) — antes de esto, una revocatoria solicitada era
+           // invisible en el panel: el trámite queda en 'aprobado' (no 'entregado'), así que
+           // `LoadPendingAsync` nunca la veía y "Esperan mi decisión" mostraba 0 aunque hubiera una
+           // decisión real pendiente.
+    public async Task Panel_SumaLasRevocatoriasActivasAPorRevisar()
+    {
+        var db = NewDbName();
+        var aprobadoConRevocatoria = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedScope(seed);
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "REF-1");
+            SeedProcedure(seed, aprobadoConRevocatoria, TramiteEstado.Aprobado, "REF-2");
+            SeedRevocationRequest(seed, aprobadoConRevocatoria, ProcedureRevocationRequestStatus.Solicitada);
+            // Un aprobado SIN solicitud activa no debe contar.
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Aprobado, "REF-3");
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var panel = await new OtMetricsReadRepository(ctx).GetOperationalPanelAsync(
+            OtTenant, Range(), null, TestContext.Current.CancellationToken);
+
+        panel!.Cola.PorRevisar.Should().Be(2);
+        panel.Movimiento.PendientesTotal.Should().Be(2);
+    }
+
+    [Fact] // El drill-down de "Esperan mi decisión" tiene que abrir la misma fila que contó, o el
+           // número de la tarjeta y la lista dejarían de cuadrar.
+    public async Task Drilldown_PorRevisarIncluyeElTramiteConRevocatoriaActiva()
+    {
+        var db = NewDbName();
+        var conRevocatoria = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedScope(seed);
+            SeedProcedure(seed, conRevocatoria, TramiteEstado.Aprobado, "REF-1");
+            SeedRevocationRequest(seed, conRevocatoria, ProcedureRevocationRequestStatus.EnRevision);
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var drilldown = await new OtMetricsReadRepository(ctx).GetDrilldownAsync(
+            OtTenant, Range(), OtDrilldownBuckets.PorRevisar, limit: 100,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        drilldown!.Total.Should().Be(1);
+        var item = drilldown.Items.Should().ContainSingle().Subject;
+        item.ProcedureInstanceId.Should().Be(conRevocatoria);
+        item.Status.Should().Be(TramiteEstado.Aprobado);
+    }
+
+    [Fact] // Una solicitud ya RECHAZADA no es una decisión pendiente del organismo (ya decidió); no
+           // debe sumar a "Esperan mi decisión".
+    public async Task Panel_NoSumaSolicitudesYaDecididas()
+    {
+        var db = NewDbName();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedScope(seed);
+            var rechazada = Guid.NewGuid();
+            SeedProcedure(seed, rechazada, TramiteEstado.Aprobado, "REF-1");
+            SeedRevocationRequest(seed, rechazada, ProcedureRevocationRequestStatus.Rechazada);
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var panel = await new OtMetricsReadRepository(ctx).GetOperationalPanelAsync(
+            OtTenant, Range(), null, TestContext.Current.CancellationToken);
+
+        panel!.Cola.PorRevisar.Should().Be(0);
+        panel.Movimiento.PendientesTotal.Should().Be(0);
     }
 
     [Fact] // El prioritario estancado es el peor indicador que puede tener un organismo.
@@ -318,8 +395,7 @@ public sealed class OtMetricsAndRejectionFlowTests
         {
             SeedScope(seed);
             SeedProcedure(seed, porRevisar, TramiteEstado.Entregado, "REF-1");
-            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Entregado, "REF-2",
-                plateFlowStatus: PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Preasignacion, "REF-2");
             seed.SaveChanges();
         }
 
@@ -487,7 +563,6 @@ public sealed class OtMetricsAndRejectionFlowTests
         Guid id,
         string status,
         string reference = "REF-001",
-        string? plateFlowStatus = null,
         bool isPaused = false,
         bool prioritario = false,
         string modalidad = "MATRICULAS")
@@ -499,7 +574,6 @@ public sealed class OtMetricsAndRejectionFlowTests
             ProcedureTypeId = ProcedureType,
             ReferenceNumber = reference,
             Status = status,
-            PlateFlowStatus = plateFlowStatus,
             IsPaused = isPaused,
             Prioritario = prioritario,
             TransitOfficeId = TransitOffice,
@@ -555,6 +629,18 @@ public sealed class OtMetricsAndRejectionFlowTests
             StatusHistoryId = eventId,
             RejectionReasonId = reasonId,
             CreatedAt = DateTimeOffset.UtcNow.AddHours(-1),
+        });
+
+    private static void SeedRevocationRequest(FlitDbContext ctx, Guid instanceId, string status) =>
+        ctx.ProcedureRevocationRequests.Add(new ProcedureRevocationRequest
+        {
+            Id = Guid.NewGuid(),
+            TenantId = ClientTenant,
+            ProcedureInstanceId = instanceId,
+            AttemptNumber = 1,
+            Status = status,
+            RequestedBy = Reviewer,
+            RequestedAt = DateTimeOffset.UtcNow.AddHours(-2),
         });
 
     private static void SeedDelivery(FlitDbContext ctx, Guid instanceId, DateTimeOffset at) =>

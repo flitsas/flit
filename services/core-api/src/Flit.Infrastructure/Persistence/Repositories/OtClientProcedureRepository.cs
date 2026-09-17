@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Domain.Documents;
+using Flit.Tramites.Domain.RevocationRequests;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -47,19 +48,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             transitOfficeIdOverride,
             async transitOfficeId =>
             {
-                var clientTenantIds = await ListGrantedClientTenantIdsAsync(
-                    transitOfficeId,
-                    cancellationToken).ConfigureAwait(false);
-
-                if (clientTenantIds.Count == 0)
-                {
-                    return PagedResult<OtClientProcedure>.Empty;
-                }
-
                 return await ExecuteCrossTenantReadAsync(
                     async () =>
                     {
-                        var query = BuildAccessibleQuery(transitOfficeId, clientTenantIds);
+                        var query = BuildAccessibleQuery(transitOfficeId);
                         query = ApplyListFilters(query, filter);
 
                         var totalCount = await query.LongCountAsync(cancellationToken).ConfigureAwait(false);
@@ -80,11 +72,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 ReferenceNumber = p.ReferenceNumber,
                                 Status = p.Status,
                                 Familia = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
-                                PlateFlowStatus = p.PlateFlowStatus,
                                 PlateAssignedAt = p.PlateAssignedAt,
                                 PlateUpdatedAt = p.PlateUpdatedAt,
-                                // HU #10804 — soat_estado por fila (para ocultar Aprobar/Rechazar en el frontend
-                                // hasta que la placa esté 'asignado' con SOAT 'vigente'). Lectura cross-tenant
+                                // HU #10804 — soat_estado por fila (informativo para el OT). Lectura cross-tenant
                                 // permitida bajo el 'SET LOCAL row_security = off' de ExecuteCrossTenantReadAsync.
                                 SoatEstado = _context.ProcedureInstanceFieldValues
                                     .Where(f => f.ProcedureInstanceId == p.Id
@@ -99,11 +89,11 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                     .FirstOrDefault(),
                                 SoatPagado = _context.ProcedureInstanceFieldValues
                                     .Any(f => f.ProcedureInstanceId == p.Id
-                                        && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.SoatPagado
+                                        && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.SoatPagado
                                         && f.ValueText == "true"),
                                 ImpuestoDepartamentalPagado = _context.ProcedureInstanceFieldValues
                                     .Any(f => f.ProcedureInstanceId == p.Id
-                                        && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.ImpuestoDepartamentalPagado
+                                        && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.ImpuestoDepartamentalPagado
                                         && f.ValueText == "true"),
                                 TransitOfficeId = p.TransitOfficeId,
                                 CreatedAt = p.CreatedAt,
@@ -117,6 +107,20 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 GestorNombre = _context.Users
                                     .Where(u => u.Id == p.CreatedByUserId)
                                     .Select(u => u.DisplayName)
+                                    .FirstOrDefault(),
+                                // Feature #12565 — sub-estado ACTIVO ('solicitada' | 'en_revision') de la solicitud
+                                // de revocatoria, para el indicativo de la bandeja OT. Mismo criterio que el resto
+                                // de esta proyección: subconsulta correlacionada, sin cambiar la forma de la query.
+                                // Bug: filtrar por estado ANTES de ordenar por intento hacía que un
+                                // rechazo VIEJO (intento 1) siguiera ganando cuando el intento 2, ya
+                                // aprobado, quedaba fuera del WHERE. Ahora se trae el estado del intento
+                                // de MAYOR AttemptNumber sin filtrar ('aprobada' compite en igualdad
+                                // para saber cuál es el más reciente); el frontend decide no pintar
+                                // nada cuando ese último es 'aprobada' (el trámite ya pasó a 'revocado').
+                                RevocationRequestStatus = _context.ProcedureRevocationRequests
+                                    .Where(r => r.ProcedureInstanceId == p.Id)
+                                    .OrderByDescending(r => r.AttemptNumber)
+                                    .Select(r => r.Status)
                                     .FirstOrDefault(),
                             })
                             .ToListAsync(cancellationToken)
@@ -149,6 +153,20 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 transitOfficeId,
                 procedureInstanceId,
                 cancellationToken),
+            cancellationToken);
+
+    /// <summary>HU #12578 — ver XML doc de la interfaz. Reutiliza <see cref="ExecuteOtScopedAsync{T}(Guid,Guid?,Func{Guid,Task{T}},CancellationToken)"/>
+    /// (MISMA resolución que <see cref="ListAsync"/>/<see cref="GetByIdAsync(Guid,Guid,Guid?,CancellationToken)"/>): sin
+    /// organismo resoluble, <c>default(Guid?)</c> es exactamente <c>null</c>, así que no hace falta
+    /// ninguna rama especial aquí.</summary>
+    public Task<Guid?> ResolveTransitOfficeIdAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteOtScopedAsync(
+            otTenantId,
+            transitOfficeIdOverride,
+            transitOfficeId => Task.FromResult<Guid?>(transitOfficeId),
             cancellationToken);
 
     public Task<OtBandejaHealth?> GetDeliveryHealthAsync(
@@ -195,9 +213,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             },
             cancellationToken);
 
-    /// <summary>Valor público para pedir los trámites que NO están en ruta de placa.</summary>
-    public const string PlateFlowSinRuta = "sin_ruta";
-
     /// <inheritdoc />
     public Task<IReadOnlyList<QueryFieldDto>?> GetBandejaFilterFieldsAsync(
         Guid otTenantId,
@@ -208,16 +223,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             transitOfficeIdOverride,
             async transitOfficeId =>
             {
-                var clientTenantIds = await ListGrantedClientTenantIdsAsync(
+                var clientTenantIds = await ListClientTenantIdsFromReceivedProceduresAsync(
                     transitOfficeId,
                     cancellationToken).ConfigureAwait(false);
 
                 return await ExecuteCrossTenantReadAsync(
                     async () =>
                     {
-                        // Las empresas con grant vigente, TODAS y no solo las que tienen trámites
-                        // ahora mismo: el contenido del filtro no debe cambiar según lo que haya en
-                        // la bandeja hoy, o el mismo desplegable ofrecería cosas distintas cada día.
+                        // Empresas que ya entregaron trámites a este organismo (HU #12350 AC7).
                         var empresas = await _context.Tenants
                             .AsNoTracking()
                             .Where(t => clientTenantIds.Contains(t.Id))
@@ -285,98 +298,48 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             transitOfficeIdOverride,
             async transitOfficeId =>
             {
-                var grantedClientTenantIds = await ListGrantedClientTenantIdsAsync(
-                    transitOfficeId,
-                    cancellationToken).ConfigureAwait(false);
-
-                // Sin grants no hay bandeja que contar: todo cero, y sin pegarle a la base.
-                if (grantedClientTenantIds.Count == 0)
-                {
-                    return (OtBandejaCounters?)new OtBandejaCounters(0, 0, 0, 0, 0, 0);
-                }
-
                 return await ExecuteCrossTenantReadAsync(
                     async () =>
                     {
-                        // Mismo universo que la bandeja: dirigidos a este organismo y con grant
-                        // vigente. Si el conteo mirara más ancho que el listado, las tarjetas
-                        // prometerían filas que al pulsar no aparecerían.
-                        var accesibles = _context.ProcedureInstances
-                            .AsNoTracking()
-                            .Where(p => p.DeletedAt == null
-                                && p.TransitOfficeId == transitOfficeId
-                                && grantedClientTenantIds.Contains(p.TenantId));
+                        // HU #12350 AC7 — mismo universo que la bandeja: trámites ya recibidos por el organismo.
+                        var accesibles = BuildAccessibleQuery(transitOfficeId);
 
-                        // UNA consulta agrupada en vez de cinco COUNT: la bandeja los pide juntos y
-                        // cinco viajes a la base para pintar una tira de cabecera no se justifican.
-                        var porClase = await accesibles
-                            .GroupBy(p => new { p.Status, p.PlateFlowStatus })
-                            .Select(g => new
-                            {
-                                g.Key.Status,
-                                g.Key.PlateFlowStatus,
-                                Total = g.Count(),
-                            })
-                            .ToListAsync(cancellationToken)
+                        // UNA consulta agrupada en vez de seis COUNT: la bandeja los pide juntos y
+                        // seis viajes a la base para pintar una tira de cabecera no se justifican.
+                        // ADR-0059 — cada tarjeta es UN estado del ciclo de vida.
+                        var porEstado = await accesibles
+                            .GroupBy(p => p.Status)
+                            .Select(g => new { Status = g.Key, Total = g.Count() })
+                            .ToDictionaryAsync(g => g.Status, g => g.Total, StringComparer.Ordinal, cancellationToken)
                             .ConfigureAwait(false);
 
-                        var sinAsignarPlaca = 0;
-                        var conPlacaAsignada = 0;
-                        var aprobados = 0;
-                        var rechazados = 0;
-                        var sinGestion = 0;
-                        var revocados = 0;
+                        int De(string estado) => porEstado.TryGetValue(estado, out var total) ? total : 0;
 
-                        foreach (var fila in porClase)
-                        {
-                            var entregado = string.Equals(
-                                fila.Status, TramiteEstado.Entregado, StringComparison.Ordinal);
-
-                            if (entregado && fila.PlateFlowStatus == PlateFlowStatus.Preasignado)
-                            {
-                                sinAsignarPlaca += fila.Total;
-                            }
-
-                            if (entregado
-                                && (fila.PlateFlowStatus == PlateFlowStatus.Asignado
-                                    || fila.PlateFlowStatus == PlateFlowStatus.Terminado))
-                            {
-                                conPlacaAsignada += fila.Total;
-                            }
-
-                            // Sin gestión: entregado y fuera de la ruta de placa. Un trámite ya
-                            // preasignado SÍ se está gestionando —el organismo tiene que ponerle
-                            // placa—, así que contarlo aquí inflaría la tarjeta que dice "nadie ha
-                            // empezado esto".
-                            if (entregado && fila.PlateFlowStatus is null)
-                            {
-                                sinGestion += fila.Total;
-                            }
-
-                            if (string.Equals(fila.Status, TramiteEstado.Aprobado, StringComparison.Ordinal))
-                            {
-                                aprobados += fila.Total;
-                            }
-
-                            if (string.Equals(fila.Status, TramiteEstado.Rechazado, StringComparison.Ordinal))
-                            {
-                                rechazados += fila.Total;
-                            }
-
-                            // HU #12166/#12168 (Feature #12156) — Aprobados que el OT revocó.
-                            if (string.Equals(fila.Status, TramiteEstado.Revocado, StringComparison.Ordinal))
-                            {
-                                revocados += fila.Total;
-                            }
-                        }
+                        // Feature #12565 — Aprobados con solicitud de revocatoria
+                        // ACTIVA: consulta aparte (no cabe en el agrupado por Status de
+                        // arriba, que no sabe nada de `procedure_revocation_requests`). Cuenta trámites
+                        // DISTINTOS, no filas de solicitud: el índice único activo-por-trámite
+                        // (`uq_procedure_revocation_requests_active_per_instance`) ya garantiza que
+                        // nunca hay más de una activa por instancia, pero `Distinct()` deja la
+                        // intención explícita sin depender de ese detalle de esquema.
+                        var solicitudesRevocatoria = await accesibles
+                            .Where(p => _context.ProcedureRevocationRequests.Any(r =>
+                                r.ProcedureInstanceId == p.Id
+                                && (r.Status == ProcedureRevocationRequestStatus.Solicitada
+                                    || r.Status == ProcedureRevocationRequestStatus.EnRevision)))
+                            .Select(p => p.Id)
+                            .Distinct()
+                            .CountAsync(cancellationToken)
+                            .ConfigureAwait(false);
 
                         return (OtBandejaCounters?)new OtBandejaCounters(
-                            sinAsignarPlaca,
-                            conPlacaAsignada,
-                            aprobados,
-                            rechazados,
-                            sinGestion,
-                            revocados);
+                            Preasignacion: De(TramiteEstado.Preasignacion),
+                            Asignados: De(TramiteEstado.Asignado),
+                            PorDecidir: De(TramiteEstado.Entregado),
+                            Aprobados: De(TramiteEstado.Aprobado),
+                            Rechazados: De(TramiteEstado.Rechazado),
+                            Revocados: De(TramiteEstado.Revocado),
+                            SolicitudesRevocatoria: solicitudesRevocatoria);
                     },
                     cancellationToken).ConfigureAwait(false);
             },
@@ -444,9 +407,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             transitOfficeIdOverride: transitOfficeIdOverride,
             rejectionReasonIds: rejectionReasonIds);
 
-    // La decisión del OT (aprobar/rechazar/observar) aplica SIEMPRE desde 'entregado' (máquina == develop).
-    // La ruta de placa no cambia el status: su progreso vive en plate_flow_status (sub-estado interno,
-    // HU #10785).
+    // La decisión del OT (aprobar/rechazar/observar). ADR-0059: aprobar solo existe desde 'entregado';
+    // rechazar también desde 'preasignacion' (cola de placa), dejando el origen en rejected_from. La
+    // arista la valida TramiteTransitionPolicy con actor Ot, la MISMA política del ciclo de vida del
+    // gestor: este repositorio escribe status bajo el scope del tenant cliente, pero no decide aparte.
     private async Task<OtClientProcedure?> TransitionAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -478,12 +442,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             accessible.ClientTenantId,
             async () =>
             {
-                var entity = await _context.ProcedureInstances
-                    .FirstOrDefaultAsync(
-                        p => p.Id == procedureInstanceId
-                            && p.TenantId == accessible.ClientTenantId
-                            && p.DeletedAt == null,
-                        cancellationToken)
+                var entity = await LoadForOtTransitionAsync(procedureInstanceId, accessible.ClientTenantId, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (entity is null)
@@ -493,17 +452,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
                 var fromStatus = entity.Status;
 
-                // N 03 (ADR-0022): la decisión OT obedece la máquina de estados única sobre el estado
-                // ACTUAL (entregado→aprobado|rechazado); si no es válida, no transiciona.
-                if (!TramiteStateMachine.IsValidTransition(fromStatus, targetStatus))
-                {
-                    return null;
-                }
-
-                // Sub-flujo de placa: el OT solo aprueba/rechaza en ruta estándar (null) o Terminado.
-                // Sin asignar (preasignado) y Asignado bloquean la decisión OT.
-                if ((targetStatus == TramiteEstado.Aprobado || targetStatus == TramiteEstado.Rechazado)
-                    && !PlateFlowStatus.PermiteDecisionOt(entity.PlateFlowStatus))
+                // N 03 (ADR-0022) + ADR-0059: la decisión OT obedece la política única sobre el estado
+                // ACTUAL; si la arista no existe para este actor/contexto, no transiciona.
+                if (!PuedeTransicionarComoOt(entity, targetStatus))
                 {
                     return null;
                 }
@@ -515,6 +466,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 entity.UpdatedAt = now;
                 entity.UpdatedBy = resolvedChangedBy;
 
+                // ADR-0059 (HU #12597/#12598) — origen del rechazo: el gestor distingue «Rechazado
+                // preasignación». Al aprobar se limpia (mismo criterio que el ciclo de vida del gestor).
+                entity.RejectedFrom = targetStatus == TramiteEstado.Rechazado ? fromStatus : null;
+
                 // ADR-0036 §D9 (HU #10916) — al aprobar, persistir el mandatario resuelto en el MISMO save
                 // que el status (el firmante ya se resolvió/eligió en el endpoint). Solo en aprobación.
                 if (targetStatus == TramiteEstado.Aprobado && mandateSignerId is not null)
@@ -522,14 +477,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     entity.MandateSignerId = mandateSignerId;
                 }
 
-                // Feature #10587 / HU #10785 — la decisión del OT parte SIEMPRE de 'entregado' (== develop):
-                // no hay hito sintético asignado→entregado (el trámite nunca salió de 'entregado'; el
-                // progreso de placa fue un sub-estado interno).
                 var effectiveFrom = fromStatus;
 
                 // Feature #10587 — al aprobar un trámite de la ruta de placa, la placa reservada pasa a
-                // utilizada (terminal); al rechazar, se libera y vuelve al inventario (disponible). En ambos
-                // casos el sub-flujo de placa termina: se limpia plate_flow_status.
+                // utilizada (terminal); al rechazar, se libera y vuelve al inventario (disponible).
                 if (targetStatus == TramiteEstado.Aprobado || targetStatus == TramiteEstado.Rechazado)
                 {
                     var plateDetail = await _context.PlateRangeDetails
@@ -553,8 +504,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         }
                         plateDetail.UpdatedAt = now;
                     }
-
-                    entity.PlateFlowStatus = null;
                 }
 
                 // Feature #10701 / HU #10860 — la decisión del OT (aprobar/rechazar) invalida los
@@ -625,11 +574,66 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 }
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                var mapped = Map(entity);
-                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken)
-                    .ConfigureAwait(false);
-                return enriched[0];
+                return await MapRowAsync(entity, cancellationToken).ConfigureAwait(false);
             },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Carga la instancia con su tipo: <see cref="TransitionContext.ForInstance"/> necesita
+    /// <c>gate_profile.requiresPlateRequest</c> para decidir las aristas de la ruta de placa, y la placa
+    /// la lee de la columna denormalizada <see cref="ProcedureInstance.Plate"/> (el grafo de
+    /// <c>field_values</c> no se carga aquí).
+    /// </summary>
+    private Task<ProcedureInstance?> LoadForOtTransitionAsync(
+        Guid procedureInstanceId, Guid clientTenantId, CancellationToken cancellationToken) =>
+        _context.ProcedureInstances
+            .Include(p => p.ProcedureType)
+            .FirstOrDefaultAsync(
+                p => p.Id == procedureInstanceId
+                    && p.TenantId == clientTenantId
+                    && p.DeletedAt == null,
+                cancellationToken);
+
+    /// <summary>
+    /// ADR-0059 — ¿el organismo puede mover la instancia a <paramref name="targetStatus"/>? Misma
+    /// política que el ciclo de vida del gestor, con actor <see cref="TramiteActor.Ot"/>.
+    /// </summary>
+    private static bool PuedeTransicionarComoOt(ProcedureInstance entity, string targetStatus) =>
+        TramiteTransitionPolicy
+            .Evaluate(entity.Status, targetStatus, TransitionContext.ForInstance(entity, TramiteActor.Ot))
+            .Allowed;
+
+    /// <summary>
+    /// Fila de historial de una arista de la cola de placa (asignar / liberar), con la auditoría
+    /// cross-tenant que este repositorio ya escribe para la decisión del OT. Va en el MISMO save que
+    /// el status; la publicación hacia webhooks (RNF01) se encola con ella.
+    /// </summary>
+    private async Task RegistrarAristaDePlacaAsync(
+        ProcedureInstance entity,
+        string fromStatus,
+        string reason,
+        Guid otTenantId,
+        string source,
+        Guid? changedBy,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = entity.TenantId,
+            ProcedureInstanceId = entity.Id,
+            FromStatus = fromStatus,
+            ToStatus = entity.Status,
+            ChangedAt = now,
+            ChangedBy = changedBy,
+            Reason = reason,
+            Metadata = BuildStatusHistoryMetadata(otTenantId, source, reason: null, items: null),
+        });
+
+        await _transitionPublisher.EnqueueAsync(
+            new TramiteTransitionRecord(entity.TenantId, entity.Id, fromStatus, entity.Status, reason, changedBy, now),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -665,10 +669,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         });
     }
 
-    // HU #10654 (Feature #10587 / HU #10785) — el OT asigna una placa a un trámite de la ruta de placa en
-    // sub-estado 'preasignado' (Flujo B): reserva la placa, la escribe en field_values (el trigger lo
-    // permite con plate_flow_status='preasignado') y avanza el SUB-ESTADO preasignado→asignado. El status
-    // global permanece en 'entregado' (no hay transición de la máquina de estados).
+    // HU #10654 → ADR-0059 (HU #12598) — el OT asigna una placa a un trámite en 'preasignacion': reserva
+    // la placa, la escribe en field_values (el trigger lo permite en ese estado) y transiciona
+    // preasignacion → asignado por la política única, con fila de historial y publicación.
     public async Task<PlateAssignmentOutcome> AssignPlateAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -709,12 +712,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             accessible.ClientTenantId,
             async () =>
             {
-                var entity = await _context.ProcedureInstances
-                    .FirstOrDefaultAsync(
-                        p => p.Id == procedureInstanceId
-                            && p.TenantId == accessible.ClientTenantId
-                            && p.DeletedAt == null,
-                        cancellationToken)
+                var entity = await LoadForOtTransitionAsync(procedureInstanceId, accessible.ClientTenantId, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (entity is null)
@@ -722,8 +720,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return PlateAssignmentOutcome.Fail(PlateAssignmentFailure.ProcedureNotAccessible);
                 }
 
-                if (entity.Status != TramiteEstado.Entregado
-                    || entity.PlateFlowStatus != PlateFlowStatus.Preasignado)
+                // HU #12598 AC3 — solo desde 'preasignacion': en asignado ya hay placa (corregir va por
+                // UpdatePlateAsync) y en entregado el trámite ya está en decisión.
+                if (entity.Status != TramiteEstado.Preasignacion)
                 {
                     return PlateAssignmentOutcome.Fail(PlateAssignmentFailure.NotPreassigned);
                 }
@@ -771,7 +770,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     }
                 }
 
-                // Escribe la placa en field_values ESTANDO en preasignado (el trigger lo permite) y
+                // Escribe la placa en field_values ESTANDO en preasignacion (el trigger lo permite) y
                 // persiste antes de cambiar el estado (evita el orden de operaciones del trigger).
                 var normalizedPlate = plate.Trim().ToUpperInvariant();
                 var fv = await _context.ProcedureInstanceFieldValues
@@ -803,33 +802,45 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 // DbUpdateConcurrencyException (500). Se recarga el token antes de tocar la instancia.
                 await _context.Entry(entity).ReloadAsync(cancellationToken).ConfigureAwait(false);
 
+                // La columna denormalizada la mantiene el trigger en PostgreSQL; se fija también aquí para
+                // que la política vea la placa recién escrita sin depender del proveedor (InMemory no tiene
+                // triggers) — es el mismo valor que el trigger acaba de copiar.
+                entity.Plate = normalizedPlate;
+
+                // ADR-0059 — preasignacion → asignado por la política única (actor Ot). Si el tipo no
+                // pide placa la arista no existe: el trámite no debió llegar a preasignacion.
+                var fromStatus = entity.Status;
+                if (!PuedeTransicionarComoOt(entity, TramiteEstado.Asignado))
+                {
+                    return PlateAssignmentOutcome.Fail(PlateAssignmentFailure.NotPreassigned);
+                }
+
                 var resolvedChangedBy = await ResolveChangedByAsync(changedBy, cancellationToken).ConfigureAwait(false);
                 var now = DateTimeOffset.UtcNow;
-                // Sub-estado interno: preasignado→asignado. El status global NO cambia (queda 'entregado'),
-                // así que no se emite transición de la máquina de estados ni fila de historial de status
-                // (evita registrar aristas que la máquina no contempla). La trazabilidad de la placa queda
-                // en plate_range_details (reserva) y en el field_value 'plate'.
-                entity.PlateFlowStatus = PlateFlowStatus.Asignado;
+                entity.Status = TramiteEstado.Asignado;
                 // HU #12165/#12167 (Feature #12156) — momento de la asignación ORIGINAL: base de la
                 // ventana de 1 hora de UpdatePlateAsync. UpdatedAt no sirve (lo pisa cualquier otra
                 // escritura); esta columna solo la toca este método.
                 entity.PlateAssignedAt = now;
                 entity.UpdatedAt = now;
                 entity.UpdatedBy = resolvedChangedBy;
+                entity.InvalidarConsolidados();
+
+                await RegistrarAristaDePlacaAsync(
+                    entity, fromStatus, $"Placa {normalizedPlate} asignada por el organismo de tránsito.",
+                    otTenantId, source, resolvedChangedBy, now, cancellationToken).ConfigureAwait(false);
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                var mapped = Map(entity);
-                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
-                return PlateAssignmentOutcome.Ok(enriched[0]);
+                return PlateAssignmentOutcome.Ok(await MapRowAsync(entity, cancellationToken).ConfigureAwait(false));
             },
             cancellationToken).ConfigureAwait(false);
     }
 
     // HU #12167 (Feature #12156) — el OT corrige la placa dentro de la ventana de 1 hora desde
     // plate_assigned_at, una única vez (plate_updated_at nulo). NO reutiliza AssignPlateAsync: ese
-    // método exige PlateFlowStatus.Preasignado (la placa aún no existe); aquí la placa YA está asignada
-    // (Asignado o incluso ya entregado/aprobado — la HU no acota el sub-estado, solo la ventana de
-    // tiempo) y solo se corrige el valor.
+    // método exige 'preasignacion' (la placa aún no existe); aquí la placa YA está asignada
+    // (asignado o incluso ya entregado/aprobado — la HU no acota el estado, solo la ventana de
+    // tiempo) y solo se corrige el valor, sin cambiar de estado (HU #12598 AC4).
     public async Task<PlateAssignmentOutcome> UpdatePlateAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -950,17 +961,16 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 });
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                var mapped = Map(entity);
-                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
-                return PlateAssignmentOutcome.Ok(enriched[0]);
+                return PlateAssignmentOutcome.Ok(await MapRowAsync(entity, cancellationToken).ConfigureAwait(false));
             },
             cancellationToken).ConfigureAwait(false);
     }
 
-    // HU #10655 (Feature #10587 / HU #10785) — el OT revoca la preasignación: libera la placa
-    // (preasignada→revocada) y, si el sub-estado era 'asignado', lo devuelve a 'preasignado' para
-    // reasignar. El status global permanece 'entregado' (no hay transición de la máquina de estados).
-    public async Task<OtClientProcedure?> RevokePlateAsync(
+    // HU #10655 → ADR-0059 (HU #12598 AC4) — «Liberar placa»: el OT devuelve un trámite 'asignado' a
+    // 'preasignacion' para asignar otra placa. Libera la reserva del inventario (preasignada → revocada)
+    // y transiciona por la política única. La placa NO se borra de field_values (HU #12077): el
+    // expediente conserva lo que se le asignó y la UI lo muestra tal cual.
+    public async Task<OtClientProcedure?> ReleasePlateAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
         string reason,
@@ -982,17 +992,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             accessible.ClientTenantId,
             async () =>
             {
-                var entity = await _context.ProcedureInstances
-                    .FirstOrDefaultAsync(
-                        p => p.Id == procedureInstanceId
-                            && p.TenantId == accessible.ClientTenantId
-                            && p.DeletedAt == null,
-                        cancellationToken)
+                var entity = await LoadForOtTransitionAsync(procedureInstanceId, accessible.ClientTenantId, cancellationToken)
                     .ConfigureAwait(false);
 
-                if (entity is null
-                    || entity.Status != TramiteEstado.Entregado
-                    || entity.PlateFlowStatus is not (PlateFlowStatus.Preasignado or PlateFlowStatus.Asignado))
+                if (entity is null || !PuedeTransicionarComoOt(entity, TramiteEstado.Preasignacion))
                 {
                     return null;
                 }
@@ -1014,28 +1017,27 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     plateDetail.UpdatedAt = now;
                 }
 
-                // Sub-estado interno: si estaba 'asignado', revocar lo devuelve a 'preasignado' para
-                // reasignar placa. El status global permanece 'entregado' (sin transición de la máquina).
-                if (entity.PlateFlowStatus == PlateFlowStatus.Asignado)
-                {
-                    entity.PlateFlowStatus = PlateFlowStatus.Preasignado;
-                    entity.UpdatedAt = now;
-                    entity.UpdatedBy = resolvedChangedBy;
-                }
+                var fromStatus = entity.Status;
+                entity.Status = TramiteEstado.Preasignacion;
+                entity.UpdatedAt = now;
+                entity.UpdatedBy = resolvedChangedBy;
+                entity.InvalidarConsolidados();
+
+                await RegistrarAristaDePlacaAsync(
+                    entity, fromStatus, reason, otTenantId, source, resolvedChangedBy, now, cancellationToken)
+                    .ConfigureAwait(false);
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                var mapped = Map(entity);
-                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
-                return enriched[0];
+                return await MapRowAsync(entity, cancellationToken).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
     }
 
     // HU #12166 (Feature #12156) — el OT deshace su propia aprobación. NO reutiliza TransitionAsync:
     // ese método asume la decisión 'entregado→aprobado|rechazado' (mira PlateRangeDetails en estado
-    // Preasignada, que ya no existe para un trámite Aprobado — la placa quedó Utilizada al aprobar) y
-    // exige PlateFlowStatus.PermiteDecisionOt, que no aplica aquí. 'aprobado→revocado' es una
-    // transición propia con su propio esqueleto, espejo estructural de TransitionAsync/RevokePlateAsync.
+    // Preasignada, que ya no existe para un trámite Aprobado — la placa quedó Utilizada al aprobar).
+    // 'aprobado→revocado' es una transición propia con su propio esqueleto, espejo estructural de
+    // TransitionAsync/ReleasePlateAsync.
     public async Task<OtClientProcedure?> RevokeAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -1117,9 +1119,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 });
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                var mapped = Map(entity);
-                var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
-                return enriched[0];
+                return await MapRowAsync(entity, cancellationToken).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -1129,22 +1129,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid procedureInstanceId,
         CancellationToken cancellationToken)
     {
-        var clientTenantIds = await ListGrantedClientTenantIdsAsync(
-            transitOfficeId,
-            cancellationToken).ConfigureAwait(false);
-
-        if (clientTenantIds.Count == 0)
-        {
-            return null;
-        }
-
         return await ExecuteCrossTenantReadAsync(
             async () =>
             {
                 // Solo las columnas que viven en la propia instancia. Los datos que están en
                 // field_values se resuelven después con UNA lectura de la tabla: una subconsulta
                 // correlacionada por atributo escalaba a más de veinte para el detalle completo.
-                var mapped = await BuildAccessibleQuery(transitOfficeId, clientTenantIds)
+                var mapped = await BuildAccessibleQuery(transitOfficeId)
                     .Where(p => p.Id == procedureInstanceId)
                     .Select(p => new ProcedureInstanceRow(
                         p.Id,
@@ -1155,7 +1146,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         // La modalidad gobierna qué causales de rechazo aplican: sin ella, el guard
                         // del rechazo descartaría causales válidas por creerlas de otro proceso.
                         p.ProcedureType != null ? p.ProcedureType.Family : "",
-                        p.PlateFlowStatus,
                         p.PlateAssignedAt,
                         p.PlateUpdatedAt,
                         p.TransitOfficeId,
@@ -1227,6 +1217,22 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     .FirstOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
 
+                // Feature #12565 — intento de revocatoria MÁS RECIENTE (cualquier estado): a lo sumo uno
+                // puede estar activo (índice único parcial), así que el más reciente por intento es
+                // siempre o el activo o el último decidido — nunca uno viejo que ya no importa.
+                var revocation = await _context.ProcedureRevocationRequests
+                    .AsNoTracking()
+                    .Where(r => r.ProcedureInstanceId == mapped.Id)
+                    .OrderByDescending(r => r.AttemptNumber)
+                    .FirstOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                var revocationActive = revocation is not null && (
+                    revocation.Status == Flit.Tramites.Domain.RevocationRequests.ProcedureRevocationRequestStatus.Solicitada
+                    || revocation.Status == Flit.Tramites.Domain.RevocationRequests.ProcedureRevocationRequestStatus.EnRevision);
+                var revocationDecided = revocation is not null && revocation.DecidedAt is not null && (
+                    revocation.Status == Flit.Tramites.Domain.RevocationRequests.ProcedureRevocationRequestStatus.Aprobada
+                    || revocation.Status == Flit.Tramites.Domain.RevocationRequests.ProcedureRevocationRequestStatus.Rechazada);
+
                 var procedure = new OtClientProcedure
                 {
                     Id = mapped.Id,
@@ -1235,17 +1241,16 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     ReferenceNumber = mapped.ReferenceNumber,
                     Status = mapped.Status,
                     Familia = mapped.Familia,
-                    PlateFlowStatus = mapped.PlateFlowStatus,
                     PlateAssignedAt = mapped.PlateAssignedAt,
                     PlateUpdatedAt = mapped.PlateUpdatedAt,
                     // HU #10804 — soat_estado también en el detalle (mismo criterio de visibilidad).
                     SoatEstado = Field(fields, Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey),
                     // HU #10805 — dígito de preferencia también en el detalle.
                     PlatePreferredLastDigit = Field(fields, PlatePreferredLastDigitFieldKey),
-                    SoatPagado = IsTrue(fields, Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.SoatPagado),
+                    SoatPagado = IsTrue(fields, Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.SoatPagado),
                     ImpuestoDepartamentalPagado = IsTrue(
                         fields,
-                        Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.ImpuestoDepartamentalPagado),
+                        Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.ImpuestoDepartamentalPagado),
                     TransitOfficeId = mapped.TransitOfficeId,
                     CreatedAt = mapped.CreatedAt,
                     SubmittedAt = mapped.SubmittedAt,
@@ -1282,6 +1287,11 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     },
                     Comercial = comercial,
                     Prenda = prenda,
+                    RevocationRequestStatus = revocationActive ? revocation!.Status : null,
+                    RevocationDecisionStatus = revocationDecided ? revocation!.Status : null,
+                    RevocationDecisionAt = revocationDecided ? revocation!.DecidedAt : null,
+                    RevocationRequestReason = revocationDecided ? revocation!.Reason : null,
+                    RevocationDecisionReason = revocationDecided ? revocation!.DecisionReason : null,
                 };
 
                 var enriched = await EnrichDisplayNamesAsync([procedure], cancellationToken)
@@ -1299,7 +1309,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         string ReferenceNumber,
         string Status,
         string Familia,
-        string? PlateFlowStatus,
         DateTimeOffset? PlateAssignedAt,
         DateTimeOffset? PlateUpdatedAt,
         Guid? TransitOfficeId,
@@ -1380,15 +1389,23 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     /// <c>?status=borrador</c> devuelve vacío por construcción y el detalle de un no entregado da 404,
     /// sin lógica adicional en ninguno de los consumidores.</para>
     /// </summary>
-    private IQueryable<ProcedureInstance> BuildAccessibleQuery(
-        Guid transitOfficeId,
-        IReadOnlyList<Guid> clientTenantIds) =>
+    private IQueryable<ProcedureInstance> BuildAccessibleQuery(Guid transitOfficeId) =>
         _context.ProcedureInstances
             .AsNoTracking()
             .Where(p => p.DeletedAt == null
                 && p.TransitOfficeId == transitOfficeId
-                && clientTenantIds.Contains(p.TenantId)
                 && TramiteEstado.RecibidosPorOrganismo.Contains(p.Status));
+
+    private async Task<IReadOnlyList<Guid>> ListClientTenantIdsFromReceivedProceduresAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken) =>
+        await ExecuteCrossTenantReadAsync(
+            async () => (IReadOnlyList<Guid>)await BuildAccessibleQuery(transitOfficeId)
+                .Select(p => p.TenantId)
+                .Distinct()
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
 
     private async Task<Guid?> ResolveTransitOfficeIdAsync(
         Guid otTenantId,
@@ -1578,36 +1595,27 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         IQueryable<ProcedureInstance> query,
         OtClientProcedureFilter filter)
     {
+        // ADR-0059 — varios estados separados por coma: las tarjetas y el desplegable filtran por el
+        // estado real, y un enlace profundo puede pedir más de uno (p. ej. la cola de placa completa).
         if (!string.IsNullOrWhiteSpace(filter.Status))
         {
-            query = query.Where(p => p.Status == filter.Status.Trim());
-        }
-
-        if (!string.IsNullOrWhiteSpace(filter.PlateFlowStatus))
-        {
-            var valores = filter.PlateFlowStatus
+            var estados = filter.Status
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Select(v => v.ToLowerInvariant())
+                .Distinct()
                 .ToList();
 
-            // `sin_ruta` no es un valor de la columna: es la AUSENCIA de ruta de placa (null). Se
-            // trata aparte para poder pedirlo junto a valores reales sin escribir dos consultas.
-            var incluirSinRuta = valores.Remove(PlateFlowSinRuta);
+            query = estados.Count == 1
+                ? query.Where(p => p.Status == estados[0])
+                : query.Where(p => estados.Contains(p.Status));
+        }
 
-            if (incluirSinRuta && valores.Count > 0)
-            {
-                query = query.Where(p =>
-                    p.PlateFlowStatus == null || valores.Contains(p.PlateFlowStatus));
-            }
-            else if (incluirSinRuta)
-            {
-                query = query.Where(p => p.PlateFlowStatus == null);
-            }
-            else if (valores.Count > 0)
-            {
-                query = query.Where(p =>
-                    p.PlateFlowStatus != null && valores.Contains(p.PlateFlowStatus));
-            }
+        if (filter.HasActiveRevocationRequest == true)
+        {
+            query = query.Where(p => _context.ProcedureRevocationRequests.Any(r =>
+                r.ProcedureInstanceId == p.Id
+                && (r.Status == ProcedureRevocationRequestStatus.Solicitada
+                    || r.Status == ProcedureRevocationRequestStatus.EnRevision)));
         }
 
         if (filter.ProcedureTypeId is not null)
@@ -1756,8 +1764,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 _ => query,
             },
 
-            OtBandejaQueryFieldCatalog.SubEstadoPlaca => PorSubEstadoPlaca(query, op, valores),
-
             // Gestor = quien radicó el trámite en la empresa cliente. Es el mismo criterio que ya
             // usaba el filtro suelto de la bandeja: para el organismo, el interlocutor es quien
             // radicó, no a quién se lo reasignaron puertas adentro de la empresa.
@@ -1808,40 +1814,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         {
             QueryOperator.EsAlguno => query.Where(p => ids.Contains(p.ProcedureTypeId)),
             QueryOperator.NoEsNinguno => query.Where(p => !ids.Contains(p.ProcedureTypeId)),
-            _ => query,
-        };
-    }
-
-    /// <summary>
-    /// Ruta de placa. <c>sin_ruta</c> no es un valor de la columna sino su ausencia, así que se trata
-    /// aparte para poder pedirlo junto a valores reales — misma regla que ya aplica el filtro suelto
-    /// <c>PlateFlowStatus</c> que mandan las tarjetas de la cabecera.
-    /// </summary>
-    private static IQueryable<ProcedureInstance> PorSubEstadoPlaca(
-        IQueryable<ProcedureInstance> query, string op, List<string> valores)
-    {
-        var enMinuscula = valores.Select(v => v.ToLowerInvariant()).ToList();
-        var incluirSinRuta = enMinuscula.Remove(PlateFlowSinRuta);
-        var negado = op == QueryOperator.NoEsNinguno;
-
-        if (op != QueryOperator.EsAlguno && !negado)
-            return query;
-
-        // Se arma el predicado en positivo y se niega al final: escribir las dos ramas por separado
-        // es la forma de que «es alguno» y «no es ninguno» dejen de ser complementarios sin que
-        // nadie lo note.
-        return (incluirSinRuta, enMinuscula.Count > 0, negado) switch
-        {
-            (true, true, false) => query.Where(p =>
-                p.PlateFlowStatus == null || enMinuscula.Contains(p.PlateFlowStatus)),
-            (true, true, true) => query.Where(p =>
-                p.PlateFlowStatus != null && !enMinuscula.Contains(p.PlateFlowStatus)),
-            (true, false, false) => query.Where(p => p.PlateFlowStatus == null),
-            (true, false, true) => query.Where(p => p.PlateFlowStatus != null),
-            (false, true, false) => query.Where(p =>
-                p.PlateFlowStatus != null && enMinuscula.Contains(p.PlateFlowStatus)),
-            (false, true, true) => query.Where(p =>
-                p.PlateFlowStatus == null || !enMinuscula.Contains(p.PlateFlowStatus)),
             _ => query,
         };
     }
@@ -1920,6 +1892,36 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         };
     }
 
+    /// <summary>
+    /// Fila que devuelve toda mutación del OT (decidir, asignar, liberar, corregir placa). Completa
+    /// <see cref="Map"/> con lo que la grilla proyecta y la entidad no trae —gestor, SOAT, dígito
+    /// preferido y los checks de «Enviar al OT»—, porque la bandeja sustituye la fila por esta
+    /// respuesta: si viniera recortada, el operador vería desaparecer el gestor y los badges justo
+    /// después de decidir. Corre dentro del scope del tenant cliente, igual que el guardado.
+    /// </summary>
+    private async Task<OtClientProcedure> MapRowAsync(ProcedureInstance entity, CancellationToken cancellationToken)
+    {
+        var fields = await LoadFieldValuesAsync(entity.Id, cancellationToken).ConfigureAwait(false);
+        var gestorId = entity.CreatedByUserId;
+        var gestorNombre = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == gestorId)
+            .Select(u => u.DisplayName)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var mapped = Map(entity) with
+        {
+            SoatEstado = Field(fields, Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey),
+            PlatePreferredLastDigit = Field(fields, PlatePreferredLastDigitFieldKey),
+            SoatPagado = IsTrue(fields, Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.SoatPagado),
+            ImpuestoDepartamentalPagado = IsTrue(
+                fields, Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.ImpuestoDepartamentalPagado),
+            GestorNombre = gestorNombre,
+        };
+        var enriched = await EnrichDisplayNamesAsync([mapped], cancellationToken).ConfigureAwait(false);
+        return enriched[0];
+    }
+
     private static OtClientProcedure Map(ProcedureInstance entity) => new()
     {
         Id = entity.Id,
@@ -1928,7 +1930,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         ReferenceNumber = entity.ReferenceNumber,
         Status = entity.Status,
         Familia = entity.ProcedureType != null ? entity.ProcedureType.Family : "",
-        PlateFlowStatus = entity.PlateFlowStatus,
         PlateAssignedAt = entity.PlateAssignedAt,
         PlateUpdatedAt = entity.PlateUpdatedAt,
         TransitOfficeId = entity.TransitOfficeId,

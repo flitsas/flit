@@ -21,4 +21,10 @@ public sealed class VehicleSignatureImprintListRow
     public long? SignedSizeBytes { get; init; }
     public string? SignedFilename { get; init; }
     public DateTimeOffset? DeletedAt { get; init; }
+
+    /// <summary>
+    /// <c>true</c> cuando la impronta fue reemplazada/borrada por el gestor (soft-delete:
+    /// <c>attachment_id</c> null, conserva <c>signed_storage_path</c> histórico) — Bug #12594, H2.
+    /// </summary>
+    public bool Reemplazada => DeletedAt is not null;
 }

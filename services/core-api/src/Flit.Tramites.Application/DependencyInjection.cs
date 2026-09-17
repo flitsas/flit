@@ -1,8 +1,11 @@
+using Flit.Tramites.Application.BulkTramites.Processing;
+using Flit.Tramites.Application.BulkTramites.SubmitBatch;
 using Flit.Tramites.Application.UseCases.Catalogs;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ImprintSignatures;
 using Flit.Tramites.Application.UseCases.ProcedureTypes;
+using Flit.Tramites.Domain.RevocationRequests;
 using Flit.Tramites.Domain.Services;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +17,10 @@ public static class DependencyInjection
     public static IServiceCollection AddTramitesApplication(this IServiceCollection services)
     {
         services.AddScoped<IProcedureTypeValidator, ProcedureTypeValidator>();
+        // HU #12571 (Feature #12565) — calculador de días hábiles para la ventana de revocatoria.
+        // Sin estado ni dependencias: Singleton (ver justificación de la implementación en
+        // IBusinessDayCalculator sobre por qué es una versión simple sin festivos colombianos).
+        services.AddSingleton<IBusinessDayCalculator, BusinessDayCalculator>();
 
         services.AddScoped<CreateProcedureTypeHandler>();
         services.AddScoped<ListProcedureTypesHandler>();
@@ -37,11 +44,24 @@ public static class DependencyInjection
 
         services.AddScoped<CaptureTypeSnapshotHandler>();
         services.AddScoped<CreateProcedureInstanceHandler>();
+        // HU #12522 (Feature #12519) — carga masiva de trámites por Excel.
+        services.AddScoped<SubmitBulkTramitesBatchHandler>();
+        // HU #12523 — procesamiento fila a fila del lote sobre los casos de uso del wizard.
+        services.AddScoped<IBulkTramitesWizardGateway, BulkTramitesWizardGateway>();
+        services.AddScoped<BulkTramitesBatchProcessor>();
+        // HU #12524 — resumen de lotes en /tramites.
+        services.AddScoped<BulkTramites.Query.GetBulkTramitesBatchesHandler>();
         services.AddScoped<GetProcedureInstanceHandler>();
         services.AddScoped<ListProcedureInstancesHandler>();
         // Filtrado/ordenamiento server-side del listado (WHERE/ORDER BY en SQL, no en memoria).
         services.AddScoped<ListProcedureInstancesFilteredHandler>();
         services.AddScoped<CountProcedureInstancesByStatusHandler>();
+        // HU #12358 (Feature #12257) - lectura consolidada de la red por TenantScope (rutas /network/**).
+        services.AddScoped<NetworkListProcedureInstancesHandler>();
+        services.AddScoped<NetworkCountProcedureInstancesByStatusHandler>();
+        services.AddScoped<NetworkGetProcedureInstanceHandler>();
+        // HU #12410 (Feature #12257) - documentos de un tramite de la red: metadatos + descarga proxeada.
+        services.AddScoped<NetworkAttachmentsHandler>();
         services.AddScoped<GetTramitesQueryFieldsHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
         // HU #10975 (Feature #10972) — persiste en field_values lo que el OCR semántico ya extrae.
@@ -55,7 +75,7 @@ public static class DependencyInjection
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // ICT (paridad v1) — pausar/reanudar trámites ICT desde la UI de FLIT (individual + masivo).
         services.AddScoped<PauseProcedureInstanceHandler>();
-        services.AddScoped<CompletePlateFlowHandler>();
+        services.AddScoped<EnviarAlOtHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
         // HU #10536 — marcar trámite como prioritario (ordenamiento con primacía en los listados).
@@ -214,6 +234,10 @@ public static class DependencyInjection
         services.AddScoped<RegenerarDocumentosTrazadoHandler>();
         services.AddScoped<GetFurTemplateFormatHandler>(); // HU #10924 — formato de FUR por clasificación
         services.AddScoped<GenerarConsolidadoHandler>();
+        // HU #12116 — firma automática de la impronta manual al radicar / asignar placa / backfill,
+        // sin depender de que alguien genere el consolidado.
+        services.AddScoped<FirmarImprontaManualSiListaHandler>();
+        services.AddScoped<BackfillFirmaImprontaManualHandler>();
         // HU #12158 — acciones avanzadas del admin sobre el consolidado (limpiar/cargar externo).
         services.AddScoped<LimpiarConsolidadoHandler>();
         services.AddScoped<CargarConsolidadoExternoHandler>();
@@ -273,6 +297,9 @@ public static class DependencyInjection
         services.AddScoped<UseCases.Consultations.ExternalQueryCacheService>();
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
 
+        // Epic #12543 — aceptación de Términos y Condiciones antes de crear un trámite.
+        services.AddScoped<UseCases.TermsAcceptance.RecordProcedureTermsAcceptanceHandler>();
+
         // Confirmación RUNT (Epic #12234, Feature #12276): configuración global (HU #12277).
         services.AddScoped<UseCases.RuntConfirmation.GetRuntConfirmationSettingsHandler>();
         services.AddScoped<UseCases.RuntConfirmation.UpdateRuntConfirmationSettingsHandler>();
@@ -306,6 +333,12 @@ public static class DependencyInjection
         // HU #11462 — resolución de destinatarios del aviso de cambio de estado (ADR-0045).
         services.AddScoped<Notifications.ITramiteNotificationRecipientResolver,
             Notifications.TramiteNotificationRecipientResolver>();
+
+        // HU #12572 (Feature #12565) — endpoint de solicitud de revocatoria.
+        services.AddScoped<UseCases.RevocationRequests.RequestRevocationHandler>();
+
+        // HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado gestor.
+        services.AddScoped<UseCases.RevocationRequests.ListRevocationRequestsHandler>();
 
         // HU #12148 — validación OT de firma digital de impronta manual.
         services.AddScoped<ListImprintSignaturesByPlacaHandler>();

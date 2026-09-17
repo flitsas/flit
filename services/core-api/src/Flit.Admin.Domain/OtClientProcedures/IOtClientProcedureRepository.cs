@@ -121,10 +121,10 @@ public interface IOtClientProcedureRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// HU #10654 / #10800 (Feature #10587) — el OT asigna una placa a un trámite en <c>preasignado</c>
-    /// (Flujo B): reserva la placa (del rango, o FUERA DE RANGO si <paramref name="outOfRange"/> — la
-    /// registra como rango ad-hoc de 1 placa), la escribe en el trámite y avanza el sub-estado a
-    /// <c>asignado</c>. Si no se puede, el resultado trae la causa concreta en
+    /// HU #10654 / #10800 → ADR-0059 — el OT asigna una placa a un trámite en <c>preasignacion</c>:
+    /// reserva la placa (del rango, o FUERA DE RANGO si <paramref name="outOfRange"/> — la registra
+    /// como rango ad-hoc de 1 placa), la escribe en el trámite y lo transiciona a <c>asignado</c>
+    /// (historial + publicación). Si no se puede, el resultado trae la causa concreta en
     /// <see cref="PlateAssignmentFailure"/> — en particular distingue la placa YA asignada, que es el
     /// error habitual en operación y antes llegaba al usuario como un mensaje genérico.
     /// </summary>
@@ -138,10 +138,12 @@ public interface IOtClientProcedureRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// HU #10655 (Feature #10587) — el OT revoca la preasignación: libera la placa
-    /// (preasignada→revocada) y devuelve el trámite a <c>preasignado</c> si estaba <c>asignado</c>.
+    /// ADR-0059 (HU #12598) — «Liberar placa»: el OT devuelve un trámite <c>asignado</c> a
+    /// <c>preasignacion</c> para asignar otra placa. Libera la reserva del inventario
+    /// (preasignada→revocada); la placa se conserva en <c>field_values</c> (HU #12077). <c>null</c> si
+    /// el trámite no es accesible o no está en <c>asignado</c>.
     /// </summary>
-    Task<OtClientProcedure?> RevokePlateAsync(
+    Task<OtClientProcedure?> ReleasePlateAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
         string reason,
@@ -181,6 +183,21 @@ public interface IOtClientProcedureRepository
         string? reason,
         Guid? changedBy,
         string source,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #12578 (Feature #12565) — expone el MISMO mecanismo de resolución de organismo que ya usan
+    /// <see cref="ListAsync"/>/<see cref="GetByIdAsync(Guid,Guid,Guid?,CancellationToken)"/> (y el resto
+    /// de la bandeja): <paramref name="transitOfficeIdOverride"/> si viene (SuperAdmin, ya validado
+    /// contra el catálogo por el caller), o si no el organismo del perfil OT de
+    /// <paramref name="otTenantId"/> (<c>admin.transit_office_profiles</c>). Se extrae a método público
+    /// para que otro caso de uso (listado de solicitudes de revocatoria del lado OT) reutilice la MISMA
+    /// resolución sin reimplementarla. <c>null</c> si <paramref name="otTenantId"/> no tiene perfil OT
+    /// resoluble — igual criterio "sin organismo, sin error" del resto de la superficie OT.
+    /// </summary>
+    Task<Guid?> ResolveTransitOfficeIdAsync(
+        Guid otTenantId,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 }

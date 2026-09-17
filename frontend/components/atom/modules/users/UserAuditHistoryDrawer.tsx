@@ -13,6 +13,7 @@ const MODULE_LABEL: Record<AdminAuditModule, string> = {
   authentication: "Autenticación",
   security: "Seguridad",
   config: "Configuración",
+  tramites: "Trámites",
 };
 
 /**
@@ -38,6 +39,8 @@ const OPERATION_LABEL: Record<string, string> = {
   change_password: "Cambió la contraseña",
   admin_reset_password: "Restableció la contraseña de otro usuario",
   activate_account: "Activó la cuenta",
+  // Epic #12543 — aceptación de T&C antes de crear un trámite.
+  accept_terms: "Aceptó los Términos y Condiciones para crear un trámite",
 };
 
 /** Etiquetas legibles de los campos que viajan en el detalle del cambio. */

@@ -1,6 +1,6 @@
-using System.Security.Claims;
 using System.Text.Json;
 using Flit.Api.Authorization;
+using Flit.Queries.Domain.Tenancy;
 
 namespace Flit.Api.Middleware;
 
@@ -31,6 +31,13 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
     /// <summary>Clave en <see cref="HttpContext.Items"/> de si el caller es SuperAdmin (bool).</summary>
     public const string SuperAdminItemKey = "tramites.isSuperAdmin";
 
+    /// <summary>
+    /// Clave en <see cref="HttpContext.Items"/> del <see cref="TenantScope"/> de la petición (HU #12321).
+    /// Canal NUEVO y paralelo: <see cref="TenantItemKey"/> y <see cref="SuperAdminItemKey"/> conservan
+    /// exactamente el mismo valor que antes; un endpoint que ignore el scope devuelve lo mismo.
+    /// </summary>
+    public const string TenantScopeItemKey = "tramites.tenantScope";
+
     private const string TenantHeader = "X-Tenant-Id";
 
     public async Task InvokeAsync(HttpContext context)
@@ -49,26 +56,22 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
             return;
         }
 
-        // Multi-rol (HU #10506): el JWT emite un claim POR CADA rol activo, en orden no
-        // determinístico — FindFirstValue solo evalúa el primero. Se evalúan TODOS los claims
-        // de los tipos relevantes (fix post-review #10504).
-        var roleValues = user.Claims
-            .Where(c => c.Type == AdminAuthorization.RoleClaimType || c.Type == "role_code")
-            .Select(c => c.Value);
-        var isSuperAdmin = roleValues.Any(r => string.Equals(r, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+        // Regla única de SuperAdmin (HU #12320): vive en RequestTenantResolver (evalúa TODOS los claims de rol).
+        var isSuperAdmin = RequestTenantResolver.IsSuperAdmin(user);
 
         if (isSuperAdmin)
         {
             // SuperAdmin: respeta el tenant del header si lo manda (acota a una empresa); si no, null = todos.
             context.Items[SuperAdminItemKey] = true;
             context.Items[TenantItemKey] = TryReadHeaderTenant(context, out var selected) ? selected : (Guid?)null;
+            // HU #12321 — All() solo aquí (fábrica internal): ningún resolver puede fabricarlo.
+            context.Items[TenantScopeItemKey] = TenantScope.All();
             await next(context);
             return;
         }
 
         // Usuario de compañía: el tenant SALE del token; se ignora/sobreescribe el header del cliente.
-        if (!Guid.TryParse(user.FindFirstValue(AdminAuthorization.TenantIdClaimType), out var tenantId)
-            || tenantId == Guid.Empty)
+        if (!RequestTenantResolver.TryResolveNonEmptyTenantId(user, out var tenantId))
         {
             await WriteProblemAsync(context, StatusCodes.Status403Forbidden, "Forbidden",
                 "El usuario autenticado no tiene una compañía asignada.");
@@ -78,47 +81,178 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         context.Request.Headers[TenantHeader] = tenantId.ToString();
         context.Items[SuperAdminItemKey] = false;
         context.Items[TenantItemKey] = tenantId;
+        // HU #12321 — alcance tipado calculado SOLO desde la BD (nunca de headers/body/token).
+        context.Items[TenantScopeItemKey] = await ResolveScopeFailClosedAsync(context, tenantId);
         await next(context);
     }
 
-    /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>
-    private static bool IsRuntimeScoped(PathString path) =>
-        path.StartsWithSegments("/api/v1/tramites/instances", StringComparison.OrdinalIgnoreCase)
-        || path.Equals("/api/v1/tramites/transit-offices", StringComparison.OrdinalIgnoreCase)
+    /// <summary>
+    /// Resuelve el <see cref="TenantScope"/> del company-user vía <see cref="ITenantScopeResolver"/>
+    /// (scoped, desde <see cref="HttpContext.RequestServices"/>). Cerrado por defecto: sin resolver
+    /// registrado, con excepción o con resultado nulo ⇒ <see cref="TenantScope.Single"/> del propio
+    /// tenant. Jamás <c>All</c>.
+    /// </summary>
+    private static async Task<TenantScope> ResolveScopeFailClosedAsync(HttpContext context, Guid tenantId)
+    {
+        try
+        {
+            var resolver = context.RequestServices?.GetService<ITenantScopeResolver>();
+            if (resolver is null)
+                return TenantScope.Single(tenantId);
+
+            var scope = await resolver.ResolveAsync(tenantId, context.RequestAborted);
+            return scope is null || scope.IsAll ? TenantScope.Single(tenantId) : scope;
+        }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return TenantScope.Single(tenantId);
+        }
+    }
+
+    /// <summary>Cómo se compara la ruta de la petición con el patrón declarado.</summary>
+    public enum RouteMatch
+    {
+        /// <summary><see cref="PathString.StartsWithSegments(string, StringComparison)"/> — cubre rutas hijas.</summary>
+        Prefix,
+
+        /// <summary>
+        /// Solo la ruta exacta, tolerando únicamente la barra final (<c>/ruta</c> y <c>/ruta/</c>): el
+        /// routing de ASP.NET Core sirve ambas y con <see cref="PathString.Equals(PathString, StringComparison)"/>
+        /// la segunda saltaba el middleware (Bug #12564). Ni sufijos pegados ni rutas hijas.
+        /// </summary>
+        Exact,
+    }
+
+    /// <summary>Entrada declarativa de la lista de rutas runtime tenant-scoped.</summary>
+    public sealed record RuntimeScopedRoute(string Path, RouteMatch Match)
+    {
+        /// <summary><c>true</c> si <paramref name="requestPath"/> cae bajo esta declaración.</summary>
+        public bool Matches(PathString requestPath) => Match == RouteMatch.Prefix
+            ? requestPath.StartsWithSegments(Path, StringComparison.OrdinalIgnoreCase)
+            : requestPath.StartsWithSegments(Path, StringComparison.OrdinalIgnoreCase, out var remaining)
+                && (!remaining.HasValue || remaining.Value == "/");
+    }
+
+    /// <summary>Prefijo bajo el que viven los endpoints runtime de trámites que este middleware protege.</summary>
+    public const string RuntimeRoutePrefix = "/api/v1/tramites";
+
+    /// <summary>
+    /// Lista declarativa (enumerable y testeable — HU #12320 AC3) de los endpoints runtime tenant-scoped
+    /// (excluye parametrización y portal público). Cada entrada conserva su comparación:
+    /// <see cref="RouteMatch.Prefix"/> = StartsWithSegments (cubre rutas hijas) y
+    /// <see cref="RouteMatch.Exact"/> = StartsWithSegments con resto vacío o <c>/</c> (solo la ruta y
+    /// su variante con barra final — Bug #12564: <c>Equals</c> dejaba pasar <c>/ruta/</c>, que el routing
+    /// sí sirve). Un test de arquitectura enumera las rutas registradas bajo
+    /// <see cref="RuntimeRoutePrefix"/> y falla nombrando la que no esté cubierta aquí.
+    /// </summary>
+    public static readonly IReadOnlyList<RuntimeScopedRoute> RuntimeScopedRoutes =
+    [
+        new("/api/v1/tramites/instances", RouteMatch.Prefix),
+        new("/api/v1/tramites/transit-offices", RouteMatch.Exact),
         // CF-02 (HU #10879) — consulta del paso 1 ANTES de crear el trámite: no lleva instancia en la
         // ruta, pero es tan tenant-scoped como el resto del runtime (usa los proveedores de consulta de
         // la compañía y busca duplicidad entre SUS trámites). Sin esta entrada el middleware no poblaba
         // http.Items y el endpoint respondía 403 "sin compañía asignada" a un usuario que sí la tiene.
-        || path.Equals("/api/v1/tramites/preflight-preview", StringComparison.OrdinalIgnoreCase)
+        new("/api/v1/tramites/preflight-preview", RouteMatch.Exact),
         // HU sin ADO 2026-08-11 — consulta RUES del paso 1 SIN trámite creado (casilla 19 del FUR):
         // mismo caso que preflight-preview justo arriba, sin instancia en la ruta pero tan
         // tenant-scoped como el resto (usa el proveedor RUES de la compañía). Sin esta entrada el
         // endpoint confiaría en el X-Tenant-Id crudo del cliente.
-        || path.Equals("/api/v1/tramites/rues-preview", StringComparison.OrdinalIgnoreCase)
-        // HU #10943 — StartsWithSegments, NO Equals: con la comparación exacta el listado y el create
-        // quedaban scopeados, pero las rutas hijas (PATCH /{id} y POST /{id}/resend, edición y reenvío de
-        // una prevalidación) caían fuera y el backend confiaba en el X-Tenant-Id crudo del cliente — un
-        // caller podía editar el correo (PII) o gastar reenvíos de OTRA compañía. Mismo bug y mismo fix
-        // que ya se aplicó a identity-validation más abajo.
-        || path.StartsWithSegments("/api/v1/tramites/biometric-validations", StringComparison.OrdinalIgnoreCase)
+        new("/api/v1/tramites/rues-preview", RouteMatch.Exact),
+        // HU #10943 — Prefix (StartsWithSegments), NO Exact: con la comparación exacta el listado y el
+        // create quedaban scopeados, pero las rutas hijas (PATCH /{id} y POST /{id}/resend, edición y
+        // reenvío de una prevalidación) caían fuera y el backend confiaba en el X-Tenant-Id crudo del
+        // cliente — un caller podía editar el correo (PII) o gastar reenvíos de OTRA compañía. Mismo bug
+        // y mismo fix que ya se aplicó a identity-validation más abajo.
+        new("/api/v1/tramites/biometric-validations", RouteMatch.Prefix),
         // Feature #10587 — placas disponibles para el wizard (Flujo A): el endpoint resuelve el tenant
         // desde http.Items (que puebla este middleware). Sin esto devolvía 403 al radicador de la compañía
         // aunque el JWT trae tenant_id (el middleware no lo scopeaba). Se impone el tenant desde el token.
-        || path.StartsWithSegments("/api/v1/tramites/plate-preassign", StringComparison.OrdinalIgnoreCase)
+        new("/api/v1/tramites/plate-preassign", RouteMatch.Prefix),
         // Colas de dead-letter de validación de identidad (stuck/requeue): el tenant se impone desde el
         // JWT igual que el resto del runtime; sin esto el endpoint confiaba en el header crudo del cliente
         // y un company-user podía leer/reencolar las atascadas de otra compañía.
-        || path.StartsWithSegments("/api/v1/tramites/identity-validation", StringComparison.OrdinalIgnoreCase)
+        new("/api/v1/tramites/identity-validation", RouteMatch.Prefix),
         // HU #10903 — consumo del wizard (escrituras vigentes + lookup de representante por NIT): el
         // operador de la compañía solo lee SU tenant. El tenant se impone desde el JWT (no del header),
         // para que un company-user no consulte el directorio de otra compañía cambiando X-Tenant-Id.
-        || path.StartsWithSegments("/api/v1/tramites/deeds", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWithSegments("/api/v1/tramites/legal-representatives", StringComparison.OrdinalIgnoreCase)
+        new("/api/v1/tramites/deeds", RouteMatch.Prefix),
+        new("/api/v1/tramites/legal-representatives", RouteMatch.Prefix),
         // HU #10955 (AC5) — lookup de contacto de actores por documento: sin instancia en la ruta,
         // pero tan tenant-scoped como el resto del runtime (mismo bug de fondo que b68b71e3 si se
         // quedara fuera: el operador podría leer el contacto de una persona capturado por OTRA
         // compañía cambiando X-Tenant-Id). El tenant se impone desde el JWT, no del header crudo.
-        || path.StartsWithSegments("/api/v1/tramites/actors", StringComparison.OrdinalIgnoreCase);
+        new("/api/v1/tramites/actors", RouteMatch.Prefix),
+        // HU #12358 (Feature #12257) — vista consolidada de la red: TODAS las rutas de lectura ancha
+        // (listado, detalle, conteos y las que sumen las HUs hermanas: documentos, estadísticas,
+        // reportes) viven bajo este único prefijo, así una sola entrada puebla el TenantScope y el test
+        // de arquitectura las cubre. Fuera de aquí ScopeFromItems sería null y la policy de cabeza
+        // (GroupHeadReadFilter) respondería 403 siempre — un olvido produce «no ve», nunca una fuga.
+        new("/api/v1/tramites/network", RouteMatch.Prefix),
+        // HU #12361 (Feature #12257) — el cliente HIJO consulta quién accedió a sus datos
+        // (/network-access-audit/mine): el tenant sale de aquí (tramites.tenantId), nunca del caller.
+        // Prefijo distinto de /network (StartsWithSegments compara segmentos completos): entrada propia.
+        new("/api/v1/tramites/network-access-audit", RouteMatch.Prefix),
+        // Feature #12519 — carga masiva de trámites: plantilla (organismos habilitados de la
+        // compañía), lotes y resultados son de UNA compañía. El tenant se impone desde el JWT igual
+        // que el resto del runtime; el SuperAdmin acota con X-Tenant-Id como en /instances.
+        new("/api/v1/tramites/carga-masiva", RouteMatch.Prefix),
+        // Epic #12543 — aceptación de T&C antes de crear trámite: la evidencia lleva el tenant desde
+        // el que se radicaba, y ese tenant sale del JWT (el SuperAdmin acota con X-Tenant-Id). Prefix
+        // para cubrir también GET /current.
+        new("/api/v1/tramites/terms-acceptances", RouteMatch.Prefix),
+        // Bug #12554 — gestión avanzada del admin sobre trámites (Feature #12155: cambiar estado,
+        // anular, reasignar gestor, reenviar validación de identidad, limpiar/cargar consolidado y el
+        // selector de gestores disponibles): los 6 endpoints leían [FromHeader(Name = "X-Tenant-Id")]
+        // SIN pasar por este middleware (prefijo /api/v1/admin/tramites, fuera de RuntimeRoutePrefix),
+        // así que un usuario NO-SuperAdmin con el permiso RBAC de la acción pero SIN jerarquía (alcance
+        // Single — TenantWriteGuard solo protege cabezas de grupo, HU #12358) podía mandar el
+        // X-Tenant-Id de OTRA compañía y operar sobre su trámite. Prefix para cubrir también
+        // /gestores-disponibles.
+        new("/api/v1/admin/tramites", RouteMatch.Prefix),
+        // Bug #12558 — GET/PUT /api/v1/me/ui-preferences/{scope} leían [FromHeader(Name = "X-Tenant-Id")]
+        // SIN pasar por este middleware (prefijo fuera de RuntimeRoutePrefix, igual que el caso de
+        // /api/v1/admin/tramites arriba): cualquier usuario autenticado NO-SuperAdmin podía mandar el
+        // X-Tenant-Id de OTRA compañía y leer/sobrescribir la preferencia de UI guardada bajo ese tenant
+        // ajeno. El user_id ya salía del JWT (correcto); solo el tenant confiaba en el header crudo. Los
+        // endpoints NO cambiaron: siguen leyendo [FromHeader] — este middleware sobrescribe el propio
+        // header del request con el tenant del JWT para cualquier caller NO-SuperAdmin (línea de abajo),
+        // así que el binding del endpoint ve el valor correcto sin tocar el handler.
+        new("/api/v1/me/ui-preferences", RouteMatch.Prefix),
+        // Bug #12564 (hallado en la revisión de seguridad del PR #374) — GET
+        // /api/v1/tramites/consultation-config (HU #10478) leía [FromHeader(Name = "X-Tenant-Id")] y
+        // estaba congelado como deuda en LegacyUncoveredRoutes desde HU #12320: cualquier usuario
+        // autenticado NO-SuperAdmin del tenant A podía mandar el X-Tenant-Id de OTRA compañía y ver su
+        // proveedor primario de consulta (VIN/placa/conductor) y sus flags OnlyOwnVehicles* /
+        // BlockProcedureFamily*. Mismo fix que /api/v1/me/ui-preferences: el endpoint NO cambia — este
+        // middleware sobrescribe el header con el tenant del JWT para cualquier caller NO-SuperAdmin y
+        // el SuperAdmin sigue acotando con el header. Exact: no hay rutas hijas; Exact tolera solo la
+        // barra final (/consultation-config/ también pasa por aquí, PR #377).
+        new("/api/v1/tramites/consultation-config", RouteMatch.Exact),
+        // HU #12578 (Feature #12565) — GET .../revocation-requests: listado dedicado "Revocatorias"
+        // del lado gestor. Lee [FromHeader(Name = "X-Tenant-Id")] igual que el POST hermano de HU
+        // #12572 (ya cubierto por /instances, Prefix); esta ruta es TOP-LEVEL (no cuelga de
+        // /instances) así que necesita su propia entrada — sin ella el middleware no la intercepta y
+        // el endpoint confiaría en el X-Tenant-Id crudo del cliente (mismo defecto de fondo que Bug
+        // #12554/#12558/#12564).
+        new("/api/v1/tramites/revocation-requests", RouteMatch.Exact),
+    ];
+
+    /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>
+    public static bool IsRuntimeScoped(PathString path)
+    {
+        foreach (var route in RuntimeScopedRoutes)
+        {
+            if (route.Matches(path))
+                return true;
+        }
+
+        return false;
+    }
 
     private static bool TryReadHeaderTenant(HttpContext context, out Guid tenantId)
     {

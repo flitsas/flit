@@ -85,11 +85,11 @@ public sealed class TransitOfficeResolverTests
     [Fact] // Sin grants no hay OT habilitado que resolver.
     public async Task NoResuelve_SinGrants()
     {
-        var grants = Substitute.For<ITransitGrantRepository>();
-        grants.ListEnabledOfficeIdsAsync(Tenant, Arg.Any<CancellationToken>())
+        var effective = Substitute.For<IEffectiveTransitOfficeListResolver>();
+        effective.ListEffectiveOfficeIdsAsync(Tenant, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<Guid>>([]));
         var catalog = Substitute.For<ITransitOfficeCatalog>();
-        var resolver = new TransitOfficeResolver(grants, catalog);
+        var resolver = new TransitOfficeResolver(effective, catalog);
 
         var match = await resolver.ResolveEnabledByNameAsync(
             Tenant, "Sabaneta", TestContext.Current.CancellationToken);
@@ -97,16 +97,16 @@ public sealed class TransitOfficeResolverTests
         match.Should().BeNull();
     }
 
-    private static (ITransitGrantRepository, ITransitOfficeCatalog) Setup(string catalogName)
+    private static (IEffectiveTransitOfficeListResolver, ITransitOfficeCatalog) Setup(string catalogName)
     {
-        var grants = Substitute.For<ITransitGrantRepository>();
-        grants.ListEnabledOfficeIdsAsync(Tenant, Arg.Any<CancellationToken>())
+        var effective = Substitute.For<IEffectiveTransitOfficeListResolver>();
+        effective.ListEffectiveOfficeIdsAsync(Tenant, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<Guid>>([SabanetaId]));
 
         var catalog = Substitute.For<ITransitOfficeCatalog>();
         catalog.GetById(SabanetaId)
             .Returns(new TransitOfficeEntry(SabanetaId, "05631000", catalogName, "05", "05631"));
 
-        return (grants, catalog);
+        return (effective, catalog);
     }
 }

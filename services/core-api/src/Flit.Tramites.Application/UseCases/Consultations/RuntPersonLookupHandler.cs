@@ -73,6 +73,17 @@ public sealed class RuntPersonLookupHandler(
 
         var dto = BuildDtoFromFields(result.HydratedFields, documentType, documentNumber, ResolveMode(result.Provider));
 
+        // Un check en "error" es el contrato de TODOS los proveedores de conductor para «no se pudo
+        // consultar» (caída, timeout, 4xx/5xx). Hasta aquí ese caso llegaba indistinguible de
+        // «persona no encontrada» (ambos Found=false) y la carga masiva le decía al usuario que
+        // revisara un documento que estaba bien. El wizard no lo necesita —cae a ingreso manual—
+        // por eso el campo es aditivo y con default.
+        dto = dto with
+        {
+            ProviderUnavailable = result.Checks.Any(c =>
+                string.Equals(c.Status, "error", StringComparison.OrdinalIgnoreCase)),
+        };
+
         // El RUNT (conductor) solo trae el FLAG de multas, no el detalle. Cuando marca multas,
         // se consulta el SIMIT del mismo documento (best-effort) para traer el detalle de cada
         // comparendo y mostrarlo junto a la alerta en la ficha del actor. Sin registry (tests) o si
@@ -286,4 +297,10 @@ public sealed record RuntPersonDto(
     IReadOnlyList<FineDetail>? Fines = null,
     string? SecondName = null,
     string? FirstLastName = null,
-    string? SecondLastName = null);
+    string? SecondLastName = null,
+    /// <summary>
+    /// La cadena de proveedores no pudo consultar (ningún proveedor respondió): distinto de
+    /// «no encontrada». Solo lo consume la carga masiva para no reportar un documento como
+    /// inexistente cuando lo que falló fue el proveedor.
+    /// </summary>
+    bool ProviderUnavailable = false);

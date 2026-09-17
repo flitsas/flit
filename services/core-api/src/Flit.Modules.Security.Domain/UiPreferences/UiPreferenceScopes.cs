@@ -14,7 +14,14 @@ public static class UiPreferenceScopes
     /// <summary>Columnas visibles en la tabla de trámites de clientes del hub OT.</summary>
     public const string OtProceduresColumns = "ot.procedures.columns";
 
-    public static readonly IReadOnlyCollection<string> All = [TramitesColumns, OtProceduresColumns];
+    /// <summary>
+    /// HU #12358 (Feature #12257) — alcance elegido en el listado de trámites por una cabeza de grupo
+    /// (propio | red | un cliente hijo), para que el selector de la HU #12363 lo persista. Es solo la
+    /// preferencia visual: el alcance efectivo lo decide el servidor (TenantScope), nunca este valor.
+    /// </summary>
+    public const string TramitesScope = "tramites.scope";
+
+    public static readonly IReadOnlyCollection<string> All = [TramitesColumns, OtProceduresColumns, TramitesScope];
 
     public static bool IsValid(string? scope) =>
         !string.IsNullOrWhiteSpace(scope) && All.Contains(scope);

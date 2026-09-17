@@ -174,7 +174,7 @@ public static class AnalyticsMetricsEndpoints
             // Tenant explícito: SuperAdmin puede acceder a cualquiera; otros solo al propio.
             if (isSuperAdmin) { tenant = requested; return true; }
 
-            var hasClaim = TryResolveTenantId(user, out var claimTenant);
+            var hasClaim = RequestTenantResolver.TryResolveTenantId(user, out var claimTenant);
             if (hasClaim && requested == claimTenant) { tenant = claimTenant; return true; }
 
             error = Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Forbidden",
@@ -191,18 +191,13 @@ public static class AnalyticsMetricsEndpoints
         }
 
         // Usuario normal → usa el tenant del JWT.
-        if (TryResolveTenantId(user, out var userTenant)) { tenant = userTenant; return true; }
+        if (RequestTenantResolver.TryResolveTenantId(user, out var userTenant)) { tenant = userTenant; return true; }
 
         error = Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
             detail: "Falta el tenant: el token no incluye tenant_id y no se indicó tenantId.");
         return false;
     }
 
-    private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId)
-    {
-        var claim = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        return Guid.TryParse(claim, out tenantId);
-    }
 
     private static IResult MapError(string error) => error switch
     {

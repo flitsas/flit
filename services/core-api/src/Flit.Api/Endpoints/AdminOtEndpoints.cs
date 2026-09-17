@@ -7,7 +7,6 @@ using Flit.Admin.Application.OtClientProcedures.GetOtBandejaHealth;
 using Flit.Admin.Application.OtClientProcedures.GetOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.ListOtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
-using Flit.Admin.Application.OtClientProcedures.RevokeOtClientProcedure;
 using Flit.Admin.Application.OtDocumentPrecedence;
 using Flit.Queries.Domain;
 using Flit.Admin.Application.OtDocumentPrecedence.ListOtDocumentPrecedence;
@@ -22,9 +21,12 @@ using Flit.Admin.Application.OtRules.ListOtRules;
 using Flit.Admin.Application.OtRules.UpdateOtRule;
 using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Domain.OtClientProcedures;
+using Flit.Api.UseCases.RevocationRequests;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ImprintSignatures;
+using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.RevocationRequests;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Application.OtRequirements.GetOtRequirements;
@@ -220,14 +222,48 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
-        group.MapPost("/client-procedures/{id:guid}/revoke", RevokeClientProcedureAsync)
-            .WithName("AdminOtRevokeClientProcedure")
-            .WithSummary("Revoca un trámite Aprobado de un cliente OT (HU #12166): libera la placa y habilita re-radicar")
+        // HU #12576 (Feature #12565) — decisión del OT sobre la solicitud de revocatoria ACTIVA del
+        // trámite (sub-flujo ORTOGONAL de HU #12570/#12571/#12572, ADR-0022: no toca TramiteStateMachine).
+        group.MapPost("/client-procedures/{id:guid}/revocation-requests/approve", ApproveRevocationRequestAsync)
+            .WithName("AdminOtApproveRevocationRequest")
+            .WithSummary("Aprueba la solicitud de revocatoria activa de un trámite Aprobado (HU #12576): ejecuta Aprobado→Revocado reutilizando el handler de HU #12166")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
+
+        group.MapPost("/client-procedures/{id:guid}/revocation-requests/reject", RejectRevocationRequestAsync)
+            .WithName("AdminOtRejectRevocationRequest")
+            .WithSummary("Rechaza la solicitud de revocatoria activa de un trámite Aprobado (HU #12576): el trámite permanece Aprobado y el gestor puede reintentar")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // Feature #12565 — motivo + documento de soporte de la solicitud ACTIVA, para que el modal
+        // "Decidir revocatoria" los muestre ANTES de aprobar/rechazar (hasta ahora el OT decidía sin
+        // verlos: ninguna ruta OT los exponía).
+        group.MapGet("/client-procedures/{id:guid}/revocation-requests/active", GetActiveRevocationRequestAsync)
+            .WithName("AdminOtGetActiveRevocationRequest")
+            .WithSummary("Motivo y documento de soporte de la solicitud de revocatoria activa de un trámite")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        // HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado OT: TODOS los intentos
+        // de solicitud de revocatoria de los trámites del organismo, en cualquier sub-estado (no solo
+        // la ACTIVA que approve/reject de arriba deciden). Mismo scoping de organismo (?transitOfficeId=
+        // para SuperAdmin, perfil propio para ot_admin) que el resto de la bandeja OT.
+        group.MapGet("/revocation-requests", ListOtRevocationRequestsAsync)
+            .WithName("AdminOtListRevocationRequests")
+            .WithSummary("Lista las solicitudes de revocatoria de los trámites del organismo (vista dedicada 'Revocatorias')")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         group.MapPost("/client-procedures/{id:guid}/consolidado", GenerateClientProcedureConsolidadoAsync)
             .WithName("AdminOtGenerateClientProcedureConsolidado")
@@ -529,7 +565,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -564,7 +600,7 @@ public static class AdminOtEndpoints
         UpdateOtProfileHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -673,7 +709,7 @@ public static class AdminOtEndpoints
         UpdateOtFeatureFlagHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -695,11 +731,6 @@ public static class AdminOtEndpoints
         };
     }
 
-    private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId)
-    {
-        var claim = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        return Guid.TryParse(claim, out tenantId);
-    }
 
     private static bool IsSuperAdmin(ClaimsPrincipal user) =>
         user.IsInRole(AdminAuthorization.SuperAdminRole);
@@ -975,7 +1006,7 @@ public static class AdminOtEndpoints
         ListOtWebhooksHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -995,7 +1026,7 @@ public static class AdminOtEndpoints
         CreateOtWebhookHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1025,7 +1056,7 @@ public static class AdminOtEndpoints
         UpdateOtWebhookHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1061,7 +1092,7 @@ public static class AdminOtEndpoints
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1095,7 +1126,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1132,7 +1163,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1175,7 +1206,7 @@ public static class AdminOtEndpoints
         ListOtClientProceduresHandler handler,
         ITransitOfficeCatalog transitOfficeCatalog,
         string? status,
-        string? plateFlowStatus,
+        bool? hasActiveRevocationRequest,
         Guid? procedureTypeId,
         string? vin,
         string? placa,
@@ -1189,7 +1220,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1212,7 +1243,7 @@ public static class AdminOtEndpoints
             OtTenantId = tenantId,
             TransitOfficeId = scopedOfficeId,
             Status = status,
-            PlateFlowStatus = plateFlowStatus,
+            HasActiveRevocationRequest = hasActiveRevocationRequest,
             ProcedureTypeId = procedureTypeId,
             Vin = vin,
             Placa = placa,
@@ -1241,7 +1272,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1274,7 +1305,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1308,7 +1339,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1357,7 +1388,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1485,7 +1516,7 @@ public static class AdminOtEndpoints
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1525,16 +1556,43 @@ public static class AdminOtEndpoints
         };
     }
 
-    private static async Task<IResult> RevokeClientProcedureAsync(
+    private static Task<IResult> ApproveRevocationRequestAsync(
         Guid id,
         HttpContext httpContext,
-        RevokeOtClientProcedureRequest? request,
-        RevokeOtClientProcedureHandler handler,
+        DecideRevocationRequestApiRequest? request,
+        DecideRevocationRequestHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken) =>
+        DecideRevocationRequestAsync(
+            id, httpContext, request, handler, transitOfficeCatalog, transitOfficeId, approve: true, cancellationToken);
+
+    private static Task<IResult> RejectRevocationRequestAsync(
+        Guid id,
+        HttpContext httpContext,
+        DecideRevocationRequestApiRequest? request,
+        DecideRevocationRequestHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken) =>
+        DecideRevocationRequestAsync(
+            id, httpContext, request, handler, transitOfficeCatalog, transitOfficeId, approve: false, cancellationToken);
+
+    /// <summary>
+    /// Feature #12565 — GET .../revocation-requests/active: mismo resolver de tenant/organismo que
+    /// approve/reject, pero de SOLO LECTURA. 404 si el trámite no es accesible para este OT o si no
+    /// tiene una solicitud de revocatoria activa (el frontend no debería llamarla en ese caso, pero la
+    /// respuesta es la misma que "no hay nada que decidir").
+    /// </summary>
+    private static async Task<IResult> GetActiveRevocationRequestAsync(
+        Guid id,
+        HttpContext httpContext,
+        GetActiveRevocationRequestHandler handler,
         ITransitOfficeCatalog transitOfficeCatalog,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1551,24 +1609,161 @@ public static class AdminOtEndpoints
             return officeError!;
         }
 
-        var result = await handler.HandleAsync(new RevokeOtClientProcedureCommand
-        {
-            OtTenantId = tenantId,
-            ProcedureInstanceId = id,
-            RevokedBy = ResolveUserId(httpContext.User),
-            Reason = request?.Reason,
-            TransitOfficeId = scopedOfficeId,
-        }, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleAsync(
+            new GetActiveRevocationRequestQuery(tenantId, id, scopedOfficeId), cancellationToken)
+            .ConfigureAwait(false);
 
         return result.Status switch
         {
-            RevokeOtClientProcedureStatus.NotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
-            RevokeOtClientProcedureStatus.InvalidState => Results.Conflict(new { error = "INVALID_STATE" }),
-            RevokeOtClientProcedureStatus.QuipuxReadOnly => Results.Json(
+            GetActiveRevocationRequestStatus.ProcedureNotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
+            GetActiveRevocationRequestStatus.RequestNotFound => Results.NotFound(
+                new { error = "No hay una solicitud de revocatoria activa para este trámite" }),
+            _ => Results.Ok(new
+            {
+                revocationRequestId = result.Detail!.RevocationRequestId,
+                attemptNumber = result.Detail.AttemptNumber,
+                reason = result.Detail.Reason,
+                supportDocumentId = result.Detail.SupportDocumentId,
+                requestedAt = result.Detail.RequestedAt,
+            }),
+        };
+    }
+
+    /// <summary>
+    /// HU #12576 (Feature #12565) — común a approve/reject: resuelve tenant/organismo (mismo patrón que
+    /// approve/reject/revoke de client-procedures) y traduce el resultado del handler a HTTP.
+    /// </summary>
+    private static async Task<IResult> DecideRevocationRequestAsync(
+        Guid id,
+        HttpContext httpContext,
+        DecideRevocationRequestApiRequest? request,
+        DecideRevocationRequestHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Guid? transitOfficeId,
+        bool approve,
+        CancellationToken cancellationToken)
+    {
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var result = await handler.HandleAsync(new DecideRevocationRequestCommand(
+            tenantId,
+            id,
+            approve,
+            request?.Reason,
+            ResolveUserId(httpContext.User),
+            scopedOfficeId), cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            DecideRevocationRequestStatus.ProcedureNotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
+            DecideRevocationRequestStatus.RequestNotFound => Results.NotFound(
+                new { error = "No hay una solicitud de revocatoria activa para este trámite" }),
+            DecideRevocationRequestStatus.InvalidState => Results.Conflict(new { error = "INVALID_STATE" }),
+            DecideRevocationRequestStatus.QuipuxReadOnly => Results.Json(
                 new { error = "QUIPUX_READONLY" },
                 statusCode: StatusCodes.Status403Forbidden),
-            _ => Results.Ok(result.Procedure),
+            DecideRevocationRequestStatus.MotivoRequerido => Results.Json(
+                new { error = TramiteEstadoErrores.MotivoRequerido, message = "Debe indicar el motivo del rechazo." },
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.Ok(new
+            {
+                procedure = result.Procedure,
+                revocationRequestId = result.RevocationRequestId,
+                attemptNumber = result.AttemptNumber,
+                status = result.RequestStatus,
+            }),
         };
+    }
+
+    /// <summary>
+    /// HU #12578 (Feature #12565) — GET /api/v1/admin/ot/revocation-requests: MISMO scoping de
+    /// organismo que approve/reject de arriba (<see cref="TryResolveScopedTransitOfficeId"/>), pero de
+    /// SOLO LECTURA — a diferencia de <see cref="DecideRevocationRequestAsync"/>, esta ruta no exige una
+    /// solicitud ACTIVA: lista TODOS los intentos, en cualquier sub-estado.
+    /// </summary>
+    private static async Task<IResult> ListOtRevocationRequestsAsync(
+        HttpContext httpContext,
+        ListOtRevocationRequestsHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] string? estado,
+        [FromQuery] DateTimeOffset? requestedFrom,
+        [FromQuery] DateTimeOffset? requestedTo,
+        [FromQuery] int? skip,
+        [FromQuery] int? take,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var result = await handler.HandleAsync(new ListOtRevocationRequestsQuery(
+            tenantId,
+            scopedOfficeId,
+            ParseRevocationStatuses(estado),
+            requestedFrom,
+            requestedTo,
+            skip,
+            take), cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new
+        {
+            items = result.Items,
+            total = result.Total,
+            skip = result.Skip,
+            take = result.Take,
+        });
+    }
+
+    /// <summary>
+    /// Sub-estados de revocatoria pedidos, separados por coma — MISMO criterio tolerante que
+    /// <c>RevocationRequestEndpoints.ParseStatuses</c> (lado gestor, HU #12578): un token fuera de
+    /// <see cref="ProcedureRevocationRequestStatus"/> se descarta sin lanzar; sin ninguno válido el
+    /// filtro se ignora (equivale a "todos").
+    /// </summary>
+    private static List<string>? ParseRevocationStatuses(string? estado)
+    {
+        if (string.IsNullOrWhiteSpace(estado))
+            return null;
+
+        var validos = estado
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(e => e.ToLowerInvariant())
+            .Where(e => ProcedureRevocationRequestStatus.Activos.Contains(e, StringComparer.Ordinal)
+                || string.Equals(e, ProcedureRevocationRequestStatus.Aprobada, StringComparison.Ordinal)
+                || string.Equals(e, ProcedureRevocationRequestStatus.Rechazada, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return validos.Count > 0 ? validos : null;
     }
 
     // ── Expediente consolidado + Licencia de Tránsito desde el perfil OT ───────────
@@ -1588,7 +1783,7 @@ public static class AdminOtEndpoints
         Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return (null, Guid.Empty, Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1933,7 +2128,7 @@ public static class AdminOtEndpoints
         CreateOtRuleHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1961,7 +2156,7 @@ public static class AdminOtEndpoints
         ListOtRulesHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -1982,7 +2177,7 @@ public static class AdminOtEndpoints
         UpdateOtRuleHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2013,7 +2208,7 @@ public static class AdminOtEndpoints
         Guid? procedureTypeId,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2042,7 +2237,7 @@ public static class AdminOtEndpoints
         UpdateOtDocumentPrecedenceHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2071,7 +2266,7 @@ public static class AdminOtEndpoints
         CreateOtDocumentTagHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2100,7 +2295,7 @@ public static class AdminOtEndpoints
         ListOtDocumentTagsHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2120,7 +2315,7 @@ public static class AdminOtEndpoints
         DeleteOtDocumentTagHandler handler,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(httpContext.User, out var tenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
         {
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2832,7 +3027,7 @@ public static class AdminOtEndpoints
         FlitDbContext db,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveTenantId(user, out var callerTenantId))
+        if (!RequestTenantResolver.TryResolveTenantId(user, out var callerTenantId))
         {
             return (Guid.Empty, Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
@@ -2903,10 +3098,10 @@ public static class AdminOtEndpoints
 /// <summary>
 /// Cuerpo de <c>POST /client-procedures/search</c> (HU #12217).
 ///
-/// <para>Conserva los filtros sueltos del GET además de <see cref="Condiciones"/>: <c>status</c> y
-/// <c>plateFlowStatus</c> los sigue mandando la tira de tarjetas de la cabecera, que no es un filtro
-/// que el usuario escriba sino un atajo a un recuento ya hecho, y los enlaces profundos de los
-/// reportes entran por ahí también.</para>
+/// <para>Conserva los filtros sueltos del GET además de <see cref="Condiciones"/>: <c>status</c> lo
+/// sigue mandando la tira de tarjetas de la cabecera (ADR-0059: cada tarjeta es un estado real), que
+/// no es un filtro que el usuario escriba sino un atajo a un recuento ya hecho, y los enlaces
+/// profundos de los reportes entran por ahí también.</para>
 /// </summary>
 internal sealed record OtBandejaSearchRequest
 {
@@ -2916,7 +3111,7 @@ internal sealed record OtBandejaSearchRequest
     public string? Busqueda { get; init; }
 
     public string? Status { get; init; }
-    public string? PlateFlowStatus { get; init; }
+    public bool? HasActiveRevocationRequest { get; init; }
     public Guid? ProcedureTypeId { get; init; }
     public string? Vin { get; init; }
     public string? Placa { get; init; }
@@ -2941,7 +3136,7 @@ internal sealed record OtBandejaSearchRequest
         Condiciones = Condiciones,
         Busqueda = Busqueda,
         Status = Status,
-        PlateFlowStatus = PlateFlowStatus,
+        HasActiveRevocationRequest = HasActiveRevocationRequest,
         ProcedureTypeId = ProcedureTypeId,
         Vin = Vin,
         Placa = Placa,

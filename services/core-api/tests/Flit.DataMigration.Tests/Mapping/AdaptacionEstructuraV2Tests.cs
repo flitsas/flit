@@ -14,6 +14,8 @@ namespace Flit.DataMigration.Tests.Mapping;
 /// <list type="bullet">
 ///   <item><c>TransitOfficeId</c> + <c>transit_office_id</c>: sin ellos el organismo no ve el trámite
 ///   en su bandeja (HU #11945) aunque el código esté como texto.</item>
+///   <item><c>ParentTenantIdAtCreation</c>: sin él la cabeza de grupo no lo ve en la vista consolidada
+///   de la red (HU #12406 / F12257).</item>
 ///   <item>Copropietarios con ordinal y porcentaje (ADR-0053): antes se descartaban con un aviso.</item>
 ///   <item><c>revocado</c> (HU #12165): antes Revoked de V1 se colapsaba en 'anulado'.</item>
 /// </list>
@@ -21,12 +23,13 @@ namespace Flit.DataMigration.Tests.Mapping;
 public sealed class AdaptacionEstructuraV2Tests
 {
     private static readonly Guid Tenant = Guid.Parse("0ad1c0de-0000-4000-8000-000000000001");
+    private static readonly Guid Padre = Guid.Parse("0ad1c0de-0000-4000-8000-00000000cabe");
 
     private static readonly TransitOfficeRef Funza = new(
         Guid.Parse("eeacc872-a522-56bb-9150-70776b094009"), "25286000", "STRIA TTOyTTE MCPAL FUNZA",
         "25286", "FUNZA", IsActive: true);
 
-    private static MappingContext Contexto(TransitOfficeRef? organismo = null) => new()
+    private static MappingContext Contexto(TransitOfficeRef? organismo = null, Guid? padre = null) => new()
     {
         TenantId = Tenant,
         ProcedureTypeId = Guid.Parse("11111111-2222-3333-4444-555555555555"),
@@ -34,6 +37,7 @@ public sealed class AdaptacionEstructuraV2Tests
         OwnerEntityId = Guid.Parse("33333333-3333-3333-3333-333333333333"),
         BuyerEntityId = Guid.Parse("44444444-4444-4444-4444-444444444444"),
         TransitOffice = organismo,
+        ParentTenantId = padre,
     };
 
     private static V1SourceRecord Matricula(
@@ -115,13 +119,26 @@ public sealed class AdaptacionEstructuraV2Tests
             StatusHistory = [],
         };
 
-        var m = TransferMapper.Map(registro, Contexto(Funza));
+        var m = TransferMapper.Map(registro, Contexto(Funza, Padre));
 
         m.Instance.TransitOfficeId.Should().Be(Funza.Id);
         Campo(m, TransitOfficeFieldKeys.Id).Should().Be(Funza.Id.ToString());
+        m.Instance.ParentTenantIdAtCreation.Should().Be(Padre);
         // Cada clave una sola vez: el id del field_value es determinístico por clave y una
         // duplicada reventaría la PK al cargar.
         m.FieldValues.Select(f => f.FieldKey).Should().OnlyHaveUniqueItems();
+    }
+
+    // ------------------------------------------------------------- cabeza de grupo
+
+    [Fact]
+    public void ConservaLaCabezaDeGrupoDeLaCompaniaRadicadora()
+    {
+        RegistrationMapper.Map(Matricula(), Contexto(padre: Padre))
+            .Instance.ParentTenantIdAtCreation.Should().Be(Padre);
+
+        RegistrationMapper.Map(Matricula(), Contexto(padre: null))
+            .Instance.ParentTenantIdAtCreation.Should().BeNull();
     }
 
     // ------------------------------------------------------------- copropietarios
@@ -230,6 +247,19 @@ public sealed class AdaptacionEstructuraV2Tests
         m.FinalStatus.Should().Be(TramiteEstado.Revocado);
         TramiteEstado.EsFinal(m.FinalStatus).Should().BeTrue();
         RegistrationStateMap.Instance.IsAmbiguous(9).Should().BeFalse();
+        m.Warnings.Should().NotContain(w => w.Contains("no tiene equivalente exacto"));
+    }
+
+    [Theory] // ADR-0059 (HU #12603) — Sent y Assigned de V1 tienen equivalente exacto en V2.
+    [InlineData(4, TramiteEstado.Preasignacion)]
+    [InlineData(5, TramiteEstado.Asignado)]
+    public void SentYAssignedDeV1SonLaRutaDePlacaEnV2YYaNoSonAmbiguos(int estadoV1, string esperado)
+    {
+        var m = RegistrationMapper.Map(Matricula(estado: estadoV1), Contexto());
+
+        m.FinalStatus.Should().Be(esperado);
+        TramiteEstado.EsEstadoDeRutaDePlaca(m.FinalStatus).Should().BeTrue();
+        RegistrationStateMap.Instance.IsAmbiguous(estadoV1).Should().BeFalse();
         m.Warnings.Should().NotContain(w => w.Contains("no tiene equivalente exacto"));
     }
 }

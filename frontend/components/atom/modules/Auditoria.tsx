@@ -32,6 +32,7 @@ const MODULE_LABEL: Record<AdminAuditModule, string> = {
   authentication: 'Autenticación',
   security: 'Seguridad',
   config: 'Configuración',
+  tramites: 'Trámites',
 };
 
 const TENANT_TYPE_LABEL: Record<AdminAuditTenantType, string> = {
@@ -321,17 +322,36 @@ function AuditoriaTable({ rows }: { rows: AdminAuditLogEntry[] }) {
   );
 }
 
+/**
+ * Epic #12543 — en una aceptación de T&C lo que importa es el tipo de trámite, que viaja en el
+ * detalle (`newValue.procedureTypeCode`) y no en `targetEntityId` (ese es el id de la evidencia).
+ * Sin esto la columna «Afectado» mostraba `PROCEDURE_TERMS_ACCEPTANCE · 87f201c9…`, que no le
+ * dice nada a quien audita.
+ */
+function tipoDeTramiteAceptado(r: AdminAuditLogEntry): string | null {
+  if (r.operation !== 'accept_terms' || !r.newValue) return null;
+  try {
+    const detalle = JSON.parse(r.newValue) as { procedureTypeCode?: unknown };
+    return typeof detalle.procedureTypeCode === 'string' && detalle.procedureTypeCode ? detalle.procedureTypeCode : null;
+  } catch {
+    return null;
+  }
+}
+
 function AuditoriaRow({ row: r }: { row: AdminAuditLogEntry }) {
   const moduleLabel = r.module ? (MODULE_LABEL[r.module] ?? r.module) : '—';
   const tenantTypeLabel = r.tenantType ? (TENANT_TYPE_LABEL[r.tenantType] ?? r.tenantType) : '—';
   const isSuccess = r.result === 'success';
   const isFailure = r.result === 'failure';
   const resultLabel = isSuccess ? 'Éxito' : isFailure ? 'Fallo' : '—';
-  const afectado = r.targetEntityType
-    ? `${r.targetEntityType} · ${shortId(r.targetEntityId)}`
-    : r.targetEntityId
-      ? shortId(r.targetEntityId)
-      : '—';
+  const tramiteAceptado = tipoDeTramiteAceptado(r);
+  const afectado = tramiteAceptado
+    ? `Trámite · ${tramiteAceptado}`
+    : r.targetEntityType
+      ? `${r.targetEntityType} · ${shortId(r.targetEntityId)}`
+      : r.targetEntityId
+        ? shortId(r.targetEntityId)
+        : '—';
   const ariaLabel =
     `Registro de auditoría del ${formatFecha(r.changedAt)}, módulo ${moduleLabel}, ` +
     `operación ${r.operation ?? 'sin especificar'}, resultado ${resultLabel}` +

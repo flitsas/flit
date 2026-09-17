@@ -162,7 +162,7 @@ internal static class SchedulingTenantResolver
                 return true;
             }
 
-            if (TryResolveTenantId(user, out var claimTenant) && requested == claimTenant)
+            if (RequestTenantResolver.TryResolveTenantId(user, out var claimTenant) && requested == claimTenant)
             {
                 tenant = claimTenant;
                 return true;
@@ -181,7 +181,7 @@ internal static class SchedulingTenantResolver
             return false;
         }
 
-        if (TryResolveTenantId(user, out var userTenant))
+        if (RequestTenantResolver.TryResolveTenantId(user, out var userTenant))
         {
             tenant = userTenant;
             return true;
@@ -228,9 +228,4 @@ internal static class SchedulingTenantResolver
         Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Not Found",
             detail: "El disparo de alerta no existe.");
 
-    private static bool TryResolveTenantId(ClaimsPrincipal user, out Guid tenantId)
-    {
-        var claim = user.FindFirstValue(AdminAuthorization.TenantIdClaimType);
-        return Guid.TryParse(claim, out tenantId);
-    }
 }

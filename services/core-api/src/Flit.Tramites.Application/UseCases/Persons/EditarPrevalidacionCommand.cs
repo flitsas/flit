@@ -47,7 +47,8 @@ public sealed record ReenviarPrevalidacionResult(
 /// cambiar el correo) y <see cref="ReenviarPrevalidacionHandler"/> (acción manual): opera SIEMPRE sobre
 /// el MISMO registro de validación — nuevo token/enlace, <c>ExpiresAt = now + TokenTtlHoras</c>,
 /// <c>Attempts</c>/<c>ReconcilePollCount</c> a 0. NO toca <c>ValidUntil</c> (se estampa solo al aprobar).
-/// Aplica el guard D10 (tope 3 reenvíos + cooldown 5 min) ANTES de tocar el proveedor o la fila.
+/// Sin límite de reenvíos ni cooldown entre ellos (el guard D10 de HU #10943 se eliminó a pedido del
+/// producto).
 /// </summary>
 internal sealed class PrevalidacionResendService(
     IKyverumVerifyClient kyverum,
@@ -62,22 +63,6 @@ internal sealed class PrevalidacionResendService(
         DateTimeOffset now,
         CancellationToken ct)
     {
-        // D10 — tope de reenvíos: bloquea ANTES de consumir una verificación del proveedor.
-        if (validation.ResendCount >= BiometricRules.MaxReenvios)
-            return ("tope_reenvios", false, null, string.Empty);
-
-        // D10 — cooldown entre reenvíos.
-        if (validation.LastResentAt is { } lastResentAt)
-        {
-            var cooldown = TimeSpan.FromMinutes(BiometricRules.ReenvioCooldownMinutos);
-            var elapsed = now - lastResentAt;
-            if (elapsed < cooldown)
-            {
-                var minutosRestantes = (int)Math.Ceiling((cooldown - elapsed).TotalMinutes);
-                return ("reenvio_en_cooldown", false, Math.Max(minutosRestantes, 1), string.Empty);
-            }
-        }
-
         return providerOptions.IsKyverum
             ? await ResendKyverumAsync(tenantId, validation, subject, now, ct)
             : ResendMock(tenantId, validation, subject, now);
@@ -304,7 +289,19 @@ public sealed class EditarPrevalidacionHandler(
         validation.Email = subjectAfter.Email;
         validation.UpdatedAt = now;
 
-        await repo.SaveChangesAsync(ct);
+        // HU #11266 (D12) — el reenvío reutiliza la MISMA fila, pero puede colisionar con OTRA fila en
+        // vuelo del mismo (tenant, documento normalizado) — p. ej. una validación de trámite abierta para
+        // la misma persona. El resto de handlers que tocan esta bitácora ya atrapan este conflicto
+        // (IniciarPrevalidacionCommand.cs, BiometricaCommand.cs, KyverumVerifyCommand.cs); este SaveChanges
+        // quedaba sin ese guard.
+        try
+        {
+            await repo.SaveChangesAsync(ct);
+        }
+        catch (Domain.Identity.IdentityInFlightConflictException)
+        {
+            return (null, "validacion_en_curso", null);
+        }
 
         var dto = IniciarBiometriaHandler.ToDto(validation, now);
         return (new EditarPrevalidacionResult(dto, captureUrl, emailChanged), null, null);
@@ -396,7 +393,15 @@ public sealed class ReenviarPrevalidacionHandler(
             Detail: $"correo_destino={EditarPrevalidacionHandler.MaskEmail(subject.Email)}; "
                 + $"reenvios_acumulados={validation.ResendCount}; encolado={queued}"), ct);
 
-        await repo.SaveChangesAsync(ct);
+        // Ver comentario equivalente en EditarPrevalidacionHandler.HandleAsync (mismo guard, mismo motivo).
+        try
+        {
+            await repo.SaveChangesAsync(ct);
+        }
+        catch (Domain.Identity.IdentityInFlightConflictException)
+        {
+            return (null, "validacion_en_curso", null);
+        }
 
         var dto = IniciarBiometriaHandler.ToDto(validation, now);
         return (new ReenviarPrevalidacionResult(dto, captureUrl, queued), null, null);

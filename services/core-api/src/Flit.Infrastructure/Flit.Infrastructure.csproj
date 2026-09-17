@@ -53,6 +53,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Flit.Admin.Tests" />
     <InternalsVisibleTo Include="Flit.Infrastructure.Tests" />
+    <!-- HU #12322 — la suite de paridad/fuga contra PostgreSQL real instancia los repositorios internal. -->
+    <InternalsVisibleTo Include="Flit.Integration.Tests" />
     <!-- HU #11371 — IExplicitChannelEmailSender es internal a propósito (puerta de acceso angosta,
          ver TenantChannelEmailRouter.cs). NSubstitute usa Castle DynamicProxy para crear el doble en
          los tests de arriba, y Castle exige que el ensamblado que declara el tipo internal marque

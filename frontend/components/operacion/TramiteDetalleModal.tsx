@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Coins,
   Download,
+  Eye,
   FileCheck2,
   FileText,
   FolderCheck,
@@ -14,8 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { InlineAlert } from '@/components/atom/InlineAlert';
-import { plateFlowHint } from './TramitesTable';
-import { AttachmentPreview, useAttachmentPreview } from './TramiteDocumentosModal';
+import { AttachmentPreview, AvisoDescargaFallida, useAttachmentPreview } from './TramiteDocumentosModal';
 import { SeccionCargando, SeccionError } from './detalle/primitivos';
 import { DetalleTramiteShell } from './detalle/DetalleTramiteShell';
 import { DetalleStepper } from './detalle/DetalleStepper';
@@ -33,14 +33,25 @@ import { TramiteDetalleActores } from './detalle/TramiteDetalleActores';
 import { TramiteDetalleVehiculo } from './detalle/TramiteDetalleVehiculo';
 import { TramiteDetalleComercial } from './detalle/TramiteDetalleComercial';
 import { TramiteDetalleIdentidad } from './detalle/TramiteDetalleIdentidad';
+import { RevocationRequestButton } from './RevocationRequestButton';
 import { DetalleVehiculoSidebar } from './detalle/DetalleVehiculoSidebar';
 import { TimelineTrackPanel } from './detalle/TimelineTrackPanel';
 import {
   mapEventsToTimelineNodes,
   mapIdentidadToTimelineNodes,
   mapStatusHistoryToTimelineNodes,
+  mergeTimelineNodesByTimestamp,
 } from './detalle/timeline-mappers';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { ConsultaModeProvider } from './ConsultaModeContext';
+import { StatusBadge } from '@/components/atom/StatusBadge';
+import {
+  COPY_DOCUMENTOS_FUERA_DE_ALCANCE,
+  COPY_SECCION_FUERA_DE_ALCANCE,
+  ETIQUETA_SOLO_CONSULTA,
+  describirErrorDeSeccion,
+} from '@/lib/tramites/network-scope';
+import { revocationRequestLabel, revocationRequestTone } from '@/lib/tramites/estados';
 import type {
   BiometricValidation,
   InstanceSummary,
@@ -156,6 +167,13 @@ export interface TramiteDetalleModalProps {
    * módulo de Trámites: allí sigue siendo la salida del estado `rechazado`.
    */
   readOnly?: boolean;
+  /**
+   * HU #12362 — modo consulta de un trámite de un cliente HIJO (cabeza de red). Implica
+   * `readOnly` y además: el detalle se lee por la ruta consolidada (`network/instances/{id}`),
+   * ninguna sección ofrece gestión de documentos, y un 403/404 de alcance se pinta con el copy del
+   * AC3 en vez de un error técnico con reintento.
+   */
+  consultaMode?: boolean;
 }
 
 export function TramiteDetalleModal({
@@ -165,8 +183,10 @@ export function TramiteDetalleModal({
   tenantId,
   item,
   onAbrirAsistente,
-  readOnly = false,
+  readOnly: readOnlyProp = false,
+  consultaMode = false,
 }: TramiteDetalleModalProps) {
+  const readOnly = readOnlyProp || consultaMode;
   const [detail, setDetail] = useState<ProcedureInstanceDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -175,6 +195,8 @@ export function TramiteDetalleModal({
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [attLoading, setAttLoading] = useState(false);
   const [attError, setAttError] = useState<string | null>(null);
+  /** HU #12362 (AC3) — el servidor no habilita los documentos de la red para esta cabeza. */
+  const [attFueraDeAlcance, setAttFueraDeAlcance] = useState(false);
   const [attReloadKey, setAttReloadKey] = useState(0);
 
   const [panelTracking, setPanelTracking] = useState<PanelTracking>(null);
@@ -201,7 +223,8 @@ export function TramiteDetalleModal({
     setSubsanarError(null);
   }
 
-  const preview = useAttachmentPreview(instanceId, tenantId);
+  // HU #12411 — en consulta, «Archivos finales» ve/descarga por la ruta de red (nunca preview-url).
+  const preview = useAttachmentPreview(instanceId, tenantId, { consultaMode });
 
   useEffect(() => {
     if (!open || !instanceId) return;
@@ -210,11 +233,16 @@ export function TramiteDetalleModal({
       setLoading(true);
       setError(null);
       try {
-        const data = await tramitesClient.getInstance(instanceId, tenantId);
+        // HU #12362 — el trámite de un hijo solo existe para la cabeza en la ruta consolidada.
+        const data = consultaMode
+          ? await tramitesClient.getNetworkInstance(instanceId)
+          : await tramitesClient.getInstance(instanceId, tenantId);
         if (!cancelled) setDetail(data ?? null);
       } catch (e: unknown) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'No se pudo cargar el trámite.');
+          setError(
+            describirErrorDeSeccion(e, consultaMode, 'No se pudo cargar el trámite.').mensaje,
+          );
           setDetail(null);
         }
       } finally {
@@ -225,7 +253,7 @@ export function TramiteDetalleModal({
     return () => {
       cancelled = true;
     };
-  }, [open, instanceId, tenantId, detailReloadKey]);
+  }, [open, instanceId, tenantId, detailReloadKey, consultaMode]);
 
   useEffect(() => {
     if (!open || !instanceId) return;
@@ -233,12 +261,24 @@ export function TramiteDetalleModal({
     const load = async () => {
       setAttLoading(true);
       setAttError(null);
+      setAttFueraDeAlcance(false);
       try {
-        const list = await tramitesClient.getAttachments(instanceId, tenantId);
+        // HU #12411 — el trámite de un hijo solo existe para la cabeza en la ruta consolidada
+        // (contrato B5 #12410); el propio sigue por la ruta de hoy.
+        const list = consultaMode
+          ? await tramitesClient.getNetworkAttachments(instanceId)
+          : await tramitesClient.getAttachments(instanceId, tenantId);
         if (!cancelled) setAttachments(list);
       } catch (e: unknown) {
         if (!cancelled) {
-          setAttError(e instanceof Error ? e.message : 'No se pudieron cargar los archivos finales.');
+          const descrito = describirErrorDeSeccion(
+            e,
+            consultaMode,
+            'No se pudieron cargar los archivos finales.',
+            COPY_DOCUMENTOS_FUERA_DE_ALCANCE,
+          );
+          setAttError(descrito.mensaje);
+          setAttFueraDeAlcance(descrito.fueraDeAlcance);
           setAttachments([]);
         }
       } finally {
@@ -249,10 +289,13 @@ export function TramiteDetalleModal({
     return () => {
       cancelled = true;
     };
-  }, [open, instanceId, tenantId, attReloadKey]);
+  }, [open, instanceId, tenantId, attReloadKey, consultaMode]);
 
   useEffect(() => {
     if (!open || !instanceId || panelTracking !== 'identidad') return;
+    // HU #12362 — el expediente biométrico solo existe por la ruta propia; para un trámite de un
+    // hijo el servidor responde 404 por diseño. No se pide: el panel pinta el copy del AC3.
+    if (consultaMode) return;
     let cancelled = false;
     const load = async () => {
       setIdentidadLoading(true);
@@ -279,9 +322,17 @@ export function TramiteDetalleModal({
     return () => {
       cancelled = true;
     };
-  }, [open, instanceId, tenantId, panelTracking, identidadReloadKey]);
+  }, [open, instanceId, tenantId, panelTracking, identidadReloadKey, consultaMode]);
+
+  const reintentarDetalle = useCallback(() => setDetailReloadKey((k) => k + 1), []);
 
   const title = item ? resolveTitle(item) : 'Detalle del trámite';
+  /** HU #12362 — razón social del hijo dueño del trámite, si viaja en la fila o en el detalle. */
+  const tenantNameRed =
+    (item as { tenantName?: string | null } | null)?.tenantName ??
+    (detail as { tenantName?: string | null } | null)?.tenantName ??
+    item?.companiaNombre ??
+    null;
   const pasos = item ? PASOS_POR_MODALIDAD[item.modalidad] : PASOS_POR_MODALIDAD.TRASPASO;
   const pasoActivoIndex = Math.max(
     0,
@@ -289,8 +340,7 @@ export function TramiteDetalleModal({
   );
   const pasoActivo = pasos[pasoActivoIndex];
   const StepIcon = pasoActivo?.Icon ?? FileText;
-  const estadoHdr = item ? detalleEstadoHeader(item.estado) : null;
-  const plateHint = item ? plateFlowHint(item.plateFlowStatus) : null;
+  const estadoHdr = item ? detalleEstadoHeader(item.estado, item.rejectedFrom) : null;
   const systemAttachments = attachments.filter((a) => a.source === 'system');
 
   // Subsanación: `rechazado` es el único estado con vuelta a la edición (el backend responde 409
@@ -301,6 +351,29 @@ export function TramiteDetalleModal({
     !readOnly && !!onAbrirAsistente && !!item && !!instanceId && item.estado === 'rechazado';
   const ofreceActivar = puedeSubsanar && !subsanacionActiva;
   const ofreceRetomar = puedeSubsanar && subsanacionActiva;
+
+  /**
+   * HU #12573/#12574 (Feature #12565) — reubicado desde `TramiteWizard` (2026-09-16): `abreAsistente`
+   * en `TramitesTable` nunca es `true` para `aprobado`, así que el botón allí era inalcanzable por
+   * navegación normal (solo por URL directa con el GUID de la instancia). Mismo componente, AC1-AC3
+   * intactos — el gate de rol vive DENTRO de `RevocationRequestButton` (usePermissions), así que se
+   * renderiza igual para cualquier rol y él decide habilitado/deshabilitado.
+   * Se oculta del todo si ya hay una solicitud activa: a diferencia del wizard (que solo se apaga con
+   * el estado local `justRequested`, reseteable al re-montar), este modal ya trae
+   * `detail.activeRevocationRequest` (lo usa el badge del header), así que no depende de ese estado
+   * local ni puede quedar "falso habilitado" tras reabrir el modal.
+   */
+  const puedeSolicitarRevocatoria =
+    !readOnly && !!instanceId && item?.estado === 'aprobado' && !detail?.activeRevocationRequest;
+
+  /**
+   * El intento MÁS RECIENTE de revocatoria terminó rechazado (`detail.lastRevocationDecision`, ver
+   * `GetProcedureInstanceHandler.BuildLastRevocationDecisionAsync`). Cuando es así, el botón de
+   * reintentar se muda al aviso del rechazo (con su motivo al lado, que es el contexto que importa
+   * para decidir si reintentar) y deja de vivir en el aviso genérico de "Trámite aprobado" — un
+   * mismo botón en dos avisos a la vez era ruido, no ayuda.
+   */
+  const revocationFueRechazada = detail?.lastRevocationDecision?.status === 'rechazada';
 
   /**
    * Enciende el flag si hace falta y salta al asistente. El POST es idempotente desde la UI: si la
@@ -361,10 +434,38 @@ export function TramiteDetalleModal({
                   {estadoHdr.label}
                 </span>
               ) : null}
+              {/* HU #12575 (Feature #12565, AC1) — badge SECUNDARIO de sub-estado de revocatoria:
+                  ortogonal al chip principal de arriba (que sigue "Aprobado", ADR-0022). Reutiliza
+                  StatusBadge (mismo componente que el distintivo de "Solo consulta" de abajo) en vez de
+                  un sistema de color nuevo, justo para que se lea como secundario/distinto del chip
+                  sólido de estado. */}
+              {detail?.activeRevocationRequest ? (
+                <StatusBadge
+                  tone={revocationRequestTone(detail.activeRevocationRequest.status) ?? 'neutral'}
+                  label={revocationRequestLabel(detail.activeRevocationRequest.status) ?? 'Revocatoria en curso'}
+                  ariaLabel={`Sub-estado de revocatoria: ${
+                    revocationRequestLabel(detail.activeRevocationRequest.status) ?? 'en curso'
+                  }`}
+                />
+              ) : null}
+              {/* HU #12362 — distintivo del modo consulta: texto + icono, no solo color. */}
+              {consultaMode ? (
+                <StatusBadge
+                  tone="neutral"
+                  ariaLabel={`${ETIQUETA_SOLO_CONSULTA}: trámite de un cliente de la red`}
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                      {ETIQUETA_SOLO_CONSULTA}
+                    </span>
+                  }
+                />
+              ) : null}
             </div>
             <p className="mt-1 text-[12px]" style={{ color: '#475569' }}>
               <span className="font-mono">{item.referenceNumber}</span> · {item.placa ?? '—'} ·
               Responsable: {item.gestorNombre ?? '—'}
+              {consultaMode && tenantNameRed ? ` · Cliente: ${tenantNameRed}` : ''}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -406,7 +507,15 @@ export function TramiteDetalleModal({
     : undefined;
 
   return (
-    <>
+    <ConsultaModeProvider
+      consultaMode={consultaMode}
+      // HU #12362 — en consulta las secciones leen del detalle consolidado (actores, campos) en
+      // vez de pedir por rutas propias que el servidor rechaza para un trámite de un hijo.
+      detalle={detail}
+      detalleLoading={loading}
+      detalleError={error}
+      reintentarDetalle={reintentarDetalle}
+    >
       <DetalleTramiteShell open={open} onClose={onClose} title={title} header={header}>
         {!item ? (
           <p className="py-6 text-center text-xs opacity-70">No se encontró información del trámite.</p>
@@ -415,10 +524,12 @@ export function TramiteDetalleModal({
             {/* El rechazo es el bloqueo, así que su aviso es también donde vive la salida: activar
                 la subsanación. Si el trámite está rechazado pero el OT no dejó motivo, el aviso se
                 pinta igual — sin él la acción no tendría dónde vivir.
-                Bug #12376, defecto 1 — en Anulado el motivo del último rechazo ya NO es vigente
-                (se anuló el trámite, no se resolvió el rechazo): se oculta aquí igual que en el
-                popover del listado (`TramitesTable.tsx`). El historial general sí lo conserva. */}
-            {(item.estado !== 'anulado' && item.ultimoRechazoMotivo?.trim()) || ofreceActivar ? (
+                Bug: `ultimoRechazoMotivo` es histórico (no se limpia al subsanar y aprobar), así que
+                antes este aviso seguía apareciendo como si el rechazo fuera VIGENTE en un trámite ya
+                Aprobado que superó ese rechazo hace rato. Ahora exige `estado === 'rechazado'`, igual
+                que `ofreceActivar` (ver `puedeSubsanar` arriba) — los dos hablan del MISMO bloqueo
+                actual, nunca de uno ya resuelto. */}
+            {(item.estado === 'rechazado' && item.ultimoRechazoMotivo?.trim()) || ofreceActivar ? (
               <InlineAlert
                 tone="error"
                 title="Rechazado por el Organismo de Tránsito"
@@ -432,7 +543,7 @@ export function TramiteDetalleModal({
                   ) : undefined
                 }
               >
-                {(item.estado !== 'anulado' && item.ultimoRechazoMotivo?.trim()) ??
+                {(item.estado === 'rechazado' && item.ultimoRechazoMotivo?.trim()) ??
                   'El organismo devolvió el trámite sin registrar un motivo. Actívale la subsanación para corregirlo y volver a radicarlo.'}
                 {subsanarError ? (
                   <span className="mt-1 block font-semibold">{subsanarError}</span>
@@ -459,13 +570,91 @@ export function TramiteDetalleModal({
                 ) : null}
               </InlineAlert>
             ) : null}
+            {/* HU #12573/#12574 (Feature #12565) — mismo copy que READ_ONLY_NOTICE['aprobado'] del
+                wizard, para no tener dos textos distintos describiendo el mismo estado.
+                Feature #12565 (ajuste UX) — UN solo aviso para el estado 'aprobado', no dos: si el
+                intento MÁS RECIENTE de revocatoria fue rechazado, este aviso absorbe esa noticia (con
+                su motivo, fecha y el botón de reintentar) en vez de vivir separada en un segundo
+                aviso debajo. El "Trámite aprobado — solo visualización" genérico sigue siendo cierto
+                de fondo, así que no desaparece: cambia de tono/título/cuerpo, no de condición. */}
+            {item.estado === 'aprobado' && !readOnly ? (
+              revocationFueRechazada && detail?.lastRevocationDecision ? (
+                <InlineAlert
+                  tone="warning"
+                  title="Solicitud de revocatoria rechazada"
+                  action={
+                    puedeSolicitarRevocatoria ? (
+                      <RevocationRequestButton
+                        instanceId={instanceId as string}
+                        tenantId={tenantId}
+                        eligibility={detail?.revocationEligibility}
+                        onRequested={() => reintentarDetalle()}
+                      />
+                    ) : undefined
+                  }
+                >
+                  El organismo de tránsito rechazó la solicitud de revocatoria; el trámite permanece
+                  Aprobado — solo visualización, puedes consultarlo y descargarlo.
+                  {detail.lastRevocationDecision.decisionReason?.trim() ? (
+                    <p className="mt-1 font-medium">
+                      Motivo: {detail.lastRevocationDecision.decisionReason}
+                    </p>
+                  ) : null}
+                  <p className="mt-1 text-[11px] opacity-70">
+                    Decidido el{' '}
+                    {new Date(detail.lastRevocationDecision.decidedAt).toLocaleString('es-CO', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </p>
+                </InlineAlert>
+              ) : (
+                <InlineAlert
+                  tone="success"
+                  title="Trámite aprobado — solo visualización"
+                  action={
+                    puedeSolicitarRevocatoria ? (
+                      <RevocationRequestButton
+                        instanceId={instanceId as string}
+                        tenantId={tenantId}
+                        eligibility={detail?.revocationEligibility}
+                        onRequested={() => reintentarDetalle()}
+                      />
+                    ) : undefined
+                  }
+                >
+                  El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes
+                  consultarla y descargarla, pero ya no se regenera.
+                </InlineAlert>
+              )
+            ) : null}
+            {/* Feature #12565 — deja un rastro de la revocatoria APROBADA en el detalle: sin esto, el
+                trámite pasaba a 'revocado' sin decir cuándo ni con qué motivo. El caso 'rechazada' ya
+                lo absorbió el aviso de arriba (el trámite sigue 'aprobado'); este solo puede coexistir
+                con él en el código, nunca en pantalla — un mismo trámite no está a la vez 'aprobado' y
+                'revocado'. */}
+            {detail?.lastRevocationDecision?.status === 'aprobada' ? (
+              <InlineAlert tone="error" title="Trámite revocado">
+                El organismo de tránsito aprobó la revocatoria: la placa/VIN quedaron libres y la
+                documentación anterior es histórica.
+                <p className="mt-1 text-[11px] opacity-70">
+                  Decidido el{' '}
+                  {new Date(detail.lastRevocationDecision.decidedAt).toLocaleString('es-CO', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  })}
+                </p>
+              </InlineAlert>
+            ) : null}
             {item.isPaused ? (
               <InlineAlert tone="warning" title="Trámite pausado">
                 {item.pausedObservation?.trim() || 'Este trámite está pausado y no avanza hasta reanudarlo.'}
               </InlineAlert>
             ) : null}
-            {plateHint ? <InlineAlert tone="info">{plateHint}</InlineAlert> : null}
             {estadoHdr?.alert &&
+            // Feature #12565 — 'revocado' ya lo anuncia el aviso de `lastRevocationDecision` de
+            // arriba, con motivo y fecha: el genérico de la cabecera sería el mismo texto dos veces.
+            detail?.lastRevocationDecision?.status !== 'aprobada' &&
             !item.ultimoRechazoMotivo?.trim() &&
             // Rechazado sin motivo ya se anuncia arriba, en el aviso que trae "Subsanar trámite":
             // sin esto saldrían dos avisos seguidos diciendo lo mismo.
@@ -517,21 +706,34 @@ export function TramiteDetalleModal({
                   ) : (
                     <TimelineTrackPanel
                       title="Línea de tiempo del trámite"
-                      nodes={[
-                        ...mapStatusHistoryToTimelineNodes(detail?.statusHistory ?? []),
-                        // Bug #12376, defecto 4 — la reasignación de gestor no es un cambio de estado,
-                        // pero sí pertenece al historial general del trámite.
-                        ...mapEventsToTimelineNodes(
-                          (detail?.events ?? []).filter((e) => e.tipo === 'reasignar_gestor_admin'),
+                      // Bug #12376, defecto 4 — la reasignación de gestor no es un cambio de estado,
+                      // pero sí pertenece al historial general del trámite. HU #12575 (AC2) — la
+                      // solicitud de revocatoria tampoco cambia el status principal (ADR-0022) y se
+                      // agrega aquí por la misma razón. `mergeTimelineNodesByTimestamp` (y no un simple
+                      // spread) porque concatenar dos listas ya ordenadas NO ordena la unión: una
+                      // solicitud de revocatoria ocurre siempre ANTES de que el status pase a
+                      // 'revocado', pero como es un evento aparte vivía en la segunda lista y salía
+                      // pintada DESPUÉS del hito 'Revocado' en pantalla.
+                      nodes={mergeTimelineNodesByTimestamp(
+                        mapStatusHistoryToTimelineNodes(detail?.statusHistory ?? []),
+                        mapEventsToTimelineNodes(
+                          (detail?.events ?? []).filter(
+                            (e) => e.tipo === 'reasignar_gestor_admin' || e.tipo === 'revocatoria_solicitada',
+                          ),
                         ),
-                      ]}
+                      )}
                       emptyMessage="Sin eventos registrados todavía."
                     />
                   )}
                 </div>
               ) : panelTracking === 'identidad' ? (
                 <div className="lg:col-span-12">
-                  {identidadLoading ? (
+                  {consultaMode ? (
+                    // HU #12362 (AC3) — sin petición, sin error técnico ni reintento.
+                    <p className="text-xs text-[#162744]/70 dark:text-white/70" role="status">
+                      {COPY_SECCION_FUERA_DE_ALCANCE}
+                    </p>
+                  ) : identidadLoading ? (
                     <SeccionCargando etiqueta="Cargando trazabilidad de identidad" filas={3} />
                   ) : identidadError ? (
                     <SeccionError
@@ -636,7 +838,13 @@ export function TramiteDetalleModal({
                               {attLoading ? (
                                 <SeccionCargando etiqueta="Cargando archivos finales" filas={2} />
                               ) : null}
-                              {!attLoading && attError ? (
+                              {!attLoading && attError && attFueraDeAlcance ? (
+                                // HU #12362 (AC3) — sin error técnico ni reintento.
+                                <p className="text-xs opacity-70" role="status">
+                                  {attError}
+                                </p>
+                              ) : null}
+                              {!attLoading && attError && !attFueraDeAlcance ? (
                                 <SeccionError
                                   mensaje={attError}
                                   contexto="los archivos finales"
@@ -661,6 +869,8 @@ export function TramiteDetalleModal({
                                           SHA-256 · {a.sha256}
                                         </span>
                                       </span>
+                                      {/* HU #12411 — en consulta la descarga va por la ruta de
+                                          red (el hook decide); la UI es la misma que la propia. */}
                                       <button
                                         type="button"
                                         onClick={() => void preview.download(a)}
@@ -675,11 +885,8 @@ export function TramiteDetalleModal({
                                   ))}
                                 </ul>
                               ) : null}
-                              {preview.doc === null && preview.error ? (
-                                <p className="mt-3 text-xs" style={{ color: '#FF4E00' }} role="alert">
-                                  {preview.error}
-                                </p>
-                              ) : null}
+                              {/* 503 audit_unavailable (consulta): mismo aviso con «Reintentar». */}
+                              <AvisoDescargaFallida preview={preview} className="mt-3" />
                             </section>
                           </div>
 
@@ -711,6 +918,6 @@ export function TramiteDetalleModal({
       </DetalleTramiteShell>
 
       <AttachmentPreview preview={preview} />
-    </>
+    </ConsultaModeProvider>
   );
 }

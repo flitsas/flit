@@ -10,11 +10,17 @@ public interface IOtProfileRepository
     /// </summary>
     Task<OtProfile?> GetByTransitOfficeAsync(Guid transitOfficeId, CancellationToken cancellationToken = default);
 
+    /// <param name="revocationWindowBusinessDays">
+    /// Ventana de revocatoria en días hábiles (HU #12568). Se persiste tal cual se recibe —
+    /// incluido <c>null</c>, que significa "sin límite" (AC2) — sin sustituirlo por el valor
+    /// previo ni por ningún default numérico.
+    /// </param>
     Task<OtProfile> SaveAsync(
         Guid tenantId,
         string operationMode,
         bool quipuxReadOnly,
         Guid? changedBy,
+        int? revocationWindowBusinessDays,
         Guid? transitOfficeId = null,
         CancellationToken cancellationToken = default);
 }

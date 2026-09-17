@@ -30,6 +30,7 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Infrastructure.Tramites;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -65,7 +66,19 @@ public static class AdminInfrastructureExtensions
 
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
+        services.AddScoped<ICompanyHierarchyRepository, CompanyHierarchyRepository>();
+        services.AddScoped<Flit.Admin.Application.Companies.Invitations.IGroupHeadInvitationRolePolicy,
+            Flit.Infrastructure.Security.GroupHeadInvitationRolePolicy>();
         services.AddScoped<ITenantSettingsRepository, TenantSettingsRepository>();
+
+        // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
+        // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
+        services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();
+
+        // HU #12323 (Feature #12254) — interruptores globales de la jerarquía leídos por petición,
+        // sin caché y fail-closed (fila ausente/error ⇒ apagado). El resolver los consulta antes que
+        // la jerarquía: apagar group_read_scope degrada a Single sin desplegar ni tocar tenants.
+        services.AddScoped<IHierarchySwitches, DbHierarchySwitches>();
 
         // HU #10191 — lista blanca + checker de propiedad vehicular (stub transitorio).
         services.AddScoped<IWhitelistRepository, WhitelistRepository>();
@@ -285,8 +298,17 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IOtRuleRepository, OtRuleRepository>();
         services.AddScoped<IOtRuleGate, OtRuleGateService>();
 
+        // HU #12407 — bloqueos de OT para cabezas Marca Blanca.
+        services.AddScoped<ITenantTransitOfficeBlockRepository, TenantTransitOfficeBlockRepository>();
+
+        // HU #12347 — lista efectiva de OT según jerarquía.
+        services.AddScoped<IEffectiveTransitOfficeListResolver, EffectiveTransitOfficeListResolver>();
+
         // #2 — validación de OT habilitado por empresa en el submit de trámites.
         services.AddScoped<ITransitOfficeGrantGate, TransitOfficeGrantGate>();
+
+        // HU #12348 / #12409 — gate de radicación (OT permitido + compañía/red activa).
+        services.AddScoped<IProcedureRadicationGate, ProcedureRadicationGate>();
 
         // HU #10518 — enforcement runtime del ciclo de vida OT: el OT elegido debe estar
         // OPERATIVO (catálogo activo + perfil/tenant OT + tenant activo), no solo con grant.
@@ -301,9 +323,6 @@ public static class AdminInfrastructureExtensions
         // HU #10602 — exigibilidad de la consulta RNMC según la config del OT destino (requires_rnmc).
         services.AddScoped<IRnmcRequirementPolicy, RnmcRequirementPolicy>();
 
-        // HU #10608 (Feature #10587) — decisión de la ruta de preasignación de placa al radicar.
-        services.AddScoped<IPlatePreassignPolicy, PlatePreassignPolicy>();
-
         // HU #10760 — consultas que la compañía inhabilitó para el OT destino: el preflight las omite.
         // Eje ortogonal al anterior (el OT declara qué exige; la compañía, qué no quiere consultar).
         services.AddScoped<IConsultationRestrictionPolicy, ConsultationRestrictionPolicy>();
@@ -317,6 +336,12 @@ public static class AdminInfrastructureExtensions
         // B11 (HU #10659) — en traspaso el OT lo fija el RUNT: resuelve el OT habilitado de la
         // empresa por nombre (grants + catálogo) para poblar transit_office_id en el preflight.
         services.AddScoped<ITransitOfficeResolver, TransitOfficeResolver>();
+
+        // HU #12538 (Feature #12519) — la carga masiva resuelve el representante legal de un actor
+        // con NIT contra el directorio de la empresa, con el mismo caso de uso de la precarga del wizard.
+        services.AddScoped<
+            Flit.Tramites.Application.BulkTramites.Processing.IBulkTramitesLegalRepresentativeDirectory,
+            Tramites.BulkTramitesLegalRepresentativeDirectory>();
 
         // HU #10222 — prelación documental y etiquetas OT.
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();

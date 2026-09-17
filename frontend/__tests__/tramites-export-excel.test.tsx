@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => ({
   listBiometricExpediente: vi.fn(),
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
-  completePlateFlow: vi.fn(),
+  enviarAlOt: vi.fn(),
   download: vi.fn(),
 }));
 

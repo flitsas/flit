@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { History, Pencil, UserPlus } from "lucide-react";
 import {
   assignRole,
+  getRoles,
   getUsers,
   updateUser,
   type TenantRole,
@@ -18,9 +19,12 @@ import { isSuperAdminRole, resolveProfile } from "@/lib/users/profiles";
 import { isInvitationRow } from "@/lib/users/invitationRow";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import { usePermissions } from "@/hooks/usePermissions";
+import { fetchChildCompanyUsers, inviteChildCompanyUser } from "@/lib/api/admin-companies";
 
 export interface CompanyUsersPanelProps {
   tenantId: string;
+  /** Si la ficha es un cliente hijo, la cabeza opera usuarios por rutas de red. */
+  networkHeadId?: string | null;
 }
 
 /**
@@ -28,8 +32,9 @@ export interface CompanyUsersPanelProps {
  * del tenant sin salir de /admin/companies/[tenantId]. Comparte tabla, filtros, acciones y
  * modal de alta con el módulo Usuarios y con el hub OT.
  */
-export function CompanyUsersPanel({ tenantId }: CompanyUsersPanelProps) {
+export function CompanyUsersPanel({ tenantId, networkHeadId }: CompanyUsersPanelProps) {
   const { isSuperAdmin } = usePermissions();
+  const managingChild = Boolean(networkHeadId);
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,19 +43,40 @@ export function CompanyUsersPanel({ tenantId }: CompanyUsersPanelProps) {
   const [auditTarget, setAuditTarget] = useState<TenantUser | null>(null);
   const [editRoles, setEditRoles] = useState<TenantRole[]>([]);
   const [editRolesLoading, setEditRolesLoading] = useState(false);
+  const [inviteRoles, setInviteRoles] = useState<TenantRole[]>([]);
+  const [inviteRolesLoading, setInviteRolesLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const all = await getUsers();
-      setUsers(all.filter((u) => u.tenantId === tenantId));
+      if (networkHeadId) {
+        const items = await fetchChildCompanyUsers(networkHeadId, tenantId);
+        setUsers(
+          items.map((u) => ({
+            id: u.userId,
+            fullName: u.displayName,
+            email: u.email,
+            role: u.roleCode,
+            roleCode: u.roleCode,
+            roleId: u.roleId,
+            status: u.status === "inactive" ? "inactive" : "active",
+            createdAt: null,
+            isSuspended: false,
+            tenantId,
+            rowVersion: 0,
+          })),
+        );
+      } else {
+        const all = await getUsers();
+        setUsers(all.filter((u) => u.tenantId === tenantId));
+      }
     } catch {
       setError("No se pudieron cargar los usuarios de esta compañía.");
     } finally {
       setLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, networkHeadId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -100,12 +126,32 @@ export function CompanyUsersPanel({ tenantId }: CompanyUsersPanelProps) {
     };
   }, [editTarget]);
 
+  useEffect(() => {
+    if (!inviteOpen || !managingChild) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInviteRolesLoading(true);
+    void getRoles()
+      .then((list) => {
+        const allowed = new Set([
+          "admincompany",
+          "radicador",
+          "gestor",
+          "documentador",
+          "validador",
+          "operariofull",
+        ]);
+        setInviteRoles(list.filter((r) => allowed.has(r.code.toLowerCase())));
+      })
+      .catch(() => setInviteRoles([]))
+      .finally(() => setInviteRolesLoading(false));
+  }, [inviteOpen, managingChild]);
+
   function actionsFor(userId: string): RowAction[] {
     const u = users.find((x) => x.id === userId);
     // HU #11552 / ADR-0048: `status === "pending"` dejaba de excluir "cancelled" — con solo ese
     // guarda, una invitación cancelada ofrecía "Ver historial" y "Editar" sobre un id que es un
     // invitationId, no un userId.
-    if (!u || isInvitationRow(u)) return [];
+    if (!u || isInvitationRow(u) || managingChild) return [];
     return [
       {
         icon: History,
@@ -122,7 +168,7 @@ export function CompanyUsersPanel({ tenantId }: CompanyUsersPanelProps) {
     ];
   }
 
-  if (!isSuperAdmin) {
+  if (!isSuperAdmin && !managingChild) {
     return (
       <p className="py-10 text-center text-sm opacity-60">
         Solo el Super Admin puede gestionar usuarios desde la ficha de compañía.
@@ -166,10 +212,16 @@ export function CompanyUsersPanel({ tenantId }: CompanyUsersPanelProps) {
             setInviteOpen(false);
             void load();
           }}
-          roles={[]}
-          rolesLoading={false}
-          isSuperAdmin
+          roles={managingChild ? inviteRoles : []}
+          rolesLoading={managingChild ? inviteRolesLoading : false}
+          isSuperAdmin={isSuperAdmin && !managingChild}
           fixedTarget={{ tenantId, profile: "GESTOR", name: "Esta compañía — perfil Gestor" }}
+          submitInvitation={
+            managingChild && networkHeadId
+              ? ({ email, fullName, roleIds }) =>
+                  inviteChildCompanyUser(networkHeadId, tenantId, { email, fullName, roleIds })
+              : undefined
+          }
         />
       )}
 

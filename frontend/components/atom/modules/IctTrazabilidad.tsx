@@ -23,7 +23,7 @@ import {
   type TramiteIct,
 } from "@/lib/api/ict-trazabilidad";
 import { CompanySelector } from "./_reportes/CompanySelector";
-import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import type { CompanyListItem } from "@/lib/api/types";
 import {
   ESTADOS_ICT,
@@ -145,9 +145,9 @@ export function IctTrazabilidad() {
   useEffect(() => {
     if (!esAdmin) return;
     const controller = new AbortController();
-    fetchCompaniesIndex({ pageSize: 100, estadoActivo: true }, controller.signal)
-      .then((res) => {
-        if (!controller.signal.aborted) setCompanias(res.data);
+    fetchAllCompanies({ estadoActivo: true }, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setCompanias(data);
       })
       .catch(() => {
         /* silencioso */

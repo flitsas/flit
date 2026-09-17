@@ -21,9 +21,6 @@ public sealed class OtClientProcedureResponse
     /// <summary>Familia del tipo (MATRICULAS | TRASPASO | OTROS): determina qué causales de rechazo aplican.</summary>
     public string Familia { get; init; } = string.Empty;
 
-    /// <summary>Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado).</summary>
-    public string? PlateFlowStatus { get; init; }
-
     /// <summary>HU #12165/#12167 (Feature #12156) — base de la ventana de 1 hora para corregir la placa.</summary>
     public DateTimeOffset? PlateAssignedAt { get; init; }
 
@@ -31,17 +28,17 @@ public sealed class OtClientProcedureResponse
     public DateTimeOffset? PlateUpdatedAt { get; init; }
 
     /// <summary>HU #10804 (Feature #10587) — estado del SOAT (soat_estado): null | unknown | vencido | vigente.
-    /// El frontend oculta Aprobar/Rechazar salvo ruta estándar o placa asignada con SOAT vigente.</summary>
+    /// Informativo (ADR-0059): las acciones del OT las gobierna <see cref="Status"/>.</summary>
     public string? SoatEstado { get; init; }
 
     /// <summary>HU #10805 (Feature #10587) — dígito de preferencia de placa (0-9). Guía para el OT
     /// al asignar; no obliga (puede asignar una placa que termine en otro dígito).</summary>
     public string? PlatePreferredLastDigit { get; init; }
 
-    /// <summary>Check opcional del gestor; badge en dashboard OT solo si PlateFlowStatus = terminado.</summary>
+    /// <summary>Check opcional del gestor al «Enviar al OT»; badge en el dashboard OT en <c>entregado</c>.</summary>
     public bool SoatPagado { get; init; }
 
-    /// <summary>Check opcional del gestor; badge en dashboard OT solo si PlateFlowStatus = terminado.</summary>
+    /// <summary>Check opcional del gestor al «Enviar al OT»; badge en el dashboard OT en <c>entregado</c>.</summary>
     public bool ImpuestoDepartamentalPagado { get; init; }
 
     public Guid? TransitOfficeId { get; init; }
@@ -93,6 +90,17 @@ public sealed class OtClientProcedureResponse
 
     /// <summary>HU #11929 — decisión de prenda; null si el trámite no tiene decisión registrada.</summary>
     public OtClientProcedurePrendaResponse? Prenda { get; init; }
+
+    /// <summary>Feature #12565 — sub-estado ACTIVO ('solicitada' | 'en_revision') de la solicitud de
+    /// revocatoria; null si nunca se solicitó o ya se decidió. Indicativo de la bandeja OT.</summary>
+    public string? RevocationRequestStatus { get; init; }
+
+    /// <summary>Feature #12565 — decisión ('aprobada' | 'rechazada') del intento más reciente, para el
+    /// detalle del trámite. Null si nunca se decidió una (o la solicitud sigue activa).</summary>
+    public string? RevocationDecisionStatus { get; init; }
+    public DateTimeOffset? RevocationDecisionAt { get; init; }
+    public string? RevocationRequestReason { get; init; }
+    public string? RevocationDecisionReason { get; init; }
 }
 
 public sealed class OtClientProcedureVehicleSnapshotResponse
@@ -176,12 +184,6 @@ public sealed class ApproveOtClientProcedureRequest
     public Guid? MandateSignerId { get; init; }
 }
 
-/// <summary>HU #12166 (Feature #12156) — motivo opcional de la revocación (auditoría, no exigido por AC).</summary>
-public sealed class RevokeOtClientProcedureRequest
-{
-    public string? Reason { get; init; }
-}
-
 internal static class OtClientProcedureMapper
 {
     public static OtClientProcedureResponse ToResponse(Domain.OtClientProcedures.OtClientProcedure procedure) =>
@@ -195,7 +197,6 @@ internal static class OtClientProcedureMapper
             ReferenceNumber = procedure.ReferenceNumber,
             Status = procedure.Status,
             Familia = procedure.Familia,
-            PlateFlowStatus = procedure.PlateFlowStatus,
             PlateAssignedAt = procedure.PlateAssignedAt,
             PlateUpdatedAt = procedure.PlateUpdatedAt,
             SoatEstado = procedure.SoatEstado,
@@ -270,5 +271,10 @@ internal static class OtClientProcedureMapper
                     AcreedorDocumento = procedure.Prenda.AcreedorDocumento,
                     LevantamientoEntidad = procedure.Prenda.LevantamientoEntidad,
                 },
+            RevocationRequestStatus = procedure.RevocationRequestStatus,
+            RevocationDecisionStatus = procedure.RevocationDecisionStatus,
+            RevocationDecisionAt = procedure.RevocationDecisionAt,
+            RevocationRequestReason = procedure.RevocationRequestReason,
+            RevocationDecisionReason = procedure.RevocationDecisionReason,
         };
 }

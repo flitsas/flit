@@ -11,21 +11,13 @@ vi.mock("@/lib/api/security", async (orig) => ({
 }));
 
 vi.mock("@/lib/api/admin-companies", () => ({
-  fetchCompaniesIndex: vi.fn().mockResolvedValue({
-    data: [{ id: "company-1", razonSocial: "Compañía Demo" }],
-    totalCount: 1,
-    page: 1,
-    pageSize: 200,
-  }),
+  fetchAllCompanies: vi.fn().mockResolvedValue([{ id: "company-1", razonSocial: "Compañía Demo" }]),
 }));
 
 vi.mock("@/lib/api/admin-transit-office-tenants", () => ({
-  fetchTransitOfficeTenants: vi.fn().mockResolvedValue({
-    data: [{ id: "ot-tenant-1", legalName: "Secretaría Demo", transitOfficeCode: "OT-DEMO" }],
-    totalCount: 1,
-    page: 1,
-    pageSize: 200,
-  }),
+  fetchAllTransitOfficeTenants: vi.fn().mockResolvedValue([
+    { id: "ot-tenant-1", legalName: "Secretaría Demo", transitOfficeCode: "OT-DEMO" },
+  ]),
 }));
 
 const listRoles = vi.fn();
@@ -315,5 +307,35 @@ describe("InviteUserModal — AdminCompany", () => {
         undefined,
       ),
     );
+  });
+
+  it("invita al hijo por submitInvitation y no usa /security/invitations", async () => {
+    const user = userEvent.setup();
+    const submitInvitation = vi.fn().mockResolvedValue({
+      invitationId: "inv-child",
+      email: "hijo@flit.local",
+      emailSent: true,
+    });
+    renderModal({
+      isSuperAdmin: false,
+      roles: [
+        { id: "role-radicador", code: "Radicador", name: "Radicador", description: null, isSystem: false, permissionCount: 0, createdAt: "" },
+      ],
+      fixedTarget: { tenantId: "child-1", profile: "GESTOR", name: "Hijo Demo" },
+      submitInvitation,
+    });
+
+    await fillIdentity(user);
+    await user.click(screen.getByRole("radio", { name: "Radicador" }));
+    await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
+
+    await waitFor(() =>
+      expect(submitInvitation).toHaveBeenCalledWith({
+        email: "nuevo@flit.local",
+        fullName: "Nuevo Usuario",
+        roleIds: ["role-radicador"],
+      }),
+    );
+    expect(createInvitation).not.toHaveBeenCalled();
   });
 });
