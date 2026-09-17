@@ -20,8 +20,8 @@ import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
  * — no hay opción de retirar la solicitud: sin botón accionable, no hay de dónde retirarla.
  */
 
-/** AC2 — rol Operario o interno FLIT: no es el Administrador de la compañía dueña del trámite. */
-const REASON_NOT_ADMIN = 'Solo el Administrador de la compañía puede solicitar la revocatoria.';
+/** AC2 — rol Operario: no es el Administrador de la compañía dueña del trámite ni interno FLIT. */
+const REASON_NOT_ADMIN = 'Solo el Administrador de la compañía o un interno FLIT pueden solicitar la revocatoria.';
 /** AC1 (Given "trámite Aprobado/FLIT") — origen ICT o foto migrada de V1, no creado en FLIT. */
 const REASON_SOURCE_NOT_SUPPORTED = 'El trámite no fue creado en FLIT; no admite solicitud de revocatoria.';
 /** AC3 — texto EXACTO del criterio de aceptación. */
@@ -31,6 +31,13 @@ const REASON_NOT_APPLICABLE = 'La revocatoria no aplica al estado actual del tr�
 
 export interface RevocationRequestButtonProps {
   instanceId: string;
+  /**
+   * Tenant dueño del trámite. Necesario para que un SuperAdmin viendo el trámite de OTRA compañía
+   * (desde `TramitesTable`/`TramiteDetalleModal`, no la ruta del wizard `?t=`) envíe la solicitud
+   * con el `X-Tenant-Id` correcto — ver comentario de clase en `RevocationRequestModal`. `undefined`
+   * para un company-user es inofensivo: el backend igual resuelve su tenant desde el JWT.
+   */
+  tenantId?: string;
   /** `ProcedureInstanceDetail.revocationEligibility` ya resuelto por el backend (AC1/AC3). */
   eligibility: RevocationEligibility | null | undefined;
   /**
@@ -42,17 +49,25 @@ export interface RevocationRequestButtonProps {
   onRequested?: (result: RequestRevocationResult) => void;
 }
 
-export function RevocationRequestButton({ instanceId, eligibility, onRequested }: RevocationRequestButtonProps) {
-  const { isAdminCompany } = usePermissions();
+export function RevocationRequestButton({
+  instanceId,
+  tenantId,
+  eligibility,
+  onRequested,
+}: RevocationRequestButtonProps) {
+  const { isAdminCompany, isSuperAdmin } = usePermissions();
   const [modalOpen, setModalOpen] = useState(false);
   // AC3 — tras un envío exitoso NO hay opción de retirar la solicitud (ver comentario de clase).
   const [justRequested, setJustRequested] = useState(false);
 
-  // AC1 — habilitado: rol Administrador + trámite Aprobado/FLIT + (sin ventana o dentro de ventana).
-  // AC2 — Operario/interno FLIT: visible pero no accionable, cualquiera que sea el estado del gate de
-  // trámite (el rol manda primero, para que el motivo sea siempre el correcto).
+  // AC1 — habilitado: rol Administrador (o interno FLIT/SuperAdmin, que también radica — decisión de
+  // producto 2026-09-16, amplía el AC original) + trámite Aprobado/FLIT + (sin ventana o dentro de
+  // ventana).
+  // AC2 — Operario: visible pero no accionable, cualquiera que sea el estado del gate de trámite (el
+  // rol manda primero, para que el motivo sea siempre el correcto).
   // AC3 — ventana vencida: deshabilitado con motivo específico.
-  const disabledReason = !isAdminCompany
+  const esAdminOInternoFlit = isAdminCompany || isSuperAdmin;
+  const disabledReason = !esAdminOInternoFlit
     ? REASON_NOT_ADMIN
     : !eligibility
       ? REASON_NOT_APPLICABLE
@@ -100,6 +115,7 @@ export function RevocationRequestButton({ instanceId, eligibility, onRequested }
       {modalOpen ? (
         <RevocationRequestModal
           instanceId={instanceId}
+          tenantId={tenantId}
           onClose={() => setModalOpen(false)}
           onSuccess={(result) => {
             setModalOpen(false);

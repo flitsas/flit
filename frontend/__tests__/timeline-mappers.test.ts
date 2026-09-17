@@ -3,6 +3,7 @@ import {
   mapEventsToTimelineNodes,
   mapIdentidadToTimelineNodes,
   mapStatusHistoryToTimelineNodes,
+  mergeTimelineNodesByTimestamp,
 } from '@/components/operacion/detalle/timeline-mappers';
 import type {
   BiometricValidation,
@@ -247,5 +248,38 @@ describe('timeline-mappers', () => {
     ];
     const nodes = mapEventsToTimelineNodes(events);
     expect(nodes.map((n) => n.info.gestor)).toEqual(['Primero', 'Segundo']);
+  });
+
+  // Reportado por el usuario (2026-09-16): en la línea de tiempo la "Solicitud de revocatoria"
+  // salía DESPUÉS del hito "Revocado" aunque cronológicamente la solicitud es siempre anterior a la
+  // decisión — porque `TramiteDetalleModal` concatenaba las dos listas (statusHistory + eventos) ya
+  // ordenadas cada una por separado, sin ordenar la unión.
+  it('mergeTimelineNodesByTimestamp intercala estado + eventos por orden cronológico real', () => {
+    const history: StatusHistory[] = [
+      { fromStatus: 'entregado', toStatus: 'aprobado', changedAt: '2026-09-16T10:00:00Z', reason: null },
+      { fromStatus: 'aprobado', toStatus: 'revocado', changedAt: '2026-09-16T16:04:00Z', reason: null },
+    ];
+    const events: ProcedureInstanceEvent[] = [
+      {
+        tipo: 'revocatoria_solicitada',
+        createdAt: '2026-09-16T16:01:00Z',
+        createdByName: 'Admin Empresa Demo',
+        revocationAttemptNumber: 1,
+      },
+    ];
+
+    const merged = mergeTimelineNodesByTimestamp(
+      mapStatusHistoryToTimelineNodes(history),
+      mapEventsToTimelineNodes(events),
+    );
+
+    expect(merged.map((n) => n.label)).toEqual([
+      'Aprobado',
+      'Solicitud de revocatoria · Intento 1',
+      'Revocado',
+    ]);
+    // El vigente pasa a ser el último cronológico de la unión (Revocado), no el último de la lista
+    // de estados sola ni el de eventos sola.
+    expect(merged.map((n) => n.isActive)).toEqual([false, false, true]);
   });
 });

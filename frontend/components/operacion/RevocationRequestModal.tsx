@@ -34,6 +34,16 @@ const ERROR_FIELD_BY_CODE: Partial<Record<string, keyof FieldErrors>> = {
 
 export interface RevocationRequestModalProps {
   instanceId: string;
+  /**
+   * Bug reportado por el usuario (2026-09-16): un SuperAdmin abriendo el trámite de OTRA compañía
+   * desde `TramitesTable`/`TramiteDetalleModal` (no la ruta del wizard `?t=`) recibía 404
+   * "Procedure instance not found" al enviar la solicitud. Causa: `tramitesClient.requestRevocation`
+   * ya soporta un `tenantId` explícito, pero nadie se lo pasaba — el header `X-Tenant-Id` caía al
+   * fallback de `tenantHeader()` (tenant activo → JWT), y el JWT de un SuperAdmin trae SU PROPIO
+   * tenant, no el del trámite que está viendo. Sin este prop, la llamada quedaba tenant-scoped al
+   * tenant equivocado.
+   */
+  tenantId?: string;
   onClose: () => void;
   /** 201 exitoso (HU #12572). El caller cierra el modal y refleja el envío (AC3). */
   onSuccess: (result: RequestRevocationResult) => void;
@@ -55,7 +65,7 @@ export interface RevocationRequestModalProps {
  * `WizardModal` (B5/B6 del guardián de diseño) — mismo patrón que "Anular trámite" en
  * `TramiteWizard.tsx`, con foco atrapado + Escape + overlay ya resueltos ahí.
  */
-export function RevocationRequestModal({ instanceId, onClose, onSuccess }: RevocationRequestModalProps) {
+export function RevocationRequestModal({ instanceId, tenantId, onClose, onSuccess }: RevocationRequestModalProps) {
   const [step, setStep] = useState<Step>('warning');
   const [reason, setReason] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -91,12 +101,16 @@ export function RevocationRequestModal({ instanceId, onClose, onSuccess }: Revoc
     setSubmitError(null);
     setSubmitting(true);
     try {
-      const result = await tramitesClient.requestRevocation(instanceId, {
-        reason: reason.trim(),
-        confirmAccuracy,
-        confirmConsequences,
-        file: file!,
-      });
+      const result = await tramitesClient.requestRevocation(
+        instanceId,
+        {
+          reason: reason.trim(),
+          confirmAccuracy,
+          confirmConsequences,
+          file: file!,
+        },
+        tenantId,
+      );
       onSuccess(result);
     } catch (err) {
       const code =

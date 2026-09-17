@@ -8,8 +8,12 @@ import type { RevocationEligibility } from '@/lib/api/types/procedure-runtime';
  * HU #12573 (Feature #12565) — "Revocatoria – Botón y gates de permisos".
  *
  * AC1 — rol Administrador + trámite Aprobado/FLIT + sin ventana o dentro de ventana → habilitado.
- * AC2 — rol Operario o interno FLIT → visible pero no accionable.
+ * AC2 — rol Operario → visible pero no accionable.
  * AC3 — ventana configurada y vencida → deshabilitado con motivo "Ventana de revocatoria vencida".
+ *
+ * Ampliación 2026-09-16 (decisión de producto durante pruebas manuales de la Feature #12565): el
+ * interno FLIT (SuperAdmin del tenant FLIT) también radica trámites, así que pasa a AC1 (habilitado)
+ * en vez del AC2 original que lo dejaba visible-pero-deshabilitado junto con Operario.
  */
 
 function base64Url(json: unknown): string {
@@ -79,17 +83,17 @@ describe('RevocationRequestButton — HU #12573', () => {
     expect(button).toBeVisible();
     expect(button).toBeDisabled();
     expect(
-      screen.getByText('Solo el Administrador de la compañía puede solicitar la revocatoria.'),
+      screen.getByText('Solo el Administrador de la compañía o un interno FLIT pueden solicitar la revocatoria.'),
     ).toBeInTheDocument();
   });
 
-  it('AC2 — interno FLIT (SuperAdmin): botón visible pero no accionable', () => {
+  it('AC1 (ampliado 2026-09-16) — interno FLIT (SuperAdmin) también radica: botón habilitado', () => {
     setToken('SuperAdmin');
     render(<RevocationRequestButton instanceId="inst-1" eligibility={eligibleWithoutWindow} />);
 
     const button = screen.getByRole('button', { name: /Solicitar revocatoria/i });
     expect(button).toBeVisible();
-    expect(button).toBeDisabled();
+    expect(button).toBeEnabled();
   });
 
   it('AC3 — ventana vencida: deshabilitado con el motivo "Ventana de revocatoria vencida"', () => {

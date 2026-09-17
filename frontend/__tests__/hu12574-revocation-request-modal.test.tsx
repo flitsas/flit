@@ -167,12 +167,16 @@ describe('RevocationRequestModal — HU #12574', () => {
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Enviar solicitud' }));
 
-    expect(mocks.requestRevocation).toHaveBeenCalledWith('inst-1', {
-      reason: 'El vehículo no cumplía los requisitos al momento de aprobar.',
-      confirmAccuracy: true,
-      confirmConsequences: true,
-      file,
-    });
+    expect(mocks.requestRevocation).toHaveBeenCalledWith(
+      'inst-1',
+      {
+        reason: 'El vehículo no cumplía los requisitos al momento de aprobar.',
+        confirmAccuracy: true,
+        confirmConsequences: true,
+        file,
+      },
+      undefined,
+    );
 
     // El modal se cierra.
     expect(await screen.findByText('Solicitud de revocatoria enviada — en revisión')).toBeInTheDocument();
@@ -182,6 +186,53 @@ describe('RevocationRequestModal — HU #12574', () => {
     expect(screen.queryByRole('button', { name: /retirar/i })).not.toBeInTheDocument();
     expect(onRequested).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'rev-1', status: 'solicitada' }),
+    );
+  });
+
+  // Reportado por el usuario (2026-09-16): un SuperAdmin viendo el trámite de OTRA compañía desde
+  // TramitesTable/TramiteDetalleModal (no la ruta del wizard `?t=`) recibía 404 "Procedure instance
+  // not found" al solicitar la revocatoria — `RevocationRequestButton` no tenía forma de recibir ni
+  // reenviar el tenant dueño del trámite, así que la llamada caía al tenant del JWT del SuperAdmin
+  // en vez del tenant real del trámite.
+  it('reenvía el tenantId del trámite al pedido, para que un SuperAdmin viendo otra compañía no falle', async () => {
+    setToken('SuperAdmin');
+    mocks.requestRevocation.mockResolvedValue({
+      id: 'rev-1',
+      procedureInstanceId: 'inst-1',
+      attemptNumber: 1,
+      status: 'solicitada',
+      requestedAt: '2026-09-15T12:00:00Z',
+    });
+    render(
+      <RevocationRequestButton
+        instanceId="inst-1"
+        tenantId="tenant-empresa-demo"
+        eligibility={eligibleWithoutWindow}
+      />,
+    );
+    await openModalAtStep2();
+
+    const dialog = await screen.findByRole('dialog', { name: /Solicitar revocatoria/ });
+    await userEvent.type(
+      within(dialog).getByLabelText('Motivo de la solicitud'),
+      'El vehículo no cumplía los requisitos al momento de aprobar.',
+    );
+    const file = new File(['%PDF-1.4'], 'soporte.pdf', { type: 'application/pdf' });
+    await userEvent.upload(dialog.querySelector('input[type="file"]') as HTMLInputElement, file);
+    await userEvent.click(
+      within(dialog).getByLabelText('Confirmo que la información registrada en esta solicitud es correcta.'),
+    );
+    await userEvent.click(
+      within(dialog).getByLabelText(
+        'Entiendo que esta solicitud de revocatoria no se puede retirar una vez enviada.',
+      ),
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Enviar solicitud' }));
+
+    expect(mocks.requestRevocation).toHaveBeenCalledWith(
+      'inst-1',
+      expect.objectContaining({ reason: expect.any(String) }),
+      'tenant-empresa-demo',
     );
   });
 
