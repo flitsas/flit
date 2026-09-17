@@ -21,8 +21,10 @@ public static class NetworkAnalyticsScope
     public const string InvalidRange = "invalid_range";
 
     /// <summary>Conjunto efectivo de clientes a consultar o el código de error.</summary>
+    /// <remarks>BUG #12588 — el rango es opcional en el overview; los demás consumidores siguen
+    /// pasando los dos extremos y la conversión implícita los acepta sin cambios.</remarks>
     public static (IReadOnlySet<Guid>? TenantIds, string? Error) Resolve(
-        TenantScope? scope, Guid? childTenantId, DateOnly from, DateOnly to)
+        TenantScope? scope, Guid? childTenantId, DateOnly? from, DateOnly? to)
     {
         if (NetworkScopePolicy.Validate(scope) is { } scopeError)
             return (null, scopeError);
@@ -31,7 +33,7 @@ public static class NetworkAnalyticsScope
         if (narrowError is not null)
             return (null, narrowError);
 
-        if (from > to)
+        if (from is { } desde && to is { } hasta && desde > hasta)
             return (null, InvalidRange);
 
         return (effective!.ReadTenantIds, null);
@@ -42,7 +44,8 @@ public static class NetworkAnalyticsScope
 }
 
 /// <summary>Consulta del overview consolidado de la red (AC1).</summary>
-public sealed record GetNetworkAnalyticsOverviewQuery(TenantScope? Scope, Guid? ChildTenantId, DateOnly From, DateOnly To);
+/// <remarks>BUG #12588 — From/To null = sin acotar por fecha (universo completo de la red).</remarks>
+public sealed record GetNetworkAnalyticsOverviewQuery(TenantScope? Scope, Guid? ChildTenantId, DateOnly? From, DateOnly? To);
 
 /// <summary>
 /// Overview de la red: misma forma que <c>GetAnalyticsOverviewHandler</c> sobre el conjunto de lectura.

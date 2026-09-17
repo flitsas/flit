@@ -47,12 +47,15 @@ internal static class NetworkAnalyticsEndpoints
     {
         ArgumentNullException.ThrowIfNull(group);
 
+        // BUG #12588 — `from`/`to` opcionales: omitirlos consolida el universo completo de la red.
+        // Mismo criterio que `/analytics/overview`; el resto de rutas de stats mantiene el rango
+        // obligatorio porque son series y rankings, que sin ventana no significan nada.
         group.MapGet("/stats/overview", async (
             HttpContext http,
-            DateOnly from,
-            DateOnly to,
             GetNetworkAnalyticsOverviewHandler handler,
             CancellationToken ct,
+            [FromQuery] DateOnly? from = null,
+            [FromQuery] DateOnly? to = null,
             [FromQuery] Guid? childTenantId = null) =>
         {
             var (result, error) = await handler.HandleAsync(
@@ -130,8 +133,8 @@ internal static class NetworkAnalyticsEndpoints
         HttpContext http,
         string resource,
         Guid? childTenantId,
-        DateOnly from,
-        DateOnly to,
+        DateOnly? from,
+        DateOnly? to,
         int? limit,
         IReadOnlyList<Guid>? reachedTenantIds,
         string? error)
