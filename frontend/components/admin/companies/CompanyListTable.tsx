@@ -8,7 +8,9 @@ import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
 import { Pagination } from "@/components/atom/Pagination";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 // Tabla paginada de compañías (HU #10194, AC1). Columnas: NIT, Razón Social,
+
 // Estado, Fecha de creación + acciones "Editar", "Activar/Desactivar" y "Configurar".
 // Paginación server-side: la tabla solo emite el cambio de página vía onPageChange.
 export interface CompanyListTableProps {
@@ -149,5 +151,5 @@ function formatDate(iso: string): string {
   if (Number.isNaN(parsed.getTime())) {
     return iso;
   }
-  return parsed.toLocaleDateString("es-CO", { year: "numeric", month: "2-digit", day: "2-digit" });
+  return parsed.toLocaleDateString("es-CO", { timeZone: ZONA_COLOMBIA, year: "numeric", month: "2-digit", day: "2-digit" });
 }

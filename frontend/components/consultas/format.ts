@@ -1,4 +1,6 @@
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 // Formateo compartido por las dos consolas de consultas.
+
 //
 // Vive fuera de cada módulo porque un informe que dice «1.284» y otro que dice «1284» sobre el
 // mismo dato se leen como dos productos. Todo lo de fecha va en huso de Bogotá, que es el mismo con
@@ -28,7 +30,7 @@ export function formatDate(iso: string | null): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "\u2014";
   return new Intl.DateTimeFormat("es-CO", {
-    timeZone: "America/Bogota",
+    timeZone: ZONA_COLOMBIA,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -41,7 +43,7 @@ export function formatDateTime(iso: string | null): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "\u2014";
   return new Intl.DateTimeFormat("es-CO", {
-    timeZone: "America/Bogota",
+    timeZone: ZONA_COLOMBIA,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

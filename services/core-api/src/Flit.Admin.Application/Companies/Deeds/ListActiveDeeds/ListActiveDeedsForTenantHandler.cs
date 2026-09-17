@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Admin.Application.Companies.Deeds.ListActiveDeeds;
 
@@ -18,9 +19,6 @@ namespace Flit.Admin.Application.Companies.Deeds.ListActiveDeeds;
 /// </summary>
 public sealed class ListActiveDeedsForTenantHandler
 {
-    // Hora de Colombia (UTC-5, sin DST): la vigencia se cuenta por día calendario local (ADR-0025 §3).
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
-
     private readonly IDeedReader _deedReader;
     private readonly ILegalRepresentativeReader _representativeReader;
     private readonly TimeProvider _timeProvider;
@@ -41,7 +39,8 @@ public sealed class ListActiveDeedsForTenantHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
+        // Hora de Colombia (UTC-5, sin DST): la vigencia se cuenta por día calendario local (ADR-0025 §3).
+        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
 
         var deeds = await _deedReader
             .ListActiveVigentesAsync(query.TenantId, today, cancellationToken)

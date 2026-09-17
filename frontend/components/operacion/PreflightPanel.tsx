@@ -14,7 +14,9 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_BTN, WIZARD_BTN_SOLID, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
+import { ZONA_COLOMBIA } from '@/lib/format/date';
 interface Props {
+
   snapshot: PreflightSnapshot | null;
   loading: boolean;
   // HU #10885 (Feature #10862, CF-04, AC2) — `forceRefresh=true` cuando el disparo viene del botón
@@ -247,7 +249,7 @@ export function selloDeConsulta(
         ? ` en ${fuentes[0]}`
         : ` en ${fuentes.slice(0, -1).join(', ')} y ${fuentes[fuentes.length - 1]}`;
 
-  return `Consultado${origen} el ${cuando.toLocaleString('es-CO')}`;
+  return `Consultado${origen} el ${cuando.toLocaleString('es-CO', { timeZone: ZONA_COLOMBIA })}`;
 }
 
 /**
@@ -440,7 +442,7 @@ export function PreflightPanel({
                 {' '}
                 · Consultado el{' '}
                 <span className="font-semibold">
-                  {new Date(snapshot.queriedAt).toLocaleString('es-CO')}
+                  {new Date(snapshot.queriedAt).toLocaleString('es-CO', { timeZone: ZONA_COLOMBIA })}
                 </span>
               </>
             )}

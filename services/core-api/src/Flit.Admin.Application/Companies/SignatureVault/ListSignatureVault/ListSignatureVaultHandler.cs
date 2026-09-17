@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.SignatureVault;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Admin.Application.Companies.SignatureVault.ListSignatureVault;
 
@@ -8,10 +9,6 @@ namespace Flit.Admin.Application.Companies.SignatureVault.ListSignatureVault;
 /// </summary>
 public sealed class ListSignatureVaultHandler
 {
-    // Hora de Colombia (UTC-5, sin DST): la vigencia se cuenta por día calendario local, coherente
-    // con EstaVigente y el resolutor de firma (ADR-0025 §3).
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
-
     private readonly ISignatureVaultReader _reader;
     private readonly TimeProvider _timeProvider;
 
@@ -46,7 +43,9 @@ public sealed class ListSignatureVaultHandler
         if (query.SoloVigentes == true)
         {
             var today = DateOnly.FromDateTime(
-                _timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
+                // Hora de Colombia (UTC-5, sin DST): la vigencia se cuenta por día calendario local, coherente
+                // con EstaVigente y el resolutor de firma (ADR-0025 §3).
+                _timeProvider.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
             result = result.Where(i => i.Estado == SignatureVaultEstado.Activa
                 && today >= i.VigenciaDesde
                 && today <= i.VigenciaHasta);

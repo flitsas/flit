@@ -15,7 +15,9 @@ import type { OtApiScope, OtProcedureAttachment } from "@/lib/api/admin-ot";
 import { OtVacio } from "./OtDetallePrimitivos";
 import { OT_BLUE, OT_GREEN } from "./ot-detalle-visual";
 
+import { ZONA_COLOMBIA } from "@/lib/format/date";
 export interface OtDetalleDocumentosProps {
+
   /** ID del trámite de cliente OT. */
   procedureId: string;
   scope?: OtApiScope;
@@ -31,7 +33,7 @@ function formatSize(bytes: number): string {
 
 function formatDate(iso: string): string {
   try {
-    return new Intl.DateTimeFormat("es-CO", {
+    return new Intl.DateTimeFormat("es-CO", { timeZone: ZONA_COLOMBIA,
       day: "2-digit",
       month: "2-digit",
       year: "numeric",

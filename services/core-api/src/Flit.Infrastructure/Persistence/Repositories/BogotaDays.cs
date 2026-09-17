@@ -1,4 +1,4 @@
-using Flit.Infrastructure.Analytics.Scheduling;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -15,7 +15,7 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal static class BogotaDays
 {
-    public static TimeZoneInfo Zone => ScheduleDueEvaluator.BogotaTimeZone;
+    public static TimeZoneInfo Zone => ColombiaTime.Zone;
 
     /// <summary>Hoy en Bogotá.</summary>
     public static DateOnly Today() =>

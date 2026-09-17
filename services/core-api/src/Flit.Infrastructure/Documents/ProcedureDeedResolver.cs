@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -18,9 +19,6 @@ namespace Flit.Infrastructure.Documents;
 /// </summary>
 internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
 {
-    // Hora de Colombia (UTC-5, sin DST): la vigencia se cuenta por día calendario local (ADR-0025 §3).
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
-
     private readonly IDeedReader _deedReader;
     private readonly ILegalRepresentativeReader _representativeReader;
     private readonly IAttachmentStorage _storage;
@@ -54,7 +52,8 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
             return [];
         }
 
-        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
+        // Hora de Colombia (UTC-5, sin DST): la vigencia se cuenta por día calendario local (ADR-0025 §3).
+        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
         var deeds = await _deedReader.ListActiveVigentesAsync(tenantId, today, ct).ConfigureAwait(false);
         if (deeds.Count == 0)
         {

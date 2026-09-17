@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.UseCases.Certifications;
 using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Domain.RuntConfirmation;
@@ -53,7 +54,7 @@ public static class KyverumRuntVehicleResultMapper
     public const string VeredictoSinMatricula = "SIN_MATRICULA_INICIAL";
 
     public static ConsultationResult MapVehicle(KyverumRuntVehicleResponse response) =>
-        MapVehicle(response, DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaOffset).Date));
+        MapVehicle(response, DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaTime.Offset).Date));
 
     /// <summary>Sobrecarga con la fecha inyectada, para que las pruebas no dependan del reloj.</summary>
     public static ConsultationResult MapVehicle(KyverumRuntVehicleResponse response, DateOnly today)
@@ -76,8 +77,6 @@ public static class KyverumRuntVehicleResultMapper
 
         return new ConsultationResult(Provider, overall, checks, hydrated, Certifications: certifications);
     }
-
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
 
     /// <summary>
     /// Traduce la respuesta al vocabulario canónico (HU #11303, ADR-0041). Se conserva el

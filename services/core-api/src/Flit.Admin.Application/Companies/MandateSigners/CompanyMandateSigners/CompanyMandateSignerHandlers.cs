@@ -2,6 +2,7 @@ using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.SignatureVault;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 
@@ -149,7 +150,7 @@ public sealed class CreateCompanyMandateSignerHandler
                 "signatureVaultId", "La firma indicada no pertenece al mandatario.", null);
         }
 
-        var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Date);
+        var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaTime.Offset).Date);
         return firma.Estado != SignatureVaultEstado.Activa
             || hoy < firma.VigenciaDesde
             || hoy > firma.VigenciaHasta

@@ -1,3 +1,4 @@
+using Flit.Queries.Domain.Time;
 using Flit.Queries.Domain;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -130,10 +131,6 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
     private static readonly IReadOnlyDictionary<Guid, string> EmptyNames = new Dictionary<Guid, string>();
     private static readonly IReadOnlyDictionary<string, bool> EmptyFirmaBaul = new Dictionary<string, bool>();
 
-    /// <summary>Hora de Colombia (UTC-5, sin DST) — igual que <see cref="ListProcedureInstancesHandler"/>:
-    /// la vigencia del baúl se cuenta por día calendario local.</summary>
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
-
     public async Task<(IReadOnlyList<InstanceSummaryDto> Items, int Total)> HandleAsync(
         ProcedureInstanceListRequest request, CancellationToken ct = default)
     {
@@ -208,7 +205,7 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
         IReadOnlySet<string> identidadKeys = await repo.ListVigenteApprovedIdentityKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
 
-        var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaUtcOffset).DateTime);
+        var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaTime.Offset).DateTime);
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
 

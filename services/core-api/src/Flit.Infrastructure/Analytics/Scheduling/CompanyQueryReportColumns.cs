@@ -1,5 +1,6 @@
 using Flit.Analytics.Application.CompanyQueries;
 using Flit.Infrastructure.Documents.Reports;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Analytics.Scheduling;
 
@@ -123,7 +124,7 @@ internal static class CompanyQueryReportColumns
 
     private static TabularWorkbookWriter.Cell DateCell(DateTimeOffset value)
     {
-        var local = TimeZoneInfo.ConvertTime(value, ScheduleDueEvaluator.BogotaTimeZone);
+        var local = TimeZoneInfo.ConvertTime(value, ColombiaTime.Zone);
         return TabularWorkbookWriter.Cell.Of(DateOnly.FromDateTime(local.Date));
     }
 
@@ -132,7 +133,7 @@ internal static class CompanyQueryReportColumns
         if (value is null)
             return TabularWorkbookWriter.Cell.Empty;
 
-        var local = TimeZoneInfo.ConvertTime(value.Value, ScheduleDueEvaluator.BogotaTimeZone);
+        var local = TimeZoneInfo.ConvertTime(value.Value, ColombiaTime.Zone);
         return TabularWorkbookWriter.Cell.OfDateTime(DateOnly.FromDateTime(local.Date), local.Hour, local.Minute);
     }
 }

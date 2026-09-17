@@ -1,5 +1,6 @@
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Domain.Companies.SignatureVault;
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Domain.Integration;
 
 namespace Flit.Infrastructure.OtRules;
@@ -18,9 +19,6 @@ namespace Flit.Infrastructure.OtRules;
 /// </summary>
 internal sealed class SignatureVaultPolicy : ISignatureVaultPolicy
 {
-    // Colombia no tiene horario de verano: UTC-5 fijo (coherente con BiometricRules).
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
-
     private readonly ITenantSettingsRepository _settings;
     private readonly ISignatureVaultReader _reader;
 
@@ -75,7 +73,8 @@ internal sealed class SignatureVaultPolicy : ISignatureVaultPolicy
             return null;
         }
 
-        var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaUtcOffset).Date);
+        // Colombia no tiene horario de verano: UTC-5 fijo (coherente con BiometricRules).
+        var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaTime.Offset).Date);
         if (!vault.EstaVigente(today))
         {
             return null;

@@ -1,5 +1,6 @@
 using Flit.Analytics.Application.IctQueries;
 using Flit.Infrastructure.Documents.Reports;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Analytics.Scheduling;
 
@@ -86,7 +87,7 @@ internal static class IctQueryReportColumns
 
     private static TabularWorkbookWriter.Cell DateTimeCell(DateTimeOffset value)
     {
-        var local = TimeZoneInfo.ConvertTime(value, ScheduleDueEvaluator.BogotaTimeZone);
+        var local = TimeZoneInfo.ConvertTime(value, ColombiaTime.Zone);
         return TabularWorkbookWriter.Cell.OfDateTime(DateOnly.FromDateTime(local.Date), local.Hour, local.Minute);
     }
 
