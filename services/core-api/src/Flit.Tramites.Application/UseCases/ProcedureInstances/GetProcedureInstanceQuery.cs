@@ -74,7 +74,11 @@ public sealed record ProcedureInstanceEventDto(
     // Correo de quien EJECUTÓ el evento — a diferencia de reasignar_gestor_admin/reenvio_validacion_admin
     // (que hablan de un TERCERO), en revocatoria_solicitada el ejecutor ES el dato relevante de "Correo"
     // de la tarjeta (ya resuelto en el mismo batch de GetUserEmailsAsync que arma NewAssignedToEmail).
-    string? CreatedByEmail = null);
+    string? CreatedByEmail = null,
+    // revocatoria_aprobada / revocatoria_rechazada (HU #12576/#12577, Feature #12565) — motivo de la
+    // DECISIÓN del OT, distinto de RevocationReason (que es el motivo original del gestor al pedirla).
+    // Ambos tipos reutilizan RevocationAttemptNumber de arriba.
+    string? RevocationDecisionReason = null);
 
 /// <summary>
 /// HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria sobre un trámite
@@ -95,6 +99,23 @@ public sealed record ProcedureInstanceActiveRevocationRequestDto(
     string Status,
     int AttemptNumber,
     DateTimeOffset RequestedAt);
+
+/// <summary>
+/// Feature #12565 — decisión del OT (HU #12576/#12577) sobre el intento MÁS RECIENTE de revocatoria,
+/// para que el detalle del trámite (gestor y OT) muestre qué pasó incluso después de que el sub-flujo
+/// ya se cerró. <c>null</c> cuando nunca se solicitó una revocatoria o cuando la solicitud sigue activa
+/// (ese caso lo cubre <see cref="ProcedureInstanceActiveRevocationRequestDto"/>, no este).
+/// </summary>
+public sealed record ProcedureInstanceRevocationDecisionDto(
+    /// <summary><c>aprobada</c> | <c>rechazada</c> — los únicos dos valores decididos.</summary>
+    string Status,
+    int AttemptNumber,
+    DateTimeOffset RequestedAt,
+    DateTimeOffset DecidedAt,
+    /// <summary>Motivo con el que el gestor pidió la revocatoria (HU #12572, AC1).</summary>
+    string? Reason,
+    /// <summary>Motivo de la decisión del OT: obligatorio al rechazar, opcional al aprobar (HU #12577).</summary>
+    string? DecisionReason);
 
 /// <summary>
 /// HU #12573 (Feature #12565) — gates de habilitación del botón "Solicitar revocatoria" (AC1-AC3) que el
@@ -170,7 +191,10 @@ public sealed record ProcedureInstanceDetailDto(
     ProcedureInstanceRevocationEligibilityDto? RevocationEligibility = null,
     // HU #12575 — ver XML doc de ProcedureInstanceActiveRevocationRequestDto. MISMA excepción que
     // RevocationEligibility: null en la vista de red (NetworkGetProcedureInstanceHandler no la calcula).
-    ProcedureInstanceActiveRevocationRequestDto? ActiveRevocationRequest = null);
+    ProcedureInstanceActiveRevocationRequestDto? ActiveRevocationRequest = null,
+    // Feature #12565 — ver XML doc de ProcedureInstanceRevocationDecisionDto. MISMA excepción que los
+    // dos campos de arriba: null en la vista de red.
+    ProcedureInstanceRevocationDecisionDto? LastRevocationDecision = null);
 
 public sealed class GetProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
@@ -189,6 +213,12 @@ public sealed class GetProcedureInstanceHandler(
         // HU #12575 — evento que ya emite RequestRevocationHandler.EventoTipo (HU #12572); estaba
         // fuera del whitelist y se descartaba aquí antes de llegar al frontend.
         "revocatoria_solicitada",
+        // Feature #12565 — decisión del OT (DecideRevocationRequestHandler, HU #12576/#12577): sin
+        // esto, un rechazo no dejaba NINGÚN rastro en el tracking (el trámite seguía Aprobado como si
+        // nunca se hubiera solicitado) y una aprobación solo se veía como la transición genérica
+        // "Revocado desde Aprobado" del historial de estados, sin el motivo del OT.
+        "revocatoria_aprobada",
+        "revocatoria_rechazada",
     };
 
     public async Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleAsync(
@@ -202,7 +232,9 @@ public sealed class GetProcedureInstanceHandler(
 
         var revocationEligibility = await BuildRevocationEligibilityAsync(instance, tenantId, ct).ConfigureAwait(false);
         var activeRevocationRequest = await BuildActiveRevocationRequestAsync(instance, tenantId, ct).ConfigureAwait(false);
-        return (await BuildDetailAsync(repo, instance, ct, revocationEligibility, activeRevocationRequest).ConfigureAwait(false), null);
+        var lastRevocationDecision = await BuildLastRevocationDecisionAsync(instance, tenantId, ct).ConfigureAwait(false);
+        return (await BuildDetailAsync(
+            repo, instance, ct, revocationEligibility, activeRevocationRequest, lastRevocationDecision).ConfigureAwait(false), null);
     }
 
     /// <summary>
@@ -263,6 +295,30 @@ public sealed class GetProcedureInstanceHandler(
     }
 
     /// <summary>
+    /// Feature #12565 — ver XML doc de <see cref="ProcedureInstanceRevocationDecisionDto"/>. A diferencia
+    /// de <see cref="BuildActiveRevocationRequestAsync"/>, SIN el gate por <c>instance.Status == 'aprobado'</c>:
+    /// una revocatoria APROBADA deja el trámite en <c>'revocado'</c> (ya no 'aprobado'), así que ese gate
+    /// escondería justo el caso que este campo existe para mostrar. Usa <c>FindLastAsync</c> (cualquier
+    /// estado, la más reciente) y solo expone la fila si YA se decidió — si sigue activa, el campo de
+    /// arriba es el que corresponde.
+    /// </summary>
+    private async Task<ProcedureInstanceRevocationDecisionDto?> BuildLastRevocationDecisionAsync(
+        ProcedureInstance instance, Guid tenantId, CancellationToken ct)
+    {
+        if (revocationRepo is null)
+            return null;
+
+        var last = await revocationRepo.FindLastAsync(tenantId, instance.Id, ct).ConfigureAwait(false);
+        if (last is null || last.DecidedAt is null || (
+                last.Status != ProcedureRevocationRequestStatus.Aprobada
+                && last.Status != ProcedureRevocationRequestStatus.Rechazada))
+            return null;
+
+        return new ProcedureInstanceRevocationDecisionDto(
+            last.Status, last.AttemptNumber, last.RequestedAt, last.DecidedAt.Value, last.Reason, last.DecisionReason);
+    }
+
+    /// <summary>
     /// ÚNICO punto que arma el <see cref="ProcedureInstanceDetailDto"/> a partir del agregado cargado:
     /// lo usan el detalle propio (este handler) y el consolidado de la red
     /// (<c>NetworkGetProcedureInstanceHandler</c>, HU #12358), cuyo contrato es «los MISMOS campos que el
@@ -285,11 +341,13 @@ public sealed class GetProcedureInstanceHandler(
         ProcedureInstanceRevocationEligibilityDto? revocationEligibility = null,
         // HU #12575 — misma excepción deliberada que revocationEligibility (ver comentario de clase):
         // solo HandleAsync la calcula; la vista de red la recibe null.
-        ProcedureInstanceActiveRevocationRequestDto? activeRevocationRequest = null)
+        ProcedureInstanceActiveRevocationRequestDto? activeRevocationRequest = null,
+        // Feature #12565 — misma excepción deliberada que los dos campos de arriba.
+        ProcedureInstanceRevocationDecisionDto? lastRevocationDecision = null)
     {
         var events = await BuildEventsAsync(repo, instance.Events, ct).ConfigureAwait(false);
         var actorInfo = await BuildStatusHistoryActorInfoAsync(repo, instance.StatusHistory, ct).ConfigureAwait(false);
-        return ToDetail(instance, events, actorInfo, revocationEligibility, activeRevocationRequest);
+        return ToDetail(instance, events, actorInfo, revocationEligibility, activeRevocationRequest, lastRevocationDecision);
     }
 
     /// <summary>
@@ -411,6 +469,28 @@ public sealed class GetProcedureInstanceHandler(
                     CreatedByCompania: createdByCompania);
             }
 
+            // revocatoria_aprobada / revocatoria_rechazada (Feature #12565) — payload de
+            // DecideRevocationRequestHandler: { revocation_request_id, attempt_number,
+            // decision_reason }. El ejecutor (CreatedBy) es el usuario del OT que decidió.
+            if (e.Tipo == "revocatoria_aprobada" || e.Tipo == "revocatoria_rechazada")
+            {
+                var decisionAttemptNumber = payload.TryGetProperty("attempt_number", out var dan)
+                    && dan.ValueKind == JsonValueKind.Number && dan.TryGetInt32(out var decisionAttemptValue)
+                        ? decisionAttemptValue
+                        : (int?)null;
+                var decisionReason = payload.TryGetProperty("decision_reason", out var dr) && dr.ValueKind == JsonValueKind.String
+                    ? dr.GetString()
+                    : null;
+                var decidedByEmail = e.CreatedBy is { } decidedBy
+                    && emails.TryGetValue(decidedBy, out var dem) ? dem : null;
+                return new ProcedureInstanceEventDto(
+                    e.Tipo, e.CreatedAt, createdByName,
+                    RevocationAttemptNumber: decisionAttemptNumber,
+                    RevocationDecisionReason: decisionReason,
+                    CreatedByEmail: decidedByEmail,
+                    CreatedByCompania: createdByCompania);
+            }
+
             // reenvio_validacion_admin
             var partyRole = payload.TryGetProperty("party_role", out var pr) && pr.ValueKind == JsonValueKind.String
                 ? pr.GetString()
@@ -445,7 +525,8 @@ public sealed class GetProcedureInstanceHandler(
         IReadOnlyList<ProcedureInstanceEventDto>? events = null,
         StatusHistoryActorInfo? actorInfo = null,
         ProcedureInstanceRevocationEligibilityDto? revocationEligibility = null,
-        ProcedureInstanceActiveRevocationRequestDto? activeRevocationRequest = null)
+        ProcedureInstanceActiveRevocationRequestDto? activeRevocationRequest = null,
+        ProcedureInstanceRevocationDecisionDto? lastRevocationDecision = null)
     {
         var names = actorInfo?.Names ?? EmptyActorMap;
         var emails = actorInfo?.Emails ?? EmptyActorMap;
@@ -486,7 +567,8 @@ public sealed class GetProcedureInstanceHandler(
             e.Prioritario,
             events ?? [],
             revocationEligibility,
-            activeRevocationRequest);
+            activeRevocationRequest,
+            lastRevocationDecision);
     }
 
     private static readonly Dictionary<Guid, string> EmptyActorMap = [];

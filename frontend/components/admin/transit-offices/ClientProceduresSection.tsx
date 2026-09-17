@@ -8,10 +8,12 @@ import {
   adjuntarOtLicenciaTransito,
   approveOtClientProcedure,
   approveOtRevocationRequest,
+  fetchActiveOtRevocationRequestDetail,
   fetchOtAttachmentPreviewUrl,
   fetchOtBandejaCounters,
   fetchOtBandejaFilterFields,
   fetchOtBandejaHealth,
+  fetchOtClientProcedure,
   fetchOtDocuments,
   fetchOtProfile,
   generarOtConsolidadoMaestro,
@@ -21,6 +23,7 @@ import {
   searchOtClientProcedures,
 } from "@/lib/api/admin-ot";
 import type {
+  OtActiveRevocationRequestDetail,
   OtBandejaCounters,
   OtBandejaHealth,
   OtClientProcedure,
@@ -405,6 +408,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [statusFilter, setStatusFilter] = useState(ESTADO_POR_DEFECTO);
   /** Sub-estado de placa; lo fijan las tarjetas de la cabecera, no el panel de búsqueda. */
   const [plateFlowFilter, setPlateFlowFilter] = useState("");
+  /**
+   * Pedido del usuario (2026-09-16) — filtro de la tarjeta "Solicitudes de revocatoria", igual
+   * criterio que `plateFlowFilter`: lo fija la tarjeta, no el panel de búsqueda.
+   */
+  const [hasActiveRevocationRequestFilter, setHasActiveRevocationRequestFilter] = useState(false);
   const [counters, setCounters] = useState<OtBandejaCounters | null>(null);
   const [contadorActivo, setContadorActivo] = useState<OtCounterKey | "">("");
   const [sortBy, setSortBy] = useState("createdAt");
@@ -482,6 +490,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [decideRevocationReason, setDecideRevocationReason] = useState("");
   // AC2 — motivo obligatorio al rechazar: se bloquea en cliente sin llamar al backend.
   const [decideRevocationFieldError, setDecideRevocationFieldError] = useState<string | null>(null);
+  // Feature #12565 — motivo + documento de soporte que cargó el gestor al solicitar, para que el OT
+  // los vea ANTES de decidir (hasta ahora el modal no mostraba ninguno de los dos).
+  const [decideRevocationDetail, setDecideRevocationDetail] =
+    useState<OtActiveRevocationRequestDetail | null>(null);
+  const [decideRevocationDetailLoading, setDecideRevocationDetailLoading] = useState(false);
   // HU #12167 — corregir la placa dentro de la ventana de 1 hora.
   const [updatePlateTarget, setUpdatePlateTarget] = useState<OtClientProcedure | null>(null);
   const [updatePlateInput, setUpdatePlateInput] = useState("");
@@ -656,6 +669,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     (): OtClientProceduresParams => ({
       status: statusFilter || undefined,
       plateFlowStatus: plateFlowFilter || undefined,
+      hasActiveRevocationRequest: hasActiveRevocationRequestFilter || undefined,
       condiciones: appliedCondiciones.length > 0 ? appliedCondiciones : undefined,
       busqueda: busquedaAplicada.trim() || undefined,
       createdFrom: appliedCreatedFrom || undefined,
@@ -668,6 +682,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     [
       statusFilter,
       plateFlowFilter,
+      hasActiveRevocationRequestFilter,
       appliedCondiciones,
       busquedaAplicada,
       appliedCreatedFrom,
@@ -751,6 +766,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     if (draftCondiciones.some((c) => c.fieldId === "estado")) {
       setStatusFilter("");
       setPlateFlowFilter("");
+      setHasActiveRevocationRequestFilter(false);
       setContadorActivo("");
     }
 
@@ -800,16 +816,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
    * que el operador acaba de pulsar.
    */
   const handleContadorSelect = (key: OtCounterKey | "") => {
-    const { status, plateFlowStatus } = filtrosDeContador(key);
+    const { status, plateFlowStatus, hasActiveRevocationRequest } = filtrosDeContador(key);
     setContadorActivo(key);
     setStatusFilter(key === "" ? ESTADO_POR_DEFECTO : status);
     setPlateFlowFilter(plateFlowStatus);
+    setHasActiveRevocationRequestFilter(hasActiveRevocationRequest ?? false);
     setPage(1);
   };
 
   const clearFilters = useCallback(() => {
     setContadorActivo("");
     setPlateFlowFilter("");
+    setHasActiveRevocationRequestFilter(false);
     setStatusFilter(ESTADO_POR_DEFECTO);
     setDraftCondiciones([]);
     setAppliedCondiciones([]);
@@ -1116,6 +1134,55 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     setDecideRevocationReason("");
     setDecideRevocationFieldError(null);
     setDecideRevocationTarget(row);
+    setDecideRevocationDetail(null);
+    setDecideRevocationDetailLoading(true);
+    fetchActiveOtRevocationRequestDetail(row.id, scope)
+      .then(setDecideRevocationDetail)
+      .catch(() => {
+        // No bloquea la decisión: si el motivo/soporte no cargan, el OT puede decidir igual (mismo
+        // criterio que el resto del modal, que ya funcionaba sin ellos).
+        setDecideRevocationDetail(null);
+      })
+      .finally(() => setDecideRevocationDetailLoading(false));
+  };
+
+  /** Abre el PDF de soporte de la solicitud en el MISMO visor inline que "Ver documentos". */
+  const handleVerSoporteRevocatoria = async () => {
+    if (!decideRevocationTarget || !decideRevocationDetail?.supportDocumentId) return;
+    const procId = decideRevocationTarget.id;
+    const attId = decideRevocationDetail.supportDocumentId;
+    setPreview((p) => {
+      if (p.url) URL.revokeObjectURL(p.url);
+      return {
+        open: true,
+        title: `Soporte de revocatoria — ${decideRevocationTarget.referenceNumber}`,
+        mimetype: "application/pdf",
+        url: null,
+        loading: true,
+        error: null,
+        download: null,
+      };
+    });
+    try {
+      const { url } = await fetchOtAttachmentPreviewUrl(procId, attId, scope);
+      const blob = await fetch(url).then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.blob();
+      });
+      const objectUrl = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+      setPreview((p) => ({
+        ...p,
+        loading: false,
+        url: objectUrl,
+        download: { procId, attId, filename: "soporte-revocatoria.pdf" },
+      }));
+    } catch {
+      setPreview((p) => ({
+        ...p,
+        loading: false,
+        error: "No se pudo abrir el documento de soporte. Intenta de nuevo.",
+      }));
+    }
   };
 
   /**
@@ -1133,25 +1200,29 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
     setDecideRevocationFieldError(null);
     setActing(true);
+    const targetId = decideRevocationTarget.id;
     try {
       if (decideRevocationMode === "approve") {
-        const decision = await approveOtRevocationRequest(
-          decideRevocationTarget.id,
-          decideRevocationReason,
-          scope,
-        );
-        // Aprobar ejecuta Aprobado→Revocado (HU #12166): la fila y el detalle abierto reflejan YA
-        // el trámite revocado que devuelve el backend.
-        if (decision.procedure) {
-          const updated = decision.procedure;
-          setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-          setDetailProcedure((prev) => (prev && prev.id === updated.id ? updated : prev));
-        }
+        await approveOtRevocationRequest(targetId, decideRevocationReason, scope);
         show("Revocatoria aprobada: el trámite quedó Revocado.", "success");
       } else {
-        await rejectOtRevocationRequest(decideRevocationTarget.id, decideRevocationReason, scope);
-        // El trámite permanece Aprobado (ADR-0022): no hay fila que actualizar.
+        await rejectOtRevocationRequest(targetId, decideRevocationReason, scope);
         show("Revocatoria rechazada. El trámite permanece Aprobado.", "success");
+      }
+      // Se relee la fila del servidor en vez de confiar en `decision.procedure`: en rechazar, el
+      // backend no devuelve ningún trámite actualizado (no cambia), y en aprobar el snapshot que
+      // devuelve el handler de revocatoria se toma ANTES de que la fila procedure_revocation_requests
+      // quede en 'aprobada' — las dos veces la fila de la bandeja se quedaba con el dato viejo hasta
+      // un refresco manual de pantalla.
+      try {
+        const fresh = await fetchOtClientProcedure(targetId, undefined, scope);
+        if (fresh) {
+          setRows((prev) => prev.map((r) => (r.id === fresh.id ? fresh : r)));
+          setDetailProcedure((prev) => (prev && prev.id === fresh.id ? fresh : prev));
+        }
+      } catch {
+        // La decisión ya se persistió (el show() de arriba ya avisó éxito); si el refresco falla,
+        // la próxima carga de la bandeja trae el dato correcto de todos modos.
       }
       setDecideRevocationTarget(null);
       setDecideRevocationReason("");
@@ -1874,14 +1945,47 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Decidir revocatoria</h2>
             <p className="mt-2 text-sm opacity-80">Trámite {decideRevocationTarget.referenceNumber}</p>
             <p className="mt-2 text-xs opacity-70">
-              El gestor solicitó revocar este trámite Aprobado. Apruébala para revocarlo (libera la
-              placa/VIN y marca el FUR/certificados vigentes como históricos) o recházala para que
-              el trámite permanezca Aprobado y el gestor pueda reintentar.
+              El gestor solicitó revocar este trámite. Aprobar lo revoca; rechazar lo deja Aprobado
+              para que el gestor pueda reintentar.
             </p>
+
+            {/* Feature #12565 — motivo + soporte que cargó el gestor al solicitar: antes de esto el
+                OT decidía sin poder verlos. */}
+            <div
+              className="mt-3 rounded-xl border p-3 text-xs"
+              style={{ borderColor: "#DFE5ED", background: "rgba(85,126,255,0.05)" }}
+            >
+              <p className="font-semibold" style={{ color: "#162744" }}>
+                Motivo de la solicitud
+              </p>
+              {decideRevocationDetailLoading ? (
+                <p className="mt-1 opacity-60">Cargando…</p>
+              ) : (
+                <p className="mt-1 whitespace-pre-wrap opacity-80">
+                  {decideRevocationDetail?.reason?.trim() || "El gestor no registró un motivo."}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleVerSoporteRevocatoria()}
+                disabled={decideRevocationDetailLoading || !decideRevocationDetail?.supportDocumentId}
+                className="mt-2 font-semibold underline disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ color: "#557EFF" }}
+              >
+                Ver documento de soporte (PDF)
+              </button>
+            </div>
 
             <fieldset className="mt-4">
               <legend className="text-xs font-semibold" style={{ color: "#162744" }}>Decisión</legend>
-              <div className="mt-2 flex gap-2 text-xs font-semibold" role="group" aria-label="Decisión sobre la solicitud de revocatoria">
+              {/* Selector de modo, NO un botón de acción: fondo tenue en vez del mismo azul/rojo
+                  sólido del botón de confirmar de abajo, para que no se lean como "dos aprobar". */}
+              <div
+                className="mt-2 flex gap-1 rounded-xl border p-1 text-xs font-semibold"
+                style={{ borderColor: "#DFE5ED" }}
+                role="group"
+                aria-label="Decisión sobre la solicitud de revocatoria"
+              >
                 <button
                   type="button"
                   aria-pressed={decideRevocationMode === "approve"}
@@ -1889,11 +1993,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                     setDecideRevocationMode("approve");
                     setDecideRevocationFieldError(null);
                   }}
-                  className={`flex-1 rounded-lg border px-3 py-2 ${decideRevocationMode === "approve" ? "text-white" : ""}`}
+                  className="flex-1 rounded-lg px-3 py-1.5"
                   style={
                     decideRevocationMode === "approve"
-                      ? { background: "#557EFF", borderColor: "#557EFF" }
-                      : undefined
+                      ? { background: "rgba(85,126,255,0.12)", color: "#3B5BDB" }
+                      : { color: "#64748b" }
                   }
                 >
                   Aprobar
@@ -1902,11 +2006,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   type="button"
                   aria-pressed={decideRevocationMode === "reject"}
                   onClick={() => setDecideRevocationMode("reject")}
-                  className={`flex-1 rounded-lg border px-3 py-2 ${decideRevocationMode === "reject" ? "text-white" : ""}`}
+                  className="flex-1 rounded-lg px-3 py-1.5"
                   style={
                     decideRevocationMode === "reject"
-                      ? { background: "#dc2626", borderColor: "#dc2626" }
-                      : undefined
+                      ? { background: "rgba(220,38,38,0.1)", color: "#dc2626" }
+                      : { color: "#64748b" }
                   }
                 >
                   Rechazar

@@ -19,6 +19,14 @@ vi.mock("@/lib/api/admin-ot", () => ({
   rejectOtClientProcedure: vi.fn(),
   approveOtRevocationRequest: vi.fn(),
   rejectOtRevocationRequest: vi.fn(),
+  fetchActiveOtRevocationRequestDetail: vi.fn().mockResolvedValue({
+    revocationRequestId: "revreq-1",
+    attemptNumber: 1,
+    reason: "El comprador desistió de la compra.",
+    supportDocumentId: "att-soporte-1",
+    requestedAt: "2026-09-16T11:53:00Z",
+  }),
+  fetchOtClientProcedure: vi.fn(),
   generarOtConsolidadoMaestro: vi.fn(),
   fetchOtDocuments: vi.fn(),
   fetchOtAttachmentPreviewUrl: vi.fn(),
@@ -43,8 +51,10 @@ vi.mock("@/lib/api/tramites-client", () => ({
 
 import {
   approveOtRevocationRequest,
+  fetchActiveOtRevocationRequestDetail,
   fetchOtBandejaFilterFields,
   fetchOtBandejaHealth,
+  fetchOtClientProcedure,
   fetchOtProfile,
   rejectOtRevocationRequest,
   searchOtClientProcedures,
@@ -112,6 +122,41 @@ describe("ClientProceduresSection — HU #12577 decidir revocatoria", () => {
     expect(screen.getByRole("button", { name: "Rechazar" })).toBeInTheDocument();
   });
 
+  it("muestra el motivo y habilita 'Ver documento de soporte' que cargó el gestor", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await abrirDecidirRevocatoria(user);
+
+    expect(
+      await screen.findByText("El comprador desistió de la compra."),
+    ).toBeInTheDocument();
+    expect(fetchActiveOtRevocationRequestDetail).toHaveBeenCalledWith(
+      "proc-aprobado-1",
+      undefined,
+    );
+    expect(
+      screen.getByRole("button", { name: /Ver documento de soporte/i }),
+    ).toBeEnabled();
+  });
+
+  it("sin documento de soporte, 'Ver documento de soporte' queda deshabilitado", async () => {
+    vi.mocked(fetchActiveOtRevocationRequestDetail).mockResolvedValueOnce({
+      revocationRequestId: "revreq-2",
+      attemptNumber: 1,
+      reason: null,
+      supportDocumentId: null,
+      requestedAt: "2026-09-16T11:53:00Z",
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await abrirDecidirRevocatoria(user);
+
+    expect(await screen.findByText(/no registró un motivo/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Ver documento de soporte/i }),
+    ).toBeDisabled();
+  });
+
   it("AC2 rechazar sin motivo bloquea el envío en cliente y no llama al backend", async () => {
     const user = userEvent.setup();
     renderSection();
@@ -155,12 +200,45 @@ describe("ClientProceduresSection — HU #12577 decidir revocatoria", () => {
     );
   });
 
+  it("tras rechazar, la fila se actualiza sola (sin refrescar la pantalla manualmente)", async () => {
+    vi.mocked(rejectOtRevocationRequest).mockResolvedValue({
+      procedure: null,
+      revocationRequestId: "req-1",
+      attemptNumber: 1,
+      status: "rechazada",
+    });
+    // El backend no devuelve el trámite al rechazar (no cambia de estado): la fila se refresca
+    // releyéndolo del servidor, ya con el indicativo puesto.
+    vi.mocked(fetchOtClientProcedure).mockResolvedValue({
+      ...procedureAprobado,
+      revocationRequestStatus: "rechazada",
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await abrirDecidirRevocatoria(user);
+
+    await user.click(screen.getByRole("button", { name: "Rechazar" }));
+    await user.type(
+      screen.getByRole("textbox", { name: /Motivo del rechazo de la revocatoria/i }),
+      "El gestor no aportó soporte suficiente",
+    );
+    await user.click(screen.getByRole("button", { name: /Confirmar rechazo/i }));
+
+    expect(await screen.findByText("Revocatoria rechazada")).toBeInTheDocument();
+  });
+
   it("AC1 aprobar (motivo opcional) actualiza la fila a Revocado", async () => {
     vi.mocked(approveOtRevocationRequest).mockResolvedValue({
-      procedure: { ...procedureAprobado, status: "revocado" },
+      procedure: null,
       revocationRequestId: "req-2",
       attemptNumber: 1,
       status: "aprobada",
+    });
+    // La fila se actualiza releyendo el trámite del servidor (no del `decision.procedure` de arriba):
+    // ver comentario de `confirmDecideRevocation`.
+    vi.mocked(fetchOtClientProcedure).mockResolvedValue({
+      ...procedureAprobado,
+      status: "revocado",
     });
     const user = userEvent.setup();
     renderSection();

@@ -6,6 +6,7 @@ using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.RevocationRequests;
 using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -129,6 +130,63 @@ public sealed class OtBandejaContadoresTests
         counters.SinGestion.Should().Be(2, "R-CON (con convenio) y R-SIN (entregado sin convenio) cuentan por igual");
     }
 
+    // Pedido del usuario (2026-09-16) — la tarjeta "Solicitudes de revocatoria" cuenta SOLO las
+    // ACTIVAS (`solicitada`/`en_revision`): una ya `rechazada` es una decisión que el organismo ya
+    // tomó (el turno es del gestor), y una `aprobada` ya se ve como "Revocados" — sumarla aquí
+    // también contaría el mismo desenlace dos veces.
+    [Fact]
+    public async Task CuentaSoloLasSolicitudesDeRevocatoriaActivas()
+    {
+        var db = NewDbName();
+        var conSolicitud = Guid.NewGuid();
+        var enRevision = Guid.NewGuid();
+        var yaRechazada = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedEscenarioBase(seed);
+            SeedProcedure(seed, conSolicitud, TramiteEstado.Aprobado, "R-SOL", plateFlowStatus: null);
+            SeedRevocationRequest(seed, conSolicitud, ProcedureRevocationRequestStatus.Solicitada);
+
+            SeedProcedure(seed, enRevision, TramiteEstado.Aprobado, "R-REV", plateFlowStatus: null);
+            SeedRevocationRequest(seed, enRevision, ProcedureRevocationRequestStatus.EnRevision);
+
+            SeedProcedure(seed, yaRechazada, TramiteEstado.Aprobado, "R-REC", plateFlowStatus: null);
+            SeedRevocationRequest(seed, yaRechazada, ProcedureRevocationRequestStatus.Rechazada);
+
+            // Aprobado sin ninguna solicitud: no debe contar.
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Aprobado, "R-SINSOL", plateFlowStatus: null);
+            seed.SaveChanges();
+        }
+
+        var counters = await Contar(db);
+
+        counters.SolicitudesRevocatoria.Should().Be(2);
+        // No es lo mismo que "Aprobados": ese sigue contando los 4 (incluida la ya rechazada).
+        counters.Aprobados.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task FiltraPorSolicitudDeRevocatoriaActiva()
+    {
+        var db = NewDbName();
+        var conSolicitud = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedEscenarioBase(seed);
+            SeedProcedure(seed, conSolicitud, TramiteEstado.Aprobado, "R-SOL", plateFlowStatus: null);
+            SeedRevocationRequest(seed, conSolicitud, ProcedureRevocationRequestStatus.Solicitada);
+            SeedProcedure(seed, Guid.NewGuid(), TramiteEstado.Aprobado, "R-SINSOL", plateFlowStatus: null);
+            seed.SaveChanges();
+        }
+
+        var bandeja = await Listar(db, plateFlowStatus: null, hasActiveRevocationRequest: true);
+
+        bandeja.TotalCount.Should().Be(1);
+        bandeja.Data.Should().OnlyContain(p => p.ReferenceNumber == "R-SOL");
+    }
+
     [Fact]
     public async Task SinTramites_DevuelveCerosYNoNulos()
     {
@@ -224,7 +282,8 @@ public sealed class OtBandejaContadoresTests
             TestContext.Current.CancellationToken);
     }
 
-    private static async Task<ListOtClientProceduresResult> Listar(string db, string? plateFlowStatus)
+    private static async Task<ListOtClientProceduresResult> Listar(
+        string db, string? plateFlowStatus, bool? hasActiveRevocationRequest = null)
     {
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
@@ -234,9 +293,22 @@ public sealed class OtBandejaContadoresTests
             {
                 OtTenantId = OtTenant,
                 PlateFlowStatus = plateFlowStatus,
+                HasActiveRevocationRequest = hasActiveRevocationRequest,
             },
             TestContext.Current.CancellationToken);
     }
+
+    private static void SeedRevocationRequest(FlitDbContext ctx, Guid instanceId, string status) =>
+        ctx.ProcedureRevocationRequests.Add(new ProcedureRevocationRequest
+        {
+            Id = Guid.NewGuid(),
+            TenantId = ClientTenant,
+            ProcedureInstanceId = instanceId,
+            AttemptNumber = 1,
+            Status = status,
+            RequestedBy = Guid.NewGuid(),
+            RequestedAt = DateTimeOffset.UtcNow.AddHours(-2),
+        });
 
     /// <summary>Organismo, convenio VIGENTE y catálogo: todo lo que no se está midiendo aquí.</summary>
     private static void SeedEscenarioBase(FlitDbContext ctx)

@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Domain.Documents;
+using Flit.Tramites.Domain.RevocationRequests;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -108,6 +109,20 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 GestorNombre = _context.Users
                                     .Where(u => u.Id == p.CreatedByUserId)
                                     .Select(u => u.DisplayName)
+                                    .FirstOrDefault(),
+                                // Feature #12565 — sub-estado ACTIVO ('solicitada' | 'en_revision') de la solicitud
+                                // de revocatoria, para el indicativo de la bandeja OT. Mismo criterio que el resto
+                                // de esta proyección: subconsulta correlacionada, sin cambiar la forma de la query.
+                                // Bug: filtrar por estado ANTES de ordenar por intento hacía que un
+                                // rechazo VIEJO (intento 1) siguiera ganando cuando el intento 2, ya
+                                // aprobado, quedaba fuera del WHERE. Ahora se trae el estado del intento
+                                // de MAYOR AttemptNumber sin filtrar ('aprobada' compite en igualdad
+                                // para saber cuál es el más reciente); el frontend decide no pintar
+                                // nada cuando ese último es 'aprobada' (el trámite ya pasó a 'revocado').
+                                RevocationRequestStatus = _context.ProcedureRevocationRequests
+                                    .Where(r => r.ProcedureInstanceId == p.Id)
+                                    .OrderByDescending(r => r.AttemptNumber)
+                                    .Select(r => r.Status)
                                     .FirstOrDefault(),
                             })
                             .ToListAsync(cancellationToken)
@@ -357,13 +372,31 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                             }
                         }
 
+                        // Pedido del usuario (2026-09-16) — Aprobados con solicitud de revocatoria
+                        // ACTIVA: consulta aparte (no cabe en el agrupado por Status/PlateFlowStatus de
+                        // arriba, que no sabe nada de `procedure_revocation_requests`). Cuenta trámites
+                        // DISTINTOS, no filas de solicitud: el índice único activo-por-trámite
+                        // (`uq_procedure_revocation_requests_active_per_instance`) ya garantiza que
+                        // nunca hay más de una activa por instancia, pero `Distinct()` deja la
+                        // intención explícita sin depender de ese detalle de esquema.
+                        var solicitudesRevocatoria = await accesibles
+                            .Where(p => _context.ProcedureRevocationRequests.Any(r =>
+                                r.ProcedureInstanceId == p.Id
+                                && (r.Status == ProcedureRevocationRequestStatus.Solicitada
+                                    || r.Status == ProcedureRevocationRequestStatus.EnRevision)))
+                            .Select(p => p.Id)
+                            .Distinct()
+                            .CountAsync(cancellationToken)
+                            .ConfigureAwait(false);
+
                         return (OtBandejaCounters?)new OtBandejaCounters(
                             sinAsignarPlaca,
                             conPlacaAsignada,
                             aprobados,
                             rechazados,
                             sinGestion,
-                            revocados);
+                            revocados,
+                            solicitudesRevocatoria);
                     },
                     cancellationToken).ConfigureAwait(false);
             },
@@ -1205,6 +1238,22 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     .FirstOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
 
+                // Feature #12565 — intento de revocatoria MÁS RECIENTE (cualquier estado): a lo sumo uno
+                // puede estar activo (índice único parcial), así que el más reciente por intento es
+                // siempre o el activo o el último decidido — nunca uno viejo que ya no importa.
+                var revocation = await _context.ProcedureRevocationRequests
+                    .AsNoTracking()
+                    .Where(r => r.ProcedureInstanceId == mapped.Id)
+                    .OrderByDescending(r => r.AttemptNumber)
+                    .FirstOrDefaultAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                var revocationActive = revocation is not null && (
+                    revocation.Status == Flit.Tramites.Domain.RevocationRequests.ProcedureRevocationRequestStatus.Solicitada
+                    || revocation.Status == Flit.Tramites.Domain.RevocationRequests.ProcedureRevocationRequestStatus.EnRevision);
+                var revocationDecided = revocation is not null && revocation.DecidedAt is not null && (
+                    revocation.Status == Flit.Tramites.Domain.RevocationRequests.ProcedureRevocationRequestStatus.Aprobada
+                    || revocation.Status == Flit.Tramites.Domain.RevocationRequests.ProcedureRevocationRequestStatus.Rechazada);
+
                 var procedure = new OtClientProcedure
                 {
                     Id = mapped.Id,
@@ -1260,6 +1309,11 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     },
                     Comercial = comercial,
                     Prenda = prenda,
+                    RevocationRequestStatus = revocationActive ? revocation!.Status : null,
+                    RevocationDecisionStatus = revocationDecided ? revocation!.Status : null,
+                    RevocationDecisionAt = revocationDecided ? revocation!.DecidedAt : null,
+                    RevocationRequestReason = revocationDecided ? revocation!.Reason : null,
+                    RevocationDecisionReason = revocationDecided ? revocation!.DecisionReason : null,
                 };
 
                 var enriched = await EnrichDisplayNamesAsync([procedure], cancellationToken)
@@ -1594,6 +1648,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 query = query.Where(p =>
                     p.PlateFlowStatus != null && valores.Contains(p.PlateFlowStatus));
             }
+        }
+
+        if (filter.HasActiveRevocationRequest == true)
+        {
+            query = query.Where(p => _context.ProcedureRevocationRequests.Any(r =>
+                r.ProcedureInstanceId == p.Id
+                && (r.Status == ProcedureRevocationRequestStatus.Solicitada
+                    || r.Status == ProcedureRevocationRequestStatus.EnRevision)));
         }
 
         if (filter.ProcedureTypeId is not null)

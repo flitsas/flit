@@ -9,7 +9,8 @@ export type OtCounterKey =
   | "aprobados"
   | "rechazados"
   | "sinGestion"
-  | "revocados";
+  | "revocados"
+  | "solicitudesRevocatoria";
 
 interface TarjetaDef {
   key: OtCounterKey;
@@ -42,6 +43,16 @@ const TARJETAS: TarjetaDef[] = [
     label: "Aprobados",
     icon: "/assets/ot-estados/aprobados.svg",
     hint: "Trámites que el organismo aprobó",
+  },
+  {
+    // Pedido del usuario (2026-09-16) — Aprobados con una solicitud de revocatoria ACTIVA: sin esta
+    // tarjeta, la única forma de notarlos era entrar a "Aprobados" y leer fila por fila. Va justo
+    // al lado de "Aprobados" (de donde sale) y antes de "Rechazados": es una decisión pendiente, no
+    // un desenlace ya cerrado como "Revocados".
+    key: "solicitudesRevocatoria",
+    label: "Solicitudes de revocatoria",
+    icon: "/assets/ot-estados/solicitud-revocatoria.svg",
+    hint: "Aprobados con una solicitud de revocatoria esperando decisión",
   },
   {
     key: "rechazados",
@@ -89,7 +100,7 @@ export function OtBandejaCountersStrip({
     <div
       role="group"
       aria-label="Carga de trabajo del organismo"
-      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-3 sm:divide-x lg:grid-cols-6 dark:divide-white/5 dark:border-white/10 dark:bg-[#0B0F14]"
+      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-3 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#0B0F14]"
     >
       {TARJETAS.map((t) => {
         const valor = counters ? counters[t.key] : null;
@@ -132,13 +143,15 @@ export function OtBandejaCountersStrip({
 }
 
 /**
- * Filtros del listado que corresponden a cada tarjeta. Es el punto donde las cinco clases se
- * traducen al contrato del API — dos van por sub-estado de placa y tres por estado del trámite—, y
- * vive junto a la tira para que contar y filtrar no puedan divergir.
+ * Filtros del listado que corresponden a cada tarjeta. Es el punto donde las clases se traducen al
+ * contrato del API —dos van por sub-estado de placa, cuatro por estado del trámite y una por
+ * sub-estado de revocatoria—, y vive junto a la tira para que contar y filtrar no puedan divergir.
  */
 export function filtrosDeContador(key: OtCounterKey | ""): {
   status: string;
   plateFlowStatus: string;
+  /** Pedido del usuario (2026-09-16) — solo la tarjeta "Solicitudes de revocatoria" lo enciende. */
+  hasActiveRevocationRequest?: boolean;
 } {
   switch (key) {
     case "sinAsignarPlaca":
@@ -153,6 +166,11 @@ export function filtrosDeContador(key: OtCounterKey | ""): {
       return { status: "entregado", plateFlowStatus: "sin_ruta" };
     case "revocados":
       return { status: "revocado", plateFlowStatus: "" };
+    // No se filtra también por `status: "aprobado"`: el filtro de revocatoria activa ya solo puede
+    // casar con trámites Aprobados (es la única precondición de la solicitud), y sumar el otro
+    // filtro sería redundante sin cambiar el resultado.
+    case "solicitudesRevocatoria":
+      return { status: "", plateFlowStatus: "", hasActiveRevocationRequest: true };
     default:
       return { status: "", plateFlowStatus: "" };
   }

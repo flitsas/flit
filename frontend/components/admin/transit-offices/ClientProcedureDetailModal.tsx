@@ -247,6 +247,57 @@ export function ClientProcedureDetailModal({
           </div>
         </div>
       ) : null}
+      {/* Feature #12565 — deja un rastro de la decisión de revocatoria en el detalle: sin esto, un
+          rechazo no dejaba huella (el trámite seguía Aprobado como si nunca se hubiera solicitado) y
+          una aprobación tampoco decía cuándo ni con qué motivo. Solo cuando el intento MÁS RECIENTE ya
+          se decidió — una solicitud activa la muestra el chip de Estado ("Revocatoria solicitada"). */}
+      {row.revocationDecisionStatus ? (
+        <div
+          className="mt-3 flex w-full items-start gap-2 rounded-xl px-3 py-2.5"
+          style={
+            row.revocationDecisionStatus === "aprobada"
+              ? {
+                  background: "var(--badge-danger-bg)",
+                  border: "1px solid var(--badge-danger-border)",
+                }
+              : { background: `${OT_WARN}1A`, border: `1px solid ${OT_WARN}55` }
+          }
+          role="status"
+        >
+          <AlertTriangle
+            className="mt-0.5 h-4 w-4 shrink-0"
+            style={{
+              color: row.revocationDecisionStatus === "aprobada" ? "var(--badge-danger-fg)" : OT_WARN,
+            }}
+            aria-hidden="true"
+          />
+          <div
+            className="text-[11.5px] font-medium"
+            style={{
+              color:
+                row.revocationDecisionStatus === "aprobada" ? "var(--badge-danger-fg)" : OT_WARN_TEXT,
+            }}
+          >
+            <strong>
+              {row.revocationDecisionStatus === "aprobada"
+                ? "Revocatoria aprobada: el trámite quedó Revocado."
+                : "Revocatoria rechazada: el trámite permanece Aprobado."}
+            </strong>
+            {row.revocationDecisionReason?.trim() ? (
+              <p className="mt-0.5">Motivo: {row.revocationDecisionReason}</p>
+            ) : null}
+            {row.revocationDecisionAt ? (
+              <p className="mt-0.5 opacity-80">
+                Decidido el{" "}
+                {new Date(row.revocationDecisionAt).toLocaleString("es-CO", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 

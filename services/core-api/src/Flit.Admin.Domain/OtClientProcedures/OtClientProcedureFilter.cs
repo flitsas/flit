@@ -21,6 +21,14 @@ public sealed class OtClientProcedureFilter
     /// </summary>
     public string? PlateFlowStatus { get; init; }
 
+    /// <summary>
+    /// Pedido del usuario (2026-09-16) — filtro de la tarjeta "Solicitudes de revocatoria": trámites
+    /// con una solicitud de revocatoria ACTIVA (<c>solicitada</c>/<c>en_revision</c>). Aparte de
+    /// <see cref="Status"/> por la misma razón que <see cref="PlateFlowStatus"/>: no es un estado del
+    /// ciclo de vida del trámite (que sigue en <c>aprobado</c>) sino del sub-flujo de revocatoria.
+    /// </summary>
+    public bool? HasActiveRevocationRequest { get; init; }
+
     public Guid? ProcedureTypeId { get; init; }
 
     /// <summary>Filtro parcial por VIN (case-insensitive).</summary>

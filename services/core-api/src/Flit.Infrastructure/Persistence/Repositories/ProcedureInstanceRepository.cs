@@ -326,6 +326,33 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return ids.ToHashSet();
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetRevocationBadgeStatusesAsync(
+        IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default)
+    {
+        if (instanceIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = instanceIds.Distinct().ToList();
+
+        // Bug: filtrar por estado ANTES de buscar el intento más reciente hacía que un trámite con
+        // intento 1 rechazado + intento 2 aprobado (revocado) siguiera mostrando "Revocatoria
+        // rechazada" en el listado — el intento 2 (aprobada) quedaba fuera del WHERE y el 1 (rechazada,
+        // ya obsoleto) ganaba por ser el único candidato. Ahora se trae el estado del intento de MAYOR
+        // AttemptNumber SIN filtrar por estado (así 'aprobada' compite en igualdad para saber cuál es
+        // el más reciente); el caller (frontend) decide no pintar nada cuando ese último es 'aprobada'
+        // (ese desenlace ya se ve solo, el trámite pasa a 'revocado').
+        var rows = await db.ProcedureRevocationRequests
+            .AsNoTracking()
+            .Where(r => distinct.Contains(r.ProcedureInstanceId))
+            .Select(r => new { r.ProcedureInstanceId, r.AttemptNumber, r.Status })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.ProcedureInstanceId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.AttemptNumber).First().Status);
+    }
+
     public async Task<IReadOnlyDictionary<Guid, string>> GetTenantNamesAsync(
         IReadOnlyCollection<Guid> tenantIds, CancellationToken ct)
     {

@@ -1,5 +1,6 @@
 using Flit.Admin.Domain.OtMetrics;
 using Flit.Infrastructure.Analytics.Scheduling;
+using Flit.Tramites.Domain.RevocationRequests;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.EntityFrameworkCore;
 
@@ -52,11 +53,20 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                 var pendientes = await LoadPendingAsync(
                     transitOfficeId, tenantIds, filter, cancellationToken).ConfigureAwait(false);
 
+                // Pedido del usuario (2026-09-16) — una solicitud de revocatoria ACTIVA
+                // (`solicitada`/`en_revision`) también es una decisión pendiente del organismo, pero
+                // vive sobre un trámite en `aprobado`, así que `LoadPendingAsync` (solo `entregado`)
+                // nunca la ve. Se cuenta aparte y se suma a `porRevisar`: aparecía "Esperan mi
+                // decisión: 0" con una revocatoria esperando, que es justo el cuello de botella que se
+                // quería evitar (el organismo tenía que adivinar que existía entrando a "Aprobados").
+                var solicitudesRevocatoria = await CountActiveRevocationRequestsAsync(
+                    transitOfficeId, tenantIds, filter, cancellationToken).ConfigureAwait(false);
+
                 // Esperas: solo se exponen las accionables por el organismo. `asignado` (esperando
                 // SOAT del cliente) y los pausados se agregan en un único número sin desglosar.
-                var porRevisar = pendientes.Count(IsPorRevisar);
+                var porRevisar = pendientes.Count(IsPorRevisar) + solicitudesRevocatoria;
                 var esperandoPlaca = pendientes.Count(IsEsperandoPlaca);
-                var enEsperaDelCliente = pendientes.Count - porRevisar - esperandoPlaca;
+                var enEsperaDelCliente = pendientes.Count - pendientes.Count(IsPorRevisar) - esperandoPlaca;
 
                 var aging = new OtAgingDto(
                     Hasta1Dia: pendientes.Count(IsHasta1Dia),
@@ -66,7 +76,11 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                     PrioritariosEstancados: pendientes.Count(IsPrioritarioEstancado));
 
                 var movimiento = await BuildDayMovementAsync(
-                    transitOfficeId, tenantIds, filter, pendientes.Count, cancellationToken)
+                    transitOfficeId,
+                    tenantIds,
+                    filter,
+                    pendientes.Count + solicitudesRevocatoria,
+                    cancellationToken)
                     .ConfigureAwait(false);
 
                 return new OtOperationalPanelDto(
@@ -75,6 +89,29 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                     aging);
             },
             cancellationToken);
+
+    /// <summary>
+    /// Pedido del usuario (2026-09-16) — trámites (dentro del alcance del panel) con una solicitud de
+    /// revocatoria ACTIVA. Cuenta trámites DISTINTOS: el índice único activo-por-instancia
+    /// (<c>uq_procedure_revocation_requests_active_per_instance</c>) ya garantiza a lo sumo una fila
+    /// activa por trámite, pero <c>Distinct()</c> deja la intención explícita sin depender de ese
+    /// detalle de esquema.
+    /// </summary>
+    private async Task<int> CountActiveRevocationRequestsAsync(
+        Guid transitOfficeId,
+        IReadOnlyList<Guid> tenantIds,
+        OtMetricsFilter filter,
+        CancellationToken cancellationToken) =>
+        await QueryInstances(transitOfficeId, tenantIds, filter)
+            .Where(p => p.Status == TramiteEstado.Aprobado
+                && _context.ProcedureRevocationRequests.Any(r =>
+                    r.ProcedureInstanceId == p.Id
+                    && (r.Status == ProcedureRevocationRequestStatus.Solicitada
+                        || r.Status == ProcedureRevocationRequestStatus.EnRevision)))
+            .Select(p => p.Id)
+            .Distinct()
+            .CountAsync(cancellationToken)
+            .ConfigureAwait(false);
 
     private async Task<OtDayMovementDto> BuildDayMovementAsync(
         Guid transitOfficeId,
@@ -1312,10 +1349,59 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         };
 
         var matched = pendientes.Where(predicate).ToList();
+        var bucketIds = matched.Select(p => p.Id).ToList();
+        var bucketWaiting = matched.ToDictionary(p => p.Id, p => p.DaysWaiting);
 
-        return (
-            matched.Select(p => p.Id).ToList(),
-            matched.ToDictionary(p => p.Id, p => p.DaysWaiting));
+        // Pedido del usuario (2026-09-16) — mismo criterio que sumó las revocatorias activas al
+        // conteo de "Esperan mi decisión" (`GetOperationalPanelAsync`): el drill-down de ESE mismo
+        // bloque (y el de "Pendientes en total", que es la cola completa) tiene que abrir las mismas
+        // filas que contó, o el número de la tarjeta y lo que se ve al abrirla divergirían.
+        if (bucket is OtDrilldownBuckets.PorRevisar or OtDrilldownBuckets.Pendientes)
+        {
+            var revocaciones = await LoadActiveRevocationRowsAsync(
+                transitOfficeId, tenantIds, filter, cancellationToken).ConfigureAwait(false);
+
+            foreach (var (id, daysWaiting) in revocaciones)
+            {
+                bucketIds.Add(id);
+                bucketWaiting[id] = daysWaiting;
+            }
+        }
+
+        return (bucketIds, bucketWaiting);
+    }
+
+    /// <summary>
+    /// Trámites (dentro del alcance) con una solicitud de revocatoria ACTIVA, con la antigüedad
+    /// contada desde que se pidió (no desde que se entregó, que para estos ya no importa: el
+    /// organismo lo aprobó hace tiempo — lo que espera decisión AHORA es la revocatoria).
+    /// </summary>
+    private async Task<List<(Guid Id, double DaysWaiting)>> LoadActiveRevocationRowsAsync(
+        Guid transitOfficeId,
+        IReadOnlyList<Guid> tenantIds,
+        OtMetricsFilter filter,
+        CancellationToken cancellationToken)
+    {
+        var solicitados = await QueryInstances(transitOfficeId, tenantIds, filter)
+            .Where(p => p.Status == TramiteEstado.Aprobado)
+            .Select(p => new
+            {
+                p.Id,
+                RequestedAt = _context.ProcedureRevocationRequests
+                    .Where(r => r.ProcedureInstanceId == p.Id
+                        && (r.Status == ProcedureRevocationRequestStatus.Solicitada
+                            || r.Status == ProcedureRevocationRequestStatus.EnRevision))
+                    .Select(r => (DateTimeOffset?)r.RequestedAt)
+                    .FirstOrDefault(),
+            })
+            .Where(p => p.RequestedAt != null)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var now = DateTimeOffset.UtcNow;
+        return solicitados
+            .Select(p => (p.Id, (now - p.RequestedAt!.Value).TotalDays))
+            .ToList();
     }
 
     // ── Pendientes: una sola definición para el panel y para el drill-down ────────────────────

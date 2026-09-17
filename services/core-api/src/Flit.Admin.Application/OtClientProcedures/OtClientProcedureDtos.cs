@@ -93,6 +93,17 @@ public sealed class OtClientProcedureResponse
 
     /// <summary>HU #11929 — decisión de prenda; null si el trámite no tiene decisión registrada.</summary>
     public OtClientProcedurePrendaResponse? Prenda { get; init; }
+
+    /// <summary>Feature #12565 — sub-estado ACTIVO ('solicitada' | 'en_revision') de la solicitud de
+    /// revocatoria; null si nunca se solicitó o ya se decidió. Indicativo de la bandeja OT.</summary>
+    public string? RevocationRequestStatus { get; init; }
+
+    /// <summary>Feature #12565 — decisión ('aprobada' | 'rechazada') del intento más reciente, para el
+    /// detalle del trámite. Null si nunca se decidió una (o la solicitud sigue activa).</summary>
+    public string? RevocationDecisionStatus { get; init; }
+    public DateTimeOffset? RevocationDecisionAt { get; init; }
+    public string? RevocationRequestReason { get; init; }
+    public string? RevocationDecisionReason { get; init; }
 }
 
 public sealed class OtClientProcedureVehicleSnapshotResponse
@@ -270,5 +281,10 @@ internal static class OtClientProcedureMapper
                     AcreedorDocumento = procedure.Prenda.AcreedorDocumento,
                     LevantamientoEntidad = procedure.Prenda.LevantamientoEntidad,
                 },
+            RevocationRequestStatus = procedure.RevocationRequestStatus,
+            RevocationDecisionStatus = procedure.RevocationDecisionStatus,
+            RevocationDecisionAt = procedure.RevocationDecisionAt,
+            RevocationRequestReason = procedure.RevocationRequestReason,
+            RevocationDecisionReason = procedure.RevocationDecisionReason,
         };
 }

@@ -52,6 +52,20 @@ export function detalleEstadoHeader(estado: InstanceStatus): DetalleEstadoHeader
         alert: 'Trámite rechazado por el Organismo de Tránsito.',
         pendiente: false,
       };
+    // Feature #12565 — sin este caso, 'revocado' caía al `default` de abajo: chip ámbar de
+    // "pendiente" (Icon de alerta) y el aviso "Trámite pendiente por aprobación...", los DOS
+    // incorrectos para un trámite que ya terminó su ciclo (y que además duplicaban el aviso propio
+    // de la decisión de revocatoria, `lastRevocationDecision`, en `TramiteDetalleModal`). `alert:
+    // null` a propósito: ese aviso específico es responsabilidad de `lastRevocationDecision`, que
+    // sabe el motivo y la fecha — este genérico no aportaría nada más que ruido repetido.
+    case 'revocado':
+      return {
+        label: estadoLabel(estado),
+        color: DETALLE_RED,
+        Icon: Ban,
+        alert: null,
+        pendiente: false,
+      };
     case 'borrador':
       return {
         label: estadoLabel(estado),

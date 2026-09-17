@@ -12,7 +12,12 @@ export type EstadoTramite =
   | 'aprobado'
   | 'rechazado'
   // HU #10870/#10874 — reabre la edición de un entregado/rechazado sin volver a borrador.
-  | 'subsanacion';
+  | 'subsanacion'
+  // HU #12166 (Feature #12156) — Aprobado→Revocado (unilateral del OT o vía revocatoria solicitada,
+  // Feature #12565): libera placa/VIN, la documentación anterior queda histórica. Ya estaba en
+  // `TramiteEstado.Todos` del backend (así que el conteo por estado ya lo traía); faltaba en este
+  // vocabulario del frontend, así que la tira de KPIs nunca ofrecía una tarjeta/filtro para él.
+  | 'revocado';
 
 export const ESTADOS_TRAMITE: readonly EstadoTramite[] = [
   'borrador',
@@ -22,10 +27,11 @@ export const ESTADOS_TRAMITE: readonly EstadoTramite[] = [
   'aprobado',
   'rechazado',
   'subsanacion',
+  'revocado',
 ] as const;
 
 /** Estados finales (RF04): sin transiciones posteriores ni edición. */
-export const ESTADOS_FINALES: readonly EstadoTramite[] = ['aprobado', 'anulado'] as const;
+export const ESTADOS_FINALES: readonly EstadoTramite[] = ['aprobado', 'anulado', 'revocado'] as const;
 
 export const ESTADO_LABELS: Record<EstadoTramite, string> = {
   borrador: 'Borrador',
@@ -35,6 +41,7 @@ export const ESTADO_LABELS: Record<EstadoTramite, string> = {
   aprobado: 'Aprobado',
   rechazado: 'Rechazado',
   subsanacion: 'En subsanación',
+  revocado: 'Revocado',
 };
 
 export interface EstadoChipStyle {
@@ -109,6 +116,14 @@ export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
     border: 'rgba(255,78,0,0.35)',
     accent: '#FF4E00',
   },
+  // Violeta: el único de los 8 tonos que no comparte familia con rechazado/anulado (rojo/vino) — se
+  // lee como "deshecho", no como un rechazo más.
+  revocado: {
+    bg: 'rgba(124,58,237,0.14)',
+    color: '#6D28D9',
+    border: 'rgba(124,58,237,0.35)',
+    accent: '#7C3AED',
+  },
 };
 
 /**
@@ -124,6 +139,7 @@ export const ESTADO_ICONO: Record<EstadoTramite, string> = {
   aprobado: '/assets/estados/aprobado.svg',
   rechazado: '/assets/estados/rechazado.svg',
   subsanacion: '/assets/estados/subsanacion.svg',
+  revocado: '/assets/estados/revocado.svg',
 };
 
 function esEstadoTramite(value: string): value is EstadoTramite {
@@ -337,4 +353,15 @@ export function revocationRequestListTone(
   value: string | null | undefined,
 ): 'success' | 'warning' | 'danger' | 'info' | 'neutral' {
   return esRevocationRequestListStatus(value) ? REVOCATION_REQUEST_LIST_TONES[value] : 'neutral';
+}
+
+/**
+ * Color CSS (token `--badge-*-fg`) del indicativo liviano (ícono + texto) de las tablas de trámites —
+ * mismo tone semántico de {@link revocationRequestListTone}, pero como valor de color listo para un
+ * `style={{ color }}` en vez de un tone de `StatusBadge` (ese indicativo no usa StatusBadge a
+ * propósito: ver comentario en `TramitesTable.tsx`/`ClientProceduresTable.tsx`).
+ */
+export function revocationRequestListColor(value: string | null | undefined): string {
+  const tone = revocationRequestListTone(value);
+  return `var(--badge-${tone}-fg)`;
 }

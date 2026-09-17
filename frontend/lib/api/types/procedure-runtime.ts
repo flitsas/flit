@@ -22,7 +22,12 @@ export type InstanceStatus =
   | 'rechazado'
   // HU #10870 — reabre la edición de un entregado/rechazado sin volver a borrador; re-radicar
   // (subsanacion → entregado) es la única transición permitida desde aquí (HU #10874, AC2).
-  | 'subsanacion';
+  | 'subsanacion'
+  // HU #12166 (Feature #12156) — Aprobado→Revocado (unilateral del OT o vía revocatoria solicitada,
+  // Feature #12565): libera placa/VIN, la documentación anterior queda histórica. Faltaba en este
+  // vocabulario — sin él, cualquier `switch`/lookup tipado sobre `InstanceStatus` no podía distinguir
+  // 'revocado' de un estado desconocido cualquiera.
+  | 'revocado';
 
 /**
  * Sub-estado INTERNO de la ruta de placa (Feature #10587 / HU #10785), ORTOGONAL a
@@ -67,6 +72,23 @@ export interface ActiveRevocationRequest {
   status: ActiveRevocationRequestStatus;
   attemptNumber: number;
   requestedAt: string;
+}
+
+/**
+ * Feature #12565 — decisión del OT sobre el intento de revocatoria MÁS RECIENTE, para el detalle del
+ * trámite (gestor y OT) incluso después de que el sub-flujo ya se cerró. Ausente/null cuando nunca se
+ * solicitó una revocatoria o cuando la solicitud sigue activa (ver {@link ActiveRevocationRequest}).
+ */
+export interface RevocationDecision {
+  /** 'aprobada' | 'rechazada' */
+  status: 'aprobada' | 'rechazada';
+  attemptNumber: number;
+  requestedAt: string;
+  decidedAt: string;
+  /** Motivo con el que el gestor pidió la revocatoria. */
+  reason: string | null;
+  /** Motivo de la decisión del OT: obligatorio al rechazar, opcional al aprobar. */
+  decisionReason: string | null;
 }
 
 /**
@@ -305,6 +327,12 @@ export interface InstanceSummary {
    * acción de pausar/reanudar en la UI (paridad v1). null/'' para trámites de plataforma.
    */
   origin?: string | null;
+  /**
+   * Feature #12565 — sub-estado ACTIVO ('solicitada' | 'en_revision') de la solicitud de revocatoria
+   * del trámite; null si nunca se solicitó o ya se decidió. Alimenta el indicativo "Revocatoria en
+   * curso" de la fila (no reemplaza el detalle del modal, que trae `activeRevocationRequest` completo).
+   */
+  revocationRequestStatus?: string | null;
 }
 
 /** Fuente por la que el trámite entró a FLIT (HU #11056). No existe fuente "QX": Quipux es salida. */
@@ -514,11 +542,18 @@ export interface ProcedureInstanceDetail {
   revocationEligibility?: RevocationEligibility | null;
   /** Ver {@link ActiveRevocationRequest}. */
   activeRevocationRequest?: ActiveRevocationRequest | null;
+  /** Ver {@link RevocationDecision}. */
+  lastRevocationDecision?: RevocationDecision | null;
 }
 
 /** Ver `ProcedureInstanceDetail.events`. */
 export interface ProcedureInstanceEvent {
-  tipo: 'reasignar_gestor_admin' | 'reenvio_validacion_admin' | 'revocatoria_solicitada';
+  tipo:
+    | 'reasignar_gestor_admin'
+    | 'reenvio_validacion_admin'
+    | 'revocatoria_solicitada'
+    | 'revocatoria_aprobada'
+    | 'revocatoria_rechazada';
   createdAt: string;
   createdByName: string | null;
   // reasignar_gestor_admin
@@ -544,6 +579,10 @@ export interface ProcedureInstanceEvent {
    * solicitó la revocatoria, así que su correo es el dato relevante de "Correo" en la tarjeta.
    */
   createdByEmail?: string | null;
+  // revocatoria_aprobada / revocatoria_rechazada (Feature #12565) — motivo de la DECISIÓN del OT,
+  // distinto de `revocationReason` (motivo original del gestor al pedirla). Reutilizan
+  // `revocationAttemptNumber` de arriba.
+  revocationDecisionReason?: string | null;
 }
 
 /** Item del body de PATCH /instances/{id}/field-values. */

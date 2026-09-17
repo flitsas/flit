@@ -95,6 +95,14 @@ public sealed class DecideRevocationRequestHandlerTests
                 && e.RequestedByUserId == Requester
                 && e.DecidedBy == OtDecisor),
             Arg.Any<CancellationToken>());
+
+        // Feature #12565 (HU #12577) — tracking: la aprobación deja un evento propio, no solo la
+        // transición genérica de estado, para que el timeline muestre motivo/decisor de la decisión.
+        var evt = await verify.ProcedureInstanceEvents.SingleAsync(
+            e => e.ProcedureInstanceId == procedureId && e.Tipo == DecideRevocationRequestHandler.EventoTipoAprobada,
+            TestContext.Current.CancellationToken);
+        evt.CreatedBy.Should().Be(OtDecisor);
+        evt.Payload.Should().Contain(requestId.ToString()).And.Contain("\"attempt_number\":1");
     }
 
     [Fact]
@@ -231,6 +239,15 @@ public sealed class DecideRevocationRequestHandlerTests
         await notifier.Received(1).NotifyDecisionAsync(
             Arg.Is<RevocationRequestDecidedEvent>(e => e.RevocationRequestId == requestId && !e.Approved),
             Arg.Any<CancellationToken>());
+
+        // Feature #12565 (HU #12577) — tracking: el rechazo también deja un evento propio, no solo el
+        // "Solicitud de revocatoria" original (ese intento nunca cambia de estado, así que sin este
+        // evento un rechazo no dejaba NINGÚN rastro en el timeline).
+        var evt = await verify.ProcedureInstanceEvents.SingleAsync(
+            e => e.ProcedureInstanceId == procedureId && e.Tipo == DecideRevocationRequestHandler.EventoTipoRechazada,
+            TestContext.Current.CancellationToken);
+        evt.CreatedBy.Should().Be(OtDecisor);
+        evt.Payload.Should().Contain(requestId.ToString()).And.Contain("Falta soporte suficiente para revocar.");
     }
 
     // ── Casos límite compartidos ───────────────────────────────────────────────────────────────────
@@ -364,8 +381,9 @@ public sealed class DecideRevocationRequestHandlerTests
         var otRepo = new OtClientProcedureRepository(ctx, new Flit.Tramites.Domain.Tramites.Estados.NullTramiteTransitionPublisher());
         var revokeHandler = new RevokeOtClientProcedureHandler(otRepo, quipuxGuard);
         var revocationRepo = new ProcedureRevocationRequestRepository(ctx);
+        var instanceRepo = new ProcedureInstanceRepository(ctx);
         return new DecideRevocationRequestHandler(
-            otRepo, revokeHandler, revocationRepo, notifier, NullLogger<DecideRevocationRequestHandler>.Instance);
+            otRepo, revokeHandler, revocationRepo, instanceRepo, notifier, NullLogger<DecideRevocationRequestHandler>.Instance);
     }
 
     private static void SeedOt(FlitDbContext ctx)

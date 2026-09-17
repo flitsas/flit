@@ -13,6 +13,12 @@ public sealed class ListOtClientProceduresQuery
     /// <summary>Sub-estado de placa; varios por coma y `sin_ruta` para los que no la tienen.</summary>
     public string? PlateFlowStatus { get; init; }
 
+    /// <summary>
+    /// Pedido del usuario (2026-09-16) — filtro de la tarjeta "Solicitudes de revocatoria": trámites
+    /// con una solicitud de revocatoria ACTIVA (<c>solicitada</c>/<c>en_revision</c>).
+    /// </summary>
+    public bool? HasActiveRevocationRequest { get; init; }
+
     public Guid? ProcedureTypeId { get; init; }
 
     public string? Vin { get; init; }

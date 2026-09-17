@@ -1,6 +1,7 @@
 using Flit.Admin.Application.OtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.RevokeOtClientProcedure;
 using Flit.Admin.Domain.OtClientProcedures;
+using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.RevocationRequests;
@@ -140,9 +141,20 @@ public sealed class DecideRevocationRequestHandler(
     IOtClientProcedureRepository otRepository,
     RevokeOtClientProcedureHandler revokeHandler,
     IProcedureRevocationRequestRepository revocationRepo,
+    // Feature #12565 — solo para encolar el evento de tracking (AddEventAsync); comparte el mismo
+    // FlitDbContext que revocationRepo (ambos Scoped por request), así que lo que se encola aquí se
+    // persiste con el MISMO SaveChangesAsync de abajo, dentro del mismo scope RLS del tenant cliente.
+    IProcedureInstanceRepository instanceRepo,
     IRevocationRequestNotifier notifier,
     ILogger<DecideRevocationRequestHandler> logger)
 {
+    /// <summary>Tipo de evento de tracking cuando el OT aprueba (HU #12577, Feature #12565).</summary>
+    public const string EventoTipoAprobada = "revocatoria_aprobada";
+
+    /// <summary>Tipo de evento de tracking cuando el OT rechaza (HU #12577, Feature #12565).</summary>
+    public const string EventoTipoRechazada = "revocatoria_rechazada";
+
+
     public async Task<DecideRevocationRequestResult> HandleAsync(
         DecideRevocationRequestCommand command,
         CancellationToken cancellationToken = default)
@@ -222,6 +234,24 @@ public sealed class DecideRevocationRequestHandler(
             activeRequest.DecidedBy = command.DecidedBy;
             activeRequest.DecidedAt = decidedAt;
             activeRequest.DecisionReason = string.IsNullOrWhiteSpace(command.Reason) ? null : command.Reason.Trim();
+            // Feature #12565 — evento PROPIO de bitácora (ver comentario del constructor): sin él, el
+            // tracking del trámite solo mostraba la transición genérica "Revocado desde Aprobado" del
+            // historial de estados, sin el motivo (opcional) que el OT haya dejado al aprobar.
+            await instanceRepo.AddEventAsync(new ProcedureInstanceEvent
+            {
+                Id = Guid.NewGuid(),
+                TenantId = clientTenantId,
+                ProcedureInstanceId = command.ProcedureInstanceId,
+                Tipo = EventoTipoAprobada,
+                Payload = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    revocation_request_id = activeRequest.Id,
+                    attempt_number = activeRequest.AttemptNumber,
+                    decision_reason = activeRequest.DecisionReason,
+                }),
+                CreatedAt = decidedAt,
+                CreatedBy = command.DecidedBy,
+            }, cancellationToken).ConfigureAwait(false);
             await revocationRepo.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }, cancellationToken).ConfigureAwait(false);
@@ -245,6 +275,24 @@ public sealed class DecideRevocationRequestHandler(
             activeRequest.DecidedAt = decidedAt;
             // No-null garantizado por el fail-fast al inicio de HandleAsync.
             activeRequest.DecisionReason = command.Reason!.Trim();
+            // Feature #12565 — evento PROPIO de bitácora (ver comentario del constructor). Sin esto,
+            // un rechazo no dejaba NINGÚN rastro en el tracking: el trámite permanece Aprobado (ADR-0022
+            // no toca TramiteStateMachine) y por tanto tampoco genera una fila de historial de estados.
+            await instanceRepo.AddEventAsync(new ProcedureInstanceEvent
+            {
+                Id = Guid.NewGuid(),
+                TenantId = clientTenantId,
+                ProcedureInstanceId = command.ProcedureInstanceId,
+                Tipo = EventoTipoRechazada,
+                Payload = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    revocation_request_id = activeRequest.Id,
+                    attempt_number = activeRequest.AttemptNumber,
+                    decision_reason = activeRequest.DecisionReason,
+                }),
+                CreatedAt = decidedAt,
+                CreatedBy = command.DecidedBy,
+            }, cancellationToken).ConfigureAwait(false);
             await revocationRepo.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }, cancellationToken).ConfigureAwait(false);

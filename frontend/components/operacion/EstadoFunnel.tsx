@@ -25,6 +25,9 @@ const FUNNEL_ORDER: EstadoTramite[] = [
   'subsanacion',
   'rechazado',
   'anulado',
+  // Feature #12565 — el desenlace de una revocatoria (unilateral del OT o vía solicitud): faltaba
+  // tarjeta/filtro para él, aunque el backend ya lo traía en el conteo por estado.
+  'revocado',
 ];
 
 export interface EstadoFunnelProps {
@@ -41,7 +44,7 @@ export function EstadoFunnel({ counts, selected = '', onSelect }: EstadoFunnelPr
     <div
       role="group"
       aria-label="Estados de los trámites"
-      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
+      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-8 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
     >
       {FUNNEL_ORDER.map((estado) => {
         const style = ESTADO_CHIP_STYLES[estado];

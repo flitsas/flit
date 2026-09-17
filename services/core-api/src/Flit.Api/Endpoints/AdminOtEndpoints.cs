@@ -252,6 +252,17 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
+        // Feature #12565 — motivo + documento de soporte de la solicitud ACTIVA, para que el modal
+        // "Decidir revocatoria" los muestre ANTES de aprobar/rechazar (hasta ahora el OT decidía sin
+        // verlos: ninguna ruta OT los exponía).
+        group.MapGet("/client-procedures/{id:guid}/revocation-requests/active", GetActiveRevocationRequestAsync)
+            .WithName("AdminOtGetActiveRevocationRequest")
+            .WithSummary("Motivo y documento de soporte de la solicitud de revocatoria activa de un trámite")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         // HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado OT: TODOS los intentos
         // de solicitud de revocatoria de los trámites del organismo, en cualquier sub-estado (no solo
         // la ACTIVA que approve/reject de arriba deciden). Mismo scoping de organismo (?transitOfficeId=
@@ -1206,6 +1217,7 @@ public static class AdminOtEndpoints
         ITransitOfficeCatalog transitOfficeCatalog,
         string? status,
         string? plateFlowStatus,
+        bool? hasActiveRevocationRequest,
         Guid? procedureTypeId,
         string? vin,
         string? placa,
@@ -1243,6 +1255,7 @@ public static class AdminOtEndpoints
             TransitOfficeId = scopedOfficeId,
             Status = status,
             PlateFlowStatus = plateFlowStatus,
+            HasActiveRevocationRequest = hasActiveRevocationRequest,
             ProcedureTypeId = procedureTypeId,
             Vin = vin,
             Placa = placa,
@@ -1622,6 +1635,57 @@ public static class AdminOtEndpoints
         CancellationToken cancellationToken) =>
         DecideRevocationRequestAsync(
             id, httpContext, request, handler, transitOfficeCatalog, transitOfficeId, approve: false, cancellationToken);
+
+    /// <summary>
+    /// Feature #12565 — GET .../revocation-requests/active: mismo resolver de tenant/organismo que
+    /// approve/reject, pero de SOLO LECTURA. 404 si el trámite no es accesible para este OT o si no
+    /// tiene una solicitud de revocatoria activa (el frontend no debería llamarla en ese caso, pero la
+    /// respuesta es la misma que "no hay nada que decidir").
+    /// </summary>
+    private static async Task<IResult> GetActiveRevocationRequestAsync(
+        Guid id,
+        HttpContext httpContext,
+        GetActiveRevocationRequestHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var result = await handler.HandleAsync(
+            new GetActiveRevocationRequestQuery(tenantId, id, scopedOfficeId), cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            GetActiveRevocationRequestStatus.ProcedureNotFound => Results.NotFound(new { error = "Trámite no encontrado" }),
+            GetActiveRevocationRequestStatus.RequestNotFound => Results.NotFound(
+                new { error = "No hay una solicitud de revocatoria activa para este trámite" }),
+            _ => Results.Ok(new
+            {
+                revocationRequestId = result.Detail!.RevocationRequestId,
+                attemptNumber = result.Detail.AttemptNumber,
+                reason = result.Detail.Reason,
+                supportDocumentId = result.Detail.SupportDocumentId,
+                requestedAt = result.Detail.RequestedAt,
+            }),
+        };
+    }
 
     /// <summary>
     /// HU #12576 (Feature #12565) — común a approve/reject: resuelve tenant/organismo (mismo patrón que
@@ -3106,6 +3170,7 @@ internal sealed record OtBandejaSearchRequest
 
     public string? Status { get; init; }
     public string? PlateFlowStatus { get; init; }
+    public bool? HasActiveRevocationRequest { get; init; }
     public Guid? ProcedureTypeId { get; init; }
     public string? Vin { get; init; }
     public string? Placa { get; init; }
@@ -3131,6 +3196,7 @@ internal sealed record OtBandejaSearchRequest
         Busqueda = Busqueda,
         Status = Status,
         PlateFlowStatus = PlateFlowStatus,
+        HasActiveRevocationRequest = HasActiveRevocationRequest,
         ProcedureTypeId = ProcedureTypeId,
         Vin = Vin,
         Placa = Placa,

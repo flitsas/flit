@@ -219,6 +219,10 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
         IReadOnlySet<Guid> conPrenda = await repo.ListInstanceIdsConPrendaVigenteAsync(
             instances.Select(i => i.Id).ToList(), ct) ?? new HashSet<Guid>();
 
+        // Feature #12565 — mismo indicativo de revocatoria activa que el listado sin filtros.
+        IReadOnlyDictionary<Guid, string> revocacionesActivas = await repo.GetRevocationBadgeStatusesAsync(
+            instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
+
         var items = instances
             .Select(e => ListProcedureInstancesHandler.ToSummary(
                 e,
@@ -226,7 +230,8 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                 firmaBaul,
-                conPrenda.Contains(e.Id)))
+                conPrenda.Contains(e.Id),
+                revocacionesActivas.GetValueOrDefault(e.Id)))
             .ToList();
 
         return items;

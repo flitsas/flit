@@ -95,6 +95,7 @@ builder.Services.AddAdminInfrastructure();
 // dos módulos puede referenciar al otro, así que vive en Flit.Api (mismo criterio que la composición
 // inline de AdminOtEndpoints.ApproveClientProcedureAsync).
 builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.DecideRevocationRequestHandler>();
+builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.GetActiveRevocationRequestHandler>();
 
 // HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado OT: mismo criterio de
 // composición API-layer que la decisión de arriba (compone Admin + Tramites).

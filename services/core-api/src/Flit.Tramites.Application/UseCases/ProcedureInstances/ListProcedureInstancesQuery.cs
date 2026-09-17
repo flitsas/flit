@@ -94,7 +94,11 @@ public sealed record InstanceSummaryDto(
                                               // Feature #12276 (HU #12312) — «Confirmado en RUNT»: "yes" | "no" | "not_consulted",
                                               // o null cuando el trámite no está aprobado. SOLO eso: ni intentos, ni marca, ni
                                               // motivo (son del Historial interno, no del cliente). Lo decide RuntConfirmedColumn.
-    string? RuntConfirmed = null);
+    string? RuntConfirmed = null,
+                                              // Feature #12565 — sub-estado ACTIVO ('solicitada' | 'en_revision') de la solicitud
+                                              // de revocatoria del trámite; null si nunca se solicitó o ya se decidió. Alimenta el
+                                              // indicativo "Revocatoria en curso" del listado (no reemplaza el detalle del modal).
+    string? RevocationRequestStatus = null);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -171,6 +175,11 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         IReadOnlySet<Guid> conPrenda = await repo.ListInstanceIdsConPrendaVigenteAsync(
             instances.Select(i => i.Id).ToList(), ct) ?? new HashSet<Guid>();
 
+        // Feature #12565 — igual patrón que la marca de prenda: una consulta en lote para el indicativo
+        // de revocatoria activa del listado.
+        IReadOnlyDictionary<Guid, string> revocacionesActivas = await repo.GetRevocationBadgeStatusesAsync(
+            instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
+
         return instances
             .Select(e => ToSummary(
                 e,
@@ -179,7 +188,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
                 // HU #12162 — mismo id EFECTIVO usado para resolver el lote de arriba.
                 gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                 firmaBaul,
-                conPrenda.Contains(e.Id)))
+                conPrenda.Contains(e.Id),
+                revocacionesActivas.GetValueOrDefault(e.Id)))
             .ToList();
     }
 
@@ -196,7 +206,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         string? companiaNombre = null,
         string? gestorNombre = null,
         IReadOnlyDictionary<string, bool>? firmaBaulPorPersona = null,
-        bool prendaVigente = false)
+        bool prendaVigente = false,
+        string? revocationRequestStatus = null)
     {
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         var buyer = e.Actors.FirstOrDefault(a =>
@@ -270,7 +281,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
                 : null,
             TramiteMarcas.TienePrenda(prendaVigente, e.TypeCode),
             TramiteMarcas.TieneTransformacion(fv, e.TypeCode),
-            Flit.Tramites.Domain.RuntConfirmation.RuntConfirmedColumn.Derive(e.Status, e.RuntConfirmedAt, e.RuntAttempts, e.RuntFlag));
+            Flit.Tramites.Domain.RuntConfirmation.RuntConfirmedColumn.Derive(e.Status, e.RuntConfirmedAt, e.RuntAttempts, e.RuntFlag),
+            revocationRequestStatus);
     }
 
     /// <summary>

@@ -12,6 +12,7 @@ import type {
   OtBandejaHealth,
   OtClientProcedure,
   OtClientProcedurePagedResult,
+  OtActiveRevocationRequestDetail,
   OtBandejaCounters,
   OtClientProceduresParams,
   OtDocumentPrecedenceListResult,
@@ -260,6 +261,24 @@ export function rejectOtRevocationRequest(
     {
       method: "POST",
       body: { reason: reason.trim() },
+      query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    },
+  );
+}
+
+/**
+ * Feature #12565 — motivo + documento de soporte de la solicitud de revocatoria ACTIVA, para que el
+ * modal "Decidir revocatoria" los muestre antes de aprobar/rechazar. 404 (mapeado a excepción por
+ * `apiFetch`) si el trámite no tiene una solicitud activa — el caller solo la llama al abrir ese modal,
+ * cuando ya se sabe que la hay (indicativo de la bandeja, `revocationRequestStatus`).
+ */
+export function fetchActiveOtRevocationRequestDetail(
+  id: string,
+  scope?: OtApiScope,
+): Promise<OtActiveRevocationRequestDetail> {
+  return apiFetch<OtActiveRevocationRequestDetail>(
+    `${base}/client-procedures/${id}/revocation-requests/active`,
+    {
       query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     },
   );

@@ -29,6 +29,7 @@ import { OtTablePagination } from "./OtTablePagination";
 import { ActionsMenu, type ActionsMenuItem } from "@/components/atom/ActionsMenu";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusTone } from "./ot-utils";
+import { revocationRequestListColor, revocationRequestListLabel } from "@/lib/tramites/estados";
 import {
   esperandoProcesoDelGestor,
   plateFlowChipStyle,
@@ -362,6 +363,22 @@ function renderCelda(columnKey: string, row: OtClientProcedure) {
               {plateFlowLabel(row.plateFlowStatus)}
             </span>
           )}
+          {/* Feature #12565 — indicativo de revocatoria: sin esto la fila se ve igual a cualquier
+              "Aprobado OT" mientras el gestor espera la decisión, o incluso DESPUÉS de un rechazo (el
+              trámite vuelve a Aprobado sin más rastro). Icono + texto en vez de un StatusBadge sólido:
+              junto al chip de Estado, dos píldoras del mismo peso visual competían por la atención.
+              `aprobada` se excluye: es el estado del intento MÁS RECIENTE, pero ese desenlace ya se ve
+              solo (el trámite pasa a "Revocado OT") — repetirlo al lado sería ruido. */}
+          {row.revocationRequestStatus && row.revocationRequestStatus !== "aprobada" ? (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-semibold"
+              style={{ color: revocationRequestListColor(row.revocationRequestStatus) }}
+              title={`Sub-estado de revocatoria: ${revocationRequestListLabel(row.revocationRequestStatus)}`}
+            >
+              <Undo2 className="h-3 w-3" aria-hidden="true" />
+              {revocationRequestListLabel(row.revocationRequestStatus)}
+            </span>
+          ) : null}
         </div>
       );
     case "fechaRadicacion":

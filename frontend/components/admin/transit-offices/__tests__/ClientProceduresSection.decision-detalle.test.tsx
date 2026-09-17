@@ -135,6 +135,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
       rechazados: 0,
       sinGestion: 1,
       revocados: 0,
+      solicitudesRevocatoria: 0,
     });
     vi.mocked(fetchOtDocuments).mockResolvedValue({
       data: [

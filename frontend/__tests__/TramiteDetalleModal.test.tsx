@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import { TramiteDetalleModal } from '@/components/operacion/TramiteDetalleModal';
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
@@ -10,6 +10,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getAttachments: vi.fn(),
     listBiometricExpediente: vi.fn(),
     startSubsanacion: vi.fn(),
+    requestRevocation: vi.fn(),
   },
 }));
 
@@ -429,5 +430,164 @@ describe('TramiteDetalleModal — sub-estado de revocatoria (HU #12575)', () => 
     expect(await screen.findByText('Solicitud de revocatoria · Intento 1')).toBeInTheDocument();
     // El hito de estado "Aprobado" del historial sigue pintándose: el evento se AGREGA, no reemplaza.
     expect(screen.getAllByText('Aprobado').length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * HU #12573/#12574 (Feature #12565) — botón "Solicitar revocatoria", reubicado desde `TramiteWizard`
+ * (2026-09-16): `abreAsistente` en `TramitesTable` nunca es `true` para `aprobado`, así que el punto
+ * de entrada real es este modal, no el wizard. AC1-AC3 los cubre `RevocationRequestButton` en
+ * aislamiento (`hu12573-revocation-request-button.test.tsx`); aquí solo se prueba el enganche: dónde
+ * aparece, cuándo se oculta y que refresca el detalle tras un envío exitoso.
+ */
+describe('TramiteDetalleModal — botón "Solicitar revocatoria" (HU #12573/#12574)', () => {
+  const APROBADO = { ...ITEM, estado: 'aprobado' } satisfies InstanceSummary;
+
+  function base64Url(json: unknown): string {
+    return btoa(JSON.stringify(json)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function setToken(role: string): void {
+    const header = base64Url({ alg: 'none', typ: 'JWT' });
+    const payload = base64Url({ sub: 'user-1', role });
+    document.cookie = `flit_token=${header}.${payload}.; path=/`;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setToken('AdminCompany');
+    vi.mocked(tramitesClient.getAttachments).mockResolvedValue([]);
+    vi.mocked(tramitesClient.listBiometricExpediente).mockResolvedValue({
+      validations: [],
+      firmaBaulPartes: [],
+      firmaBaulActores: [],
+    });
+  });
+
+  afterEach(() => {
+    document.cookie = 'flit_token=; path=/; Max-Age=0';
+  });
+
+  it('con rol Administrador y sin solicitud activa: aparece habilitado en el aviso "Trámite aprobado"', async () => {
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [],
+      fieldValues: [],
+      actors: [],
+      activeRevocationRequest: null,
+      revocationEligibility: { sourceSupported: true, windowExpiresAt: null, windowExpired: false },
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
+    );
+
+    const aviso = (await screen.findByText('Trámite aprobado — solo visualización')).closest(
+      '[role="status"]',
+    );
+    expect(aviso).not.toBeNull();
+    expect(
+      within(aviso as HTMLElement).getByRole('button', { name: /Solicitar revocatoria/i }),
+    ).toBeEnabled();
+  });
+
+  it('con una solicitud activa: el botón no aparece (el badge del header ya lo comunica)', async () => {
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [],
+      fieldValues: [],
+      actors: [],
+      activeRevocationRequest: { status: 'solicitada', attemptNumber: 1, requestedAt: '2026-05-01T10:00:00Z' },
+      revocationEligibility: { sourceSupported: true, windowExpiresAt: null, windowExpired: false },
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
+    );
+
+    await screen.findByText('Revocatoria solicitada');
+    expect(screen.queryByRole('button', { name: /Solicitar revocatoria/i })).not.toBeInTheDocument();
+  });
+
+  it('en modo consulta (readOnly) no ofrece la acción', async () => {
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [],
+      fieldValues: [],
+      actors: [],
+      activeRevocationRequest: null,
+      revocationEligibility: { sourceSupported: true, windowExpiresAt: null, windowExpired: false },
+    } as never);
+    render(
+      <TramiteDetalleModal
+        open
+        instanceId="inst-1"
+        item={APROBADO}
+        onClose={() => undefined}
+        readOnly
+      />,
+    );
+
+    await screen.findByText('Aprobado');
+    expect(screen.queryByText('Trámite aprobado — solo visualización')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Solicitar revocatoria/i })).not.toBeInTheDocument();
+  });
+
+  it('rol Operario: el botón queda visible pero deshabilitado', async () => {
+    setToken('Operario');
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [],
+      fieldValues: [],
+      actors: [],
+      activeRevocationRequest: null,
+      revocationEligibility: { sourceSupported: true, windowExpiresAt: null, windowExpired: false },
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
+    );
+
+    const boton = await screen.findByRole('button', { name: /Solicitar revocatoria/i });
+    expect(boton).toBeVisible();
+    expect(boton).toBeDisabled();
+  });
+
+  it('envío exitoso: refresca el detalle (releé getInstance) para reflejar el nuevo sub-estado', async () => {
+    const user = userEvent.setup();
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [],
+      fieldValues: [],
+      actors: [],
+      activeRevocationRequest: null,
+      revocationEligibility: { sourceSupported: true, windowExpiresAt: null, windowExpired: false },
+    } as never);
+    vi.mocked(tramitesClient.requestRevocation).mockResolvedValue({
+      id: 'rev-1',
+      procedureInstanceId: 'inst-1',
+      attemptNumber: 1,
+      status: 'solicitada',
+      requestedAt: '2026-09-16T12:00:00Z',
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: /Solicitar revocatoria/i }));
+    const dialog = await screen.findByRole('dialog', { name: 'Solicitar revocatoria' });
+    await user.click(within(dialog).getByRole('button', { name: 'Continuar' }));
+    await user.type(
+      within(dialog).getByLabelText('Motivo de la solicitud'),
+      'El vehículo no cumplía los requisitos al momento de aprobar.',
+    );
+    const file = new File(['%PDF-1.4'], 'soporte.pdf', { type: 'application/pdf' });
+    await user.upload(dialog.querySelector('input[type="file"]') as HTMLInputElement, file);
+    await user.click(
+      within(dialog).getByLabelText('Confirmo que la información registrada en esta solicitud es correcta.'),
+    );
+    await user.click(
+      within(dialog).getByLabelText(
+        'Entiendo que esta solicitud de revocatoria no se puede retirar una vez enviada.',
+      ),
+    );
+
+    const llamadasAntes = vi.mocked(tramitesClient.getInstance).mock.calls.length;
+    await user.click(within(dialog).getByRole('button', { name: 'Enviar solicitud' }));
+
+    await screen.findByText('Solicitud de revocatoria enviada — en revisión');
+    expect(vi.mocked(tramitesClient.getInstance).mock.calls.length).toBeGreaterThan(llamadasAntes);
   });
 });

@@ -35,10 +35,19 @@ namespace Flit.Admin.Domain.OtClientProcedures;
 /// <param name="Revocados">
 /// HU #12166 (Feature #12156) — Aprobados que el organismo revocó (deshizo su propia aprobación).
 /// </param>
+/// <param name="SolicitudesRevocatoria">
+/// Pedido del usuario (2026-09-16) — Aprobados con una solicitud de revocatoria ACTIVA
+/// (<c>solicitada</c>/<c>en_revision</c>): necesitan una decisión del organismo, a diferencia de
+/// <see cref="Revocados"/> (ya decidido, estado final) o una solicitud <c>rechazada</c> (ya
+/// decidida, el turno es del gestor). Aparte de <see cref="Aprobados"/> — todo trámite con solicitud
+/// activa YA cuenta ahí— para que el organismo no tenga que abrir "Aprobados" fila por fila para
+/// notar cuál de ellos tiene una revocatoria esperando.
+/// </param>
 public sealed record OtBandejaCounters(
     int SinAsignarPlaca,
     int ConPlacaAsignada,
     int Aprobados,
     int Rechazados,
     int SinGestion,
-    int Revocados);
+    int Revocados,
+    int SolicitudesRevocatoria);

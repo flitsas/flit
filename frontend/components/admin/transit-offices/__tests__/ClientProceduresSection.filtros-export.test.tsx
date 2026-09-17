@@ -128,6 +128,7 @@ beforeEach(() => {
     rechazados: 0,
     sinGestion: 0,
     revocados: 0,
+    solicitudesRevocatoria: 0,
   });
   vi.mocked(searchOtClientProcedures).mockResolvedValue(pagina([tramite(1)], 1));
 });

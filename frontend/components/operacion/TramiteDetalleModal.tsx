@@ -34,12 +34,14 @@ import { TramiteDetalleActores } from './detalle/TramiteDetalleActores';
 import { TramiteDetalleVehiculo } from './detalle/TramiteDetalleVehiculo';
 import { TramiteDetalleComercial } from './detalle/TramiteDetalleComercial';
 import { TramiteDetalleIdentidad } from './detalle/TramiteDetalleIdentidad';
+import { RevocationRequestButton } from './RevocationRequestButton';
 import { DetalleVehiculoSidebar } from './detalle/DetalleVehiculoSidebar';
 import { TimelineTrackPanel } from './detalle/TimelineTrackPanel';
 import {
   mapEventsToTimelineNodes,
   mapIdentidadToTimelineNodes,
   mapStatusHistoryToTimelineNodes,
+  mergeTimelineNodesByTimestamp,
 } from './detalle/timeline-mappers';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { ConsultaModeProvider } from './ConsultaModeContext';
@@ -353,6 +355,29 @@ export function TramiteDetalleModal({
   const ofreceRetomar = puedeSubsanar && subsanacionActiva;
 
   /**
+   * HU #12573/#12574 (Feature #12565) — reubicado desde `TramiteWizard` (2026-09-16): `abreAsistente`
+   * en `TramitesTable` nunca es `true` para `aprobado`, así que el botón allí era inalcanzable por
+   * navegación normal (solo por URL directa con el GUID de la instancia). Mismo componente, AC1-AC3
+   * intactos — el gate de rol vive DENTRO de `RevocationRequestButton` (usePermissions), así que se
+   * renderiza igual para cualquier rol y él decide habilitado/deshabilitado.
+   * Se oculta del todo si ya hay una solicitud activa: a diferencia del wizard (que solo se apaga con
+   * el estado local `justRequested`, reseteable al re-montar), este modal ya trae
+   * `detail.activeRevocationRequest` (lo usa el badge del header), así que no depende de ese estado
+   * local ni puede quedar "falso habilitado" tras reabrir el modal.
+   */
+  const puedeSolicitarRevocatoria =
+    !readOnly && !!instanceId && item?.estado === 'aprobado' && !detail?.activeRevocationRequest;
+
+  /**
+   * El intento MÁS RECIENTE de revocatoria terminó rechazado (`detail.lastRevocationDecision`, ver
+   * `GetProcedureInstanceHandler.BuildLastRevocationDecisionAsync`). Cuando es así, el botón de
+   * reintentar se muda al aviso del rechazo (con su motivo al lado, que es el contexto que importa
+   * para decidir si reintentar) y deja de vivir en el aviso genérico de "Trámite aprobado" — un
+   * mismo botón en dos avisos a la vez era ruido, no ayuda.
+   */
+  const revocationFueRechazada = detail?.lastRevocationDecision?.status === 'rechazada';
+
+  /**
    * Enciende el flag si hace falta y salta al asistente. El POST es idempotente desde la UI: si la
    * subsanación ya está activa se omite, para que "Continuar" no choque contra el 409 de reactivar.
    */
@@ -501,10 +526,12 @@ export function TramiteDetalleModal({
             {/* El rechazo es el bloqueo, así que su aviso es también donde vive la salida: activar
                 la subsanación. Si el trámite está rechazado pero el OT no dejó motivo, el aviso se
                 pinta igual — sin él la acción no tendría dónde vivir.
-                Bug #12376, defecto 1 — en Anulado el motivo del último rechazo ya NO es vigente
-                (se anuló el trámite, no se resolvió el rechazo): se oculta aquí igual que en el
-                popover del listado (`TramitesTable.tsx`). El historial general sí lo conserva. */}
-            {(item.estado !== 'anulado' && item.ultimoRechazoMotivo?.trim()) || ofreceActivar ? (
+                Bug: `ultimoRechazoMotivo` es histórico (no se limpia al subsanar y aprobar), así que
+                antes este aviso seguía apareciendo como si el rechazo fuera VIGENTE en un trámite ya
+                Aprobado que superó ese rechazo hace rato. Ahora exige `estado === 'rechazado'`, igual
+                que `ofreceActivar` (ver `puedeSubsanar` arriba) — los dos hablan del MISMO bloqueo
+                actual, nunca de uno ya resuelto. */}
+            {(item.estado === 'rechazado' && item.ultimoRechazoMotivo?.trim()) || ofreceActivar ? (
               <InlineAlert
                 tone="error"
                 title="Rechazado por el Organismo de Tránsito"
@@ -518,7 +545,7 @@ export function TramiteDetalleModal({
                   ) : undefined
                 }
               >
-                {(item.estado !== 'anulado' && item.ultimoRechazoMotivo?.trim()) ??
+                {(item.estado === 'rechazado' && item.ultimoRechazoMotivo?.trim()) ??
                   'El organismo devolvió el trámite sin registrar un motivo. Actívale la subsanación para corregirlo y volver a radicarlo.'}
                 {subsanarError ? (
                   <span className="mt-1 block font-semibold">{subsanarError}</span>
@@ -543,6 +570,82 @@ export function TramiteDetalleModal({
                 {subsanarError && !ofreceActivar ? (
                   <span className="mt-1 block font-semibold">{subsanarError}</span>
                 ) : null}
+              </InlineAlert>
+            ) : null}
+            {/* HU #12573/#12574 (Feature #12565) — mismo copy que READ_ONLY_NOTICE['aprobado'] del
+                wizard, para no tener dos textos distintos describiendo el mismo estado.
+                Feature #12565 (ajuste UX) — UN solo aviso para el estado 'aprobado', no dos: si el
+                intento MÁS RECIENTE de revocatoria fue rechazado, este aviso absorbe esa noticia (con
+                su motivo, fecha y el botón de reintentar) en vez de vivir separada en un segundo
+                aviso debajo. El "Trámite aprobado — solo visualización" genérico sigue siendo cierto
+                de fondo, así que no desaparece: cambia de tono/título/cuerpo, no de condición. */}
+            {item.estado === 'aprobado' && !readOnly ? (
+              revocationFueRechazada && detail?.lastRevocationDecision ? (
+                <InlineAlert
+                  tone="warning"
+                  title="Solicitud de revocatoria rechazada"
+                  action={
+                    puedeSolicitarRevocatoria ? (
+                      <RevocationRequestButton
+                        instanceId={instanceId as string}
+                        tenantId={tenantId}
+                        eligibility={detail?.revocationEligibility}
+                        onRequested={() => reintentarDetalle()}
+                      />
+                    ) : undefined
+                  }
+                >
+                  El organismo de tránsito rechazó la solicitud de revocatoria; el trámite permanece
+                  Aprobado — solo visualización, puedes consultarlo y descargarlo.
+                  {detail.lastRevocationDecision.decisionReason?.trim() ? (
+                    <p className="mt-1 font-medium">
+                      Motivo: {detail.lastRevocationDecision.decisionReason}
+                    </p>
+                  ) : null}
+                  <p className="mt-1 text-[11px] opacity-70">
+                    Decidido el{' '}
+                    {new Date(detail.lastRevocationDecision.decidedAt).toLocaleString('es-CO', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </p>
+                </InlineAlert>
+              ) : (
+                <InlineAlert
+                  tone="success"
+                  title="Trámite aprobado — solo visualización"
+                  action={
+                    puedeSolicitarRevocatoria ? (
+                      <RevocationRequestButton
+                        instanceId={instanceId as string}
+                        tenantId={tenantId}
+                        eligibility={detail?.revocationEligibility}
+                        onRequested={() => reintentarDetalle()}
+                      />
+                    ) : undefined
+                  }
+                >
+                  El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes
+                  consultarla y descargarla, pero ya no se regenera.
+                </InlineAlert>
+              )
+            ) : null}
+            {/* Feature #12565 — deja un rastro de la revocatoria APROBADA en el detalle: sin esto, el
+                trámite pasaba a 'revocado' sin decir cuándo ni con qué motivo. El caso 'rechazada' ya
+                lo absorbió el aviso de arriba (el trámite sigue 'aprobado'); este solo puede coexistir
+                con él en el código, nunca en pantalla — un mismo trámite no está a la vez 'aprobado' y
+                'revocado'. */}
+            {detail?.lastRevocationDecision?.status === 'aprobada' ? (
+              <InlineAlert tone="error" title="Trámite revocado">
+                El organismo de tránsito aprobó la revocatoria: la placa/VIN quedaron libres y la
+                documentación anterior es histórica.
+                <p className="mt-1 text-[11px] opacity-70">
+                  Decidido el{' '}
+                  {new Date(detail.lastRevocationDecision.decidedAt).toLocaleString('es-CO', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  })}
+                </p>
               </InlineAlert>
             ) : null}
             {item.isPaused ? (
@@ -603,18 +706,22 @@ export function TramiteDetalleModal({
                   ) : (
                     <TimelineTrackPanel
                       title="Línea de tiempo del trámite"
-                      nodes={[
-                        ...mapStatusHistoryToTimelineNodes(detail?.statusHistory ?? []),
-                        // Bug #12376, defecto 4 — la reasignación de gestor no es un cambio de estado,
-                        // pero sí pertenece al historial general del trámite. HU #12575 (AC2) — la
-                        // solicitud de revocatoria tampoco cambia el status principal (ADR-0022) y se
-                        // agrega aquí por la misma razón.
-                        ...mapEventsToTimelineNodes(
+                      // Bug #12376, defecto 4 — la reasignación de gestor no es un cambio de estado,
+                      // pero sí pertenece al historial general del trámite. HU #12575 (AC2) — la
+                      // solicitud de revocatoria tampoco cambia el status principal (ADR-0022) y se
+                      // agrega aquí por la misma razón. `mergeTimelineNodesByTimestamp` (y no un simple
+                      // spread) porque concatenar dos listas ya ordenadas NO ordena la unión: una
+                      // solicitud de revocatoria ocurre siempre ANTES de que el status pase a
+                      // 'revocado', pero como es un evento aparte vivía en la segunda lista y salía
+                      // pintada DESPUÉS del hito 'Revocado' en pantalla.
+                      nodes={mergeTimelineNodesByTimestamp(
+                        mapStatusHistoryToTimelineNodes(detail?.statusHistory ?? []),
+                        mapEventsToTimelineNodes(
                           (detail?.events ?? []).filter(
                             (e) => e.tipo === 'reasignar_gestor_admin' || e.tipo === 'revocatoria_solicitada',
                           ),
                         ),
-                      ]}
+                      )}
                       emptyMessage="Sin eventos registrados todavía."
                     />
                   )}
