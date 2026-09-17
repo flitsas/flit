@@ -51,11 +51,11 @@ public static class NotificationSampleRenderer
                 ? AsignacionPlacaEmailPreviewSample.BuildRenting(baseUrl)
                 : AsignacionPlacaEmailPreviewSample.BuildFlit(baseUrl, effectiveTheme),
             RevocationRequestNotificationEnqueuer.TemplateKey => ComposeRevocationRequest(
-                RevocationRequestEmailMilestone.Solicitada, channel, baseUrl),
+                RevocationRequestEmailMilestone.Solicitada, channel, baseUrl, effectiveTheme),
             RevocationRequestNotificationEnqueuer.DecisionTemplateKeyAprobada => ComposeRevocationRequest(
-                RevocationRequestEmailMilestone.Aprobada, channel, baseUrl),
+                RevocationRequestEmailMilestone.Aprobada, channel, baseUrl, effectiveTheme),
             RevocationRequestNotificationEnqueuer.DecisionTemplateKeyRechazada => ComposeRevocationRequest(
-                RevocationRequestEmailMilestone.Rechazada, channel, baseUrl),
+                RevocationRequestEmailMilestone.Rechazada, channel, baseUrl, effectiveTheme),
             _ => throw new InvalidOperationException(
                 $"El catálogo resolvió el id '{templateId}' pero no hay muestra registrada para él."),
         };
@@ -79,10 +79,10 @@ public static class NotificationSampleRenderer
     }
 
     private static (string Subject, string Html) ComposeRevocationRequest(
-        string milestone, NotificationChannel channel, string baseUrl) =>
+        string milestone, NotificationChannel channel, string baseUrl, EmailTheme? theme) =>
         channel == NotificationChannel.TenantApi
             ? RevocationRequestEmailPreviewSample.BuildRenting(milestone, baseUrl)
-            : RevocationRequestEmailPreviewSample.BuildFlit(milestone, baseUrl);
+            : RevocationRequestEmailPreviewSample.BuildFlit(milestone, baseUrl, theme);
 
     private static (string Subject, string Html) ToTuple(
         Flit.Modules.Security.Application.Auth.ComposedEmail email) =>

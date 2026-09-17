@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Domain.RevocationRequests;
 
 namespace Flit.Infrastructure.Notifications.Tramites;
@@ -32,6 +33,13 @@ public sealed record RevocationRequestEmailModel(
 /// marca propios y no hay razón de negocio para uno distinto — mismos avisos de trámite, mismo
 /// remitente visual. Decisión documentada en el reporte de la HU #12579.
 /// </para>
+/// <para>
+/// HU #12428 (Feature #12405, ADR-0060) — la variante FLIT admite un <see cref="EmailTheme"/>
+/// resuelto por red: con <see cref="EmailThemeKind.Brand"/> el mismo cuerpo funcional se envuelve
+/// en <see cref="BrandedEmailChrome"/> (misma convención que <see cref="AsignacionPlacaEmailComposer"/>
+/// y <see cref="TramiteCambioEstadoEmailComposer"/>); con <c>Flit</c>/<c>null</c> el HTML anterior se
+/// conserva byte a byte (AC9). El canal Renting nunca recibe tema (AC8).
+/// </para>
 /// </summary>
 public static class RevocationRequestEmailComposer
 {
@@ -48,15 +56,50 @@ public static class RevocationRequestEmailComposer
     private const string PrivacyPolicyUrl = "https://flitsas.com/politica-de-privacidad";
     private const string SupportEmail = "soporte@flitsas.com";
 
+    /// <param name="theme">HU #12428 AC1/AC2/AC9 — igual convención que
+    /// <c>AsignacionPlacaEmailComposer.ComposeFlit</c>: aditivo, <c>Flit</c>/<c>null</c> preserva
+    /// el HTML anterior byte a byte.</param>
     public static (string Subject, string Html) ComposeFlit(
-        string milestone, RevocationRequestEmailModel model, string assetsBaseUrl)
+        string milestone, RevocationRequestEmailModel model, string assetsBaseUrl, EmailTheme? theme = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(milestone);
         ArgumentNullException.ThrowIfNull(model);
         var copy = ResolveCopy(milestone);
         var subject = BuildSubject(copy, model.Radicado);
-        var html = BuildFlitHtml(copy, model, assetsBaseUrl);
+        var html = theme is { IsBrand: true }
+            ? BuildBrandedHtml(copy, model, theme)
+            : BuildFlitHtml(copy, model, assetsBaseUrl);
         return (subject, html);
+    }
+
+    /// <summary>HU #12428 AC2/AC3/AC6 — mismo dato funcional que <see cref="BuildFlitHtml"/> (saludo,
+    /// intro del hito, radicado, placa, motivo si aplica, cierre) sobre el chrome de
+    /// <see cref="BrandedEmailChrome"/>. El cierre usa la variante neutra de marca (sin "En FLIT")
+    /// — mismo criterio que <c>TramiteCambioEstadoEmailComposer.BuildBrandedHtml</c>.</summary>
+    private static string BuildBrandedHtml(
+        MilestoneCopy copy, RevocationRequestEmailModel model, EmailTheme theme)
+    {
+        var destinatario = Enc(model.DestinatarioNombre);
+        var placa = Enc(model.Placa);
+        var radicado = Enc(model.Radicado);
+        var linkColor = BrandedEmailChrome.LinkColor(theme);
+
+        var body = new StringBuilder();
+        body.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 12px;\">Estimado/a Señor/a <strong style=\"color:{linkColor};\">{destinatario}</strong>.</p>");
+        body.Append(CultureInfo.InvariantCulture, $"<p style=\"margin:0 0 16px;\">{copy.IntroHtml}</p>");
+        body.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{linkColor};\">Radicado:</strong> {radicado}</p>");
+        body.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 16px;\"><strong style=\"color:{linkColor};\">Placa del Vehículo:</strong> {placa}</p>");
+        if (!string.IsNullOrWhiteSpace(model.Motivo) && copy.ShowMotivo)
+        {
+            body.Append(CultureInfo.InvariantCulture,
+                $"<p style=\"margin:0 0 16px;\"><strong style=\"color:{linkColor};\">Motivo:</strong> {EncMultiline(model.Motivo)}</p>");
+        }
+        body.Append(CultureInfo.InvariantCulture, $"<p style=\"margin:0;\">{copy.CierreBrandHtml}</p>");
+
+        return BrandedEmailChrome.Wrap(theme, copy.Heading, body.ToString());
     }
 
     public static (string Subject, string Html) ComposeRenting(
@@ -173,8 +216,14 @@ public static class RevocationRequestEmailComposer
         return sb.ToString();
     }
 
+    /// <param name="CierreBrandHtml">Cierre para el chrome de marca (HU #12428): sin la mención
+    /// literal a FLIT, porque el remitente visual es la marca de la red.</param>
     private sealed record MilestoneCopy(
-        string SubjectPrefix, string Heading, string AccentColor, string IntroHtml, string CierreHtml, bool ShowMotivo);
+        string SubjectPrefix, string Heading, string AccentColor, string IntroHtml, string CierreHtml, bool ShowMotivo,
+        string CierreBrandHtml);
+
+    private const string CierreBrandGenerico =
+        "Nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.";
 
     private static MilestoneCopy ResolveCopy(string milestone) => milestone switch
     {
@@ -184,21 +233,24 @@ public static class RevocationRequestEmailComposer
             AccentColor: InfoAmber,
             IntroHtml: "Hemos recibido tu solicitud de revocatoria del trámite. El organismo de tránsito la revisará y te avisaremos por este medio en cuanto haya una decisión.",
             CierreHtml: "En FLIT, nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.",
-            ShowMotivo: false),
+            ShowMotivo: false,
+            CierreBrandHtml: CierreBrandGenerico),
         RevocationRequestEmailMilestone.Aprobada => new MilestoneCopy(
             SubjectPrefix: "Tu solicitud de revocatoria fue aprobada",
             Heading: "¡SOLICITUD DE REVOCATORIA APROBADA!",
             AccentColor: ApprovedGreen,
             IntroHtml: "El organismo de tránsito aprobó tu solicitud de revocatoria. El trámite quedó en estado <strong>Revocado</strong>.",
             CierreHtml: "En FLIT, nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.",
-            ShowMotivo: false),
+            ShowMotivo: false,
+            CierreBrandHtml: CierreBrandGenerico),
         RevocationRequestEmailMilestone.Rechazada => new MilestoneCopy(
             SubjectPrefix: "Tu solicitud de revocatoria fue rechazada",
             Heading: "SOLICITUD DE REVOCATORIA RECHAZADA",
             AccentColor: RejectedRed,
             IntroHtml: "El organismo de tránsito rechazó tu solicitud de revocatoria. El trámite permanece sin cambios en su estado actual.",
             CierreHtml: "Puedes radicar un nuevo intento de revocatoria cuando corrijas el motivo indicado abajo.",
-            ShowMotivo: true),
+            ShowMotivo: true,
+            CierreBrandHtml: "Puedes radicar un nuevo intento de revocatoria cuando corrijas el motivo indicado arriba."),
         _ => throw new ArgumentOutOfRangeException(nameof(milestone), milestone, "Hito de revocatoria desconocido."),
     };
 

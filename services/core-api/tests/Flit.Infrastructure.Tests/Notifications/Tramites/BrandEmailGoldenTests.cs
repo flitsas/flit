@@ -1,14 +1,17 @@
+using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.Notifications.Preview;
 using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Tests.Shared;
+using Flit.Tramites.Domain.RevocationRequests;
 using Xunit;
 
 namespace Flit.Infrastructure.Tests.Notifications.Tramites;
 
 /// <summary>
-/// HU #12428 AC2/AC3/AC6 — congela ASUNTO y CUERPO de <c>tramites.aprobado</c> y
-/// <c>tramites.asignacion-placa</c> renderizados con un tema de marca FIJO, carácter a carácter.
+/// HU #12428 AC2/AC3/AC6 — congela ASUNTO y CUERPO de <c>tramites.aprobado</c>,
+/// <c>tramites.asignacion-placa</c> y las 3 de revocatoria (<c>tramites.revocatoria-*</c>, #12565)
+/// renderizados con un tema de marca FIJO, carácter a carácter.
 /// No toca ningún golden de <see cref="TramiteEmailGoldenTests"/> (variante <c>Flit</c>/Renting).
 /// <para>
 /// <b>Si un refactor obliga a editar un <c>.golden.txt</c>, el refactor está mal.</b> Solo un
@@ -47,5 +50,19 @@ public sealed class BrandEmailGoldenTests
         EmailGolden.Assert(
             new EmailMessage(Guid.Empty, AsignacionPlacaEmailComposer.TemplateId, "destinatario@ejemplo.test", "Destinatario", subject, html),
             "tramites-asignacion-placa-brand");
+    }
+
+    [Theory]
+    [InlineData(RevocationRequestEmailMilestone.Solicitada, RevocationRequestNotificationEnqueuer.TemplateKey, "tramites-revocatoria-solicitada-brand")]
+    [InlineData(RevocationRequestEmailMilestone.Aprobada, RevocationRequestNotificationEnqueuer.DecisionTemplateKeyAprobada, "tramites-revocatoria-aprobada-brand")]
+    [InlineData(RevocationRequestEmailMilestone.Rechazada, RevocationRequestNotificationEnqueuer.DecisionTemplateKeyRechazada, "tramites-revocatoria-rechazada-brand")]
+    public void Revocatoria_brand_conserva_asunto_y_cuerpo(string milestone, string templateKey, string golden)
+    {
+        var (subject, html) = RevocationRequestEmailPreviewSample.BuildFlit(
+            milestone, "https://cdn.flit.test/email-assets", BrandTheme);
+
+        EmailGolden.Assert(
+            new EmailMessage(Guid.Empty, templateKey, "destinatario@ejemplo.test", "Destinatario", subject, html),
+            golden);
     }
 }
