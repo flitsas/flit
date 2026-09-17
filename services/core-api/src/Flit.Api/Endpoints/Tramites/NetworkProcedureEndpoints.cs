@@ -34,7 +34,9 @@ namespace Flit.Api.Endpoints.Tramites;
 ///   <item><c>GET /children</c> (HU #12555, <see cref="NetworkChildrenEndpoints"/>): clientes hijos
 ///   vigentes de la cabeza (id + nombre), sin la policy admin de <see cref="AdminCompanyChildrenEndpoints"/>.</item>
 /// </list>
-/// Policy de cabeza (<see cref="GroupHeadReadFilter"/>) sobre todo el grupo: sin alcance de grupo ⇒ 403.
+/// Policy de cabeza (<see cref="GroupHeadReadFilter"/>) sobre todo el grupo: sin alcance de grupo ⇒ 403
+/// <c>network_scope_required</c>; con alcance pero sin rol AdminCompany ⇒ 403 <c>network_role_required</c>
+/// (HU #12652: la red es exclusiva del administrador de la cabeza).
 /// HU #12361: <see cref="NetworkAccessAuditFilter"/> (más externo) escribe UN registro por petición en
 /// <c>tramites.network_access_audit</c> con el desenlace que cada ruta publica vía
 /// <see cref="NetworkAccessAuditContext.Publish"/> — hijos alcanzados, recurso y filtros sin PII.

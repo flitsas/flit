@@ -26,7 +26,10 @@ export interface NetworkChildOption {
 export type NetworkChildrenStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
 
 export interface UseNetworkScopeResult {
-  /** HU #12356 — ¿el usuario es cabeza de grupo (CONCESION | MARCA_BLANCA)? Si no, nada de esto aplica. */
+  /**
+   * HU #12356 — ¿el usuario es cabeza de grupo (CONCESION | MARCA_BLANCA)? Si no, nada de esto aplica.
+   * HU #12652 — además exige rol AdminCompany: un Radicador/Operador de la cabeza recibe `false`.
+   */
   isGroupParent: boolean;
   /** Alcance vigente. Para quien no es cabeza es SIEMPRE el default (`own`). */
   scope: NetworkScopePreference;
@@ -68,9 +71,14 @@ const SCOPE = 'tramites.scope';
  * significa que el caller no es cabeza pese al claim del JWT y oculta el selector entero.
  */
 export function useNetworkScope(): UseNetworkScopeResult {
-  const { isGroupParent, tenantId, isSuperAdmin } = usePermissions();
+  const { isGroupParent, tenantId, isSuperAdmin, isAdminCompany } = usePermissions();
   // El SuperAdmin ve todas las compañías por rol, no por jerarquía: para él no hay «mi red».
-  const esCabeza = isGroupParent && !isSuperAdmin && !!tenantId;
+  // HU #12652 — el alcance de red es exclusivo del AdminCompany de la cabeza: un Radicador/Operador
+  // de la cabeza ve solo su compañía (sin selector, sin chip «Red», rutas propias). `isAdminCompany`
+  // recorre todos los claims de rol (multi-rol, HU #10506), así que Radicador + AdminCompany cuenta.
+  // Sin rol admin el hook tampoco lee `tramites.scope`: una preferencia `network` guardada en otra
+  // sesión no se aplica ni se pisa (AC4).
+  const esCabeza = isGroupParent && isAdminCompany && !isSuperAdmin && !!tenantId;
 
   const [scope, setScopeState] = useState<NetworkScopePreference>(DEFAULT_NETWORK_SCOPE);
   const [ready, setReady] = useState(!esCabeza);
@@ -84,6 +92,8 @@ export function useNetworkScope(): UseNetworkScopeResult {
   // AC2 — 403 (`network_scope_required`) del endpoint de hijos: el claim `is_group_parent` del JWT
   // dijo que sí, pero el servidor dice que no. No es una degradación de "lista no disponible": el
   // selector entero deja de tener sentido, así que `isGroupParent` devuelto pasa a `false`.
+  // HU #12652 — el 403 `network_role_required` (rol sin alcance de red) se trata exactamente igual:
+  // cualquier 403 de `network/children` apaga la cabeza efectiva (defensa en profundidad).
   const [scopeDenied, setScopeDenied] = useState(false);
   // AC2 — un 403 del endpoint de hijos anula la cabeza efectiva: el claim del JWT quedó desfasado
   // frente a lo que decide el servidor, y ese servidor manda.
@@ -130,6 +140,8 @@ export function useNetworkScope(): UseNetworkScopeResult {
       } catch (err) {
         if (!active) return;
         setChildren([]);
+        // `network_scope_required` (no es cabeza) o `network_role_required` (HU #12652, rol sin
+        // alcance de red): en ambos el servidor niega la red y el selector desaparece.
         if (err instanceof TramitesApiError && err.status === 403) {
           setScopeDenied(true);
           setChildrenStatus('idle');
