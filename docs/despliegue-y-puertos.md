@@ -197,7 +197,11 @@ El flujo es el mismo en los tres escenarios; solo cambian los hostnames/puertos.
 
 - **core-api:** `Cors:AllowedOrigins` en su `appsettings.json` / variable
   `Cors__AllowedOrigins` (incluye `http://localhost:4001` para dev).
-- **gateway:** `Cors__AllowedOrigins__0` en el compose (= `CORS_ORIGIN` del `.env`).
+- **gateway:** `Cors__AllowedOrigins__0` en el compose (= `CORS_ORIGIN` del `.env`) y
+  `Cors__AllowedOrigins__1` (= `CORS_ORIGIN_MARCA_BLANCA`, el dominio de marca blanca
+  `marcablanca<env>.flitsas.online`, que es un vhost de nginx apuntando al mismo
+  contenedor `frontend`). Si falta el segundo, el front de marca blanca carga pero
+  todas sus llamadas a la API fallan por CORS.
 - El origen permitido debe ser la URL desde la que sirve el **frontend**.
 
 ### Health checks (para verificar conectividad)
