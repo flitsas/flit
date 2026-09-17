@@ -530,3 +530,53 @@ describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
     });
   });
 });
+
+// ── Tarjetas KPI: el rótulo se lee entero ────────────────────────────────────
+//
+// El título compartía fila con el icono dentro de un `min-w-0` con `truncate`, así que solo
+// disponía de `ancho − 48px` y en pantalla se veían «Total Trá…», «Otros Trá…» y «Completa…».
+// Ahora ocupa la fila completa y el icono baja a la del número.
+describe("Dashboard — rótulos de las tarjetas KPI", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getToken.mockReturnValue("token");
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
+    mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
+    mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
+    mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
+    mocks.getActiveBanners.mockResolvedValue([]);
+  });
+
+  it.each(["Total Trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
+    "«%s» se renderiza completo, sin recortar",
+    async (label) => {
+      render(<Dashboard onNewTramite={noop} />);
+
+      const rotulo = await screen.findByText(label);
+      expect(rotulo).toBeInTheDocument();
+      // `truncate` corta por CSS sin tocar el texto, así que el nodo tiene que llevar el
+      // tratamiento de dos líneas y NO la clase que recortaba.
+      expect(rotulo).toHaveClass("line-clamp-2");
+      expect(rotulo).not.toHaveClass("truncate");
+    },
+  );
+
+  it("el rótulo respeta el piso tipográfico de 12px de la línea base", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const rotulo = await screen.findByText("Total Trámites");
+    expect(rotulo).toHaveClass("text-xs");
+    expect(rotulo.className).not.toMatch(/text-\[1[01]px\]/);
+  });
+
+  it("la cifra no se trunca: recortarla mostraría un conteo falso", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const cifra = await screen.findByText("7");
+    expect(cifra).toHaveClass("tabular-nums");
+    expect(cifra).not.toHaveClass("truncate");
+  });
+});

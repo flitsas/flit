@@ -660,12 +660,21 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 const Icon = k.icon;
                 const isError = status === "error";
                 return (
+                  // El título ocupa la fila completa y el icono baja a la del número. Antes
+                  // compartía fila con el icono dentro de un `min-w-0` con `truncate`, así que solo
+                  // disponía de `ancho − 48px` y con la rejilla en 3 columnas los rótulos largos se
+                  // cortaban en pantalla («Total Trá…», «Otros Trá…», «Completa…»). Recuperados esos
+                  // 48px, el rótulo más largo cabe y el tamaño sube al piso tipográfico de 12px.
                   <div
                     key={k.label}
-                    className="rounded-2xl p-3 flex items-center justify-between bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
+                    className="rounded-2xl p-3 flex flex-col gap-2 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
                   >
                     <div className="min-w-0">
-                      <p className="text-[11px] opacity-70 font-medium truncate">{k.label}</p>
+                      {/* line-clamp-2 en vez de truncate: si algún día entra un rótulo más largo,
+                          se parte en dos líneas en vez de perder texto por el borde. */}
+                      <p className="text-xs opacity-70 font-medium leading-tight line-clamp-2">
+                        {k.label}
+                      </p>
                       {/* AC1 — cada indicador dice que es de la red (texto, no solo color). */}
                       {networkActive && (
                         <NetworkScopeBadge
@@ -675,9 +684,13 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                           testId={`kpi-red-${k.label}`}
                         />
                       )}
+                    </div>
+                    {/* `items-end`: la cifra y el icono se alinean por su base, no por su centro —
+                        con alturas tan distintas (24px vs 36px) centrarlos descuadraba la fila. */}
+                    <div className="flex items-end justify-between gap-2">
                       {isError ? (
                         <p
-                          className="text-xl font-bold mt-1 flex items-center gap-1.5"
+                          className="text-xl font-bold flex items-center gap-1.5 min-w-0"
                           style={{ color: "#FF4E00" }}
                           title={errorMessage ?? "No se pudo cargar este indicador."}
                         >
@@ -686,16 +699,18 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                           <span className="sr-only">Error al cargar {k.label.toLowerCase()}</span>
                         </p>
                       ) : (
-                        <p className="text-2xl font-bold mt-1" style={{ color: k.color }}>
+                        // `tabular-nums` y sin truncar: recortar un conteo mostraría una cifra
+                        // falsa. Mismo criterio que la tira de contadores del OT.
+                        <p className="text-2xl font-bold leading-none tabular-nums" style={{ color: k.color }}>
                           {status === "loading" ? "—" : k.value}
                         </p>
                       )}
-                    </div>
-                    <div
-                      className="h-9 w-9 rounded-xl grid place-items-center shrink-0"
-                      style={{ background: isError ? "#FF4E001A" : `${k.color}1A` }}
-                    >
-                      <Icon className="h-4 w-4" style={{ color: isError ? "#FF4E00" : k.color }} />
+                      <div
+                        className="h-9 w-9 rounded-xl grid place-items-center shrink-0"
+                        style={{ background: isError ? "#FF4E001A" : `${k.color}1A` }}
+                      >
+                        <Icon className="h-4 w-4" style={{ color: isError ? "#FF4E00" : k.color }} />
+                      </div>
                     </div>
                   </div>
                 );
