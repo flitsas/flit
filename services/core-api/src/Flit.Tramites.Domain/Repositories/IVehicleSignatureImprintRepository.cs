@@ -8,10 +8,13 @@ public interface IVehicleSignatureImprintRepository
     void Add(VehicleSignatureImprint row);
 
     /// <summary>
-    /// Busca fila activa (<c>deleted_at IS NULL</c>) por hash del PDF base.
-    /// Idempotencia al re-estampar; filas soft-deleted no bloquean una nueva firma.
+    /// Busca fila activa (<c>deleted_at IS NULL</c>) por trámite + hash del PDF base.
+    /// Idempotencia al re-estampar; filas soft-deleted no bloquean una nueva firma. La unicidad
+    /// (y por tanto esta búsqueda) es por <b>trámite</b>: el mismo PDF base puede firmarse en
+    /// trámites distintos sin considerarse duplicado (Bug #12594).
     /// </summary>
-    Task<VehicleSignatureImprint?> FindByDocumentHashAsync(
+    Task<VehicleSignatureImprint?> FindActiveByInstanceAndHashAsync(
+        Guid procedureInstanceId,
         string documentHash,
         CancellationToken cancellationToken = default);
 

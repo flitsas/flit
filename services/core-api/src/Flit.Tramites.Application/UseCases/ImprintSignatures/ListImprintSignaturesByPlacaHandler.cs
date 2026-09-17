@@ -60,7 +60,8 @@ public sealed class ListImprintSignaturesByPlacaHandler
             row.SignedSizeBytes,
             row.SignedFilename,
             row.DeletedAt,
-            lastValidation);
+            lastValidation,
+            row.Reemplazada);
 
     internal static ImprintSignatureValidationSummaryDto MapValidation(Domain.Entities.ImprintSignatureValidation row) =>
         new(row.Id, row.Result, row.FailureReason, row.ValidatedAt, row.ValidatedBy, row.Placa);

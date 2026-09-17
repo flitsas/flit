@@ -234,6 +234,10 @@ public static class DependencyInjection
         services.AddScoped<RegenerarDocumentosTrazadoHandler>();
         services.AddScoped<GetFurTemplateFormatHandler>(); // HU #10924 — formato de FUR por clasificación
         services.AddScoped<GenerarConsolidadoHandler>();
+        // HU #12116 — firma automática de la impronta manual al radicar / asignar placa / backfill,
+        // sin depender de que alguien genere el consolidado.
+        services.AddScoped<FirmarImprontaManualSiListaHandler>();
+        services.AddScoped<BackfillFirmaImprontaManualHandler>();
         // HU #12158 — acciones avanzadas del admin sobre el consolidado (limpiar/cargar externo).
         services.AddScoped<LimpiarConsolidadoHandler>();
         services.AddScoped<CargarConsolidadoExternoHandler>();

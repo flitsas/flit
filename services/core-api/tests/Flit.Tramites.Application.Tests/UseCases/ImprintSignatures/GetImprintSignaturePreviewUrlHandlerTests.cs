@@ -89,6 +89,40 @@ public sealed class GetImprintSignaturePreviewUrlHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_UsesSignedStoragePath_WhenRowIsSoftDeleted()
+    {
+        // Bug #12594 (H2): una fila "reemplazada" (soft-delete: AttachmentId null, DeletedAt seteado)
+        // debe seguir sirviendo el PDF histórico vía SignedStoragePath. El handler consulta
+        // GetByIdAsync, que en el repositorio real usa IgnoreQueryFilters() (no filtra DeletedAt),
+        // así que este test fija el escenario a nivel de aplicación con la fila ya "encontrada".
+        var id = Guid.NewGuid();
+        _imprints.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(new VehicleSignatureImprint
+        {
+            Id = id,
+            TenantId = Guid.NewGuid(),
+            ProcedureInstanceId = Guid.NewGuid(),
+            ModuleCode = "impronta_manual",
+            DocumentHash = "hash",
+            PublicKey = "pk",
+            PrivateKey = "sk",
+            Signature = "sig",
+            SignedAt = DateTimeOffset.UtcNow,
+            SignedStoragePath = "snap/impronta-historica.pdf",
+            AttachmentId = null,
+            DeletedAt = DateTimeOffset.UtcNow,
+        });
+
+        var (result, error) = await _sut.HandleAsync(id, TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Url.Should().Contain("snap/impronta-historica.pdf",
+            "\"Ver PDF\" debe seguir habilitado para la fila histórica de una impronta reemplazada");
+        await _instances.DidNotReceive()
+            .GetByIdWithAttachmentsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task HandleAsync_FallsBackToAttachment_WhenSnapshotMissing()
     {
         var id = Guid.NewGuid();
