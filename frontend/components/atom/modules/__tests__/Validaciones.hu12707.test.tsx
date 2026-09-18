@@ -18,6 +18,19 @@ const mocks = vi.hoisted(() => ({
   listCompanies: vi.fn(),
 }));
 
+// HU #12709 — estas pruebas son de un usuario que no es cabeza de red: alcance siempre «Mi compañía».
+vi.mock('@/hooks/useNetworkScope', () => ({
+  useNetworkScope: () => ({
+    isGroupParent: false,
+    scope: { mode: 'own' },
+    setScope: () => {},
+    networkActive: false,
+    children: [],
+    childrenStatus: 'idle',
+    ready: true,
+    saving: false,
+  }),
+}));
 vi.mock('@/lib/api/superadmin-client', () => ({
   superadminClient: { listCompanies: mocks.listCompanies },
 }));

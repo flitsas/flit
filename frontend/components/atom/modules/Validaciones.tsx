@@ -46,6 +46,14 @@ import { PageNav } from '@/components/atom/PageNav';
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
 import { SearchableSelect } from '@/components/atom/SearchableSelect';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
+import { useNetworkScope } from '@/hooks/useNetworkScope';
+import { NetworkScopeSelector } from '@/components/operacion/NetworkScopeSelector';
+import { NetworkScopeBadge } from '@/components/operacion/NetworkScopeBadge';
+import {
+  ETIQUETA_SOLO_CONSULTA,
+  isNetworkReadOnly,
+  isScopeRejection,
+} from '@/lib/tramites/network-scope';
 import { PersonIdentityDetailDrawer } from './PersonIdentityDetailDrawer';
 import {
   PrevalidacionForm,
@@ -323,7 +331,26 @@ export function Validaciones() {
   // «Todas»: la vista mezcla compañías, así que se pinta la columna Compañía y las acciones de lote
   // (reintentar todas las incidencias) necesitan una compañía elegida.
   const viendoTodas = isFlitAdmin && companyId === '';
-  const showCompanyColumn = isFlitAdmin;
+
+  // HU #12709 — alcance de red de la cabeza (Concesión / Marca Blanca), con preferencia PROPIA del
+  // módulo. Para quien no es administrador de una cabeza (Radicador, hija, sin red, SuperAdmin) el hook
+  // no hace ninguna petición y el alcance es siempre «Mi compañía» (AC6).
+  // Mismo idioma que `isFlitAdmin`: el tenant del JWT, leído una vez.
+  const [callerTenantId] = useState<string | null>(() => decodeJwtPayload(getToken())?.tenant_id ?? null);
+  const red = useNetworkScope('identidad.scope');
+  // AC7 — la red respondió 403/404 (freno `group_read_scope`, red deshecha): se vuelve a «Mi compañía»
+  // sin mostrar un fallo con reintento.
+  const [redNoDisponible, setRedNoDisponible] = useState(false);
+  const networkActive = red.networkActive && !redNoDisponible;
+  const networkChild = networkActive ? red.scope.childTenantId : undefined;
+  const networkRef = useRef({ active: networkActive, child: networkChild });
+  networkRef.current = { active: networkActive, child: networkChild };
+  const showCompanyColumn = isFlitAdmin || networkActive;
+  /** AC3 — fila de una compañía hija vista por la cabeza: solo consulta (las propias conservan acciones). */
+  const esSoloConsulta = useCallback(
+    (tenantId: string | undefined) => networkActive && isNetworkReadOnly({ tenantId }, callerTenantId),
+    [networkActive, callerTenantId],
+  );
 
   const [persons, setPersons] = useState<TenantBiometricPerson[] | null>(null);
   const [stats, setStats] = useState<BiometricValidationStats | null>(null);
@@ -344,6 +371,8 @@ export function Validaciones() {
     documentType: string;
     documentNumber: string;
     tenantId?: string;
+    /** HU #12709 — persona de una hija vista por la cabeza: detalle por la ruta de red, en lectura. */
+    soloConsulta?: boolean;
   } | null>(null);
 
   // Gestión de prevalidaciones, absorbida de la pantalla retirada /tramites/prevalidaciones.
@@ -437,14 +466,15 @@ export function Validaciones() {
       fetchingRef.current = true;
       if (!opts?.background) setFetching(true);
       try {
-        const res = await tramitesClient.listTenantBiometricPersons(
-          {
-            ...buildPersonApiFilters(uiFilters),
-            page: pageRef.current,
-            pageSize: pageSizeRef.current,
-          },
-          listTenantRef.current,
-        );
+        const filtros = {
+          ...buildPersonApiFilters(uiFilters),
+          page: pageRef.current,
+          pageSize: pageSizeRef.current,
+        };
+        // HU #12709 — en «Toda la red» o una hija, las rutas de red (el alcance lo decide el servidor).
+        const res = networkRef.current.active
+          ? await tramitesClient.listNetworkIdentityPersons(filtros, networkRef.current.child)
+          : await tramitesClient.listTenantBiometricPersons(filtros, listTenantRef.current);
         if (reqId !== reqIdRef.current) return;
         setPersons(res.persons);
         setStats(res.stats);
@@ -453,6 +483,12 @@ export function Validaciones() {
         setLastUpdatedAt(new Date());
       } catch (err) {
         if (reqId !== reqIdRef.current) return;
+        // AC7 — un 403/404 de la red no es un fallo técnico: la red no está disponible para este usuario
+        // ahora (freno general, red deshecha). Se vuelve a «Mi compañía» y la pantalla recarga sola.
+        if (networkRef.current.active && isScopeRejection(err)) {
+          setRedNoDisponible(true);
+          return;
+        }
         // En auto-refresco con datos ya en pantalla, un fallo transitorio NO machaca la vista con el error.
         if (opts?.background && personsRef.current !== null) {
           return;
@@ -546,10 +582,13 @@ export function Validaciones() {
     void refreshStuck();
   };
 
-  // Refetch cuando cambian los filtros aplicados O la página/tamaño (carga inicial incluida).
+  // Refetch cuando cambian los filtros aplicados, la página/tamaño o el alcance de red (carga inicial
+  // incluida). Espera a saber el alcance guardado de la cabeza: así no pide primero «lo propio» y luego
+  // «la red» a quien ya la había elegido.
   useEffect(() => {
+    if (!red.ready) return;
     void load(applied);
-  }, [applied, page, pageSize, load]);
+  }, [applied, page, pageSize, load, red.ready, networkActive, networkChild]);
 
   // Los eventos atascados son por-alcance (independientes de filtros/página): refrescan con los filtros.
   useEffect(() => {
@@ -766,6 +805,8 @@ export function Validaciones() {
   };
 
   const handleNew = () => {
+    // AC4 — crear es solo en lo propio: con la red o una hija elegida el botón está deshabilitado.
+    if (networkActive) return;
     setSuccessResult(null);
     // AC7 — en «Todas» no hay compañía que suponer: se pide antes de abrir el formulario.
     if (viendoTodas) {
@@ -897,6 +938,25 @@ export function Validaciones() {
     return { nombre: c?.razonSocial ?? tenantName ?? '—', nit: c?.nit ?? null };
   };
 
+  // HU #12709 — selector de alcance de la cabeza de red (mismo componente que Trámites).
+  const networkSelector = red.isGroupParent ? (
+    <div className="flex shrink-0 items-center gap-2">
+      <NetworkScopeSelector
+        scope={redNoDisponible ? { mode: 'own' } : red.scope}
+        onChange={(next) => {
+          setRedNoDisponible(false);
+          red.setScope(next);
+          setPage(1);
+        }}
+        hijos={red.children}
+        childrenStatus={red.childrenStatus}
+        disabled={red.saving}
+        testId="identidad-network-scope-select"
+      />
+      {networkActive ? <NetworkScopeBadge scope={red.scope} hijos={red.children} testId="identidad-network-scope-badge" /> : null}
+    </div>
+  ) : null;
+
   const companySelector =
     isFlitAdmin && companies !== null && companies.length > 0 ? (
       <div className="w-64 shrink-0">
@@ -960,18 +1020,26 @@ export function Validaciones() {
         <button
           type="button"
           onClick={handleNew}
+          disabled={networkActive}
           aria-label="Crear nueva prevalidación de identidad"
-          className="flex h-[88px] w-full shrink-0 flex-col items-center justify-center rounded-2xl px-4 text-[13px] font-semibold leading-tight text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] sm:w-36"
+          aria-describedby={networkActive ? 'val-nueva-solo-propio' : undefined}
+          title={networkActive ? 'Disponible en Mi compañía' : undefined}
+          className="flex h-[88px] w-full shrink-0 flex-col items-center justify-center rounded-2xl px-4 text-[13px] font-semibold leading-tight text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50 sm:w-36"
           style={{ background: 'linear-gradient(90deg, #557EFF 0%, #00DBD5 100%)' }}
         >
           <span>Nueva</span>
           <span>prevalidación</span>
+          {networkActive ? (
+            <span id="val-nueva-solo-propio" className="mt-1 text-[10px] font-medium opacity-90">
+              Disponible en Mi compañía
+            </span>
+          ) : null}
         </button>
       </div>
 
       <div>
         <ValidacionesFiltrosBar
-          scopeSelector={companySelector}
+          scopeSelector={companySelector ?? networkSelector}
           search={search}
           onSearchChange={setSearch}
           periodo={periodo}
@@ -1100,12 +1168,18 @@ export function Validaciones() {
           <PersonasTable
             rows={persons}
             columns={tableColumns}
+            esSoloConsulta={esSoloConsulta}
             companyLabel={companyLabel}
             now={nowTick}
             resendMeta={resendMeta}
             onOpenPerson={(docType, docNumber, tenantId) => {
               openForTenant(tenantId);
-              setPersonDetail({ documentType: docType, documentNumber: docNumber, tenantId });
+              setPersonDetail({
+                documentType: docType,
+                documentNumber: docNumber,
+                tenantId,
+                soloConsulta: esSoloConsulta(tenantId),
+              });
             }}
             onEdit={(row) => {
               openForTenant(row.tenantId);
@@ -1166,6 +1240,7 @@ export function Validaciones() {
         <PersonIdentityDetailDrawer
           documentType={personDetail.documentType}
           documentNumber={personDetail.documentNumber}
+          networkTenantId={personDetail.soloConsulta ? personDetail.tenantId : undefined}
           onClose={() => {
             setPersonDetail(null);
             closeTenantScope();
@@ -1880,6 +1955,7 @@ type CompanyLabelFn = (
 function PersonasTable({
   rows,
   columns,
+  esSoloConsulta,
   companyLabel,
   now,
   resendMeta,
@@ -1893,6 +1969,8 @@ function PersonasTable({
 }: {
   rows: TenantBiometricPerson[];
   columns: readonly IdentidadColumnKey[];
+  /** HU #12709 — ¿la fila de esta compañía es de solo consulta (hija vista por la cabeza)? */
+  esSoloConsulta: (tenantId: string | undefined) => boolean;
   companyLabel: CompanyLabelFn;
   now: number;
   resendMeta: Record<string, ResendMeta>;
@@ -1941,6 +2019,7 @@ function PersonasTable({
     <ValidacionesTable
       rows={mapped}
       columns={columns}
+      esSoloConsulta={esSoloConsulta}
       companyLabel={companyLabel}
       now={now}
       resendMeta={resendMeta}
@@ -1963,6 +2042,7 @@ function PersonasTable({
 function ValidacionesTable({
   rows,
   columns,
+  esSoloConsulta,
   companyLabel,
   now,
   resendMeta,
@@ -1977,6 +2057,7 @@ function ValidacionesTable({
 }: {
   rows: TenantBiometricValidation[];
   columns: readonly IdentidadColumnKey[];
+  esSoloConsulta: (tenantId: string | undefined) => boolean;
   companyLabel: CompanyLabelFn;
   now: number;
   resendMeta: Record<string, ResendMeta>;
@@ -2011,6 +2092,7 @@ function ValidacionesTable({
               key={r.id}
               row={r}
               columns={columns}
+              soloConsulta={esSoloConsulta(r.tenantId)}
               gridCols={gridCols}
               companyLabel={companyLabel}
               now={now}
@@ -2034,6 +2116,7 @@ function ValidacionesTable({
 function ValidacionRow({
   row: r,
   columns,
+  soloConsulta,
   gridCols,
   companyLabel,
   now,
@@ -2049,6 +2132,8 @@ function ValidacionRow({
 }: {
   row: TenantBiometricValidation;
   columns: readonly IdentidadColumnKey[];
+  /** HU #12709 (AC3) — fila de una compañía hija: solo «Ver proceso», con el distintivo visible. */
+  soloConsulta: boolean;
   gridCols: string;
   companyLabel: CompanyLabelFn;
   now: number;
@@ -2105,6 +2190,7 @@ function ValidacionRow({
   const enlaceUtilizable = tieneEnlaceUtilizable(r, now);
   const ariaLabel =
     (columns.includes('compania') ? `Compañía ${companyLabel(r.tenantId, r.tenantName).nombre}. ` : '') +
+    (soloConsulta ? `${ETIQUETA_SOLO_CONSULTA}. ` : '') +
     `Validación de ${r.name}${parte}, trámite ${refLabel} (${modalidad}), ` +
     `proveedor ${provider}, correo ${emailLabel}, estado ${badgeLabel}` +
     (intentosInfo ? `, intentos ${intentosInfo.intentos} de ${intentosInfo.maxIntentos}` : '') +
@@ -2345,6 +2431,9 @@ function ValidacionRow({
     ),
   };
 
+  // AC3 — fila de una hija: ni reenviar, ni editar, ni simular, ni iniciar, ni reintentar. Solo verla.
+  const menuItems = soloConsulta ? actionItems.filter((i) => i.key === 'proceso') : actionItems;
+
   const rowContent = (
     <div
       className="grid gap-2 items-center px-4 py-3 text-xs"
@@ -2354,9 +2443,12 @@ function ValidacionRow({
         <Fragment key={key}>{cells[key]}</Fragment>
       ))}
       <div className="flex min-w-0 flex-col items-end gap-0.5">
+        {soloConsulta ? (
+          <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel={ETIQUETA_SOLO_CONSULTA} />
+        ) : null}
         <ActionsMenu
           ariaLabel={`Acciones de validación de ${r.name}`}
-          items={actionItems}
+          items={menuItems}
           className="bg-white dark:bg-[#0B0F14]"
         />
         {!isTramite && admiteReenvio && resendDisabledReason && (

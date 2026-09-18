@@ -74,18 +74,26 @@ public sealed class NetworkIdentityValidationEndpointsTests
     // ── AC4 — datos que ve la cabeza ───────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Cabeza_ve_el_correo_enmascarado_y_nunca_el_enlace_de_captura()
+    public async Task Cabeza_ve_enmascarado_el_correo_de_sus_hijas_y_nunca_su_enlace_de_captura()
     {
         var response = await GetAsync(P, "AdminCompany", ByPersonUrl);
 
         using var body = await JsonAsync(response);
         foreach (var person in body.RootElement.GetProperty("persons").EnumerateArray())
         {
-            person.GetProperty("email").GetString().Should().MatchRegex(@"^.{1,2}\*\*\*@correo\.co$");
-            person.TryGetProperty("captureUrl", out _).Should().BeFalse();
-            person.TryGetProperty("linkExpiresAt", out _).Should().BeFalse();
             person.GetProperty("documentNumber").GetString().Should().NotBeNullOrEmpty();
             person.TryGetProperty("score", out _).Should().BeTrue();
+            if (person.GetProperty("tenantId").GetGuid() == P)
+            {
+                // HU #12709 (AC3) — las filas de la propia cabeza viajan completas: son suyas.
+                person.GetProperty("email").GetString().Should().Be("carolina.perez@correo.co");
+                person.GetProperty("captureUrl").GetString().Should().NotBeNull();
+                continue;
+            }
+
+            person.GetProperty("email").GetString().Should().MatchRegex(@"^.{1,2}\*\*\*@correo\.co$");
+            person.GetProperty("captureUrl").ValueKind.Should().Be(JsonValueKind.Null);
+            person.GetProperty("linkExpiresAt").ValueKind.Should().Be(JsonValueKind.Null);
         }
     }
 
