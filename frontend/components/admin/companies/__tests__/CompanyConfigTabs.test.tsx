@@ -319,8 +319,8 @@ describe("CompanyConfigTabs — identificación de la compañía (HU #11062)", (
   });
 });
 
-// HU #12710 — el Administrador de Compañía sin red, o de una hija, solo ve Representantes legales y
-// Mandatarios; el resto de secciones es del SuperAdmin y de la cabeza de red.
+// HU #12710 (Epic #12685) — el Administrador de Compañía (sin red, de una hija o de una cabeza de red)
+// solo ve Representantes legales y Mandatarios; el resto de secciones es del SuperAdmin.
 describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
   const slots = {
     whitelistSlot: <div>panel-lista-blanca</div>,
@@ -362,7 +362,22 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
     expect(screen.getByText("panel-mandatarios")).toBeInTheDocument();
   });
 
-  it("AC6/AC7 — sin restricción (SuperAdmin o cabeza de red) conserva todas las pestañas", () => {
+  it("AC6 — la cabeza administrando una hija conserva además Usuarios (Panel de red), nada de configuración", () => {
+    render(
+      <CompanyConfigTabs
+        settings={{ ...settings, preasignacionPlacaActiva: true }}
+        onSaveSettings={vi.fn()}
+        restrictedToRepresentatives
+        usuariosSlot={<div>panel-usuarios</div>}
+        {...slots}
+      />,
+    );
+
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual(["Representantes legales", "Mandatarios", "Usuarios"]);
+  });
+
+  it("AC7 — sin restricción (SuperAdmin) conserva todas las pestañas", () => {
     render(
       <CompanyConfigTabs
         settings={{ ...settings, preasignacionPlacaActiva: true }}
