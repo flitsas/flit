@@ -114,7 +114,7 @@ describe("Detalle OT — presentación con las rejillas del prototipo (HU #12061
     abrir();
 
     const tandas = await screen.findAllByRole("table", {
-      name: /^Especificaciones del vehículo/,
+      name: /^Especificaciones técnicas/,
     });
     const rotulos = tandas.flatMap(columnas);
 
@@ -129,7 +129,7 @@ describe("Detalle OT — presentación con las rejillas del prototipo (HU #12061
 
     await screen.findByRole("table", { name: "Datos del trámite" });
     // El trámite no trae cilindraje, ejes ni identificadores mecánicos.
-    for (const ausente of ["Cilindraje", "Ejes", "N. Motor", "N. Chasis", "N. Serie"]) {
+    for (const ausente of ["Cilindraje", "Ejes", "Nº Motor", "Nº Chasis", "Nº Serie"]) {
       expect(screen.queryByText(ausente)).not.toBeInTheDocument();
     }
     // «Peso» sale en el prototipo pero no existe en el contrato del OT: tampoco se inventa.
@@ -151,7 +151,7 @@ describe("Detalle OT — presentación con las rejillas del prototipo (HU #12061
     const user = userEvent.setup();
 
     await screen.findByRole("table", { name: "Datos del trámite" });
-    await user.click(screen.getByRole("button", { name: "Actores del Trámite" }));
+    await user.click(screen.getByRole("button", { name: "Actores del trámite" }));
 
     const tabla = await screen.findByRole("table", { name: "Actores del trámite" });
     expect(columnas(tabla)).toEqual(["Documento", "Nombre completo", "Tipo de actor"]);

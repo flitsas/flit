@@ -29,6 +29,7 @@ import {
 import { formatOtProcedureStatus, procedureStatusChip } from "./ot-utils";
 
 import { formatFechaHora } from "@/lib/format/date";
+import { COPY } from "@/lib/copy/copy-catalog";
 /**
 
  * Bloques del detalle. Ya no son pasos de un recorrido sino acordeones independientes; el nombre
@@ -36,11 +37,13 @@ import { formatFechaHora } from "@/lib/format/date";
  */
 export type OtDetalleSeccionId = "vehiculo" | "actores" | "documentos";
 
-const SECCIONES: { id: OtDetalleSeccionId; titulo: string }[] = [
+export const OT_DETALLE_SECCIONES: { id: OtDetalleSeccionId; titulo: string }[] = [
   { id: "vehiculo", titulo: "Detalles del trámite y vehículo" },
-  { id: "actores", titulo: "Actores del Trámite" },
+  { id: "actores", titulo: COPY.A07 },
   { id: "documentos", titulo: "Documentos del Trámite" },
 ];
+
+const SECCIONES = OT_DETALLE_SECCIONES;
 
 export interface ClientProcedureDetailModalProps {
   open: boolean;

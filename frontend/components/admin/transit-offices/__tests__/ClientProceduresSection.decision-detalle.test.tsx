@@ -359,7 +359,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
 
     const dialog = await abrirDetalle(user, "RAD-2026-101");
     await waitFor(() => expect(fetchOtClientProcedure).toHaveBeenCalledTimes(1));
-    const actores = within(dialog).getByRole("button", { name: "Actores del Trámite" });
+    const actores = within(dialog).getByRole("button", { name: "Actores del trámite" });
     await user.click(actores);
     expect(actores).toHaveAttribute("aria-expanded", "true");
 
