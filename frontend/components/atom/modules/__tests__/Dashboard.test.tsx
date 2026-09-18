@@ -37,6 +37,7 @@ vi.mock("@/lib/api/analytics", () => ({
 }));
 vi.mock("@/lib/api/admin-companies", () => ({ fetchAllCompanies: mocks.fetchAllCompanies }));
 vi.mock("@/lib/api/tramites-client", () => ({
+  ALL_TENANTS: "*",
   tramitesClient: { listTenantBiometricValidations: mocks.listTenantBiometricValidations },
 }));
 vi.mock("@/lib/api/client", () => ({ getToken: mocks.getToken }));
@@ -227,7 +228,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(screen.queryByText("Resoluciones")).not.toBeInTheDocument();
   });
 
-  it("SuperAdmin en 'Todas las compañías': no llama al endpoint (no hay un tenant concreto) y no queda en error permanente", async () => {
+  it("SuperAdmin en 'Todas las compañías': las validaciones se piden de todas (ALL_TENANTS) y no queda en error permanente", async () => {
     mocks.isSuperAdmin.mockReturnValue(true);
     mocks.fetchAllCompanies.mockResolvedValue([]);
 
@@ -241,6 +242,14 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     // qué se cambiara en configuración de compañía. Ahora, sin una compañía concreta elegida,
     // la sección completa no ocupa espacio: ni tarjeta, ni mensaje, ni alerta de error.
     await waitFor(() => expect(mocks.fetchAllCompanies).toHaveBeenCalled());
+    // HU #12706 (AC4) — el listado plano ya tiene vista global: se pide sin compañía, nunca con el
+    // tenant del JWT del SuperAdmin. (El primer render, antes de saber que es SuperAdmin, lanza una
+    // carga que se aborta; cuentan las dos últimas: stats y por vencer.)
+    await waitFor(() => {
+      const calls = mocks.listTenantBiometricValidations.mock.calls;
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+      expect(calls.slice(-2).map((c) => c[1])).toEqual(["*", "*"]);
+    });
     expect(screen.queryByText("Selecciona una compañía para ver sus módulos activos.")).not.toBeInTheDocument();
     expect(screen.queryByText("Próximamente")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
