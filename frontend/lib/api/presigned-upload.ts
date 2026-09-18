@@ -14,7 +14,11 @@ export async function uploadFileToPresignedUrl(
   ticket: PresignedUploadTicket,
   file: File,
 ): Promise<void> {
-  const method = (ticket.method ?? "POST").trim().toUpperCase() || "POST";
+  // ADR-0057: el file-manager manda method. Si falta y no hay fields (URL firmada PUT Contabo),
+  // no asumir POST: Contabo rechaza multipart con SignatureDoesNotMatch.
+  const explicit = (ticket.method ?? "").trim().toUpperCase();
+  const hasFields = Object.keys(ticket.fields ?? {}).length > 0;
+  const method = explicit || (hasFields ? "POST" : "PUT");
   let res: Response;
 
   if (method === "PUT") {
