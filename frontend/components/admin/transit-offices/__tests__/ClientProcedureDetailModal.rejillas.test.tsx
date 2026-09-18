@@ -184,7 +184,7 @@ describe("Detalle OT — presentación con las rejillas del prototipo (HU #12061
     // El consolidado es una tarjeta más de la rejilla, pero con entidad propia.
     expect(within(panel).getByText("Consolidado de documentos")).toBeInTheDocument();
     expect(
-      within(panel).getByRole("button", { name: "Ver consolidado del expediente" }),
+      within(panel).getByRole("button", { name: "Ver consolidado" }),
     ).toBeInTheDocument();
   });
 

@@ -344,7 +344,7 @@ export function ClientProcedureDetailModal({
           className="h-11 min-w-[200px] rounded-xl px-6 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           style={{ background: OT_ORANGE }}
         >
-          Rechazar trámite
+          {COPY.E01Rechazar}
         </button>
       ) : null}
       {onApprove ? (
@@ -355,7 +355,7 @@ export function ClientProcedureDetailModal({
           aria-describedby={!decidible && avisos.length > 0 ? avisosId : undefined}
           className={`h-11 min-w-[200px] rounded-xl px-6 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${OT_APROBAR_GRADIENTE}`}
         >
-          Aprobar trámite
+          {COPY.E01Aprobar}
         </button>
       ) : null}
     </div>

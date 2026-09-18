@@ -16,6 +16,7 @@ import { OtVacio } from "./OtDetallePrimitivos";
 import { OT_BLUE, OT_GREEN } from "./ot-detalle-visual";
 
 import { formatFechaHora } from "@/lib/format/date";
+import { COPY } from "@/lib/copy/copy-catalog";
 export interface OtDetalleDocumentosProps {
 
   /** ID del trámite de cliente OT. */
@@ -309,7 +310,7 @@ export function OtDetalleDocumentos({
                 <AccionDoc
                   blanco
                   icon={Eye}
-                  label="Ver consolidado del expediente"
+                  label={COPY.A12}
                   title="Muestra el consolidado del expediente; lo genera si aún no está o si cambió el trámite"
                   disabled={consolidadoActing}
                   onClick={() => void handleConsolidado()}
