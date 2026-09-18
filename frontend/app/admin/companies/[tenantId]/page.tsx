@@ -62,14 +62,11 @@ function CompanyDetail() {
     callerTenantId === networkHeadId &&
     tenantId !== callerTenantId;
 
-  // HU #12710 — el Administrador de Compañía sin red, o de una hija, solo gestiona Representantes
-  // legales y Mandatarios. La cabeza de red sobre su propia compañía o administrando una hija, y el
-  // SuperAdmin, conservan todas las secciones. Misma regla que aplica la API (GroupHeadCompanyPolicy).
-  const restrictedToRepresentatives =
-    isAdminCompany &&
-    !isSuperAdmin &&
-    !managingChild &&
-    !(isGroupParent && callerTenantId === tenantId);
+  // HU #12710 (Epic #12685) — el Administrador de Compañía, también el de una cabeza de red y sobre
+  // su propia compañía o una hija, solo gestiona Representantes legales y Mandatarios; el resto de
+  // secciones es del SuperAdmin. Misma regla que aplica la API (SuperAdminPolicy en las reservadas).
+  // Administrando una hija conserva además Usuarios: las invitaciones son del Panel de red.
+  const restrictedToRepresentatives = isAdminCompany && !isSuperAdmin;
 
   const otPanelMode = resolveOtConfigPanelMode({
     company,
@@ -237,7 +234,9 @@ function CompanyDetail() {
           title="Configuración de compañía"
           subtitle={
             restrictedToRepresentatives
-              ? "Gestiona los representantes legales y los mandatarios de tu compañía."
+              ? managingChild
+                ? "Gestiona los representantes legales, los mandatarios y los usuarios de esta compañía de tu red."
+                : "Gestiona los representantes legales y los mandatarios de tu compañía."
               : "Edita las políticas operativas y revisa el historial de cambios."
           }
         />

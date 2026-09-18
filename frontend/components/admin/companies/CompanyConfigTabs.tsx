@@ -99,14 +99,15 @@ export interface CompanyConfigTabsProps {
    */
   company?: { razonSocial: string; nit: string } | null;
   /**
-   * HU #12710 — Administrador de Compañía sin red o de una hija: solo Representantes legales y
-   * Mandatarios, y abre en Representantes. El resto de secciones es del SuperAdmin (y de la cabeza de
-   * red); la API también las rechaza, esto solo evita ofrecer pestañas que responderían 403.
+   * HU #12710 — Administrador de Compañía (también el de una cabeza de red): solo Representantes
+   * legales y Mandatarios, y abre en Representantes. El resto de secciones es del SuperAdmin; la API
+   * también las rechaza, esto solo evita ofrecer pestañas que responderían 403. Si el consumidor
+   * inyecta `usuariosSlot` (la cabeza administrando una hija), Usuarios se conserva.
    */
   restrictedToRepresentatives?: boolean;
 }
 
-/** HU #12710 — pestañas que conserva el Administrador de Compañía sin red o de una hija. */
+/** HU #12710 — pestañas que conserva el Administrador de Compañía. */
 export const REPRESENTATIVE_TABS: readonly TabId[] = ["representantes", "mandatarios"];
 
 export function CompanyConfigTabs({
@@ -132,7 +133,7 @@ export function CompanyConfigTabs({
     () =>
       TABS.filter((t) =>
         restrictedToRepresentatives
-          ? REPRESENTATIVE_TABS.includes(t.id)
+          ? REPRESENTATIVE_TABS.includes(t.id) || (t.id === "usuarios" && Boolean(usuariosSlot))
           : (t.id !== "placas" || settings.preasignacionPlacaActiva) &&
             (t.id !== "usuarios" || Boolean(usuariosSlot)),
       ),

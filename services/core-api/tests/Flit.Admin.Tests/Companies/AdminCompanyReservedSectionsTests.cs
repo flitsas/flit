@@ -12,13 +12,14 @@ using Xunit;
 namespace Flit.Admin.Tests.Companies;
 
 /// <summary>
-/// HU #12710 — el Administrador de Compañía sin red, o de una compañía hija, solo conserva
-/// Representantes legales y Mandatarios en Administración; el resto de secciones responde 403 en la
-/// API aun sobre su propio tenant. La cabeza de red y el SuperAdmin conservan su acceso.
+/// HU #12710 (Epic #12685) — el Administrador de Compañía, sea sin red, de una hija o de una cabeza de
+/// red, solo conserva Representantes legales y Mandatarios en Administración; el resto de secciones
+/// responde 403 en la API aun sobre su propio tenant. Solo el SuperAdmin conserva su acceso.
 /// <list type="bullet">
-///   <item>AC4 — secciones reservadas: 403 para el AdminCompany sin red y para el de una hija.</item>
+///   <item>AC4 — secciones reservadas: 403 para el AdminCompany sin red, el de una hija y el de una cabeza.</item>
 ///   <item>AC3 — Representantes legales y Mandatarios: siguen abiertos para ese mismo rol.</item>
-///   <item>AC6 — la cabeza de red opera las secciones reservadas de su compañía como hoy.</item>
+///   <item>AC6 — la cabeza tampoco opera la configuración de sus hijas; conserva sus Representantes y
+///   Mandatarios y el Panel de red (listado, invitaciones y usuarios).</item>
 ///   <item>AC7 — el SuperAdmin opera todas las rutas como hoy.</item>
 /// </list>
 /// La jerarquía sale de un <see cref="ICompanyHierarchyRepository"/> falso (misma fuente que usa
@@ -56,6 +57,31 @@ public sealed class AdminCompanyReservedSectionsTests
         { "GET", "/personalized-documents" },
         { "POST", "/personalized-documents" },
         { "GET", "/notification-delivery-logs" },
+    };
+
+    /// <summary>
+    /// Secciones reservadas de una hija vistas por la cabeza, relativas a
+    /// <c>/api/v1/admin/companies/{cabeza}/children/{hija}</c>.
+    /// </summary>
+    public static TheoryData<string, string> ReservadasDeHija => new()
+    {
+        { "GET", "/settings" },
+        { "PUT", "/settings" },
+        { "GET", "/whitelist" },
+        { "POST", "/whitelist" },
+        { "GET", "/audit-log" },
+        { "GET", "/document-params" },
+        { "GET", "/personalized-documents" },
+    };
+
+    /// <summary>Lo que la cabeza conserva sobre una hija: sus Representantes y Mandatarios y el Panel de red.</summary>
+    public static TheoryData<string> ConservadasDeHija => new()
+    {
+        $"/children/{Hija}/legal-representatives",
+        $"/children/{Hija}/mandate-signers",
+        "/children",
+        $"/children/{Hija}",
+        $"/children/{Hija}/users",
     };
 
     /// <summary>Secciones que el Administrador de Compañía conserva (AC3).</summary>
@@ -110,16 +136,48 @@ public sealed class AdminCompanyReservedSectionsTests
         response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
 
-    // ── AC6 / AC7 — cabeza de red y SuperAdmin sin cambios ─────────────────────────────────────
+    // ── AC4 / AC6 — la cabeza de red, igual que cualquier Administrador de Compañía ────────────
 
     [Theory]
     [MemberData(nameof(Reservadas))]
-    public async Task Cabeza_de_red_sigue_operando_las_secciones_reservadas_de_su_compania(string method, string ruta)
+    public async Task Cabeza_de_red_recibe_403_en_las_secciones_reservadas_de_su_compania(string method, string ruta)
     {
         var response = await SendAsync(TestTokenFactory.CreateAdminCompanyToken(Cabeza), method, Cabeza, ruta);
 
-        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
+
+    [Theory]
+    [MemberData(nameof(ReservadasDeHija))]
+    public async Task Cabeza_de_red_recibe_403_en_la_configuracion_de_sus_hijas(string method, string ruta)
+    {
+        var response = await SendAsync(
+            TestTokenFactory.CreateAdminCompanyToken(Cabeza), method, Cabeza, $"/children/{Hija}{ruta}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Theory]
+    [MemberData(nameof(ConservadasDeHija))]
+    public async Task Cabeza_de_red_conserva_representantes_mandatarios_y_panel_de_red_de_sus_hijas(string ruta)
+    {
+        var response = await SendAsync(TestTokenFactory.CreateAdminCompanyToken(Cabeza), "GET", Cabeza, ruta);
+
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Theory]
+    [MemberData(nameof(Conservadas))]
+    public async Task Cabeza_de_red_conserva_representantes_y_mandatarios_de_su_compania(string ruta)
+    {
+        var response = await SendAsync(TestTokenFactory.CreateAdminCompanyToken(Cabeza), "GET", Cabeza, ruta);
+
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+    }
+
+    // ── AC7 — SuperAdmin sin cambios ───────────────────────────────────────────────────────────
 
     [Theory]
     [MemberData(nameof(Reservadas))]
