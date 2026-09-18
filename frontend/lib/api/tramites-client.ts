@@ -1,5 +1,6 @@
 import type { QueryField } from '@/lib/api/queries';
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
+import { uploadFileToPresignedUrl } from './presigned-upload';
 import type {
   AceptarConsentimientoResult,
   ActorContactLookupInput,
@@ -1466,10 +1467,9 @@ export const tramitesClient = {
     return JSON.parse(await res.text()) as PersistOcrFieldsResult;
   },
 
-  // Subida directa navegador→S3 (presigned). El binario NO pasa por el request del
-  // API (resuelve PDFs grandes que fallaban en el límite del request/gateway):
-  //   1) presign  → el API registra el archivo en el file-manager y devuelve la POST policy de S3.
-  //   2) POST a S3 → el navegador sube el binario directo con los campos firmados + el archivo.
+  // Subida directa navegador→storage (presigned, ADR-0057):
+  //   1) presign  → el API registra el archivo en el file-manager y devuelve url + method + fields.
+  //   2) PUT o POST al storage → el navegador sube el binario (PUT crudo en Contabo; POST policy en MinIO/S3).
   //   3) register → el API persiste la metadata del adjunto (incl. el sha256 que calcula el cliente).
   uploadAttachment: async (
     instanceId: string,
@@ -1491,20 +1491,8 @@ export const tramitesClient = {
       },
     );
 
-    // 2) POST policy a S3: los campos firmados van ANTES del 'file'. NO se fija Content-Type ni
-    // headers de tenant: es S3, no el API; el navegador pone el boundary del multipart.
-    const form = new FormData();
-    for (const [key, value] of Object.entries(presign.fields)) {
-      form.append(key, value);
-    }
-    form.append('file', file);
-    const s3Res = await fetch(presign.url, { method: 'POST', body: form });
-    if (!s3Res.ok) {
-      const body = await s3Res.text().catch(() => '');
-      throw new Error(
-        `Error subiendo a almacenamiento (${s3Res.status})${body ? ': ' + body : ''}`,
-      );
-    }
+    // 2) storage (PUT|POST según file-manager / ADR-0057)
+    await uploadFileToPresignedUrl(presign, file);
 
     // 3) register
     return request<ProcedureAttachment>(

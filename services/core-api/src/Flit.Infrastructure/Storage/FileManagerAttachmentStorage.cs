@@ -90,7 +90,8 @@ internal sealed class FileManagerAttachmentStorage(
         return new PresignedUpload(
             created.Id,
             created.PresignedUrl.Url,
-            created.PresignedUrl.Fields ?? new Dictionary<string, string>());
+            created.PresignedUrl.Fields ?? new Dictionary<string, string>(),
+            string.IsNullOrWhiteSpace(created.PresignedUrl.Method) ? "POST" : created.PresignedUrl.Method);
     }
 
     public async Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default)
