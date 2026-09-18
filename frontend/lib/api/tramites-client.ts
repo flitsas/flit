@@ -590,10 +590,20 @@ function authOnlyHeader(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/**
+ * HU #12706 — «todas las compañías»: pasado como tenant a una lectura transversal (p. ej. el listado de
+ * Validación de Identidad), la petición sale SIN `X-Tenant-Id`. Solo tiene efecto para un SuperAdmin: el
+ * backend decide «todas» por el rol del token, nunca por la ausencia del header, y a cualquier otro rol
+ * el middleware le impone su compañía. Sin este modo, `tenantHeader` caería al tenant del JWT y el
+ * SuperAdmin vería solo su propia compañía interna.
+ */
+export const ALL_TENANTS = '*';
+
 export function tenantHeader(tenantId?: string): HeadersInit {
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (tenantId === ALL_TENANTS) return headers;
   const resolved = tenantId ?? activeTramitesTenant ?? jwtTenantId();
   if (resolved) headers['X-Tenant-Id'] = resolved;
   return headers;

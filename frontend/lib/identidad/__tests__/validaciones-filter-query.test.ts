@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitPersonaODocumentoQuery } from '@/components/atom/modules/ValidacionesFilterToolbar';
+import { splitPersonaODocumentoQuery } from '@/lib/identidad/validaciones-filtros';
 
 describe('splitPersonaODocumentoQuery', () => {
   it('vacío no filtra', () => {

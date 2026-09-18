@@ -21,7 +21,10 @@ public static class UiPreferenceScopes
     /// </summary>
     public const string TramitesScope = "tramites.scope";
 
-    public static readonly IReadOnlyCollection<string> All = [TramitesColumns, OtProceduresColumns, TramitesScope];
+    /// <summary>HU #12707 (Feature #12705) — columnas visibles en la grilla de Validación de Identidad.</summary>
+    public const string IdentidadColumns = "identidad.columns";
+
+    public static readonly IReadOnlyCollection<string> All = [TramitesColumns, OtProceduresColumns, TramitesScope, IdentidadColumns];
 
     public static bool IsValid(string? scope) =>
         !string.IsNullOrWhiteSpace(scope) && All.Contains(scope);

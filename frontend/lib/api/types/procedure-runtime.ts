@@ -1741,6 +1741,12 @@ export interface LinkedProcedureRef {
  * tabla y la navegación al trámite se condiciona a instanceId != null.
  */
 export interface TenantBiometricValidation {
+  /**
+   * HU #12706 — compañía dueña del registro (columna «Compañía» del SuperAdmin y de la red de la cabeza).
+   * Opcional: aditivo en el contrato; las acciones de la fila viajan con esta compañía.
+   */
+  tenantId?: string;
+  tenantName?: string | null;
   id: string;
   /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
   instanceId: string | null;
@@ -1861,6 +1867,12 @@ export interface TenantBiometricValidationFilters {
  * peor alerta. Espejo de TenantBiometricPersonDto.
  */
 export interface TenantBiometricPerson {
+  /**
+   * HU #12706 — compañía dueña del registro (columna «Compañía» del SuperAdmin y de la red de la cabeza).
+   * Opcional: aditivo en el contrato; las acciones de la fila viajan con esta compañía.
+   */
+  tenantId?: string;
+  tenantName?: string | null;
   documentType: string;
   documentNumber: string;
   name: string;
@@ -1945,6 +1957,12 @@ export type StuckIdentityValidationKind = 'envio' | 'encadenamiento';
  * StuckIdentityValidationDto (HU #10349). Sin PII.
  */
 export interface StuckIdentityValidation {
+  /**
+   * HU #12706 — compañía dueña del registro (columna «Compañía» del SuperAdmin y de la red de la cabeza).
+   * Opcional: aditivo en el contrato; las acciones de la fila viajan con esta compañía.
+   */
+  tenantId?: string;
+  tenantName?: string | null;
   id: string;
   validationId: string;
   eventType: string;
