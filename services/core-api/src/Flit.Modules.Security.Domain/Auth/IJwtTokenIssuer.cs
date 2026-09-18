@@ -21,6 +21,10 @@ public interface IJwtTokenIssuer
     /// HU #12345/#12406: <paramref name="tenantType"/> e <paramref name="isGroupParent"/> se emiten
     /// como claims <c>tenant_type</c> e <c>is_group_parent</c> para que el frontend controle la UI
     /// de "Red de clientes" sin round-trips adicionales.
+    /// HU #12422 (ADR-0060 D3): <paramref name="domain"/> se emite como claim <c>dom</c> — el
+    /// dominio de EMISIÓN de la sesión (<c>"flit"</c> o el host de la red), sin lista de compañías
+    /// ni alcance. <c>Flit.Api.Authorization.DomainBindingMiddleware</c> rechaza una petición cuyo
+    /// <c>dom</c> no coincide con el dominio sellado de la petición actual.
     /// </summary>
     IssuedAccessToken IssueToken(
         Guid userId,
@@ -32,5 +36,6 @@ public interface IJwtTokenIssuer
         string tenantType,
         bool isGroupParent,
         IReadOnlyList<UserRoleSnapshot> roles,
-        IReadOnlyList<string> permissionSlugs);
+        IReadOnlyList<string> permissionSlugs,
+        string domain);
 }

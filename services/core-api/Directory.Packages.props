@@ -98,6 +98,11 @@
     <!-- MinIO + Postgres storage (ADR-0016 Aceptado 2026-05-27).
          AWSSDK.S3 funciona con MinIO S3-compatible via ForcePathStyle=true. -->
     <PackageVersion Include="AWSSDK.S3" Version="3.7.410" />
+    <!-- HU #12425 (Épica #12237) — comprobación de titularidad de dominio por registro TXT DNS.
+         Auditada por security-agent: .claude/state/marca-blanca/auditoria-dnsclient.md
+         (APROBADO CON CONDICIONES; Apache-2.0, 0 CVE conocidos, sin dependencias transitivas en el
+         grupo net6.0/net8.0 que resuelve bajo net10.0 por roll-forward de TFM). -->
+    <PackageVersion Include="DnsClient" Version="1.8.0" />
 
     <!-- FluentValidation (validators por command en Flit.Modules.*). -->
     <PackageVersion Include="FluentValidation" Version="11.10.0" />

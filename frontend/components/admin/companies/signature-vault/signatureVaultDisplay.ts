@@ -1,3 +1,5 @@
+import { formatFechaCalendario } from "@/lib/format/date";
+
 // Helpers de presentación del Baúl de Firmas (HU #10644): etiquetas de estado,
 // estilos del badge y formateo de fechas (YYYY-MM-DD → dd/mm/aaaa) sin dependencias.
 import type { SignatureVaultEstado } from "@/lib/api/admin-signature-vault";
@@ -16,11 +18,11 @@ export const ESTADO_BADGE: Record<SignatureVaultEstado, { color: string; border:
 };
 
 /** Formatea una fecha ISO / YYYY-MM-DD a dd/mm/aaaa en es-CO, robusto ante valores vacíos. */
+/**
+ * Vigencia del baúl: es una fecha de CALENDARIO, no un instante (excepción RN-08 de la
+ * Épica #12552). Delega en el formateador compartido, que ya conserva el día tal cual y no
+ * lo convierte de zona — antes esto se lograba aquí formateando en UTC a mano.
+ */
 export function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  // Fechas puras (YYYY-MM-DD) se parsean como UTC para evitar corrimientos por zona horaria.
-  const iso = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00Z` : value;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+  return formatFechaCalendario(value, "—");
 }

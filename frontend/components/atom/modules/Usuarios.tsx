@@ -27,7 +27,7 @@ import { resolveProfile, targetEntityTypeForProfile } from "@/lib/users/profiles
 import { isInvitationRow } from "@/lib/users/invitationRow";
 import { superadminClient } from "@/lib/api/superadmin-client";
 
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 // HU #10623 (AC3/AC4): "Eliminados" solo se ofrece a SuperAdmin. AdminCompany puede
 
 // suspender/desactivar pero NO eliminar; el botón Eliminar y la pestaña Eliminados son SuperAdmin-only.
@@ -49,7 +49,7 @@ function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-CO", { timeZone: ZONA_COLOMBIA, dateStyle: "medium", timeStyle: "short" }).format(parsed);
+  return formatFechaHora(parsed);
 }
 
 export function Usuarios() {

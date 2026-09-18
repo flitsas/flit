@@ -1,0 +1,17 @@
+# deploy/edge/acme/systemd/flit-acme-poll.timer.example
+#
+# Instalar como /etc/systemd/system/flit-acme-poll.timer, junto con
+# flit-acme-poll.service.example. Cada 5 min (AC1: latencia aceptable entre
+# "dominio verificado" y "certificado emitido", sin intervencion manual).
+
+[Unit]
+Description=FLIT - timer del poller de emision automatica de certificados (HU #12426)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

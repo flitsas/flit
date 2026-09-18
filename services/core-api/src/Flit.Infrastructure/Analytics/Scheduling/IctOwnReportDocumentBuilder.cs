@@ -3,6 +3,7 @@ using System.Globalization;
 using Flit.Infrastructure.Documents.Reports;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Queries.Domain.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -246,7 +247,7 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
                 report.Detalle.Select(r => (IReadOnlyList<string>)
                 [
                     r.Placa ?? "", r.Vin ?? "", r.Radicado ?? "", r.Comentarios ?? "",
-                    r.RegistradoEn.ToString("yyyy-MM-dd HH:mm", Es),
+                    FormatoFecha.Instante(r.RegistradoEn),
                 ]).ToList()),
         };
 
@@ -530,7 +531,7 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
                 report.CorridasFueraDeSla.Select(r => (IReadOnlyList<string>)
                 [
                     r.Job, r.Resultado, r.DuracionSeg.ToString(SegFormat, Es),
-                    r.Inicio.ToString("yyyy-MM-dd HH:mm", Es),
+                    FormatoFecha.Instante(r.Inicio),
                 ]).ToList()),
         };
 
@@ -667,7 +668,7 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
                 report.Detalle.Select(r => (IReadOnlyList<string>)
                 [
                     r.Radicado, r.Estado, r.Intentos.ToString(Es), r.UrlDestino ?? "",
-                    r.RegistradoEn.ToString("yyyy-MM-dd HH:mm", Es),
+                    FormatoFecha.Instante(r.RegistradoEn),
                 ]).ToList()),
         };
 

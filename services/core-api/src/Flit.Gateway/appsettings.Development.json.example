@@ -2,6 +2,10 @@
   "Cors": {
     "AllowedOrigins": ["http://localhost:4001"]
   },
+  "Internal": {
+    "ApiBaseUrl": "http://localhost:4003",
+    "ApiKey": "REEMPLAZAR"
+  },
   "ReverseProxy": {
     "Clusters": {
       "core-api-cluster": {

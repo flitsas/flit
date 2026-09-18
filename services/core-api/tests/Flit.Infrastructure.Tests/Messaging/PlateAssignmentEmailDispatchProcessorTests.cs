@@ -147,6 +147,9 @@ public sealed class PlateAssignmentEmailDispatchProcessorTests
         services.AddScoped(_ => NewContext(dbName));
         services.AddScoped(_ => sender);
         services.AddScoped(_ => brandResolver);
+        // HU #12428 — igual que ProcedureStateChangeEmailDispatchProcessorTests: paridad AC9, sin
+        // marca en juego.
+        services.AddScoped<IEmailThemeResolver>(_ => NullEmailThemeResolver.Instance);
         services.AddScoped<IPlateAssignmentEmailModelProjector, PlateAssignmentEmailModelProjectorService>();
         services.AddSingleton(Options.Create(new NotificationEmailAssetsOptions
         {

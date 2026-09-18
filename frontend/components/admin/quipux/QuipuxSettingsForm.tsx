@@ -31,7 +31,7 @@ import {
 } from "@/lib/api/admin-quipux-settings";
 import { digitsOnly } from "@/lib/format/currency";
 
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 const CARD =
 
   "space-y-4 rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#162744]";
@@ -517,7 +517,7 @@ export function QuipuxSettingsForm() {
       <div className="flex flex-wrap items-center justify-between gap-3 pb-2">
         <p className="text-xs text-[#59677D] dark:text-white/70">
           {updatedAt
-            ? `Última actualización: ${new Date(updatedAt).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA })}`
+            ? `Última actualización: ${formatFechaHora(new Date(updatedAt))}`
             : "Aún no se ha guardado ninguna configuración."}
         </p>
         <CreateButton

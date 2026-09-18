@@ -42,6 +42,7 @@ jobs:
       core_port: ${{ steps.env.outputs.core_port }}
       python_port: ${{ steps.env.outputs.python_port }}
       migracion_port: ${{ steps.env.outputs.migracion_port }}
+      internal_subnet: ${{ steps.env.outputs.internal_subnet }}
     steps:
       - name: Map branch to environment
         id: env
@@ -52,6 +53,9 @@ jobs:
           # gh_env: nombre del GitHub Environment donde viven los secrets del VPS
           # (los Environments configurados son develop/staging/production). env_name
           # (dev/qa/pdn) se usa solo para tags de imagen y etiquetas de display.
+          # FLIT_INTERNAL_SUBNET (Marca Blanca #12421): CIDR distinto por stack si DEV/QA/PDN
+          # comparten VPS — Docker rechaza subredes solapadas ("Pool overlaps...").
+          # Convencion: DEV 172.28.40.0/24 · QA 10.114.50.0/24 · PDN 10.114.60.0/24.
           case "${{ github.ref_name }}" in
             release)
               env_name=pdn
@@ -60,6 +64,7 @@ jobs:
               api_domain=api.pdn.flitsas.online
               image_tag=pdn
               front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030
+              internal_subnet=10.114.60.0/24
               ;;
             staging)
               env_name=qa
@@ -68,6 +73,7 @@ jobs:
               api_domain=api.qa.flitsas.online
               image_tag=qa
               front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030
+              internal_subnet=10.114.50.0/24
               ;;
             develop)
               env_name=dev
@@ -76,6 +82,9 @@ jobs:
               api_domain=api.dev.flitsas.online
               image_tag=dev
               front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030
+              # 172.28.40.0/24 (doc) ya estaba ocupado en el VPS compartido → Pool overlaps.
+              # CIDR 10.114.x/24: el rango 172.28.x/24 choca en el VPS compartido (Pool overlaps).
+              internal_subnet=10.114.40.0/24
               ;;
             *)
               echo "::error::Rama no soportada para deploy: ${{ github.ref_name }}"
@@ -102,8 +111,9 @@ jobs:
             echo "core_port=$core_port"
             echo "python_port=$python_port"
             echo "migracion_port=$migracion_port"
+            echo "internal_subnet=$internal_subnet"
           } >> "$GITHUB_OUTPUT"
-          echo "Ambiente: $env_name | front: $front_domain ($front_port) | api: $api_domain ($gateway_port) | build-tag: $image_tag | deploy-tag: $deploy_tag"
+          echo "Ambiente: $env_name | front: $front_domain ($front_port) | api: $api_domain ($gateway_port) | build-tag: $image_tag | deploy-tag: $deploy_tag | subnet: $internal_subnet"
 
   build-core-api:
     name: Build & push core-api (.NET) image
@@ -221,6 +231,10 @@ jobs:
             NEXT_PUBLIC_API_BASE_URL=https://${{ needs.setup.outputs.api_domain }}/api/v1
             NEXT_PUBLIC_TRASPASOS_API_BASE_URL=https://${{ needs.setup.outputs.api_domain }}/api/v1/procedures
             NEXT_PUBLIC_DEV_USER_ID=01900000-100b-7001-8001-000000000001
+            # Marca Blanca (HU #12419, delta-hechos-post-adr.md #25) — hosts que se consideran
+            # FLIT (sin marca de red). No hay salida de dominio de frontend en `needs.setup`,
+            # así que se usa el respaldo de dominios propios de la plataforma.
+            NEXT_PUBLIC_FLIT_HOSTS=*.flitsas.online,*.flitsas.com
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
@@ -432,6 +446,12 @@ jobs:
             export CORE_API_PORT=${{ needs.setup.outputs.core_port }}
             export PYTHON_ML_PORT=${{ needs.setup.outputs.python_port }}
             export MIGRACION_API_PORT=${{ needs.setup.outputs.migracion_port }}
+            # Marca Blanca (#12421): CIDR de la red Docker de ESTE stack (distinto por ambiente).
+            export FLIT_INTERNAL_SUBNET=${{ needs.setup.outputs.internal_subnet }}
+
+            # Recrear la red del proyecto si el compose ahora fija IPAM (evita quedar
+            # con un bridge viejo sin subnet / conflicto al "Creating" de nuevo).
+            docker compose -f docker-compose.prod.yml down --remove-orphans || true
 
             # GHCR login: el usuario DEBE ser el dueño del PAT (GHCR_USERNAME), NO github.actor.
             # Si el merge lo hace otro usuario, login con github.actor falla en ~10s (exit 1).

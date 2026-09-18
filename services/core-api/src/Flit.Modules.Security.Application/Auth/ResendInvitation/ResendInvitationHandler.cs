@@ -1,4 +1,5 @@
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.Extensions.Logging;
 
@@ -16,8 +17,12 @@ public sealed partial class ResendInvitationHandler(
     ISecureTokenGenerator tokenGenerator,
     IEmailSender emailSender,
     InvitationOptions options,
-    ILogger<ResendInvitationHandler> logger)
+    INetworkUrlBaseResolver urlBaseResolver,
+    ILogger<ResendInvitationHandler> logger,
+    IEmailThemeResolver? themeResolver = null)
 {
+    private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
+
     public async Task<ResendInvitationResult> HandleAsync(
         ResendInvitationCommand command,
         CancellationToken cancellationToken)
@@ -44,11 +49,25 @@ public sealed partial class ResendInvitationHandler(
         await invitationRepository.UpdateResendAsync(
             invitation.InvitationId, token.TokenHash, now, command.ResentBy, cancellationToken);
 
-        var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
-        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link);
+        // HU #12423 AC2 — el reenvío recalcula el enlace con el dominio VIGENTE de la red (no
+        // persiste la URL): si la red cambió de dominio entre el envío original y el reenvío, el
+        // nuevo correo usa el dominio actual.
+        var activateUrlBase = await urlBaseResolver
+            .ForTenantAsync(invitation.TenantId, options.ActivateUrlBase, cancellationToken)
+            .ConfigureAwait(false);
+        var link = InvitationEmailTemplate.BuildActivateLink(activateUrlBase, token.RawToken);
+        var theme = await _themeResolver.ResolveAsync(invitation.TenantId, cancellationToken).ConfigureAwait(false);
+        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link, theme: theme);
         // HU #11363 AC1 — mismo id que CreateInvitationHandler: es la misma plantilla, dos disparadores.
         var message = new EmailMessage(
-            invitation.TenantId, "security.invitation", invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody);
+            invitation.TenantId, "security.invitation", invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody)
+        {
+            ThemeKind = theme.KindWireValue,
+            ThemeVersion = theme.IsBrand ? theme.Version : null,
+            // HU #12430 AC1/AC3 — nombre visible del remitente = nombre de plataforma de la marca,
+            // SOLO cuando el tema resuelto es Brand; la dirección nunca cambia.
+            SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
+        };
 
         LogActivationLinkDev(logger, link);
 

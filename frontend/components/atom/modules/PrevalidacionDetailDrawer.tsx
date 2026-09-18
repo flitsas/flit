@@ -28,7 +28,7 @@ import { IdentityInfoTile } from '@/components/atom/modules/IdentityInfoTile';
 import { FLIT } from '@/lib/flit-design-tokens';
 import type { BiometricEstado, BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 /**
 
  * Panel lateral derecho de proceso de identidad (CF-06/CF-07), mismo patrón que Reportes /
@@ -55,7 +55,7 @@ function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  return formatFechaHora(d);
 }
 
 export interface PrevalidacionDetailDrawerProps {

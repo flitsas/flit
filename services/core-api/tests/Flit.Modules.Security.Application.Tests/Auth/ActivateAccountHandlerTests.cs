@@ -1,5 +1,7 @@
 using Flit.Admin.Application.Auditing;
+using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.ActivateAccount;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,6 +20,8 @@ public sealed class ActivateAccountHandlerTests
     private readonly IEmailSender _emailSender = Substitute.For<IEmailSender>();
     private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
     private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
+    private readonly ITenantNetworkMembership _networkMembership = Substitute.For<ITenantNetworkMembership>();
+    private readonly IDomainContextAccessor _domainContext = Substitute.For<IDomainContextAccessor>();
     private readonly ActivateAccountHandler _handler;
 
     private static readonly Guid InvitationId = Guid.NewGuid();
@@ -39,6 +43,7 @@ public sealed class ActivateAccountHandlerTests
     {
         _handler = new ActivateAccountHandler(
             _invitationRepo, _tokenGen, _activationRepo, _hasher, _emailSender, _auditWriter, _auditContext,
+            _networkMembership, _domainContext,
             NullLogger<ActivateAccountHandler>.Instance);
         _tokenGen.HashToken(RawToken).Returns(TokenHash);
         _hasher.Hash(ValidPassword).Returns("hashed-password");

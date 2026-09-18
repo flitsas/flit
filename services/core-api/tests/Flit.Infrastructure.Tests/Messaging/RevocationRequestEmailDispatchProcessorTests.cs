@@ -49,6 +49,57 @@ public sealed class RevocationRequestEmailDispatchProcessorTests
     }
 
     [Fact]
+    public async Task TemaBrand_CanalFlit_AplicaChromeDeMarcaYTrazaThemeKindVersion()
+    {
+        // HU #12428 AC1/AC5 — mismo patrón que PlateAssignmentEmailDispatchProcessor: el tema se
+        // resuelve por red para la variante FLIT y viaja en EmailMessage (theme_kind/theme_version
+        // en notification_delivery_logs + remitente visual de la marca, HU #12430).
+        var dbName = NewDbName();
+        await SeedInstanceAsync(dbName);
+        await SeedDispatchAsync(dbName, RevocationRequestEmailMilestone.Aprobada, "Ana", "ana@flit.test");
+
+        var brand = new EmailTheme(
+            EmailThemeKind.Brand, "Movilidad Andina",
+            "https://dev.flitsas.online/api/v1/public/branding/logos/11111111-1111-4111-8111-111111111111",
+            "#0B3D91", "#1FA2FF", "#FFFFFF", 7);
+        var themeResolver = Substitute.For<IEmailThemeResolver>();
+        themeResolver.ResolveAsync(Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(brand);
+
+        var sender = new RecordingSender();
+        var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp, themeResolver);
+
+        await processor.ProcessPendingAsync(Ct);
+
+        var message = sender.Messages.Should().ContainSingle().Subject;
+        message.HtmlBody.Should().Contain("Movilidad Andina");
+        message.HtmlBody.Should().Contain(brand.LogoUrl!);
+        message.ThemeKind.Should().Be("brand");
+        message.ThemeVersion.Should().Be(7);
+        message.SenderDisplayName.Should().Be("Movilidad Andina");
+    }
+
+    [Fact]
+    public async Task TemaBrand_CanalRenting_NoResuelveTemaNiTraza()
+    {
+        // HU #12428 AC8 — TenantApi nunca recibe tema: ni se llama al resolutor ni se traza.
+        var dbName = NewDbName();
+        await SeedInstanceAsync(dbName);
+        await SeedDispatchAsync(dbName, RevocationRequestEmailMilestone.Solicitada, "Ana", "ana@flit.test");
+
+        var themeResolver = Substitute.For<IEmailThemeResolver>();
+        var sender = new RecordingSender();
+        var processor = NewProcessor(dbName, sender, NotificationChannel.TenantApi, themeResolver);
+
+        await processor.ProcessPendingAsync(Ct);
+
+        var message = sender.Messages.Should().ContainSingle().Subject;
+        message.ThemeKind.Should().BeNull();
+        message.ThemeVersion.Should().BeNull();
+        message.SenderDisplayName.Should().BeNull();
+        await themeResolver.DidNotReceive().ResolveAsync(Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task VarianteCuerpo_SigueCanalDelTenant()
     {
         var dbName = NewDbName();
@@ -159,7 +210,7 @@ public sealed class RevocationRequestEmailDispatchProcessorTests
         new(new DbContextOptionsBuilder<FlitDbContext>().UseInMemoryDatabase(dbName).Options);
 
     private static RevocationRequestEmailDispatchProcessor NewProcessor(
-        string dbName, IEmailSender sender, NotificationChannel channel)
+        string dbName, IEmailSender sender, NotificationChannel channel, IEmailThemeResolver? themeResolver = null)
     {
         var channelResolver = Substitute.For<INotificationChannelResolver>();
         channelResolver.ResolveAsync(Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(channel);
@@ -168,6 +219,10 @@ public sealed class RevocationRequestEmailDispatchProcessorTests
         services.AddScoped(_ => NewContext(dbName));
         services.AddScoped(_ => sender);
         services.AddScoped(_ => channelResolver);
+        // HU #12428 — el worker resuelve el tema por red; los casos base no ejercitan marca, así que
+        // resuelven siempre EmailTheme.Flit (NullEmailThemeResolver), igual que los gemelos de placa
+        // y cambio de estado. Los casos con tema Brand pasan su propio resolutor.
+        services.AddScoped(_ => themeResolver ?? NullEmailThemeResolver.Instance);
         services.AddSingleton(Options.Create(new NotificationEmailAssetsOptions
         {
             BaseUrl = "https://cdn.flit.test/email-assets",

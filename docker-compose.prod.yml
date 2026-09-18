@@ -15,13 +15,17 @@
 # gRPC este-oeste (interno, NO publicado): core-ict -> core-api en CORE_API_GRPC_PORT (default 8082);
 # el callback de estados va core-api -> core-ict en CORE_ICT_PORT (h2c en el mismo puerto REST).
 #
-# Los defaults son los de QA. El CD exporta las vars segun la rama (develop/staging/
+# Los defaults son los de DEV. El CD exporta las vars segun la rama (develop/staging/
 # release); para operacion manual, fijalas en el .env del VPS de ese ambiente.
 #
 # Mapeo de dominios en el reverse-proxy del HOST (ejemplo DEV):
 #   qa.flitsas.online      -> 127.0.0.1:${FRONTEND_PORT}  (frontend)
 #   api.qa.flitsas.online  -> 127.0.0.1:${GATEWAY_PORT}   (gateway / API publica)
 #   core.qa.flitsas.online -> 127.0.0.1:${CORE_API_PORT}  (core-api, opcional/debug)
+#   <dominio de cliente>    -> 127.0.0.1:${GATEWAY_PORT} (/api/v1) y 127.0.0.1:${FRONTEND_PORT} (/)
+#                              (Marca Blanca, HU #12421 — catch-all sin entrada por cliente,
+#                              ver deploy/edge/nginx/flit-network-domains.conf.example y
+#                              deploy/edge/README.md)
 #
 # Postgres NO esta aqui: corre en el HOST (host.docker.internal:5432).
 #
@@ -33,17 +37,22 @@
 #   VERIFIK_API_TOKEN       token Verifik (RUNT)
 #   ICT_SERVICE_TOKEN_SECRET  secreto HMAC del canal gRPC este-oeste ICT (core-api <-> core-ict).
 #                             Sin el, la orquestacion y el callback quedan fail-closed.
+#   FLIT_INTERNAL_API_KEY   clave compartida Gateway <-> core-api para GET /internal/domains/active
+#                           (Marca Blanca, #12417/#12421). Vacia = fail-closed (ver servicio gateway).
+#   FLIT_INTERNAL_SUBNET    CIDR de la red interna Docker de ESTE stack (Marca Blanca, #12421) —
+#                           DISTINTO por ambiente si DEV/QA/PDN comparten VPS (ver bloque `networks`
+#                           al final de este archivo y deploy/edge/README.md).
 # Variables de puerto (defaults DEV; el CD las inyecta por ambiente):
 #   FRONTEND_PORT / GATEWAY_PORT / CORE_API_PORT / PYTHON_ML_PORT
 # Variables para AISLAR este proyecto del resto del VPS:
-#   COMPOSE_PROJECT_NAME    nombre del proyecto Compose (default: flitqa)
+#   COMPOSE_PROJECT_NAME    nombre del proyecto Compose (default: flitdev)
 # Variables opcionales:
 #   CORE_API_TAG / FRONTEND_TAG / PYTHON_ML_TAG   tag de imagen (default: latest)
 #   VERIFIK_BASE_URL / VERIFIK_TIMEOUT_SECONDS
 #
 # NOTA: login deshabilitado temporalmente -> NO se requieren llaves JWT.
 # NOTA: la imagen python-ml debe construirse/publicarse en el pipeline CD
-#       (ghcr.io/flitsas/flitqa/python-ml) para que `docker compose pull` la encuentre.
+#       (ghcr.io/flitsas/flitdev/python-ml) para que `docker compose pull` la encuentre.
 # NOTA: todas las imagenes se publican en GHCR (ghcr.io). El VPS debe hacer
 #       `docker login ghcr.io` (lo hace el CD con GHCR_PAT) antes del pull.
 #
@@ -54,7 +63,7 @@
 # Nombre del proyecto: UNICO por proyecto en el VPS. Si dos repos comparten el
 # mismo nombre, `up --remove-orphans` borra los contenedores del otro. Sobrescribir
 # con COMPOSE_PROJECT_NAME en el .env de cada proyecto.
-name: flitqa
+name: flitdev
 
 x-restart-policy: &restart unless-stopped
 
@@ -111,7 +120,7 @@ x-flitmig-env: &flitmig-env
 services:
   # ── Flit.Api (interno, detras de YARP) — CORE_API_PORT ────────────────────
   core-api:
-    image: ghcr.io/flitsas/flitqa/core-api:${CORE_API_TAG:-latest}
+    image: ghcr.io/flitsas/flitdev/core-api:${CORE_API_TAG:-latest}
     command: ["dotnet", "/app/api/Flit.Api.dll"]
     # content root = working_dir, para que .NET encuentre su appsettings.json
     working_dir: /app/api
@@ -122,6 +131,12 @@ services:
       ASPNETCORE_URLS: http://+:${CORE_API_PORT:-5003}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       Cors__AllowedOrigins: ${CORS_ORIGIN:-https://qa.flitsas.online}
+      # Marca Blanca (#12417/#12421): MISMA clave que Internal__ApiKey del servicio gateway
+      # de abajo. Si difieren, el Gateway no puede autenticar GET /internal/domains/active
+      # (responde 401 SIEMPRE) y su CORS dinamico cae a la lista fija de Cors__AllowedOrigins__0
+      # — los dominios de red activos dejan de aceptarse hasta que coincidan. Vacia en ambos
+      # lados = fail-closed (comportamiento de hoy, sin dominios de red).
+      Internal__ApiKey: ${FLIT_INTERNAL_API_KEY:-}
       # File Manager: DONDE LEE V2 los binarios de los adjuntos. Sin esta variable
       # cae al default de appsettings.json, que apunta a AWS pdn. Al pasar V2 a MinIO
       # hay que definirla, y tiene que ser EXACTAMENTE la misma URL que recibe el
@@ -305,7 +320,7 @@ services:
 
   # ── Flit.Ict.Api (Integración con Terceros, detras de YARP) — CORE_ICT_PORT ─
   core-ict:
-    image: ghcr.io/flitsas/flitqa/core-ict:${CORE_ICT_TAG:-latest}
+    image: ghcr.io/flitsas/flitdev/core-ict:${CORE_ICT_TAG:-latest}
     # content root = working_dir, para que .NET encuentre su appsettings.json (dll en /app/api).
     working_dir: /app/api
     extra_hosts:
@@ -365,7 +380,7 @@ services:
   # Las credenciales salen del .env del VPS (ver .env.prod.example, bloque FLITMIG_).
   migrador:
     profiles: ["migracion"]
-    image: ghcr.io/flitsas/flitqa/core-api:${CORE_API_TAG:-latest}
+    image: ghcr.io/flitsas/flitdev/core-api:${CORE_API_TAG:-latest}
     entrypoint: ["dotnet", "/app/migrador/Flit.DataMigration.V1.dll"]
     # content root = working_dir, para que .NET encuentre su appsettings.json
     working_dir: /app/migrador
@@ -413,7 +428,7 @@ services:
   # tramite va en su propia transaccion y el candado es de sesion, asi que no queda a
   # medias — pero ese id hay que volver a lanzarlo. No desplegar durante una ola.
   migracion-api:
-    image: ghcr.io/flitsas/flitqa/core-api:${CORE_API_TAG:-latest}
+    image: ghcr.io/flitsas/flitdev/core-api:${CORE_API_TAG:-latest}
     entrypoint: ["dotnet", "/app/migracion-api/Flit.DataMigration.Api.dll"]
     # content root = working_dir, para que .NET encuentre su appsettings.json
     working_dir: /app/migracion-api
@@ -444,7 +459,7 @@ services:
 
   # ── Flit.Gateway (API publica YARP: /api, /hubs, /ml) — GATEWAY_PORT ──────
   gateway:
-    image: ghcr.io/flitsas/flitqa/core-api:${CORE_API_TAG:-latest}
+    image: ghcr.io/flitsas/flitdev/core-api:${CORE_API_TAG:-latest}
     command: ["dotnet", "/app/gateway/Flit.Gateway.dll"]
     # content root = working_dir, para que YARP cargue sus rutas de appsettings.json
     working_dir: /app/gateway
@@ -466,6 +481,21 @@ services:
       ReverseProxy__Clusters__migracion-cluster__Destinations__migracion-api-1__Address: http://migracion-api:${MIGRACION_API_PORT:-5030}/
       # Login deshabilitado temporalmente: sin llave JWT el gateway no valida firma
       # ni exige autenticación (ver Flit.Gateway/Program.cs).
+      # ── Marca Blanca (#12417/#12421) ────────────────────────────────────────
+      # Como llega a core-api para resolver la lista de dominios activos (CORS dinamico)
+      # y la MISMA clave que Internal__ApiKey de core-api arriba (ver ese comentario si
+      # difieren). Vacia = fail-closed: /internal/domains/active responde 401 SIEMPRE y
+      # el CORS del gateway se queda solo con Cors__AllowedOrigins__0.
+      Internal__ApiBaseUrl: http://core-api:${CORE_API_PORT:-5003}
+      Internal__ApiKey: ${FLIT_INTERNAL_API_KEY:-}
+      # CIDR de la red interna Docker de ESTE stack (bloque `networks` al final del
+      # archivo). SOLO una peticion que llegue desde aqui puede traer un X-Flit-Domain de
+      # confianza (DomainSealTransform — delta-hechos-post-adr.md hecho 20); es el camino
+      # del frontend Next.js resolviendo marca server-side por la red interna
+      # (BRANDING_INTERNAL_API_URL, servicio frontend abajo), NUNCA trafico publico via
+      # nginx. Vacio/no listado = nunca se confia en el sello entrante (fail-closed, el
+      # Gateway usa siempre Request.Host.Host — comportamiento de hoy).
+      DomainSeal__InternalAllowedNetworks__0: ${FLIT_INTERNAL_SUBNET:-172.28.40.0/24}
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-5002}:${GATEWAY_PORT:-5002}"
     depends_on:
@@ -482,7 +512,7 @@ services:
 
   # ── python-ml (FastAPI OCR/ML, detras de YARP /ml) — PYTHON_ML_PORT ────────
   python-ml:
-    image: ghcr.io/flitsas/flitqa/python-ml:${PYTHON_ML_TAG:-latest}
+    image: ghcr.io/flitsas/flitdev/python-ml:${PYTHON_ML_TAG:-latest}
     command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${PYTHON_ML_PORT:-5012}"]
     ports:
       - "127.0.0.1:${PYTHON_ML_PORT:-5012}:${PYTHON_ML_PORT:-5012}"
@@ -497,7 +527,7 @@ services:
 
   # ── Frontend (Next.js) — FRONTEND_PORT ────────────────────────────────────
   frontend:
-    image: ghcr.io/flitsas/flitqa/frontend:${FRONTEND_TAG:-latest}
+    image: ghcr.io/flitsas/flitdev/frontend:${FRONTEND_TAG:-latest}
     environment:
       # Next.js (next dev/start) escucha en este puerto interno.
       PORT: "${FRONTEND_PORT:-5001}"
@@ -514,9 +544,53 @@ services:
       # Por la red interna de Docker, NO por el dominio público: ese salto pasa por nginx, cuyo
       # proxy_read_timeout de 60 s corta migraciones de instancia 3 que sí se completan.
       MIGRACION_API_URL: http://gateway:${GATEWAY_PORT:-5002}
+      # ── Marca Blanca (#12419/#12421) ────────────────────────────────────────
+      # Resolucion de marca en el SERVIDOR (layout.tsx, resolve-brand.server.ts) por la
+      # red interna de Docker — MISMO patron y MISMO motivo que MIGRACION_API_URL de
+      # arriba (evita el hairpin por nginx y su proxy_read_timeout de 60 s). Server-only:
+      # SIN prefijo NEXT_PUBLIC_, no se hornea en el bundle que descarga el navegador.
+      # resolve-brand.server.ts manda la cabecera X-Flit-Domain: <host> explicita en esa
+      # llamada — el Gateway SOLO confia en ese valor si la conexion viene de
+      # DomainSeal__InternalAllowedNetworks (servicio gateway arriba); para cualquier
+      # peticion publica (via nginx) el Gateway ignora X-Flit-Domain entrante y usa
+      # siempre Request.Host.Host (hecho 20/21).
+      BRANDING_INTERNAL_API_URL: http://gateway:${GATEWAY_PORT:-5002}
+      # Follow-up de seguridad de #12417 (delta-hechos-post-adr.md hecho 24): el CIDR interno solo
+      # NO basta (docker-proxy/DNAT puede hacer que una conexion externa llegue con IP del gateway
+      # del bridge). resolve-brand.server.ts manda esta clave como X-Internal-Key junto con
+      # X-Flit-Domain (#12419); server-only, SIN prefijo NEXT_PUBLIC_. MISMA clave que
+      # Internal__ApiKey de gateway y core-api (ver mas abajo).
+      FLIT_INTERNAL_API_KEY: ${FLIT_INTERNAL_API_KEY:-}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-5001}:${FRONTEND_PORT:-5001}"
     depends_on:
       - gateway
     restart: *restart
     logging: *default-logging
+
+# ── Red interna (Marca Blanca, #12421) ──────────────────────────────────────
+# Subred EXPLICITA de la red "default" (la que TODO servicio de arriba usa ya
+# de forma implicita, al no declarar `networks:` propio — este bloque no
+# cambia a que red se conecta cada servicio, SOLO le fija el CIDR).
+#
+# Por que hace falta: sin `ipam.config`, Docker asigna la subred del bridge al
+# azar entre recreaciones de la red (`docker compose down` + `up`, no un simple
+# restart) y entre distintos stacks del mismo host. DomainSeal__InternalAllowedNetworks
+# (servicio gateway) necesita un CIDR DETERMINISTA para decidir si confiar en el
+# X-Flit-Domain que manda el frontend server-side (hecho 19/20 de
+# delta-hechos-post-adr.md) — con una subred que cambia sola, ese filtro
+# quedaria adivinando o, en el peor caso, vacio (fail-closed: NINGUNA peticion
+# del frontend interno se confiaria, /public/branding cachearia FLIT para todo
+# el mundo aunque la red SI tenga marca).
+#
+# OJO si DEV/QA/PDN comparten el mismo VPS (topologia real de este repo, ver
+# cabecera del archivo): cada stack necesita un FLIT_INTERNAL_SUBNET DISTINTO —
+# Docker rechaza crear dos redes con subredes que se solapan en el mismo host
+# ("Pool overlaps with other one on this address space"). Convencion sugerida,
+# documentada en deploy/edge/README.md: DEV 172.28.40.0/24 · QA 172.28.50.0/24 ·
+# PDN 172.28.60.0/24 (mismo digito de decenas que los puertos 4xxx/5xxx/6xxx).
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${FLIT_INTERNAL_SUBNET:-172.28.40.0/24}

@@ -17,7 +17,7 @@ import {
 import { documentLabel } from '@/lib/tramites/document-labels';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
-import { formatFecha } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 import {
   ATTACHMENT_SOURCE_LABELS,
   type ChecklistItemView,
@@ -143,7 +143,7 @@ function AdjuntoRow({
           {documentLabel(attachment.tipo)} · {attachment.filename}
         </span>
         <span className="block text-xs text-[#162744]/70 dark:text-white/70">
-          {formatBytes(attachment.sizeBytes)} · {formatFecha(attachment.uploadedAt)}
+          {formatBytes(attachment.sizeBytes)} · {formatFechaHora(attachment.uploadedAt)}
         </span>
       </span>
       <DownloadButton filename={attachment.filename} onClick={() => onDownload(attachment)} />
@@ -173,7 +173,7 @@ function ConsultaRow({
           {documentLabel(attachment.tipo)} · {attachment.filename}
         </span>
         <span className="block text-xs text-[#162744]/70 dark:text-white/70">
-          {formatBytes(attachment.sizeBytes)} · {formatFecha(attachment.uploadedAt)}
+          {formatBytes(attachment.sizeBytes)} · {formatFechaHora(attachment.uploadedAt)}
           {origen ? ` · ${origen}` : ''}
         </span>
       </span>

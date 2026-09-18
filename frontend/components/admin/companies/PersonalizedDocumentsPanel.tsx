@@ -36,7 +36,7 @@ import {
 import { ApiValidationError } from "@/lib/api/types";
 import type { EnrutamientoSMTP } from "@/lib/api/types";
 
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 export interface PersonalizedDocumentsPanelProps {
 
   tenantId: string;
@@ -622,5 +622,5 @@ function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return "—";
-  return parsed.toLocaleDateString("es-CO", { timeZone: ZONA_COLOMBIA, year: "numeric", month: "2-digit", day: "2-digit" });
+  return formatFechaHora(parsed);
 }

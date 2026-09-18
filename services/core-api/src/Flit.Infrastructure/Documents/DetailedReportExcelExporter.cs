@@ -4,6 +4,7 @@ using DocumentFormat.OpenXml.Spreadsheet;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Dtos;
 using Flit.Analytics.Application.Queries;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Documents;
 
@@ -171,8 +172,8 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         r.IsLeasing ? "Sí" : "No",
         r.PaymentType,
         r.TransferType ?? string.Empty,
-        r.SubmittedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? string.Empty,
-        r.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? string.Empty,
+        FormatoFecha.Instante(r.SubmittedAt),
+        FormatoFecha.Instante(r.CompletedAt),
     ];
 
     /// <summary>«Compañía» + las mismas celdas de siempre (AC1/AC6: ningún enlace ni contenido de documentos).</summary>

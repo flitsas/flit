@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
@@ -415,6 +416,83 @@ public sealed class NotificationDeliveryLoggingEmailSenderTests
         var row = await ctx.NotificationDeliveryLogs.SingleAsync(TestContext.Current.CancellationToken);
 
         row.RecipientDiverted.Should().BeFalse();
+    }
+
+    // ── HU #12430 AC5 — el remitente aplicado se traza (sender_name/sender_email) ────────────────
+
+    [Fact]
+    public async Task HU12430_CanalFlitSmtp_DejaFilaConSenderNameSaneadoYSenderEmailDeLaConfiguracion()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var provider = BuildProvider(dbName);
+        var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new CapturingLogger<NotificationDeliveryLoggingEmailSender>();
+        var inner = new FakeEmailSender(EmailSendResult.Sent with { Channel = "flit_smtp" });
+        var emailSettings = new EmailSettings { DefaultSenderEmail = "no-reply@flitsas.online", DefaultSenderName = "FLIT Trámites" };
+        var sender = new NotificationDeliveryLoggingEmailSender(inner, scopeFactory, logger, emailSettings);
+
+        var message = new EmailMessage(
+            TenantA, "security.invitation", "invitado@flit.test", "Invitado", "Asunto", "<html/>")
+        {
+            SenderDisplayName = "Movilidad Andina",
+        };
+
+        await sender.SendAsync(message, TestContext.Current.CancellationToken);
+
+        await using var ctx = NewContext(dbName);
+        var row = await ctx.NotificationDeliveryLogs.SingleAsync(TestContext.Current.CancellationToken);
+        row.SenderName.Should().Be("Movilidad Andina");
+        row.SenderEmail.Should().Be("no-reply@flitsas.online");
+    }
+
+    [Fact]
+    public async Task HU12430_SinSenderDisplayName_DejaFilaConElNombrePorDefectoYSenderEmailIgual()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var provider = BuildProvider(dbName);
+        var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new CapturingLogger<NotificationDeliveryLoggingEmailSender>();
+        var inner = new FakeEmailSender(EmailSendResult.Sent with { Channel = "flit_smtp" });
+        var emailSettings = new EmailSettings { DefaultSenderEmail = "no-reply@flitsas.online", DefaultSenderName = "FLIT Trámites" };
+        var sender = new NotificationDeliveryLoggingEmailSender(inner, scopeFactory, logger, emailSettings);
+
+        var message = new EmailMessage(
+            TenantA, "security.forgot-password", "usuario@flit.test", "Usuario", "Asunto", "<html/>");
+
+        await sender.SendAsync(message, TestContext.Current.CancellationToken);
+
+        await using var ctx = NewContext(dbName);
+        var row = await ctx.NotificationDeliveryLogs.SingleAsync(TestContext.Current.CancellationToken);
+        row.SenderName.Should().Be("FLIT Trámites");
+        row.SenderEmail.Should().Be("no-reply@flitsas.online");
+    }
+
+    [Fact]
+    public async Task HU12430_CanalTenantApi_DejaFilaConSenderNameYSenderEmailEnNull()
+    {
+        // AC2 — Renting ignora SenderDisplayName; este decorador tampoco conoce el remitente propio
+        // de ese canal, así que registra NULL en vez de arriesgar un valor incorrecto (documentado
+        // en el comentario de clase).
+        var dbName = Guid.NewGuid().ToString();
+        await using var provider = BuildProvider(dbName);
+        var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new CapturingLogger<NotificationDeliveryLoggingEmailSender>();
+        var inner = new FakeEmailSender(EmailSendResult.Sent with { Channel = "tenant_api" });
+        var emailSettings = new EmailSettings { DefaultSenderEmail = "no-reply@flitsas.online", DefaultSenderName = "FLIT Trámites" };
+        var sender = new NotificationDeliveryLoggingEmailSender(inner, scopeFactory, logger, emailSettings);
+
+        var message = new EmailMessage(
+            TenantA, "analytics.alert", "cliente@flit.test", "Cliente", "Asunto", "<html/>")
+        {
+            SenderDisplayName = "Nombre Que Debe Ignorarse",
+        };
+
+        await sender.SendAsync(message, TestContext.Current.CancellationToken);
+
+        await using var ctx = NewContext(dbName);
+        var row = await ctx.NotificationDeliveryLogs.SingleAsync(TestContext.Current.CancellationToken);
+        row.SenderName.Should().BeNull();
+        row.SenderEmail.Should().BeNull();
     }
 
     // ── Infraestructura de prueba ─────────────────────────────────────────────────────────────────

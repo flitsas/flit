@@ -1,0 +1,150 @@
+# deploy/edge/nginx/flit-network-domains.conf.example
+#
+# Catch-all para dominios de RED de Marca Blanca (HU #12421, Feature #12368,
+# ADR-0060 D2). Vive en el nginx EXTERNO del VPS — FUERA de este repositorio
+# (ver deploy/edge/README.md §Instalación). Este archivo es la plantilla
+# versionada; el nginx real del VPS no se toca desde aquí.
+#
+# QUÉ RESUELVE: dar de alta un dominio de cliente nuevo NO requiere tocar este
+# archivo ni el nginx real ni reiniciar contenedores (AC1/AC2). nginx elige,
+# para cada conexión, el `server{}` cuyo `server_name` calce con el `Host` de
+# la petición usando este ORDEN DE PRECEDENCIA (de mayor a menor prioridad):
+#   1. server_name EXACTO                 (dev.flitsas.online)
+#   2. server_name con wildcard al INICIO (*.flitsas.online)
+#   3. server_name con wildcard al FINAL  (flitsas.*)
+#   4. server_name por expresión regular  (~^...$)
+#   5. el `server{}` marcado `default_server` para esa combinación IP:puerto
+#      (si ninguno de los anteriores calzó)
+# Los dominios propios de FLIT (dev/qa/pdn.flitsas.online, api.*.flitsas.online,
+# *.flitsas.com) y los del portal de organismos de tránsito (ict.*) YA TIENEN
+# su `server{}` explícito en el nginx real del VPS, con esos nombres exactos —
+# por precedencia (1) SIEMPRE se sirven ahí, nunca por este catch-all, así que
+# su enrutamiento queda exactamente el de hoy (AC3) sin tocarlos. Este archivo
+# SOLO entra en juego para un `Host` que no calza en NINGÚN server_name
+# existente: exactamente un dominio de cliente recién activado.
+#
+# REQUISITO DE INSTALACIÓN: solo puede existir UN `default_server` por
+# combinación (IP, puerto) en TODO el nginx del VPS. Antes de instalar,
+# verifica que ningún otro `server{}` de los puertos 80/443 ya declare
+# `default_server` — si lo hay, quita el `default_server` de aquí (server_name
+# `_` solo, sin la palabra clave) y dejalo donde ya está declarado.
+#
+# SUSTITUCIÓN DE VARIABLES: nginx NO interpola variables de shell. Antes de
+# instalar, reemplaza ${GATEWAY_PORT} / ${FRONTEND_PORT} / la ruta del
+# certificado con los valores reales del ambiente (ver deploy/edge/README.md
+# §Instalación — `envsubst` o edición manual). Puertos por ambiente (mismos
+# del docker-compose.prod.yml de este repo):
+#   GATEWAY_PORT   4002 DEV · 5002 QA · 6002 PDN   (Flit.Gateway — /api/v1, /hubs, /ml)
+#   FRONTEND_PORT  4001 DEV · 5001 QA · 6001 PDN   (Next.js — todo lo demás)
+# Ambos servicios publican SOLO en 127.0.0.1:<puerto> (ver docker-compose.prod.yml
+# cabecera) — este nginx corre en el MISMO host (el VPS), nunca cruza red pública.
+
+# ── Redirección HTTP → HTTPS + reto ACME ────────────────────────────────────
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    # HTTP-01 (emisión/renovación manual del certificado hasta #12426, NEW-28).
+    # Deja pasar el challenge sin redirigir a HTTPS.
+    location /.well-known/acme-challenge/ {
+        root /var/www/acme-challenge;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ── Catch-all HTTPS: enruta al frontend y al Gateway con el host preservado ─
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    http2 on;
+    server_name _;
+
+    # Certificado MANUAL (NEW-28 / #12426 lo automatiza): hasta entonces, este
+    # bloque sirve el dominio de PRUEBA controlado del equipo (AC5) con un
+    # certificado emitido a mano para ESE dominio. Un catch-all real que sirva
+    # CUALQUIER dominio de cliente con TLS válido necesita wildcard u
+    # on-demand TLS — eso es #12426; documentado también en
+    # deploy/edge/README.md §Certificados.
+    ssl_certificate     /etc/letsencrypt/live/CAMBIA-ESTE-DOMINIO-DE-PRUEBA/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/CAMBIA-ESTE-DOMINIO-DE-PRUEBA/privkey.pem;
+
+    # Mismo valor que el proxy_read_timeout ya vigente en el nginx real del VPS
+    # para MIGRACION_API_URL (ver docker-compose.prod.yml, comentario del
+    # servicio frontend): 60 s. No lo subas aquí sin subirlo también allá —
+    # dos timeouts distintos para el mismo salto son la mitad de la fotografía.
+    proxy_read_timeout 60s;
+    proxy_http_version 1.1;
+
+    # Host ORIGINAL preservado end-to-end (AC1) — Flit.Gateway usa
+    # Request.Host.Host y NUNCA X-Forwarded-Host (delta-hechos-post-adr.md
+    # hecho 20; DomainSealTransform.cs), así que esta línea es la que de
+    # verdad decide qué dominio ve la API.
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+
+    # X-Flit-Domain: A PROPÓSITO no se fija NI se borra aquí (ni con
+    # proxy_set_header ni con proxy_hide_header). Lo sella EXCLUSIVAMENTE
+    # Flit.Gateway (DomainSealTransform, HU #12417): en todas sus rutas quita
+    # cualquier X-Flit-Domain entrante y lo repone con el host real de la
+    # conexión — así que un valor puesto aquí sería, en el mejor caso,
+    # redundante, y en el peor, una segunda fuente de verdad que confundiría
+    # una auditoría ("¿lo puso nginx o el Gateway?"). La única excepción
+    # documentada al sellado (tráfico desde la red interna Docker, p. ej. el
+    # frontend Next.js resolviendo marca server-side) NO pasa por este nginx:
+    # llega al Gateway directo por la red del compose (hecho 7/21,
+    # BRANDING_INTERNAL_API_URL en docker-compose.prod.yml). Este catch-all
+    # solo ve tráfico público, para el que el sello SIEMPRE debe ser el host
+    # real de la petición — exactamente lo que ya hace sin tocar la cabecera.
+
+    # SignalR: WebSocket, necesita el upgrade explícito.
+    location /hubs/ {
+        proxy_pass http://127.0.0.1:${GATEWAY_PORT}/hubs/;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # OCR/ML (python-ml, detrás de YARP en /ml — ver appsettings.json del
+    # Gateway, ruta ml-route).
+    location /ml/ {
+        proxy_pass http://127.0.0.1:${GATEWAY_PORT}/ml/;
+    }
+
+    # API pública (auth, public/*, company/*, admin/*, webhooks, migracion,
+    # etc. — TODO lo que YARP expone bajo /api/v1). Prefijo EXACTO /api/v1/,
+    # no /api/: el BFF propio de Next.js vive en /api/migracion (route handler
+    # de frontend/app/api/migracion) SIN el segmento /v1/, así que cae en el
+    # location / de abajo y NUNCA llega aquí — no hay colisión (verificado
+    # contra Flit.Gateway/appsettings.json: todas las rutas YARP cuelgan de
+    # /api/v1/..., ninguna de /api/migracion).
+    location /api/v1/ {
+        proxy_pass http://127.0.0.1:${GATEWAY_PORT}/api/v1/;
+    }
+
+    # Todo lo demás: el frontend Next.js (incluida /api/migracion, su propio
+    # BFF — nginx elige el location con el prefijo MÁS LARGO que calza, así
+    # que /api/v1/... siempre gana sobre este / genérico para lo que sí
+    # empieza por /api/v1/).
+    location / {
+        proxy_pass http://127.0.0.1:${FRONTEND_PORT};
+    }
+}
+
+# ── Opcional: clasificación de host para observabilidad (logs/métricas) ────
+# No decide enrutamiento (eso lo hacen los server{} de arriba, por precedencia
+# de server_name) — es solo para no perder de vista, en el access_log del
+# nginx real, cuánto tráfico entra por un dominio de red vs. por FLIT. Actívalo
+# solo si ya tienes un log_format que use $flit_domain_class.
+#
+# map $host $flit_domain_class {
+#     default                 network;
+#     ~\.flitsas\.online$     flit;
+#     ~\.flitsas\.com$        flit;
+#     ict.flitsas.com         ict;
+#     ~^ict\.                 ict;
+# }

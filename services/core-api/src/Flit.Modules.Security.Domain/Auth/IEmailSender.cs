@@ -29,6 +29,26 @@ public sealed record EmailMessage(
 
     /// <summary>Copia oculta. Vacío en invitaciones, reset y reportes.</summary>
     public IReadOnlyList<string> BccEmails { get; init; } = [];
+
+    /// <summary>
+    /// HU #12428 AC5 — <c>"flit"</c> | <c>"brand"</c>, el tema QUE YA SE APLICÓ al componer
+    /// <see cref="HtmlBody"/> (nunca se resuelve aquí). <c>null</c> cuando el composer que armó este
+    /// mensaje todavía no participa de la resolución de tema (AC8 pendiente en ese punto). Lo
+    /// consume <c>NotificationDeliveryLoggingEmailSender</c> para dejar traza en
+    /// <c>admin.notification_delivery_logs.theme_kind</c>; ninguna implementación de transporte lo
+    /// usa para enviar.
+    /// </summary>
+    public string? ThemeKind { get; init; }
+
+    /// <summary><c>tenant_brandings.published_version</c> aplicada (solo con <c>ThemeKind = "brand"</c>).</summary>
+    public int? ThemeVersion { get; init; }
+
+    /// <summary>
+    /// HU #12430 — nombre visible del remitente a aplicar por el transporte (<c>SmtpEmailSender</c>).
+    /// Declarada en esta historia (#12428) como propiedad ADITIVA sin consumidor todavía: ningún
+    /// transporte la lee hasta que #12430 la conecte.
+    /// </summary>
+    public string? SenderDisplayName { get; init; }
 }
 
 /// <summary>Archivo adjunto de un <see cref="EmailMessage"/> (Reportes 2.0, HU-D).</summary>

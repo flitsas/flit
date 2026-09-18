@@ -6,8 +6,13 @@
 @theme inline {
   --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --color-flit-primary: #162744;
-  --color-flit-brand: #557eff;
+  /* HU #12419 (ADR-0060 §D5) — alias a `--brand-*` con el hex FLIT como valor por defecto. Sin
+   * `<style id="brand-tokens">` inyectado (host FLIT, BrandStyle.tsx), `var(--brand-primary, …)`
+   * resuelve al fallback y el CSS computa EXACTAMENTE los mismos valores de siempre (AC7). Solo
+   * primary/secondary tienen equivalente en la marca (`BrandColors{primary,secondary,onPrimary}`);
+   * tech/alert/bg/gray son decorativos/semánticos de FLIT y no varían por red. */
+  --color-flit-primary: var(--brand-primary, #162744);
+  --color-flit-brand: var(--brand-secondary, #557eff);
   --color-flit-tech: #00dbd5;
   --color-flit-alert: #ff4e00;
   --color-flit-bg: #eef5ff;

@@ -1,4 +1,4 @@
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 // Formateo compartido por las dos consolas de consultas.
 
 //
@@ -24,30 +24,17 @@ export function formatDays(value: number | null | undefined): string {
   return `${numFmt.format(value)} ${value === 1 ? "d\u00eda" : "d\u00edas"}`;
 }
 
-/** Fecha corta en huso de Bogota. */
-export function formatDate(iso: string | null): string {
-  if (!iso) return "\u2014";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "\u2014";
-  return new Intl.DateTimeFormat("es-CO", {
-    timeZone: ZONA_COLOMBIA,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(date);
-}
-
-/** Fecha y hora en huso de Bogota. */
+/**
+ * Fecha y hora de un instante, en el formato estándar de la plataforma (Épica #12552):
+ * DD/MM/YYYY HH:mm en hora de Colombia.
+ *
+ * Antes existía también `formatDate`, que mostraba solo el día. Con el formato único las dos
+ * convergieron, y mantener dos nombres para el mismo resultado invitaba al error: sus llamadas
+ * pasaron a esta.
+ */
 export function formatDateTime(iso: string | null): string {
   if (!iso) return "\u2014";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "\u2014";
-  return new Intl.DateTimeFormat("es-CO", {
-    timeZone: ZONA_COLOMBIA,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return formatFechaHora(date);
 }

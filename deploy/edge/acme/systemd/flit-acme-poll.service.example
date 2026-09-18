@@ -1,0 +1,20 @@
+# deploy/edge/acme/systemd/flit-acme-poll.service.example
+#
+# Instalar como /etc/systemd/system/flit-acme-poll.service en el VPS.
+# Variables sensibles (FLIT_INTERNAL_API_KEY) via EnvironmentFile, NUNCA
+# inline en esta unidad (AC6).
+
+[Unit]
+Description=FLIT - poller de emision automatica de certificados por dominio (HU #12426)
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/flit-acme/env
+ExecStart=/opt/flit/deploy/edge/acme/poll-and-issue.sh
+User=flit-acme
+Group=flit-acme
+# El usuario dedicado necesita: lectura/escritura en ACME_WEBROOT, lectura de
+# ~/.acme.sh del propio usuario, y permiso para `systemctl reload nginx`
+# (via /etc/sudoers.d/flit-acme con NOPASSWD solo para ese comando exacto).

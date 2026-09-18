@@ -1,5 +1,6 @@
 using Flit.Analytics.Application.Dtos;
 using Flit.Infrastructure.Analytics.Scheduling;
+using Flit.Modules.Security.Domain.Auth;
 using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Notifications.Preview;
@@ -56,7 +57,7 @@ public static class AnalyticsEmailPreviewSample
     /// Muestra del informe programado (plantilla <c>analytics.scheduled-report</c>) con tablas de
     /// KPIs por categoría y top de radicadores POBLADAS con DTOs sintéticos (AC1).
     /// </summary>
-    public static (string Subject, string Html) BuildScheduledReport()
+    public static (string Subject, string Html) BuildScheduledReport(EmailTheme? theme = null)
     {
         var overview = new List<CategoryMetricsDto>
         {
@@ -70,7 +71,7 @@ public static class AnalyticsEmailPreviewSample
         };
 
         return SchedulerEmailComposer.BuildScheduledReport(
-            PhScheduleName, SyntheticReportType, PhPeriodLabel, overview, topProducers);
+            PhScheduleName, SyntheticReportType, PhPeriodLabel, overview, topProducers, theme);
     }
 
     /// <summary>
@@ -78,7 +79,7 @@ public static class AnalyticsEmailPreviewSample
     /// valor y ventana sintéticos, y fecha de disparo FIJA (AC2 — determinista, no depende del
     /// reloj del sistema).
     /// </summary>
-    public static (string Subject, string Html) BuildAlert() =>
+    public static (string Subject, string Html) BuildAlert(EmailTheme? theme = null) =>
         SchedulerEmailComposer.BuildAlert(
             PhRuleName,
             SyntheticMetric,
@@ -87,5 +88,6 @@ public static class AnalyticsEmailPreviewSample
             SyntheticValue,
             SyntheticWindowMinutes,
             TriggeredAtUtc,
-            ColombiaTime.Zone);
+            ColombiaTime.Zone,
+            theme);
 }

@@ -14,7 +14,7 @@ import type {
   StatusHistoryItem,
 } from '@/lib/api/types/procedure-runtime';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 /**
 
  * Panel del trámite: se abre desde el indicador de estado del listado (HU #12185).
@@ -261,7 +261,7 @@ function juntar(nombre?: string | null, documento?: string | null): string | nul
 
 function fecha(iso: string): string {
   try {
-    return new Date(iso).toLocaleString('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' });
+    return formatFechaHora(new Date(iso));
   } catch {
     return iso;
   }

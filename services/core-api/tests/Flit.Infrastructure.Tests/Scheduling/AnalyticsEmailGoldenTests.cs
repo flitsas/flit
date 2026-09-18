@@ -186,6 +186,9 @@ public sealed class AnalyticsEmailGoldenTests
         services.AddSingleton(emailSender);
         services.AddSingleton(metrics ?? Substitute.For<IAlertMetricsReadRepository>());
         services.AddSingleton(analytics);
+        // HU #12428 — cuarto punto de inyección del tema (Analítica); esta suite de paridad (AC9)
+        // no ejercita marca.
+        services.AddSingleton<IEmailThemeResolver>(NullEmailThemeResolver.Instance);
         var provider = services.BuildServiceProvider();
 
         return new AnalyticsSchedulerProcessor(

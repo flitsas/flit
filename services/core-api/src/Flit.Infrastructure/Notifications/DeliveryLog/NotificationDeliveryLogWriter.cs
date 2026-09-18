@@ -36,6 +36,10 @@ internal sealed class NotificationDeliveryLogWriter(FlitDbContext db) : INotific
                     RecipientDiverted = entry.RecipientDiverted,
                     OccurredAt = DateTimeOffset.UtcNow,
                     CreatedAt = DateTimeOffset.UtcNow,
+                    ThemeKind = entry.ThemeKind,
+                    ThemeVersion = entry.ThemeVersion,
+                    SenderName = entry.SenderName,
+                    SenderEmail = entry.SenderEmail,
                 });
 
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

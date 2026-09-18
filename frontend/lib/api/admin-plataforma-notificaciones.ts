@@ -5,6 +5,7 @@
 // para los contratos exactos (fuente de verdad, no modificar desde el frontend). El listado de
 // compañías se reutiliza de `admin-companies.ts` (mismo contrato que el resto de Plataforma).
 import { apiFetch } from "./client";
+import type { EmailThemeInfo } from "./types";
 
 const plantillasBase = "/api/v1/admin/plataforma/notificaciones/plantillas";
 const canalesBase = "/api/v1/admin/plataforma/notificaciones/canales";
@@ -49,11 +50,16 @@ export async function listNotificationChannels(
 
 export type NotificationTestChannel = "FLIT_SMTP" | "TENANT_API";
 
-/** Render de muestra de una plantilla (AC1/AC2). Nunca se envía correo al pedirlo. */
+/**
+ * Render de muestra de una plantilla (AC1/AC2). Nunca se envía correo al pedirlo.
+ * `theme` (HU #12431, aditivo) — solo llega cuando la petición incluyó `tenantId`; sin él el
+ * backend no resuelve tema y el campo simplemente no viene.
+ */
 export interface NotificationSample {
   templateId: string;
   subject: string;
   html: string;
+  theme?: EmailThemeInfo;
 }
 
 /**
@@ -61,18 +67,23 @@ export interface NotificationSample {
  * muestra para renderizar en el `iframe` aislado. `404` si el id no existe en el catálogo.
  * `channel` opcional (`FLIT_SMTP` | `TENANT_API`) selecciona la variante cuando la plantilla
  * tiene formatos distintos por canal (p. ej. `tramites.aprobado` / `tramites.rechazado`).
+ * `tenantId` opcional (HU #12431, AC2) — resuelve el tema de correo de esa compañía (una hija
+ * muestra el tema de su cabeza; una Concesión o sin red, el de FLIT). Sin `tenantId` la petición
+ * y la respuesta son IDÉNTICAS a como eran antes de la HU #12431 (AC2, paridad).
  */
 export async function getNotificationSample(
   templateId: string,
   options?: {
     channel?: NotificationTestChannel;
     procedureTypeId?: string;
+    tenantId?: string;
     signal?: AbortSignal;
   },
 ): Promise<NotificationSample> {
   const params = new URLSearchParams();
   if (options?.channel) params.set("channel", options.channel);
   if (options?.procedureTypeId) params.set("procedureTypeId", options.procedureTypeId);
+  if (options?.tenantId) params.set("tenantId", options.tenantId);
   const qs = params.toString();
   const path = `${plantillasBase}/${encodeURIComponent(templateId)}/muestra${qs ? `?${qs}` : ""}`;
   return apiFetch<NotificationSample>(path, { signal: options?.signal });

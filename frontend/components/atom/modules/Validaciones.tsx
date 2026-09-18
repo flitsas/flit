@@ -68,7 +68,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
+import { ZONA_COLOMBIA, formatFechaHora } from '@/lib/format/date';
 /**
 
  * Módulo ÚNICO de Identidad: validaciones y prevalidaciones viven aquí (antes había una pantalla
@@ -113,7 +113,7 @@ function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  return formatFechaHora(d);
 }
 
 /** Formatea una fecha ISO solo a día (es-CO), sin hora. Para aprobación/expiración de la vigencia. */
@@ -121,7 +121,7 @@ function formatFechaCorta(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium' }).format(d);
+  return formatFechaHora(d);
 }
 
 /**

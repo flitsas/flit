@@ -1,4 +1,5 @@
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
@@ -19,6 +20,7 @@ public sealed class ResendInvitationHandlerTests
         ActivateUrlBase = "http://localhost:3000/invite/activate",
         ResendCooldown = TimeSpan.FromMinutes(2),
     };
+    private readonly INetworkUrlBaseResolver _urlBaseResolver = Substitute.For<INetworkUrlBaseResolver>();
     private readonly ResendInvitationHandler _handler;
 
     private static readonly Guid TenantId = Guid.NewGuid();
@@ -29,7 +31,11 @@ public sealed class ResendInvitationHandlerTests
 
     public ResendInvitationHandlerTests()
     {
-        _handler = new ResendInvitationHandler(_repo, _tokenGen, _email, _options, _logger);
+        _handler = new ResendInvitationHandler(_repo, _tokenGen, _email, _options, _urlBaseResolver, _logger);
+        // Por defecto: sin red — el resolutor devuelve la base configurada literal (AC4).
+        _urlBaseResolver
+            .ForTenantAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => Task.FromResult(callInfo.ArgAt<string>(1)));
         _tokenGen.Generate().Returns(new GeneratedToken("raw-token-new", "hash-new"));
         // HU #11358 — por defecto el sender simula éxito (antes lo hacía implícitamente un Task
         // no configurado).

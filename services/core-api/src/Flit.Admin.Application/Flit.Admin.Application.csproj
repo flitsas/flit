@@ -12,6 +12,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <!-- HU #12418 (Feature #12366, ADR-0060 D2) — ResolvePublicBrandingHandler registra el fallo
+         (AC6) sin acoplarse a ASP.NET Core; Logging.Abstractions es la misma dependencia general
+         que ya usa Flit.Modules.Security.Application. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
 </Project>

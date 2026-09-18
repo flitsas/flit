@@ -1,5 +1,7 @@
 using Flit.Admin.Application.Auditing;
+using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using NSubstitute;
@@ -19,11 +21,15 @@ public sealed class LoginHandlerAuditTests
     private readonly IJwtTokenIssuer _jwtTokenIssuer = Substitute.For<IJwtTokenIssuer>();
     private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
     private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
+    private readonly ITenantNetworkMembership _networkMembership = Substitute.For<ITenantNetworkMembership>();
+    private readonly IDomainContextAccessor _domainContext = Substitute.For<IDomainContextAccessor>();
     private readonly LoginHandler _handler;
 
     public LoginHandlerAuditTests()
     {
-        _handler = new LoginHandler(_repository, _passwordHasher, _jwtTokenIssuer, _auditWriter, _auditContext);
+        _handler = new LoginHandler(
+            _repository, _passwordHasher, _jwtTokenIssuer, _auditWriter, _auditContext,
+            _networkMembership, _domainContext);
     }
 
     // ── AC4 — login fallido con email inexistente: se audita sin tenant y sin lanzar por la auditoría ──
@@ -76,7 +82,7 @@ public sealed class LoginHandlerAuditTests
         _jwtTokenIssuer.IssueToken(
                 Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(),
-                Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>())
+                Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 
         await _handler.HandleAsync(new LoginCommand("demo@flit.local", "DemoPass1!"), CancellationToken.None);
@@ -149,7 +155,7 @@ public sealed class LoginHandlerAuditTests
         _jwtTokenIssuer.IssueToken(
                 Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(),
-                Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>())
+                Arg.Any<IReadOnlyList<UserRoleSnapshot>>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>())
             .Returns(new IssuedAccessToken { Token = "jwt-token", ExpiresInSeconds = 43200 });
 
         var received = new List<AdminAuditEntry>();

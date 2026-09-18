@@ -15,6 +15,12 @@
   <ItemGroup>
     <ProjectReference Include="../../tools/Flit.DataMigration.V1/Flit.DataMigration.V1.csproj" />
     <ProjectReference Include="../../tools/Flit.DataMigration.Api/Flit.DataMigration.Api.csproj" />
+    <!-- HU #12417 — no existe Flit.Gateway.Tests (delta-hechos-post-adr.md hecho 4): los tests del
+         Gateway (rutas YARP y, desde esta HU, el sello de dominio y el CORS dinámico) viven aquí,
+         junto a GatewayRutaMigracionTests/GatewayRutaPublicaTests. Alias "gw" obligatorio: el
+         Program de top-level statements de Flit.Gateway choca (CS0433) con el de
+         Flit.DataMigration.Api que ya usan MigracionAutorizacionTests/MigracionEstadoTests. -->
+    <ProjectReference Include="../../src/Flit.Gateway/Flit.Gateway.csproj" Aliases="gw" />
   </ItemGroup>
 
   <ItemGroup>

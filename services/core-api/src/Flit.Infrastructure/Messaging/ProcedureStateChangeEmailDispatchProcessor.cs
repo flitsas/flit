@@ -83,21 +83,23 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
         var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
         var channelResolver = scope.ServiceProvider.GetRequiredService<INotificationChannelResolver>();
         var assets = scope.ServiceProvider.GetRequiredService<IOptions<NotificationEmailAssetsOptions>>().Value;
+        var themeResolver = scope.ServiceProvider.GetRequiredService<IEmailThemeResolver>();
 
         if (!db.Database.IsRelational())
         {
-            return await ProcessOneInMemoryAsync(db, emailSender, channelResolver, assets, excludeIds, ct);
+            return await ProcessOneInMemoryAsync(db, emailSender, channelResolver, themeResolver, assets, excludeIds, ct);
         }
 
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(
-            async () => await ProcessOneAsync(db, emailSender, channelResolver, assets, excludeIds, ct));
+            async () => await ProcessOneAsync(db, emailSender, channelResolver, themeResolver, assets, excludeIds, ct));
     }
 
     private async Task<Guid?> ProcessOneAsync(
         FlitDbContext db,
         IEmailSender emailSender,
         INotificationChannelResolver channelResolver,
+        IEmailThemeResolver themeResolver,
         NotificationEmailAssetsOptions assets,
         IReadOnlySet<Guid> excludeIds,
         CancellationToken ct)
@@ -114,7 +116,7 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
 
         var row = await db.ProcedureStateChangeEmailDispatches.FirstAsync(d => d.Id == claimedId.Value, ct);
         var batch = await LoadBatchAsync(db, row.OutboxId, ct);
-        await DispatchBatchAsync(batch, db, emailSender, channelResolver, assets, ct);
+        await DispatchBatchAsync(batch, db, emailSender, channelResolver, themeResolver, assets, ct);
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -125,6 +127,7 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
         FlitDbContext db,
         IEmailSender emailSender,
         INotificationChannelResolver channelResolver,
+        IEmailThemeResolver themeResolver,
         NotificationEmailAssetsOptions assets,
         IReadOnlySet<Guid> excludeIds,
         CancellationToken ct)
@@ -144,7 +147,7 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
                         && d.Attempts < MaxAttempts)
             .ToListAsync(ct);
 
-        await DispatchBatchAsync(batch, db, emailSender, channelResolver, assets, ct);
+        await DispatchBatchAsync(batch, db, emailSender, channelResolver, themeResolver, assets, ct);
         await db.SaveChangesAsync(ct);
         return seed.Id;
     }
@@ -163,6 +166,7 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
         FlitDbContext db,
         IEmailSender emailSender,
         INotificationChannelResolver channelResolver,
+        IEmailThemeResolver themeResolver,
         NotificationEmailAssetsOptions assets,
         CancellationToken ct)
     {
@@ -253,6 +257,13 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
             var assetsBaseUrl = assets.BaseUrl;
             string? lastOutcome = null;
 
+            // HU #12428 AC1/AC8 — el canal Renting (TenantApi) no se toca (mapa de diseño): solo el
+            // canal FLIT resuelve tema de marca. Una sola resolución por lote: mismo tenant cliente
+            // para todos los destinatarios del batch.
+            var theme = channel == NotificationChannel.TenantApi
+                ? EmailTheme.Flit
+                : await themeResolver.ResolveAsync(seed.TenantId, ct).ConfigureAwait(false);
+
             foreach (var group in groups)
             {
                 var carrier = group.To;
@@ -267,7 +278,7 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
 
                 var (subject, html) = channel == NotificationChannel.TenantApi
                     ? TramiteCambioEstadoEmailComposer.ComposeRenting(model, assetsBaseUrl)
-                    : TramiteCambioEstadoEmailComposer.ComposeFlit(model, assetsBaseUrl);
+                    : TramiteCambioEstadoEmailComposer.ComposeFlit(model, assetsBaseUrl, theme);
 
                 var message = new EmailMessage(
                     seed.TenantId,
@@ -278,6 +289,11 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
                     html)
                 {
                     BccEmails = group.Bcc,
+                    ThemeKind = channel == NotificationChannel.TenantApi ? null : theme.KindWireValue,
+                    ThemeVersion = channel == NotificationChannel.TenantApi ? null : (theme.IsBrand ? theme.Version : null),
+                    // HU #12430 AC1/AC2 — TenantApi nunca resuelve marca (theme queda
+                    // EmailTheme.Flit arriba), así que IsBrand ya es false en ese caso.
+                    SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
                 };
 
                 var result = await emailSender.SendAsync(message, ct).ConfigureAwait(false);

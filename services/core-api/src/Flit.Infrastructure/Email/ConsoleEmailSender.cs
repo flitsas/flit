@@ -14,17 +14,27 @@ public sealed partial class ConsoleEmailSender(ILogger<ConsoleEmailSender> logge
 {
     public Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
+        // HU #12430 AC1/AC6 — misma resolución de remitente que SmtpEmailSender (saneado, con
+        // respaldo al nombre por defecto): este transporte de desarrollo debe reflejar lo mismo que
+        // vería un destinatario real, para que probar en Development no oculte una regresión.
+        var senderName = SmtpEmailSender.ResolveSenderName(DevEmailSettings, message);
         LogDevEmail(
-            logger, message.ToEmail, message.ToName, message.Subject, message.HtmlBody, message.Attachments.Count);
+            logger, senderName, message.ToEmail, message.ToName, message.Subject, message.HtmlBody,
+            message.Attachments.Count);
         return Task.FromResult(EmailSendResult.Sent);
     }
 
+    // Solo se usa aquí para tomar EmailSettings.DefaultSenderName por defecto cuando el mensaje no
+    // trae SenderDisplayName — esta clase no envía correo real y no necesita host/credenciales.
+    private static readonly EmailSettings DevEmailSettings = new();
+
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "[DEV EMAIL] Para: {ToEmail} <{ToName}> | Asunto: {Subject}\n{HtmlBody}\n"
+        Message = "[DEV EMAIL] De: {SenderName} | Para: {ToEmail} <{ToName}> | Asunto: {Subject}\n{HtmlBody}\n"
             + "Adjuntos: {AttachmentCount}")]
     private static partial void LogDevEmail(
         ILogger logger,
+        string senderName,
         string toEmail,
         string toName,
         string subject,

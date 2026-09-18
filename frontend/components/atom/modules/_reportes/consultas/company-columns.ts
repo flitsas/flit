@@ -12,7 +12,7 @@ import {
   type ColumnPreset,
   type DataColumn,
 } from "@/components/consultas/columns";
-import { formatDate, formatDateTime, formatDays, formatInt } from "@/components/consultas/format";
+import { formatDateTime, formatDays, formatInt } from "@/components/consultas/format";
 import type { CompanyQueryRow } from "@/lib/api/company-queries";
 import { bogotaClock, bogotaDay } from "@/lib/xlsx";
 
@@ -239,7 +239,7 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     id: "creado_en",
     label: "Creado",
     group: GRUPO_TIEMPOS,
-    value: (r) => formatDate(r.creadoEn),
+    value: (r) => formatDateTime(r.creadoEn),
     raw: (r) => bogotaDay(r.creadoEn),
     width: 12,
     defaultVisible: true,

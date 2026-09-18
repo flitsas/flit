@@ -77,8 +77,15 @@ internal sealed partial class NotificationTestSendAdminService(
     EmailTransportDescriptor transportDescriptor,
     TimeProvider timeProvider,
     ILogger<NotificationTestSendAdminService> logger,
-    IProcedureTypeCatalog procedureTypes) : INotificationTestSendAdminService
+    IProcedureTypeCatalog procedureTypes,
+    IEmailThemeResolver? themeResolver = null) : INotificationTestSendAdminService
 {
+    // Parámetro opcional (mismo patrón que en los handlers de Seguridad, HU #12428): ningún test
+    // existente que construye este servicio con 9 argumentos deja de compilar. DI de producción
+    // SIEMPRE resuelve DbEmailThemeResolver (registrado en AdminInfrastructureExtensions).
+    private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
+
+
     // Ventana de enfriamiento entre envíos de prueba (AC2). Decisión del PO del 2026-08-11: baja de
     // 5 minutos a 5 segundos. Sigue siendo global (una sola fila) y sigue sin ser configuración —
     // constante de producto. El propósito YA NO es racionar el uso del SuperAdmin (con 5 minutos
@@ -198,6 +205,18 @@ internal sealed partial class NotificationTestSendAdminService(
                 channel: SettingsWire.ToWire(channel));
         }
 
+        // HU #12430 AC2 — tema y remitente de marca SOLO se resuelven con tenantId + canal
+        // FLIT_SMTP: TenantApi nunca resuelve marca (mismo criterio que los 8 puntos de inyección de
+        // producción, hecho 80 de la Épica). Sin tenantId, comportamiento IDÉNTICO a antes de esta
+        // historia (EmailTheme.Flit, que a su vez deja SenderDisplayName en null más abajo).
+        var theme = request.TenantId is { } tenantId && channel == NotificationChannel.FlitSmtp
+            ? await _themeResolver.ResolveAsync(tenantId, ct).ConfigureAwait(false)
+            : EmailTheme.Flit;
+        // La DIRECCIÓN nunca cambia (AC1) — solo el nombre visible, y solo si hay marca publicada.
+        var appliedSenderName = theme.IsBrand
+            ? SenderDisplayNameSanitizer.Sanitize(theme.PlatformName) ?? senderName
+            : senderName;
+
         // AC5 — render de muestra. Un fallo aquí es defensivo (el catálogo resolvió un id sin
         // muestra registrada en RenderSample): se reporta como fallo de render, SIN enviar ni sellar.
         string subject, html;
@@ -244,7 +263,13 @@ internal sealed partial class NotificationTestSendAdminService(
             ToEmail: row.TestRecipientEmail!,
             ToName: "Banco de pruebas de notificaciones",
             Subject: subject,
-            HtmlBody: html);
+            HtmlBody: html)
+        {
+            // HU #12430 AC2 — el saneado real ocurre en SmtpEmailSender/ConsoleEmailSender (igual
+            // que en producción); aquí viaja el valor crudo del tema, idéntico al resto de los
+            // puntos de inyección.
+            SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
+        };
 
         // HU #11371 — envía por el canal explícito elegido, SIN resolver política de tenant y SIN el
         // bypass de correos de cuenta (ya se descartó ese caso arriba). Se salta el decorador de
@@ -266,11 +291,22 @@ internal sealed partial class NotificationTestSendAdminService(
             TemplateId: descriptor.Id,
             Channel: SettingsWire.ToWire(channel),
             SenderEmail: senderEmail,
-            SenderName: senderName,
+            SenderName: appliedSenderName,
             SentAt: now,
             RetryAfterSeconds: null,
             IsConsoleTransport: isConsoleTransport,
-            RecipientDiverted: sendResult.RecipientDiverted);
+            RecipientDiverted: sendResult.RecipientDiverted)
+        {
+            // HU #12430 AC2 — ADITIVO, solo con tenantId + canal FLIT_SMTP (mismo criterio que la
+            // resolución de arriba: TenantApi nunca resuelve marca, hecho 80 de la Épica — no
+            // confundir "canal Renting" con "tema flit resuelto" reportando un ThemeKind aquí).
+            ThemeKind = request.TenantId is not null && channel == NotificationChannel.FlitSmtp
+                ? theme.KindWireValue
+                : null,
+            ThemeVersion = request.TenantId is not null && channel == NotificationChannel.FlitSmtp && theme.IsBrand
+                ? theme.Version
+                : null,
+        };
     }
 
     private async Task<(NotificationTestSendResult? Failure, NotificationSampleProcedureType? Overlay)>
