@@ -33,7 +33,11 @@ internal sealed class CompanyPersonalizedDocumentStorage : ICompanyPersonalizedD
             .CreatePresignedUploadAsync(tenantId, DocumentTipo, filename, cancellationToken)
             .ConfigureAwait(false);
 
-        return new PersonalizedDocumentUploadTicket(upload.StoragePath, upload.Url, upload.Fields);
+        return new PersonalizedDocumentUploadTicket(
+            upload.StoragePath,
+            upload.Url,
+            upload.Fields,
+            string.IsNullOrWhiteSpace(upload.Method) ? "POST" : upload.Method);
     }
 
     public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken cancellationToken = default)

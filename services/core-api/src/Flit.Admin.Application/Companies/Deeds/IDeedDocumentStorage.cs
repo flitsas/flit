@@ -1,16 +1,14 @@
 namespace Flit.Admin.Application.Companies.Deeds;
 
 /// <summary>
-/// Presigned POST policy para subir el PDF de una escritura DIRECTO al storage de la empresa (sin
-/// pasar por el request del API — el PDF puede ser grande). <c>StoragePath</c> es el id opaco del
-/// backend de almacenamiento (lo que flit guarda en <c>admin.company_deeds</c>); <c>Url</c> +
-/// <c>Fields</c> son la URL firmada y los campos del POST policy (van ANTES del <c>file</c> en el
-/// multipart). El SHA-256 del PDF lo calcula el cliente y viaja en el alta/edición.
+/// Ticket de subida directa al storage (ADR-0057). <c>Method</c> = <c>POST</c> (multipart con
+/// <c>Fields</c>) o <c>PUT</c> (bytes crudos; Contabo). Ausente/vacío ⇒ POST.
 /// </summary>
 public sealed record DeedUploadTicket(
     string StoragePath,
     string Url,
-    IReadOnlyDictionary<string, string> Fields);
+    IReadOnlyDictionary<string, string> Fields,
+    string Method = "POST");
 
 /// <summary>
 /// Presigned GET URL de vida corta para visualizar el PDF inline en el navegador (TTL ≈ 10 min). No

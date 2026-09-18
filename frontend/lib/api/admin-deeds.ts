@@ -1,10 +1,11 @@
 // Cliente tipado de las escrituras (PDF) por compañía (HU #10905, backend #10902, ADR-0033).
 // Endpoints SuperAdmin acotados por tenantId. El PDF NUNCA viaja en el request del API ni se guarda en
-// BD: se sube DIRECTO a S3 con una presigned POST policy y se ve con una presigned GET de vida corta.
+// BD: se sube DIRECTO a storage (presigned PUT|POST, ADR-0057) y se ve con una presigned GET de vida corta.
 // El cliente calcula el SHA-256 del PDF (integridad) y lo envía en el alta/edición.
 import { apiFetch } from "./client";
 import { fetchLegalRepresentatives } from "./admin-legal-representatives";
 import { companyScopedPath } from "./company-scoped-path";
+import { uploadFileToPresignedUrl } from "./presigned-upload";
 
 /**
  * Escritura proyectada para la gestión admin (metadatos, sin binario). `representedCompanyIds` es la
@@ -41,13 +42,14 @@ export interface DeedDetail {
 }
 
 /**
- * Presigned POST policy para subir el PDF DIRECTO a S3. `fields` van ANTES del `file` en el
- * multipart; `storagePath` es la referencia que el backend ya persistió en la escritura.
+ * Ticket de subida directa (ADR-0057). `method`: "POST" (multipart + fields) o "PUT" (bytes crudos).
+ * Ausente ⇒ POST. `storagePath` es la referencia que el backend ya persistió en la escritura.
  */
 export interface DeedUploadTicket {
   storagePath: string;
   url: string;
   fields: Record<string, string>;
+  method?: string | null;
 }
 
 /** Respuesta del alta (201) / edición (200): id + presigned upload (null si no se reemplaza el PDF). */
@@ -153,21 +155,9 @@ export function deleteDeed(
   return apiFetch<void>(`${base(tenantId, networkHeadId)}/${id}`, { method: "DELETE" });
 }
 
-/**
- * Sube el PDF DIRECTO a S3 con la presigned POST policy: los campos firmados van ANTES del `file`. No
- * se fija Content-Type ni Authorization (es S3, no el API; el navegador pone el boundary del multipart).
- */
+/** Sube el PDF DIRECTO a storage según `upload.method` (PUT Contabo / POST MinIO·S3). */
 export async function uploadDeedPdf(upload: DeedUploadTicket, file: File): Promise<void> {
-  const form = new FormData();
-  for (const [key, value] of Object.entries(upload.fields)) {
-    form.append(key, value);
-  }
-  form.append("file", file);
-  const res = await fetch(upload.url, { method: "POST", body: form });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Error subiendo el PDF a almacenamiento (${res.status})${detail ? ": " + detail : ""}`);
-  }
+  await uploadFileToPresignedUrl(upload, file);
 }
 
 /**

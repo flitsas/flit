@@ -1091,14 +1091,14 @@ export interface AttachmentsResponse {
 }
 
 /**
- * Respuesta de POST /instances/{id}/attachments/presign: POST policy de S3 para subir el binario
- * directo desde el navegador. `storagePath` (id del file-manager) se devuelve luego al registrar la
- * metadata; `fields` son los campos firmados que van ANTES del 'file' en el multipart a S3.
+ * Respuesta de POST /instances/{id}/attachments/presign (ADR-0057).
+ * `method`: "POST" (multipart + fields) o "PUT" (bytes crudos; Contabo). Ausente ⇒ POST.
  */
 export interface PresignAttachmentResponse {
   storagePath: string;
   url: string;
   fields: Record<string, string>;
+  method?: string | null;
 }
 
 /**
