@@ -97,7 +97,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
     mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
@@ -228,6 +228,33 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(screen.queryByText("Resoluciones")).not.toBeInTheDocument();
   });
 
+  it("HU #12711 — sin permiso de Validaciones ni dashboard.read, la tarjeta de validaciones no se pide ni se pinta", async () => {
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Rada", email: "rada@flit.io", permissions: ["tramites.read"] });
+
+    render(<Dashboard onNewTramite={noop} />);
+
+    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+    expect(mocks.listTenantBiometricValidations).not.toHaveBeenCalled();
+    expect(screen.queryByText("Validaciones Biométricas")).not.toBeInTheDocument();
+    expect(screen.queryByText("No se pudieron cargar las métricas del dashboard.")).not.toBeInTheDocument();
+  });
+
+  it("HU #12711 — un usuario de organismo no ve la tarjeta aunque tenga dashboard.read", async () => {
+    mocks.decodeJwtPayload.mockReturnValue({
+      display_name: "Ot",
+      email: "ot@flit.io",
+      entity_type: "TRANSIT_OFFICE",
+      permissions: ["dashboard.read"],
+    });
+
+    render(<Dashboard onNewTramite={noop} />);
+
+    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+    expect(mocks.listTenantBiometricValidations).not.toHaveBeenCalled();
+  });
+
   it("SuperAdmin en 'Todas las compañías': las validaciones se piden de todas (ALL_TENANTS) y no queda en error permanente", async () => {
     mocks.isSuperAdmin.mockReturnValue(true);
     mocks.fetchAllCompanies.mockResolvedValue([]);
@@ -276,7 +303,7 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchAnalyticsOverview.mockResolvedValue(OVERVIEW);
     mocks.fetchMonthlyTrend.mockResolvedValue(CAROUSEL_TREND);
@@ -394,7 +421,7 @@ describe("Dashboard — cuerpo dinámico del slide de bienvenida (Opción A)", (
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchMonthlyTrend.mockResolvedValue(CAROUSEL_TREND);
     mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
@@ -469,7 +496,7 @@ describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
     mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
@@ -548,7 +575,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
     mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
