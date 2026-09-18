@@ -1,3 +1,4 @@
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -16,6 +17,12 @@ public sealed class ListStuckIdentityValidationsTests
     private readonly IIdentityValidationOutboxRepository _repo =
         Substitute.For<IIdentityValidationOutboxRepository>();
 
+    private readonly IProcedureInstanceRepository _instances = Substitute.For<IProcedureInstanceRepository>();
+
+    /// <summary>Alcance de UNA compañía, tal como lo arma el handler desde el Guid.</summary>
+    private static TenantScope OnlyTenant(Guid tenant) =>
+        Arg.Is<TenantScope>(s => !s.IsAll && s.ReadTenantIds.Count == 1 && s.ReadTenantIds.Contains(tenant));
+
     private static StuckIdentityValidationRow StuckRow() => new(
         Id: Guid.NewGuid(),
         ValidationId: Guid.NewGuid(),
@@ -33,9 +40,9 @@ public sealed class ListStuckIdentityValidationsTests
     {
         var ct = TestContext.Current.CancellationToken;
         var tenant = Guid.NewGuid();
-        var handler = new ListStuckIdentityValidationsHandler(_repo);
+        var handler = new ListStuckIdentityValidationsHandler(_repo, _instances);
         var row = StuckRow();
-        _repo.ListStuckAsync(tenant, ListStuckIdentityValidationsHandler.MaxRows, ct)
+        _repo.ListStuckAsync(OnlyTenant(tenant), ListStuckIdentityValidationsHandler.MaxRows, ct)
             .Returns(new List<StuckIdentityValidationRow> { row });
 
         var result = await handler.HandleAsync(tenant, ct);
@@ -61,14 +68,36 @@ public sealed class ListStuckIdentityValidationsTests
     {
         var ct = TestContext.Current.CancellationToken;
         var tenant = Guid.NewGuid();
-        var handler = new ListStuckIdentityValidationsHandler(_repo);
-        _repo.ListStuckAsync(tenant, Arg.Any<int>(), ct).Returns(new List<StuckIdentityValidationRow>());
+        var handler = new ListStuckIdentityValidationsHandler(_repo, _instances);
+        _repo.ListStuckAsync(OnlyTenant(tenant), Arg.Any<int>(), ct).Returns(new List<StuckIdentityValidationRow>());
 
         var result = await handler.HandleAsync(tenant, ct);
 
         result.Total.Should().Be(0);
         result.Stuck.Should().BeEmpty();
         result.MaxDeliveryAttempts.Should().Be(IdentityValidationOutbox.MaxDeliveryAttempts);
+    }
+
+    [Fact]
+    public async Task SuperAdmin_sin_compania_lista_las_atascadas_de_todas_con_su_compania()
+    {
+        // HU #12706, AC4 — TenantScope.All solo lo fabrica el middleware para el SuperAdmin sin acotar.
+        var ct = TestContext.Current.CancellationToken;
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var rowA = StuckRow() with { TenantId = tenantA };
+        var rowB = StuckRow() with { TenantId = tenantB };
+        _repo.ListStuckAsync(Arg.Is<TenantScope>(s => s.IsAll), ListStuckIdentityValidationsHandler.MaxRows, ct)
+            .Returns(new List<StuckIdentityValidationRow> { rowA, rowB });
+        _instances.GetTenantNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [tenantA] = "Renting A", [tenantB] = "Concesionario B" });
+
+        var result = await new ListStuckIdentityValidationsHandler(_repo, _instances).HandleAsync(TenantScope.All(), ct);
+
+        result.Stuck.Select(d => (d.TenantId, d.TenantName)).Should().BeEquivalentTo(
+            [(tenantA, "Renting A"), (tenantB, "Concesionario B")]);
+        // Los nombres se resuelven en UNA consulta, no una por fila.
+        await _instances.Received(1).GetTenantNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct);
     }
 
     [Fact]

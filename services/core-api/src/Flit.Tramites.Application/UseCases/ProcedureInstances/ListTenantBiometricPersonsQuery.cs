@@ -1,3 +1,4 @@
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.ReadModels;
@@ -35,7 +36,11 @@ public sealed record TenantBiometricPersonDto(
     DateTimeOffset? ValidatedAt,
     DateTimeOffset? ValidUntil,
     int? DaysRemaining,
-    DateTimeOffset? LinkExpiresAt);
+    DateTimeOffset? LinkExpiresAt,
+    // HU #12706 — compañía dueña de la persona (la persona es compañía + documento). Aditivos: el
+    // front que no los lee sigue funcionando. TenantName null si la compañía no resuelve nombre.
+    Guid TenantId = default,
+    string? TenantName = null);
 
 /// <summary>
 /// Respuesta del listado agrupado. <see cref="Stats"/> cuenta PERSONAS por el estado de su validación
@@ -136,11 +141,22 @@ public sealed class ListTenantBiometricPersonsHandler(
         IdentityValidationAlertKinds.PorVencer,
     ];
 
-    public async Task<(TenantBiometricPersonsResponse? Result, string? Error)> HandleAsync(
+    public Task<(TenantBiometricPersonsResponse? Result, string? Error)> HandleAsync(
         Guid tenantId,
         TenantBiometricPersonListQuery? query = null,
+        CancellationToken ct = default) =>
+        HandleAsync(TenantScope.Single(tenantId), query, ct);
+
+    /// <summary>
+    /// HU #12706 — grilla por persona acotada por <see cref="TenantScope"/>: <c>All</c> solo lo fabrica
+    /// el middleware para el SuperAdmin sin compañía elegida; el resto de roles llega con <c>Single</c>.
+    /// </summary>
+    public async Task<(TenantBiometricPersonsResponse? Result, string? Error)> HandleAsync(
+        TenantScope scope,
+        TenantBiometricPersonListQuery? query,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(scope);
         query ??= new TenantBiometricPersonListQuery();
         var validationError = query.Validate();
         if (validationError is not null)
@@ -156,27 +172,42 @@ public sealed class ListTenantBiometricPersonsHandler(
         // contadores tienen que cuadrar con lo que el gestor ve. Cada persona aporta el estado de su
         // validación más reciente, sobre el mismo conjunto filtrado que la página.
         var stats = ListTenantBiometricValidationsHandler.BuildStats(
-            await repo.CountBiometricPersonsByEstadoAsync(tenantId, activeFilter, now, ct));
+            await repo.CountBiometricPersonsByEstadoAsync(scope, activeFilter, now, ct));
 
         var (rows, totalPersons) = await repo.ListBiometricValidationsGroupedByPersonAsync(
-            tenantId, (page - 1) * pageSize, pageSize, activeFilter, now, ct);
+            scope, (page - 1) * pageSize, pageSize, activeFilter, now, ct);
 
-        var stuckIds = await StuckIdsAsync(tenantId, ct);
-        var worstByPerson = await ResolveWorstAlertsAsync(tenantId, rows, stuckIds, now, ct);
+        // La peor alerta se resuelve por compañía (una pasada por compañía presente en la página, no
+        // por fila): las atascadas y el escaneo de alertas son de la compañía de la persona, y la misma
+        // cédula en otra compañía es otra persona (HU #12706, AC3).
+        var worstByPerson = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var byTenant in rows.GroupBy(r => r.TenantId))
+        {
+            var stuckIds = await StuckIdsAsync(byTenant.Key, ct);
+            var worst = await ResolveWorstAlertsAsync(byTenant.Key, byTenant.ToList(), stuckIds, now, ct);
+            foreach (var kv in worst)
+                worstByPerson[PersonKey(byTenant.Key, kv.Key)] = kv.Value;
+        }
+
+        var tenantNames = rows.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await repo.GetTenantNamesAsync(rows.Select(r => r.TenantId).Distinct().ToList(), ct)
+                ?? new Dictionary<Guid, string>();
 
         var persons = rows.Select(r =>
         {
-            var key = $"{r.DocumentTypeNorm}|{r.DocumentNumberNorm}";
-            worstByPerson.TryGetValue(key, out var worst);
-            return ToDto(r, worst, now);
+            worstByPerson.TryGetValue(PersonKey(r.TenantId, $"{r.DocumentTypeNorm}|{r.DocumentNumberNorm}"), out var worst);
+            return ToDto(r, worst, now, tenantNames.GetValueOrDefault(r.TenantId));
         }).ToList();
 
         return (new TenantBiometricPersonsResponse(persons, stats, page, pageSize, totalPersons), null);
     }
 
+    private static string PersonKey(Guid tenantId, string documentKey) => $"{tenantId:N}|{documentKey}";
+
     private async Task<IReadOnlyDictionary<string, string?>> ResolveWorstAlertsAsync(
         Guid tenantId,
-        IReadOnlyList<BiometricPersonGroupProjection> rows,
+        List<BiometricPersonGroupProjection> rows,
         IReadOnlySet<Guid> stuckIds,
         DateTimeOffset now,
         CancellationToken ct)
@@ -257,7 +288,8 @@ public sealed class ListTenantBiometricPersonsHandler(
     private static TenantBiometricPersonDto ToDto(
         BiometricPersonGroupProjection r,
         string? worstAlert,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? tenantName)
     {
         // DaysRemaining solo aplica a aprobadas; reusa BiometricRules vía proyección mínima.
         int? daysRemaining = null;
@@ -291,7 +323,9 @@ public sealed class ListTenantBiometricPersonsHandler(
             r.ValidatedAt,
             r.ValidUntil,
             daysRemaining,
-            r.ExpiresAt);
+            r.ExpiresAt,
+            r.TenantId,
+            tenantName);
     }
 
     /// <summary>
