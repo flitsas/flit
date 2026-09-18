@@ -318,3 +318,68 @@ describe("CompanyConfigTabs — identificación de la compañía (HU #11062)", (
     ).not.toBeInTheDocument();
   });
 });
+
+// HU #12710 — el Administrador de Compañía sin red, o de una hija, solo ve Representantes legales y
+// Mandatarios; el resto de secciones es del SuperAdmin y de la cabeza de red.
+describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
+  const slots = {
+    whitelistSlot: <div>panel-lista-blanca</div>,
+    otSlot: <div>panel-organismos</div>,
+    auditSlot: <div>panel-historial</div>,
+    documentosSlot: <div>panel-documentos</div>,
+    platesSlot: <div>panel-placas</div>,
+    legalRepresentativesSlot: <div>panel-representantes</div>,
+    mandatariosSlot: <div>panel-mandatarios</div>,
+  };
+
+  it("AC1 — muestra solo Representantes legales y Mandatarios y abre en Representantes", () => {
+    render(
+      <CompanyConfigTabs
+        settings={{ ...settings, preasignacionPlacaActiva: true }}
+        onSaveSettings={vi.fn()}
+        restrictedToRepresentatives
+        {...slots}
+      />,
+    );
+
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual(["Representantes legales", "Mandatarios"]);
+    expect(screen.getByRole("tab", { name: /representantes legales/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("panel-representantes")).toBeInTheDocument();
+    // Ninguna sección reservada llega a montarse, ni el «Guardar todo» de la configuración.
+    for (const reservado of ["panel-lista-blanca", "panel-organismos", "panel-historial", "panel-documentos", "panel-placas"]) {
+      expect(screen.queryByText(reservado)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole("button", { name: /guardar todo/i })).not.toBeInTheDocument();
+  });
+
+  it("AC3 — Mandatarios sigue disponible", async () => {
+    const user = userEvent.setup();
+    render(<CompanyConfigTabs settings={settings} onSaveSettings={vi.fn()} restrictedToRepresentatives {...slots} />);
+
+    await user.click(screen.getByRole("tab", { name: /mandatarios/i }));
+
+    expect(screen.getByText("panel-mandatarios")).toBeInTheDocument();
+  });
+
+  it("AC6/AC7 — sin restricción (SuperAdmin o cabeza de red) conserva todas las pestañas", () => {
+    render(
+      <CompanyConfigTabs
+        settings={{ ...settings, preasignacionPlacaActiva: true }}
+        onSaveSettings={vi.fn()}
+        {...slots}
+      />,
+    );
+
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual([
+      "Trámites",
+      "Configuración Empresa",
+      "Documentos",
+      "Placas preasignadas",
+      "Representantes legales",
+      "Mandatarios",
+      "Historial de Cambios",
+    ]);
+  });
+});

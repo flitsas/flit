@@ -98,7 +98,16 @@ export interface CompanyConfigTabsProps {
    * se resuelve (o si la identidad no se pudo cargar): la pantalla sigue funcionando sin el rótulo.
    */
   company?: { razonSocial: string; nit: string } | null;
+  /**
+   * HU #12710 — Administrador de Compañía sin red o de una hija: solo Representantes legales y
+   * Mandatarios, y abre en Representantes. El resto de secciones es del SuperAdmin (y de la cabeza de
+   * red); la API también las rechaza, esto solo evita ofrecer pestañas que responderían 403.
+   */
+  restrictedToRepresentatives?: boolean;
 }
+
+/** HU #12710 — pestañas que conserva el Administrador de Compañía sin red o de una hija. */
+export const REPRESENTATIVE_TABS: readonly TabId[] = ["representantes", "mandatarios"];
 
 export function CompanyConfigTabs({
   settings,
@@ -112,18 +121,22 @@ export function CompanyConfigTabs({
   mandatariosSlot,
   usuariosSlot,
   company,
+  restrictedToRepresentatives = false,
 }: CompanyConfigTabsProps) {
-  const [tab, setTab] = useState<TabId>("tramites");
+  const [tab, setTab] = useState<TabId>(restrictedToRepresentatives ? "representantes" : "tramites");
   // La pestaña de placas solo aparece si la preasignación está activa.
   // Usuarios solo si el consumidor inyecta el slot (SuperAdmin en ficha compañía).
+  // HU #12710 — restringido: solo Representantes y Mandatarios (una pestaña fuera de la lista, aunque
+  // se fije por estado, recae en la primera visible).
   const visibleTabs = useMemo(
     () =>
-      TABS.filter(
-        (t) =>
-          (t.id !== "placas" || settings.preasignacionPlacaActiva) &&
-          (t.id !== "usuarios" || Boolean(usuariosSlot)),
+      TABS.filter((t) =>
+        restrictedToRepresentatives
+          ? REPRESENTATIVE_TABS.includes(t.id)
+          : (t.id !== "placas" || settings.preasignacionPlacaActiva) &&
+            (t.id !== "usuarios" || Boolean(usuariosSlot)),
       ),
-    [settings.preasignacionPlacaActiva, usuariosSlot],
+    [restrictedToRepresentatives, settings.preasignacionPlacaActiva, usuariosSlot],
   );
   const [form, setForm] = useState<SettingsForm>(() => formFromSettings(settings));
   // Línea base (última configuración guardada) para detectar cambios; se actualiza al guardar.

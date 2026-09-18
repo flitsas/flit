@@ -18,6 +18,9 @@ public static class AdminCompanyDocumentParamsEndpoints
         var group = app
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/document-params")
             .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red. El
+            // Administrador de Compañía sin red, o de una hija, solo conserva Representantes y Mandatarios.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithTags("Admin · Documentos");
 
