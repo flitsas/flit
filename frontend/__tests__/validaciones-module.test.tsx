@@ -31,6 +31,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
+  // HU #12706 — «todas las compañías» del SuperAdmin.
+  ALL_TENANTS: '*',
   tramitesClient: {
     listTenantBiometricPersons: mocks.listTenantBiometricPersons,
     listPersonBiometricValidations: mocks.listPersonBiometricValidations,
@@ -245,11 +247,29 @@ function renderValidaciones() {
   );
 }
 
+/**
+ * HU #12707 — la barra de Trámites no tiene panel que desplegar: los controles están siempre a la vista.
+ * Se conserva el ayudante para no reescribir cada prueba; ya no hace nada salvo dar el `user`.
+ */
 async function abrirFiltros(user = userEvent.setup()) {
-  if (!screen.queryByRole('button', { name: /colapsar panel de búsqueda/i })) {
-    await user.click(screen.getByRole('button', { name: /desplegar panel de búsqueda/i }));
-  }
   return user;
+}
+
+/** HU #12707 — «+ Filtro» › campo › valor › «Agregar filtro» › «Aplicar». */
+async function aplicarFiltro(
+  user: ReturnType<typeof userEvent.setup>,
+  campo: string,
+  llenar: () => Promise<void>,
+) {
+  await user.click(screen.getByRole('button', { name: /^(\+ filtro|filtros \(\d+\))$/i }));
+  await user.click(screen.getByRole('button', { name: campo }));
+  await llenar();
+  await user.click(screen.getByRole('button', { name: 'Agregar filtro' }));
+  await user.click(screen.getByRole('button', { name: 'Aplicar' }));
+}
+
+async function aplicarOpcion(user: ReturnType<typeof userEvent.setup>, campo: string, opcion: string) {
+  await aplicarFiltro(user, campo, () => user.click(screen.getByRole('radio', { name: opcion })));
 }
 
 async function abrirIncidencias(user = userEvent.setup()) {
@@ -257,8 +277,8 @@ async function abrirIncidencias(user = userEvent.setup()) {
   return screen.getByRole('dialog', { name: /gestión de incidencias/i });
 }
 
+/** HU #12707 — el buscador aplica solo, tras el retardo: ya no hay botón «Buscar». */
 async function buscar(user = userEvent.setup()) {
-  await user.click(screen.getByRole('button', { name: /^buscar$/i }));
   return user;
 }
 
@@ -418,13 +438,11 @@ describe('Validaciones — datos y accesibilidad', () => {
     expect(row.getAttribute('aria-label')).not.toMatch(/vigente hasta/i);
   });
 
-  it('el acordeón de filtros tiene nombre accesible', async () => {
+  it('la barra de filtros tiene nombre accesible (HU #12707: reemplaza al acordeón)', async () => {
     renderValidaciones();
 
     await screen.findByText('TRM-2026-000001');
-    expect(
-      screen.getByRole('button', { name: /desplegar panel de búsqueda/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('search', { name: /filtros de validaciones/i })).toBeInTheDocument();
   });
 });
 
@@ -551,7 +569,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
     await screen.findByText('TRM-2026-000001');
     await abrirFiltros();
 
-    expect(screen.queryByRole('combobox', { name: /ver las validaciones de otra empresa/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Compañía' })).not.toBeInTheDocument();
     expect(mocks.listCompanies).not.toHaveBeenCalled();
   });
 
@@ -563,11 +581,12 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
     renderValidaciones();
 
     const user = await abrirFiltros();
-    const selector = await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i });
+    const selector = await screen.findByRole('combobox', { name: 'Compañía' });
     await user.click(selector);
 
+    // HU #12706/#12707 — arranca en «Todas las compañías», no en la empresa propia del admin.
     const lista = screen.getByRole('listbox');
-    expect(within(lista).getByRole('option', { name: /Mi empresa/ })).toBeInTheDocument();
+    expect(within(lista).getByRole('option', { name: /Todas las compañías/ })).toBeInTheDocument();
     expect(within(lista).getByRole('option', { name: /Movilidad Bogotá/ })).toBeInTheDocument();
   });
 
@@ -579,7 +598,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
 
     renderValidaciones();
     await abrirFiltros(user);
-    await user.click(await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i }));
+    await user.click(await screen.findByRole('combobox', { name: 'Compañía' }));
     await user.keyboard('medell');
 
     const opciones = within(screen.getByRole('listbox')).getAllByRole('option');
@@ -595,18 +614,21 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
 
     renderValidaciones();
     await abrirFiltros(user);
-    const selector = await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i });
+    const selector = await screen.findByRole('combobox', { name: 'Compañía' });
     mocks.listTenantBiometricPersons.mockClear();
 
     await user.click(selector);
     await user.click(screen.getByRole('option', { name: /Tránsito Medellín/ }));
 
-    // El tenant se fija ANTES de recargar: la petición ya sale con la empresa elegida.
-    expect(mocks.setActiveTramitesTenant).toHaveBeenCalledWith('tenant-b');
-    await waitFor(() => expect(mocks.listTenantBiometricPersons).toHaveBeenCalled());
+    // HU #12707 — el alcance viaja EXPLÍCITO en la petición del listado (no como override global del
+    // cliente): en «Todas» cada fila es de una compañía distinta.
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(expect.any(Object), 'tenant-b'),
+    );
+    expect(mocks.listStuckIdentityValidations).toHaveBeenLastCalledWith('tenant-b');
   });
 
-  it('volver a "Mi empresa" quita el override', async () => {
+  it('volver a «Todas las compañías» vuelve a pedir sin compañía', async () => {
     const user = userEvent.setup();
     mocks.isSuperAdmin.mockReturnValue(true);
     mocks.listCompanies.mockResolvedValue(EMPRESAS);
@@ -614,13 +636,15 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
 
     renderValidaciones();
     await abrirFiltros(user);
-    const selector = await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i });
+    const selector = await screen.findByRole('combobox', { name: 'Compañía' });
     await user.click(selector);
     await user.click(screen.getByRole('option', { name: /Movilidad Bogotá/ }));
     await user.click(selector);
-    await user.click(screen.getByRole('option', { name: /Mi empresa/ }));
+    await user.click(screen.getByRole('option', { name: /Todas las compañías/ }));
 
-    expect(mocks.setActiveTramitesTenant).toHaveBeenLastCalledWith(undefined);
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(expect.any(Object), '*'),
+    );
   });
 
   it('al mirar otra empresa lo dice explícitamente, para no operar sobre datos ajenos por descuido', async () => {
@@ -631,9 +655,9 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
 
     renderValidaciones();
     await abrirFiltros(user);
-    const selector = await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i });
+    const selector = await screen.findByRole('combobox', { name: 'Compañía' });
 
-    // En "Mi empresa" no hay aviso: es el caso normal.
+    // En «Todas» no hay aviso: cada fila dice su compañía en la columna.
     expect(screen.queryByText(/estás viendo los datos de/i)).not.toBeInTheDocument();
 
     await user.click(selector);
@@ -651,7 +675,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
 
     const { unmount } = renderValidaciones();
     await abrirFiltros();
-    await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i });
+    await screen.findByRole('combobox', { name: 'Compañía' });
     mocks.setActiveTramitesTenant.mockClear();
 
     unmount();
@@ -668,7 +692,7 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
 
     expect(await screen.findByText('TRM-2026-000001')).toBeInTheDocument();
     await abrirFiltros();
-    expect(screen.queryByRole('combobox', { name: /ver las validaciones de otra empresa/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Compañía' })).not.toBeInTheDocument();
   });
 });
 
@@ -681,12 +705,12 @@ describe('Validaciones — filtros (HU #10348)', () => {
     await screen.findByText('TRM-2026-000001'); // carga inicial
     await abrirFiltros(user);
 
-    await user.selectOptions(screen.getByLabelText('Estado'), 'aprobado');
-    await buscar(user);
+    await aplicarOpcion(user, 'Estado', 'Aprobado');
 
     await waitFor(() =>
-      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
         expect.objectContaining({ status: 'aprobado' }),
+        undefined,
       ),
     );
   });
@@ -699,12 +723,12 @@ describe('Validaciones — filtros (HU #10348)', () => {
     await screen.findByText('TRM-2026-000001');
     await abrirFiltros(user);
 
-    await user.selectOptions(screen.getByLabelText('Vigencia'), 'por_vencer');
-    await buscar(user);
+    await aplicarOpcion(user, 'Vigencia', 'Por vencer (≤7 días)');
 
     await waitFor(() =>
-      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
         expect.objectContaining({ vigenciaEstado: 'por_vencer' }),
+        undefined,
       ),
     );
   });
@@ -717,17 +741,18 @@ describe('Validaciones — filtros (HU #10348)', () => {
     await screen.findByText('TRM-2026-000001');
     await abrirFiltros(user);
 
-    await user.click(screen.getByRole('button', { name: /rango vencimiento/i }));
-    await user.type(screen.getByLabelText('Vence desde'), '2026-07-01');
-    await user.type(screen.getByLabelText('Vence hasta'), '2026-07-31');
-    await buscar(user);
+    await aplicarFiltro(user, 'Vence entre…', async () => {
+      await user.type(screen.getByLabelText('Desde'), '2026-07-01');
+      await user.type(screen.getByLabelText('Hasta'), '2026-07-31');
+    });
 
     await waitFor(() =>
-      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
         expect.objectContaining({
           expiraDesde: '2026-07-01T00:00:00',
           expiraHasta: '2026-07-31T23:59:59',
         }),
+        undefined,
       ),
     );
   });
@@ -740,12 +765,12 @@ describe('Validaciones — filtros (HU #10348)', () => {
     await screen.findByText('TRM-2026-000001');
     await abrirFiltros(user);
 
-    await user.type(screen.getByLabelText('Vence en ≤ N días'), '3');
-    await buscar(user);
+    await aplicarFiltro(user, 'Vence en ≤ N días', () => user.type(screen.getByLabelText('Días'), '3'));
 
     await waitFor(() =>
-      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
         expect.objectContaining({ venceEnDias: 3 }),
+        undefined,
       ),
     );
   });
@@ -757,14 +782,15 @@ describe('Validaciones — filtros (HU #10348)', () => {
     renderValidaciones();
     await screen.findByText('TRM-2026-000001');
     await abrirFiltros(user);
-    const q = screen.getByLabelText(/buscar por persona o documento/i);
+    const q = screen.getByPlaceholderText('Nombre o número de documento');
     await user.clear(q);
     await user.type(q, 'Ana');
     await buscar(user);
 
     await waitFor(() =>
-      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
         expect.objectContaining({ name: 'Ana' }),
+        undefined,
       ),
     );
 
@@ -773,8 +799,9 @@ describe('Validaciones — filtros (HU #10348)', () => {
     await buscar(user);
 
     await waitFor(() =>
-      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
         expect.objectContaining({ documentNumber: '1020304050' }),
+        undefined,
       ),
     );
   }, 15_000);
@@ -804,8 +831,7 @@ describe('Validaciones — filtros (HU #10348)', () => {
     await screen.findByText('TRM-2026-000001');
     await abrirFiltros(user);
 
-    await user.selectOptions(screen.getByLabelText('Estado'), 'expirado');
-    await buscar(user);
+    await aplicarOpcion(user, 'Estado', 'Expirado');
 
     expect(await screen.findByText(/sin resultados\./i)).toBeInTheDocument();
     // NO debe mostrar el vacío inicial.
@@ -814,29 +840,26 @@ describe('Validaciones — filtros (HU #10348)', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('limpiar filtros: restablece los controles y recarga sin query params', async () => {
+  it('limpiar todo: quita los chips y recarga sin query params', async () => {
     const user = userEvent.setup();
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
 
     renderValidaciones();
     await screen.findByText('TRM-2026-000001');
-    await abrirFiltros(user);
-
-    const estadoSelect = screen.getByLabelText('Estado');
-    await user.selectOptions(estadoSelect, 'aprobado');
-    await buscar(user);
-    await waitFor(() => expect(estadoSelect).toHaveValue('aprobado'));
+    await aplicarOpcion(user, 'Estado', 'Aprobado');
+    expect(await screen.findByText('Estado: Aprobado')).toBeInTheDocument();
 
     mocks.listTenantBiometricPersons.mockClear();
-    await user.click(screen.getByRole('button', { name: /limpiar filtros/i }));
+    await user.click(screen.getByRole('button', { name: 'Limpiar todo' }));
 
     await waitFor(() => {
       expect(mocks.listTenantBiometricPersons).toHaveBeenCalled();
       const lastArg = mocks.listTenantBiometricPersons.mock.calls.at(-1)?.[0];
       expect(lastArg?.status).toBeUndefined();
     });
-    // El control vuelve a "Todos" (valor vacío).
-    expect(screen.getByLabelText('Estado')).toHaveValue('');
+    // El chip desaparece y el disparador vuelve a su estado de reposo.
+    expect(screen.queryByText('Estado: Aprobado')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^\+ filtro$/i })).toBeInTheDocument();
   });
 
   it('auto-refresca la grilla en vivo por intervalo (suscripción), sin pulsar Actualizar', async () => {
@@ -980,7 +1003,8 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
     await user.click(btn);
 
     await waitFor(() =>
-      expect(mocks.requeueStuckIdentityValidation).toHaveBeenCalledWith('evt-1'),
+      // Usuario de compañía: la compañía no viaja (el backend impone la suya), igual que antes.
+      expect(mocks.requeueStuckIdentityValidation).toHaveBeenCalledWith('evt-1', undefined),
     );
     expect(await screen.findByText(/no hay validaciones de identidad atascadas/i)).toBeInTheDocument();
   });
@@ -1159,7 +1183,7 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
 describe('Validaciones — paginación', () => {
   const PAGED: TenantBiometricPersonsResponse = {
     ...FULL,
-    total: 45, // 45 / 20 = 3 páginas
+    total: 45, // 45 / 10 = 5 páginas (HU #12707: 10 por defecto, como Trámites)
   };
 
   it('navega a la página siguiente y consulta el backend con esa página', async () => {
@@ -1169,12 +1193,15 @@ describe('Validaciones — paginación', () => {
     renderValidaciones();
     await screen.findByText('TRM-2026-000001');
 
-    expect(screen.getByText(/página 1 de 3/i)).toBeInTheDocument();
+    // HU #12707 (AC9) — pie de Trámites: navegación numerada + «Mostrando X–Y de N».
+    expect(screen.getByRole('button', { name: 'Página 1' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByText(/de 45$/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /página siguiente/i }));
 
     await waitFor(() =>
-      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
-        expect.objectContaining({ page: 2, pageSize: 20 }),
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 2, pageSize: 10 }),
+        undefined,
       ),
     );
   });
@@ -1189,8 +1216,9 @@ describe('Validaciones — paginación', () => {
     await user.selectOptions(screen.getByLabelText('Filas por página'), '50');
 
     await waitFor(() =>
-      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
         expect.objectContaining({ page: 1, pageSize: 50 }),
+        undefined,
       ),
     );
   });
@@ -1379,7 +1407,7 @@ describe('Validaciones — paginación', () => {
       await user.click(screen.getByRole('button', { name: /confirmar reenvío/i }));
 
       await waitFor(() =>
-        expect(mocks.iniciarBiometric).toHaveBeenCalledWith('inst-3', { parte: 'vendedor' }),
+        expect(mocks.iniciarBiometric).toHaveBeenCalledWith('inst-3', { parte: 'vendedor' }, undefined),
       );
       expect(mocks.resendPrevalidacion).not.toHaveBeenCalled();
     });

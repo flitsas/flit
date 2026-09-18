@@ -31,7 +31,7 @@ import {
   fetchNetworkMonthlyTrend,
 } from "@/lib/api/analytics";
 import { fetchAllCompanies } from "@/lib/api/admin-companies";
-import { tramitesClient } from "@/lib/api/tramites-client";
+import { ALL_TENANTS, tramitesClient } from "@/lib/api/tramites-client";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
@@ -340,13 +340,10 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
     const controller = new AbortController();
 
     async function loadBiometrics() {
-      // El endpoint /biometric-validations NO tiene vista global (a diferencia de /analytics):
-      // exige un tenant concreto vía header. Un SuperAdmin en "Todas las compañías" debe ver un
-      // aviso, no datos silenciosamente equivocados (el tenant del propio JWT del SuperAdmin).
-      if (isSuper && !tenantId) {
-        setBiometricStatus("empty");
-        return;
-      }
+      // HU #12706 (AC4) — el listado plano ya tiene vista global para el SuperAdmin: en «Todas las
+      // compañías» se pide explícitamente sin compañía (ALL_TENANTS), no con el tenant del propio JWT
+      // del SuperAdmin, que daría datos silenciosamente equivocados.
+      const biometricTenant = isSuper && !tenantId ? ALL_TENANTS : tenantId || undefined;
       setBiometricStatus("loading");
 
       if (!isValidOptionalRange(range)) {
@@ -363,8 +360,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
 
       try {
         const [statsRes, expiringRes] = await Promise.all([
-          tramitesClient.listTenantBiometricValidations({ createdFrom, createdTo, pageSize: 10 }, tenantId || undefined),
-          tramitesClient.listTenantBiometricValidations({ vigenciaEstado: "por_vencer", pageSize: 10 }, tenantId || undefined),
+          tramitesClient.listTenantBiometricValidations({ createdFrom, createdTo, pageSize: 10 }, biometricTenant),
+          tramitesClient.listTenantBiometricValidations({ vigenciaEstado: "por_vencer", pageSize: 10 }, biometricTenant),
         ]);
         if (controller.signal.aborted) return;
         setBiometricStats(statsRes.stats);

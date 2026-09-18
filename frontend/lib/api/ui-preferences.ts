@@ -13,7 +13,9 @@ export type UiPreferenceScope =
   | 'tramites.columns'
   | 'ot.procedures.columns'
   /** HU #12363 — alcance de lectura del listado de la cabeza de red (`{ mode, childTenantId? }`). */
-  | 'tramites.scope';
+  | 'tramites.scope'
+  /** HU #12707 — columnas visibles en la grilla de Validación de Identidad. */
+  | 'identidad.columns';
 
 /** Forma del valor persistido. Hoy solo se usa `visible` (claves de columna); se deja abierta
  *  a futuras claves de preferencia bajo el mismo scope. */
