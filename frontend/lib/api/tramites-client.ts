@@ -599,6 +599,36 @@ function authOnlyHeader(): HeadersInit {
  */
 export const ALL_TENANTS = '*';
 
+/**
+ * Query string de la grilla por persona de Validación de Identidad: la usan la ruta propia y la de red
+ * (HU #12709), para que un mismo filtro viaje igual por las dos. Vacíos/undefined no se envían;
+ * `standalone` es booleano explícito (no se pierde `false`).
+ */
+function biometricPersonParams(filters: TenantBiometricPersonFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  const add = (key: string, value: string | number | undefined) => {
+    if (value === undefined) return;
+    const s = typeof value === 'number' ? String(value) : value.trim();
+    if (s !== '') params.set(key, s);
+  };
+  add('name', filters.name);
+  add('documentType', filters.documentType);
+  add('documentNumber', filters.documentNumber);
+  add('status', filters.status);
+  add('createdFrom', filters.createdFrom);
+  add('createdTo', filters.createdTo);
+  add('vigenciaEstado', filters.vigenciaEstado);
+  add('expiraDesde', filters.expiraDesde);
+  add('expiraHasta', filters.expiraHasta);
+  add('venceEnDias', filters.venceEnDias);
+  add('page', filters.page);
+  add('pageSize', filters.pageSize);
+  if (filters.standalone !== undefined) {
+    params.set('standalone', String(filters.standalone));
+  }
+  return params;
+}
+
 export function tenantHeader(tenantId?: string): HeadersInit {
   const headers: Record<string, string> = {};
   const token = getToken();
@@ -1993,33 +2023,76 @@ export const tramitesClient = {
     );
   },
 
+  // HU #12708/#12709 — Validación de Identidad de la RED (cabeza de grupo, solo lectura). Rutas
+  // `network/**`: el alcance lo resuelve el servidor desde el JWT, así que NO se envía `X-Tenant-Id`.
+  // Sin `childTenantId` = toda la red; con él, solo esa compañía (fuera de la red ⇒ 403). Las filas de
+  // una hija llegan con el correo enmascarado y sin enlace de captura; las de la cabeza, completas.
+  listNetworkIdentityPersons: async (
+    filters: TenantBiometricPersonFilters = {},
+    childTenantId?: string,
+  ): Promise<TenantBiometricPersonsResponse> => {
+    const params = biometricPersonParams(filters);
+    if (childTenantId) params.set('childTenantId', childTenantId);
+    const query = params.toString();
+    const res = await request<TenantBiometricPersonsResponse>(
+      `/api/v1/tramites/network/identity-validations/by-person${query ? `?${query}` : ''}`,
+      { headers: authOnlyHeader() },
+    );
+    return (
+      res ?? {
+        persons: [],
+        stats: { total: 0, aprobadas: 0, enProceso: 0, rechazadas: 0, expiradas: 0 },
+        page: 1,
+        pageSize: 20,
+        total: 0,
+      }
+    );
+  },
+
+  // HU #12708 — historial de una persona de UNA compañía de la red (la cédula puede estar en dos hijas).
+  listNetworkPersonIdentityValidations: async (
+    childTenantId: string,
+    documentType: string,
+    documentNumber: string,
+    opts: { page?: number; pageSize?: number } = {},
+  ): Promise<PersonBiometricValidationsResponse> => {
+    const params = new URLSearchParams();
+    params.set('childTenantId', childTenantId);
+    params.set('documentType', documentType);
+    params.set('documentNumber', documentNumber);
+    if (opts.page != null) params.set('page', String(opts.page));
+    if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize));
+    const res = await request<PersonBiometricValidationsResponse>(
+      `/api/v1/tramites/network/identity-validations/by-person/detail?${params.toString()}`,
+      { headers: authOnlyHeader() },
+    );
+    return (
+      res ?? {
+        documentType,
+        documentNumber,
+        name: null,
+        validations: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        allTerminal: true,
+      }
+    );
+  },
+
+  // HU #12708 — bitácora de una validación de la red (fuera del alcance ⇒ 404, como un id inexistente).
+  getNetworkIdentityAudit: (validationId: string): Promise<IdentityAuditResponse> =>
+    request<IdentityAuditResponse>(
+      `/api/v1/tramites/network/identity-validations/${validationId}/audit`,
+      { headers: authOnlyHeader() },
+    ),
+
   // HU #11270/#11271 — vista agrupada por persona (ADR-0040). Endpoint propio; no altera el listado plano.
   listTenantBiometricPersons: async (
     filters: TenantBiometricPersonFilters = {},
     tenantId?: string,
   ): Promise<TenantBiometricPersonsResponse> => {
-    const params = new URLSearchParams();
-    const add = (key: string, value: string | number | undefined) => {
-      if (value === undefined) return;
-      const s = typeof value === 'number' ? String(value) : value.trim();
-      if (s !== '') params.set(key, s);
-    };
-    add('name', filters.name);
-    add('documentType', filters.documentType);
-    add('documentNumber', filters.documentNumber);
-    add('status', filters.status);
-    add('createdFrom', filters.createdFrom);
-    add('createdTo', filters.createdTo);
-    add('vigenciaEstado', filters.vigenciaEstado);
-    add('expiraDesde', filters.expiraDesde);
-    add('expiraHasta', filters.expiraHasta);
-    add('venceEnDias', filters.venceEnDias);
-    add('page', filters.page);
-    add('pageSize', filters.pageSize);
-    if (filters.standalone !== undefined) {
-      params.set('standalone', String(filters.standalone));
-    }
-    const query = params.toString();
+    const query = biometricPersonParams(filters).toString();
     const res = await request<TenantBiometricPersonsResponse>(
       `/api/v1/tramites/biometric-validations/by-person${query ? `?${query}` : ''}`,
       { headers: tenantHeader(tenantId) },

@@ -77,6 +77,19 @@ vi.mock('@/lib/api/tramites-client', () => ({
 }));
 
 // El selector de empresa solo existe para el admin FLIT: se controla el rol desde el JWT.
+// HU #12709 — estas pruebas son de un usuario que no es cabeza de red: alcance siempre «Mi compañía».
+vi.mock('@/hooks/useNetworkScope', () => ({
+  useNetworkScope: () => ({
+    isGroupParent: false,
+    scope: { mode: 'own' },
+    setScope: () => {},
+    networkActive: false,
+    children: [],
+    childrenStatus: 'idle',
+    ready: true,
+    saving: false,
+  }),
+}));
 vi.mock('@/lib/api/superadmin-client', () => ({
   superadminClient: { listCompanies: mocks.listCompanies },
 }));

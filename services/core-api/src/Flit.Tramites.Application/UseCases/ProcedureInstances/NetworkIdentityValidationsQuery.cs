@@ -8,8 +8,9 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 //
 // Misma lectura que la vista propia de la compañía (#12706) con el alcance de la red: la cabeza lee
 // {cabeza} ∪ hijas vía TenantScope (resuelto en BD por el middleware, nunca por la petición). Qué NO ve
-// la cabeza de los datos de una hija, por minimización: el correo completo (va enmascarado) y el enlace
-// de captura. Ningún DTO de estas rutas trae certificado, fotografías ni token.
+// la cabeza de los datos de una HIJA, por minimización: el correo completo (va enmascarado) y el enlace
+// de captura. Sus PROPIAS filas viajan completas: son suyas y conserva sus acciones sobre ellas (HU #12709,
+// AC3). Ningún DTO de estas rutas trae certificado, fotografías ni token.
 
 /// <summary>Errores propios de las rutas de identidad de la red (además de los de <see cref="NetworkScopePolicy"/>).</summary>
 public static class NetworkIdentityErrors
@@ -19,8 +20,9 @@ public static class NetworkIdentityErrors
 }
 
 /// <summary>
-/// Fila de la grilla por persona de la red: los mismos campos que <see cref="TenantBiometricPersonDto"/>
-/// salvo el enlace de captura y su vencimiento, y con el correo enmascarado.
+/// Fila de la grilla por persona de la red: los mismos campos que <see cref="TenantBiometricPersonDto"/>.
+/// En filas de una hija el correo va enmascarado y el enlace de captura (con su vencimiento) es null; en
+/// filas de la propia cabeza viajan como en su vista propia.
 /// </summary>
 public sealed record NetworkIdentityPersonDto(
     Guid TenantId,
@@ -45,7 +47,9 @@ public sealed record NetworkIdentityPersonDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? ValidatedAt,
     DateTimeOffset? ValidUntil,
-    int? DaysRemaining);
+    int? DaysRemaining,
+    string? CaptureUrl = null,
+    DateTimeOffset? LinkExpiresAt = null);
 
 /// <summary>Respuesta de <c>GET /network/identity-validations/by-person</c>.</summary>
 public sealed record NetworkIdentityPersonsResponse(
@@ -55,9 +59,19 @@ public sealed record NetworkIdentityPersonsResponse(
     int PageSize,
     int Total);
 
-/// <summary>Minimización de datos personales para la cabeza de red.</summary>
+/// <summary>Minimización de datos personales para la cabeza de red (solo sobre datos de sus hijas).</summary>
 public static class NetworkIdentityRedaction
 {
+    /// <summary>
+    /// Fila de la red vista por la cabeza <paramref name="headTenantId"/>: la de una hija sale con el correo
+    /// enmascarado y sin enlace; la propia, completa.
+    /// </summary>
+    public static NetworkIdentityPersonDto ToNetwork(TenantBiometricPersonDto p, Guid? headTenantId) =>
+        p.TenantId == headTenantId ? ToOwn(p) : ToNetwork(p);
+
+    private static NetworkIdentityPersonDto ToOwn(TenantBiometricPersonDto p) =>
+        ToNetwork(p) with { Email = p.Email, CaptureUrl = p.CaptureUrl, LinkExpiresAt = p.LinkExpiresAt };
+
     public static NetworkIdentityPersonDto ToNetwork(TenantBiometricPersonDto p) => new(
         p.TenantId,
         p.TenantName,
@@ -115,8 +129,9 @@ public sealed class NetworkListIdentityPersonsHandler(ListTenantBiometricPersons
         if (error is not null)
             return (null, error);
 
+        var head = scope!.WriteTenantId;
         return (new NetworkIdentityPersonsResponse(
-            result!.Persons.Select(NetworkIdentityRedaction.ToNetwork).ToList(),
+            result!.Persons.Select(p => NetworkIdentityRedaction.ToNetwork(p, head)).ToList(),
             result.Stats,
             result.Page,
             result.PageSize,
@@ -154,6 +169,10 @@ public sealed class NetworkListPersonIdentityValidationsHandler(ListPersonBiomet
         var (result, error) = await inner.HandleAsync(tenantId, documentType, documentNumber, page, pageSize, ct);
         if (error is not null)
             return (null, error);
+
+        // El historial de una persona de la propia cabeza viaja como en su vista propia.
+        if (tenantId == scope!.WriteTenantId)
+            return (result, null);
 
         return (result! with
         {
