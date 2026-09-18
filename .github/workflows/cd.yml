@@ -60,8 +60,9 @@ jobs:
             release)
               env_name=pdn
               gh_env=production
-              front_domain=pdn.flitsas.online
-              api_domain=api.pdn.flitsas.online
+              # Dominios reales del VPS/nginx (NO pdn.flitsas.online — ese host no sirve el stack).
+              front_domain=flitsas.online
+              api_domain=api.flitsas.online
               image_tag=pdn
               front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030
               internal_subnet=10.114.60.0/24
@@ -234,7 +235,7 @@ jobs:
             # Marca Blanca (HU #12419, delta-hechos-post-adr.md #25) — hosts que se consideran
             # FLIT (sin marca de red). No hay salida de dominio de frontend en `needs.setup`,
             # así que se usa el respaldo de dominios propios de la plataforma.
-            NEXT_PUBLIC_FLIT_HOSTS=*.flitsas.online,*.flitsas.com
+            NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
