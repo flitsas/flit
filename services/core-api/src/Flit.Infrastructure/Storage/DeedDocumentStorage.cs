@@ -34,7 +34,11 @@ internal sealed class DeedDocumentStorage : IDeedDocumentStorage
             .CreatePresignedUploadAsync(tenantId, DocumentTipo, DocumentFilename, cancellationToken)
             .ConfigureAwait(false);
 
-        return new DeedUploadTicket(upload.StoragePath, upload.Url, upload.Fields);
+        return new DeedUploadTicket(
+            upload.StoragePath,
+            upload.Url,
+            upload.Fields,
+            string.IsNullOrWhiteSpace(upload.Method) ? "POST" : upload.Method);
     }
 
     public async Task<DeedDocumentView?> GetViewUrlAsync(

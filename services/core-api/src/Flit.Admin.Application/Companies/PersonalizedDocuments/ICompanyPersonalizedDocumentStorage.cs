@@ -1,16 +1,13 @@
 namespace Flit.Admin.Application.Companies.PersonalizedDocuments;
 
 /// <summary>
-/// Presigned POST policy para subir el PDF personalizado DIRECTO al storage de la empresa (sin pasar
-/// por el request del API). <c>StoragePath</c> es el id opaco del backend de almacenamiento (lo que
-/// FLIT guarda en <c>admin.company_personalized_documents</c>); <c>Url</c> + <c>Fields</c> son la URL
-/// firmada y los campos del POST policy (van ANTES del <c>file</c> en el multipart). El SHA-256
-/// declarado lo calcula el cliente; el servidor lo RECALCULA al confirmar (§7 DT-6 del plan técnico).
+/// Ticket de subida directa al storage (ADR-0057). <c>Method</c> = <c>POST</c>|<c>PUT</c>.
 /// </summary>
 public sealed record PersonalizedDocumentUploadTicket(
     string StoragePath,
     string Url,
-    IReadOnlyDictionary<string, string> Fields);
+    IReadOnlyDictionary<string, string> Fields,
+    string Method = "POST");
 
 /// <summary>
 /// Presigned GET URL de vida corta (HU #11314, ADR-0029-preview-presigned-get-inline) para
