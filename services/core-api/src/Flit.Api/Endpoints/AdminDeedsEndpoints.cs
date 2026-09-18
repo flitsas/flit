@@ -211,7 +211,13 @@ public static class AdminDeedsEndpoints
     }
 
     private static object ToUpload(DeedUploadTicket ticket) =>
-        new { storagePath = ticket.StoragePath, url = ticket.Url, fields = ticket.Fields };
+        new
+        {
+            storagePath = ticket.StoragePath,
+            url = ticket.Url,
+            fields = ticket.Fields,
+            method = string.IsNullOrWhiteSpace(ticket.Method) ? "POST" : ticket.Method,
+        };
 
     /// <summary>422 con el sobre estándar de errores; nunca incluye PII.</summary>
     private static IResult ValidationProblem(IReadOnlyList<DeedValidationError> errors) =>

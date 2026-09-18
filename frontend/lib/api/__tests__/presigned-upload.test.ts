@@ -26,7 +26,21 @@ describe("uploadFileToPresignedUrl", () => {
     );
   });
 
-  it("usa POST multipart cuando method ausente (MinIO/S3)", async () => {
+  it("usa PUT si method ausente y fields vacíos (ticket Contabo sin method en API)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => "" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = new File([new Uint8Array([1])], "doc.pdf", { type: "application/pdf" });
+    await uploadFileToPresignedUrl(
+      { url: "https://eu2.contabostorage.com/bucket/obj?X-Amz-Signature=abc", fields: {} },
+      file,
+    );
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].method).toBe("PUT");
+  });
+
+  it("usa POST multipart cuando method ausente pero hay fields (MinIO/S3)", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => "" });
     vi.stubGlobal("fetch", fetchMock);
 

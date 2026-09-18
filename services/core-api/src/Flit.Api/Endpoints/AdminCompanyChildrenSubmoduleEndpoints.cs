@@ -583,6 +583,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
                             storagePath = result.Upload.StoragePath,
                             url = result.Upload.Url,
                             fields = result.Upload.Fields,
+                            method = string.IsNullOrWhiteSpace(result.Upload.Method) ? "POST" : result.Upload.Method,
                         },
                 }),
             _ => Results.Json(
@@ -970,6 +971,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
                             storagePath = result.Upload.StoragePath,
                             url = result.Upload.Url,
                             fields = result.Upload.Fields,
+                            method = string.IsNullOrWhiteSpace(result.Upload.Method) ? "POST" : result.Upload.Method,
                         },
                 })
             : Results.Json(
@@ -1023,6 +1025,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
                         storagePath = result.Upload.StoragePath,
                         url = result.Upload.Url,
                         fields = result.Upload.Fields,
+                        method = string.IsNullOrWhiteSpace(result.Upload.Method) ? "POST" : result.Upload.Method,
                     },
             }),
             UpdateDeedOutcome.NotFound => Results.NotFound(),
