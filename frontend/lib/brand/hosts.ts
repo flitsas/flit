@@ -16,7 +16,9 @@
 
 /**
  * Lista por defecto cuando `NEXT_PUBLIC_FLIT_HOSTS` no está definida (dev local y respaldo).
- * `*.dominio` matchea cualquier subdominio de `dominio` (no el dominio raíz sin subdominio).
+ * `*.dominio` matchea el dominio raíz y cualquier subdominio (paridad con `ReservedHosts` .NET).
+ * En PDN el frontend se sirve en la raíz `flitsas.online`; tratarla como dominio de red rompía el
+ * login (arreglo 5ae9578f, traído de `release`).
  * `!host` excluye ese host exacto aunque otro patrón lo cubra.
  *
  * Las negaciones de los hosts de prueba de marca blanca viven TAMBIÉN aquí, no solo en el
@@ -59,8 +61,10 @@ function stripPort(host: string): string {
 
 function matchesPattern(host: string, pattern: string): boolean {
   if (pattern.startsWith("*.")) {
-    const suffix = pattern.slice(1); // ".dominio.tld"
-    return host.length > suffix.length && host.endsWith(suffix);
+    // Alineado con ReservedHosts (.NET): `*.flitsas.online` también reserva el apex.
+    const baseDomain = pattern.slice(2); // "flitsas.online"
+    const suffix = pattern.slice(1); // ".flitsas.online"
+    return host === baseDomain || (host.length > suffix.length && host.endsWith(suffix));
   }
   return host === pattern;
 }
