@@ -12,7 +12,7 @@ import {
   type UserProfileKind,
 } from "@/lib/users/profiles";
 
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 /**
 
  * Fila normalizada de usuario. Los tres listados (módulo Usuarios, ficha de compañía y hub OT)
@@ -101,7 +101,7 @@ function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-CO", { timeZone: ZONA_COLOMBIA, dateStyle: "medium", timeStyle: "short" }).format(parsed);
+  return formatFechaHora(parsed);
 }
 
 export interface UsersTableProps {

@@ -37,7 +37,7 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 interface Props {
 
   instanceId: string | null;
@@ -178,7 +178,7 @@ function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  return formatFechaHora(d);
 }
 
 /**
@@ -1382,7 +1382,7 @@ function StartAction({
       if (conflict) {
         setConfirmOpen(false);
         const hasta = conflict.validUntil
-          ? new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium' }).format(new Date(conflict.validUntil))
+          ? formatFechaHora(new Date(conflict.validUntil))
           : null;
         setConflictMsg(
           conflict.motivo === 'identidad_vigente'

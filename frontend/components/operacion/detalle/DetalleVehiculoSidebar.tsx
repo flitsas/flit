@@ -1,6 +1,6 @@
 'use client';
 
-import { formatFecha } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 import { DETALLE_CARD, DETALLE_META, DETALLE_NAVY, DETALLE_BORDER } from './detalle-visual';
 
@@ -30,8 +30,8 @@ export function DetalleVehiculoSidebar({ item }: { item: InstanceSummary }) {
         className="mt-3 border-t pt-3 text-[11px] border-[#DFE5ED] dark:border-white/5"
         style={{ color: DETALLE_META }}
       >
-        <p>Creado: {formatFecha(item.createdAt)}</p>
-        <p>Actualizado: {item.updatedAt ? formatFecha(item.updatedAt) : '—'}</p>
+        <p>Creado: {formatFechaHora(item.createdAt)}</p>
+        <p>Actualizado: {item.updatedAt ? formatFechaHora(item.updatedAt) : '—'}</p>
       </div>
     </aside>
   );

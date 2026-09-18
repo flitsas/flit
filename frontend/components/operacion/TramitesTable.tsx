@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { formatFecha } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
@@ -266,9 +266,10 @@ function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipI
   );
 }
 
-// HU #11018 — formato de negocio unico: AÑO/MES/DIA, sin hora.
+// Epica #12552 — formato unico de instante: DD/MM/YYYY HH:mm en hora de Colombia.
+// Sustituye el criterio de la HU #11018 (AÑO/MES/DIA sin hora) por decision del negocio.
 function shortDate(iso: string): string {
-  return formatFecha(iso);
+  return formatFechaHora(iso);
 }
 
 // Selector de columnas — el ancho/orden de cada columna vive en TRAMITES_COLUMNS

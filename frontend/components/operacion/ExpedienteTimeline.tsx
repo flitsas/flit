@@ -3,7 +3,7 @@
 import type { StatusHistory } from '@/lib/api/types/procedure-runtime';
 import { estadoLabel } from '@/lib/tramites/estados';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 // Línea de tiempo del expediente. Adaptado del ExpedienteTimeline de Johan a la
 
 // capa de datos de FLIT: la cronología se construye desde el statusHistory[] que
@@ -19,7 +19,7 @@ interface Props {
 
 function fmt(iso: string): string {
   try {
-    return new Date(iso).toLocaleString('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' });
+    return formatFechaHora(new Date(iso));
   } catch {
     return iso;
   }

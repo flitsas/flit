@@ -861,7 +861,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     expect(within(rows).getByText('Empresa Gestora SAS')).toBeInTheDocument();
     expect(within(rows).getByText('Ana Gestora')).toBeInTheDocument();
     expect(within(rows).getByText('Integración')).toBeInTheDocument();
-    expect(within(rows).getByText('2026/07/20')).toBeInTheDocument();
+    expect(within(rows).getByText('20/07/2026 10:00')).toBeInTheDocument();
   });
 
   // La acreditación de cada parte vive DENTRO de la celda de esa parte: quién firmó lo dice la

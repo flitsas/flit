@@ -6,8 +6,8 @@ import type { StatusHistoryItem } from '@/lib/api/types/procedure-runtime';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { LogQxLink } from './LogQxLink';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
 
+import { formatFechaHora } from '@/lib/format/date';
 /**
  * HU-2 (N03, RF05) — timeline vertical del historial de transiciones de estado del trámite
  * (GET /instances/{id}/status-history). Más reciente arriba; cada entrada muestra el chip del
@@ -17,15 +17,11 @@ import { ZONA_COLOMBIA } from '@/lib/format/date';
 
 const PAGE_SIZE = 20;
 
-const fmtFecha = new Intl.DateTimeFormat('es-CO', {
-  timeZone: ZONA_COLOMBIA,
-  dateStyle: 'medium',
-  timeStyle: 'short',
-});
+
 
 function formatFecha(iso: string): string {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : fmtFecha.format(date);
+  return Number.isNaN(date.getTime()) ? iso : formatFechaHora(date);
 }
 
 export function EstadoTimeline({ instanceId }: { instanceId: string }) {

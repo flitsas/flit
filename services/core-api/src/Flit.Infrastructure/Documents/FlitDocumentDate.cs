@@ -1,30 +1,36 @@
 using System.Globalization;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Documents;
 
 /// <summary>
-/// Formato de fecha de los documentos que genera FLIT (HU #11049): <b>AÑO/MES/DÍA, sin hora</b>.
+/// Fechas de los documentos que genera FLIT. Adopta el formato estándar de la plataforma
+/// (Épica #12552): <b><c>DD/MM/YYYY HH:mm</c></b> para un instante y <b><c>DD/MM/YYYY</c></b> para
+/// una fecha de calendario.
 ///
-/// <para>Los certificados imprimían <c>yyyy-MM-dd HH:mm UTC</c> para sus fechas propias, y las fechas de
-/// SOAT, RTM y RUES salían tal como las entrega el proveedor —a veces con hora—, así que el consolidado
-/// mezclaba formatos y añadía una precisión (hora, minuto) que no aporta a quien revisa el expediente.</para>
+/// <para>
+/// Esto <b>revierte el criterio de la HU #11049</b>, que imprimía <c>AÑO/MES/DÍA</c> sin hora en
+/// todo el consolidado. Es un cambio de criterio del negocio, no la corrección de un defecto:
+/// queda anotado en el Discussion de la Épica para que no compute contra aquella historia.
+/// </para>
 ///
-/// <para>Dos casos distintos, por eso hay dos operaciones:</para>
+/// <para>Siguen siendo dos casos distintos, y ahora la diferencia además se ve:</para>
 /// <list type="bullet">
-///   <item><see cref="Format(DateTimeOffset)"/> — fechas propias del sistema, ya tipadas.</item>
-///   <item><see cref="Normalize"/> — fechas que llegan como TEXTO del proveedor. Si se pueden
-///   interpretar se reformatean; si no, <b>se devuelve el original intacto</b>: nunca se inventa ni se
-///   vacía un dato de un certificado.</item>
+///   <item><see cref="Format(DateTimeOffset)"/> — fechas PROPIAS del sistema, ya tipadas: cuándo se
+///   consultó una fuente, cuándo se generó el documento. Son instantes, así que llevan hora y se
+///   convierten a la hora de Colombia.</item>
+///   <item><see cref="Normalize"/> — fechas que llegan como TEXTO del proveedor (SOAT, RTM, RUES):
+///   expedición, vigencia, vencimiento, matrícula. Son fechas de CALENDARIO, así que van sin hora y
+///   <b>sin convertir de zona</b> (excepción RN-08): convertirlas correría el día del vencimiento de
+///   una póliza. Si no se pueden interpretar <b>se devuelve el original intacto</b>: nunca se
+///   inventa ni se vacía un dato de un certificado.</item>
 /// </list>
 /// </summary>
 internal static class FlitDocumentDate
 {
-    /// <summary>Patrón único de los documentos FLIT.</summary>
-    private const string Pattern = "yyyy/MM/dd";
-
     /// <summary>
     /// Formatos que se aceptan al normalizar texto del proveedor. Se prueban en orden y de forma
-    /// EXACTA para no depender de la cultura del runtime (que puede correr en modo
+    /// EXACTA para no depender de la cultura del runtime (que corre en modo
     /// globalization-invariant) y para no confundir día con mes: <c>dd/MM/yyyy</c> va antes que
     /// <c>MM/dd/yyyy</c>, que no se acepta, porque los proveedores colombianos usan día primero.
     /// </summary>
@@ -47,17 +53,17 @@ internal static class FlitDocumentDate
         "dd-MM-yyyy",
     ];
 
-    /// <summary>Fecha propia del sistema en el formato documental.</summary>
-    internal static string Format(DateTimeOffset value) =>
-        value.ToString(Pattern, CultureInfo.InvariantCulture);
+    /// <summary>Fecha propia del sistema: instante, con hora, en hora de Colombia.</summary>
+    internal static string Format(DateTimeOffset value) => FormatoFecha.Instante(value);
 
-    /// <summary>Fecha propia del sistema en el formato documental.</summary>
+    /// <inheritdoc cref="Format(DateTimeOffset)"/>
     internal static string Format(DateTime value) =>
-        value.ToString(Pattern, CultureInfo.InvariantCulture);
+        FormatoFecha.Instante(new DateTimeOffset(value.ToUniversalTime(), TimeSpan.Zero));
 
     /// <summary>
-    /// Reformatea a <c>AAAA/MM/DD</c> una fecha que llega como texto (SOAT, RTM, RUES). Devuelve el
-    /// valor original —recortado— cuando no se puede interpretar, y <c>null</c>/vacío tal cual.
+    /// Reformatea a <c>DD/MM/YYYY</c> una fecha de calendario que llega como texto (SOAT, RTM,
+    /// RUES). Devuelve el valor original —recortado— cuando no se puede interpretar, y
+    /// <c>null</c>/vacío tal cual.
     /// </summary>
     internal static string? Normalize(string? value)
     {
@@ -70,7 +76,7 @@ internal static class FlitDocumentDate
                 raw, AcceptedFormats, CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var exact))
         {
-            return Format(exact);
+            return Calendario(exact);
         }
 
         // Último intento tolerante (ISO 8601 con desplazamiento, sufijos raros del proveedor…). Si
@@ -78,7 +84,16 @@ internal static class FlitDocumentDate
         return DateTimeOffset.TryParse(
             raw, CultureInfo.InvariantCulture,
             DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var loose)
-            ? Format(loose)
+            ? Calendario(loose)
             : raw;
     }
+
+    /// <summary>
+    /// Día tal como vino, sin mover la zona. El texto se interpretó con
+    /// <see cref="DateTimeStyles.AssumeUniversal"/>, de modo que «2027-01-23» quedó en 00:00Z:
+    /// tomar su día en UTC devuelve el 23. Pasarlo a Colombia devolvería el 22 — el corrimiento que
+    /// la excepción RN-08 existe para evitar.
+    /// </summary>
+    private static string Calendario(DateTimeOffset parsed) =>
+        FormatoFecha.Calendario(DateOnly.FromDateTime(parsed.UtcDateTime));
 }

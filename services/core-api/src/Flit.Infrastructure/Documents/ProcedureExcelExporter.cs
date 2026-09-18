@@ -3,6 +3,7 @@ using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Dtos;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Documents;
 
@@ -93,8 +94,8 @@ internal sealed class ProcedureExcelExporter : IProcedureExcelExporter
         r.Category,
         r.Status,
         r.CreatedByDisplayName,
-        r.SubmittedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? string.Empty,
-        r.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? string.Empty,
+        FormatoFecha.Instante(r.SubmittedAt),
+        FormatoFecha.Instante(r.CompletedAt),
     ];
 
     private static void WriteRow(OpenXmlWriter writer, IReadOnlyList<string> values)

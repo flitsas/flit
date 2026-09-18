@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { UserCheck } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { WizardAccordion } from './WizardAccordion';
-import { formatFecha } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 import type { MandateSignerSelection } from '@/lib/api/types/procedure-runtime';
 
 const BORDER = '#DFE5ED';
@@ -119,7 +119,7 @@ export function MandatarioSection({
                 ) : o.identidadVigente ? (
                   <span className="block text-xs" style={{ color: 'var(--flit-success-ink)' }}>
                     Identidad vigente
-                    {o.identidadHasta ? ` hasta el ${formatFecha(o.identidadHasta)}` : ''}
+                    {o.identidadHasta ? ` hasta el ${formatFechaHora(o.identidadHasta)}` : ''}
                   </span>
                 ) : (
                   <span className="block text-xs" style={{ color: 'var(--badge-warning-fg)' }}>

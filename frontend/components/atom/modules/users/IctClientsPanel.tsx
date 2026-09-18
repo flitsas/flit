@@ -19,7 +19,7 @@ import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import type { CompanyListItem } from "@/lib/api/types";
 import { SearchableSelect } from "@/components/atom/SearchableSelect";
 
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 interface Props {
 
   isSuperAdmin: boolean;
@@ -308,7 +308,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
                     )}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
-                    {c.lastLoginAt ? new Date(c.lastLoginAt).toLocaleString(undefined, { timeZone: ZONA_COLOMBIA }) : "—"}
+                    {c.lastLoginAt ? formatFechaHora(new Date(c.lastLoginAt)) : "—"}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1">

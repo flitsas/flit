@@ -44,7 +44,7 @@ describe('timeline-mappers', () => {
     expect(nodes[0]!.info.rol).toBe('Gestor');
     // El campo se llama "Fecha y hora" en la tarjeta: debe traer la hora, no solo el día
     // (formatFechaHora, no formatFecha — esta última es la fecha de negocio sin hora, HU #11018).
-    expect(nodes[0]!.info.fecha).toBe('2026/01/02 05:00');
+    expect(nodes[0]!.info.fecha).toBe('02/01/2026 05:00');
   });
 
   it('mapStatusHistoryToTimelineNodes cae al guion cuando fue un proceso automático', () => {

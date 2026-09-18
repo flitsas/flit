@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using Flit.Analytics.Application.Dtos;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Analytics.Scheduling;
 
@@ -184,7 +185,6 @@ internal static class SchedulerEmailComposer
         TimeZoneInfo timeZone,
         EmailTheme? theme)
     {
-        var local = TimeZoneInfo.ConvertTime(triggeredAtUtc, timeZone);
         var sb = new StringBuilder();
         OpenLayout(sb, "Alerta FLIT", ruleName, theme);
         sb.Append(CultureInfo.InvariantCulture,
@@ -196,7 +196,7 @@ internal static class SchedulerEmailComposer
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 4px\"><strong>Ventana de evaluación:</strong> últimos {windowMinutes.ToString(Es)} minutos</p>");
         sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0\"><strong>Fecha del disparo:</strong> {local.ToString("dd/MM/yyyy HH:mm", Es)} (hora de Bogotá)</p>");
+            $"<p style=\"margin:0\"><strong>Fecha del disparo:</strong> {FormatoFecha.Instante(triggeredAtUtc)} (hora de Bogotá)</p>");
         CloseLayout(sb, theme);
         return sb.ToString();
     }

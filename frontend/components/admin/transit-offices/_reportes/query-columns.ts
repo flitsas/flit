@@ -16,7 +16,7 @@ import {
   type ColumnPreset,
   type DataColumn,
 } from "@/components/consultas/columns";
-import { estadoMeta, formatDate, formatDateTime, formatHours, formatInt } from "./report-columns";
+import { estadoMeta, formatDateTime, formatHours, formatInt } from "./report-columns";
 
 const TRANSFORMACION_LABEL: Record<string, string> = {
   cambio_color: "Color",
@@ -183,7 +183,7 @@ export const QUERY_COLUMNS: QueryColumn[] = [
     label: "Radicado",
     group: "Fechas",
     xlsxHeader: "Fecha de radicación",
-    value: (r) => formatDate(r.radicadoEn),
+    value: (r) => formatDateTime(r.radicadoEn),
     raw: (r) => bogotaDay(r.radicadoEn),
     width: 14,
     sort: "radicado",
@@ -194,7 +194,7 @@ export const QUERY_COLUMNS: QueryColumn[] = [
     label: "Decidido",
     group: "Fechas",
     xlsxHeader: "Fecha de decisión",
-    value: (r) => formatDate(r.decididoEn),
+    value: (r) => formatDateTime(r.decididoEn),
     raw: (r) => bogotaDay(r.decididoEn),
     width: 14,
     sort: "decidido",
@@ -204,7 +204,7 @@ export const QUERY_COLUMNS: QueryColumn[] = [
     label: "Aprobado",
     group: "Fechas",
     xlsxHeader: "Fecha de aprobación",
-    value: (r) => formatDate(r.aprobadoEn),
+    value: (r) => formatDateTime(r.aprobadoEn),
     raw: (r) => bogotaDay(r.aprobadoEn),
     width: 14,
   },

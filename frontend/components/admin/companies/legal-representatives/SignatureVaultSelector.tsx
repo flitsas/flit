@@ -13,7 +13,7 @@ import {
   createSignatureVaultEntry,
   fetchSignatureVaultByDocument,
 } from "@/lib/api/admin-signature-vault";
-import { formatFecha } from "@/lib/format/date";
+import { formatFechaCalendario } from "@/lib/format/date";
 import { ApiError, ApiValidationError } from "@/lib/api/types";
 
 export interface SignatureVaultSelectorProps {
@@ -40,7 +40,7 @@ export interface SignatureVaultSelectorProps {
  * hasta que alguien generaba un PDF y notaba que faltaba la línea «Hash:».
  */
 function etiquetaFirma(sig: SignatureVaultItem): string {
-  const base = `${sig.fullName} — vigente hasta ${formatFecha(sig.vigenciaHasta)}`;
+  const base = `${sig.fullName} — vigente hasta ${formatFechaCalendario(sig.vigenciaHasta)}`;
   return sig.codigoHash ? `${base} · Hash ${sig.codigoHash}` : `${base} · sin código hash`;
 }
 

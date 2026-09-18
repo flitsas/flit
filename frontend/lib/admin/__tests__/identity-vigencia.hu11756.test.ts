@@ -14,7 +14,7 @@ import {
 
 // Uso de ejemplo:
 //   identidadRotulo("valid") → "Identidad: aprobada y vigente"
-//   firmaBaulRotulo(true, "2027-12-31") → "Firma del baúl: vigente hasta 2027/12/31"
+//   firmaBaulRotulo(true, "2027-12-31") → "Firma del baúl: vigente hasta 31/12/2027"
 //   identityCopy({ identityStatus: "none", firmaBaulVigente: false }) →
 //     { message: "...módulo Identidad.", showLink: true }
 
@@ -40,7 +40,7 @@ describe("HU #11756 — identidadRotulo: los 4 estados canónicos del ADR-0050",
 
 describe("HU #11756 — firmaBaulRotulo: las dos formas del rótulo de firma", () => {
   it("happy path: vigente con fecha → «Firma del baúl: vigente hasta AAAA/MM/DD»", () => {
-    expect(firmaBaulRotulo(true, "2027-12-31")).toBe("Firma del baúl: vigente hasta 2027/12/31");
+    expect(firmaBaulRotulo(true, "2027-12-31")).toBe("Firma del baúl: vigente hasta 31/12/2027");
   });
   it("happy path: sin firma vigente → «Firma del baúl: sin firma vigente»", () => {
     expect(firmaBaulRotulo(false, null)).toBe("Firma del baúl: sin firma vigente");

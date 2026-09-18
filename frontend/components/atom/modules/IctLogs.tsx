@@ -33,7 +33,7 @@ import { decodeJwtPayload, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jw
 import { ModuleTitle } from "./ModuleTitle";
 import { ReportesTabBar } from "./_reportes/ReportesTabBar";
 
-import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { formatFechaHora } from "@/lib/format/date";
 type Tab = "logs" | "alertas";
 
 const LOG_TYPES: ReadonlyArray<{ value: IctLogType; label: string }> = [
@@ -280,7 +280,7 @@ function LogsTab() {
                             <span className="sr-only">{open ? "Ocultar detalle" : "Ver detalle"}</span>
                           </td>
                           <td className="border-y px-4 py-3 align-middle whitespace-nowrap" style={{ borderColor: BORDER }}>
-                            {new Date(row.createdAt).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA })}
+                            {formatFechaHora(new Date(row.createdAt))}
                           </td>
                           <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
                             <StatusBadge label={etiquetaTipo(row.logType)} tone="info" />
@@ -611,7 +611,7 @@ function IctAlertEventsList() {
                     className="rounded-l-xl border-y border-l px-4 py-3 align-middle whitespace-nowrap"
                     style={{ borderColor: BORDER }}
                   >
-                    {new Date(e.triggeredAt).toLocaleString("es-CO", { timeZone: ZONA_COLOMBIA })}
+                    {formatFechaHora(new Date(e.triggeredAt))}
                   </td>
                   <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
                     {e.ruleName}
