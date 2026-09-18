@@ -23,11 +23,17 @@ public static class AdminResetPasswordEmailTemplate
     /// siempre la misma salida.
     /// </summary>
     public static ComposedEmail Compose(
-        string displayName, string temporaryPassword, string? assetsBaseUrl = null) =>
-        new(Subject, BuildBody(displayName, temporaryPassword, assetsBaseUrl));
+        string displayName,
+        string temporaryPassword,
+        string? assetsBaseUrl = null,
+        Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null) =>
+        new(Subject, BuildBody(displayName, temporaryPassword, assetsBaseUrl, theme));
 
     private static string BuildBody(
-        string displayName, string temporaryPassword, string? assetsBaseUrl)
+        string displayName,
+        string temporaryPassword,
+        string? assetsBaseUrl,
+        Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null)
     {
         var nameRaw = string.IsNullOrWhiteSpace(displayName) ? "usuario" : displayName;
         var name = System.Net.WebUtility.HtmlEncode(nameRaw);
@@ -45,6 +51,7 @@ public static class AdminResetPasswordEmailTemplate
             headline: "¡CONTRASEÑA RESTABLECIDA!",
             bodyInnerHtml: body,
             closingHeadline: null,
-            assetsBaseUrl: assetsBaseUrl);
+            assetsBaseUrl: assetsBaseUrl,
+            theme: theme);
     }
 }

@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "brand:inventory": "node scripts/brand-color-inventory.mjs",
     "format:check": "echo 'format:check: sin formateador configurado en el repo (deuda: adoptar Prettier/Biome en ADR aparte)' && exit 0"
   },
   "dependencies": {

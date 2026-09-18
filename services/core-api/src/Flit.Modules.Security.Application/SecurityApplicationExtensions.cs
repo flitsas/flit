@@ -5,6 +5,7 @@ using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
 using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
@@ -27,6 +28,10 @@ public static class SecurityApplicationExtensions
 {
     public static IServiceCollection AddSecurityApplication(this IServiceCollection services)
     {
+        // HU #12423 (Feature #12369) — dirección base del enlace de correo por red MARCA_BLANCA;
+        // sin E/S propia (delega en ITenantNetworkMembership, registrada en Infrastructure).
+        services.AddScoped<INetworkUrlBaseResolver, NetworkUrlBaseResolver>();
+
         services.AddScoped<LoginHandler>();
         services.AddScoped<ForgotPasswordHandler>();
         services.AddScoped<ResetPasswordHandler>();

@@ -1,4 +1,5 @@
 using Flit.Admin.Application.Auditing;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.Extensions.Logging;
 
@@ -12,8 +13,13 @@ public sealed partial class ActivateAccountHandler(
     IEmailSender emailSender,
     IAdminAuditWriter auditWriter,
     IAuditContextAccessor auditContext,
-    ILogger<ActivateAccountHandler> logger)
+    ITenantNetworkMembership networkMembership,
+    IDomainContextAccessor domainContext,
+    ILogger<ActivateAccountHandler> logger,
+    IEmailThemeResolver? themeResolver = null)
 {
+    private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
+
     public async Task<AccountActivatedResult> HandleAsync(
         ActivateAccountCommand command,
         CancellationToken cancellationToken)
@@ -24,6 +30,18 @@ public sealed partial class ActivateAccountHandler(
         if (invitation is null)
         {
             await AuditAsync(null, AuditVocabulary.Results.Failure, "invitation_invalid", cancellationToken)
+                .ConfigureAwait(false);
+            throw new InvalidInvitationTokenException();
+        }
+
+        // HU #12423 AC5 — el enlace es de la red de otro tenant (o de FLIT para un tenant de red):
+        // mismo error genérico de token inválido de hoy, sin revelar a qué red pertenece.
+        var domainCoherent = await NetworkDomainCoherence
+            .IsCoherentAsync(networkMembership, domainContext, invitation.TenantId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!domainCoherent)
+        {
+            await AuditAsync(invitation, AuditVocabulary.Results.Failure, "invitation_invalid", cancellationToken)
                 .ConfigureAwait(false);
             throw new InvalidInvitationTokenException();
         }
@@ -64,14 +82,22 @@ public sealed partial class ActivateAccountHandler(
     {
         try
         {
-            var composed = WelcomeRegistrationEmailTemplate.Compose();
+            var theme = await _themeResolver.ResolveAsync(invitation.TenantId, cancellationToken).ConfigureAwait(false);
+            var composed = WelcomeRegistrationEmailTemplate.Compose(theme: theme);
             var message = new EmailMessage(
                 invitation.TenantId,
                 "security.welcome-registration",
                 invitation.Email,
                 invitation.FullName,
                 composed.Subject,
-                composed.HtmlBody);
+                composed.HtmlBody)
+            {
+                ThemeKind = theme.KindWireValue,
+                ThemeVersion = theme.IsBrand ? theme.Version : null,
+                // HU #12430 AC1/AC3 — nombre visible del remitente = nombre de plataforma de la
+                // marca, SOLO cuando el tema resuelto es Brand; la dirección nunca cambia.
+                SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
+            };
 
             var sendResult = await emailSender.SendAsync(message, cancellationToken).ConfigureAwait(false);
             if (!sendResult.Success)

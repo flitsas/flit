@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# deploy/edge/acme/notify-certificate.sh.example
+#
+# Hook post-emision/renovacion de certificado (HU #12426, Feature #12370).
+# Se invoca como --reloadcmd de `acme.sh --install-cert` (o desde el
+# poller, `poll-and-issue.sh.example`, justo despues de una emision nueva).
+#
+# Que hace, en orden:
+#   1. Lee el certificado recien instalado y calcula issuedAt/expiresAt.
+#   2. Avisa a core-api via PUT /api/v1/internal/domains/{host}/certificate
+#      (X-Internal-Key) para que el dominio pase de `verified` a `active`
+#      (contratos-api.md linea 134-136) -- CON REINTENTOS.
+#   3. Recarga nginx (reload, NUNCA restart -- AC4: no corta conexiones de
+#      otros dominios ya servidos).
+#   4. Registra cada paso en el journal/syslog.
+#
+# Uso:
+#   notify-certificate.sh.example <host> <ruta-fullchain.pem>
+#
+# Variables de entorno requeridas (del .env del VPS / unidad systemd, NUNCA
+# de este repo -- AC6):
+#   FLIT_INTERNAL_API_KEY   clave compartida con Internal__ApiKey de core-api
+#   CORE_API_INTERNAL_URL   ej. http://127.0.0.1:4003 (ver deploy/edge/acme/README.md
+#                           -- SIEMPRE core-api directo, NUNCA el Gateway publico,
+#                           porque /api/v1/internal/* devuelve 404 en YARP)
+#
+# Variables opcionales:
+#   NGINX_RELOAD_CMD        por defecto "systemctl reload nginx"
+#   NOTIFY_MAX_RETRIES      por defecto 5
+#   NOTIFY_RETRY_BASE_SECS  por defecto 3 (backoff exponencial: 3,6,12,24,48s)
+
+set -euo pipefail
+
+LOG_TAG="flit-acme-notify"
+
+log() {
+  # $1 = nivel (info|warning|err), resto = mensaje
+  local level="$1"; shift
+  if command -v logger >/dev/null 2>&1; then
+    logger -t "${LOG_TAG}" -p "user.${level}" -- "$*"
+  fi
+  printf '[%s] %s: %s\n' "$(date -u +%FT%TZ)" "${level}" "$*" >&2
+}
+
+fail() {
+  log err "$*"
+  exit 1
+}
+
+[[ $# -eq 2 ]] || fail "uso: $0 <host> <ruta-fullchain.pem>"
+
+HOST="$1"
+CERT_PATH="$2"
+
+: "${FLIT_INTERNAL_API_KEY:?FLIT_INTERNAL_API_KEY no esta definida (ver deploy/edge/acme/README.md, tabla de variables)}"
+: "${CORE_API_INTERNAL_URL:?CORE_API_INTERNAL_URL no esta definida, ej. http://127.0.0.1:4003}"
+
+NGINX_RELOAD_CMD="${NGINX_RELOAD_CMD:-systemctl reload nginx}"
+NOTIFY_MAX_RETRIES="${NOTIFY_MAX_RETRIES:-5}"
+NOTIFY_RETRY_BASE_SECS="${NOTIFY_RETRY_BASE_SECS:-3}"
+
+[[ -f "${CERT_PATH}" ]] || fail "certificado no encontrado: ${CERT_PATH}"
+command -v openssl >/dev/null 2>&1 || fail "openssl no disponible en PATH"
+command -v curl >/dev/null 2>&1 || fail "curl no disponible en PATH"
+
+# ── 1. Fechas del certificado ────────────────────────────────────────────
+# openssl x509 -dates imprime dos lineas: "notBefore=..." y "notAfter=...",
+# formato RFC 2822 (ej. "Sep 16 00:00:00 2026 GMT"). Se normalizan a ISO-8601
+# UTC para el body del PUT (contratos-api.md: { issuedAt, expiresAt }).
+raw_dates="$(openssl x509 -in "${CERT_PATH}" -noout -dates)" \
+  || fail "no se pudo leer fechas de ${CERT_PATH}"
+
+not_before="$(printf '%s\n' "${raw_dates}" | sed -n 's/^notBefore=//p')"
+not_after="$(printf '%s\n' "${raw_dates}" | sed -n 's/^notAfter=//p')"
+
+[[ -n "${not_before}" && -n "${not_after}" ]] \
+  || fail "no se pudieron parsear notBefore/notAfter de ${CERT_PATH}"
+
+issued_at="$(date -u -d "${not_before}" +%FT%TZ 2>/dev/null)" \
+  || fail "fecha notBefore invalida: ${not_before}"
+expires_at="$(date -u -d "${not_after}" +%FT%TZ 2>/dev/null)" \
+  || fail "fecha notAfter invalida: ${not_after}"
+
+log info "host=${HOST} issuedAt=${issued_at} expiresAt=${expires_at}"
+
+# ── 2. PUT al backend, con reintentos y backoff exponencial ─────────────
+body="$(printf '{"issuedAt":"%s","expiresAt":"%s"}' "${issued_at}" "${expires_at}")"
+url="${CORE_API_INTERNAL_URL%/}/api/v1/internal/domains/${HOST}/certificate"
+
+attempt=1
+notified=0
+while [[ "${attempt}" -le "${NOTIFY_MAX_RETRIES}" ]]; do
+  http_code="$(curl -sS -o /tmp/flit-acme-notify-body.$$ -w '%{http_code}' \
+    -X PUT "${url}" \
+    -H "Content-Type: application/json" \
+    -H "X-Internal-Key: ${FLIT_INTERNAL_API_KEY}" \
+    --max-time 10 \
+    -d "${body}" || echo "000")"
+
+  if [[ "${http_code}" == "200" ]]; then
+    log info "PUT ${url} -> 200 (intento ${attempt}/${NOTIFY_MAX_RETRIES})"
+    notified=1
+    rm -f /tmp/flit-acme-notify-body.$$
+    break
+  fi
+
+  if [[ "${http_code}" == "404" ]]; then
+    # Host desconocido para el backend: no tiene sentido reintentar (no va a
+    # aparecer solo). Se registra como error duro y se sale sin reintentar.
+    resp="$(cat /tmp/flit-acme-notify-body.$$ 2>/dev/null || true)"
+    rm -f /tmp/flit-acme-notify-body.$$
+    fail "PUT ${url} -> 404 DOMAIN_NOT_FOUND (host=${HOST}); respuesta: ${resp}"
+  fi
+
+  wait_secs=$(( NOTIFY_RETRY_BASE_SECS * (2 ** (attempt - 1)) ))
+  log warning "PUT ${url} -> ${http_code} (intento ${attempt}/${NOTIFY_MAX_RETRIES}); reintento en ${wait_secs}s"
+  rm -f /tmp/flit-acme-notify-body.$$
+  sleep "${wait_secs}"
+  attempt=$(( attempt + 1 ))
+done
+
+if [[ "${notified}" -ne 1 ]]; then
+  fail "no se pudo notificar a core-api tras ${NOTIFY_MAX_RETRIES} intentos (host=${HOST}) -- el scheduler debe alertar"
+fi
+
+# ── 3. Reload de nginx (graceful, AC4) ───────────────────────────────────
+if nginx -t >/dev/null 2>&1; then
+  # shellcheck disable=SC2086
+  if ${NGINX_RELOAD_CMD}; then
+    log info "nginx recargado (${NGINX_RELOAD_CMD}) tras certificado de ${HOST}"
+  else
+    fail "nginx -t OK pero '${NGINX_RELOAD_CMD}' fallo -- revisar manualmente antes de reintentar"
+  fi
+else
+  fail "nginx -t fallo -- NO se recargo nginx (certificado de ${HOST} instalado pero sin activar en el borde; revisar configuracion antes de reintentar)"
+fi
+
+log info "notify-certificate.sh completado para ${HOST}"
+exit 0

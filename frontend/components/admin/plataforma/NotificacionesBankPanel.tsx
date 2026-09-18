@@ -11,6 +11,8 @@ import {
   type NotificationTestChannel,
   type NotificationTestMailbox,
 } from "@/lib/api/admin-plataforma-notificaciones";
+import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
+import type { CompanyListItem } from "@/lib/api/types";
 import { NotificacionBuzonPruebasSection } from "./NotificacionBuzonPruebasSection";
 import { NotificacionVistaPreviaModal } from "./NotificacionVistaPreviaModal";
 import { NotificacionEnviarPruebaModal } from "./NotificacionEnviarPruebaModal";
@@ -63,6 +65,33 @@ export function NotificacionesBankPanel() {
 
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
   const [sendTarget, setSendTarget] = useState<SendTarget | null>(null);
+
+  // HU #12431 AC2 — selector de red con marca. Reutiliza el listado admin de compañías
+  // (`fetchCompaniesIndex`) filtrando client-side por `tenantType === "MARCA_BLANCA"`: el
+  // contrato de /admin/companies/index no expone un filtro server-side por tipo de tenant, y el
+  // listado tampoco distingue si la cabeza ya tiene marca publicada — se muestran TODAS las
+  // cabezas Marca Blanca y, si una no tiene marca publicada, el backend resuelve el tema FLIT
+  // (fallback documentado en el contrato). Sin selección (`""`) la muestra es la de FLIT,
+  // idéntica a como era antes de esta HU (AC2, paridad).
+  const [networks, setNetworks] = useState<CompanyListItem[]>([]);
+  const [selectedNetworkId, setSelectedNetworkId] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchCompaniesIndex({ pageSize: 200 })
+      .then((result) => {
+        if (cancelled) return;
+        setNetworks(result.data.filter((c) => c.tenantType === "MARCA_BLANCA"));
+      })
+      .catch(() => {
+        // Best-effort: si el listado de redes falla, el selector queda vacío pero la consola
+        // sigue usable con la muestra FLIT (sin selección).
+        if (!cancelled) setNetworks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -263,12 +292,33 @@ export function NotificacionesBankPanel() {
       </div>
 
       <section aria-labelledby="notificaciones-tabla-heading" className="flex flex-col gap-3">
-        <h2
-          id="notificaciones-tabla-heading"
-          className="text-sm font-semibold text-[#162244] dark:text-white"
-        >
-          Banco de pruebas ({rows.length})
-        </h2>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2
+            id="notificaciones-tabla-heading"
+            className="text-sm font-semibold text-[#162244] dark:text-white"
+          >
+            Banco de pruebas ({rows.length})
+          </h2>
+          <label
+            htmlFor="notificaciones-red-marca"
+            className="flex flex-col gap-1 text-xs font-semibold text-[#162244] dark:text-white"
+          >
+            Red con marca
+            <select
+              id="notificaciones-red-marca"
+              value={selectedNetworkId}
+              onChange={(e) => setSelectedNetworkId(e.target.value)}
+              className="rounded-xl border border-[#DFE5ED] bg-white px-3 py-1.5 text-xs font-medium text-[#162244] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            >
+              <option value="">FLIT (sin red)</option>
+              {networks.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.razonSocial}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <DataTable
           columns={columns}
           rows={rows}
@@ -289,6 +339,7 @@ export function NotificacionesBankPanel() {
         templateName={previewTarget?.row.name ?? ""}
         channel={previewTarget?.channel}
         formatLabel={previewTarget?.formatLabel}
+        tenantId={selectedNetworkId || undefined}
       />
 
       <NotificacionEnviarPruebaModal

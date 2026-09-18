@@ -5,6 +5,7 @@ using Flit.Api.Authorization;
 using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Catalog;
 using Flit.Infrastructure.Notifications.Tramites;
+using Flit.Modules.Security.Domain.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -84,8 +85,10 @@ public static class AdminPlataformaNotificacionesPlantillasEndpoints
         [FromQuery] string? usuarioId,
         [FromQuery] string? channel,
         [FromQuery] Guid? procedureTypeId,
+        [FromQuery] Guid? tenantId,
         IOptions<NotificationEmailAssetsOptions> emailAssets,
         IProcedureTypeCatalog procedureTypes,
+        IEmailThemeResolver themeResolver,
         CancellationToken ct)
     {
         // AC3 — el contrato NO admite identificadores reales. Se rechaza aquí, ANTES de resolver
@@ -125,10 +128,30 @@ public static class AdminPlataformaNotificacionesPlantillasEndpoints
                 string.Equals(type.Family, "TRASPASO", StringComparison.OrdinalIgnoreCase));
         }
 
+        // HU #12428 AC1/AC8 (contratos-api.md §3, HU #12431) — sin tenantId, salida IDÉNTICA a hoy:
+        // theme queda null y no viaja en la respuesta serializada (record posicional sin cambios +
+        // propiedad init aditiva).
+        EmailTheme? theme = null;
+        if (tenantId is { } id && id != Guid.Empty)
+        {
+            theme = await themeResolver.ResolveAsync(id, ct).ConfigureAwait(false);
+        }
+
         var assetsBaseUrl = emailAssets.Value.BaseUrl;
         var (subject, html) = NotificationSampleRenderer.Render(
-            descriptor.Id, resolvedChannel, assetsBaseUrl, overlay);
-        return Results.Ok(new NotificationTemplateSampleResponse(descriptor.Id, subject, html));
+            descriptor.Id, resolvedChannel, assetsBaseUrl, overlay, theme);
+
+        var response = new NotificationTemplateSampleResponse(descriptor.Id, subject, html);
+        if (theme is not null)
+        {
+            response = response with
+            {
+                Theme = new EmailThemeInfoResponse(
+                    theme.KindWireValue, theme.PlatformName, theme.IsBrand ? theme.Version : null, SenderName: null),
+            };
+        }
+
+        return Results.Ok(response);
     }
 
     private static NotificationTemplateListItemResponse ToListItem(NotificationTemplateDescriptor descriptor) =>
@@ -153,4 +176,21 @@ public sealed record NotificationTemplateListItemResponse(
 /// Respuesta de <c>GET /api/v1/admin/plataforma/notificaciones/plantillas/{templateId}/muestra</c>
 /// (AC2) — asunto y cuerpo HTML compuestos en modo muestra, sin datos de personas (Ley 1581).
 /// </summary>
-public sealed record NotificationTemplateSampleResponse(string TemplateId, string Subject, string Html);
+/// <remarks>
+/// <see cref="Theme"/> es ADITIVA (HU #12428/#12431, contratos-api.md §3): propiedad <c>init</c>, no
+/// posicional, para que ningún código existente que construya este record con 3 argumentos deje de
+/// compilar. Sin <c>?tenantId=</c> queda <c>null</c> y no aparece en el JSON serializado — salida
+/// IDÉNTICA a antes de esta historia.
+/// </remarks>
+public sealed record NotificationTemplateSampleResponse(string TemplateId, string Subject, string Html)
+{
+    public EmailThemeInfoResponse? Theme { get; init; }
+}
+
+/// <summary>
+/// Forma pública del tema aplicado a una muestra (HU #12428/#12431). <c>Kind</c>:
+/// <c>"flit"</c> | <c>"brand"</c> | <c>"draft-partial"</c> (esta última solo la usa
+/// <c>GET /company/branding/email-sample?source=draft</c> con un borrador incompleto).
+/// <c>Version</c> es <c>null</c> con <c>"flit"</c>.
+/// </summary>
+public sealed record EmailThemeInfoResponse(string Kind, string PlatformName, int? Version, string? SenderName);

@@ -377,6 +377,9 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
         services.AddScoped(_ => NewContext(dbName));
         services.AddScoped(_ => sender);
         services.AddScoped(_ => channelResolver);
+        // HU #12428 — el worker resuelve tema por tenant; estos tests de paridad (AC9) no ejercitan
+        // marca, así que resuelven siempre EmailTheme.Flit (NullEmailThemeResolver).
+        services.AddScoped<IEmailThemeResolver>(_ => NullEmailThemeResolver.Instance);
         services.AddSingleton(Options.Create(new NotificationEmailAssetsOptions
         {
             BaseUrl = "https://cdn.flit.test/email-assets",

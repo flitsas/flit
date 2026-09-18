@@ -9,7 +9,7 @@ import { clearToken } from "@/lib/auth/session";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-policy";
 
 const INPUT_CLASS =
-  "w-full bg-white border border-[#DFE5ED] rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-[#557eff] focus:ring-2 focus:ring-[#557eff]/20";
+  "w-full bg-white border border-flit-gray rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 export function ActivateAccountForm({ token }: { token: string | null }) {
   const [password, setPassword] = useState("");
@@ -21,7 +21,7 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
 
   if (!token) {
     return (
-      <p role="alert" className="text-sm text-[#ff4e00]">
+      <p role="alert" className="text-sm text-flit-alert">
         El enlace de activación es inválido. Solicita una nueva invitación.
       </p>
     );
@@ -30,16 +30,16 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
   if (done) {
     return (
       <div role="status" className="space-y-4">
-        <p className="text-sm" style={{ color: "#162744" }}>Tu cuenta fue activada correctamente.</p>
+        <p className="text-sm" style={{ color: "var(--color-flit-primary)" }}>Tu cuenta fue activada correctamente.</p>
         {hadPriorSession && (
-          <p className="text-xs opacity-50" style={{ color: "#162744" }}>
+          <p className="text-xs opacity-50" style={{ color: "var(--color-flit-primary)" }}>
             Por tu seguridad, cerramos la sesión que estaba activa en este navegador. Inicia sesión con tu nueva cuenta.
           </p>
         )}
         <Link
           href="/login"
           className="inline-block rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-          style={{ background: "#557eff" }}
+          style={{ background: "var(--color-flit-brand)" }}
         >
           Ir a iniciar sesión
         </Link>
@@ -82,7 +82,7 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4" aria-label="Activar cuenta" noValidate>
       <div>
-        <label htmlFor="ac-password" className="block text-sm font-medium text-[#162744] mb-1">
+        <label htmlFor="ac-password" className="block text-sm font-medium text-flit-primary mb-1">
           Nueva contraseña
         </label>
         <input
@@ -93,10 +93,10 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <p className="mt-1 text-xs opacity-50" style={{ color: "#162744" }}>{PASSWORD_POLICY_HINT}</p>
+        <p className="mt-1 text-xs opacity-50" style={{ color: "var(--color-flit-primary)" }}>{PASSWORD_POLICY_HINT}</p>
       </div>
       <div>
-        <label htmlFor="ac-confirm" className="block text-sm font-medium text-[#162744] mb-1">
+        <label htmlFor="ac-confirm" className="block text-sm font-medium text-flit-primary mb-1">
           Confirmar contraseña
         </label>
         <input
@@ -109,7 +109,7 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
         />
       </div>
       {error && (
-        <p role="alert" className="text-sm text-[#ff4e00]">
+        <p role="alert" className="text-sm text-flit-alert">
           {error}
         </p>
       )}
@@ -117,7 +117,7 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
         type="submit"
         disabled={loading}
         className="w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-        style={{ background: "#557eff" }}
+        style={{ background: "var(--color-flit-brand)" }}
       >
         {loading ? "Activando…" : "Activar mi cuenta"}
       </button>

@@ -14,7 +14,10 @@ public static class WelcomeRegistrationEmailTemplate
     /// <summary>
     /// Composición pura: misma entrada → misma salida. Sin E/S ni estado.
     /// </summary>
-    public static ComposedEmail Compose(string? loginUrl = null, string? assetsBaseUrl = null)
+    public static ComposedEmail Compose(
+        string? loginUrl = null,
+        string? assetsBaseUrl = null,
+        Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null)
     {
         var url = string.IsNullOrWhiteSpace(loginUrl) ? DefaultLoginUrl : loginUrl.Trim();
         var display = ToDisplayUrl(url);
@@ -28,7 +31,8 @@ public static class WelcomeRegistrationEmailTemplate
             headline: "¡GRACIAS POR REGISTRARTE!",
             bodyInnerHtml: body,
             closingHeadline: "¡Disfruta de todos tus beneficios!",
-            assetsBaseUrl: assetsBaseUrl);
+            assetsBaseUrl: assetsBaseUrl,
+            theme: theme);
 
         return new ComposedEmail(Subject, html);
     }

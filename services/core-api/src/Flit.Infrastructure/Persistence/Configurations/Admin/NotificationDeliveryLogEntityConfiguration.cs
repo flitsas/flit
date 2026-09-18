@@ -41,6 +41,13 @@ internal sealed class NotificationDeliveryLogEntityConfiguration
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
         builder.Property(x => x.CreatedBy).HasColumnName("created_by");
 
+        // HU #12428 AC5 / #12430 AC5 (DDL 117) — traza del tema y remitente aplicados. Nullable: sin
+        // backfill de filas anteriores.
+        builder.Property(x => x.ThemeKind).HasColumnName("theme_kind").HasMaxLength(10);
+        builder.Property(x => x.ThemeVersion).HasColumnName("theme_version");
+        builder.Property(x => x.SenderName).HasColumnName("sender_name").HasMaxLength(80);
+        builder.Property(x => x.SenderEmail).HasColumnName("sender_email").HasMaxLength(320);
+
         // Misma lectura canónica del DDL: tenant primero, fecha descendente.
         builder.HasIndex(x => new { x.TenantId, x.OccurredAt })
             .HasDatabaseName("ix_notification_delivery_logs_tenant_occurred_at");

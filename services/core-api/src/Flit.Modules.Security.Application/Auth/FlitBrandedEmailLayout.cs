@@ -38,14 +38,32 @@ public static class FlitBrandedEmailLayout
     /// <param name="bodyInnerHtml">Fragmentos HTML del cuerpo (párrafos/enlaces ya escapados).</param>
     /// <param name="closingHeadline">Título de cierre opcional (sin HTML).</param>
     /// <param name="assetsBaseUrl">Base HTTPS de assets; si es null/vacío usa el default público.</param>
+    /// <param name="theme">
+    /// HU #12428 AC1/AC2/AC8/AC9 — tema de correo ya resuelto. <c>null</c> o
+    /// <see cref="Flit.Modules.Security.Domain.Auth.EmailThemeKind.Flit"/> ⇒ este método NO cambia
+    /// una sola línea de su salida (AC9, paridad byte a byte): el parámetro se agrega al final,
+    /// opcional, precisamente para que ningún llamador existente tenga que cambiar. Con
+    /// <see cref="Flit.Modules.Security.Domain.Auth.EmailThemeKind.Brand"/> delega en
+    /// <see cref="Flit.Modules.Security.Domain.Auth.BrandedEmailChrome"/> (AC2: logo/nombre en
+    /// encabezado, color principal en el título, nombre en el pie) reutilizando EXACTAMENTE el mismo
+    /// <paramref name="bodyInnerHtml"/> que hoy compone cada plantilla (AC2, "cuerpo funcional...
+    /// idénticos").
+    /// </param>
     public static string Wrap(
         string headline,
         string bodyInnerHtml,
         string? closingHeadline = null,
-        string? assetsBaseUrl = null)
+        string? assetsBaseUrl = null,
+        Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(headline);
         ArgumentNullException.ThrowIfNull(bodyInnerHtml);
+
+        if (theme is { IsBrand: true })
+        {
+            return Flit.Modules.Security.Domain.Auth.BrandedEmailChrome.Wrap(
+                theme, headline, bodyInnerHtml, closingHeadline);
+        }
 
         var baseUrl = string.IsNullOrWhiteSpace(assetsBaseUrl)
             ? DefaultAssetsBaseUrl

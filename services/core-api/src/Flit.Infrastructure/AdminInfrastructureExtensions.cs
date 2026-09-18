@@ -32,7 +32,9 @@ using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Infrastructure.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure;
 
@@ -41,7 +43,14 @@ namespace Flit.Infrastructure;
 /// </summary>
 public static class AdminInfrastructureExtensions
 {
-    public static IServiceCollection AddAdminInfrastructure(this IServiceCollection services)
+    /// <summary>
+    /// <paramref name="configuration"/> es opcional (retrocompatible con el único call site anterior,
+    /// <c>Program.cs</c>): HU #12416 la necesita para ligar <c>DomainOptions</c> (sección
+    /// <c>Domains</c>); sin ella, los dominios reservados quedan vacíos y <c>EdgeTarget</c> en blanco
+    /// (falla cerrado: nada queda "reservado" por omisión, así que en ese caso el SuperAdmin debe
+    /// tener presente que la lista de reservados no está poblada).
+    /// </summary>
+    public static IServiceCollection AddAdminInfrastructure(this IServiceCollection services, IConfiguration? configuration = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -71,9 +80,115 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Security.GroupHeadInvitationRolePolicy>();
         services.AddScoped<ITenantSettingsRepository, TenantSettingsRepository>();
 
+        // HU #12412 (Feature #12366, ADR-0060 D1) — identidad de marca de la cabeza MARCA_BLANCA.
+        services.AddScoped<Flit.Admin.Domain.Companies.Branding.ITenantBrandingRepository, TenantBrandingRepository>();
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandLogoStorage,
+            Flit.Infrastructure.Storage.BrandLogoStorage>();
+        // HU #12413 (Feature #12366, ADR-0060 D1) — formato/peso/dimensiones/contraste reales.
+        // Mismo patrón que DomainOptions/ImprontaValidationPolicyOptions: Application consume el
+        // POCO YA resuelto, sin IOptions. PermissiveBrandAssetValidator queda como respaldo
+        // fail-open documentado (no se borra, solo se deja de registrar).
+        if (configuration is not null)
+        {
+            services.Configure<Flit.Admin.Application.Companies.Branding.BrandingOptions>(
+                configuration.GetSection(Flit.Admin.Application.Companies.Branding.BrandingOptions.SectionName));
+            services.AddSingleton(sp =>
+                sp.GetRequiredService<IOptions<Flit.Admin.Application.Companies.Branding.BrandingOptions>>().Value);
+        }
+        else
+        {
+            services.AddSingleton(new Flit.Admin.Application.Companies.Branding.BrandingOptions());
+        }
+
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandAssetValidator,
+            Flit.Admin.Application.Companies.Branding.BrandAssetValidator>();
+
+        // HU #12418 (Feature #12366, ADR-0060 D2) — resolución pública/sesión de marca. Lectura
+        // directa del estado del tenant (sin caché propia) + caché de 60 s del resultado resuelto,
+        // sobre el MISMO IMemoryCache singleton (AddMemoryCache más abajo) que invalida
+        // Publish/RetireBrandingHandler y CompanyWriteRepository.
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.IBrandingTenantLookup, BrandingTenantLookupRepository>();
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.ResolvePublicBranding.ResolvePublicBrandingHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.ResolveSessionBranding.ResolveSessionBrandingHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.Branding.GetPublicBrandLogo.GetPublicBrandLogoHandler>();
+        services.AddSingleton<Flit.Infrastructure.Domains.MemoryPublicBrandingCache>();
+        services.AddSingleton<Flit.Admin.Application.Companies.Branding.ResolvePublicBranding.IPublicBrandingCache>(
+            sp => sp.GetRequiredService<Flit.Infrastructure.Domains.MemoryPublicBrandingCache>());
+        services.AddSingleton<Flit.Admin.Application.Companies.Branding.IBrandingCacheInvalidator>(
+            sp => sp.GetRequiredService<Flit.Infrastructure.Domains.MemoryPublicBrandingCache>());
+
+        // HU #12428 (Feature #12405, Épica #12237 Marca Blanca, ADR-0060) — resolutor del tema de
+        // correo. Misma herencia de marca que #12418, sobre el MISMO IMemoryCache singleton (arriba)
+        // — MemoryPublicBrandingCache.InvalidateTenant ya limpia también esta clave.
+        if (configuration is not null)
+        {
+            services.AddSingleton(sp =>
+            {
+                var options = new Flit.Infrastructure.Notifications.Theme.EmailThemePublicBrandingOptions();
+                configuration.GetSection(Flit.Infrastructure.Notifications.Theme.EmailThemePublicBrandingOptions.SectionName).Bind(options);
+                return options;
+            });
+        }
+        else
+        {
+            services.AddSingleton(new Flit.Infrastructure.Notifications.Theme.EmailThemePublicBrandingOptions());
+        }
+        services.AddScoped<Flit.Modules.Security.Domain.Auth.IEmailThemeResolver,
+            Flit.Infrastructure.Notifications.Theme.DbEmailThemeResolver>();
+
+        // HU #12416 (Feature #12368, ADR-0060 D1/D2) — dominio dedicado de la red MARCA_BLANCA.
+        services.AddScoped<Flit.Admin.Domain.Companies.Domains.ITenantDomainRepository, TenantDomainRepository>();
+        // Resolutor por host con caché de 60 s (ADR-0060 D2): IMemoryCache es Singleton, la clase es
+        // Scoped (una FlitDbContext por resolución vía ITenantDomainRepository), el caché se comparte.
+        services.AddMemoryCache();
+        services.AddScoped<Flit.Admin.Application.Companies.Domains.ITenantDomainResolver,
+            Flit.Infrastructure.Domains.CachedTenantDomainResolver>();
+        // Reservados y CNAME del borde (Domains:Reserved, Domains:EdgeTarget). Igual que
+        // ImprontaValidationPolicyOptions: Application consume el POCO YA resuelto, sin IOptions.
+        if (configuration is not null)
+        {
+            services.Configure<Flit.Admin.Application.Companies.Domains.DomainOptions>(
+                configuration.GetSection(Flit.Admin.Application.Companies.Domains.DomainOptions.SectionName));
+            services.AddSingleton(sp =>
+                sp.GetRequiredService<IOptions<Flit.Admin.Application.Companies.Domains.DomainOptions>>().Value);
+        }
+        else
+        {
+            services.AddSingleton(new Flit.Admin.Application.Companies.Domains.DomainOptions());
+        }
+
+        // HU #12425 (Feature #12370, Épica #12237) — comprobación de titularidad por TXT DNS y ciclo
+        // de estados pending → verified → active. Mismo patrón que DomainOptions: Application consume
+        // el POCO ya resuelto por IOptions, sin depender de Microsoft.Extensions.Options.
+        if (configuration is not null)
+        {
+            services.Configure<Flit.Admin.Application.Companies.Domains.Verification.DomainVerificationOptions>(
+                configuration.GetSection(Flit.Admin.Application.Companies.Domains.Verification.DomainVerificationOptions.SectionName));
+            services.AddSingleton(sp =>
+                sp.GetRequiredService<IOptions<Flit.Admin.Application.Companies.Domains.Verification.DomainVerificationOptions>>().Value);
+        }
+        else
+        {
+            services.AddSingleton(new Flit.Admin.Application.Companies.Domains.Verification.DomainVerificationOptions());
+        }
+
+        services.AddSingleton<Flit.Admin.Application.Companies.Domains.Verification.IDnsTxtResolver,
+            Flit.Infrastructure.Domains.DnsClientTxtResolver>();
+        services.AddScoped<Flit.Admin.Application.Companies.Domains.Verification.VerifyDomainHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.Domains.Verification.ApplyDomainCertificateHandler>();
+        // El BackgroundService respeta Domains:Verification:Enabled en su propio ExecuteAsync (AC6);
+        // se registra siempre para que encender/apagar por configuración no requiera reiniciar el DI.
+        services.AddHostedService<Flit.Infrastructure.Domains.DomainVerificationSchedulerProcessor>();
+
         // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
         // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
         services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();
+
+        // HU #12422 (Feature #12369, ADR-0060 D3) — pertenencia a una red MARCA_BLANCA (cabeza o hija)
+        // + dominio activo de esa cabeza, sobre el mismo dato estructural que ITenantScopeResolver.
+        // Sin caché propia: se invoca solo en login/recuperación, no en cada petición runtime.
+        services.AddScoped<Flit.Modules.Security.Application.Auth.Network.ITenantNetworkMembership,
+            Flit.Infrastructure.Persistence.DbTenantNetworkMembership>();
 
         // HU #12323 (Feature #12254) — interruptores globales de la jerarquía leídos por petición,
         // sin caché y fail-closed (fila ausente/error ⇒ apagado). El resolver los consulta antes que

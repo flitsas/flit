@@ -554,6 +554,9 @@ public sealed class AnalyticsSchedulerProcessorTests
         services.AddSingleton(emailSender);
         services.AddSingleton(metrics);
         services.AddSingleton(analytics);
+        // HU #12428 AC1/AC8 — cuarto punto de inyección del tema (todos los tipos de informe,
+        // incluida "consulta"); estos tests no ejercitan marca.
+        services.AddSingleton<IEmailThemeResolver>(NullEmailThemeResolver.Instance);
 
         // Solo se registran cuando el test los necesita: así los tests que no los pasan ejercitan
         // el camino "no se pudo generar el adjunto" (best-effort) sin tener que simularlo aparte.

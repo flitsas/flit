@@ -38,6 +38,9 @@
     <!-- HU #12515 — guía y ADR de procesos periódicos (assert de existencia + referencias). -->
     <Content Include="..\..\..\..\docs\estandar-jobs-periodicos-flit.md" CopyToOutputDirectory="PreserveNewest" Link="docs\estandar-jobs-periodicos-flit.md" />
     <Content Include="..\..\..\..\docs\decisions\ADR-0059-estandar-procesos-automaticos-periodicos.md" CopyToOutputDirectory="PreserveNewest" Link="docs\decisions\ADR-0059-estandar-procesos-automaticos-periodicos.md" />
+    <!-- HU #12413 — fixture de contraste WCAG compartido con el frontend (#12414/#12429), para que
+         backend y frontend calculen EXACTAMENTE el mismo ratio sobre los mismos pares de colores. -->
+    <Content Include="..\Shared\Fixtures\Branding\contrast-cases.json" CopyToOutputDirectory="PreserveNewest" Link="Fixtures\Branding\contrast-cases.json" />
   </ItemGroup>
 
 </Project>

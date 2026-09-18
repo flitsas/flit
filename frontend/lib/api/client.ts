@@ -2,6 +2,7 @@
 // adjunta el header Authorization y normaliza errores 422 a ApiValidationError.
 import { TOKEN_COOKIE, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 import { clearToken, emitSessionExpired } from "@/lib/auth/session";
+import { resolveApiBase } from "./base-url";
 import { ApiError, ApiValidationError, type ValidationErrorResponse } from "./types";
 
 export const API_BASE_URL =
@@ -14,10 +15,16 @@ export const API_BASE_URL =
  * CD arma `NEXT_PUBLIC_API_BASE_URL=https://api.<env>.flitsas.online/api/v1`), un `path`
  * absoluto (con `/` inicial) reemplaza ese sufijo en vez de duplicarlo — concatenar a mano
  * produjo `/api/v1/api/v1/...` (404) en banners promocionales.
+ *
+ * HU #12419 — `resolveApiBase` devuelve "" en un host de red (el borde ya enruta `/api/v1/*` al
+ * Gateway en el MISMO origen, #12421), así que el `origin` cae al fallback de `window.location`
+ * de abajo, exactamente como en dev local sin `NEXT_PUBLIC_API_BASE_URL`. En host FLIT el
+ * comportamiento es IDÉNTICO al de siempre (AC7).
  */
 export function resolveApiUrl(path: string): string {
+  const configuredBase = resolveApiBase(API_BASE_URL);
   const origin =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    configuredBase || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   return new URL(path, origin).toString();
 }
 
@@ -69,7 +76,9 @@ export interface RequestOptions {
  */
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, query, signal } = options;
-  const base = API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const configuredBase = resolveApiBase(API_BASE_URL);
+  const base =
+    configuredBase || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(path, base);
 
   if (query) {
@@ -129,6 +138,14 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       clearToken();
       emitSessionExpired();
       throw new ApiError(401, "SESSION_EXPIRED");
+    }
+    if (response.status === 401 && data?.error === "SESSION_DOMAIN_MISMATCH") {
+      // HU #12422 AC5 / #12424 (ADR-0060 D3) — el JWT se emitió para un dominio distinto del
+      // sellado en esta petición (`DomainBindingMiddleware`). Se trata igual que una sesión
+      // expirada: limpiar y volver al login, sin exponer nada de la red al usuario.
+      clearToken();
+      emitSessionExpired();
+      throw new ApiError(401, "SESSION_DOMAIN_MISMATCH", data);
     }
     throw new ApiError(response.status, friendlyErrorMessage(data), data);
   }

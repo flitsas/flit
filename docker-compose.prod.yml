@@ -22,6 +22,10 @@
 #   dev.flitsas.online      -> 127.0.0.1:${FRONTEND_PORT}  (frontend)
 #   api.dev.flitsas.online  -> 127.0.0.1:${GATEWAY_PORT}   (gateway / API publica)
 #   core.dev.flitsas.online -> 127.0.0.1:${CORE_API_PORT}  (core-api, opcional/debug)
+#   <dominio de cliente>    -> 127.0.0.1:${GATEWAY_PORT} (/api/v1) y 127.0.0.1:${FRONTEND_PORT} (/)
+#                              (Marca Blanca, HU #12421 — catch-all sin entrada por cliente,
+#                              ver deploy/edge/nginx/flit-network-domains.conf.example y
+#                              deploy/edge/README.md)
 #
 # Postgres NO esta aqui: corre en el HOST (host.docker.internal:5432).
 #
@@ -33,6 +37,11 @@
 #   VERIFIK_API_TOKEN       token Verifik (RUNT)
 #   ICT_SERVICE_TOKEN_SECRET  secreto HMAC del canal gRPC este-oeste ICT (core-api <-> core-ict).
 #                             Sin el, la orquestacion y el callback quedan fail-closed.
+#   FLIT_INTERNAL_API_KEY   clave compartida Gateway <-> core-api para GET /internal/domains/active
+#                           (Marca Blanca, #12417/#12421). Vacia = fail-closed (ver servicio gateway).
+#   FLIT_INTERNAL_SUBNET    CIDR de la red interna Docker de ESTE stack (Marca Blanca, #12421) —
+#                           DISTINTO por ambiente si DEV/QA/PDN comparten VPS (ver bloque `networks`
+#                           al final de este archivo y deploy/edge/README.md).
 # Variables de puerto (defaults DEV; el CD las inyecta por ambiente):
 #   FRONTEND_PORT / GATEWAY_PORT / CORE_API_PORT / PYTHON_ML_PORT
 # Variables para AISLAR este proyecto del resto del VPS:
@@ -122,6 +131,12 @@ services:
       ASPNETCORE_URLS: http://+:${CORE_API_PORT:-4003}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       Cors__AllowedOrigins: ${CORS_ORIGIN:-https://dev.flitsas.online}
+      # Marca Blanca (#12417/#12421): MISMA clave que Internal__ApiKey del servicio gateway
+      # de abajo. Si difieren, el Gateway no puede autenticar GET /internal/domains/active
+      # (responde 401 SIEMPRE) y su CORS dinamico cae a la lista fija de Cors__AllowedOrigins__0
+      # — los dominios de red activos dejan de aceptarse hasta que coincidan. Vacia en ambos
+      # lados = fail-closed (comportamiento de hoy, sin dominios de red).
+      Internal__ApiKey: ${FLIT_INTERNAL_API_KEY:-}
       # File Manager: DONDE LEE V2 los binarios de los adjuntos. Sin esta variable
       # cae al default de appsettings.json, que apunta a AWS pdn. Al pasar V2 a MinIO
       # hay que definirla, y tiene que ser EXACTAMENTE la misma URL que recibe el
@@ -466,6 +481,21 @@ services:
       ReverseProxy__Clusters__migracion-cluster__Destinations__migracion-api-1__Address: http://migracion-api:${MIGRACION_API_PORT:-4030}/
       # Login deshabilitado temporalmente: sin llave JWT el gateway no valida firma
       # ni exige autenticación (ver Flit.Gateway/Program.cs).
+      # ── Marca Blanca (#12417/#12421) ────────────────────────────────────────
+      # Como llega a core-api para resolver la lista de dominios activos (CORS dinamico)
+      # y la MISMA clave que Internal__ApiKey de core-api arriba (ver ese comentario si
+      # difieren). Vacia = fail-closed: /internal/domains/active responde 401 SIEMPRE y
+      # el CORS del gateway se queda solo con Cors__AllowedOrigins__0.
+      Internal__ApiBaseUrl: http://core-api:${CORE_API_PORT:-4003}
+      Internal__ApiKey: ${FLIT_INTERNAL_API_KEY:-}
+      # CIDR de la red interna Docker de ESTE stack (bloque `networks` al final del
+      # archivo). SOLO una peticion que llegue desde aqui puede traer un X-Flit-Domain de
+      # confianza (DomainSealTransform — delta-hechos-post-adr.md hecho 20); es el camino
+      # del frontend Next.js resolviendo marca server-side por la red interna
+      # (BRANDING_INTERNAL_API_URL, servicio frontend abajo), NUNCA trafico publico via
+      # nginx. Vacio/no listado = nunca se confia en el sello entrante (fail-closed, el
+      # Gateway usa siempre Request.Host.Host — comportamiento de hoy).
+      DomainSeal__InternalAllowedNetworks__0: ${FLIT_INTERNAL_SUBNET:-172.28.40.0/24}
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-4002}:${GATEWAY_PORT:-4002}"
     depends_on:
@@ -514,9 +544,53 @@ services:
       # Por la red interna de Docker, NO por el dominio público: ese salto pasa por nginx, cuyo
       # proxy_read_timeout de 60 s corta migraciones de instancia 3 que sí se completan.
       MIGRACION_API_URL: http://gateway:${GATEWAY_PORT:-4002}
+      # ── Marca Blanca (#12419/#12421) ────────────────────────────────────────
+      # Resolucion de marca en el SERVIDOR (layout.tsx, resolve-brand.server.ts) por la
+      # red interna de Docker — MISMO patron y MISMO motivo que MIGRACION_API_URL de
+      # arriba (evita el hairpin por nginx y su proxy_read_timeout de 60 s). Server-only:
+      # SIN prefijo NEXT_PUBLIC_, no se hornea en el bundle que descarga el navegador.
+      # resolve-brand.server.ts manda la cabecera X-Flit-Domain: <host> explicita en esa
+      # llamada — el Gateway SOLO confia en ese valor si la conexion viene de
+      # DomainSeal__InternalAllowedNetworks (servicio gateway arriba); para cualquier
+      # peticion publica (via nginx) el Gateway ignora X-Flit-Domain entrante y usa
+      # siempre Request.Host.Host (hecho 20/21).
+      BRANDING_INTERNAL_API_URL: http://gateway:${GATEWAY_PORT:-4002}
+      # Follow-up de seguridad de #12417 (delta-hechos-post-adr.md hecho 24): el CIDR interno solo
+      # NO basta (docker-proxy/DNAT puede hacer que una conexion externa llegue con IP del gateway
+      # del bridge). resolve-brand.server.ts manda esta clave como X-Internal-Key junto con
+      # X-Flit-Domain (#12419); server-only, SIN prefijo NEXT_PUBLIC_. MISMA clave que
+      # Internal__ApiKey de gateway y core-api (ver mas abajo).
+      FLIT_INTERNAL_API_KEY: ${FLIT_INTERNAL_API_KEY:-}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-4001}:${FRONTEND_PORT:-4001}"
     depends_on:
       - gateway
     restart: *restart
     logging: *default-logging
+
+# ── Red interna (Marca Blanca, #12421) ──────────────────────────────────────
+# Subred EXPLICITA de la red "default" (la que TODO servicio de arriba usa ya
+# de forma implicita, al no declarar `networks:` propio — este bloque no
+# cambia a que red se conecta cada servicio, SOLO le fija el CIDR).
+#
+# Por que hace falta: sin `ipam.config`, Docker asigna la subred del bridge al
+# azar entre recreaciones de la red (`docker compose down` + `up`, no un simple
+# restart) y entre distintos stacks del mismo host. DomainSeal__InternalAllowedNetworks
+# (servicio gateway) necesita un CIDR DETERMINISTA para decidir si confiar en el
+# X-Flit-Domain que manda el frontend server-side (hecho 19/20 de
+# delta-hechos-post-adr.md) — con una subred que cambia sola, ese filtro
+# quedaria adivinando o, en el peor caso, vacio (fail-closed: NINGUNA peticion
+# del frontend interno se confiaria, /public/branding cachearia FLIT para todo
+# el mundo aunque la red SI tenga marca).
+#
+# OJO si DEV/QA/PDN comparten el mismo VPS (topologia real de este repo, ver
+# cabecera del archivo): cada stack necesita un FLIT_INTERNAL_SUBNET DISTINTO —
+# Docker rechaza crear dos redes con subredes que se solapan en el mismo host
+# ("Pool overlaps with other one on this address space"). Convencion sugerida,
+# documentada en deploy/edge/README.md: DEV 172.28.40.0/24 · QA 172.28.50.0/24 ·
+# PDN 172.28.60.0/24 (mismo digito de decenas que los puertos 4xxx/5xxx/6xxx).
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${FLIT_INTERNAL_SUBNET:-172.28.40.0/24}

@@ -53,6 +53,7 @@ public sealed class AdminPlataformaNotificacionesEnviosEndpointTests
         _factory = factory;
         _client = factory.CreateClient();
         _factory.ExplicitChannelEmailSender.ClearReceivedCalls();
+        _factory.ThemeResolver.ClearReceivedCalls();
         // Restablece la disponibilidad por defecto en cada test (el doble es compartido vía
         // IClassFixture): FlitSmtp siempre disponible, TenantApi apagado — mismo estado que el
         // ambiente real de pruebas (RENTING_API_ENABLED no definida).
@@ -279,6 +280,54 @@ public sealed class AdminPlataformaNotificacionesEnviosEndpointTests
             NotificationChannel.FlitSmtp, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
     }
 
+    // ── HU #12430 AC2 — tenantId opcional en el envío de prueba ───────────────────────────────
+
+    [Fact]
+    public async Task HU12430_SinTenantId_RespuestaNoIncluyeApplied()
+    {
+        SetMailbox("pruebas-envio-hu12430-sin-tenant@flit.co");
+        _factory.ExplicitChannelEmailSender
+            .SendAsync(NotificationChannel.FlitSmtp, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
+
+        var response = await SuperAdminClient().PostAsJsonAsync(
+            EnviosUrl, new { templateId = "security.invitation", channel = "FLIT_SMTP" },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SendDto>(TestContext.Current.CancellationToken);
+        body!.Applied.Should().BeNull("sin tenantId la respuesta es idéntica a antes de HU #12430");
+
+        await _factory.ThemeResolver.DidNotReceiveWithAnyArgs().ResolveAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task HU12430_ConTenantIdDeCompaniaConMarca_RespuestaIncluyeAppliedConElNombreDeLaMarca()
+    {
+        SetMailbox("pruebas-envio-hu12430-con-tenant@flit.co");
+        _factory.ExplicitChannelEmailSender
+            .SendAsync(NotificationChannel.FlitSmtp, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var tenantId = Guid.NewGuid();
+        _factory.ThemeResolver.ResolveAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns(new EmailTheme(
+                EmailThemeKind.Brand, "Movilidad Andina", "https://logo.test/l.png", "#0B3D91", "#1FA2FF", "#FFFFFF", 4));
+
+        var response = await SuperAdminClient().PostAsJsonAsync(
+            EnviosUrl, new { templateId = "security.invitation", channel = "FLIT_SMTP", tenantId },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SendDto>(TestContext.Current.CancellationToken);
+        body!.Applied.Should().NotBeNull();
+        body.Applied!.ThemeKind.Should().Be("brand");
+        body.Applied.ThemeVersion.Should().Be(4);
+        body.Applied.SenderName.Should().Be("Movilidad Andina");
+        body.SenderName.Should().Be("Movilidad Andina");
+        // AC1 — la dirección de envío NUNCA cambia, con o sin marca.
+        body.SenderEmail.Should().Be(body.Applied.SenderEmail);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private HttpClient SuperAdminClient()
@@ -332,7 +381,9 @@ public sealed class AdminPlataformaNotificacionesEnviosEndpointTests
     private sealed record SendDto(
         bool Success, string Outcome, string Message, string? TemplateId, string? Channel,
         string? SenderEmail, string? SenderName, DateTimeOffset? SentAt, bool IsConsoleTransport,
-        bool RecipientDiverted);
+        bool RecipientDiverted, AppliedDto? Applied = null);
+
+    private sealed record AppliedDto(string ThemeKind, int? ThemeVersion, string? SenderName, string? SenderEmail);
 
     private sealed record ErrorDto(string Error, string? Message);
 
@@ -401,6 +452,15 @@ public sealed class EnviosTestFactory : WebApplicationFactory<Program>
     internal IExplicitChannelEmailSender ExplicitChannelEmailSender { get; } = Substitute.For<IExplicitChannelEmailSender>();
 
     /// <summary>
+    /// HU #12430 AC2 — doble de <see cref="IEmailThemeResolver"/> (mismo patrón que
+    /// <c>AdminPlataformaNotificacionesPlantillasEndpointsTests.SideEffectFreeFactory</c>): sin
+    /// configurar ningún <c>ResolveAsync</c>, NSubstitute devuelve <c>default(EmailTheme)</c> (no
+    /// <see cref="EmailTheme.Flit"/>) para cualquier tenant no configurado explícitamente — cada test
+    /// que use <c>tenantId</c> DEBE configurar el resultado esperado.
+    /// </summary>
+    internal IEmailThemeResolver ThemeResolver { get; } = Substitute.For<IEmailThemeResolver>();
+
+    /// <summary>
     /// Reloj controlable para <c>NotificationTestSendAdminService</c> (recibe <see cref="TimeProvider"/>
     /// por inyección). <c>Flit.Infrastructure.Tests.Notifications.Admin.NotificationTestSendAdminServiceTests</c>
     /// ya tiene un <c>TestTimeProvider</c> equivalente, pero es una clase privada anidada en OTRO
@@ -417,6 +477,7 @@ public sealed class EnviosTestFactory : WebApplicationFactory<Program>
         builder.ConfigureTestServices(services =>
         {
             services.AddScoped(_ => ExplicitChannelEmailSender);
+            services.AddScoped(_ => ThemeResolver);
             services.AddSingleton<System.TimeProvider>(TimeProvider);
 
             // Remitente y transporte SMTP deterministas — EmailSettings se registra en Program.cs

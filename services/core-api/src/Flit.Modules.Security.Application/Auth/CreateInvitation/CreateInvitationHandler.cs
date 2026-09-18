@@ -1,3 +1,4 @@
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
 using Microsoft.Extensions.Logging;
@@ -10,8 +11,14 @@ public sealed partial class CreateInvitationHandler(
     ISecureTokenGenerator tokenGenerator,
     IEmailSender emailSender,
     InvitationOptions options,
-    ILogger<CreateInvitationHandler> logger)
+    INetworkUrlBaseResolver urlBaseResolver,
+    ILogger<CreateInvitationHandler> logger,
+    IEmailThemeResolver? themeResolver = null)
 {
+    // HU #12428 — parámetro opcional (patrón NullBrandingCacheInvalidator/NullEmailThemeResolver):
+    // los tests que no ejercitan esta historia no cambian su construcción del handler.
+    private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
+
     public async Task<InvitationCreatedResult> HandleAsync(
         CreateInvitationCommand command,
         CancellationToken cancellationToken)
@@ -56,11 +63,25 @@ public sealed partial class CreateInvitationHandler(
             new UserInvitationData(command.TenantId, email, command.FullName, roleIds, token.TokenHash, command.InvitedBy),
             cancellationToken);
 
-        var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
-        var composed = InvitationEmailTemplate.Compose(command.FullName, link);
+        // HU #12423 AC1 — el enlace de activación usa el dominio de la red del tenant al que se
+        // invita (cabeza o hija); sin dominio activo, la base configurada literal (AC4).
+        var activateUrlBase = await urlBaseResolver
+            .ForTenantAsync(command.TenantId, options.ActivateUrlBase, cancellationToken)
+            .ConfigureAwait(false);
+        var link = InvitationEmailTemplate.BuildActivateLink(activateUrlBase, token.RawToken);
+        // HU #12428 AC1/AC8 — tema por la red del tenant destino (cabeza, hija o FLIT).
+        var theme = await _themeResolver.ResolveAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
+        var composed = InvitationEmailTemplate.Compose(command.FullName, link, theme: theme);
         // HU #11363 AC1 — id estable del catálogo (TemplateIds.Invitation en Flit.Infrastructure);
         // comparte plantilla con ResendInvitationHandler (dos disparadores, una sola entrada).
-        var message = new EmailMessage(command.TenantId, "security.invitation", email, email, composed.Subject, composed.HtmlBody);
+        var message = new EmailMessage(command.TenantId, "security.invitation", email, email, composed.Subject, composed.HtmlBody)
+        {
+            ThemeKind = theme.KindWireValue,
+            ThemeVersion = theme.IsBrand ? theme.Version : null,
+            // HU #12430 AC1/AC3 — nombre visible del remitente = nombre de plataforma de la marca,
+            // SOLO cuando el tema resuelto es Brand; la dirección nunca cambia.
+            SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
+        };
 
         LogActivationLinkDev(logger, link);
 

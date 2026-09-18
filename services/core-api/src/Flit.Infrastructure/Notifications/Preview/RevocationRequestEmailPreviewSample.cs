@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Notifications.Tramites;
+using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Domain.RevocationRequests;
 
 namespace Flit.Infrastructure.Notifications.Preview;
@@ -28,11 +29,15 @@ public static class RevocationRequestEmailPreviewSample
         Radicado: "FT1-0000012",
         Motivo: "El documento de soporte adjunto no es legible.");
 
-    public static (string Subject, string Html) BuildFlit(string milestone, string? assetsBaseUrl = null) =>
+    /// <param name="theme">HU #12428 — tema resuelto por red; <c>null</c>/<c>Flit</c> deja la
+    /// muestra idéntica a la variante FLIT (AC9).</param>
+    public static (string Subject, string Html) BuildFlit(
+        string milestone, string? assetsBaseUrl = null, EmailTheme? theme = null) =>
         RevocationRequestEmailComposer.ComposeFlit(
             milestone,
             SampleFor(milestone),
-            string.IsNullOrWhiteSpace(assetsBaseUrl) ? DefaultAssetsBaseUrl : assetsBaseUrl);
+            string.IsNullOrWhiteSpace(assetsBaseUrl) ? DefaultAssetsBaseUrl : assetsBaseUrl,
+            theme);
 
     public static (string Subject, string Html) BuildRenting(string milestone, string? assetsBaseUrl = null) =>
         RevocationRequestEmailComposer.ComposeRenting(

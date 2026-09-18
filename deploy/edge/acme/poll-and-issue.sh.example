@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# deploy/edge/acme/poll-and-issue.sh.example
+#
+# Poller de emision automatica (HU #12426, AC1). Corre en el VPS via
+# systemd timer (deploy/edge/acme/systemd/flit-acme-poll.timer.example, cada
+# 5 min) o cron equivalente. NO reemplaza el catch-all de nginx (#12421) --
+# solo emite certificados para hosts que el backend marco como verificados y
+# aun no tienen certificado, y delega la notificacion/reload en
+# notify-certificate.sh.example.
+#
+# CONTRATO CONFIRMADO (ver deploy/edge/acme/README.md): el endpoint
+# GET .../internal/domains/pending-certificate lo expone #12425 (auth
+# X-Internal-Key, 200 { "hosts": [...] } con los dominios verified sin
+# certificado). Si la ruta real difiere en algun ambiente, ajustar solo
+# FLIT_ACME_DOMAIN_LIST_URL -- el parseo del campo "hosts" no cambia.
+#
+# Instala cada certificado en /etc/acme/live/<host>/{fullchain.pem,key.pem}
+# (acme.sh --install-cert --cert-home /etc/acme) para que el catch-all de
+# nginx (deploy/edge/nginx/flit-network-domains.conf.example) pueda resolver
+# `ssl_certificate /etc/acme/live/$ssl_server_name/fullchain.pem;` por SNI
+# sin generar ni tocar ningun bloque server{} nuevo (ver README.md §Limite
+# de nginx clasico -- resuelto de forma nativa).
+#
+# Variables de entorno requeridas:
+#   FLIT_INTERNAL_API_KEY      igual que notify-certificate.sh.example
+#   CORE_API_INTERNAL_URL      ej. http://127.0.0.1:4003
+#   FLIT_ACME_DOMAIN_LIST_URL  ej. ${CORE_API_INTERNAL_URL}/api/v1/internal/domains/pending-certificate
+#   ACME_WEBROOT               ej. /var/www/acme-challenge (mismo que el
+#                               location /.well-known/acme-challenge/ del
+#                               flit-network-domains.conf.example de #12421)
+#
+# Variables opcionales:
+#   ACME_SH_BIN            por defecto "$HOME/.acme.sh/acme.sh"
+#   ACME_CERT_HOME         por defecto /etc/acme (raiz de $ssl_server_name en nginx)
+#   FLIT_ACME_STATE_DIR    por defecto /var/lib/flit-acme (marcas de cooldown)
+#   FLIT_ACME_COOLDOWN_SECS  por defecto 3600 (1h, ver README.md rate limits)
+#   NOTIFY_SCRIPT          por defecto ruta hermana notify-certificate.sh
+
+set -euo pipefail
+
+LOG_TAG="flit-acme-poll"
+log() {
+  local level="$1"; shift
+  if command -v logger >/dev/null 2>&1; then
+    logger -t "${LOG_TAG}" -p "user.${level}" -- "$*"
+  fi
+  printf '[%s] %s: %s\n' "$(date -u +%FT%TZ)" "${level}" "$*" >&2
+}
+fail() { log err "$*"; exit 1; }
+
+: "${FLIT_INTERNAL_API_KEY:?}"
+: "${CORE_API_INTERNAL_URL:?}"
+FLIT_ACME_DOMAIN_LIST_URL="${FLIT_ACME_DOMAIN_LIST_URL:-${CORE_API_INTERNAL_URL%/}/api/v1/internal/domains/pending-certificate}"
+: "${ACME_WEBROOT:?ACME_WEBROOT no definida (ej. /var/www/acme-challenge)}"
+
+ACME_SH_BIN="${ACME_SH_BIN:-$HOME/.acme.sh/acme.sh}"
+ACME_CERT_HOME="${ACME_CERT_HOME:-/etc/acme}"
+FLIT_ACME_STATE_DIR="${FLIT_ACME_STATE_DIR:-/var/lib/flit-acme}"
+FLIT_ACME_COOLDOWN_SECS="${FLIT_ACME_COOLDOWN_SECS:-3600}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NOTIFY_SCRIPT="${NOTIFY_SCRIPT:-${SCRIPT_DIR}/notify-certificate.sh}"
+
+command -v curl >/dev/null 2>&1 || fail "curl no disponible"
+command -v jq >/dev/null 2>&1 || fail "jq no disponible (parseo de la lista de hosts)"
+[[ -x "${ACME_SH_BIN}" ]] || fail "acme.sh no encontrado/ejecutable en ${ACME_SH_BIN}"
+mkdir -p "${FLIT_ACME_STATE_DIR}"
+
+# ── 1. Preguntar al backend que hosts estan verified sin certificado ─────
+response="$(curl -sS -o /tmp/flit-acme-poll-body.$$ -w '%{http_code}' \
+  -H "X-Internal-Key: ${FLIT_INTERNAL_API_KEY}" \
+  --max-time 10 \
+  "${FLIT_ACME_DOMAIN_LIST_URL}" || echo "000")"
+
+if [[ "${response}" != "200" ]]; then
+  body="$(cat /tmp/flit-acme-poll-body.$$ 2>/dev/null || true)"
+  rm -f /tmp/flit-acme-poll-body.$$
+  fail "GET ${FLIT_ACME_DOMAIN_LIST_URL} -> ${response}; respuesta: ${body}"
+fi
+
+hosts_json="$(cat /tmp/flit-acme-poll-body.$$)"
+rm -f /tmp/flit-acme-poll-body.$$
+
+mapfile -t hosts < <(printf '%s' "${hosts_json}" | jq -r '.hosts[]? // empty')
+
+if [[ "${#hosts[@]}" -eq 0 ]]; then
+  log info "sin dominios pendientes de certificado"
+  exit 0
+fi
+
+log info "dominios pendientes de certificado: ${hosts[*]}"
+
+exit_code=0
+for host in "${hosts[@]}"; do
+  cooldown_file="${FLIT_ACME_STATE_DIR}/${host}.last-attempt"
+
+  if [[ -f "${cooldown_file}" ]]; then
+    last_attempt="$(cat "${cooldown_file}")"
+    now="$(date +%s)"
+    elapsed=$(( now - last_attempt ))
+    if [[ "${elapsed}" -lt "${FLIT_ACME_COOLDOWN_SECS}" ]]; then
+      log info "host=${host}: en cooldown (${elapsed}s de ${FLIT_ACME_COOLDOWN_SECS}s) -- se omite este ciclo (rate limits Let's Encrypt, ver README.md)"
+      continue
+    fi
+  fi
+
+  date +%s > "${cooldown_file}"
+
+  log info "host=${host}: emitiendo certificado (HTTP-01, webroot ${ACME_WEBROOT})"
+  if ! "${ACME_SH_BIN}" --issue --webroot "${ACME_WEBROOT}" -d "${host}"; then
+    log warning "host=${host}: acme.sh --issue fallo -- se reintentara tras el cooldown de ${FLIT_ACME_COOLDOWN_SECS}s"
+    exit_code=1
+    continue
+  fi
+
+  # Instala en ${ACME_CERT_HOME}/live/<host>/{fullchain.pem,key.pem} -- la
+  # ruta que el catch-all de nginx resuelve por SNI con
+  # `ssl_certificate ${ACME_CERT_HOME}/live/$ssl_server_name/fullchain.pem;`
+  # (ver README.md §Limite de nginx clasico -- resuelto de forma nativa,
+  # nginx >= 1.15.9). --reloadcmd dispara notify-certificate.sh, que a su vez
+  # avisa a core-api y hace `nginx -s reload`.
+  install_dir="${ACME_CERT_HOME}/live/${host}"
+  mkdir -p "${install_dir}"
+  if "${ACME_SH_BIN}" --install-cert -d "${host}" \
+      --cert-home "${ACME_CERT_HOME}" \
+      --key-file "${install_dir}/key.pem" \
+      --fullchain-file "${install_dir}/fullchain.pem" \
+      --reloadcmd "${NOTIFY_SCRIPT} ${host} ${install_dir}/fullchain.pem"; then
+    log info "host=${host}: certificado instalado en ${install_dir} y notificado"
+  else
+    log warning "host=${host}: acme.sh --install-cert o el reloadcmd fallaron -- revisar journal (${LOG_TAG}, ${LOG_TAG}-notify)"
+    exit_code=1
+  fi
+done
+
+exit "${exit_code}"

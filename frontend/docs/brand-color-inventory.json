@@ -1,0 +1,288 @@
+{
+  "generatedAt": "2026-09-15T23:06:45.540Z",
+  "hu": 12415,
+  "methodology": {
+    "scanDirs": [
+      "app",
+      "components",
+      "lib"
+    ],
+    "scanExtensions": [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".css",
+      ".svg"
+    ],
+    "excludedDirSegments": [
+      "node_modules",
+      ".next",
+      "__tests__"
+    ],
+    "brandHexes": [
+      "#162744",
+      "#557eff",
+      "#00dbd5",
+      "#ff4e00",
+      "#eef5ff",
+      "#dfe5ed"
+    ],
+    "note": "Conteo repositorio-completo con metodología propia (ver comentario junto a SCAN_DIRS); no reproduce literalmente la cifra de referencia citada en el AC2 de la HU."
+  },
+  "surfaces": [
+    {
+      "id": "acceso",
+      "label": "Pantalla de acceso",
+      "files": [
+        {
+          "relPath": "components/atom/Login.tsx",
+          "exists": true,
+          "occurrences": []
+        },
+        {
+          "relPath": "app/login/page.tsx",
+          "exists": true,
+          "occurrences": []
+        }
+      ],
+      "totals": {
+        "marca": 0,
+        "neutro": 0,
+        "estado": 0
+      }
+    },
+    {
+      "id": "activacion",
+      "label": "Activación de cuenta",
+      "files": [
+        {
+          "relPath": "app/invite/activate/page.tsx",
+          "exists": true,
+          "occurrences": []
+        },
+        {
+          "relPath": "components/auth/ActivateAccountForm.tsx",
+          "exists": true,
+          "occurrences": []
+        }
+      ],
+      "totals": {
+        "marca": 0,
+        "neutro": 0,
+        "estado": 0
+      }
+    },
+    {
+      "id": "recuperacion",
+      "label": "Recuperación de contraseña",
+      "files": [
+        {
+          "relPath": "app/auth/forgot-password/page.tsx",
+          "exists": true,
+          "occurrences": []
+        },
+        {
+          "relPath": "app/auth/reset-password/page.tsx",
+          "exists": true,
+          "occurrences": []
+        },
+        {
+          "relPath": "components/auth/ForgotPasswordForm.tsx",
+          "exists": true,
+          "occurrences": []
+        },
+        {
+          "relPath": "components/auth/ResetPasswordForm.tsx",
+          "exists": true,
+          "occurrences": []
+        },
+        {
+          "relPath": "components/auth/AuthCard.tsx",
+          "exists": true,
+          "occurrences": [
+            {
+              "line": 29,
+              "hex": "#0B0F14",
+              "hexNormalized": "#0b0f14",
+              "classification": "neutro",
+              "snippet": "<div className=\"w-full max-w-md rounded-2xl border border-flit-gray bg-white p-8 text-flit-primary shadow-2xl dark:border-white/10 dark:bg-[#0B0F14] dark:text-w"
+            }
+          ]
+        }
+      ],
+      "totals": {
+        "marca": 0,
+        "neutro": 1,
+        "estado": 0
+      }
+    },
+    {
+      "id": "cabecera-menu",
+      "label": "Cabecera y menú",
+      "files": [
+        {
+          "relPath": "components/atom/Shell.tsx",
+          "exists": true,
+          "occurrences": [
+            {
+              "line": 588,
+              "hex": "#05060A",
+              "hexNormalized": "#05060a",
+              "classification": "neutro",
+              "snippet": "background: dark ? \"#05060A\" : \"var(--color-flit-bg)\","
+            },
+            {
+              "line": 589,
+              "hex": "#FFFFFF",
+              "hexNormalized": "#ffffff",
+              "classification": "neutro",
+              "snippet": "color: dark ? \"#FFFFFF\" : \"var(--color-flit-primary)\","
+            },
+            {
+              "line": 651,
+              "hex": "#0B0F14",
+              "hexNormalized": "#0b0f14",
+              "classification": "neutro",
+              "snippet": "background: dark ? \"#0B0F14\" : \"#FFFFFF\","
+            },
+            {
+              "line": 651,
+              "hex": "#FFFFFF",
+              "hexNormalized": "#ffffff",
+              "classification": "neutro",
+              "snippet": "background: dark ? \"#0B0F14\" : \"#FFFFFF\","
+            },
+            {
+              "line": 654,
+              "hex": "#FFFFFF",
+              "hexNormalized": "#ffffff",
+              "classification": "neutro",
+              "snippet": "color: dark ? \"#FFFFFF\" : \"var(--color-flit-primary)\","
+            },
+            {
+              "line": 783,
+              "hex": "#ffffff",
+              "hexNormalized": "#ffffff",
+              "classification": "neutro",
+              "snippet": "color: \"#ffffff\","
+            }
+          ]
+        },
+        {
+          "relPath": "components/atom/dock/DockDesktop.tsx",
+          "exists": true,
+          "occurrences": [
+            {
+              "line": 135,
+              "hex": "#ffffff",
+              "hexNormalized": "#ffffff",
+              "classification": "neutro",
+              "snippet": "? { background: \"var(--nav-activo)\", boxShadow: \"var(--nav-sombra-activo)\", color: \"#ffffff\" }"
+            },
+            {
+              "line": 156,
+              "hex": "#ffffff",
+              "hexNormalized": "#ffffff",
+              "classification": "neutro",
+              "snippet": "style={{ color: lit ? \"#ffffff\" : undefined }}"
+            },
+            {
+              "line": 180,
+              "hex": "#ffffff",
+              "hexNormalized": "#ffffff",
+              "classification": "neutro",
+              "snippet": "style={{ color: lit ? \"#ffffff\" : undefined }}"
+            },
+            {
+              "line": 204,
+              "hex": "#4F74C9",
+              "hexNormalized": "#4f74c9",
+              "classification": "estado",
+              "snippet": "[\"--acc\" as string]: \"#4F74C9\","
+            }
+          ]
+        }
+      ],
+      "totals": {
+        "marca": 0,
+        "neutro": 9,
+        "estado": 1
+      }
+    },
+    {
+      "id": "pestana",
+      "label": "Icono y título de la pestaña",
+      "files": [
+        {
+          "relPath": "app/layout.tsx",
+          "exists": true,
+          "occurrences": []
+        },
+        {
+          "relPath": "app/icon.svg",
+          "exists": true,
+          "occurrences": [
+            {
+              "line": 1,
+              "hex": "#557eff",
+              "hexNormalized": "#557eff",
+              "classification": "marca",
+              "snippet": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg id=\"Capa_2\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 29.95 29.95\"><"
+            },
+            {
+              "line": 1,
+              "hex": "#00dbd5",
+              "hexNormalized": "#00dbd5",
+              "classification": "marca",
+              "snippet": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg id=\"Capa_2\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 29.95 29.95\"><"
+            },
+            {
+              "line": 1,
+              "hex": "#fafafa",
+              "hexNormalized": "#fafafa",
+              "classification": "neutro",
+              "snippet": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg id=\"Capa_2\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 29.95 29.95\"><"
+            },
+            {
+              "line": 1,
+              "hex": "#fafafa",
+              "hexNormalized": "#fafafa",
+              "classification": "neutro",
+              "snippet": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg id=\"Capa_2\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 29.95 29.95\"><"
+            }
+          ]
+        }
+      ],
+      "totals": {
+        "marca": 2,
+        "neutro": 2,
+        "estado": 0
+      }
+    }
+  ],
+  "excludedOutOfScope": [
+    {
+      "file": "app/profile/change-password/page.tsx",
+      "reason": "Cambio de contraseña autenticado (ajustes de perfil), no 'recuperación de contraseña' (flujo no autenticado de AC1)."
+    },
+    {
+      "file": "components/auth/ChangePasswordForm.tsx",
+      "reason": "Formulario exclusivo de app/profile/change-password/page.tsx — mismo motivo."
+    }
+  ],
+  "repoWide": {
+    "totalFilesScanned": 700,
+    "brandHexOccurrences": {
+      "insideScope": {
+        "files": 1,
+        "occurrences": 2
+      },
+      "outsideScope": {
+        "files": 379,
+        "occurrences": 3006
+      },
+      "total": 3008
+    }
+  }
+}

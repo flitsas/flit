@@ -25,9 +25,13 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_TRASPASOS_API_BASE_URL
 ARG NEXT_PUBLIC_DEV_USER_ID
+# Marca Blanca (HU #12419) — hosts que se consideran FLIT (lib/brand/hosts.ts). Sin pasar,
+# next build usa el respaldo por defecto (localhost, *.flitsas.online, *.flitsas.com).
+ARG NEXT_PUBLIC_FLIT_HOSTS
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_TRASPASOS_API_BASE_URL=$NEXT_PUBLIC_TRASPASOS_API_BASE_URL
 ENV NEXT_PUBLIC_DEV_USER_ID=$NEXT_PUBLIC_DEV_USER_ID
+ENV NEXT_PUBLIC_FLIT_HOSTS=$NEXT_PUBLIC_FLIT_HOSTS
 
 # Codigo y build de produccion (.next compilado, baked en la imagen).
 COPY . .

@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Notifications.Tramites;
+using Flit.Modules.Security.Domain.Auth;
 
 namespace Flit.Infrastructure.Notifications.Preview;
 
@@ -16,10 +17,11 @@ public static class AsignacionPlacaEmailPreviewSample
         Ciudad: "Medellín",
         SecretariaTransito: "Secretaría de Movilidad de Medellín");
 
-    public static (string Subject, string Html) BuildFlit(string? assetsBaseUrl = null) =>
+    public static (string Subject, string Html) BuildFlit(string? assetsBaseUrl = null, EmailTheme? theme = null) =>
         AsignacionPlacaEmailComposer.ComposeFlit(
             Sample,
-            string.IsNullOrWhiteSpace(assetsBaseUrl) ? DefaultAssetsBaseUrl : assetsBaseUrl);
+            string.IsNullOrWhiteSpace(assetsBaseUrl) ? DefaultAssetsBaseUrl : assetsBaseUrl,
+            theme);
 
     public static (string Subject, string Html) BuildRenting(string? assetsBaseUrl = null) =>
         AsignacionPlacaEmailComposer.ComposeRenting(

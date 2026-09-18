@@ -16,7 +16,11 @@ public static class InvitationEmailTemplate
         return $"{activateUrlBase}{separator}token={Uri.EscapeDataString(rawToken)}";
     }
 
-    public static string BuildHtmlBody(string fullName, string link, string? assetsBaseUrl = null)
+    public static string BuildHtmlBody(
+        string fullName,
+        string link,
+        string? assetsBaseUrl = null,
+        Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null)
     {
         var name = System.Net.WebUtility.HtmlEncode(fullName);
         var body =
@@ -32,14 +36,20 @@ public static class InvitationEmailTemplate
             headline: "¡INVITACIÓN A FLIT!",
             bodyInnerHtml: body,
             closingHeadline: "¡Activa tu cuenta y disfruta de todos tus beneficios!",
-            assetsBaseUrl: assetsBaseUrl);
+            assetsBaseUrl: assetsBaseUrl,
+            theme: theme);
     }
 
     /// <summary>
     /// HU #11351 — composición pura: asunto y cuerpo a partir únicamente de <paramref name="fullName"/>
     /// y <paramref name="link"/> (ya calculado con <see cref="BuildActivateLink"/>). Sin E/S, sin reloj,
-    /// sin aleatoriedad, sin estado.
+    /// sin aleatoriedad, sin estado. <paramref name="theme"/> (HU #12428) es opcional y aditivo: sin
+    /// él, o con el tema FLIT, la salida es idéntica a antes de esta historia.
     /// </summary>
-    public static ComposedEmail Compose(string fullName, string link, string? assetsBaseUrl = null) =>
-        new(Subject, BuildHtmlBody(fullName, link, assetsBaseUrl));
+    public static ComposedEmail Compose(
+        string fullName,
+        string link,
+        string? assetsBaseUrl = null,
+        Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null) =>
+        new(Subject, BuildHtmlBody(fullName, link, assetsBaseUrl, theme));
 }

@@ -4,10 +4,12 @@ using Flit.Analytics.Application;
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Analytics;
 using Flit.Api.Endpoints;
+using Flit.Api.Endpoints.Internal;
 using Flit.Api.Endpoints.Public;
 using Flit.Api.Endpoints.SuperAdmin;
 using Flit.Api.Endpoints.Tramites;
 using Flit.Api.OpenApi;
+using Flit.Api.RateLimiting;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Security;
@@ -87,7 +89,9 @@ builder.Services.PostConfigure<JwtBearerOptions>(
 
 // Módulo Admin (HU #10189, RF02).
 builder.Services.AddAdminApplication();
-builder.Services.AddAdminInfrastructure();
+// HU #12416 — AddAdminInfrastructure necesita builder.Configuration para ligar DomainOptions
+// (sección Domains: reservados y CNAME del borde).
+builder.Services.AddAdminInfrastructure(builder.Configuration);
 
 // HU #12576 (Feature #12565) — orquestador API-layer de la decisión OT sobre una solicitud de
 // revocatoria: compone Flit.Admin.Application (RevokeOtClientProcedureHandler, HU #12166) con
@@ -109,6 +113,20 @@ builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHa
 
 // HU #12345 — cabeza de grupo (AdminCompany + is_group_parent en BD).
 builder.Services.AddScoped<IAuthorizationHandler, GroupHeadCompanyAuthorizationHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, MarcaBlancaHeadCompanyAuthorizationHandler>();
+
+// HU #12417 (Feature #12368, ADR-0060 D2) — DomainContext por petición (DomainContextMiddleware
+// más abajo puebla HttpContext.Items; este accessor lo expone a Application sin acoplarla a HTTP).
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<Flit.Modules.Security.Application.Auth.IDomainContextAccessor,
+    Flit.Api.Authorization.HttpDomainContextAccessor>();
+
+// HU #12418 (Feature #12366, ADR-0060 D2) — resolución pública/sesión de marca: sección
+// PublicBranding (relleno de tiempo opcional + límite de tasa) y la PRIMERA policy de
+// AddRateLimiter del repo (delta-hechos #1), solo para /public/branding y /public/branding/logos/*.
+builder.Services.Configure<Flit.Api.RateLimiting.PublicBrandingOptions>(
+    builder.Configuration.GetSection(Flit.Api.RateLimiting.PublicBrandingOptions.SectionName));
+builder.Services.AddPublicBrandingRateLimiter();
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
@@ -207,7 +225,22 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors(FrontendCorsPolicy);
 
+// HU #12418 (Feature #12366, ADR-0060 D2) — límite de tasa de /public/branding* (delta-hechos #1:
+// primera policy del repo). Tras CORS/routing, antes de auth/endpoints.
+app.UseRateLimiter();
+
+// HU #12417 (Feature #12368, ADR-0060 D2) — puebla DomainContext leyendo EXCLUSIVAMENTE el sello
+// X-Flit-Domain que fija Flit.Gateway. Va ANTES de auth: el login/recuperación (#12422) necesita
+// el dominio de la petición sin depender de un JWT (hoy sin validar — Bug diferido).
+app.UseMiddleware<Flit.Api.Middleware.DomainContextMiddleware>();
+
 app.UseAuthentication();
+
+// HU #12422 (Feature #12369, ADR-0060 D3) — liga la sesión al dominio de emisión (claim "dom").
+// Va DESPUÉS de auth (necesita HttpContext.User) y ANTES de authorization: una petición anónima
+// (sin usuario autenticado) la atraviesa sin cambios.
+app.UseMiddleware<Flit.Api.Authorization.DomainBindingMiddleware>();
+
 app.UseAuthorization();
 
 // Enforcement multi-tenant de los endpoints runtime de trámites (#1): resuelve el tenant desde el
@@ -240,6 +273,11 @@ app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
 app.MapUserUiPreferencesEndpoints();
 app.MapAdminCompaniesEndpoints();
+app.MapAdminCompaniesBrandingEndpoints();
+app.MapCompanyBrandingEndpoints();
+app.MapAdminCompaniesDomainEndpoints();
+app.MapCompanyDomainEndpoints();
+app.MapInternalDomainsEndpoints();
 app.MapAdminCompanyChildrenEndpoints();
 app.MapAdminCompanyChildrenConfigEndpoints();
 app.MapAdminCompanyChildrenInvitationsEndpoints();
@@ -299,6 +337,9 @@ app.MapPublicKyverumWebhookEndpoints();
 app.MapPublicPortalEndpoints();
 // HU #12240 (Feature #12236) — banners promocionales: listado publico + imagen por streaming.
 app.MapPublicBannersEndpoints();
+// HU #12418 (Feature #12366, ADR-0060 D2) — identidad de marca pública (antes del login) + sesión.
+app.MapPublicBrandingEndpoints();
+app.MapMeBrandingEndpoints();
 app.MapTramitesInstanceEndpoints();
 // HU #12358 (Feature #12257) — vista consolidada de la red (solo lectura) bajo /api/v1/tramites/network.
 app.MapTramitesNetworkEndpoints();
