@@ -151,6 +151,8 @@ internal static class BiometricaEndpoints
                 : Results.Ok(result);
         })
         .WithName("ListTenantBiometricValidations")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleOrDashboard()
         .Produces<TenantBiometricValidationsResponse>(StatusCodes.Status200OK);
 
         // GET vista agrupada por persona (HU #11270 / ADR-0040): una fila por documento normalizado.
@@ -199,6 +201,8 @@ internal static class BiometricaEndpoints
                 : Results.Ok(result);
         })
         .WithName("ListTenantBiometricPersons")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleRead()
         .Produces<TenantBiometricPersonsResponse>(StatusCodes.Status200OK);
 
         // GET historial multi-validación de UNA persona (HU #11272 / CF-06): tope 50 + paginación.
@@ -232,6 +236,8 @@ internal static class BiometricaEndpoints
             };
         })
         .WithName("ListPersonBiometricValidations")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleRead()
         .Produces<PersonBiometricValidationsResponse>(StatusCodes.Status200OK);
 
         // GET eventos de validación de identidad ATASCADOS (dead-letter): pendientes que agotaron los
@@ -250,6 +256,8 @@ internal static class BiometricaEndpoints
             return Results.Ok(result);
         })
         .WithName("ListStuckIdentityValidations")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleRead()
         .Produces<StuckIdentityValidationsResponse>(StatusCodes.Status200OK);
 
         // POST reencolar ("desatascar") un evento de identidad atascado: reinicia sus intentos para que el
@@ -267,7 +275,9 @@ internal static class BiometricaEndpoints
             return error is "not_found"
                 ? Results.Problem(statusCode: 404, title: "Not Found", detail: "No hay un evento atascado con ese id.")
                 : Results.Ok(new { requeued = true });
-        }).WithName("RequeueStuckIdentityValidation");
+        }).WithName("RequeueStuckIdentityValidation")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleManage();
 
         // POST reencolar TODOS los eventos atascados del tenant de una vez → { requeued: N }.
         group.MapPost("/identity-validation/stuck/requeue-all", async (
@@ -280,7 +290,9 @@ internal static class BiometricaEndpoints
 
             var count = await handler.HandleAsync(tenantId.Value, ct);
             return Results.Ok(new { requeued = count });
-        }).WithName("RequeueAllStuckIdentityValidations");
+        }).WithName("RequeueAllStuckIdentityValidations")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleManage();
 
         // GET alertas/recordatorios de validación de identidad del TENANT (HU #10873, AC1/AC2): clasifica
         // cada validación en rechazada|expirada|por_vencer|atascada y marca la que amerita recordatorio de
@@ -298,6 +310,8 @@ internal static class BiometricaEndpoints
             return Results.Ok(result);
         })
         .WithName("ListIdentityValidationAlerts")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleRead()
         .Produces<IdentityValidationAlertsResponse>(StatusCodes.Status200OK);
 
         // GET alertas/recordatorios de validación de identidad de UN trámite puntual (HU #10873): misma
@@ -457,6 +471,8 @@ internal static class BiometricaEndpoints
             };
         })
         .WithName("IniciarPrevalidacionIdentidad")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleManage()
         .Produces<IniciarPrevalidacionResult>(StatusCodes.Status201Created)
         .Produces<IniciarPrevalidacionResult>(StatusCodes.Status202Accepted);
 
@@ -501,6 +517,8 @@ internal static class BiometricaEndpoints
             };
         })
         .WithName("EditarPrevalidacionIdentidad")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleManage()
         .Produces<EditarPrevalidacionResult>(StatusCodes.Status200OK);
 
         // POST reenviar manualmente la validación de identidad de una prevalidación standalone (HU #10943,
@@ -540,6 +558,8 @@ internal static class BiometricaEndpoints
             };
         })
         .WithName("ReenviarPrevalidacionIdentidad")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleManage()
         .Produces<ReenviarPrevalidacionResult>(StatusCodes.Status200OK)
         .Produces<ReenviarPrevalidacionResult>(StatusCodes.Status202Accepted);
 
@@ -561,6 +581,8 @@ internal static class BiometricaEndpoints
                 : Results.Ok(result);
         })
         .WithName("GetPrevalidacionDetail")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleRead()
         .Produces<BiometricValidationDto>(StatusCodes.Status200OK);
 
         // GET bitácora de una validación de identidad SIN depender de instancia (CF-07, Feature #11004,
@@ -582,6 +604,8 @@ internal static class BiometricaEndpoints
                 : Results.Ok(result);
         })
         .WithName("GetIdentityAuditByValidation")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleOrTramites()
         .Produces<IdentityAuditResponse>(StatusCodes.Status200OK);
 
         // POST asegurar identidad de una parte (HU #10350): reutiliza una validación vigente de la

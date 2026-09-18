@@ -221,6 +221,9 @@ public sealed class IdentityValidationScopeEndpointsTests
             new("role", role),
             new("role_code", role),
             new("tenant_id", tenantId.ToString()),
+            // Permisos reales del rol AdminCompany en RBAC (HU #12711 los exige en la API del módulo).
+            new("permissions", "validaciones.read"),
+            new("permissions", "validaciones.manage"),
         };
 
         return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
@@ -298,8 +301,16 @@ public sealed class IdentityValidationScopeEndpointsTests
                 services.AddScoped(_ => Repo);
                 services.AddScoped(_ => Outbox);
                 services.AddScoped<ITenantScopeResolver>(_ => new FakeScopeResolver());
+                services.AddScoped<Flit.Api.Authorization.ITransitOfficeTenantProbe>(_ => new NoTransitOffices());
             });
         }
+    }
+
+    /// <summary>Ninguna compañía de estas pruebas es organismo de tránsito (eso lo cubre HU #12711).</summary>
+    private sealed class NoTransitOffices : Flit.Api.Authorization.ITransitOfficeTenantProbe
+    {
+        public Task<bool> IsTransitOfficeAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
     }
 
     /// <summary>La cabeza tiene una hija: el middleware le calcula <c>Group</c>; el resto, <c>Single</c>.</summary>
