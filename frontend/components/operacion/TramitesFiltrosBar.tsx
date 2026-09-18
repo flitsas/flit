@@ -10,6 +10,7 @@ import {
   describeCondition,
 } from '@/components/consultas/QueryFilterBar';
 import type { QueryCondition, QueryField } from '@/lib/api/queries';
+import { COPY } from '@/lib/copy/copy-catalog';
 
 /**
  * Fila de acciones compactas del listado de trámites (Track A). Reemplaza a la tarjeta blanca de
@@ -136,7 +137,7 @@ function usePopoverDismiss(
 }
 
 const RANGO_SOBRE_OPTIONS: { value: RangoSobre; label: string }[] = [
-  { value: 'created', label: 'Fecha de creación' },
+  { value: 'created', label: COPY.A04 },
   { value: 'updated', label: 'Última actualización' },
 ];
 

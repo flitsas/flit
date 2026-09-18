@@ -1,5 +1,6 @@
 import { bogotaDay, type XlsxCell } from '@/lib/xlsx';
 import { formatFechaHora } from '@/lib/format/date';
+import { COPY } from '@/lib/copy/copy-catalog';
 import { estadoLabelConOrigen } from '@/lib/tramites/estados';
 import {
   FIRMA_TEXTO,
@@ -97,9 +98,9 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // sin saber de quién sin cruzar la vista a otra columna; juntas, la cabecera de la columna ya
   // dice de quién es. El piso cubre el peor caso de las DOS líneas: el nombre completo arriba y
   // el valor más largo ("Sin registrar", ~82px) debajo, más los 32px de padding del `<td>`.
-  { key: 'propietario', label: 'Vendedor', minPx: 170, group: GRUPO_BASE },
+  { key: 'propietario', label: COPY.A01, minPx: 170, group: GRUPO_BASE },
   { key: 'comprador', label: 'Comprador', minPx: 170, group: GRUPO_BASE },
-  { key: 'tramite', label: 'Trámite / Estado', minPx: 160, group: GRUPO_BASE },
+  { key: 'tramite', label: COPY.A03, minPx: 160, group: GRUPO_BASE },
   // HU #12183 — dos íconos como mucho, de 20px, y nunca texto: el piso cubre los dos más el
   // padding de la celda. Fija por eso mismo: no tiene nada que hacer con el ancho sobrante.
   { key: 'marcas', label: 'Marcas', minPx: 84, fixed: true, group: GRUPO_BASE },
@@ -109,8 +110,8 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // Sin truncar: el nombre del organismo es la mitad del valor de la columna ("SECRETARIA
   // DISTRITAL DE MOVILIDAD DE BOGOTA" cortado a "SECRETARIA DISTRITAL DE…" no distingue nada).
   // Envuelve en varias líneas, así que es de las que mejor aprovecha el ancho sobrante.
-  { key: 'secretaria', label: 'Secretaría', minPx: 190, group: GRUPO_BASE },
-  { key: 'gestor', label: 'Gestor', minPx: 160, group: GRUPO_BASE },
+  { key: 'secretaria', label: COPY.A05, minPx: 190, group: GRUPO_BASE },
+  { key: 'gestor', label: COPY.A06, minPx: 160, group: GRUPO_BASE },
   // Fija: tres etiquetas conocidas y cortas ("Dashboard", "Integración", "Migrado").
   { key: 'fuente', label: 'Fuente', minPx: 120, fixed: true, group: GRUPO_BASE },
   // HU #12363 — cliente dueño del trámite, solo en el alcance de red. Va al final del listado base
@@ -122,12 +123,12 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   //
   // El rótulo del desglose del vehículo NO puede ser "Vehículo" —ya lo lleva la columna fundida— y
   // "Marca / modelo" es además lo que de verdad pinta: marca + línea.
-  { key: 'vin', label: 'VIN', minPx: 168, fixed: true, group: GRUPO_DESGLOSE },
+  { key: 'vin', label: COPY.A02Vin, minPx: 168, fixed: true, group: GRUPO_DESGLOSE },
   { key: 'vehiculo', label: 'Marca / modelo', minPx: 140, group: GRUPO_DESGLOSE },
   { key: 'estado', label: 'Estado', minPx: 150, group: GRUPO_DESGLOSE },
   // Fijas: "3/5" con el nombre del paso, y dos fechas de formato constante.
   { key: 'paso', label: 'Paso', minPx: 130, fixed: true, group: GRUPO_DESGLOSE },
-  { key: 'fechaCreacion', label: 'Fecha de creación', minPx: 130, fixed: true, group: GRUPO_DESGLOSE },
+  { key: 'fechaCreacion', label: COPY.A04, minPx: 130, fixed: true, group: GRUPO_DESGLOSE },
   { key: 'fechaActualizacion', label: 'Fecha de actualización', minPx: 140, fixed: true, group: GRUPO_DESGLOSE },
 ] as const;
 
@@ -409,7 +410,7 @@ function campoFirma(
  */
 const CAMPO_FECHA_CREACION: TramitesExportField = {
   id: 'fechaCreacion',
-  label: 'Fecha de creación',
+  label: COPY.A04,
   sort: 'createdAt',
   sortKind: 'fecha',
   value: (row) => formatFechaHora(row.createdAt),
@@ -429,7 +430,7 @@ const CAMPO_FECHA_ACTUALIZACION: TramitesExportField = {
   width: 18,
 };
 
-const CAMPO_VIN = { ...campoTexto('vin', 'VIN', (row) => row.vin, 20), sort: 'vin' };
+const CAMPO_VIN = { ...campoTexto('vin', COPY.A02Vin, (row) => row.vin, 20), sort: 'vin' };
 const CAMPO_VEHICULO = campoTexto('vehiculo', 'Marca / modelo', (row) => vehiculo(row), 24);
 // ADR-0059 — el export dice lo mismo que el chip: «Rechazado preasignación» cuando aplica.
 const CAMPO_ESTADO = { ...campoTexto('estado', 'Estado', (row) => estadoLabelConOrigen(row.estado, row.rejectedFrom), 22), sort: 'estado' };
@@ -463,12 +464,12 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
     apilado(CAMPO_FECHA_ACTUALIZACION, 'fechaActualizacion'),
   ],
   placa: [
-    { ...campoTexto('placa', 'Placa', (row) => row.placa, 12), sort: 'placa' },
+    { ...campoTexto('placa', COPY.A02Placa, (row) => row.placa, 12), sort: 'placa' },
     apilado(CAMPO_VIN, 'vin'),
     apilado(CAMPO_VEHICULO, 'vehiculo'),
   ],
   propietario: [
-    { ...campoTexto('vendedor', 'Vendedor', (row) => row.vendedorNombre, 28), sort: 'vendedor' },
+    { ...campoTexto('vendedor', COPY.A01, (row) => row.vendedorNombre, 28), sort: 'vendedor' },
     campoFirma('vendedorFirma', 'Firma del vendedor', (r) => r.vendedorNombre, (r) => r.firmaVendedorEstado),
   ],
   comprador: [
@@ -484,14 +485,14 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   // se ordene el listado.
   confirmadoRunt: [campoTexto('confirmadoRunt', 'Confirmado en RUNT', (row) => runtConfirmadoLabel(row), 18)],
   tramite: [
-    { ...campoTexto('tramite', 'Trámite', (row) => tramiteLabel(row), 22), sort: 'tipo_tramite' },
+    { ...campoTexto('tramite', COPY.A03, (row) => tramiteLabel(row), 22), sort: 'tipo_tramite' },
     apilado(CAMPO_ESTADO, 'estado'),
     apilado(CAMPO_PASO, 'paso'),
     apilado(CAMPO_PASO_NOMBRE, 'paso'),
   ],
   secretaria: [
     {
-      ...campoTexto('secretaria', 'Secretaría', (row) => row.organismoTransito, 34),
+      ...campoTexto('secretaria', COPY.A05, (row) => row.organismoTransito, 34),
       sort: 'organismo',
     },
   ],
@@ -499,7 +500,7 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   // quien la operó. En una sola columna no se puede agrupar por ninguna de las dos.
   gestor: [
     { ...campoTexto('compania', 'Compañía', (row) => row.companiaNombre, 28), sort: 'compania' },
-    { ...campoTexto('gestor', 'Gestor', (row) => row.gestorNombre, 24), sort: 'gestor' },
+    { ...campoTexto('gestor', COPY.A06, (row) => row.gestorNombre, 24), sort: 'gestor' },
   ],
   fuente: [{ ...campoTexto('fuente', 'Fuente', (row) => FUENTE_LABEL[row.fuente ?? 'dashboard'], 14), sort: 'fuente' }],
   // HU #12363 — el dueño del trámite en el alcance de red: `tenantName` lo ponen las rutas
