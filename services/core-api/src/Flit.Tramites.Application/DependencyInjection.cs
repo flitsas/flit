@@ -163,6 +163,10 @@ public static class DependencyInjection
         services.AddScoped<ListTenantBiometricValidationsHandler>();
         // HU #11270 — vista agrupada por persona (ADR-0040); endpoint propio.
         services.AddScoped<ListTenantBiometricPersonsHandler>();
+        // HU #12708 — Validación de Identidad de la red (cabeza de grupo, solo lectura).
+        services.AddScoped<NetworkListIdentityPersonsHandler>();
+        services.AddScoped<NetworkListPersonIdentityValidationsHandler>();
+        services.AddScoped<NetworkGetIdentityAuditHandler>();
         services.AddScoped<GetBiometriaByTokenHandler>();
         services.AddScoped<CompletarBiometriaHandler>();
         services.AddScoped<SimularBiometriaHandler>();

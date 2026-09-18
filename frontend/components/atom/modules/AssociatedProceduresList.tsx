@@ -26,6 +26,11 @@ export function AssociatedProceduresList({
   /** Detalle: colapsable como IdentityValidationTrackingPanel. */
   collapsible = false,
   defaultOpen = false,
+  /**
+   * HU #12709 — `false` en modo consulta de la red: el trámite de una compañía hija no se abre desde la
+   * vista propia de la cabeza, así que se muestra sin enlace.
+   */
+  linkable = true,
 }: {
   procedures: AssociatedProcedureItem[];
   ariaLabel?: string;
@@ -33,6 +38,7 @@ export function AssociatedProceduresList({
   compact?: boolean;
   collapsible?: boolean;
   defaultOpen?: boolean;
+  linkable?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -47,8 +53,8 @@ export function AssociatedProceduresList({
             : null;
         return (
           <li key={p.instanceId}>
-            <a
-              href={`/tramites/${p.instanceId}`}
+            <ProcedureLinkTag
+              href={linkable ? `/tramites/${p.instanceId}` : undefined}
               className={
                 compact
                   ? 'block truncate underline'
@@ -65,7 +71,7 @@ export function AssociatedProceduresList({
               ) : (
                 <>
                   <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
-                    <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+                    {linkable ? <ExternalLink className="h-3 w-3 shrink-0" aria-hidden /> : null}
                     {p.referenceNumber}
                     {p.primary ? (
                       <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold opacity-70">
@@ -80,7 +86,7 @@ export function AssociatedProceduresList({
                   {p.status && <span className="text-[10px] opacity-60">Estado: {p.status}</span>}
                 </>
               )}
-            </a>
+            </ProcedureLinkTag>
           </li>
         );
       })}
@@ -167,4 +173,9 @@ export function buildAssociatedProcedures(opts: {
   }
 
   return items;
+}
+
+/** Enlace al trámite, o el mismo contenido sin enlace cuando no se puede abrir (modo consulta de red). */
+function ProcedureLinkTag({ href, ...rest }: React.ComponentProps<'a'>) {
+  return href ? <a href={href} {...rest} /> : <span {...rest} />;
 }
