@@ -55,7 +55,7 @@ jobs:
           # (dev/qa/pdn) se usa solo para tags de imagen y etiquetas de display.
           # FLIT_INTERNAL_SUBNET (Marca Blanca #12421): CIDR distinto por stack si DEV/QA/PDN
           # comparten VPS — Docker rechaza subredes solapadas ("Pool overlaps...").
-          # Convencion: DEV 172.28.40.0/24 · QA 172.28.50.0/24 · PDN 172.28.60.0/24.
+          # Convencion: DEV 172.28.40.0/24 · QA 10.114.50.0/24 · PDN 10.114.60.0/24.
           case "${{ github.ref_name }}" in
             release)
               env_name=pdn
@@ -64,7 +64,7 @@ jobs:
               api_domain=api.pdn.flitsas.online
               image_tag=pdn
               front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030
-              internal_subnet=172.28.60.0/24
+              internal_subnet=10.114.60.0/24
               ;;
             staging)
               env_name=qa
@@ -73,7 +73,7 @@ jobs:
               api_domain=api.qa.flitsas.online
               image_tag=qa
               front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030
-              internal_subnet=172.28.50.0/24
+              internal_subnet=10.114.50.0/24
               ;;
             develop)
               env_name=dev
@@ -83,8 +83,8 @@ jobs:
               image_tag=dev
               front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030
               # 172.28.40.0/24 (doc) ya estaba ocupado en el VPS compartido → Pool overlaps.
-              # DEV usa .41 hasta liberar ese CIDR; QA/PDN siguen la convencion .50/.60.
-              internal_subnet=172.28.41.0/24
+              # CIDR 10.114.x/24: el rango 172.28.x/24 choca en el VPS compartido (Pool overlaps).
+              internal_subnet=10.114.40.0/24
               ;;
             *)
               echo "::error::Rama no soportada para deploy: ${{ github.ref_name }}"
