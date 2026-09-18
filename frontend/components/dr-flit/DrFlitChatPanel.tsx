@@ -41,6 +41,7 @@ export function DrFlitChatPanel({
   panelRef,
   closeButtonRef,
   inputRef,
+  canSearchValidaciones,
 }: {
   open: boolean;
   panelId: string;
@@ -53,6 +54,8 @@ export function DrFlitChatPanel({
   onBackToSearch: () => void;
   onSend: (text: string) => void;
   onNavigate: (href: string) => void;
+  /** HU #12711 — ver `DrFlitClientBranchChoices`. */
+  canSearchValidaciones?: boolean;
   panelRef: RefObject<HTMLDivElement | null>;
   closeButtonRef: RefObject<HTMLButtonElement | null>;
   inputRef: RefObject<HTMLInputElement | null>;
@@ -156,7 +159,10 @@ export function DrFlitChatPanel({
           )}
 
           {state.showClientBranch && !state.isTyping && (
-            <DrFlitClientBranchChoices onSelect={onSelectClientBranch} />
+            <DrFlitClientBranchChoices
+              onSelect={onSelectClientBranch}
+              canSearchValidaciones={canSearchValidaciones}
+            />
           )}
 
           {state.tramiteResults && !state.isTyping && (

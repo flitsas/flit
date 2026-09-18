@@ -14,10 +14,20 @@ const ICONS = {
 export function DrFlitClientBranchChoices({
   onSelect,
   disabled,
+  canSearchValidaciones = true,
 }: {
   onSelect: (branch: DrFlitClientBranch) => void;
   disabled?: boolean;
+  /**
+   * HU #12711 — la API de Validación de Identidad exige el permiso del módulo y rechaza a los
+   * organismos: quien no ve el módulo en el menú tampoco ve esta opción (si no, la búsqueda
+   * terminaría en «No pude completar la búsqueda»).
+   */
+  canSearchValidaciones?: boolean;
 }) {
+  const branches = DR_FLIT_CLIENT_BRANCHES.filter(
+    (branch) => branch.id !== "validaciones" || canSearchValidaciones,
+  );
   return (
     <div className="flex flex-col gap-2" aria-label="Opciones por cliente">
       <p
@@ -27,7 +37,7 @@ export function DrFlitClientBranchChoices({
         Elige una opción
       </p>
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
-        {DR_FLIT_CLIENT_BRANCHES.map((branch) => {
+        {branches.map((branch) => {
           const Icon = ICONS[branch.id];
           return (
             <li key={branch.id}>

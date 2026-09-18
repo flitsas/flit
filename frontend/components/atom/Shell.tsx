@@ -713,6 +713,7 @@ export function Shell({
         <DrFlitAssistant
           displayName={currentUser?.displayName ?? currentUser?.email ?? null}
           routeScope={`${pathname}|${active}`}
+          canSearchValidaciones={visibleDock.some((it) => it.id === "validaciones")}
         />
 
         {/* Bottom dock — móvil/tablet (<lg): lanzador + hoja agrupada. */}
