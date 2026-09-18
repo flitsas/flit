@@ -18,7 +18,7 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 /**
 
  * HU #10875 + CF-08 (Feature #11004, HU #11009).
@@ -463,5 +463,5 @@ function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  return formatFechaHora(d);
 }

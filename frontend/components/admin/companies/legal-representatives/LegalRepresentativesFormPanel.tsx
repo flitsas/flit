@@ -16,7 +16,7 @@ import type {
 import { fetchLegalRepresentative } from "@/lib/api/admin-legal-representatives";
 import { digitsOnly } from "@/lib/format/currency";
 import { sanitizeDocNumber } from "@/lib/validation/fieldRules";
-import { formatFecha } from "@/lib/format/date";
+import { formatFechaCalendario } from "@/lib/format/date";
 import { procedureTypeLabels } from "./legalRepresentativesDisplay";
 import { RepresentativeCompaniesAccordion } from "./RepresentativeCompaniesAccordion";
 import { SignatureVaultSelector } from "./SignatureVaultSelector";
@@ -591,7 +591,7 @@ export function LegalRepresentativesFormPanel({
               </span>
               {detail.firmaBaulVigente && detail.firmaBaulVigenteHasta && (
                 <p className="mt-1 text-[10px] opacity-60">
-                  Válida hasta {formatFecha(detail.firmaBaulVigenteHasta)}
+                  Válida hasta {formatFechaCalendario(detail.firmaBaulVigenteHasta)}
                 </p>
               )}
             </div>

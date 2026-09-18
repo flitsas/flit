@@ -71,7 +71,7 @@ describe('HU #11203 — elegir el mandatario que firma', () => {
     renderSection();
 
     expect(await screen.findByText('CC 1020304050')).toBeInTheDocument();
-    expect(screen.getByText(/Identidad vigente hasta el 2026\/12\/31/)).toBeInTheDocument();
+    expect(screen.getByText(/Identidad vigente hasta el 31\/12\/2026/)).toBeInTheDocument();
     // Sin ninguna de las dos vías el mandato no puede firmarse hoy: se avisa al elegir, no al final,
     // y se apunta a la salida (firmar más adelante) en vez de dejar al gestor bloqueado.
     expect(screen.getByText(/Sin firma del baúl ni identidad vigentes/)).toBeInTheDocument();

@@ -1,5 +1,6 @@
 using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Application.Auth;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
@@ -17,13 +18,15 @@ public sealed class ResetPasswordHandlerTests
     private readonly PasswordRecoveryOptions _options = new();
     private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
     private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
+    private readonly ITenantNetworkMembership _networkMembership = Substitute.For<ITenantNetworkMembership>();
+    private readonly IDomainContextAccessor _domainContext = Substitute.For<IDomainContextAccessor>();
     private readonly ResetPasswordHandler _handler;
 
     public ResetPasswordHandlerTests()
     {
         _handler = new ResetPasswordHandler(
             _tokenRepository, _userAccountRepository, _tokenGenerator, _passwordHasher, _options,
-            _auditWriter, _auditContext);
+            _auditWriter, _auditContext, _networkMembership, _domainContext);
     }
 
     [Fact]
@@ -102,5 +105,56 @@ public sealed class ResetPasswordHandlerTests
             Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
         await _tokenRepository.DidNotReceiveWithAnyArgs().InvalidateActiveForUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    // HU #12423 AC5 — token de recuperación de un tenant de una red R, redimido en el dominio de
+    // FLIT ⇒ mismo error genérico de token inválido de hoy, sin revelar la red, y el token NO se
+    // consume (queda vigente para el reintento en el dominio correcto).
+    [Fact]
+    public async Task HandleAsync_NetworkTokenRedeemedOnFlitDomain_ThrowsGenericInvalidResetToken()
+    {
+        var userId = Guid.NewGuid();
+        var tokenId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        _tokenGenerator.HashToken("raw-token").Returns("hash-token");
+        _tokenRepository.FindActiveByTokenHashAsync(
+                "hash-token", "password_reset", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(new PasswordResetTokenRecord(tokenId, userId, tenantId));
+        _domainContext.Kind.Returns(DomainKind.Flit);
+        _networkMembership.ResolveAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns(new NetworkMembership(Guid.NewGuid(), IsMarcaBlancaNetwork: true, ActiveHost: "app.movilidadandina.com"));
+
+        var act = () => _handler.HandleAsync(new ResetPasswordCommand("raw-token", "NewPass123!"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidResetTokenException>();
+        await _userAccountRepository.DidNotReceiveWithAnyArgs().UpdatePasswordHashAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _tokenRepository.DidNotReceiveWithAnyArgs().MarkUsedAsync(
+            Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    // HU #12423 AC5 — camino feliz: token de un tenant de la red R redimido en el dominio de la
+    // MISMA red R ⇒ se procesa con normalidad.
+    [Fact]
+    public async Task HandleAsync_NetworkTokenRedeemedOnOwnNetworkDomain_UpdatesPassword()
+    {
+        var userId = Guid.NewGuid();
+        var tokenId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var headTenantId = Guid.NewGuid();
+        _tokenGenerator.HashToken("raw-token").Returns("hash-token");
+        _tokenRepository.FindActiveByTokenHashAsync(
+                "hash-token", "password_reset", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(new PasswordResetTokenRecord(tokenId, userId, tenantId));
+        _passwordHasher.Hash("NewPass123!").Returns("argon2id|salt|hash");
+        _domainContext.Kind.Returns(DomainKind.Network);
+        _domainContext.HeadTenantId.Returns(headTenantId);
+        _networkMembership.ResolveAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns(new NetworkMembership(headTenantId, IsMarcaBlancaNetwork: true, ActiveHost: "app.movilidadandina.com"));
+
+        await _handler.HandleAsync(new ResetPasswordCommand("raw-token", "NewPass123!"), CancellationToken.None);
+
+        await _userAccountRepository.Received(1).UpdatePasswordHashAsync(
+            userId, "argon2id|salt|hash", Arg.Any<DateTimeOffset>(), false, Arg.Any<CancellationToken>());
     }
 }

@@ -628,3 +628,74 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+
+// ── Acceso por dominio de red (HU #12422, consumido por #12424) ────────────
+// Origen: contracts/openapi/core-api.v1.yaml → LoginNetworkInfo / NetworkDomainRequiredResponse.
+// Campos aditivos y opcionales: no alteran el contrato existente de LoginResponse/AuthErrorResponse.
+
+/** `LoginResponse.network` — solo presente cuando el login se hizo por el dominio de una red MARCA_BLANCA activa. */
+export interface LoginNetworkInfo {
+  host: string;
+}
+
+/**
+ * 403 aditivo de `POST /auth/login` (ADR-0060 D3): credencial válida de un usuario de una red
+ * MARCA_BLANCA con dominio activo, presentada por el dominio de FLIT. El cliente NO decide
+ * acceso con esto — solo ofrece el enlace directo al dominio propio.
+ */
+export interface NetworkDomainRequiredResponse {
+  error: "NETWORK_DOMAIN_REQUIRED";
+  networkDomain: string;
+  loginUrl: string;
+}
+
+// ── Dominio propio de la red (HU #12416, #12425, #12427; ADR-0060) ─────────
+// Origen: contracts/openapi/core-api.v1.yaml → TenantDomainResponse.
+export type TenantDomainStatus = "pending" | "verified" | "active" | "failed";
+
+/**
+ * Origen: contracts/openapi/core-api.v1.yaml → TenantDomainResponse.statusReason (nullable).
+ * Los tres valores documentados para HU #12425 AC2 son `TXT_NOT_FOUND | TXT_MISMATCH | DNS_ERROR`;
+ * se tipa como `string` (no unión cerrada) porque el backend puede sumar motivos y el panel ya
+ * cae a un texto genérico para cualquier valor no reconocido — no debe romperse por eso.
+ */
+export type TenantDomainStatusReason = string | null;
+
+export interface TenantDomainVerificationInstructions {
+  txtName: string;
+  txtValue: string;
+  cnameName: string;
+  cnameTarget: string;
+}
+
+export interface TenantDomainCertificate {
+  issuedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface TenantDomainResponse {
+  host: string;
+  status: TenantDomainStatus;
+  statusReason: TenantDomainStatusReason;
+  statusChangedAt: string;
+  verification: TenantDomainVerificationInstructions;
+  verifiedAt: string | null;
+  activatedAt: string | null;
+  certificate: TenantDomainCertificate;
+  lastCheckedAt: string | null;
+  nextCheckAt: string | null;
+  graceUntil: string | null;
+  rowVersion: number;
+}
+
+// ── Tema de correo por red — HU #12431 (consumido por #12428) ──────────────
+// Campo aditivo `theme` de `NotificationTemplateSampleResponse`
+// (`contracts/openapi/core-api.v1.yaml`, ver `.claude/state/marca-blanca/diseno/contratos-api.md`).
+// `kind`: "brand" = tema de una red publicada; "flit" = sin red o sin marca (fallback);
+// "draft-partial" = borrador de la cabeza incompleto, completado con FLIT.
+export interface EmailThemeInfo {
+  kind: "flit" | "brand" | "draft-partial";
+  platformName: string;
+  version?: number;
+  senderName?: string;
+}

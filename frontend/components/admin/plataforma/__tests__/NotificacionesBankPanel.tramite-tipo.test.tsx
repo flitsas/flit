@@ -23,6 +23,12 @@ vi.mock("@/lib/api/superadmin-client", () => ({
   },
 }));
 
+// HU #12431 AC2 — selector "Red con marca": listado reutilizado de admin-companies.
+const fetchCompaniesIndex = vi.fn().mockResolvedValue({ data: [], totalCount: 0, page: 1, pageSize: 200 });
+vi.mock("@/lib/api/admin-companies", () => ({
+  fetchCompaniesIndex: (...a: unknown[]) => fetchCompaniesIndex(...a),
+}));
+
 const templates = [
   {
     id: "tramites.aprobado",

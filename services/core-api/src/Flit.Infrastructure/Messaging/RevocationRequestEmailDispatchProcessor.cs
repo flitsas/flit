@@ -83,22 +83,24 @@ internal sealed class RevocationRequestEmailDispatchProcessor(
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
         var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
         var channelResolver = scope.ServiceProvider.GetRequiredService<INotificationChannelResolver>();
+        var themeResolver = scope.ServiceProvider.GetRequiredService<IEmailThemeResolver>();
         var assets = scope.ServiceProvider.GetRequiredService<IOptions<NotificationEmailAssetsOptions>>().Value;
 
         if (!db.Database.IsRelational())
         {
-            return await ProcessOneInMemoryAsync(db, emailSender, channelResolver, assets, excludeIds, ct);
+            return await ProcessOneInMemoryAsync(db, emailSender, channelResolver, themeResolver, assets, excludeIds, ct);
         }
 
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(
-            async () => await ProcessOneAsync(db, emailSender, channelResolver, assets, excludeIds, ct));
+            async () => await ProcessOneAsync(db, emailSender, channelResolver, themeResolver, assets, excludeIds, ct));
     }
 
     private async Task<Guid?> ProcessOneAsync(
         FlitDbContext db,
         IEmailSender emailSender,
         INotificationChannelResolver channelResolver,
+        IEmailThemeResolver themeResolver,
         NotificationEmailAssetsOptions assets,
         IReadOnlySet<Guid> excludeIds,
         CancellationToken ct)
@@ -114,7 +116,7 @@ internal sealed class RevocationRequestEmailDispatchProcessor(
         }
 
         var row = await db.RevocationRequestEmailDispatches.FirstAsync(d => d.Id == claimedId.Value, ct);
-        await DispatchAsync(row, db, emailSender, channelResolver, assets, ct);
+        await DispatchAsync(row, db, emailSender, channelResolver, themeResolver, assets, ct);
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -125,6 +127,7 @@ internal sealed class RevocationRequestEmailDispatchProcessor(
         FlitDbContext db,
         IEmailSender emailSender,
         INotificationChannelResolver channelResolver,
+        IEmailThemeResolver themeResolver,
         NotificationEmailAssetsOptions assets,
         IReadOnlySet<Guid> excludeIds,
         CancellationToken ct)
@@ -138,7 +141,7 @@ internal sealed class RevocationRequestEmailDispatchProcessor(
         if (row is null)
             return null;
 
-        await DispatchAsync(row, db, emailSender, channelResolver, assets, ct);
+        await DispatchAsync(row, db, emailSender, channelResolver, themeResolver, assets, ct);
         await db.SaveChangesAsync(ct);
         return row.Id;
     }
@@ -148,6 +151,7 @@ internal sealed class RevocationRequestEmailDispatchProcessor(
         FlitDbContext db,
         IEmailSender emailSender,
         INotificationChannelResolver channelResolver,
+        IEmailThemeResolver themeResolver,
         NotificationEmailAssetsOptions assets,
         CancellationToken ct)
     {
@@ -200,9 +204,14 @@ internal sealed class RevocationRequestEmailDispatchProcessor(
 
             var channel = await channelResolver.ResolveAsync(row.TenantId, ct).ConfigureAwait(false);
             var assetsBaseUrl = assets.BaseUrl;
+            // HU #12428 AC1/AC8 — el canal Renting no cambia (mismo criterio que
+            // ProcedureStateChangeEmailDispatchProcessor): solo la variante FLIT resuelve tema.
+            var theme = channel == NotificationChannel.TenantApi
+                ? EmailTheme.Flit
+                : await themeResolver.ResolveAsync(row.TenantId, ct).ConfigureAwait(false);
             var (subject, html) = channel == NotificationChannel.TenantApi
                 ? RevocationRequestEmailComposer.ComposeRenting(row.Milestone, model, assetsBaseUrl)
-                : RevocationRequestEmailComposer.ComposeFlit(row.Milestone, model, assetsBaseUrl);
+                : RevocationRequestEmailComposer.ComposeFlit(row.Milestone, model, assetsBaseUrl, theme);
 
             var message = new EmailMessage(
                 row.TenantId,
@@ -210,7 +219,14 @@ internal sealed class RevocationRequestEmailDispatchProcessor(
                 row.Recipient,
                 row.RecipientName ?? string.Empty,
                 subject,
-                html);
+                html)
+            {
+                ThemeKind = channel == NotificationChannel.TenantApi ? null : theme.KindWireValue,
+                ThemeVersion = channel == NotificationChannel.TenantApi ? null : (theme.IsBrand ? theme.Version : null),
+                // HU #12430 AC1/AC2 — TenantApi nunca resuelve marca (theme queda
+                // EmailTheme.Flit arriba), así que IsBrand ya es false en ese caso.
+                SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
+            };
 
             var result = await emailSender.SendAsync(message, ct).ConfigureAwait(false);
             if (result.Success)

@@ -1,4 +1,5 @@
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
 using Microsoft.Extensions.Logging;
@@ -23,8 +24,12 @@ public sealed partial class ReactivateInvitationHandler(
     ISecureTokenGenerator tokenGenerator,
     IEmailSender emailSender,
     InvitationOptions options,
-    ILogger<ReactivateInvitationHandler> logger)
+    INetworkUrlBaseResolver urlBaseResolver,
+    ILogger<ReactivateInvitationHandler> logger,
+    IEmailThemeResolver? themeResolver = null)
 {
+    private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
+
     public async Task<ReactivateInvitationResult> HandleAsync(
         ReactivateInvitationCommand command,
         CancellationToken cancellationToken)
@@ -84,10 +89,23 @@ public sealed partial class ReactivateInvitationHandler(
         await invitationRepository.ReactivateAsync(
             invitation.InvitationId, token.TokenHash, now, command.ReactivatedBy, cancellationToken);
 
-        var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
-        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link);
+        // HU #12423 AC1/AC2 — mismo resolutor que crear/reenviar: dominio vigente de la red del
+        // tenant dueño de la invitación.
+        var activateUrlBase = await urlBaseResolver
+            .ForTenantAsync(invitation.TenantId, options.ActivateUrlBase, cancellationToken)
+            .ConfigureAwait(false);
+        var link = InvitationEmailTemplate.BuildActivateLink(activateUrlBase, token.RawToken);
+        var theme = await _themeResolver.ResolveAsync(invitation.TenantId, cancellationToken).ConfigureAwait(false);
+        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link, theme: theme);
         var message = new EmailMessage(
-            invitation.TenantId, "security.invitation", invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody);
+            invitation.TenantId, "security.invitation", invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody)
+        {
+            ThemeKind = theme.KindWireValue,
+            ThemeVersion = theme.IsBrand ? theme.Version : null,
+            // HU #12430 AC1/AC3 — nombre visible del remitente = nombre de plataforma de la marca,
+            // SOLO cuando el tema resuelto es Brand; la dirección nunca cambia.
+            SenderDisplayName = theme.IsBrand ? theme.PlatformName : null,
+        };
 
         LogActivationLinkDev(logger, link);
 

@@ -552,6 +552,115 @@ public sealed class NotificationTestSendAdminServiceTests
         row.LastTestSentAt.Should().Be(now, "el sello ocurre ANTES de enviar, sin importar si el transporte falla después");
     }
 
+    // ── HU #12430 AC2 — tenantId opcional: tema y remitente de marca en el envío de prueba ─────
+
+    [Fact]
+    public async Task HU12430_ConTenantIdDeCompaniaConMarca_AplicaElNombreDeLaMarcaSinCambiarLaDireccion()
+    {
+        var dbName = NewDbName();
+        await SeedMailboxAsync(dbName, "pruebas@flit.co");
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        EmailMessage? captured = null;
+        explicitSender
+            .SendAsync(NotificationChannel.FlitSmtp, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                captured = call.Arg<EmailMessage>();
+                return Task.FromResult(EmailSendResult.Sent);
+            });
+        var tenantId = Guid.NewGuid();
+        var themeResolver = Substitute.For<IEmailThemeResolver>();
+        themeResolver.ResolveAsync(tenantId, Arg.Any<CancellationToken>())
+            .Returns(new EmailTheme(EmailThemeKind.Brand, "Movilidad Andina", "https://logo.test/l.png", "#0B3D91", "#1FA2FF", "#FFFFFF", 3));
+        var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
+
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false, themeResolver: themeResolver);
+        var result = await service.SendAsync(
+            new SendNotificationTestRequest("security.invitation", "FLIT_SMTP", TenantId: tenantId), UserId, Ct);
+
+        result.Success.Should().BeTrue();
+        result.SenderName.Should().Be("Movilidad Andina", "AC1 — el nombre visible es el de la marca");
+        result.SenderEmail.Should().Be(
+            "tramitesvehiculos@flitsas.com", "AC1 — la dirección de envío es SIEMPRE la de FLIT, nunca cambia");
+        result.ThemeKind.Should().Be("brand");
+        result.ThemeVersion.Should().Be(3);
+
+        captured.Should().NotBeNull();
+        captured!.SenderDisplayName.Should().Be("Movilidad Andina");
+    }
+
+    [Fact]
+    public async Task HU12430_SinTenantId_NoResuelveTemaYDejaThemeKindEnNull()
+    {
+        var dbName = NewDbName();
+        await SeedMailboxAsync(dbName, "pruebas@flit.co");
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Sent);
+        var themeResolver = Substitute.For<IEmailThemeResolver>();
+        var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
+
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false, themeResolver: themeResolver);
+        var result = await service.SendAsync(
+            new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
+
+        result.Success.Should().BeTrue();
+        result.ThemeKind.Should().BeNull("sin tenantId la respuesta es idéntica a antes de HU #12430");
+        result.ThemeVersion.Should().BeNull();
+        result.SenderEmail.Should().Be("tramitesvehiculos@flitsas.com");
+        result.SenderName.Should().Be("FLIT Trámites");
+        await themeResolver.DidNotReceiveWithAnyArgs().ResolveAsync(default, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HU12430_ConTenantIdYCanalTenantApi_IgnoraElTenantIdYNoResuelveTema()
+    {
+        // AC2 — el canal Renting no cambia: tenantId solo tiene efecto con FLIT_SMTP.
+        var dbName = NewDbName();
+        await SeedMailboxAsync(dbName, "pruebas@flit.co");
+        var explicitSender = NewExplicitSender(tenantApiAvailable: true);
+        SetupTenantApiSend(explicitSender, EmailSendResult.Sent);
+        var rentingOptions = new RentingChannelOptions
+        {
+            Enabled = true,
+            SendEmailSenderEmail = "canal@renting.test",
+            SendEmailSenderUsername = "Canal Renting",
+        };
+        var themeResolver = Substitute.For<IEmailThemeResolver>();
+        var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
+
+        var service = NewService(
+            dbName, explicitSender, timeProvider, isConsoleTransport: false, rentingOptions, themeResolver);
+        var result = await service.SendAsync(
+            new SendNotificationTestRequest("analytics.alert", "TENANT_API", TenantId: Guid.NewGuid()), UserId, Ct);
+
+        result.Success.Should().BeTrue();
+        result.ThemeKind.Should().BeNull("TENANT_API nunca resuelve marca, con o sin tenantId");
+        result.SenderName.Should().Be("Canal Renting", "el remitente sigue siendo el del canal Renting, no el de una marca");
+        await themeResolver.DidNotReceiveWithAnyArgs().ResolveAsync(default, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HU12430_ConTenantIdDeCompaniaSinMarca_DevuelveThemeKindFlitYRemitentePorDefecto()
+    {
+        var dbName = NewDbName();
+        await SeedMailboxAsync(dbName, "pruebas@flit.co");
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Sent);
+        var tenantId = Guid.NewGuid();
+        var themeResolver = Substitute.For<IEmailThemeResolver>();
+        themeResolver.ResolveAsync(tenantId, Arg.Any<CancellationToken>()).Returns(EmailTheme.Flit);
+        var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
+
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false, themeResolver: themeResolver);
+        var result = await service.SendAsync(
+            new SendNotificationTestRequest("security.invitation", "FLIT_SMTP", TenantId: tenantId), UserId, Ct);
+
+        result.Success.Should().BeTrue();
+        result.ThemeKind.Should().Be("flit");
+        result.ThemeVersion.Should().BeNull();
+        result.SenderName.Should().Be("FLIT Trámites");
+    }
+
     // ── Canal inválido: error de entrada, no consume enfriamiento ────────────
 
     [Fact]
@@ -620,7 +729,8 @@ public sealed class NotificationTestSendAdminServiceTests
         IExplicitChannelEmailSender explicitChannelSender,
         TestTimeProvider timeProvider,
         bool isConsoleTransport,
-        RentingChannelOptions? rentingOptions = null)
+        RentingChannelOptions? rentingOptions = null,
+        IEmailThemeResolver? themeResolver = null)
     {
         var emailSettings = new EmailSettings
         {
@@ -638,7 +748,8 @@ public sealed class NotificationTestSendAdminServiceTests
             new EmailTransportDescriptor(isConsoleTransport),
             timeProvider,
             NullLogger<NotificationTestSendAdminService>.Instance,
-            NewProcedureTypeCatalog());
+            NewProcedureTypeCatalog(),
+            themeResolver);
     }
 
     /// <summary>

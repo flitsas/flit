@@ -22,11 +22,19 @@ public static class ForgotPasswordEmailTemplate
     /// reloj, sin aleatoriedad, sin estado.
     /// </summary>
     public static ComposedEmail Compose(
-        string displayName, string link, int lifetimeMinutes, string? assetsBaseUrl = null) =>
-        new(Subject, BuildHtmlBody(displayName, link, lifetimeMinutes, assetsBaseUrl));
+        string displayName,
+        string link,
+        int lifetimeMinutes,
+        string? assetsBaseUrl = null,
+        Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null) =>
+        new(Subject, BuildHtmlBody(displayName, link, lifetimeMinutes, assetsBaseUrl, theme));
 
     private static string BuildHtmlBody(
-        string displayName, string link, int lifetimeMinutes, string? assetsBaseUrl)
+        string displayName,
+        string link,
+        int lifetimeMinutes,
+        string? assetsBaseUrl,
+        Flit.Modules.Security.Domain.Auth.EmailTheme? theme = null)
     {
         var greetingName = string.IsNullOrWhiteSpace(displayName) ? "usuario" : displayName;
         var name = System.Net.WebUtility.HtmlEncode(greetingName);
@@ -42,6 +50,7 @@ public static class ForgotPasswordEmailTemplate
             headline: "¡RECUPERACIÓN DE CONTRASEÑA!",
             bodyInnerHtml: body,
             closingHeadline: null,
-            assetsBaseUrl: assetsBaseUrl);
+            assetsBaseUrl: assetsBaseUrl,
+            theme: theme);
     }
 }

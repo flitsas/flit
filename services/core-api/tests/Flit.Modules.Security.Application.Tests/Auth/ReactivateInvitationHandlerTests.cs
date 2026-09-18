@@ -1,4 +1,5 @@
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
@@ -31,6 +32,7 @@ public sealed class ReactivateInvitationHandlerTests
         ActivateUrlBase = "http://localhost:3000/invite/activate",
         ResendCooldown = TimeSpan.FromMinutes(2),
     };
+    private readonly INetworkUrlBaseResolver _urlBaseResolver = Substitute.For<INetworkUrlBaseResolver>();
     private readonly ReactivateInvitationHandler _handler;
 
     private static readonly Guid TenantId = Guid.NewGuid();
@@ -43,7 +45,12 @@ public sealed class ReactivateInvitationHandlerTests
 
     public ReactivateInvitationHandlerTests()
     {
-        _handler = new ReactivateInvitationHandler(_repo, _userManagementRepo, _tokenGen, _email, _options, _logger);
+        _handler = new ReactivateInvitationHandler(
+            _repo, _userManagementRepo, _tokenGen, _email, _options, _urlBaseResolver, _logger);
+        // Por defecto: sin red — el resolutor devuelve la base configurada literal (AC4).
+        _urlBaseResolver
+            .ForTenantAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => Task.FromResult(callInfo.ArgAt<string>(1)));
         _tokenGen.Generate().Returns(new GeneratedToken("raw-token-reactivated", "hash-reactivated"));
         _email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailSendResult.Sent));

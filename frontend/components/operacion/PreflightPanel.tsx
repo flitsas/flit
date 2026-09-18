@@ -14,7 +14,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_BTN, WIZARD_BTN_SOLID, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 interface Props {
 
   snapshot: PreflightSnapshot | null;
@@ -249,7 +249,7 @@ export function selloDeConsulta(
         ? ` en ${fuentes[0]}`
         : ` en ${fuentes.slice(0, -1).join(', ')} y ${fuentes[fuentes.length - 1]}`;
 
-  return `Consultado${origen} el ${cuando.toLocaleString('es-CO', { timeZone: ZONA_COLOMBIA })}`;
+  return `Consultado${origen} el ${formatFechaHora(cuando)}`;
 }
 
 /**
@@ -442,7 +442,7 @@ export function PreflightPanel({
                 {' '}
                 · Consultado el{' '}
                 <span className="font-semibold">
-                  {new Date(snapshot.queriedAt).toLocaleString('es-CO', { timeZone: ZONA_COLOMBIA })}
+                  {formatFechaHora(new Date(snapshot.queriedAt))}
                 </span>
               </>
             )}

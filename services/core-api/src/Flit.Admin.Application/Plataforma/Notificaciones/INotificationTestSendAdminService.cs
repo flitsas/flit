@@ -8,10 +8,18 @@ namespace Flit.Admin.Application.Plataforma.Notificaciones;
 /// Código wire del canal: <c>FLIT_SMTP</c> | <c>TENANT_API</c> (ver <c>SettingsWire</c>). Ninguno
 /// de los dos infiere el canal: lo elige el SuperAdmin en cada envío.
 /// </param>
+/// <param name="TenantId">
+/// HU #12430 AC2 — opcional y ADITIVO: compañía para la que se resuelve tema y remitente antes de
+/// enviar la muestra (<c>IEmailThemeResolver</c>, mismo criterio que el resto de la Épica Marca
+/// Blanca). <c>null</c> ⇒ comportamiento idéntico a antes de esta historia (tema FLIT, remitente por
+/// defecto del canal). Solo tiene efecto con <see cref="Channel"/> <c>FLIT_SMTP</c> — el canal
+/// <c>TENANT_API</c> nunca resuelve marca (AC2/hecho 80 de la Épica).
+/// </param>
 public sealed record SendNotificationTestRequest(
     string? TemplateId,
     string? Channel,
-    Guid? ProcedureTypeId = null);
+    Guid? ProcedureTypeId = null,
+    Guid? TenantId = null);
 
 /// <summary>
 /// HU #11368 AC1-AC8 — catálogo CERRADO de desenlaces de un intento de envío de prueba.
@@ -109,6 +117,16 @@ public sealed record NotificationTestSendResult(
     bool IsConsoleTransport,
     bool RecipientDiverted = false)
 {
+    /// <summary>
+    /// HU #12430 AC2 — ADITIVO: <c>"flit"</c> | <c>"brand"</c> resuelto para
+    /// <see cref="SendNotificationTestRequest.TenantId"/>. <c>null</c> cuando la solicitud NO trajo
+    /// <c>tenantId</c> (comportamiento idéntico a antes de esta historia).
+    /// </summary>
+    public string? ThemeKind { get; init; }
+
+    /// <summary><c>tenant_brandings.published_version</c> aplicada (solo con <c>ThemeKind = "brand"</c>).</summary>
+    public int? ThemeVersion { get; init; }
+
     public static NotificationTestSendResult Failure(
         NotificationTestSendOutcome outcome,
         string message,

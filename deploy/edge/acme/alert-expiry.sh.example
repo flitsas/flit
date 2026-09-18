@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# deploy/edge/acme/alert-expiry.sh.example
+#
+# Alerta de vencimiento (HU #12426, AC3). Corre independiente de acme.sh y de
+# poll-and-issue.sh.example -- no confia en que la renovacion automatica
+# nunca falle. Recorre los certificados instalados de dominios de CLIENTE
+# (no el de FLIT, que tiene su propio ciclo fuera de esta HU) y, si a alguno
+# le quedan <= 14 dias, avisa al canal de operacion. Se repite en cada
+# ejecucion (diaria, ver systemd/flit-acme-expiry.timer.example) hasta que
+# la renovacion tenga exito -- por diseno, no deduplica alertas entre dias.
+#
+# Variables de entorno requeridas:
+#   OPS_ALERT_WEBHOOK_URL   webhook generico compatible Slack/Teams
+#                           (payload de texto: {"text": "..."})
+#
+# Variables opcionales:
+#   FLIT_ACME_CERTS_DIR     por defecto "$HOME/.acme.sh" (layout de acme.sh)
+#   FLIT_ACME_EXPIRY_DAYS   por defecto 14 (umbral de alerta, AC3)
+#   FLIT_ACME_EXCLUDE_HOSTS lista separada por espacios de hosts a ignorar
+#                           (ej. el dominio de PRUEBA de #12421 si se emitio
+#                           a mano y no lo gestiona acme.sh)
+
+set -euo pipefail
+
+LOG_TAG="flit-acme-expiry"
+log() {
+  local level="$1"; shift
+  if command -v logger >/dev/null 2>&1; then
+    logger -t "${LOG_TAG}" -p "user.${level}" -- "$*"
+  fi
+  printf '[%s] %s: %s\n' "$(date -u +%FT%TZ)" "${level}" "$*" >&2
+}
+fail() { log err "$*"; exit 1; }
+
+: "${OPS_ALERT_WEBHOOK_URL:?OPS_ALERT_WEBHOOK_URL no definida -- sin ella no hay canal de aviso (AC3 no se puede cumplir en silencio)}"
+
+FLIT_ACME_CERTS_DIR="${FLIT_ACME_CERTS_DIR:-$HOME/.acme.sh}"
+FLIT_ACME_EXPIRY_DAYS="${FLIT_ACME_EXPIRY_DAYS:-14}"
+FLIT_ACME_EXCLUDE_HOSTS="${FLIT_ACME_EXCLUDE_HOSTS:-}"
+
+command -v openssl >/dev/null 2>&1 || fail "openssl no disponible"
+command -v curl >/dev/null 2>&1 || fail "curl no disponible"
+
+[[ -d "${FLIT_ACME_CERTS_DIR}" ]] || fail "directorio de certificados no encontrado: ${FLIT_ACME_CERTS_DIR}"
+
+is_excluded() {
+  local host="$1"
+  local excluded
+  for excluded in ${FLIT_ACME_EXCLUDE_HOSTS}; do
+    [[ "${host}" == "${excluded}" ]] && return 0
+  done
+  return 1
+}
+
+notify() {
+  local host="$1" motivo="$2" vencimiento="$3"
+  local text="[flit-acme] Certificado de ${host} vence en ${motivo} (vencimiento: ${vencimiento} UTC). Verificar renovacion (poll-and-issue.sh / acme.sh --renew) y el runbook deploy/edge/acme/RUNBOOK.md."
+  local payload
+  payload="$(printf '{"text":%s}' "$(printf '%s' "${text}" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{printf "\"%s\"", $0}')")"
+
+  if curl -sS -o /dev/null -w '%{http_code}' \
+      -H "Content-Type: application/json" \
+      --max-time 10 \
+      -d "${payload}" \
+      "${OPS_ALERT_WEBHOOK_URL}" | grep -qE '^2'; then
+    log info "alerta enviada: ${host} (${motivo})"
+  else
+    log err "no se pudo enviar la alerta de ${host} al webhook -- revisar OPS_ALERT_WEBHOOK_URL"
+    return 1
+  fi
+}
+
+exit_code=0
+found_any=0
+
+while IFS= read -r -d '' fullchain; do
+  host="$(basename "$(dirname "${fullchain}")")"
+  found_any=1
+
+  if is_excluded "${host}"; then
+    log info "host=${host}: excluido por FLIT_ACME_EXCLUDE_HOSTS"
+    continue
+  fi
+
+  not_after="$(openssl x509 -in "${fullchain}" -noout -enddate 2>/dev/null | sed -n 's/^notAfter=//p')"
+  if [[ -z "${not_after}" ]]; then
+    log warning "host=${host}: no se pudo leer notAfter de ${fullchain}"
+    exit_code=1
+    continue
+  fi
+
+  expires_epoch="$(date -u -d "${not_after}" +%s 2>/dev/null || echo 0)"
+  now_epoch="$(date -u +%s)"
+  days_left=$(( (expires_epoch - now_epoch) / 86400 ))
+
+  if [[ "${days_left}" -le "${FLIT_ACME_EXPIRY_DAYS}" ]]; then
+    log warning "host=${host}: quedan ${days_left} dias (umbral ${FLIT_ACME_EXPIRY_DAYS})"
+    if ! notify "${host}" "${days_left} dias" "${not_after}"; then
+      exit_code=1
+    fi
+  else
+    log info "host=${host}: quedan ${days_left} dias, OK"
+  fi
+done < <(find "${FLIT_ACME_CERTS_DIR}" -mindepth 2 -maxdepth 2 -type f -name 'fullchain.cer' -print0 2>/dev/null)
+
+if [[ "${found_any}" -eq 0 ]]; then
+  log info "sin certificados instalados bajo ${FLIT_ACME_CERTS_DIR} (nada que revisar todavia)"
+fi
+
+exit "${exit_code}"

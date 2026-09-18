@@ -124,6 +124,13 @@ public static class DependencyInjection
         // Editar compañía (botón "Editar" en el listado, #10118).
         services.AddScoped<UpdateCompanyHandler>();
 
+        // HU #12412 (Feature #12366, ADR-0060 D1) — identidad de marca de la cabeza MARCA_BLANCA.
+        services.AddScoped<Companies.Branding.GetBranding.GetBrandingHandler>();
+        services.AddScoped<Companies.Branding.UpsertBrandingDraft.UpsertBrandingDraftHandler>();
+        services.AddScoped<Companies.Branding.PublishBranding.PublishBrandingHandler>();
+        services.AddScoped<Companies.Branding.RetireBranding.RetireBrandingHandler>();
+        services.AddScoped<Companies.Branding.UploadBrandLogo.UploadBrandLogoHandler>();
+
         // HU #12345 — gestión de clientes hijos por cabeza de grupo.
         services.AddScoped<Companies.Children.CreateChildCompany.CreateChildCompanyHandler>();
         services.AddScoped<Companies.Children.UpdateChildCompany.UpdateChildCompanyHandler>();

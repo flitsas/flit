@@ -37,7 +37,11 @@ public sealed partial class SmtpEmailSender(EmailSettings settings, ILogger<Smtp
         }
 
         var mime = new MimeMessage();
-        mime.From.Add(new MailboxAddress(settings.DefaultSenderName, settings.DefaultSenderEmail));
+        // HU #12430 AC1/AC3/AC6 — el nombre visible puede venir de la marca del tenant (saneado
+        // contra inyección de cabeceras); la DIRECCIÓN de envío NUNCA cambia: siempre es la de FLIT
+        // configurada por ambiente (settings.DefaultSenderEmail), sin importar el tema.
+        var senderName = ResolveSenderName(settings, message);
+        mime.From.Add(new MailboxAddress(senderName, settings.DefaultSenderEmail));
         mime.To.Add(new MailboxAddress(message.ToName, message.ToEmail));
         foreach (var bcc in message.BccEmails)
         {
@@ -125,6 +129,16 @@ public sealed partial class SmtpEmailSender(EmailSettings settings, ILogger<Smtp
             return EmailSendResult.Failed(outcome);
         }
     }
+
+    /// <summary>
+    /// HU #12430 AC1/AC3/AC6 — nombre visible EFECTIVAMENTE aplicado al <c>From</c>: el saneado de
+    /// <see cref="EmailMessage.SenderDisplayName"/> (nombre de plataforma de la marca, cuando el
+    /// composer lo resolvió con <c>EmailTheme.IsBrand</c>) o, si viene vacío/nulo/queda vacío tras
+    /// sanear, <see cref="EmailSettings.DefaultSenderName"/> — el remitente que existía antes de
+    /// esta historia. Función pura (sin red) para poder probarla sin abrir un socket SMTP.
+    /// </summary>
+    internal static string ResolveSenderName(EmailSettings settings, EmailMessage message) =>
+        SenderDisplayNameSanitizer.Sanitize(message.SenderDisplayName) ?? settings.DefaultSenderName;
 
     /// <summary>
     /// <see cref="SmtpErrorCode"/> distingue destinatario de contenido con precisión; para el

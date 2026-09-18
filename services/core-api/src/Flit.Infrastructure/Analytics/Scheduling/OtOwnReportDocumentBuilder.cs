@@ -1,6 +1,7 @@
 using System.Globalization;
 using Flit.Admin.Domain.OtMetrics;
 using Flit.Infrastructure.Documents.Reports;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Analytics.Scheduling;
 
@@ -180,9 +181,9 @@ internal sealed class OtOwnReportDocumentBuilder(IOtMetricsReadRepository repo)
                     // que la pantalla, y ahí la columna es «Tipo de trámite».
                     r.ReferenceNumber, r.ClientTenantName, r.TipoTramite,
                     r.Placa ?? "", r.Vin ?? "", Label(EstadoLabel, r.EstadoOt), SiNo(r.Prioritario),
-                    r.RadicadoEn.ToString("yyyy-MM-dd", Es),
-                    r.UltimaRadicacionEn?.ToString("yyyy-MM-dd", Es) ?? "",
-                    r.DecididoEn?.ToString("yyyy-MM-dd", Es) ?? "",
+                    FormatoFecha.Instante(r.RadicadoEn),
+                    FormatoFecha.Instante(r.UltimaRadicacionEn),
+                    FormatoFecha.Instante(r.DecididoEn),
                     Hours(r.HorasHastaDecision), r.DiasEnOrganismo?.ToString("0.#", Es) ?? "",
                     r.DecididoPor ?? "", r.Devoluciones.ToString(Es),
                     r.CausalesUltimoRechazo.Count == 0 ? "" : string.Join(" · ", r.CausalesUltimoRechazo),

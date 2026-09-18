@@ -7,14 +7,14 @@ import { ZONA_COLOMBIA } from '../lib/format/date';
 const RAIZ = path.resolve(__dirname, '..');
 
 /**
- * Archivos que legítimamente NO fijan la zona de Colombia.
+ * Archivos que legítimamente NO fijan la zona de Colombia. Ninguno, desde la HU #12664:
+ * `signatureVaultDisplay` formateaba su vigencia en UTC a mano y ahora delega en
+ * `formatFechaCalendario`, que conserva el día sin convertir de zona (excepción RN-08).
  *
- * `signatureVaultDisplay.ts` formatea una VIGENCIA, que es una fecha de calendario y no un
- * instante: la recibe como `AAAA-MM-DD`, la interpreta en UTC y la muestra en UTC, de modo que el
- * día no se corre. Convertirla a Colombia la retrasaría una jornada — el defecto de la HU #11194,
- * que la Épica #12552 recoge como excepción RN-08.
+ * Se deja el conjunto, vacío, porque el guardián lo necesita y porque documenta que la
+ * exención existió: si vuelve a aparecer un caso, este es su sitio.
  */
-const EXENTOS = new Set(['components/admin/companies/signature-vault/signatureVaultDisplay.ts']);
+const EXENTOS = new Set<string>();
 
 const IGNORAR_DIR = new Set(['node_modules', '.next', 'coverage', '__tests__', '.turbo']);
 

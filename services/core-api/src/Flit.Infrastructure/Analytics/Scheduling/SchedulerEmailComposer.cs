@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using Flit.Analytics.Application.Dtos;
+using Flit.Modules.Security.Domain.Auth;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Infrastructure.Analytics.Scheduling;
 
@@ -72,10 +74,11 @@ internal static class SchedulerEmailComposer
         string reportType,
         string periodLabel,
         IReadOnlyList<CategoryMetricsDto> overview,
-        IReadOnlyList<TopProducerDto> topProducers)
+        IReadOnlyList<TopProducerDto> topProducers,
+        EmailTheme? theme = null)
     {
         var subject = $"[FLIT] {scheduleName} — {periodLabel}";
-        var html = BuildScheduledReportHtml(scheduleName, reportType, periodLabel, overview, topProducers);
+        var html = BuildScheduledReportHtml(scheduleName, reportType, periodLabel, overview, topProducers, theme);
         return (subject, html);
     }
 
@@ -85,10 +88,11 @@ internal static class SchedulerEmailComposer
         string reportType,
         string periodLabel,
         IReadOnlyList<CategoryMetricsDto> overview,
-        IReadOnlyList<TopProducerDto> topProducers)
+        IReadOnlyList<TopProducerDto> topProducers,
+        EmailTheme? theme)
     {
         var sb = new StringBuilder();
-        OpenLayout(sb, "Informe programado FLIT", scheduleName);
+        OpenLayout(sb, "Informe programado FLIT", scheduleName, theme);
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 4px\"><strong>Tipo de informe:</strong> {WebUtility.HtmlEncode(ReportTypeLabel(reportType))}</p>");
         sb.Append(CultureInfo.InvariantCulture,
@@ -144,7 +148,7 @@ internal static class SchedulerEmailComposer
         }
 
         sb.Append("<p style=\"margin:16px 0 0;font-size:12px;color:#6b7a94\">Revisa el archivo adjunto para el detalle completo del periodo.</p>");
-        CloseLayout(sb);
+        CloseLayout(sb, theme);
         return sb.ToString();
     }
 
@@ -160,11 +164,12 @@ internal static class SchedulerEmailComposer
         decimal value,
         int windowMinutes,
         DateTimeOffset triggeredAtUtc,
-        TimeZoneInfo timeZone)
+        TimeZoneInfo timeZone,
+        EmailTheme? theme = null)
     {
         var subject = $"[FLIT] Alerta: {ruleName}";
         var html = BuildAlertHtml(
-            ruleName, metric, @operator, threshold, value, windowMinutes, triggeredAtUtc, timeZone);
+            ruleName, metric, @operator, threshold, value, windowMinutes, triggeredAtUtc, timeZone, theme);
         return (subject, html);
     }
 
@@ -177,11 +182,11 @@ internal static class SchedulerEmailComposer
         decimal value,
         int windowMinutes,
         DateTimeOffset triggeredAtUtc,
-        TimeZoneInfo timeZone)
+        TimeZoneInfo timeZone,
+        EmailTheme? theme)
     {
-        var local = TimeZoneInfo.ConvertTime(triggeredAtUtc, timeZone);
         var sb = new StringBuilder();
-        OpenLayout(sb, "Alerta FLIT", ruleName);
+        OpenLayout(sb, "Alerta FLIT", ruleName, theme);
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 4px\"><strong>Métrica:</strong> {WebUtility.HtmlEncode(MetricLabel(metric))}</p>");
         sb.Append(CultureInfo.InvariantCulture,
@@ -191,8 +196,8 @@ internal static class SchedulerEmailComposer
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 4px\"><strong>Ventana de evaluación:</strong> últimos {windowMinutes.ToString(Es)} minutos</p>");
         sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0\"><strong>Fecha del disparo:</strong> {local.ToString("dd/MM/yyyy HH:mm", Es)} (hora de Bogotá)</p>");
-        CloseLayout(sb);
+            $"<p style=\"margin:0\"><strong>Fecha del disparo:</strong> {FormatoFecha.Instante(triggeredAtUtc)} (hora de Bogotá)</p>");
+        CloseLayout(sb, theme);
         return sb.ToString();
     }
 
@@ -203,11 +208,11 @@ internal static class SchedulerEmailComposer
     /// qué consulta es y si se truncó por el tope de filas.
     /// </summary>
     public static (string Subject, string Html) BuildConsultaReport(
-        string scheduleName, string queryName, int total, bool truncated, int rowCap)
+        string scheduleName, string queryName, int total, bool truncated, int rowCap, EmailTheme? theme = null)
     {
         var subject = $"[FLIT] {scheduleName}";
         var sb = new StringBuilder();
-        OpenLayout(sb, "Informe programado FLIT · Consulta personalizada", scheduleName);
+        OpenLayout(sb, "Informe programado FLIT · Consulta personalizada", scheduleName, theme);
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 4px\"><strong>Consulta:</strong> {WebUtility.HtmlEncode(queryName)}</p>");
         sb.Append(CultureInfo.InvariantCulture,
@@ -224,7 +229,7 @@ internal static class SchedulerEmailComposer
                 + "app para ver o exportar el resto.</p>");
         }
 
-        CloseLayout(sb);
+        CloseLayout(sb, theme);
         return (subject, sb.ToString());
     }
 
@@ -232,16 +237,16 @@ internal static class SchedulerEmailComposer
     /// Cuerpo del correo cuando la SavedQuery de un informe tipo "consulta" ya no existe (se borró
     /// después de programar el informe) — se avisa en vez de enviar un correo vacío sin explicación.
     /// </summary>
-    public static (string Subject, string Html) BuildConsultaReportMissing(string scheduleName)
+    public static (string Subject, string Html) BuildConsultaReportMissing(string scheduleName, EmailTheme? theme = null)
     {
         var subject = $"[FLIT] {scheduleName} — consulta no disponible";
         var sb = new StringBuilder();
-        OpenLayout(sb, "Informe programado FLIT · Consulta personalizada", scheduleName);
+        OpenLayout(sb, "Informe programado FLIT · Consulta personalizada", scheduleName, theme);
         sb.Append(
             "<p style=\"margin:0\">La consulta guardada que alimentaba este informe ya no existe "
             + "(se borró después de programarlo). Este informe no traerá adjunto hasta que se vuelva a "
             + "programar sobre una consulta guardada vigente.</p>");
-        CloseLayout(sb);
+        CloseLayout(sb, theme);
         return (subject, sb.ToString());
     }
 
@@ -252,21 +257,33 @@ internal static class SchedulerEmailComposer
         $"({OperatorLabel(@operator)} {threshold.ToString("0.##", Es)}) " +
         $"en la ventana de los últimos {windowMinutes.ToString(Es)} minutos.";
 
-    private static void OpenLayout(StringBuilder sb, string kicker, string title)
+    private static void OpenLayout(StringBuilder sb, string kicker, string title, EmailTheme? theme = null)
     {
+        // HU #12428 AC2/AC9 — theme null/Flit: SIN CAMBIOS respecto al HTML anterior a esta
+        // historia (parámetro aditivo, paridad byte a byte). Brand: color principal de la banda +
+        // logotipo del tema si hay URL.
+        var band = theme is { IsBrand: true } ? BrandedEmailChrome.LinkColor(theme) : Ink;
+        var accent = theme is { IsBrand: true } ? BrandedEmailChrome.LinkColor(theme) : Primary;
         sb.Append(CultureInfo.InvariantCulture,
             $"<div style=\"font-family:Segoe UI,Arial,sans-serif;color:{Ink};max-width:640px;margin:0 auto\">");
         sb.Append(CultureInfo.InvariantCulture,
-            $"<div style=\"background:{Ink};border-radius:12px 12px 0 0;padding:16px 20px\">" +
-            $"<p style=\"margin:0;color:{Primary};font-size:12px;letter-spacing:1px;text-transform:uppercase\">{WebUtility.HtmlEncode(kicker)}</p>" +
+            $"<div style=\"background:{band};border-radius:12px 12px 0 0;padding:16px 20px\">" +
+            $"<p style=\"margin:0;color:{accent};font-size:12px;letter-spacing:1px;text-transform:uppercase\">{WebUtility.HtmlEncode(kicker)}</p>" +
             $"<h2 style=\"margin:4px 0 0;color:#ffffff\">{WebUtility.HtmlEncode(title)}</h2></div>");
         sb.Append("<div style=\"border:1px solid #e3e9f5;border-top:0;border-radius:0 0 12px 12px;padding:20px\">");
+        if (theme is { IsBrand: true } && !string.IsNullOrWhiteSpace(theme.LogoUrl))
+        {
+            sb.Append(CultureInfo.InvariantCulture,
+                $"<p style=\"margin:0 0 12px;text-align:center\"><img src=\"{WebUtility.HtmlEncode(theme.LogoUrl)}\" alt=\"{WebUtility.HtmlEncode(theme.PlatformName)}\" height=\"32\" style=\"max-height:32px;width:auto;border:0;\"/></p>");
+        }
     }
 
-    private static void CloseLayout(StringBuilder sb)
+    private static void CloseLayout(StringBuilder sb, EmailTheme? theme = null)
     {
+        var platformName = theme is { IsBrand: true } ? theme.PlatformName : "FLIT";
         sb.Append("</div>");
-        sb.Append("<p style=\"font-size:11px;color:#6b7a94;margin:12px 0 0;text-align:center\">Mensaje automático de FLIT — no responda a este correo.</p>");
+        sb.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"font-size:11px;color:#6b7a94;margin:12px 0 0;text-align:center\">Mensaje automático de {WebUtility.HtmlEncode(platformName)} — no responda a este correo.</p>");
         sb.Append("</div>");
     }
 }

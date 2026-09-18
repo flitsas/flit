@@ -12,7 +12,7 @@
  * fórmula.</p>
  */
 import { bogotaClock, type XlsxCell } from '@/lib/xlsx';
-import { formatFecha } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 import type { OtClientProcedure } from '@/lib/api/types-ot';
 import { OT_PROCEDURES_COLUMNS } from './ot-procedures-columns';
 import { formatOtProcedureStatus } from '@/components/admin/transit-offices/ot-utils';
@@ -133,7 +133,7 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
       label: 'Fecha de radicación',
       // `value` es el texto de respaldo (CSV); `raw` es lo que hace que Excel la trate como FECHA
       // y no como una cadena que no se puede ordenar ni restar.
-      value: (r) => (r.createdAt ? formatFecha(r.createdAt) : ''),
+      value: (r) => (r.createdAt ? formatFechaHora(r.createdAt) : ''),
       raw: (r) => bogotaClock(r.createdAt ?? null),
       width: 20,
     },

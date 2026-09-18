@@ -1,4 +1,5 @@
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
 using FluentAssertions;
@@ -16,6 +17,7 @@ public sealed class CreateInvitationHandlerTests
     private readonly IEmailSender _email = Substitute.For<IEmailSender>();
     private readonly ILogger<CreateInvitationHandler> _logger = Substitute.For<ILogger<CreateInvitationHandler>>();
     private readonly InvitationOptions _options = new() { ActivateUrlBase = "http://localhost:3000/invite/activate" };
+    private readonly INetworkUrlBaseResolver _urlBaseResolver = Substitute.For<INetworkUrlBaseResolver>();
     private readonly CreateInvitationHandler _handler;
 
     private static readonly Guid TenantId = Guid.NewGuid();
@@ -28,7 +30,12 @@ public sealed class CreateInvitationHandlerTests
 
     public CreateInvitationHandlerTests()
     {
-        _handler = new CreateInvitationHandler(_repo, _userManagementRepo, _tokenGen, _email, _options, _logger);
+        _handler = new CreateInvitationHandler(
+            _repo, _userManagementRepo, _tokenGen, _email, _options, _urlBaseResolver, _logger);
+        // Por defecto: sin red — el resolutor devuelve la base configurada literal (AC4).
+        _urlBaseResolver
+            .ForTenantAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => Task.FromResult(callInfo.ArgAt<string>(1)));
         _tokenGen.Generate().Returns(new GeneratedToken("raw-token-abc", "hash-abc"));
         _repo.CreateAsync(Arg.Any<UserInvitationData>(), Arg.Any<CancellationToken>())
             .Returns(InvitationId);

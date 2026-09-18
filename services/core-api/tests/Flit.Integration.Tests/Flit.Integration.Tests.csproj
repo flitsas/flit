@@ -20,6 +20,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Flit.Infrastructure\Flit.Infrastructure.csproj" />
+    <!-- HU #12429 — único proyecto de Flit.Integration.Tests que necesita el host HTTP completo
+         (WebApplicationFactory<Program>, AC2/AC3/AC4): las suites de anti-enumeración por dominio
+         ejercitan el pipeline real (DomainContextMiddleware, DomainBindingMiddleware, rate limiter),
+         no solo el repositorio/handler en aislado. -->
+    <ProjectReference Include="..\..\src\Flit.Api\Flit.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +32,8 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="NSubstitute" />
   </ItemGroup>
 
 </Project>

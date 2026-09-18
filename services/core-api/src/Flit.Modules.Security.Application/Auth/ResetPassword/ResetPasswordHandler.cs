@@ -1,4 +1,5 @@
 using Flit.Admin.Application.Auditing;
+using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Domain.Auth;
 
 namespace Flit.Modules.Security.Application.Auth.ResetPassword;
@@ -7,6 +8,8 @@ namespace Flit.Modules.Security.Application.Auth.ResetPassword;
 /// Redención del token de recuperación (HU #10169): valida el token vigente y fija la
 /// nueva contraseña (Argon2), marca el token como usado e invalida los demás tokens
 /// activos del usuario. Cualquier fallo de token responde de forma genérica.
+/// HU #12423 AC5 — además del token, valida que el dominio sellado de la petición sea coherente
+/// con la red del tenant dueño del token; una incoherencia responde el MISMO error genérico.
 /// </summary>
 public sealed class ResetPasswordHandler(
     IPasswordResetTokenRepository tokenRepository,
@@ -15,7 +18,9 @@ public sealed class ResetPasswordHandler(
     IPasswordHasher passwordHasher,
     PasswordRecoveryOptions options,
     IAdminAuditWriter auditWriter,
-    IAuditContextAccessor auditContext)
+    IAuditContextAccessor auditContext,
+    ITenantNetworkMembership networkMembership,
+    IDomainContextAccessor domainContext)
 {
     private const string Purpose = "password_reset";
 
@@ -42,6 +47,18 @@ public sealed class ResetPasswordHandler(
         if (record is null)
         {
             await AuditAsync(null, AuditVocabulary.Results.Failure, "invalid_reset_token", cancellationToken)
+                .ConfigureAwait(false);
+            throw new InvalidResetTokenException();
+        }
+
+        // HU #12423 AC5 — el enlace es de la red de otro tenant (o de FLIT para un tenant de red):
+        // mismo error genérico de token inválido de hoy, sin revelar a qué red pertenece.
+        var domainCoherent = await NetworkDomainCoherence
+            .IsCoherentAsync(networkMembership, domainContext, record.TenantId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!domainCoherent)
+        {
+            await AuditAsync(record.UserId, AuditVocabulary.Results.Failure, "invalid_reset_token", cancellationToken)
                 .ConfigureAwait(false);
             throw new InvalidResetTokenException();
         }

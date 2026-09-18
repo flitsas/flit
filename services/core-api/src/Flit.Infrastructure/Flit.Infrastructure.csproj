@@ -85,6 +85,10 @@
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
+    <!-- HU #12425 — resolución de registros TXT DNS (System.Net.Dns de la BCL no los soporta).
+         Versión fijada en Directory.Packages.props (CPM); auditoría de dependencia en
+         .claude/state/marca-blanca/auditoria-dnsclient.md. -->
+    <PackageReference Include="DnsClient" />
   </ItemGroup>
 
 </Project>

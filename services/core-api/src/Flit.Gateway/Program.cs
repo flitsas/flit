@@ -1,7 +1,9 @@
 using System.Threading.RateLimiting;
 using Flit.Gateway.Configuration;
+using Flit.Gateway.Cors;
 using Flit.Gateway.Health;
 using Flit.Gateway.Middleware;
+using Flit.Gateway.Transforms;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -19,9 +21,27 @@ builder.Host.UseSerilog((ctx, lc) => lc
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
 
-builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
-    .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
-    .AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
+// HU #12417 (Feature #12368, ADR-0060 D2) — sello de dominio + CORS derivados de los dominios
+// registrados: la lista fija de Cors:AllowedOrigins NO cambia (AC4), se UNE en tiempo real a
+// https://{host} de cada dominio activo. SetIsOriginAllowed (más abajo, tras Build) evalúa por
+// petición — dar de alta un dominio se refleja sin redespliegue (AC3).
+var fixedCorsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors();
+builder.Services.AddMemoryCache();
+builder.Services.Configure<InternalApiOptions>(builder.Configuration.GetSection(InternalApiOptions.SectionName));
+var internalApiOptionsAtStartup = builder.Configuration.GetSection(InternalApiOptions.SectionName).Get<InternalApiOptions>()
+    ?? new InternalApiOptions();
+builder.Services.AddHttpClient(DynamicCorsOriginSource.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(internalApiOptionsAtStartup.ApiBaseUrl, UriKind.Absolute);
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+builder.Services.AddSingleton<DynamicCorsOriginSource>();
+
+// HU #12417 AC1/AC5 — sello X-Flit-Domain: se aplica a TODA ruta YARP (AddTransforms, no por
+// ruta individual). La excepción de red interna (delta-hechos-post-adr.md hecho 7) es opt-in vía
+// DomainSeal:InternalAllowedNetworks (vacío por defecto — fail-closed).
+builder.Services.Configure<DomainSealOptions>(builder.Configuration.GetSection(DomainSealOptions.SectionName));
 
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 var hasJwtSigningKey = jwt.TryGetSigningKey(builder.Environment, out var jwtSigningKey);
@@ -100,7 +120,8 @@ builder.Services.AddOpenTelemetry()
         .AddOtlpExporter());
 
 var reverseProxyBuilder = builder.Services.AddReverseProxy()
-    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
+    .AddTransforms<DomainSealTransform>();
 if (builder.Environment.IsDevelopment())
 {
     Log.Warning(
@@ -115,11 +136,38 @@ builder.Services.AddHttpClient();
 var app = builder.Build();
 
 app.UseSerilogRequestLogging();
-app.UseCors();
+
+// HU #12417 AC3/AC4 — orígenes dinámicos: SetIsOriginAllowed (NO WithOrigins estático) se evalúa
+// EN CADA petición contra DynamicCorsOriginSource (lista fija ∪ dominios activos, caché 60 s,
+// respaldo a la última lista buena). GetAwaiter().GetResult() es seguro aquí: el caché en memoria
+// resuelve de forma síncrona salvo el primer refresco tras expirar el TTL o el arranque en frío.
+var dynamicCorsOriginSource = app.Services.GetRequiredService<DynamicCorsOriginSource>();
+app.UseCors(policy => policy
+    .SetIsOriginAllowed(origin => dynamicCorsOriginSource
+        .IsOriginAllowedAsync(origin, fixedCorsOrigins)
+        .GetAwaiter().GetResult())
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials());
+
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// HU #12417 AC3 — YARP NO publica /api/v1/internal/*: el Gateway lo consume DIRECTO
+// (DynamicCorsOriginSource, fuera del proxy). Cualquier intento de atravesarlo por la ruta pública
+// recibe 404 antes de llegar al reverse proxy, sin tocar ict-host-route ni el resto de rutas.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/v1/internal", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    await next(context);
+});
 
 app.MapHealthEndpoints();
 app.MapReverseProxy();

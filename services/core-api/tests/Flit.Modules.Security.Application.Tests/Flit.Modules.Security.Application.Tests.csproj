@@ -42,6 +42,9 @@
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- HU #12422 — LoginTimingTests necesita un IPasswordHasher real (mismo algoritmo que
+         producción) de bajo costo; Application no puede referenciar Flit.Infrastructure. -->
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
   </ItemGroup>
 
 </Project>

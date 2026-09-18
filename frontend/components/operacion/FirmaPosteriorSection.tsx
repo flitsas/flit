@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Clock } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { formatFecha } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 import type { FirmaPosteriorEstado } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -146,7 +146,7 @@ export function FirmaPosteriorSection({
                 </p>
                 {estado.marcado && estado.marcadoAt && (
                   <p className="mt-1 text-xs opacity-60">
-                    Marcado el {formatFecha(estado.marcadoAt)}
+                    Marcado el {formatFechaHora(estado.marcadoAt)}
                   </p>
                 )}
               </div>

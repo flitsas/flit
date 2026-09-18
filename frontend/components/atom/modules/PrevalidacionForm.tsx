@@ -9,7 +9,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { sanitizeDocNumber } from '@/lib/validation/fieldRules';
 
-import { ZONA_COLOMBIA } from '@/lib/format/date';
+import { formatFechaHora } from '@/lib/format/date';
 /**
 
  * Resultado de REUTILIZAR una validación existente en vez de crear una nueva (módulo unificado de
@@ -231,7 +231,7 @@ export function PrevalidacionForm({
     if (!iso) return null;
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return new Intl.DateTimeFormat('es-CO', { timeZone: ZONA_COLOMBIA, dateStyle: 'medium' }).format(d);
+    return formatFechaHora(d);
   };
 
   const fieldClass = (field: keyof FormValues) =>

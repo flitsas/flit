@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Flit.Modules.Security.Domain.Auth;
 
 namespace Flit.Infrastructure.Notifications.Tramites;
 
@@ -51,13 +52,34 @@ public static class AsignacionPlacaEmailComposer
     public static string ResolveRentingFooterUrl(string assetsBaseUrl) =>
         CombineAssetUrl(assetsBaseUrl, DefaultRentingFooterFileName);
 
+    /// <param name="theme">HU #12428 AC1/AC2/AC9 — igual convención que
+    /// <c>TramiteCambioEstadoEmailComposer.ComposeFlit</c>: aditivo, <c>Flit</c>/<c>null</c> preserva
+    /// el HTML anterior byte a byte.</param>
     public static (string Subject, string Html) ComposeFlit(
-        AsignacionPlacaEmailModel model, string assetsBaseUrl)
+        AsignacionPlacaEmailModel model, string assetsBaseUrl, EmailTheme? theme = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         var estado = NormalizeEstado(model.EstadoActual);
         var subject = $"[FLIT] Asignación de placa — {model.Placa} — {estado}";
-        return (subject, BuildFlitHtml(model, estado, assetsBaseUrl));
+        var html = theme is { IsBrand: true }
+            ? BuildBrandedHtml(model, estado, theme)
+            : BuildFlitHtml(model, estado, assetsBaseUrl);
+        return (subject, html);
+    }
+
+    /// <summary>HU #12428 AC2/AC3/AC6 — mismo dato funcional que <see cref="BuildFlitHtml"/> sobre el
+    /// chrome de <see cref="BrandedEmailChrome"/>.</summary>
+    private static string BuildBrandedHtml(AsignacionPlacaEmailModel model, string estado, EmailTheme theme)
+    {
+        var linkColor = BrandedEmailChrome.LinkColor(theme);
+        var bodyRows = BuildSharedBody(model, estado, estadoColor: linkColor);
+
+        var body = new StringBuilder();
+        body.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
+        body.Append(bodyRows);
+        body.Append("</table>");
+
+        return BrandedEmailChrome.Wrap(theme, "¡NOTIFICACIÓN ASIGNACIÓN DE PLACA!", body.ToString());
     }
 
     public static (string Subject, string Html) ComposeRenting(

@@ -1,6 +1,7 @@
 using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.ForgotPassword;
+using Flit.Modules.Security.Domain.Auth;
 
 namespace Flit.Infrastructure.Notifications.Preview;
 
@@ -45,17 +46,17 @@ public static class SecurityEmailPreviewSample
     private const string ResetUrlBase = "https://app.flit.test/password/reset";
 
     /// <summary>Muestra de <see cref="InvitationEmailTemplate"/> (plantilla <c>security.invitation</c>).</summary>
-    public static ComposedEmail BuildInvitation(string? assetsBaseUrl = null)
+    public static ComposedEmail BuildInvitation(string? assetsBaseUrl = null, EmailTheme? theme = null)
     {
         var link = InvitationEmailTemplate.BuildActivateLink(ActivateUrlBase, PhToken);
-        return InvitationEmailTemplate.Compose(PhNombreDestinatario, link, assetsBaseUrl);
+        return InvitationEmailTemplate.Compose(PhNombreDestinatario, link, assetsBaseUrl, theme);
     }
 
     /// <summary>Muestra de <see cref="ForgotPasswordEmailTemplate"/> (plantilla <c>security.forgot-password</c>).</summary>
-    public static ComposedEmail BuildForgotPassword(int lifetimeMinutes = 30, string? assetsBaseUrl = null)
+    public static ComposedEmail BuildForgotPassword(int lifetimeMinutes = 30, string? assetsBaseUrl = null, EmailTheme? theme = null)
     {
         var link = ForgotPasswordEmailTemplate.BuildResetLink(ResetUrlBase, PhToken);
-        return ForgotPasswordEmailTemplate.Compose(PhNombreDestinatario, link, lifetimeMinutes, assetsBaseUrl);
+        return ForgotPasswordEmailTemplate.Compose(PhNombreDestinatario, link, lifetimeMinutes, assetsBaseUrl, theme);
     }
 
     /// <summary>
@@ -63,15 +64,16 @@ public static class SecurityEmailPreviewSample
     /// <c>security.admin-reset-password</c>). AC2: el marcador <see cref="PhContrasenaTemporal"/>
     /// es un literal — nunca se invoca <c>ITemporaryPasswordGenerator</c> para producirlo.
     /// </summary>
-    public static ComposedEmail BuildAdminResetPassword(string? assetsBaseUrl = null) =>
-        AdminResetPasswordEmailTemplate.Compose(PhNombreDestinatario, PhContrasenaTemporal, assetsBaseUrl);
+    public static ComposedEmail BuildAdminResetPassword(string? assetsBaseUrl = null, EmailTheme? theme = null) =>
+        AdminResetPasswordEmailTemplate.Compose(PhNombreDestinatario, PhContrasenaTemporal, assetsBaseUrl, theme);
 
     /// <summary>
     /// Muestra de <see cref="WelcomeRegistrationEmailTemplate"/> (plantilla
     /// <c>security.welcome-registration</c>). Enlace fijo al login principal.
     /// </summary>
-    public static ComposedEmail BuildWelcomeRegistration(string? assetsBaseUrl = null) =>
+    public static ComposedEmail BuildWelcomeRegistration(string? assetsBaseUrl = null, EmailTheme? theme = null) =>
         WelcomeRegistrationEmailTemplate.Compose(
             WelcomeRegistrationEmailTemplate.DefaultLoginUrl,
-            assetsBaseUrl);
+            assetsBaseUrl,
+            theme);
 }

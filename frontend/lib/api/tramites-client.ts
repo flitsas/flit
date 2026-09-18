@@ -149,6 +149,7 @@ import type {
 } from './types/revocation-requests';
 import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
+import { resolveApiBase } from './base-url';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
 import type {
@@ -214,12 +215,17 @@ const BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '';
 
 // Único constructor de URLs del cliente. El path absoluto (/api/v1/...) toma solo el
-// ORIGEN de BASE_URL e ignora su path, así un BASE_URL con sufijo /api/v1 (el que inyecta
+// ORIGEN de la base e ignora su path, así un BASE_URL con sufijo /api/v1 (el que inyecta
 // el CD) NO se duplica (`…/api/v1/api/v1/…` → 404). Mismo patrón que lib/api/client.ts.
 // Usarlo SIEMPRE; no concatenar `${BASE_URL}${path}` (rompe cuando el base trae sufijo).
+//
+// HU #12419 — `resolveApiBase` devuelve "" en un host de red (el borde ya enruta `/api/v1/*`
+// al Gateway en el MISMO origen, #12421): el fallback de `window.location.origin` de abajo
+// arma la URL same-origin. En host FLIT, comportamiento IDÉNTICO al de siempre (AC7).
 export const apiUrl = (path: string): string => {
+  const configuredBase = resolveApiBase(BASE_URL);
   const base =
-    BASE_URL ||
+    configuredBase ||
     (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
   return new URL(path, base).toString();
 };

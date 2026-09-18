@@ -113,6 +113,12 @@ internal static class CoveredQueries
         // HU #12410 — documentos de la red: dueño por IProcedureInstanceOwnerLookup + CanRead, luego los handlers de anexos con ese tenant (NetworkAttachmentsTests). Sin modo global.
         new("Q38", "NetworkAttachmentsHandler.ListAsync (red: ProcedureInstanceOwnerLookup + ListAttachmentsHandler con el tenant del dueno)", "TenantScope", 2, SupportsGlobal: false),
         new("Q39", "NetworkAttachmentsHandler.DownloadAsync (red: ProcedureInstanceOwnerLookup + DownloadAttachmentHandler con el tenant del dueno)", "TenantScope", 2, SupportsGlobal: false),
+        // HU #12429 (Feature #12366) — suite de paridad y anti-enumeracion de Marca Blanca (MarcaBlanca/).
+        new("Q40", "ResolvePublicBrandingHandler.HandleAsync (GET /public/branding: dominio -> BrandIdentity, BrandParityTests/BrandingFallbackTests/CrossNetworkIsolationTests)", "bool isNetworkDomain, Guid? headTenantId", 0, SupportsGlobal: false),
+        new("Q41", "DbEmailThemeResolver.ResolveAsync (tema de correo por clase del tenant, BrandParityTests/EmailThemeByClassTests/BrandingFallbackTests)", "Guid? tenantId", 0, SupportsGlobal: false),
+        new("Q42", "POST /api/v1/auth/login (LoginHandler, anti-enumeracion por dominio via WebApplicationFactory, LoginAntiEnumerationTests/CrossNetworkIsolationTests)", "X-Flit-Domain + email/password", 0, SupportsGlobal: false),
+        new("Q43", "POST /api/v1/auth/forgot-password + GET /public/branding negativos (ForgotPasswordHandler/ResolvePublicBrandingHandler via WebApplicationFactory, RecoveryAndBrandingAntiEnumerationTests)", "X-Flit-Domain + email", 0, SupportsGlobal: false),
+        new("Q44", "MarcaBlancaHeadCompanyAuthorizationHandler (policy /company/branding* y /company/domain*, endurecimiento del hecho 88)", "ClaimsPrincipal + GetHierarchyInfoAsync", 0, SupportsGlobal: false),
     ];
 
     public static CoveredQuery Get(string id) =>

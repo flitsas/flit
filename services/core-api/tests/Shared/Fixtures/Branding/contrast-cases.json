@@ -1,0 +1,12 @@
+[
+  { "fg": "#FFFFFF", "bg": "#162744", "expectedRatio": 14.92 },
+  { "fg": "#FFFFFF", "bg": "#557EFF", "expectedRatio": 3.61 },
+  { "fg": "#000000", "bg": "#FFFFFF", "expectedRatio": 21.0 },
+  { "fg": "#FFFFFF", "bg": "#000000", "expectedRatio": 21.0 },
+  { "fg": "#557EFF", "bg": "#4F74C9", "expectedRatio": 1.24 },
+  { "fg": "#0B3D91", "bg": "#FFFFFF", "expectedRatio": 10.04 },
+  { "fg": "#ffffff", "bg": "#162744", "expectedRatio": 14.92 },
+  { "fg": "#ffffff", "bg": "#557eff", "expectedRatio": 3.61 },
+  { "fg": "#333333", "bg": "#FFFFFF", "expectedRatio": 12.63 },
+  { "fg": "#FFFFFF", "bg": "#CCCCCC", "expectedRatio": 1.61 }
+]

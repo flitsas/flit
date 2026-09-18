@@ -137,6 +137,31 @@ describe("apiFetch — errores no-ok (Bug #11626)", () => {
 
     window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
   });
+
+  // HU #12424 AC5/AC6 (ADR-0060 D3) — SESSION_DOMAIN_MISMATCH en cualquier ruta autenticada se
+  // trata igual que una sesión expirada: limpiar token + emitir el mismo evento global.
+  it("401 SESSION_DOMAIN_MISMATCH: limpia el token y emite el mismo evento global que SESSION_EXPIRED", async () => {
+    document.cookie = "flit_token=jwt-de-otra-red; path=/";
+    mockFetchOnce(401, { error: "SESSION_DOMAIN_MISMATCH" });
+
+    const listener = vi.fn();
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener);
+
+    let caught: unknown;
+    try {
+      await apiFetch("/api/v1/admin/companies");
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    expect((caught as ApiError).status).toBe(401);
+    expect((caught as ApiError).message).toBe("SESSION_DOMAIN_MISMATCH");
+    expect(listener).toHaveBeenCalledOnce();
+    expect(document.cookie).not.toContain("flit_token=jwt-de-otra-red");
+
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
+  });
 });
 
 // Uso de ejemplo: friendlyErrorMessage({ detail: "..." }) → "..."

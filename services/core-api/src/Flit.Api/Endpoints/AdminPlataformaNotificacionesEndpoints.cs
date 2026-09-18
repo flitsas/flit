@@ -103,7 +103,8 @@ public static class AdminPlataformaNotificacionesEndpoints
     {
         var result = await service
             .SendAsync(
-                new SendNotificationTestRequest(request.TemplateId, request.Channel, request.ProcedureTypeId),
+                new SendNotificationTestRequest(
+                    request.TemplateId, request.Channel, request.ProcedureTypeId, request.TenantId),
                 ResolveUserId(user),
                 ct)
             .ConfigureAwait(false);
@@ -155,7 +156,15 @@ public static class AdminPlataformaNotificacionesEndpoints
             result.SenderName,
             result.SentAt,
             result.IsConsoleTransport,
-            result.RecipientDiverted);
+            result.RecipientDiverted)
+        {
+            // HU #12430 AC2 — ADITIVO: solo aparece cuando la solicitud trajo tenantId (ver
+            // NotificationTestSendAdminService, que deja ThemeKind en null en cualquier otro caso).
+            Applied = result.ThemeKind is null
+                ? null
+                : new NotificationTestSendAppliedResponse(
+                    result.ThemeKind, result.ThemeVersion, result.SenderName, result.SenderEmail),
+        };
 
     private static NotificationChannelResponseItem ToResponse(NotificationChannelView view) =>
         new(view.Channel, view.Label, view.IsDefault, view.IsConfigured, view.SenderEmail, view.SenderName);
@@ -197,10 +206,15 @@ public sealed record NotificationTestMailboxResponse(
 /// Cuerpo de <c>POST /api/v1/admin/plataforma/notificaciones/buzon-pruebas/envios</c> (HU #11368).
 /// El destinatario NUNCA viaja en el cuerpo: siempre es el buzón de pruebas configurado.
 /// </summary>
+/// <param name="TenantId">
+/// HU #12430 AC2 — opcional y ADITIVO: compañía para la que se resuelve tema y remitente de marca
+/// antes de enviar la muestra. Sin este campo, comportamiento IDÉNTICO a antes de esta historia.
+/// </param>
 public sealed record SendNotificationTestBodyRequest(
     string? TemplateId,
     string? Channel,
-    Guid? ProcedureTypeId = null);
+    Guid? ProcedureTypeId = null,
+    Guid? TenantId = null);
 
 /// <summary>
 /// Respuesta de <c>POST /api/v1/admin/plataforma/notificaciones/buzon-pruebas/envios</c> (HU #11368,
@@ -223,4 +237,19 @@ public sealed record NotificationTestSendResponse(
     string? SenderName,
     DateTimeOffset? SentAt,
     bool IsConsoleTransport,
-    bool RecipientDiverted);
+    bool RecipientDiverted)
+{
+    /// <summary>
+    /// HU #12430 AC2 — ADITIVO (contratos-api.md §3): tema y remitente REALMENTE aplicados cuando
+    /// la solicitud trajo <c>tenantId</c>. <c>null</c> sin ese campo — respuesta idéntica a antes de
+    /// esta historia.
+    /// </summary>
+    public NotificationTestSendAppliedResponse? Applied { get; init; }
+}
+
+/// <summary>
+/// HU #12430 AC2 — tema y remitente aplicados a un envío de prueba con <c>tenantId</c>
+/// (contratos-api.md §3: <c>{ themeKind, themeVersion, senderName, senderEmail }</c>).
+/// </summary>
+public sealed record NotificationTestSendAppliedResponse(
+    string ThemeKind, int? ThemeVersion, string? SenderName, string? SenderEmail);
