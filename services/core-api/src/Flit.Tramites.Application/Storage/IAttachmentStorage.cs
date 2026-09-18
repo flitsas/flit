@@ -7,15 +7,17 @@ namespace Flit.Tramites.Application.Storage;
 public sealed record StoredFile(string StoragePath, string Sha256, long SizeBytes);
 
 /// <summary>
-/// Presigned POST policy para subir un binario DIRECTO a S3 desde el cliente (sin pasar por el
-/// request del API). <c>StoragePath</c> es el id opaco del backend de almacenamiento (lo que flit
-/// guarda en <c>procedure_instance_attachments</c>); <c>Url</c> + <c>Fields</c> son la URL de S3 y
-/// los campos firmados del POST policy (van ANTES del 'file' en el multipart).
+/// Presigned upload para subir un binario DIRECTO al storage desde el cliente (sin pasar por el
+/// request del API). <c>StoragePath</c> es el id opaco del backend de almacenamiento;
+/// <c>Url</c> + <c>Fields</c> + <c>Method</c> vienen del file-manager (ADR-0057):
+/// <c>POST</c> = multipart con <c>Fields</c> antes del <c>file</c>; <c>PUT</c> = bytes crudos
+/// (Contabo Object Storage / Ceph detrás de Kong rechaza el POST policy). Ausente o vacío ⇒ POST.
 /// </summary>
 public sealed record PresignedUpload(
     string StoragePath,
     string Url,
-    IReadOnlyDictionary<string, string> Fields);
+    IReadOnlyDictionary<string, string> Fields,
+    string Method = "POST");
 
 /// <summary>
 /// Abstracción de almacenamiento de adjuntos (storage-agnóstica para testear sin tocar red).

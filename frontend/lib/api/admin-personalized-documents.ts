@@ -10,6 +10,7 @@
 import { apiFetch } from "./client";
 import { ApiError, ApiValidationError } from "./types";
 import { companyScopedPath } from "./company-scoped-path";
+import { uploadFileToPresignedUrl } from "./presigned-upload";
 
 /** Vocabulario cerrado de tipos de documento personalizable (espejo de `PersonalizedDocumentTypes`). */
 export type PersonalizedDocumentType = "mandato" | "tramite_virtual";
@@ -43,11 +44,12 @@ export interface PersonalizedDocumentGroup {
   history: PersonalizedDocumentVersion[];
 }
 
-/** Presigned POST policy para subir el PDF DIRECTO a storage (campos ANTES del `file`). */
+/** Ticket de subida directa (ADR-0057). `method`: POST|PUT; ausente ⇒ POST. */
 export interface PersonalizedDocumentUploadTicket {
   storagePath: string;
   url: string;
   fields: Record<string, string>;
+  method?: string | null;
 }
 
 /** Respuesta de `POST ""`: alta en `pendiente` + ticket de subida. */
@@ -137,24 +139,12 @@ export function createPersonalizedDocumentVersion(
   });
 }
 
-/**
- * Sube el PDF DIRECTO al storage con la presigned POST policy. Los campos firmados van SIEMPRE
- * ANTES del `file` en el `FormData`: el almacenamiento rechaza la petición si el orden se invierte.
- */
+/** Sube el PDF DIRECTO a storage según `upload.method` (PUT Contabo / POST MinIO·S3). */
 export async function uploadPersonalizedDocumentFile(
   upload: PersonalizedDocumentUploadTicket,
   file: File,
 ): Promise<void> {
-  const form = new FormData();
-  for (const [key, value] of Object.entries(upload.fields)) {
-    form.append(key, value);
-  }
-  form.append("file", file);
-  const res = await fetch(upload.url, { method: "POST", body: form });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Error subiendo el PDF a almacenamiento (${res.status})${detail ? ": " + detail : ""}`);
-  }
+  await uploadFileToPresignedUrl(upload, file);
 }
 
 /**

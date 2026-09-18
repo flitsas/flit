@@ -156,11 +156,12 @@ public static class AttachmentRules
 /// <summary>Datos para abrir una subida directa a S3 (presigned): metadata sin binario.</summary>
 public sealed record PresignAttachmentInput(string Tipo, string Filename, string Mimetype, long SizeBytes);
 
-/// <summary>Presigned POST policy + id de almacenamiento que el cliente usa para subir a S3.</summary>
+/// <summary>Presigned upload + id de almacenamiento (ADR-0057: <c>Method</c> = POST|PUT).</summary>
 public sealed record PresignAttachmentResponse(
     string StoragePath,
     string Url,
-    IReadOnlyDictionary<string, string> Fields);
+    IReadOnlyDictionary<string, string> Fields,
+    string Method = "POST");
 
 /// <summary>Metadata de un adjunto ya subido directo a S3 (flujo presigned), sin binario.</summary>
 public sealed record RegisterAttachmentInput(
@@ -324,7 +325,11 @@ public sealed class PresignAttachmentHandler(
         var filename = string.IsNullOrWhiteSpace(input.Filename) ? "file" : input.Filename.Trim();
         var presigned = await storage.CreatePresignedUploadAsync(id, tipo, filename, ct);
 
-        return (new PresignAttachmentResponse(presigned.StoragePath, presigned.Url, presigned.Fields), null);
+        return (new PresignAttachmentResponse(
+            presigned.StoragePath,
+            presigned.Url,
+            presigned.Fields,
+            string.IsNullOrWhiteSpace(presigned.Method) ? "POST" : presigned.Method), null);
     }
 }
 
