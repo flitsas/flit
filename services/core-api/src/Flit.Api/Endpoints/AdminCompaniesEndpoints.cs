@@ -130,6 +130,8 @@ public static class AdminCompaniesEndpoints
         // GET /api/v1/admin/companies/{tenantId}/settings — configuración actual (#10190 AC3).
         group.MapGet("/{tenantId:guid}/settings", GetSettingsAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyGetSettings")
             .WithSummary("Obtiene la configuración operativa del tenant")
             .WithDescription("Retorna la configuración operativa de la compañía. 404 si el tenant no tiene "
@@ -142,6 +144,8 @@ public static class AdminCompaniesEndpoints
         // PUT /api/v1/admin/companies/{tenantId}/settings — guardado atómico + audit (#10190 AC1/AC2).
         group.MapPut("/{tenantId:guid}/settings", UpdateSettingsAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyUpdateSettings")
             .WithSummary("Actualiza la configuración operativa del tenant")
             .WithDescription("Guardado atómico de la configuración operativa con registro de auditoría. "
@@ -154,6 +158,8 @@ public static class AdminCompaniesEndpoints
         // POST /api/v1/admin/companies/{tenantId}/whitelist — alta masiva + audit (#10191 AC4/AC5).
         group.MapPost("/{tenantId:guid}/whitelist", AddWhitelistAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyAddWhitelist")
             .WithSummary("Agrega correos a la whitelist del tenant")
             .WithDescription("Alta masiva de correos exentos; devuelve los insertados y los omitidos "
@@ -166,6 +172,8 @@ public static class AdminCompaniesEndpoints
         // GET /api/v1/admin/companies/{tenantId}/whitelist — lista de correos exentos (#10191 AC6).
         group.MapGet("/{tenantId:guid}/whitelist", GetWhitelistAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyGetWhitelist")
             .WithSummary("Lista los correos de la whitelist del tenant")
             .WithDescription("Retorna los correos exentos configurados para la compañía. Requiere SuperAdmin.")
@@ -176,6 +184,8 @@ public static class AdminCompaniesEndpoints
         // POST /api/v1/admin/companies/{tenantId}/transit-grants — habilita OT + audit (#10192 AC2).
         group.MapPost("/{tenantId:guid}/transit-grants", AddTransitGrantAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyAddTransitGrant")
             .WithSummary("Habilita un Organismo de Tránsito para el tenant")
             .WithDescription("Concede acceso de la compañía a un OT (idempotente: 201 tanto en alta nueva "
@@ -188,6 +198,8 @@ public static class AdminCompaniesEndpoints
         // DELETE /api/v1/admin/companies/{tenantId}/transit-grants/{transitOfficeId} — deshabilita OT (#10192 AC3).
         group.MapDelete("/{tenantId:guid}/transit-grants/{transitOfficeId:guid}", RemoveTransitGrantAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyRemoveTransitGrant")
             .WithSummary("Deshabilita un Organismo de Tránsito del tenant")
             .WithDescription("Revoca el acceso de la compañía a un OT. 204 si se eliminó, 404 si el grant "
@@ -200,6 +212,8 @@ public static class AdminCompaniesEndpoints
         // GET /api/v1/admin/companies/{tenantId}/transit-grants — OT habilitados del tenant (#10192 AC5).
         group.MapGet("/{tenantId:guid}/transit-grants", GetTransitGrantsAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyGetTransitGrants")
             .WithSummary("Lista los OT habilitados del tenant")
             .WithDescription("Retorna los Organismos de Tránsito habilitados para la compañía. Requiere SuperAdmin.")
@@ -231,6 +245,8 @@ public static class AdminCompaniesEndpoints
         // PUT /api/v1/admin/companies/{tenantId}/transit-agreements/{transitOfficeId} — convenio comercial.
         group.MapPut("/{tenantId:guid}/transit-agreements/{transitOfficeId:guid}", SetTransitAgreementAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanySetTransitAgreement")
             .WithSummary("Marca o desmarca el convenio de la compañía con un Organismo de Tránsito")
             .WithDescription("El convenio NO es el permiso para radicar (eso son los transit-grants): es un "
@@ -243,6 +259,8 @@ public static class AdminCompaniesEndpoints
         // GET /api/v1/admin/companies/{tenantId}/transit-agreements — OT con convenio activo.
         group.MapGet("/{tenantId:guid}/transit-agreements", GetTransitAgreementsAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyGetTransitAgreements")
             .WithSummary("Lista los OT con los que la compañía tiene convenio")
             .Produces(StatusCodes.Status200OK)
@@ -252,6 +270,8 @@ public static class AdminCompaniesEndpoints
         // GET /api/v1/admin/companies/{tenantId}/audit-log — historial de gobernanza paginado (#10192 AC4).
         group.MapGet("/{tenantId:guid}/audit-log", GetAuditLogAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyGetAuditLog")
             .WithSummary("Lista el historial de auditoría del tenant")
             .WithDescription("Historial de gobernanza (cambios de settings, whitelist y grants) paginado. "
@@ -264,6 +284,8 @@ public static class AdminCompaniesEndpoints
         // de consulta (RNMC, comparendos) por OT de la compañía (HU #10759 AC1/AC5).
         group.MapGet("/{tenantId:guid}/ot-consultation-restrictions", GetOtConsultationRestrictionsAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyGetOtConsultationRestrictions")
             .WithSummary("Lista las restricciones de consulta por OT del tenant")
             .WithDescription("Retorna las filas de restricción configuradas explícitamente (tabla dispersa: "
@@ -279,6 +301,8 @@ public static class AdminCompaniesEndpoints
                 "/{tenantId:guid}/ot-consultation-restrictions/{transitOfficeId:guid}/{consultationKind}",
                 SetOtConsultationRestrictionAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanySetOtConsultationRestriction")
             .WithSummary("Fija el estado de una restricción de consulta por OT")
             .WithDescription("Habilita o inhabilita una consulta (rnmc|fines) para un Organismo de Tránsito "
@@ -294,6 +318,8 @@ public static class AdminCompaniesEndpoints
         // preflight (soat/rtm/estado_vehiculo/fines/rnmc) por OT de la compañía (FEATURE 05).
         group.MapGet("/{tenantId:guid}/ot-blocking-policies", GetOtBlockingPoliciesAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyGetOtBlockingPolicies")
             .WithSummary("Lista las políticas de bloqueo de preflight por OT del tenant")
             .WithDescription("Retorna las filas de política configuradas explícitamente (tabla dispersa: "
@@ -309,6 +335,8 @@ public static class AdminCompaniesEndpoints
                 "/{tenantId:guid}/ot-blocking-policies/{transitOfficeId:guid}/{criterion}",
                 SetOtBlockingPolicyAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanySetOtBlockingPolicy")
             .WithSummary("Fija el carácter bloqueante de un criterio del preflight por OT")
             .WithDescription("Marca un criterio (soat|rtm|estado_vehiculo|fines|rnmc) como bloqueante o "
@@ -323,6 +351,8 @@ public static class AdminCompaniesEndpoints
         // GET/PUT — documento de prenda opcional (opt-out) por compañía + OT.
         group.MapGet("/{tenantId:guid}/ot-prenda-document-policies", GetOtPrendaDocumentPoliciesAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanyGetOtPrendaDocumentPolicies")
             .WithSummary("Lista OTs donde la prenda es opcional (check activo)")
             .Produces<IReadOnlyList<OtPrendaDocumentPolicyResponse>>(StatusCodes.Status200OK)
@@ -333,6 +363,8 @@ public static class AdminCompaniesEndpoints
                 "/{tenantId:guid}/ot-prenda-document-policies/{transitOfficeId:guid}",
                 SetOtPrendaDocumentPolicyAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .WithName("AdminCompanySetOtPrendaDocumentPolicy")
             .WithSummary("Activa o desactiva el check de prenda opcional por OT")
             .WithDescription("documentOptional=true ⇒ deja de exigir prenda; false ⇒ vuelve a obligatoria (default).")

@@ -23,6 +23,9 @@ public static class AdminCompanyNotificationDeliveryLogsEndpoints
         var group = app
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/notification-delivery-logs")
             .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            // HU #12710 — sección reservada: SuperAdmin o administrador de una cabeza de red. El
+            // Administrador de Compañía sin red, o de una hija, solo conserva Representantes y Mandatarios.
+            .RequireAuthorization(AdminAuthorization.GroupHeadCompanyPolicy)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithTags("Admin · Compañías · Bitácora de notificaciones");
 

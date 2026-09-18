@@ -62,6 +62,15 @@ function CompanyDetail() {
     callerTenantId === networkHeadId &&
     tenantId !== callerTenantId;
 
+  // HU #12710 — el Administrador de Compañía sin red, o de una hija, solo gestiona Representantes
+  // legales y Mandatarios. La cabeza de red sobre su propia compañía o administrando una hija, y el
+  // SuperAdmin, conservan todas las secciones. Misma regla que aplica la API (GroupHeadCompanyPolicy).
+  const restrictedToRepresentatives =
+    isAdminCompany &&
+    !isSuperAdmin &&
+    !managingChild &&
+    !(isGroupParent && callerTenantId === tenantId);
+
   const otPanelMode = resolveOtConfigPanelMode({
     company,
     parentTenantType: parentCompany?.tenantType ?? null,
@@ -128,8 +137,12 @@ function CompanyDetail() {
           networkHeadId && tenantId !== callerTenantId && networkHeadId === callerTenantId
             ? networkHeadId
             : null;
+        // HU #12710 — el rol restringido no pide la configuración: la API se la niega (403) y sus
+        // dos pestañas no la usan. La ficha arranca con valores por defecto que nadie muestra.
         const [data, identity] = await Promise.all([
-          fetchTenantSettings(tenantId, signal, childScope),
+          restrictedToRepresentatives
+            ? Promise.resolve(defaultSettings(tenantId))
+            : fetchTenantSettings(tenantId, signal, childScope),
           fetchCompany(tenantId, signal, childScope),
         ]);
         if (signal?.aborted) {
@@ -166,7 +179,7 @@ function CompanyDetail() {
         }
       }
     },
-    [tenantId, accessChecked, isSuperAdmin, networkHeadId, callerTenantId],
+    [tenantId, accessChecked, isSuperAdmin, networkHeadId, callerTenantId, restrictedToRepresentatives],
   );
 
   useEffect(() => {
@@ -222,7 +235,11 @@ function CompanyDetail() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <ModuleTitle
           title="Configuración de compañía"
-          subtitle="Edita las políticas operativas y revisa el historial de cambios."
+          subtitle={
+            restrictedToRepresentatives
+              ? "Gestiona los representantes legales y los mandatarios de tu compañía."
+              : "Edita las políticas operativas y revisa el historial de cambios."
+          }
         />
         {showNetworkLink && (
           <Link
@@ -257,6 +274,7 @@ function CompanyDetail() {
               <CompanyConfigTabs
                 settings={settings}
                 company={company}
+                restrictedToRepresentatives={restrictedToRepresentatives}
                 onSaveSettings={handleSaveSettings}
                 whitelistSlot={<WhitelistPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
                 otSlot={
