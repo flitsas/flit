@@ -136,6 +136,48 @@ public sealed class IdentityValidationScopeTests(PostgresDatabaseFixture fixture
         soloC.Should().ContainSingle().Which.TenantId.Should().Be(CompaniaC);
     }
 
+    [PostgresFact]
+    public async Task La_red_de_una_cabeza_lee_la_cabeza_y_su_hija_y_nunca_la_compania_ajena()
+    {
+        // HU #12708 — A es cabeza con la hija B; C es ajena. Mismo SQL crudo que la vista propia, con el
+        // conjunto de lectura del grupo en el = ANY(uuid[]).
+        await SeedAsync();
+
+        await using var ctx = NewContext();
+        var repo = new ProcedureInstanceRepository(ctx);
+        var ct = TestContext.Current.CancellationToken;
+        var red = TenantScope.Group(CompaniaA, [CompaniaB], GroupKind.MarcaBlanca);
+        var (rows, total) = await repo.ListBiometricValidationsGroupedByPersonAsync(red, 0, 50, null, DateTimeOffset.UtcNow, ct);
+        var counts = await repo.CountBiometricPersonsByEstadoAsync(red, null, DateTimeOffset.UtcNow, ct);
+
+        total.Should().Be(3, "2 personas de la cabeza A y 1 de la hija B");
+        rows.Select(r => r.TenantId).Should().NotContain(CompaniaC);
+        counts.Values.Sum().Should().Be(3);
+    }
+
+    [PostgresFact]
+    public async Task Las_atascadas_de_todas_las_companias_traen_su_compania_y_una_compania_solo_las_suyas()
+    {
+        // AC4 — la cola de envío atascada (error_envio) de A y de C; B no tiene.
+        await SeedAsync();
+        await using (var seed = NewContext())
+        {
+            seed.ProcedureInstanceBiometricValidations.AddRange(
+                Validacion(CompaniaA, "79000111", BiometricEstados.ErrorEnvio, Base.AddHours(5)),
+                Validacion(CompaniaC, "52000222", BiometricEstados.ErrorEnvio, Base.AddHours(6)));
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var outbox = new IdentityValidationOutboxRepository(ctx);
+        var ct = TestContext.Current.CancellationToken;
+        var todas = await outbox.ListStuckAsync(TenantScope.All(), 200, ct);
+        var soloA = await outbox.ListStuckAsync(TenantScope.Single(CompaniaA), 200, ct);
+
+        todas.Select(r => r.TenantId).Should().BeEquivalentTo([CompaniaA, CompaniaC]);
+        soloA.Should().ContainSingle().Which.TenantId.Should().Be(CompaniaA);
+    }
+
     /// <summary>
     /// A: cédula compartida (rechazada → aprobada) + otra persona en proceso. B: cédula compartida
     /// rechazada. C: una persona aprobada. Todas standalone (prevalidaciones, sin trámite).

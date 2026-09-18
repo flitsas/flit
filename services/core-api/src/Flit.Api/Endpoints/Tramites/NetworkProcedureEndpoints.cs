@@ -33,6 +33,9 @@ namespace Flit.Api.Endpoints.Tramites;
 ///   de un trámite de la red, con interruptor de clase para CONCESION.</item>
 ///   <item><c>GET /children</c> (HU #12555, <see cref="NetworkChildrenEndpoints"/>): clientes hijos
 ///   vigentes de la cabeza (id + nombre), sin la policy admin de <see cref="AdminCompanyChildrenEndpoints"/>.</item>
+///   <item><c>GET /identity-validations/by-person</c>, <c>…/by-person/detail</c> y <c>…/{validationId}/audit</c>
+///   (HU #12708, <see cref="NetworkIdentityValidationEndpoints"/>): Validación de Identidad de la red en solo
+///   lectura, con el correo enmascarado y sin enlace de captura.</item>
 /// </list>
 /// Policy de cabeza (<see cref="GroupHeadReadFilter"/>) sobre todo el grupo: sin alcance de grupo ⇒ 403
 /// <c>network_scope_required</c>; con alcance pero sin rol AdminCompany ⇒ 403 <c>network_role_required</c>
@@ -209,6 +212,8 @@ internal static class NetworkProcedureEndpoints
         group.MapNetworkAttachments();
         // HU #12555 — GET /children: clientes hijos vigentes de la cabeza (id + nombre), sin policy admin.
         group.MapNetworkChildren();
+        // HU #12708 — Validación de Identidad de la red (solo lectura): por persona, historial y bitácora.
+        group.MapNetworkIdentityValidations();
 
         return app;
     }

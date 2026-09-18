@@ -93,6 +93,10 @@ public sealed class NetworkRoleGateTests : IClassFixture<NetworkRoleGateTests.Ga
         { "GET", $"{Prefix}/instances/{{id:guid}}/attachments" },
         { "GET", $"{Prefix}/instances/{{id:guid}}/attachments/{{attachmentId:guid}}/download" },
         { "GET", $"{Prefix}/children" },
+        // HU #12708 — Validación de Identidad de la red (solo lectura).
+        { "GET", $"{Prefix}/identity-validations/by-person" },
+        { "GET", $"{Prefix}/identity-validations/by-person/detail" },
+        { "GET", $"{Prefix}/identity-validations/{{validationId:guid}}/audit" },
     };
 
     // ── Inventario: 100 % de las familias de network/** bajo la misma puerta ─────────────────
@@ -298,7 +302,8 @@ public sealed class NetworkRoleGateTests : IClassFixture<NetworkRoleGateTests.Ga
     {
         var url = template
             .Replace("{id:guid}", AnyProcedure.ToString(), StringComparison.Ordinal)
-            .Replace("{attachmentId:guid}", AnyAttachment.ToString(), StringComparison.Ordinal);
+            .Replace("{attachmentId:guid}", AnyAttachment.ToString(), StringComparison.Ordinal)
+            .Replace("{validationId:guid}", AnyAttachment.ToString(), StringComparison.Ordinal);
         if (url.Contains("/stats/", StringComparison.Ordinal) || url.Contains("/reports/", StringComparison.Ordinal))
             url += $"?{Range}";
 
