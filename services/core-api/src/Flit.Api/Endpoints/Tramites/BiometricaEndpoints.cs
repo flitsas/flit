@@ -1,3 +1,5 @@
+using Flit.Api.Authorization;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -113,10 +115,12 @@ internal static class BiometricaEndpoints
             [FromQuery] int? pageSize,
             // HU #10867 — true = solo standalone; false = solo ligadas a trámite; omitido = todas.
             [FromQuery] bool? standalone,
+            HttpContext http,
             ListTenantBiometricValidationsHandler handler,
             CancellationToken ct) =>
         {
-            if (tenantId is null || tenantId == Guid.Empty)
+            // HU #12706 — sin compañía solo el SuperAdmin obtiene «todas»; el resto, 400 como hoy.
+            if (ResolveReadScope(http, tenantId) is not { } scope)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var query = new TenantBiometricValidationListQuery(
@@ -141,7 +145,7 @@ internal static class BiometricaEndpoints
                 pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize,
                 standalone);
 
-            var (result, error) = await handler.HandleAsync(tenantId.Value, query, ct);
+            var (result, error) = await handler.HandleAsync(scope, query, ct);
             return error is not null
                 ? Results.Problem(statusCode: 400, title: "Bad Request", detail: error)
                 : Results.Ok(result);
@@ -166,10 +170,12 @@ internal static class BiometricaEndpoints
             [FromQuery] int? page,
             [FromQuery] int? pageSize,
             [FromQuery] bool? standalone,
+            HttpContext http,
             ListTenantBiometricPersonsHandler handler,
             CancellationToken ct) =>
         {
-            if (tenantId is null || tenantId == Guid.Empty)
+            // HU #12706 — sin compañía solo el SuperAdmin obtiene «todas»; el resto, 400 como hoy.
+            if (ResolveReadScope(http, tenantId) is not { } scope)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var query = new TenantBiometricPersonListQuery(
@@ -187,7 +193,7 @@ internal static class BiometricaEndpoints
                 pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize,
                 standalone);
 
-            var (result, error) = await handler.HandleAsync(tenantId.Value, query, ct);
+            var (result, error) = await handler.HandleAsync(scope, query, ct);
             return error is not null
                 ? Results.Problem(statusCode: 400, title: "Bad Request", detail: error)
                 : Results.Ok(result);
@@ -232,13 +238,15 @@ internal static class BiometricaEndpoints
         // reintentos del worker de outbox (fase 2). Observabilidad para reencolar manualmente.
         group.MapGet("/identity-validation/stuck", async (
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
             ListStuckIdentityValidationsHandler handler,
             CancellationToken ct) =>
         {
-            if (tenantId is null || tenantId == Guid.Empty)
+            // HU #12706 — sin compañía solo el SuperAdmin obtiene «todas»; el resto, 400 como hoy.
+            if (ResolveReadScope(http, tenantId) is not { } scope)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var result = await handler.HandleAsync(tenantId.Value, ct);
+            var result = await handler.HandleAsync(scope, ct);
             return Results.Ok(result);
         })
         .WithName("ListStuckIdentityValidations")
@@ -600,6 +608,32 @@ internal static class BiometricaEndpoints
         .Produces<EnsureIdentityResult>(StatusCodes.Status200OK);
 
         return app;
+    }
+
+    /// <summary>
+    /// HU #12706 — alcance de las LECTURAS transversales de identidad (listado plano, por persona y
+    /// atascadas).
+    /// <list type="bullet">
+    ///   <item>Con compañía (<c>X-Tenant-Id</c>): esa compañía y nada más. Para un usuario de compañía el
+    ///   <see cref="Middleware.TenantEnforcementMiddleware"/> ya sobrescribió el header con la del JWT,
+    ///   así que la compañía B que mande el Administrador de A nunca llega aquí.</item>
+    ///   <item>Sin compañía: <c>TenantScope.All</c> SOLO si el middleware marcó la petición como
+    ///   SuperAdmin y dejó ese alcance en <see cref="HttpContext.Items"/>. La ausencia del header por sí
+    ///   sola nunca vale «todas»: cualquier otro caso devuelve <c>null</c> ⇒ 400, igual que antes.</item>
+    /// </list>
+    /// La cabeza de red NO amplía su alcance aquí: su red se consulta por <c>/network</c> (HU #12708).
+    /// </summary>
+    private static TenantScope? ResolveReadScope(HttpContext http, Guid? headerTenantId)
+    {
+        if (headerTenantId is { } tenantId && tenantId != Guid.Empty)
+            return TenantScope.Single(tenantId);
+
+        var (itemsTenant, isSuperAdmin) = RequestTenantResolver.FromItems(http);
+        return isSuperAdmin
+            && itemsTenant is null
+            && RequestTenantResolver.ScopeFromItems(http) is { IsAll: true } all
+                ? all
+                : null;
     }
 }
 
