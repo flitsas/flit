@@ -648,15 +648,24 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     .ToList());
     }
 
-    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(
+    public Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(
         Guid tenantId,
+        int skip,
+        int take,
+        BiometricValidationListFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct) =>
+        ListBiometricValidationsByTenantAsync(TenantScope.Single(tenantId), skip, take, filter, now, ct);
+
+    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(
+        TenantScope scope,
         int skip,
         int take,
         BiometricValidationListFilter? filter,
         DateTimeOffset now,
         CancellationToken ct)
     {
-        var query = BaseTenantBiometricQuery(tenantId);
+        var query = BaseTenantBiometricQuery(scope);
         query = ApplyBiometricValidationFilters(query, filter, now);
 
         return await query
@@ -666,13 +675,20 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ToListAsync(ct);
     }
 
-    public async Task<IReadOnlyDictionary<string, int>> CountBiometricValidationsByEstadoAsync(
+    public Task<IReadOnlyDictionary<string, int>> CountBiometricValidationsByEstadoAsync(
         Guid tenantId,
+        BiometricValidationListFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct) =>
+        CountBiometricValidationsByEstadoAsync(TenantScope.Single(tenantId), filter, now, ct);
+
+    public async Task<IReadOnlyDictionary<string, int>> CountBiometricValidationsByEstadoAsync(
+        TenantScope scope,
         BiometricValidationListFilter? filter,
         DateTimeOffset now,
         CancellationToken ct)
     {
-        var query = ApplyBiometricValidationFilters(BaseTenantBiometricQuery(tenantId), filter, now);
+        var query = ApplyBiometricValidationFilters(BaseTenantBiometricQuery(scope), filter, now);
 
         var rows = await query
             .GroupBy(v => v.Status)
@@ -690,22 +706,39 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             BiometricPersonGroupFilter? filter,
             DateTimeOffset now,
             CancellationToken ct) =>
+        ListBiometricValidationsGroupedByPersonAsync(TenantScope.Single(tenantId), skip, take, filter, now, ct);
+
+    public Task<(IReadOnlyList<BiometricPersonGroupProjection> Rows, int TotalPersons)>
+        ListBiometricValidationsGroupedByPersonAsync(
+            TenantScope scope,
+            int skip,
+            int take,
+            BiometricPersonGroupFilter? filter,
+            DateTimeOffset now,
+            CancellationToken ct) =>
         // DISTINCT ON es PostgreSQL; InMemory (tests) usa el equivalente GroupBy en memoria.
         db.Database.IsNpgsql()
-            ? ListGroupedByPersonNpgsqlAsync(tenantId, skip, take, filter, now, ct)
-            : ListGroupedByPersonInMemoryAsync(tenantId, skip, take, filter, now, ct);
+            ? ListGroupedByPersonNpgsqlAsync(scope, skip, take, filter, now, ct)
+            : ListGroupedByPersonInMemoryAsync(scope, skip, take, filter, now, ct);
+
+    public Task<IReadOnlyDictionary<string, int>> CountBiometricPersonsByEstadoAsync(
+        Guid tenantId,
+        BiometricPersonGroupFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct) =>
+        CountBiometricPersonsByEstadoAsync(TenantScope.Single(tenantId), filter, now, ct);
 
     public async Task<IReadOnlyDictionary<string, int>> CountBiometricPersonsByEstadoAsync(
-        Guid tenantId,
+        TenantScope scope,
         BiometricPersonGroupFilter? filter,
         DateTimeOffset now,
         CancellationToken ct)
     {
         if (db.Database.IsNpgsql())
-            return await CountGroupedByPersonNpgsqlAsync(tenantId, filter, now, ct);
+            return await CountGroupedByPersonNpgsqlAsync(scope, filter, now, ct);
 
         // InMemory: se reutiliza el mismo agrupador (sin paginar) para no duplicar los filtros.
-        var (rows, _) = await ListGroupedByPersonInMemoryAsync(tenantId, 0, int.MaxValue, filter, now, ct);
+        var (rows, _) = await ListGroupedByPersonInMemoryAsync(scope, 0, int.MaxValue, filter, now, ct);
         return rows
             .GroupBy(r => EstadoEfectivo(r.Status, r.ExpiresAt, now))
             .ToDictionary(g => g.Key, g => g.Count());
@@ -844,6 +877,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             WITH base AS (
                 SELECT
                     v.id,
+                    v.tenant_id,
                     v.document_type,
                     v.document_number,
                     upper(btrim(v.document_type)) AS document_type_norm,
@@ -877,7 +911,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 -- expediente, y con JOIN desaparecería de su propia lista.
                 LEFT JOIN tramites.procedure_types pt
                     ON pt.id = pi.procedure_type_id
-                WHERE v.tenant_id = {0}
+                -- HU #12706 — {0} es el conjunto de compañías legibles (uuid[]): una sola para el gestor,
+                -- NULL solo para el SuperAdmin sin acotar (TenantScope.All). Un arreglo vacío no
+                -- devuelve filas: cerrado por defecto, nunca «sin filtro».
+                WHERE ({0}::uuid[] IS NULL OR v.tenant_id = ANY({0}::uuid[]))
                   AND v.deleted_at IS NULL
                   AND (v.procedure_instance_id IS NULL OR pi.deleted_at IS NULL)
                   AND ({1}::text IS NULL OR upper(btrim(v.document_type)) = {1})
@@ -892,23 +929,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                        OR ({4} = FALSE AND v.procedure_instance_id IS NOT NULL))
             ),
             counted AS (
-                SELECT document_type_norm, document_number_norm, COUNT(*)::int AS validation_count
+                -- La persona es compañía + documento: la misma cédula en dos compañías son dos personas
+                -- (HU #12706, AC3). Con una sola compañía el tenant_id no cambia la agrupación.
+                SELECT tenant_id, document_type_norm, document_number_norm, COUNT(*)::int AS validation_count
                 FROM base
-                GROUP BY document_type_norm, document_number_norm
+                GROUP BY tenant_id, document_type_norm, document_number_norm
             ),
             latest AS (
-                SELECT DISTINCT ON (b.document_type_norm, b.document_number_norm)
+                SELECT DISTINCT ON (b.tenant_id, b.document_type_norm, b.document_number_norm)
                     b.*,
                     c.validation_count
                 FROM base b
                 JOIN counted c
-                  ON c.document_type_norm = b.document_type_norm
+                  ON c.tenant_id = b.tenant_id
+                 AND c.document_type_norm = b.document_type_norm
                  AND c.document_number_norm = b.document_number_norm
                 -- Desempate por id: sin él, dos validaciones de la misma persona con idéntico
                 -- created_at hacen que DISTINCT ON elija una u otra en cada ejecución, y la página de
                 -- filas y el conteo de KPIs (dos sentencias distintas) pueden quedarse con estados
                 -- diferentes para la misma persona.
-                ORDER BY b.document_type_norm, b.document_number_norm, b.created_at DESC, b.id DESC
+                ORDER BY b.tenant_id, b.document_type_norm, b.document_number_norm, b.created_at DESC, b.id DESC
             ),
             filtered AS (
                 SELECT *
@@ -947,6 +987,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             -- y no lo hallara → InvalidOperationException 500 en by-person.
             SELECT
                 id AS latest_validation_id,
+                tenant_id,
                 document_type,
                 document_number,
                 document_type_norm,
@@ -997,7 +1038,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     /// ({14} = <c>now</c>, que solo usa la cola de conteo). La página añade {15} skip y {16} take.
     /// </summary>
     private static object[] BuildGroupedByPersonParams(
-        Guid tenantId,
+        TenantScope scope,
         BiometricPersonGroupFilter? filter,
         DateTimeOffset now)
     {
@@ -1041,7 +1082,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
         return
         [
-            Db(tenantId),
+            // HU #12706 — NULL solo con TenantScope.All; si no, el conjunto legible (vacío ⇒ cero filas).
+            Db(scope.IsAll ? null : scope.ReadTenantIds.ToArray()),
             Db(docType),
             Db(docNumber),
             Db(nameEscaped),
@@ -1061,14 +1103,14 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     private async Task<(IReadOnlyList<BiometricPersonGroupProjection> Rows, int TotalPersons)>
         ListGroupedByPersonNpgsqlAsync(
-            Guid tenantId,
+            TenantScope scope,
             int skip,
             int take,
             BiometricPersonGroupFilter? filter,
             DateTimeOffset now,
             CancellationToken ct)
     {
-        var shared = BuildGroupedByPersonParams(tenantId, filter, now);
+        var shared = BuildGroupedByPersonParams(scope, filter, now);
         var args = new object[shared.Length + 2];
         shared.CopyTo(args, 0);
         args[^2] = skip;
@@ -1084,7 +1126,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     }
 
     private async Task<IReadOnlyDictionary<string, int>> CountGroupedByPersonNpgsqlAsync(
-        Guid tenantId,
+        TenantScope scope,
         BiometricPersonGroupFilter? filter,
         DateTimeOffset now,
         CancellationToken ct)
@@ -1092,7 +1134,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         var rows = await db.Database
             .SqlQueryRaw<BiometricPersonStatusCountSqlRow>(
                 GroupedByPersonCountsSql,
-                BuildGroupedByPersonParams(tenantId, filter, now))
+                BuildGroupedByPersonParams(scope, filter, now))
             .ToListAsync(ct);
 
         return rows.ToDictionary(r => r.Status, r => r.PersonCount);
@@ -1100,14 +1142,14 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     private async Task<(IReadOnlyList<BiometricPersonGroupProjection> Rows, int TotalPersons)>
         ListGroupedByPersonInMemoryAsync(
-            Guid tenantId,
+            TenantScope scope,
             int skip,
             int take,
             BiometricPersonGroupFilter? filter,
             DateTimeOffset now,
             CancellationToken ct)
     {
-        var all = await BaseTenantBiometricQuery(tenantId).ToListAsync(ct);
+        var all = await BaseTenantBiometricQuery(scope).ToListAsync(ct);
 
         if (filter is not null)
         {
@@ -1141,7 +1183,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         }
 
         var groups = all
+            // Misma clave que el SQL: compañía + documento normalizado (HU #12706, AC3).
             .GroupBy(v => (
+                v.TenantId,
                 DocumentCanonicalNormalization.NormalizePart(v.DocumentType),
                 DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber)))
             .Select(g =>
@@ -1150,11 +1194,12 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 var latest = g.OrderByDescending(v => v.CreatedAt).ThenByDescending(v => v.Id).First();
                 return new BiometricPersonGroupProjection
                 {
+                    TenantId = g.Key.TenantId,
                     LatestValidationId = latest.Id,
                     DocumentType = latest.DocumentType,
                     DocumentNumber = latest.DocumentNumber,
-                    DocumentTypeNorm = g.Key.Item1,
-                    DocumentNumberNorm = g.Key.Item2,
+                    DocumentTypeNorm = g.Key.Item2,
+                    DocumentNumberNorm = g.Key.Item3,
                     Name = latest.Name,
                     Status = latest.Status,
                     CreatedAt = latest.CreatedAt,
@@ -1251,6 +1296,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     /// <summary>Fila intermedia de SqlQueryRaw para el DISTINCT ON agrupado (HU #11270).</summary>
     private sealed class BiometricPersonGroupSqlRow
     {
+        public Guid TenantId { get; init; }
         public Guid LatestValidationId { get; init; }
         public string DocumentType { get; init; } = string.Empty;
         public string DocumentNumber { get; init; } = string.Empty;
@@ -1277,6 +1323,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
         public BiometricPersonGroupProjection ToProjection() => new()
         {
+            TenantId = TenantId,
             LatestValidationId = LatestValidationId,
             DocumentType = DocumentType,
             DocumentNumber = DocumentNumber,
@@ -1301,6 +1348,18 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             MaxAttempts = MaxAttempts,
         };
     }
+
+    /// <summary>
+    /// HU #12706 — base de las lecturas transversales de identidad acotada por <see cref="TenantScope"/>
+    /// (<c>WhereTenantInScope</c>: sin filtro solo en <c>All</c>, conjunto vacío ⇒ cero filas).
+    /// </summary>
+    private IQueryable<ProcedureInstanceBiometricValidation> BaseTenantBiometricQuery(TenantScope scope) =>
+        db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Include(v => v.ProcedureInstance)
+            .WhereTenantInScope(scope, v => v.TenantId)
+            .Where(v => v.ProcedureInstanceId == null
+                || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null));
 
     private IQueryable<ProcedureInstanceBiometricValidation> BaseTenantBiometricQuery(Guid tenantId) =>
         db.ProcedureInstanceBiometricValidations

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
-import { uiPreferencesClient } from '@/lib/api/ui-preferences';
+import { uiPreferencesClient, type UiPreferenceScope } from '@/lib/api/ui-preferences';
 import { fetchNetworkChildren, TramitesApiError } from '@/lib/api/tramites-client';
 import {
   DEFAULT_NETWORK_SCOPE,
@@ -51,7 +51,8 @@ export interface UseNetworkScopeResult {
   saving: boolean;
 }
 
-const SCOPE = 'tramites.scope';
+/** Preferencia por defecto: la del listado de Trámites (y analítica/reportes, que la comparten). */
+const DEFAULT_SCOPE_KEY: UiPreferenceScope = 'tramites.scope';
 
 /**
  * HU #12363 — alcance de lectura de una cabeza de red (Feature #12257).
@@ -70,7 +71,13 @@ const SCOPE = 'tramites.scope';
  * «Propio | Red» sin lista (`childrenStatus='unavailable'`); un 403 (`network_scope_required`)
  * significa que el caller no es cabeza pese al claim del JWT y oculta el selector entero.
  */
-export function useNetworkScope(): UseNetworkScopeResult {
+export function useNetworkScope(
+  /**
+   * HU #12709 — dónde se guarda el alcance elegido. Validación de Identidad usa `identidad.scope`: la
+   * cabeza puede ver «Toda la red» en Identidad y «Mi compañía» en Trámites (AC5).
+   */
+  scopeKey: UiPreferenceScope = DEFAULT_SCOPE_KEY,
+): UseNetworkScopeResult {
   const { isGroupParent, tenantId, isSuperAdmin, isAdminCompany } = usePermissions();
   // El SuperAdmin ve todas las compañías por rol, no por jerarquía: para él no hay «mi red».
   // HU #12652 — el alcance de red es exclusivo del AdminCompany de la cabeza: un Radicador/Operador
@@ -110,7 +117,7 @@ export function useNetworkScope(): UseNetworkScopeResult {
     let active = true;
     (async () => {
       try {
-        const res = await uiPreferencesClient.get(SCOPE);
+        const res = await uiPreferencesClient.get(scopeKey);
         if (!active) return;
         setScopeState(parseNetworkScopePreference(res?.value));
       } catch {
@@ -122,7 +129,7 @@ export function useNetworkScope(): UseNetworkScopeResult {
     return () => {
       active = false;
     };
-  }, [esCabeza]);
+  }, [esCabeza, scopeKey]);
 
   // Hijos de la red — solo para la cabeza. Un 5xx/error de red degrada el selector a sus dos
   // opciones fijas; un 403 (`network_scope_required`) oculta el selector entero (ver `scopeDenied`).
@@ -163,7 +170,7 @@ export function useNetworkScope(): UseNetworkScopeResult {
       setSaving(true);
       (async () => {
         try {
-          await uiPreferencesClient.put(SCOPE, {
+          await uiPreferencesClient.put(scopeKey, {
             mode: next.mode,
             ...(next.childTenantId ? { childTenantId: next.childTenantId } : {}),
           });
@@ -174,7 +181,7 @@ export function useNetworkScope(): UseNetworkScopeResult {
         }
       })();
     },
-    [esCabezaEfectiva],
+    [esCabezaEfectiva, scopeKey],
   );
 
   /**

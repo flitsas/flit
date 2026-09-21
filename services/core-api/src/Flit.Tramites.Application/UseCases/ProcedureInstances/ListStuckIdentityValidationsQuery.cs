@@ -1,3 +1,4 @@
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 
@@ -21,7 +22,10 @@ public sealed record StuckIdentityValidationDto(
     string? Name,
     string? DocumentType,
     string? DocumentNumber,
-    string Kind);
+    string Kind,
+    // HU #12706 — compañía dueña (columna Compañía del SuperAdmin sin acotar). Aditivos.
+    Guid TenantId = default,
+    string? TenantName = null);
 
 /// <summary>Respuesta: los eventos atascados + el total devuelto (acotado a <see cref="ListStuckIdentityValidationsHandler.MaxRows"/>).</summary>
 public sealed record StuckIdentityValidationsResponse(
@@ -36,19 +40,35 @@ public sealed record StuckIdentityValidationsResponse(
 /// operador detecte trámites cuyo encadenamiento async (firma/FUR) quedó trabado y los reencole
 /// manualmente (reset de <c>attempts</c>). Solo lectura, acotado a <see cref="MaxRows"/>.
 /// </summary>
-public sealed class ListStuckIdentityValidationsHandler(IIdentityValidationOutboxRepository repo)
+public sealed class ListStuckIdentityValidationsHandler(
+    IIdentityValidationOutboxRepository repo,
+    IProcedureInstanceRepository instances)
 {
     /// <summary>Cap de filas devueltas (vista de monitoreo, no exporta histórico completo).</summary>
     public const int MaxRows = 200;
 
-    public async Task<StuckIdentityValidationsResponse> HandleAsync(Guid tenantId, CancellationToken ct = default)
+    public Task<StuckIdentityValidationsResponse> HandleAsync(Guid tenantId, CancellationToken ct = default) =>
+        HandleAsync(TenantScope.Single(tenantId), ct);
+
+    /// <summary>
+    /// HU #12706 — atascadas acotadas por <see cref="TenantScope"/>: <c>All</c> (SuperAdmin sin
+    /// compañía elegida) lista las de todas las compañías, con la compañía de cada fila.
+    /// </summary>
+    public async Task<StuckIdentityValidationsResponse> HandleAsync(TenantScope scope, CancellationToken ct = default)
     {
-        var rows = await repo.ListStuckAsync(tenantId, MaxRows, ct);
+        ArgumentNullException.ThrowIfNull(scope);
+        var rows = await repo.ListStuckAsync(scope, MaxRows, ct);
+
+        var names = rows.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await instances.GetTenantNamesAsync(rows.Select(r => r.TenantId).Distinct().ToList(), ct)
+                ?? new Dictionary<Guid, string>();
 
         var dtos = rows
             .Select(o => new StuckIdentityValidationDto(
                 o.Id, o.ValidationId, o.EventType, o.Attempts, o.OccurredAt, o.CreatedAt,
-                o.Name, o.DocumentType, o.DocumentNumber, o.Kind))
+                o.Name, o.DocumentType, o.DocumentNumber, o.Kind,
+                o.TenantId, names.GetValueOrDefault(o.TenantId)))
             .ToList();
 
         return new StuckIdentityValidationsResponse(dtos, dtos.Count, IdentityValidationOutbox.MaxDeliveryAttempts);

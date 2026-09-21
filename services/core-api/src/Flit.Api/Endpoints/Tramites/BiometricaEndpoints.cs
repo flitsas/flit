@@ -1,3 +1,5 @@
+using Flit.Api.Authorization;
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -113,10 +115,12 @@ internal static class BiometricaEndpoints
             [FromQuery] int? pageSize,
             // HU #10867 — true = solo standalone; false = solo ligadas a trámite; omitido = todas.
             [FromQuery] bool? standalone,
+            HttpContext http,
             ListTenantBiometricValidationsHandler handler,
             CancellationToken ct) =>
         {
-            if (tenantId is null || tenantId == Guid.Empty)
+            // HU #12706 — sin compañía solo el SuperAdmin obtiene «todas»; el resto, 400 como hoy.
+            if (ResolveReadScope(http, tenantId) is not { } scope)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var query = new TenantBiometricValidationListQuery(
@@ -141,12 +145,14 @@ internal static class BiometricaEndpoints
                 pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize,
                 standalone);
 
-            var (result, error) = await handler.HandleAsync(tenantId.Value, query, ct);
+            var (result, error) = await handler.HandleAsync(scope, query, ct);
             return error is not null
                 ? Results.Problem(statusCode: 400, title: "Bad Request", detail: error)
                 : Results.Ok(result);
         })
         .WithName("ListTenantBiometricValidations")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleOrDashboard()
         .Produces<TenantBiometricValidationsResponse>(StatusCodes.Status200OK);
 
         // GET vista agrupada por persona (HU #11270 / ADR-0040): una fila por documento normalizado.
@@ -166,10 +172,12 @@ internal static class BiometricaEndpoints
             [FromQuery] int? page,
             [FromQuery] int? pageSize,
             [FromQuery] bool? standalone,
+            HttpContext http,
             ListTenantBiometricPersonsHandler handler,
             CancellationToken ct) =>
         {
-            if (tenantId is null || tenantId == Guid.Empty)
+            // HU #12706 — sin compañía solo el SuperAdmin obtiene «todas»; el resto, 400 como hoy.
+            if (ResolveReadScope(http, tenantId) is not { } scope)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var query = new TenantBiometricPersonListQuery(
@@ -187,12 +195,14 @@ internal static class BiometricaEndpoints
                 pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize,
                 standalone);
 
-            var (result, error) = await handler.HandleAsync(tenantId.Value, query, ct);
+            var (result, error) = await handler.HandleAsync(scope, query, ct);
             return error is not null
                 ? Results.Problem(statusCode: 400, title: "Bad Request", detail: error)
                 : Results.Ok(result);
         })
         .WithName("ListTenantBiometricPersons")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleRead()
         .Produces<TenantBiometricPersonsResponse>(StatusCodes.Status200OK);
 
         // GET historial multi-validación de UNA persona (HU #11272 / CF-06): tope 50 + paginación.
@@ -226,22 +236,28 @@ internal static class BiometricaEndpoints
             };
         })
         .WithName("ListPersonBiometricValidations")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleRead()
         .Produces<PersonBiometricValidationsResponse>(StatusCodes.Status200OK);
 
         // GET eventos de validación de identidad ATASCADOS (dead-letter): pendientes que agotaron los
         // reintentos del worker de outbox (fase 2). Observabilidad para reencolar manualmente.
         group.MapGet("/identity-validation/stuck", async (
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
             ListStuckIdentityValidationsHandler handler,
             CancellationToken ct) =>
         {
-            if (tenantId is null || tenantId == Guid.Empty)
+            // HU #12706 — sin compañía solo el SuperAdmin obtiene «todas»; el resto, 400 como hoy.
+            if (ResolveReadScope(http, tenantId) is not { } scope)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var result = await handler.HandleAsync(tenantId.Value, ct);
+            var result = await handler.HandleAsync(scope, ct);
             return Results.Ok(result);
         })
         .WithName("ListStuckIdentityValidations")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleRead()
         .Produces<StuckIdentityValidationsResponse>(StatusCodes.Status200OK);
 
         // POST reencolar ("desatascar") un evento de identidad atascado: reinicia sus intentos para que el
@@ -259,7 +275,9 @@ internal static class BiometricaEndpoints
             return error is "not_found"
                 ? Results.Problem(statusCode: 404, title: "Not Found", detail: "No hay un evento atascado con ese id.")
                 : Results.Ok(new { requeued = true });
-        }).WithName("RequeueStuckIdentityValidation");
+        }).WithName("RequeueStuckIdentityValidation")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleManage();
 
         // POST reencolar TODOS los eventos atascados del tenant de una vez → { requeued: N }.
         group.MapPost("/identity-validation/stuck/requeue-all", async (
@@ -272,7 +290,9 @@ internal static class BiometricaEndpoints
 
             var count = await handler.HandleAsync(tenantId.Value, ct);
             return Results.Ok(new { requeued = count });
-        }).WithName("RequeueAllStuckIdentityValidations");
+        }).WithName("RequeueAllStuckIdentityValidations")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleManage();
 
         // GET alertas/recordatorios de validación de identidad del TENANT (HU #10873, AC1/AC2): clasifica
         // cada validación en rechazada|expirada|por_vencer|atascada y marca la que amerita recordatorio de
@@ -290,6 +310,8 @@ internal static class BiometricaEndpoints
             return Results.Ok(result);
         })
         .WithName("ListIdentityValidationAlerts")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleRead()
         .Produces<IdentityValidationAlertsResponse>(StatusCodes.Status200OK);
 
         // GET alertas/recordatorios de validación de identidad de UN trámite puntual (HU #10873): misma
@@ -449,6 +471,8 @@ internal static class BiometricaEndpoints
             };
         })
         .WithName("IniciarPrevalidacionIdentidad")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleManage()
         .Produces<IniciarPrevalidacionResult>(StatusCodes.Status201Created)
         .Produces<IniciarPrevalidacionResult>(StatusCodes.Status202Accepted);
 
@@ -493,6 +517,8 @@ internal static class BiometricaEndpoints
             };
         })
         .WithName("EditarPrevalidacionIdentidad")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleManage()
         .Produces<EditarPrevalidacionResult>(StatusCodes.Status200OK);
 
         // POST reenviar manualmente la validación de identidad de una prevalidación standalone (HU #10943,
@@ -532,6 +558,8 @@ internal static class BiometricaEndpoints
             };
         })
         .WithName("ReenviarPrevalidacionIdentidad")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleManage()
         .Produces<ReenviarPrevalidacionResult>(StatusCodes.Status200OK)
         .Produces<ReenviarPrevalidacionResult>(StatusCodes.Status202Accepted);
 
@@ -553,6 +581,8 @@ internal static class BiometricaEndpoints
                 : Results.Ok(result);
         })
         .WithName("GetPrevalidacionDetail")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleRead()
         .Produces<BiometricValidationDto>(StatusCodes.Status200OK);
 
         // GET bitácora de una validación de identidad SIN depender de instancia (CF-07, Feature #11004,
@@ -574,6 +604,8 @@ internal static class BiometricaEndpoints
                 : Results.Ok(result);
         })
         .WithName("GetIdentityAuditByValidation")
+        // HU #12711 — permiso del módulo en la API y rechazo del perfil de organismo.
+        .RequireIdentityModuleOrTramites()
         .Produces<IdentityAuditResponse>(StatusCodes.Status200OK);
 
         // POST asegurar identidad de una parte (HU #10350): reutiliza una validación vigente de la
@@ -600,6 +632,32 @@ internal static class BiometricaEndpoints
         .Produces<EnsureIdentityResult>(StatusCodes.Status200OK);
 
         return app;
+    }
+
+    /// <summary>
+    /// HU #12706 — alcance de las LECTURAS transversales de identidad (listado plano, por persona y
+    /// atascadas).
+    /// <list type="bullet">
+    ///   <item>Con compañía (<c>X-Tenant-Id</c>): esa compañía y nada más. Para un usuario de compañía el
+    ///   <see cref="Middleware.TenantEnforcementMiddleware"/> ya sobrescribió el header con la del JWT,
+    ///   así que la compañía B que mande el Administrador de A nunca llega aquí.</item>
+    ///   <item>Sin compañía: <c>TenantScope.All</c> SOLO si el middleware marcó la petición como
+    ///   SuperAdmin y dejó ese alcance en <see cref="HttpContext.Items"/>. La ausencia del header por sí
+    ///   sola nunca vale «todas»: cualquier otro caso devuelve <c>null</c> ⇒ 400, igual que antes.</item>
+    /// </list>
+    /// La cabeza de red NO amplía su alcance aquí: su red se consulta por <c>/network</c> (HU #12708).
+    /// </summary>
+    private static TenantScope? ResolveReadScope(HttpContext http, Guid? headerTenantId)
+    {
+        if (headerTenantId is { } tenantId && tenantId != Guid.Empty)
+            return TenantScope.Single(tenantId);
+
+        var (itemsTenant, isSuperAdmin) = RequestTenantResolver.FromItems(http);
+        return isSuperAdmin
+            && itemsTenant is null
+            && RequestTenantResolver.ScopeFromItems(http) is { IsAll: true } all
+                ? all
+                : null;
     }
 }
 

@@ -119,6 +119,12 @@ internal static class CoveredQueries
         new("Q42", "POST /api/v1/auth/login (LoginHandler, anti-enumeracion por dominio via WebApplicationFactory, LoginAntiEnumerationTests/CrossNetworkIsolationTests)", "X-Flit-Domain + email/password", 0, SupportsGlobal: false),
         new("Q43", "POST /api/v1/auth/forgot-password + GET /public/branding negativos (ForgotPasswordHandler/ResolvePublicBrandingHandler via WebApplicationFactory, RecoveryAndBrandingAntiEnumerationTests)", "X-Flit-Domain + email", 0, SupportsGlobal: false),
         new("Q44", "MarcaBlancaHeadCompanyAuthorizationHandler (policy /company/branding* y /company/domain*, endurecimiento del hecho 88)", "ClaimsPrincipal + GetHierarchyInfoAsync", 0, SupportsGlobal: false),
+        // HU #12706 / #12708 — Validación de Identidad con TenantScope: SuperAdmin «todas» y red de la cabeza (Tramites/IdentityValidationScopeTests).
+        new("Q45", "ProcedureInstanceRepository.ListBiometricValidationsGroupedByPersonAsync (TenantScope, SQL crudo = ANY(uuid[]))", "TenantScope", 2, SupportsGlobal: true),
+        new("Q46", "ProcedureInstanceRepository.CountBiometricPersonsByEstadoAsync (TenantScope, mismo CTE que Q45)", "TenantScope", 2, SupportsGlobal: true),
+        new("Q47", "ProcedureInstanceRepository.ListBiometricValidationsByTenantAsync (TenantScope)", "TenantScope", 3, SupportsGlobal: true),
+        new("Q48", "ProcedureInstanceRepository.CountBiometricValidationsByEstadoAsync (TenantScope)", "TenantScope", 3, SupportsGlobal: true),
+        new("Q49", "IdentityValidationOutboxRepository.ListStuckAsync (TenantScope)", "TenantScope", 1, SupportsGlobal: true),
     ];
 
     public static CoveredQuery Get(string id) =>
