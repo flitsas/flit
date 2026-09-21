@@ -129,4 +129,71 @@ describe("DateRangePicker — HU #12724", () => {
       expect(filterChange).toHaveBeenCalledWith(sinRango());
     });
   });
+
+  // --- Cobertura adicional AC1/AC3/AC4/AC5 (dev-tester HU #12724) ---
+
+  describe("contrato DateRange al confirmar (AC1)", () => {
+    // Uso de ejemplo: aplicar from≠to → onChange({ from, to }) con ISO YYYY-MM-DD
+    it("emite DateRange completo al aplicar dos fechas distintas", async () => {
+      const user = userEvent.setup();
+      render(<DateRangePicker value={sinRango()} onChange={onChange} />);
+      await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
+      const dialog = screen.getByRole("dialog");
+      await user.click(within(dialog).getByTestId("day-2026-09-01"));
+      await user.click(within(dialog).getByTestId("day-2026-09-15"));
+      await waitFor(() => {
+        expect(onChange).toHaveBeenCalledWith({ from: "2026-09-01", to: "2026-09-15" });
+      });
+      const emitted = onChange.mock.calls.at(-1)![0];
+      expect(emitted).toHaveProperty("from");
+      expect(emitted).toHaveProperty("to");
+    });
+  });
+
+  describe("teclado Espacio y tokens dark (AC3)", () => {
+    // Uso de ejemplo: foco + Space abre dialog; popover lleva clases dark:*
+    it("abre el calendario con Espacio", async () => {
+      const user = userEvent.setup();
+      render(<DateRangePicker value={sinRango()} onChange={onChange} />);
+      const trigger = screen.getByRole("button", { name: /Rango de fechas/i });
+      trigger.focus();
+      await user.keyboard(" ");
+      expect(screen.getByRole("dialog", { name: "Elegir rango de fechas" })).toBeInTheDocument();
+    });
+
+    it("el popover declara tokens dark del sistema", async () => {
+      const user = userEvent.setup();
+      render(<DateRangePicker value={sinRango()} onChange={onChange} />);
+      await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
+      const dialog = screen.getByRole("dialog");
+      expect(dialog.className).toMatch(/dark:bg-\[#0B0F14\]/);
+      expect(dialog.className).toMatch(/dark:text-white/);
+      expect(dialog.className).toMatch(/dark:border-white\/15/);
+    });
+  });
+
+  describe("migración DateRangeFilter sin inputs date (AC4)", () => {
+    // Uso de ejemplo: DateRangeFilter → DateRangePicker; cero input[type=date]
+    it("renderiza DateRangePicker y no usa input type=date", async () => {
+      const { DateRangeFilter } = await import("@/components/atom/modules/_reportes/DateRangeFilter");
+      const { container } = render(
+        <DateRangeFilter value={sinRango()} onChange={onChange} />,
+      );
+      expect(screen.getByTestId("date-range-picker")).toBeInTheDocument();
+      expect(container.querySelectorAll('input[type="date"]')).toHaveLength(0);
+      expect(screen.getByRole("button", { name: /Rango de fechas/i })).toBeInTheDocument();
+    });
+  });
+
+  describe("dependencia react-day-picker (AC5)", () => {
+    // Uso de ejemplo: package.json declara react-day-picker y no otra lib de fechas de UI
+    it("declara react-day-picker y no agrega otra librería de calendario", async () => {
+      const pkg = await import("../../../package.json");
+      const deps = { ...pkg.default.dependencies, ...pkg.default.devDependencies };
+      expect(deps["react-day-picker"]).toBeDefined();
+      expect(deps["@mui/x-date-pickers"]).toBeUndefined();
+      expect(deps["react-datepicker"]).toBeUndefined();
+      expect(deps["flatpickr"]).toBeUndefined();
+    });
+  });
 });
