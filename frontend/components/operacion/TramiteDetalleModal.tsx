@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Coins,
   Download,
@@ -197,6 +197,8 @@ export function TramiteDetalleModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailReloadKey, setDetailReloadKey] = useState(0);
+  /** Instancia cuyo `detail` está en pantalla; sirve para no vaciarlo en refetch (HU #12726 C.4). */
+  const detailInstanceRef = useRef<string | null>(null);
 
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [attLoading, setAttLoading] = useState(false);
@@ -238,25 +240,33 @@ export function TramiteDetalleModal({
   }, [open, initialPanel]);
 
   useEffect(() => {
-    if (!open || !instanceId) return;
+    if (!open || !instanceId) {
+      if (!open) detailInstanceRef.current = null;
+      return;
+    }
     let cancelled = false;
+    const instanceChanged = detailInstanceRef.current !== instanceId;
     const load = async () => {
       setLoading(true);
       setError(null);
-      // HU #12726 (C.4) — no reutilizar el detalle de una apertura anterior mientras llega el fetch.
-      setDetail(null);
+      // HU #12726 (C.4) — al cambiar de trámite no reutilizar el detalle anterior; en refetch
+      // del mismo id conservar datos en pantalla (skeleton/labels estables) y refrescar al terminar.
+      if (instanceChanged) setDetail(null);
       try {
         // HU #12362 — el trámite de un hijo solo existe para la cabeza en la ruta consolidada.
         const data = consultaMode
           ? await tramitesClient.getNetworkInstance(instanceId)
           : await tramitesClient.getInstance(instanceId, tenantId);
-        if (!cancelled) setDetail(data ?? null);
+        if (!cancelled) {
+          setDetail(data ?? null);
+          detailInstanceRef.current = instanceId;
+        }
       } catch (e: unknown) {
         if (!cancelled) {
           setError(
             describirErrorDeSeccion(e, consultaMode, 'No se pudo cargar el trámite.').mensaje,
           );
-          setDetail(null);
+          if (instanceChanged) setDetail(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -338,6 +348,8 @@ export function TramiteDetalleModal({
   }, [open, instanceId, tenantId, panelTracking, identidadReloadKey, consultaMode]);
 
   const reintentarDetalle = useCallback(() => setDetailReloadKey((k) => k + 1), []);
+  /** Carga inicial sin datos previos — en refetch se conserva el detalle en pantalla (C.4). */
+  const detailInitialLoad = loading && !detail;
 
   const title = item ? resolveTitle(item) : 'Detalle del trámite';
   /** HU #12362 — razón social del hijo dueño del trámite, si viaja en la fila o en el detalle. */
@@ -535,7 +547,7 @@ export function TramiteDetalleModal({
       // HU #12362 — en consulta las secciones leen del detalle consolidado (actores, campos) en
       // vez de pedir por rutas propias que el servidor rechaza para un trámite de un hijo.
       detalle={detail}
-      detalleLoading={loading}
+      detalleLoading={detailInitialLoad}
       detalleError={error}
       reintentarDetalle={reintentarDetalle}
     >
@@ -692,9 +704,9 @@ export function TramiteDetalleModal({
             <div className="mt-3 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-12">
               {panelTracking === 'timeline' ? (
                 <div className="lg:col-span-12">
-                  {loading ? (
+                  {detailInitialLoad ? (
                     <SeccionCargando etiqueta="Cargando línea de tiempo" filas={3} />
-                  ) : error ? (
+                  ) : error && !detail ? (
                     <SeccionError
                       mensaje={error}
                       contexto="la línea de tiempo"
@@ -888,9 +900,9 @@ export function TramiteDetalleModal({
                           </div>
 
                           <div className="h-full min-h-0">
-                            {loading ? (
+                            {detailInitialLoad ? (
                               <SeccionCargando etiqueta="Cargando historial" filas={3} />
-                            ) : error ? (
+                            ) : error && !detail ? (
                               <SeccionError
                                 mensaje={error}
                                 contexto="el historial de auditoría"
