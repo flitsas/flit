@@ -22,6 +22,8 @@ export interface JwtPayload {
   /** HU #12351 — tenant padre cuando el usuario opera un cliente hijo. */
   parent_tenant_id?: string;
   tenant_type?: string;
+  /** HU #10616 — tipo de entidad del tenant: "COMPANY" | "TRANSIT_OFFICE". */
+  entity_type?: string;
   role_id?: string;
   exp?: number;
   [key: string]: unknown;
@@ -41,6 +43,9 @@ export const ADMIN_COMPANY_ROLE = "AdminCompany";
 
 /** Rol requerido para la consola OT (HU #10218). */
 export const OT_ADMIN_ROLE = "ot_admin";
+
+/** Valor de `entity_type` que identifica a un tenant organismo de tránsito. */
+export const TRANSIT_OFFICE_ENTITY_TYPE = "TRANSIT_OFFICE";
 
 /**
  * Decodifica el payload (segunda parte) de un JWT base64url. Devuelve `null` si
@@ -265,6 +270,28 @@ export function isOtAdmin(payload: JwtPayload | null): boolean {
     Array.isArray(payload.roles) &&
     payload.roles.some((r) => typeof r?.code === "string" && r.code.toLowerCase() === target)
   );
+}
+
+/**
+ * Indica si el tenant del payload es un organismo de tránsito (`entity_type = TRANSIT_OFFICE`).
+ */
+export function isTransitOfficeTenant(payload: JwtPayload | null): boolean {
+  return (
+    typeof payload?.entity_type === "string" &&
+    payload.entity_type.toUpperCase() === TRANSIT_OFFICE_ENTITY_TYPE
+  );
+}
+
+/**
+ * Indica si el usuario opera la superficie OT (tablero, hub, bandeja de trámites).
+ * Antes esto era `isOtAdmin` a secas y cualquier otro rol de un organismo (p. ej. "Gestor OT")
+ * caía en la experiencia del gestor de empresa, con dashboard y radicación incluidos. La señal
+ * que decide es el tipo de tenant: los roles con TargetEntityType TRANSIT_OFFICE solo pueden
+ * asignarse en tenants OT, así que todo usuario de un organismo entra aquí. `ot_admin` se
+ * conserva por compatibilidad con tokens que no traigan `entity_type`.
+ */
+export function isOtUser(payload: JwtPayload | null): boolean {
+  return isOtAdmin(payload) || isTransitOfficeTenant(payload);
 }
 
 function base64UrlDecode(value: string): string {
