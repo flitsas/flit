@@ -71,7 +71,9 @@ public sealed class IdentityVigenciaPorDocumentoResolverTests
         var ct = TestContext.Current.CancellationToken;
         var tenantA = Guid.NewGuid();
         var tenantB = Guid.NewGuid();
-        var aprobada = Aprobada(Now.AddDays(-1), Now.AddDays(29));
+        // HandleAsync usa DateTimeOffset.UtcNow (no el reloj fijo `Now` de esta clase).
+        var reloj = DateTimeOffset.UtcNow;
+        var aprobada = Aprobada(reloj.AddDays(-1), reloj.AddDays(29));
 
         _repo.ListBiometricValidationsByPersonAsync(
                 tenantA, "CC", "900123456", 0, 1, Arg.Any<CancellationToken>())
