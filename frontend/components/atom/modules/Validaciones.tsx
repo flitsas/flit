@@ -30,6 +30,10 @@ import {
 } from 'lucide-react';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ModuleTitle } from './ModuleTitle';
+import { COPY } from '@/lib/copy/copy-catalog';
+
+/** H1 canónico del módulo Identidad (HU #12699 / A17). El id SPA permanece `validaciones`. */
+export const IDENTIDAD_MODULE_TITLE = COPY.A17;
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { ValidacionesFiltrosBar } from './ValidacionesFiltrosBar';
 import {
@@ -981,7 +985,7 @@ export function Validaciones() {
       </div>
 
       <ModuleTitle
-        title="Validaciones"
+        title={IDENTIDAD_MODULE_TITLE}
         subtitle="Monitoreo, verificación biométrica y gestión de estados de identidad en tiempo real."
         right={
           <div className="flex items-center gap-2">

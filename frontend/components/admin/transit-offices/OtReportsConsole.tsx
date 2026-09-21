@@ -17,6 +17,7 @@ import { OtNowTab } from "./_reportes/OtNowTab";
 import { OtQueriesTab } from "./_reportes/OtQueriesTab";
 import { OtReportBuilder } from "./_reportes/OtReportBuilder";
 import { OtReviewersTab } from "./_reportes/OtReviewersTab";
+import { COPY } from "@/lib/copy/copy-catalog";
 
 // Reportes del organismo de tránsito.
 //
@@ -43,10 +44,10 @@ export interface OtReportsConsoleProps {
   transitOfficeId: string;
 }
 
-const TABS = [
+export const OT_REPORTES_TABS = [
   {
     id: "ahora",
-    label: "Ahora mismo",
+    label: COPY.A22,
     hint: "Qué tengo en la cola en este momento",
   },
   {
@@ -71,7 +72,7 @@ const TABS = [
   },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof OT_REPORTES_TABS)[number]["id"];
 
 /**
  * La pestaña activa vive en la dirección, no solo en memoria.
@@ -96,7 +97,7 @@ function initialTab(): TabId {
   const requested = new URLSearchParams(window.location.search).get(TAB_QUERY_PARAM);
   // Una pestaña que ya no existe —un enlace viejo, un parámetro escrito a mano— no puede dejar la
   // consola en blanco: cae en la primera.
-  return TABS.some((t) => t.id === requested) ? (requested as TabId) : "ahora";
+  return OT_REPORTES_TABS.some((t) => t.id === requested) ? (requested as TabId) : "ahora";
 }
 
 export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
@@ -149,7 +150,7 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
     <div className="flex flex-col gap-6" data-testid="ot-reports-console">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#DFE5ED] dark:border-white/10">
         <div role="tablist" aria-label="Reportes del organismo" className="flex flex-wrap gap-1">
-          {TABS.map((item) => {
+          {OT_REPORTES_TABS.map((item) => {
             const active = tab === item.id;
             return (
               <button

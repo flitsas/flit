@@ -15,6 +15,7 @@ import { UsersTable, toUserRow } from "./users/UsersTable";
 import { UserAuditHistoryDrawer } from "./users/UserAuditHistoryDrawer";
 import { ResetPasswordDialog } from "./users/ResetPasswordDialog";
 import { ModuleTitle } from "./ModuleTitle";
+import { COPY } from "@/lib/copy/copy-catalog";
 import { ICON_BUTTON_HIT_AREA, type RowAction } from "@/components/atom/RowActions";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ICT_CLIENTS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
@@ -327,7 +328,7 @@ export function Usuarios() {
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
-        title="Usuarios"
+        title={COPY.A23}
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
         action={
           // El backend exige AdminCompanyPolicy para invitar (Bug #11581). El acceso a este

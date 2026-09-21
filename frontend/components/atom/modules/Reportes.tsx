@@ -35,8 +35,8 @@ import { ConsultasTab } from "./_reportes/tabs/ConsultasTab";
 
 type TabId = "resumen" | "operacion" | "ot" | "uso" | "productividad" | "consultas";
 
-/** Pestañas + slug RBAC que las hace visibles (§3). SuperAdmin las ve todas. */
-const TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; slug: string }> = [
+/** Pestañas + slug RBAC que las hace visibles (§3). SuperAdmin las ve todas. A20/A21 N/A: no se clonan al OT. */
+export const GESTOR_REPORTES_TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; slug: string }> = [
   { id: "resumen", label: "Resumen general", slug: "reportes.resumen.read" },
   { id: "operacion", label: "Operación / Trámites", slug: "reportes.operacion.read" },
   { id: "ot", label: "Organismo de Tránsito", slug: "reportes.ot.read" },
@@ -104,7 +104,7 @@ export function Reportes() {
 
   const visibleTabs = useMemo(
     () =>
-      TAB_DEFS.filter(
+      GESTOR_REPORTES_TAB_DEFS.filter(
         (tab) =>
           isSuper ||
           permissions.includes(tab.slug) ||

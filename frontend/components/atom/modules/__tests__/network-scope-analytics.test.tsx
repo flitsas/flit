@@ -245,7 +245,7 @@ describe("HU #12364 AC1 — estadísticas de la red en la pantalla de analítica
     // Distintivo textual en los 4 KPIs y en las dos secciones de trámites.
     const badges = await screen.findAllByRole("status", { name: new RegExp(`^${ETIQUETA_DISTINTIVO_RED}:`) });
     expect(badges.length).toBeGreaterThanOrEqual(6);
-    expect(screen.getByTestId("kpi-red-Total Trámites")).toHaveTextContent(ETIQUETA_DISTINTIVO_RED);
+    expect(screen.getByTestId("kpi-red-Total trámites")).toHaveTextContent(ETIQUETA_DISTINTIVO_RED);
     // Lo que no tiene ruta de red (biometría) se rotula como propio, no como red.
     expect(screen.getByTestId("biometria-solo-propia")).toBeInTheDocument();
   });
@@ -266,7 +266,7 @@ describe("HU #12364 AC1 — estadísticas de la red en la pantalla de analítica
       expect.objectContaining({ childTenantId: HIJO }),
       expect.anything(),
     );
-    const kpi = await screen.findByTestId("kpi-red-Total Trámites");
+    const kpi = await screen.findByTestId("kpi-red-Total trámites");
     await waitFor(() => expect(kpi).toHaveTextContent("Concesionario Hijo SAS"));
   });
 
@@ -280,7 +280,7 @@ describe("HU #12364 AC1 — estadísticas de la red en la pantalla de analítica
       expect.anything(),
     );
     expect(mocks.fetchNetworkAnalyticsOverview).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("kpi-red-Total Trámites")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kpi-red-Total trámites")).not.toBeInTheDocument();
     // Pero sí ve el selector para poder cambiar de alcance.
     expect(screen.getByTestId("dashboard-network-scope-select")).toBeInTheDocument();
   });
@@ -400,7 +400,7 @@ describe("HU #12364 AC4 — un cliente sin jerarquía no percibe cambios", () =>
     expect(mocks.prefsGet).not.toHaveBeenCalled();
     expect(mocks.fetchNetworkChildren).not.toHaveBeenCalled();
     expect(screen.queryByLabelText(ETIQUETA_ALCANCE)).not.toBeInTheDocument();
-    expect(screen.queryByTestId("kpi-red-Total Trámites")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kpi-red-Total trámites")).not.toBeInTheDocument();
   });
 
   it("Reporte detallado: sin selector, consulta y exportación propias", async () => {
@@ -480,7 +480,7 @@ describe("HU #12364 AC6 — sin documentos ni anexos", () => {
   it("con la red activa ni el Dashboard ni el reporte ofrecen descargar documentos o anexos de los hijos", async () => {
     cabeza({ mode: "network", childTenantId: HIJO });
     const { unmount } = render(<Dashboard onNewTramite={() => {}} />);
-    await screen.findByTestId("kpi-red-Total Trámites");
+    await screen.findByTestId("kpi-red-Total trámites");
     expect(screen.queryByRole("button", { name: /anexo|documento|paquete|descargar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /anexo|documento|paquete|descargar/i })).not.toBeInTheDocument();
     unmount();
@@ -540,7 +540,7 @@ describe("HU #12652 — alcance de red exclusivo del AdminCompany de la cabeza",
     expect(mocks.prefsGet).not.toHaveBeenCalled();
     expect(screen.queryByTestId("dashboard-network-scope-select")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(ETIQUETA_ALCANCE)).not.toBeInTheDocument();
-    expect(screen.queryByTestId("kpi-red-Total Trámites")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kpi-red-Total trámites")).not.toBeInTheDocument();
     expect(screen.queryAllByRole("status", { name: new RegExp(`^${ETIQUETA_DISTINTIVO_RED}:`) })).toHaveLength(0);
     expect(screen.queryByText(/No tienes acceso a las métricas de la red/)).not.toBeInTheDocument();
   });

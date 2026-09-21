@@ -38,6 +38,7 @@ import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
 import { useActiveBanners } from "@/hooks/useActiveBanners";
 import { bannerAmbientGradient, useDominantColor } from "@/hooks/useDominantColor";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
+import { COPY } from "@/lib/copy/copy-catalog";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
@@ -54,6 +55,11 @@ import type {
   MonthlyTrendPoint,
 } from "@/lib/api/types";
 import type { BiometricValidationStats } from "@/lib/api/types/procedure-runtime";
+
+/** KPI de volumen del dashboard gestor (HU #12700 / E03). */
+export const DASHBOARD_KPI_TOTAL_LABEL = COPY.E03;
+/** Hero del dashboard gestor (A18 es N/A: no se unifica con el hero OT). */
+export const DASHBOARD_HERO_PREFIX = "Hola,";
 
 // ── Helpers de rango ──────────────────────────────────────────────────────────
 
@@ -174,7 +180,7 @@ type Slide = WelcomeSlide | BannerSlide;
 function buildSlides(displayName: string, welcomeBody: string, banners: ActiveBanner[]): Slide[] {
   const welcome: WelcomeSlide = {
     type: "welcome",
-    title: `Hola, ${displayName} 👋`,
+    title: `${DASHBOARD_HERO_PREFIX} ${displayName} 👋`,
     body: welcomeBody,
   };
 
@@ -648,7 +654,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           {tramitesModuleEnabled !== false && (
             <div className="grid grid-cols-3 gap-3 flex-1">
               {[
-                { label: "Total Trámites", value: totalTramites, icon: FileText, color: "#557EFF" },
+                { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, icon: FileText, color: "#557EFF" },
                 { label: "Matrículas", value: matriculas, icon: Car, color: "#00DBD5" },
                 { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00" },
                 { label: "Otros Trámites", value: otros, icon: Layers, color: "#162744" },
