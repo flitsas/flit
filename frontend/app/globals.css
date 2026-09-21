@@ -478,3 +478,19 @@
     }
   }
 }
+
+/* HU #12724 — DateRangePicker (react-day-picker) con tokens FLIT */
+.flit-date-range-picker .rdp-root {
+  --rdp-accent-color: var(--color-flit-brand, #557eff);
+  --rdp-accent-background-color: rgba(85, 126, 255, 0.14);
+  --rdp-day-height: 36px;
+  --rdp-day-width: 36px;
+  --rdp-day_button-height: 34px;
+  --rdp-day_button-width: 34px;
+}
+
+.dark .flit-date-range-picker .rdp-root {
+  --rdp-accent-color: #8fa8ff;
+  --rdp-accent-background-color: rgba(143, 168, 255, 0.18);
+  color: #fff;
+}

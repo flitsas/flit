@@ -12,7 +12,7 @@
 // hardcodeados y pasa a mostrar, después del slide fijo, los banners Activos que configura el
 // Administrador (endpoint público `GET /api/v1/public/banners/active`).
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { ActiveModulesResponse, AnalyticsOverviewResponse } from "@/lib/api/types";
@@ -524,19 +524,23 @@ describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
     expect(params.createdTo).toBeUndefined();
   });
 
-  it("los inputs de fecha arrancan vacíos", async () => {
+  it("el selector de rango arranca vacío (HU #12724)", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByLabelText(/Desde/i)).toHaveValue("");
-    expect(screen.getByLabelText(/Hasta/i)).toHaveValue("");
+    expect(
+      await screen.findByRole("button", { name: /Rango de fechas: Seleccionar rango/i }),
+    ).toBeInTheDocument();
   });
 
-  it("al poner una fecha, sí se acota: el filtro sigue disponible", async () => {
+  it("al aplicar una sola fecha, sí se acota: el filtro sigue disponible", async () => {
     const user = userEvent.setup();
     render(<Dashboard onNewTramite={noop} />);
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
 
-    await user.type(await screen.findByLabelText(/Desde/i), "2026-09-01");
+    await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Elegir rango de fechas" });
+    await user.click(within(dialog).getByTestId("day-2026-09-01"));
+    await user.click(within(dialog).getByTestId("date-range-apply"));
 
     await waitFor(() => {
       const ultima = mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0];
@@ -554,12 +558,17 @@ describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
     // Ya se está mostrando todo al abrir: no hay nada que limpiar.
     expect(limpiar).toBeDisabled();
 
-    await user.type(await screen.findByLabelText(/Desde/i), "2026-09-01");
+    await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Elegir rango de fechas" });
+    await user.click(within(dialog).getByTestId("day-2026-09-01"));
+    await user.click(within(dialog).getByTestId("date-range-apply"));
     await waitFor(() => expect(limpiar).not.toBeDisabled());
 
     await user.click(limpiar);
 
-    expect(await screen.findByLabelText(/Desde/i)).toHaveValue("");
+    expect(
+      await screen.findByRole("button", { name: /Rango de fechas: Seleccionar rango/i }),
+    ).toBeInTheDocument();
     await waitFor(() => {
       expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].from).toBeFalsy();
     });
