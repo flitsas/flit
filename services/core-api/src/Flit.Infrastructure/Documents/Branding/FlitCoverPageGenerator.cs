@@ -13,7 +13,7 @@ public sealed record FlitCoverData(
     string CompaniaRadicadora);
 
 /// <summary>
-/// <summary>Genera la portada institucional del expediente consolidado (HU #10857, punto 3) en tamaño Carta,
+/// Genera la portada institucional del expediente consolidado (HU #10857, punto 3) en tamaño Carta,
 /// según la muestra oficial (recursos dllo membrete): banda de membrete superior, logo FLIT con
 /// "Versión 2.0" centrado, líneas divisoras en gradiente que enmarcan la etiqueta "TRÁMITE:" y el
 /// código del trámite (Poppins Bold, #557EFF), y el bloque de datos del trámite centrado (etiquetas
