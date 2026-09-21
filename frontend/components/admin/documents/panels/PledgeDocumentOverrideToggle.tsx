@@ -97,12 +97,13 @@ export function PledgeDocumentOverrideToggle({ transitOfficeId }: PledgeDocument
           Por defecto el documento de prenda es obligatorio. Activa el check para que deje de
           exigirse en esa compañía.
         </p>
-        <ul className="space-y-2">
+        <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           {rows.map((row) => (
             <li key={row.tenantId} className="rounded-xl border px-3 py-2">
               <ToggleSwitch
                 id={`prenda-optional-${row.tenantId}`}
-                label={`${row.tenantName} — Prenda opcional`}
+                label={row.tenantName}
+                description="Prenda opcional"
                 checked={row.documentOptional}
                 disabled={pendingTenantId === row.tenantId}
                 onChange={(checked) => void handleToggle(row.tenantId, checked)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ban, Clock, History, MailX, Pencil, RotateCcw, ShieldOff, Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -36,7 +36,8 @@ import { UsersTable, toUserRow } from "@/components/atom/modules/users/UsersTabl
 import { isInvitationRow } from "@/lib/users/invitationRow";
 import { UserAuditHistoryDrawer } from "@/components/atom/modules/users/UserAuditHistoryDrawer";
 // HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
-import { ICON_BUTTON_HIT_AREA, type RowAction } from "@/components/atom/RowActions";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { ICON_BUTTON_HIT_AREA, RowActions, type RowAction } from "@/components/atom/RowActions";
 import { assignRole, getRoles, type TenantRole } from "@/lib/api/security";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import { formatOtDate } from "./ot-utils";
@@ -369,61 +370,12 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
       </div>
 
       {showDeleted && isSuperAdmin && (
-        // HU #10624 (AC3) — GET /api/v1/admin/ot/users?onlyDeleted=true: usuarios eliminados
-        // del tenant OT resuelto. Restaurar (1 clic de confirmación en RestoreUserDialog) deshace
-        // el soft-delete vía el endpoint genérico restoreUser() (SOLO SuperAdmin).
-        <UiStateBoundary
+        <DeletedUsersTable
           status={deletedStatus}
-          emptyMessage="No hay usuarios eliminados en este organismo de tránsito."
-          errorMessage="No se pudo cargar el listado de usuarios eliminados."
+          users={deletedUsers}
           onRetry={() => void loadDeleted()}
-        >
-          <div className="rounded-xl border overflow-hidden bg-card">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted">
-                  <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
-                    Usuario
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
-                    Eliminado el
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold" style={{ color: "#557EFF" }}>
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {deletedUsers.map((u) => (
-                  <tr
-                    key={u.id}
-                    className="transition hover:bg-blue-50/40 dark:hover:bg-white/5 border-b"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-sm">{u.fullName}</div>
-                      <div className="text-xs" style={{ color: "#557EFF" }}>
-                        {u.email}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 opacity-70">{u.deletedAt ? formatOtDate(u.deletedAt) : "—"}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        title="Restaurar usuario"
-                        aria-label={`Restaurar usuario ${u.fullName}`}
-                        onClick={() => setRestoreTarget(u)}
-                        className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50`}
-                        style={{ color: "#557EFF" }}
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </UiStateBoundary>
+          onRestore={setRestoreTarget}
+        />
       )}
 
       {!showDeleted && (
@@ -766,5 +718,75 @@ function OtField({
       </label>
       {children}
     </div>
+  );
+}
+
+/** HU #12731 — usuarios eliminados con DataTable canónico. */
+function DeletedUsersTable({
+  status,
+  users,
+  onRetry,
+  onRestore,
+}: {
+  status: UiStatus;
+  users: OtUserItem[];
+  onRetry: () => void;
+  onRestore: (user: OtUserItem) => void;
+}) {
+  const columns: DataTableColumn<OtUserItem>[] = useMemo(
+    () => [
+      {
+        key: "user",
+        header: "Usuario",
+        render: (u) => (
+          <div>
+            <div className="text-sm font-medium">{u.fullName}</div>
+            <div className="text-xs text-[var(--badge-info-fg)]">{u.email}</div>
+          </div>
+        ),
+      },
+      {
+        key: "deletedAt",
+        header: "Eliminado el",
+        render: (u) => (
+          <span className="opacity-70">{u.deletedAt ? formatOtDate(u.deletedAt) : "—"}</span>
+        ),
+      },
+      {
+        key: "actions",
+        header: "Acciones",
+        align: "right",
+        render: (u) => (
+          <RowActions
+            actions={[
+              {
+                icon: RotateCcw,
+                label: `Restaurar usuario ${u.fullName}`,
+                tone: "primary",
+                onClick: () => onRestore(u),
+              },
+            ]}
+          />
+        ),
+      },
+    ],
+    [onRestore],
+  );
+
+  return (
+    <UiStateBoundary
+      status={status}
+      emptyMessage="No hay usuarios eliminados en este organismo de tránsito."
+      errorMessage="No se pudo cargar el listado de usuarios eliminados."
+      onRetry={onRetry}
+    >
+      <DataTable
+        columns={columns}
+        rows={users}
+        getRowKey={(u) => u.id}
+        ariaLabel="Usuarios eliminados del organismo de tránsito"
+        minWidth={640}
+      />
+    </UiStateBoundary>
   );
 }

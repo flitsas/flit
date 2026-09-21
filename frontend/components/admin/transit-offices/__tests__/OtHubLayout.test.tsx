@@ -63,7 +63,7 @@ vi.mock("@/lib/api/client", () => ({
 const jwtMocks = vi.hoisted(() => ({
   decodeJwtPayload: vi.fn().mockReturnValue({}),
   isSuperAdmin: vi.fn().mockReturnValue(true),
-  isOtAdmin: vi.fn().mockReturnValue(false),
+  isOtUser: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock("@/lib/auth/jwt", () => jwtMocks);
@@ -72,8 +72,19 @@ describe("OtHubLayout — HU #10236", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     jwtMocks.isSuperAdmin.mockReturnValue(true);
-    jwtMocks.isOtAdmin.mockReturnValue(false);
+    jwtMocks.isOtUser.mockReturnValue(false);
     vi.mocked(fetchTransitOfficesOperationalStatus).mockResolvedValue(ACTIVE_STATUS);
+  });
+
+  it("HU #12731 — surface plano por defecto (sin card contenedora)", () => {
+    render(
+      <OtHubLayout transitOfficeId="ot-1" activeTab="client-procedures" moduleTitle="Test OT">
+        <p>Contenido módulo</p>
+      </OtHubLayout>,
+    );
+    const superficie = screen.getByTestId("ot-hub-superficie");
+    expect(superficie).toHaveAttribute("data-surface", "plano");
+    expect(superficie.className).not.toMatch(/rounded-2xl border bg-card/);
   });
 
   it("AC2 renderiza pestañas de módulos OT (SuperAdmin)", () => {
@@ -91,7 +102,7 @@ describe("OtHubLayout — HU #10236", () => {
 
   it("Admin OT: no muestra pestañas ni volver al listado (navegación en dock)", () => {
     jwtMocks.isSuperAdmin.mockReturnValue(false);
-    jwtMocks.isOtAdmin.mockReturnValue(true);
+    jwtMocks.isOtUser.mockReturnValue(true);
     render(
       <OtHubLayout transitOfficeId="ot-1" activeTab="client-procedures" moduleTitle="Test OT">
         <p>Contenido módulo</p>

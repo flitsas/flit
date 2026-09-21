@@ -5,12 +5,15 @@ import { Loader2, Trash2 } from "lucide-react";
 import type { CreateOtRuleRequest, OtRule, OtRuleCondition } from "@/lib/api/types-ot";
 import { OtSidePanel } from "./OtSidePanel";
 import { OT_INPUT_CLS } from "./ot-form-styles";
-import { OT_RULE_ACTIONS, OT_RULE_FIELDS, OT_RULE_OPERATORS } from "./ot-utils";
+import { OT_RULE_ACTIONS, OT_RULE_FIELDS, OT_RULE_OPERATORS, formatOtRuleAction } from "./ot-utils";
 
 export interface RuleFormPanelProps {
   open: boolean;
   onClose: () => void;
+  /** Regla existente — panel precargado en modo consulta/edición (HU #12731). */
+  rule?: OtRule | null;
   onCreate: (body: CreateOtRuleRequest) => Promise<OtRule>;
+  onUpdate?: (id: string, body: { isEnabled: boolean }) => Promise<OtRule>;
   onSaved: (rule: OtRule) => void;
 }
 
@@ -20,8 +23,23 @@ const emptyCondition = (): OtRuleCondition => ({
   value: "",
 });
 
+function conditionValueToInput(value: unknown): string {
+  if (Array.isArray(value)) return value.join(", ");
+  if (value === true) return "true";
+  if (value === false) return "false";
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
 /** Constructor visual de reglas AND/OR (HU #10223). */
-export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPanelProps) {
+export function RuleFormPanel({
+  open,
+  onClose,
+  rule,
+  onCreate,
+  onSaved,
+}: RuleFormPanelProps) {
+  const editing = Boolean(rule);
   const [name, setName] = useState("");
   const [logic, setLogic] = useState<"AND" | "OR">("AND");
   const [actionType, setActionType] = useState("bloquear");
@@ -32,16 +50,31 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
 
   useEffect(() => {
     if (!open) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de formulario al abrir panel lateral
-    setName("");
-    setLogic("AND");
-    setActionType("bloquear");
-    setQueueName("");
-    setConditions([emptyCondition()]);
+    if (rule) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de formulario al abrir panel lateral
+      setName(rule.name);
+      setLogic(rule.logic);
+      setActionType(rule.action.type);
+      setQueueName(rule.action.queue_name ?? "");
+      setConditions(
+        rule.conditions.length > 0
+          ? rule.conditions.map((c) => ({
+              ...c,
+              value: conditionValueToInput(c.value),
+            }))
+          : [emptyCondition()],
+      );
+    } else {
+      setName("");
+      setLogic("AND");
+      setActionType("bloquear");
+      setQueueName("");
+      setConditions([emptyCondition()]);
+    }
     setConditionError(null);
-  }, [open]);
+  }, [open, rule]);
 
-  const canSave = conditions.length > 0 && name.trim().length > 0;
+  const canSave = !editing && conditions.length > 0 && name.trim().length > 0;
 
   const parseValue = (raw: string, op: string): unknown => {
     if (op === "in") {
@@ -53,6 +86,10 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
   };
 
   const submit = async () => {
+    if (editing) {
+      onClose();
+      return;
+    }
     if (conditions.length === 0) {
       setConditionError("Debes agregar al menos una condición");
       return;
@@ -83,30 +120,38 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
   return (
     <OtSidePanel
       open={open}
-      title="Nueva regla"
-      ariaLabel="Nueva regla"
+      title={editing ? `Editar regla: ${rule?.name ?? ""}` : "Nueva regla"}
+      ariaLabel={editing ? `Editar regla ${rule?.name ?? ""}` : "Nueva regla"}
       onClose={onClose}
       disabled={submitting}
       footer={
         <button
           type="button"
-          disabled={submitting || !canSave}
+          disabled={submitting || (!editing && !canSave)}
           className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-50"
           style={{ background: "#557EFF" }}
           onClick={() => void submit()}
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-          Guardar regla
+          {editing ? "Cerrar" : "Guardar regla"}
         </button>
       }
     >
       <div className="space-y-4">
+        {editing ? (
+          <p className="text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+            Lógica y acción de la regla (solo lectura). Para cambiarlas, crea una regla nueva y
+            desactiva esta con el toggle de la tabla.
+          </p>
+        ) : null}
+
         <label className="block text-xs font-semibold text-foreground">
           Nombre
           <input
             className={`mt-1 ${OT_INPUT_CLS}`}
             value={name}
             onChange={(e) => setName(e.target.value)}
+            readOnly={editing}
           />
         </label>
 
@@ -123,6 +168,7 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
                 aria-label={`Campo condición ${index + 1}`}
                 className={OT_INPUT_CLS}
                 value={cond.field}
+                disabled={editing}
                 onChange={(e) =>
                   setConditions((prev) =>
                     prev.map((c, i) => (i === index ? { ...c, field: e.target.value } : c)),
@@ -139,6 +185,7 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
                 aria-label={`Operador condición ${index + 1}`}
                 className={OT_INPUT_CLS}
                 value={cond.op}
+                disabled={editing}
                 onChange={(e) =>
                   setConditions((prev) =>
                     prev.map((c, i) => (i === index ? { ...c, op: e.target.value } : c)),
@@ -156,13 +203,14 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
                 className={OT_INPUT_CLS}
                 placeholder={cond.op === "in" ? "matricula, renovacion" : "valor"}
                 value={String(cond.value ?? "")}
+                readOnly={editing}
                 onChange={(e) =>
                   setConditions((prev) =>
                     prev.map((c, i) => (i === index ? { ...c, value: e.target.value } : c)),
                   )
                 }
               />
-              {conditions.length > 1 && (
+              {!editing && conditions.length > 1 && (
                 <button
                   type="button"
                   className="flex items-center gap-1 text-[10px] font-semibold"
@@ -174,14 +222,16 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
               )}
             </div>
           ))}
-          <button
-            type="button"
-            className="flex items-center gap-1 text-xs font-semibold"
-            style={{ color: "#557EFF" }}
-            onClick={() => setConditions((prev) => [...prev, emptyCondition()])}
-          >
-            Agregar condición
-          </button>
+          {!editing && (
+            <button
+              type="button"
+              className="flex items-center gap-1 text-xs font-semibold"
+              style={{ color: "#557EFF" }}
+              onClick={() => setConditions((prev) => [...prev, emptyCondition()])}
+            >
+              Agregar condición
+            </button>
+          )}
           {conditionError && (
             <p className="text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
               {conditionError}
@@ -194,6 +244,7 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
           <select
             className={`mt-1 ${OT_INPUT_CLS}`}
             value={logic}
+            disabled={editing}
             onChange={(e) => setLogic(e.target.value as "AND" | "OR")}
           >
             <option value="AND">AND (todas)</option>
@@ -203,20 +254,27 @@ export function RuleFormPanel({ open, onClose, onCreate, onSaved }: RuleFormPane
 
         <label className="block text-xs font-semibold text-foreground">
           Acción
-          <select
-            className={`mt-1 ${OT_INPUT_CLS}`}
-            value={actionType}
-            onChange={(e) => setActionType(e.target.value)}
-          >
-            {OT_RULE_ACTIONS.map((a) => (
-              <option key={a.value} value={a.value}>
-                {a.label}
-              </option>
-            ))}
-          </select>
+          {editing ? (
+            <p className="mt-1 rounded-xl border px-3 py-2 text-xs">
+              {formatOtRuleAction(rule!.action.type)}
+              {rule!.action.queue_name ? ` (${rule!.action.queue_name})` : ""}
+            </p>
+          ) : (
+            <select
+              className={`mt-1 ${OT_INPUT_CLS}`}
+              value={actionType}
+              onChange={(e) => setActionType(e.target.value)}
+            >
+              {OT_RULE_ACTIONS.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          )}
         </label>
 
-        {actionType === "cola_especial" && (
+        {!editing && actionType === "cola_especial" && (
           <label className="block text-xs font-semibold text-foreground">
             Nombre de cola
             <input

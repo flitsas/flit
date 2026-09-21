@@ -34,7 +34,7 @@ describe("PledgeDocumentOverrideToggle — prenda opcional por compañía", () =
     const user = userEvent.setup();
     render(<PledgeDocumentOverrideToggle transitOfficeId={OT} />);
 
-    const toggle = await screen.findByRole("switch", { name: /gestora uno — prenda opcional/i });
+    const toggle = await screen.findByRole("switch", { name: /gestora uno/i });
     expect(toggle).not.toBeChecked();
 
     await user.click(toggle);

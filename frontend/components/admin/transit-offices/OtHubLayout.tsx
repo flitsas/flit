@@ -43,7 +43,7 @@ export function OtHubLayout({
   transitOfficeId,
   activeTab,
   moduleTitle,
-  surface = "panel",
+  surface = "plano",
   children,
 }: OtHubLayoutProps) {
   const router = useRouter();
