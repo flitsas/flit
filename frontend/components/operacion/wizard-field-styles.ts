@@ -79,6 +79,20 @@ export const WIZARD_BTN =
 export const WIZARD_BTN_SOLID = '#557EFF';
 
 /**
+ * Botón de acción primario dentro de tarjetas del wizard (validación, documentos, etc.): azul
+ * plano `#557EFF`, sin degradado. El degradado (`WIZARD_CTA_GRADIENT`) queda reservado al pie del
+ * asistente (Continuar / Radicar / Finalizar) — HU #12729 D.3.
+ */
+export const WIZARD_BTN_BRAND =
+  'rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 ' +
+  'disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
+
+/** Variante outline del botón de marca para cancelar / reenviar secundario. */
+export const WIZARD_BTN_BRAND_OUTLINE =
+  'flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ' +
+  'disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
+
+/**
  * Degradado del CTA primario del asistente: token FLIT `gradient.primary` (azul→cian), el mismo
  * del CTA general del producto. Antes era azul→`#2563EB` (blue-600 de Tailwind, no un token FLIT):
  * B7 (guardián de diseño) lo corrige al degradado de marca.

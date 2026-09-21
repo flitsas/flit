@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import MatriculaResumen, { ResumenCard } from './MatriculaResumen';
-import ExpedienteTimeline from './ExpedienteTimeline';
+import { ExpedienteCronologicoAccordion } from './ExpedienteTimeline';
 import ExpedienteVisor from './ExpedienteVisor';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -816,7 +816,7 @@ export function FirmaFurStep({
 
       {/* Borrador: la cronología vive en el resumen. Otros estados: modal de detalle / badge listado. */}
       {(detail?.status ?? 'borrador') === 'borrador' ? (
-        <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
+        <ExpedienteCronologicoAccordion statusHistory={detail?.statusHistory ?? []} />
       ) : null}
 
       {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
