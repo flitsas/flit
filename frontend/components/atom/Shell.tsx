@@ -11,6 +11,7 @@ import {
   isAdminCompany,
   isGroupParent,
   isOtAdmin,
+  isOtUser,
   isSuperAdmin,
   TOKEN_STORAGE_KEY,
 } from "@/lib/auth/jwt";
@@ -154,7 +155,9 @@ function useCurrentUser() {
         ? "Admin de Compañía"
         : roleCodes.includes("ot_admin")
           ? "Admin OT"
-          : roleCodes[0] || "Usuario";
+          : isOtUser(payload)
+            ? roleCodes[0] || "Usuario OT"
+            : roleCodes[0] || "Usuario";
     return {
       displayName:
         (payload.display_name as string | undefined) ??
@@ -167,6 +170,8 @@ function useCurrentUser() {
       isAdminCompany: isAdminCompany(payload),
       isGroupParent: isGroupParent(payload),
       isOtAdmin: isOtAdmin(payload),
+      // Cualquier rol de un tenant OT (no solo ot_admin) opera la superficie del organismo.
+      isOtUser: isOtUser(payload),
       tenantId: (payload.tenant_id as string) ?? null,
       canReadLogQx: canReadLogQx(payload),
       canReadIctLogs: canReadIctLogs(payload),
@@ -232,7 +237,7 @@ export function Shell({
   const visibleDock = (visibleModuleCodes
     ? DOCK.filter((it) => it.id === "ayuda" || visibleModuleCodes.includes(it.id))
     : DOCK
-  ).filter((it) => !(currentUser?.isOtAdmin && OT_ADMIN_SPA_OMIT.has(it.id)));
+  ).filter((it) => !(currentUser?.isOtUser && OT_ADMIN_SPA_OMIT.has(it.id)));
 
   // Una sola lista con TODAS las entradas del dock (módulos + botones admin/empresa
   // según rol). El FAB de inicio va siempre en el centro y las entradas se reparten
@@ -429,9 +434,11 @@ export function Shell({
     });
   }
 
-  // Admin OT: pestañas del hub trasladadas al dock (Administración = Reglas/Docs/Requisitos;
+  // Usuario OT: pestañas del hub trasladadas al dock (Administración = Reglas/Docs/Requisitos;
   // Trámites, Preasignación, Usuarios y Reportes como ítems del dock). Sin Compañías/RBAC.
-  if (currentUser?.isOtAdmin) {
+  // Todo rol de un tenant OT entra aquí; "Usuarios" queda solo para ot_admin porque su API
+  // (UserAdminPolicy) sigue siendo de administradores.
+  if (currentUser?.isOtUser) {
     entries.push(
       {
         key: OT_ADM_DOCK.tramites,
@@ -468,13 +475,17 @@ export function Shell({
         active: isOtHubSegmentActive(pathname, "plate-ranges"),
         onClick: () => goOtHub("plate-ranges"),
       },
-      {
-        key: OT_ADM_DOCK.usuarios,
-        label: COPY.B21Usuarios,
-        icon: Users,
-        active: isOtHubSegmentActive(pathname, "usuarios"),
-        onClick: () => goOtHub("usuarios"),
-      },
+      ...(currentUser.isOtAdmin
+        ? [
+            {
+              key: OT_ADM_DOCK.usuarios,
+              label: COPY.B21Usuarios,
+              icon: Users,
+              active: isOtHubSegmentActive(pathname, "usuarios"),
+              onClick: () => goOtHub("usuarios"),
+            },
+          ]
+        : []),
       {
         key: OT_ADM_DOCK.reportes,
         label: COPY.B21Reportes,

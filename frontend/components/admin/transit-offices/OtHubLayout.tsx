@@ -8,7 +8,7 @@ import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { fetchTransitOfficesOperationalStatus } from "@/lib/api/admin-transit-office-tenants";
 import { getToken } from "@/lib/api/client";
-import { decodeJwtPayload, isOtAdmin, isSuperAdmin } from "@/lib/auth/jwt";
+import { decodeJwtPayload, isOtUser, isSuperAdmin } from "@/lib/auth/jwt";
 import { OtTabBar } from "@/components/admin/transit-offices/OtTabBar";
 import {
   OT_HUB_TABS,
@@ -59,7 +59,7 @@ export function OtHubLayout({
   useEffect(() => {
     const payload = decodeJwtPayload(getToken());
     const superAdmin = isSuperAdmin(payload);
-    const otAdmin = isOtAdmin(payload);
+    const otAdmin = isOtUser(payload);
     // Admin OT: sin pestañas (viven en el dock). SuperAdmin conserva la barra.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowTabBar(superAdmin);

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   decodeJwtPayload,
-  isOtAdmin as checkOtAdmin,
+  isOtUser as checkOtAdmin,
   TOKEN_STORAGE_KEY,
 } from "@/lib/auth/jwt";
 import { getToken } from "@/lib/api/client";
