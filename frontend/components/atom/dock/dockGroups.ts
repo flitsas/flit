@@ -11,6 +11,7 @@ import {
   Tag,
 } from "lucide-react";
 import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
+import { COPY } from "@/lib/copy/copy-catalog";
 
 /**
  * Agrupadores del dock — orden estable de las píldoras.
@@ -38,16 +39,27 @@ export const DOCK_GROUP_ORDER = [
 export type DockGroupId = (typeof DOCK_GROUP_ORDER)[number];
 
 export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
-  tramites: "Trámites",
-  identidad: "Identidad",
-  reportes: "Reportes",
-  usuarios: "Usuarios",
+  tramites: COPY.B21Tramites,
+  identidad: COPY.A17,
+  reportes: COPY.B21Reportes,
+  usuarios: COPY.B21Usuarios,
   preasignacion: "Preasignación",
   administracion: "Administración",
   administradores: "Administradores",
   integraciones: "Integraciones",
-  ayuda: "Ayuda",
+  ayuda: COPY.B21Ayuda,
 };
+
+/** Labels de las píldoras SPA (HU #12699 / A17 + B21). El id de Identidad sigue siendo `validaciones`. */
+export const SPA_DOCK_ITEM_LABEL = {
+  tramites: COPY.B21Tramites,
+  reportes: COPY.B21Reportes,
+  "reportes-detallados": "Reportes Detallados",
+  validaciones: COPY.A17,
+  "historial-placa": "Historial por placa",
+  usuarios: COPY.B21Usuarios,
+  ayuda: COPY.B21Ayuda,
+} as const;
 
 /**
  * Firma mínima de los iconos del dock (lucide-react). `aria-hidden` admite también la forma
