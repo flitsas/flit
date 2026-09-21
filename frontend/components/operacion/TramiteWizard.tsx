@@ -2856,7 +2856,7 @@ function TramiteObservacionesField({
         </p>
       )}
       {(preview.manual || preview.auto.length > 0) && (
-        <div className="rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
+        <div className="min-w-0 rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
           <p className="text-xs font-bold uppercase opacity-55">Así quedarán en el FUR</p>
           <div className="mt-1 space-y-0.5 text-xs leading-relaxed">
             {preview.manual && (
@@ -2864,7 +2864,7 @@ function TramiteObservacionesField({
             )}
             {/* Atenuadas: son las que el gestor no escribió y no puede editar aquí. */}
             {preview.auto.map((segment) => (
-              <p key={segment} className="opacity-70">
+              <p key={segment} className="break-words whitespace-pre-line opacity-70">
                 {segment}
               </p>
             ))}
@@ -4716,7 +4716,23 @@ function StepBody({
     // puede llegar desde un borrador abierto antes del cambio, y encuentra sus datos donde ahora
     // viven en vez de toparse con un paso que ya no existe.
     case 'prenda':
-    case 'documentos':
+    case 'documentos': {
+      // HU #12727 (D.1) — Observaciones comparte fila con Prenda cuando esta sección existe.
+      const muestraSeccionPrenda =
+        caps.pideValorComercial ||
+        ((caps.permitePrendaComplementaria || esTipoDePrenda(tipoCodigo)) &&
+          !esCancelacionDeMatricula(tipoCodigo));
+      const observacionesAccordion = (
+        <WizardAccordion
+          title="Observaciones del trámite"
+          defaultOpen
+          level="h3"
+          className="h-full min-w-0"
+        >
+          <TramiteObservacionesField instanceId={instanceId} hideCardWrapper />
+        </WizardAccordion>
+      );
+
       return (
         <div className="space-y-3">
           {caps.pideValorComercial ? (
@@ -4743,10 +4759,11 @@ function StepBody({
                 const esPuerta = caps.prendaEsPuerta;
                 return (
                   <WizardAccordionRow defaultOpen>
-                    <div className="grid grid-cols-1 gap-3 items-stretch">
+                    <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
                       <WizardAccordion
                         title="Asignación de Prenda / Limitación a la Propiedad"
                         level="h3"
+                        className="h-full min-w-0"
                       >
                         <PrendaForm
                           ref={prendaFormRef}
@@ -4762,6 +4779,7 @@ function StepBody({
                           hideHeader
                         />
                       </WizardAccordion>
+                      {observacionesAccordion}
                     </div>
                   </WizardAccordionRow>
                 );
@@ -4819,38 +4837,44 @@ function StepBody({
                   const documentoObligatorio =
                     prendaDocumentRequired || esPrendaDeAccionUnica(tipoCodigo);
                   return (
-                    <WizardAccordion
-                      title="Asignación de Prenda / Limitación a la Propiedad"
-                      defaultOpen
-                      level="h3"
-                    >
-                      <PrendaForm
-                        ref={prendaFormRef}
-                        instanceId={instanceId}
-                        onSaved={onRefresh}
-                        embeddedInWizard
-                        modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
-                        decisions={
-                          decisionesDelTipo ??
-                          (esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined)
-                        }
-                        documentRequired={documentoObligatorio}
-                        exigeEntidadLevantamiento={esPrendaDeAccionUnica(tipoCodigo)}
-                        // ADR-0055/HU #12130 (AC1/AC2) — solo PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA
-                        // admiten declarar la acción complementaria en la misma radicación.
-                        permiteAccionComplementaria={permiteAccionComplementaria(tipoCodigo)}
-                        onDocumentGateChange={onPrendaDocumentGateChange}
-                        runtHasGravamen={gravamen?.status === 'warn'}
-                        runtGravamenMessage={gravamen?.message}
-                        // HU #12131 (AC1/AC2) — el check ya corrió (existe en la respuesta) y no
-                        // encontró gravamen: `runtAvisoGravamenVariant` solo devuelve variante para
-                        // los tipos de UNA sola decisión de prenda (Inscribir/Levantar), que es
-                        // justo el alcance de esta HU.
-                        runtGravamenChecked={gravamen !== undefined}
-                        runtAvisoVariant={runtAvisoGravamenVariant(tipoCodigo)}
-                        hideHeader
-                      />
-                    </WizardAccordion>
+                    <WizardAccordionRow defaultOpen>
+                      <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
+                        <WizardAccordion
+                          title="Asignación de Prenda / Limitación a la Propiedad"
+                          defaultOpen
+                          level="h3"
+                          className="h-full min-w-0"
+                        >
+                          <PrendaForm
+                            ref={prendaFormRef}
+                            instanceId={instanceId}
+                            onSaved={onRefresh}
+                            embeddedInWizard
+                            modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
+                            decisions={
+                              decisionesDelTipo ??
+                              (esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined)
+                            }
+                            documentRequired={documentoObligatorio}
+                            exigeEntidadLevantamiento={esPrendaDeAccionUnica(tipoCodigo)}
+                            // ADR-0055/HU #12130 (AC1/AC2) — solo PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA
+                            // admiten declarar la acción complementaria en la misma radicación.
+                            permiteAccionComplementaria={permiteAccionComplementaria(tipoCodigo)}
+                            onDocumentGateChange={onPrendaDocumentGateChange}
+                            runtHasGravamen={gravamen?.status === 'warn'}
+                            runtGravamenMessage={gravamen?.message}
+                            // HU #12131 (AC1/AC2) — el check ya corrió (existe en la respuesta) y no
+                            // encontró gravamen: `runtAvisoGravamenVariant` solo devuelve variante para
+                            // los tipos de UNA sola decisión de prenda (Inscribir/Levantar), que es
+                            // justo el alcance de esta HU.
+                            runtGravamenChecked={gravamen !== undefined}
+                            runtAvisoVariant={runtAvisoGravamenVariant(tipoCodigo)}
+                            hideHeader
+                          />
+                        </WizardAccordion>
+                        {observacionesAccordion}
+                      </div>
+                    </WizardAccordionRow>
                   );
                 })()}
             </>
@@ -4953,11 +4977,10 @@ function StepBody({
             })()
           )}
 
-          <WizardAccordion title="Observaciones del trámite" level="h3">
-            <TramiteObservacionesField instanceId={instanceId} hideCardWrapper />
-          </WizardAccordion>
+          {!muestraSeccionPrenda && observacionesAccordion}
         </div>
       );
+    }
 
     // ADR-0050 — las partes las declara el TIPO. Con dos partes se unifican en un solo formulario
     // (2 tarjetas) y la key estable `actores` evita remontar al pasar del índice server
