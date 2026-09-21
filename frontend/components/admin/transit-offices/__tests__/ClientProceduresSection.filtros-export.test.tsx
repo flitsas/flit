@@ -270,13 +270,13 @@ describe("Bandeja OT — la barra de filtros del listado de trámites (HU #12218
 });
 
 describe("Bandeja OT — orden por subcampo (HU #12219)", () => {
-  it("la cabecera de «Empresa / Gestor» ofrece las dos y ordena por la elegida", async () => {
+  it("la cabecera de «Gestor» ofrece las dos y ordena por la elegida", async () => {
     const user = userEvent.setup();
     renderSection();
     await screen.findByText("RAD-0001");
 
-    await user.click(screen.getByRole("button", { name: /Ordenar Empresa \/ Gestor/ }));
-    const menu = screen.getByRole("menu", { name: /Ordenar por, en Empresa \/ Gestor/ });
+    await user.click(screen.getByRole("button", { name: /Ordenar Gestor/ }));
+    const menu = screen.getByRole("menu", { name: /Ordenar por, en Gestor/ });
     expect(within(menu).getByText("Empresa cliente")).toBeInTheDocument();
     expect(within(menu).getByText("Gestor")).toBeInTheDocument();
 

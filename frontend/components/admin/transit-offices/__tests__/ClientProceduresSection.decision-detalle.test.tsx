@@ -160,8 +160,8 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     renderSection();
 
     const dialog = await abrirDetalle(user, "RAD-2026-101");
-    expect(within(dialog).getByRole("button", { name: "Rechazar trámite" })).toBeEnabled();
-    expect(within(dialog).getByRole("button", { name: "Aprobar trámite" })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: "Rechazar" })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: "Aprobar" })).toBeEnabled();
   });
 
   it("AC2 — rechazar abre el diálogo de motivos ya existente, por encima del detalle", async () => {
@@ -169,7 +169,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     renderSection();
 
     const dialog = await abrirDetalle(user, "RAD-2026-101");
-    await user.click(within(dialog).getByRole("button", { name: "Rechazar trámite" }));
+    await user.click(within(dialog).getByRole("button", { name: "Rechazar" }));
 
     const motivos = await screen.findByRole("dialog", { name: "Rechazar trámite" });
     // Se apila por encima del detalle (z-[1100]); si no, el clic parecería no hacer nada.
@@ -183,7 +183,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     renderSection();
 
     const dialog = await abrirDetalle(user, "RAD-2026-101");
-    await user.click(within(dialog).getByRole("button", { name: "Aprobar trámite" }));
+    await user.click(within(dialog).getByRole("button", { name: "Aprobar" }));
 
     const aprobacion = await screen.findByRole("dialog", { name: "Confirmar aprobación" });
     expect(aprobacion.className).toContain("z-[1200]");
@@ -216,9 +216,9 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     const dialog = await abrirDetalle(user, "RAD-2026-101");
     expect(within(dialog).getByText(/gestione SOAT e impuestos/i)).toBeInTheDocument();
 
-    const aprobar = within(dialog).getByRole("button", { name: "Aprobar trámite" });
+    const aprobar = within(dialog).getByRole("button", { name: "Aprobar" });
     expect(aprobar).toBeDisabled();
-    expect(within(dialog).getByRole("button", { name: "Rechazar trámite" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Rechazar" })).toBeDisabled();
     // El botón deshabilitado apunta a la franja que explica el porqué.
     const describedBy = aprobar.getAttribute("aria-describedby");
     expect(describedBy).toBeTruthy();
@@ -235,8 +235,8 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     const dialog = await abrirDetalle(user, "RAD-2026-101");
     expect(within(dialog).getByText(/Pendiente asignar placa por el OT/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/solo se aprueba una vez entregado/i)).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Aprobar trámite" })).toBeDisabled();
-    expect(within(dialog).getByRole("button", { name: "Rechazar trámite" })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: "Aprobar" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Rechazar" })).toBeEnabled();
   });
 
   it("AC5 — un trámite ya resuelto dice que no admite decisión", async () => {
@@ -248,7 +248,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     expect(
       within(dialog).getByText(/el organismo solo decide sobre los que tiene entregados/i),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Aprobar trámite" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Aprobar" })).toBeDisabled();
   });
 
   it("AC6 — el SuperAdmin supervisa sin pie de decisión", async () => {
@@ -257,8 +257,8 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     renderSection();
 
     const dialog = await abrirDetalle(user, "RAD-2026-101");
-    expect(within(dialog).queryByRole("button", { name: "Aprobar trámite" })).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole("button", { name: "Rechazar trámite" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Aprobar" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Rechazar" })).not.toBeInTheDocument();
   });
 
   it("AC6 — en modo Quipux de solo lectura tampoco hay pie", async () => {
@@ -274,7 +274,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
 
     await waitFor(() => expect(fetchOtProfile).toHaveBeenCalled());
     const dialog = await abrirDetalle(user, "RAD-2026-101");
-    expect(within(dialog).queryByRole("button", { name: "Aprobar trámite" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Aprobar" })).not.toBeInTheDocument();
   });
 
   it("escribir el motivo de rechazo NO recarga el detalle de detrás", async () => {
@@ -291,7 +291,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     });
     expect(acordeon).toHaveAttribute("aria-expanded", "true");
 
-    await user.click(within(dialog).getByRole("button", { name: "Rechazar trámite" }));
+    await user.click(within(dialog).getByRole("button", { name: "Rechazar" }));
     const motivos = await screen.findByRole("dialog", { name: "Rechazar trámite" });
     await user.type(within(motivos).getByRole("textbox"), "Faltan improntas legibles");
 
@@ -359,7 +359,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
 
     const dialog = await abrirDetalle(user, "RAD-2026-101");
     await waitFor(() => expect(fetchOtClientProcedure).toHaveBeenCalledTimes(1));
-    const actores = within(dialog).getByRole("button", { name: "Actores del Trámite" });
+    const actores = within(dialog).getByRole("button", { name: "Actores del trámite" });
     await user.click(actores);
     expect(actores).toHaveAttribute("aria-expanded", "true");
 
@@ -453,7 +453,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
     expect(within(dialog).getByText("Sin preasignar")).toBeInTheDocument();
     expect(within(dialog).getByText("Dígito preferido: 3")).toBeInTheDocument();
     // Sigue sin poder decidirse, pero desde aquí se desbloquea.
-    expect(within(dialog).getByRole("button", { name: "Aprobar trámite" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Aprobar" })).toBeDisabled();
 
     await user.click(within(dialog).getByRole("button", { name: "Asignar placa" }));
     expect(await screen.findByRole("dialog", { name: "Asignar placa" })).toBeInTheDocument();

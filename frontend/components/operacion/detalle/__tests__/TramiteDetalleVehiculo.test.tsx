@@ -71,9 +71,9 @@ describe('TramiteDetalleVehiculo — solo pinta las claves de fieldValues que ex
     expect(screen.queryByText('Alto')).not.toBeInTheDocument();
     expect(screen.queryByText('Largo')).not.toBeInTheDocument();
     expect(screen.queryByText('Estado')).not.toBeInTheDocument();
-    expect(screen.queryByText('N. Motor')).not.toBeInTheDocument();
-    expect(screen.queryByText('N. Chasis')).not.toBeInTheDocument();
-    expect(screen.queryByText('N. Serie')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nº Motor')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nº Chasis')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nº Serie')).not.toBeInTheDocument();
     expect(screen.queryByText('Empresa vinculadora')).not.toBeInTheDocument();
     expect(screen.queryByText('—')).not.toBeInTheDocument();
   });

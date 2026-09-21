@@ -781,8 +781,8 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
       'Vehículo',
       'Vendedor',
       'Comprador',
-      'Trámite / Estado',
-      'Secretaría',
+      'Trámite',
+      'Organismo de tránsito',
       'Acciones',
     ]) {
       expect(within(header).getByText(col)).toBeInTheDocument();
@@ -794,7 +794,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     // disponibles en el selector para moverlo a su propia columna.
     expect(within(header).queryByText('Paso')).not.toBeInTheDocument();
     expect(within(header).queryByText('Estado')).not.toBeInTheDocument();
-    expect(within(header).queryByText('Fecha de creación')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Fecha radicación')).not.toBeInTheDocument();
     // La acreditación de cada parte va dentro de su columna de actor: no hay columna "Firmas".
     expect(within(header).queryByText('Firmas')).not.toBeInTheDocument();
     // Fuera del default por decisión de producto: el gestor las enciende desde "Columnas".
@@ -1659,7 +1659,7 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     await agregarCondicion('placa', 'Placa', 'contiene', 'ABC');
     await agregarCondicion('comprador', 'Comprador', 'es_alguno', 'García');
 
-    // Rango propio sobre "Fecha de creación": vive en el popover "Periodo", un disparador distinto.
+    // Rango propio sobre "Fecha radicación": vive en el popover "Periodo", un disparador distinto.
     // Abrirlo cierra "Filtros" (clic fuera), pero el borrador sigue vivo — todo el estado vive en
     // TramitesTable, no en el popover.
     await abrirPopoverPeriodo();
@@ -1804,13 +1804,13 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     // La fecha de creación va apilada bajo el radicado en el default: para ordenar por ella hay
     // que sacarla a su propia columna, que es donde vive la cabecera ordenable.
     await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
-    await userEvent.click(screen.getByRole('checkbox', { name: /^Fecha de creación$/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Fecha radicación$/i }));
 
-    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Fecha de creación$/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Fecha radicación$/ }));
     await userEvent.click(
-      within(screen.getByRole('menu', { name: /Ordenar por, en Fecha de creación/ })).getByRole(
+      within(screen.getByRole('menu', { name: /Ordenar por, en Fecha radicación/ })).getByRole(
         'menuitemradio',
-        { name: 'Fecha de creación: Más antigua' },
+        { name: 'Fecha radicación: Más antigua' },
       ),
     );
     await vi.waitFor(() => {

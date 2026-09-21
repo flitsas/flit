@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
+import { COPY } from '@/lib/copy/copy-catalog';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
@@ -1272,12 +1273,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                   onClick={() => void handleExportExcel()}
                   disabled={exporting || loading}
                   aria-label="Exportar el listado de trámites a Excel"
-                  title="Exportar a Excel"
+                  title={COPY.A13}
                   className={controlCls(false)}
                   data-testid="tramites-export-xlsx"
                 >
                   <Download className={`h-3.5 w-3.5 ${exporting ? 'animate-pulse' : ''}`} aria-hidden="true" />
-                  {exporting ? 'Exportando…' : 'Exportar'}
+                  {exporting ? 'Exportando…' : COPY.A13}
                 </button>
               }
               bulkUploadAction={
@@ -2350,7 +2351,7 @@ function TramiteRow({
       ? [
           {
             key: 'consolidado',
-            label: 'Ver consolidado',
+            label: COPY.A12,
             icon: FileStack,
             onSelect: () => onVerConsolidado(item),
           },

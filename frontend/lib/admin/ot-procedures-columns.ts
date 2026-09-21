@@ -1,32 +1,32 @@
 // Columnas de la tabla de trámites del OT (ClientProceduresTable).
 
+import { COPY } from "@/lib/copy/copy-catalog";
+
 export interface OtProceduresColumnDef {
   key: string;
   label: string;
   /** Si true, la cabecera es clickable para ordenar (sortBy = key). */
   sortable?: boolean;
   /**
-   * Por qué ordena la columna, cuando NO coincide con su rótulo. Solo lo necesita "Empresa /
-   * Gestor": muestra dos datos pero el API únicamente sabe ordenar por el gestor, y anunciar
-   * "Ordenar por Empresa / Gestor" prometería un orden que no existe.
+   * Por qué ordena la columna, cuando NO coincide con su rótulo. Solo lo necesita la celda
+   * empresa+gestor (layout RN-07, A06): muestra dos datos pero el API únicamente sabe ordenar
+   * por el gestor, y anunciar un orden por empresa+persona prometería un orden que no existe.
    */
   sortLabel?: string;
 }
 
 export const OT_PROCEDURES_COLUMNS: readonly OtProceduresColumnDef[] = [
-  { key: "radicado", label: "Radicado", sortable: true },
-  { key: "vin", label: "VIN", sortable: true },
-  { key: "placa", label: "Placa", sortable: true },
-  { key: "vendedor", label: "Propietario / vendedor", sortable: true },
-  { key: "comprador", label: "Comprador", sortable: true },
+  { key: "radicado", label: COPY.B15, sortable: true },
+  { key: "vin", label: COPY.A02Vin, sortable: true },
+  { key: "placa", label: COPY.A02Placa, sortable: true },
+  { key: "vendedor", label: COPY.A01, sortable: true },
+  { key: "comprador", label: COPY.B17, sortable: true },
   // Ordenable desde la HU #12217: el backend ya resuelve el ORDER BY por nombre del tipo.
-  { key: "tipoTramite", label: "Tipo trámite", sortable: true },
-  // Empresa y gestor en UNA celda: los dos identifican a quien radicó el trámite, y separados
-  // obligaban a barrer la fila de lado a lado para saber de dónde venía. Ordena por GESTOR, que es
-  // lo único de los dos que el API sabe ordenar; el control de orden lo dice en su nombre.
-  { key: "empresaGestor", label: "Empresa / Gestor", sortable: true, sortLabel: "gestor" },
-  { key: "estado", label: "Estado", sortable: true },
-  { key: "fechaRadicacion", label: "Fecha radicación", sortable: true },
+  { key: "tipoTramite", label: COPY.A03, sortable: true },
+  // Empresa y gestor en UNA celda (layout RN-07). El vocablo de la persona es A06 Gestor.
+  { key: "empresaGestor", label: COPY.A06, sortable: true, sortLabel: COPY.A06 },
+  { key: "estado", label: COPY.B18, sortable: true },
+  { key: "fechaRadicacion", label: COPY.A04, sortable: true },
 ] as const;
 
 /** Todas las columnas visibles por defecto. */
@@ -46,7 +46,7 @@ export interface OtProceduresSortOption {
 /**
  * Por cuáles de sus datos se puede ordenar una columna (HU #12219).
  *
- * <p>«Empresa / Gestor» apila DOS datos en una celda y un clic en la cabecera no puede decir por
+ * <p>La celda empresa+gestor (A06) apila DOS datos y un clic en la cabecera no puede decir por
  * cuál ordena: hasta ahora ordenaba siempre por el gestor, así que la cabecera prometía un orden
  * por empresa que no existía. Devolviendo la lista, la cabecera ofrece un desplegable cuando hay
  * más de un dato y conserva el clic simple cuando hay uno solo.</p>
@@ -56,7 +56,7 @@ export function otProceduresSortOptions(columnKey: string): OtProceduresSortOpti
     case "empresaGestor":
       return [
         { id: "empresa", label: "Empresa cliente", sort: "empresa", kind: "texto" },
-        { id: "gestor", label: "Gestor", sort: "gestor", kind: "texto" },
+        { id: "gestor", label: COPY.A06, sort: "gestor", kind: "texto" },
       ];
     default:
       return [];

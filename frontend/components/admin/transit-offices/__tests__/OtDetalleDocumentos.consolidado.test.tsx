@@ -57,7 +57,7 @@ describe("OtDetalleDocumentos — consolidado del expediente", () => {
     renderTab();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole("button", { name: /Ver consolidado del expediente/i }));
+    await user.click(await screen.findByRole("button", { name: /Ver consolidado/i }));
     // Sin forzar: el backend decide por la marca de vigencia.
     await waitFor(() => expect(generarOtConsolidadoMaestro).toHaveBeenCalledWith("proc-1", undefined, false));
 
@@ -74,7 +74,7 @@ describe("OtDetalleDocumentos — consolidado del expediente", () => {
     expect(
       screen.queryByRole("button", { name: /Actualizar el consolidado del expediente/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Ver consolidado del expediente/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ver consolidado/i })).toBeInTheDocument();
   });
 
   it("HU #11932 — la acción se llama «Actualizar consolidado», sin rastro de «Regenerar»", async () => {
