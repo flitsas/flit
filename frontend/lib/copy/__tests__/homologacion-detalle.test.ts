@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { OT_DETALLE_SECCIONES } from "@/components/admin/transit-offices/ClientProcedureDetailModal";
 import { COPY, isNaCopyKey } from "../copy-catalog";
 
