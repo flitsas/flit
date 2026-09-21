@@ -8,7 +8,9 @@ import {
   isAdminCompany,
   isGroupParent,
   isOtAdmin,
+  isOtUser,
   isSuperAdmin,
+  isTransitOfficeTenant,
   type JwtPayload,
 } from "../jwt";
 
@@ -59,6 +61,34 @@ describe("isSuperAdmin / isAdminCompany / isOtAdmin — claim roles como array d
     expect(isAdminCompany({})).toBe(false);
     expect(isOtAdmin({})).toBe(false);
     expect(isSuperAdmin(null)).toBe(false);
+  });
+});
+
+describe("isOtUser — cualquier rol de un tenant organismo de tránsito", () => {
+  it("un rol distinto de ot_admin en un tenant TRANSIT_OFFICE es usuario OT", () => {
+    // Bug: "Gestor OT" caía en la experiencia del gestor (dashboard de empresa, radicación).
+    const payload: JwtPayload = {
+      roles: [{ id: "r1", code: "gestor_ot" }],
+      entity_type: "TRANSIT_OFFICE",
+    };
+    expect(isOtAdmin(payload)).toBe(false);
+    expect(isTransitOfficeTenant(payload)).toBe(true);
+    expect(isOtUser(payload)).toBe(true);
+  });
+
+  it("ot_admin sigue siendo usuario OT aunque el token no traiga entity_type", () => {
+    expect(isOtUser({ role: "ot_admin" })).toBe(true);
+  });
+
+  it("entity_type se compara sin distinguir mayúsculas", () => {
+    expect(isOtUser({ role: "gestor_ot", entity_type: "transit_office" })).toBe(true);
+  });
+
+  it("un rol de empresa (COMPANY) o un payload vacío no es usuario OT", () => {
+    expect(isOtUser({ role: "Radicador", entity_type: "COMPANY" })).toBe(false);
+    expect(isOtUser({ role: "AdminCompany" })).toBe(false);
+    expect(isOtUser({})).toBe(false);
+    expect(isOtUser(null)).toBe(false);
   });
 });
 

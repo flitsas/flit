@@ -31,13 +31,14 @@ import {
   fetchNetworkMonthlyTrend,
 } from "@/lib/api/analytics";
 import { fetchAllCompanies } from "@/lib/api/admin-companies";
-import { tramitesClient } from "@/lib/api/tramites-client";
+import { ALL_TENANTS, tramitesClient } from "@/lib/api/tramites-client";
 import { getToken } from "@/lib/api/client";
-import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { canReadIdentityDashboard, decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
 import { useActiveBanners } from "@/hooks/useActiveBanners";
 import { bannerAmbientGradient, useDominantColor } from "@/hooks/useDominantColor";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
+import { COPY } from "@/lib/copy/copy-catalog";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
@@ -54,6 +55,11 @@ import type {
   MonthlyTrendPoint,
 } from "@/lib/api/types";
 import type { BiometricValidationStats } from "@/lib/api/types/procedure-runtime";
+
+/** KPI de volumen del dashboard gestor (HU #12700 / E03). */
+export const DASHBOARD_KPI_TOTAL_LABEL = COPY.E03;
+/** Hero del dashboard gestor (A18 es N/A: no se unifica con el hero OT). */
+export const DASHBOARD_HERO_PREFIX = "Hola,";
 
 // ── Helpers de rango ──────────────────────────────────────────────────────────
 
@@ -174,7 +180,7 @@ type Slide = WelcomeSlide | BannerSlide;
 function buildSlides(displayName: string, welcomeBody: string, banners: ActiveBanner[]): Slide[] {
   const welcome: WelcomeSlide = {
     type: "welcome",
-    title: `Hola, ${displayName} 👋`,
+    title: `${DASHBOARD_HERO_PREFIX} ${displayName} 👋`,
     body: welcomeBody,
   };
 
@@ -196,6 +202,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   // Identidad del usuario
   const [displayName, setDisplayName] = useState("—");
   const [isSuper, setIsSuper] = useState(false);
+  // HU #12711 — la API de identidad exige el permiso del módulo (o dashboard.read) y rechaza a los
+  // organismos: sin él, la tarjeta de validaciones no se pide ni se pinta (antes quedaba en error).
+  const [canSeeBiometrics, setCanSeeBiometrics] = useState(false);
 
   // Selector de compañía (solo SuperAdmin)
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
@@ -265,6 +274,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDisplayName(name);
     setIsSuper(isSuperAdmin(payload));
+    setCanSeeBiometrics(canReadIdentityDashboard(payload));
   }, []);
 
   // Cargar catálogo COMPLETO de compañías para el selector SuperAdmin (paginado internamente:
@@ -340,13 +350,11 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
     const controller = new AbortController();
 
     async function loadBiometrics() {
-      // El endpoint /biometric-validations NO tiene vista global (a diferencia de /analytics):
-      // exige un tenant concreto vía header. Un SuperAdmin en "Todas las compañías" debe ver un
-      // aviso, no datos silenciosamente equivocados (el tenant del propio JWT del SuperAdmin).
-      if (isSuper && !tenantId) {
-        setBiometricStatus("empty");
-        return;
-      }
+      if (!canSeeBiometrics) return;
+      // HU #12706 (AC4) — el listado plano ya tiene vista global para el SuperAdmin: en «Todas las
+      // compañías» se pide explícitamente sin compañía (ALL_TENANTS), no con el tenant del propio JWT
+      // del SuperAdmin, que daría datos silenciosamente equivocados.
+      const biometricTenant = isSuper && !tenantId ? ALL_TENANTS : tenantId || undefined;
       setBiometricStatus("loading");
 
       if (!isValidOptionalRange(range)) {
@@ -363,8 +371,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
 
       try {
         const [statsRes, expiringRes] = await Promise.all([
-          tramitesClient.listTenantBiometricValidations({ createdFrom, createdTo, pageSize: 10 }, tenantId || undefined),
-          tramitesClient.listTenantBiometricValidations({ vigenciaEstado: "por_vencer", pageSize: 10 }, tenantId || undefined),
+          tramitesClient.listTenantBiometricValidations({ createdFrom, createdTo, pageSize: 10 }, biometricTenant),
+          tramitesClient.listTenantBiometricValidations({ vigenciaEstado: "por_vencer", pageSize: 10 }, biometricTenant),
         ]);
         if (controller.signal.aborted) return;
         setBiometricStats(statsRes.stats);
@@ -379,7 +387,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
 
     void loadBiometrics();
     return () => controller.abort();
-  }, [range, tenantId, isSuper, reloadKey]);
+  }, [range, tenantId, isSuper, reloadKey, canSeeBiometrics]);
 
   // Cargar flags de módulos activos (Trámites/Comparendos/Resoluciones), independiente del
   // rango de fechas — no depende de `range` (AC5: un fallo aquí no debe tumbar ni bloquear
@@ -646,7 +654,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           {tramitesModuleEnabled !== false && (
             <div className="grid grid-cols-3 gap-3 flex-1">
               {[
-                { label: "Total Trámites", value: totalTramites, icon: FileText, color: "#557EFF" },
+                { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, icon: FileText, color: "#557EFF" },
                 { label: "Matrículas", value: matriculas, icon: Car, color: "#00DBD5" },
                 { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00" },
                 { label: "Otros Trámites", value: otros, icon: Layers, color: "#162744" },
@@ -751,7 +759,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
 
       {/* Fila inferior: Distribución general + Validaciones Biométricas (cada una con su propio estado) + gráfica mensual (chartStatus) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className={`md:col-span-2 grid grid-cols-1 gap-3 ${canSeeBiometrics ? "md:grid-cols-2" : ""}`}>
           {/* Distribución general de trámites — solo visible si el módulo Trámites está
               habilitado (AC1), mismo default `true` que el bloque de KPIs. */}
           {tramitesModuleEnabled !== false && (
@@ -800,6 +808,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             </UiStateBoundary>
           )}
 
+          {canSeeBiometrics && (
           <UiStateBoundary
             status={biometricStatus}
             errorMessage={biometricErrorMessage}
@@ -846,6 +855,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               )}
             </section>
           </UiStateBoundary>
+          )}
         </div>
 
         {/* Gráfico mensual por categoría — tendencia de 6 meses, independiente del rango

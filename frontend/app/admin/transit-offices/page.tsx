@@ -12,12 +12,12 @@ import {
 } from "@/lib/api/admin-transit-office-tenants";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { getToken } from "@/lib/api/client";
-import { decodeJwtPayload, isOtAdmin } from "@/lib/auth/jwt";
+import { decodeJwtPayload, isOtUser } from "@/lib/auth/jwt";
 import { otHubModulePath } from "@/components/admin/transit-offices/ot-nav";
 import { ApiError, ApiValidationError } from "@/lib/api/types";
 
 // Consola OT — listado (HU #10236) + activación one-shot sin modal (HU #11224).
-// ot_admin salta a su hub; SuperAdmin activa desde la fila del catálogo.
+// Usuario de un tenant OT salta a su hub; SuperAdmin activa desde la fila del catálogo.
 export default function AdminTransitOfficesPage() {
   return (
     <ToastProvider>
@@ -38,7 +38,7 @@ function AdminTransitOfficesPageInner() {
   useEffect(() => {
     const payload = decodeJwtPayload(getToken());
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRole(payload && isOtAdmin(payload) ? "ot_admin" : "other");
+    setRole(payload && isOtUser(payload) ? "ot_admin" : "other");
   }, []);
 
   useEffect(() => {

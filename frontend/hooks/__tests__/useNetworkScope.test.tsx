@@ -222,4 +222,24 @@ describe('HU #12652 — el alcance de red exige rol AdminCompany en la cabeza', 
     expect(result.current.scope).toEqual({ mode: 'own' });
     expect(result.current.networkActive).toBe(false);
   });
+
+  it('HU #12709 (AC5) — con la clave de Identidad lee y guarda identidad.scope, no la de Trámites', async () => {
+    vi.mocked(usePermissions).mockReturnValue(permisos({ isGroupParent: true }));
+    vi.mocked(uiPreferencesClient.get).mockResolvedValue({
+      scope: 'identidad.scope',
+      value: { mode: 'network' },
+    });
+    vi.mocked(uiPreferencesClient.put).mockResolvedValue({ scope: 'identidad.scope', value: { mode: 'own' } });
+    vi.mocked(fetchNetworkChildren).mockResolvedValue([{ id: HIJO_A, nombre: 'Alfa SAS' }]);
+
+    const { result } = renderHook(() => useNetworkScope('identidad.scope'));
+
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(uiPreferencesClient.get).toHaveBeenCalledWith('identidad.scope');
+    expect(result.current.networkActive).toBe(true);
+
+    result.current.setScope({ mode: 'own' });
+    await waitFor(() => expect(uiPreferencesClient.put).toHaveBeenCalledWith('identidad.scope', { mode: 'own' }));
+    expect(uiPreferencesClient.get).not.toHaveBeenCalledWith('tramites.scope');
+  });
 });

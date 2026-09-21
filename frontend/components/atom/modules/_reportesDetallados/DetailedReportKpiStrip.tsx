@@ -3,6 +3,7 @@
 import type { DetailedReportSummary } from "@/lib/api/detailed-report";
 import { KpiCard } from "../_reportes/KpiCard";
 import { formatNumber } from "../_reportes/format";
+import { COPY } from "@/lib/copy/copy-catalog";
 
 interface DetailedReportKpiStripProps {
   summary?: DetailedReportSummary | null;
@@ -17,7 +18,7 @@ export function DetailedReportKpiStrip({ summary }: DetailedReportKpiStripProps)
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
       <KpiCard
-        label="Total trámites"
+        label={COPY.E03}
         value={formatNumber(total)}
         tooltip="Trámites que cumplen los filtros activos."
         testId="detailed-kpi-total"

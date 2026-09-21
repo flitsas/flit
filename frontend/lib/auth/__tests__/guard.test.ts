@@ -74,6 +74,22 @@ describe("evaluateAdminAccess (AC6)", () => {
     expect(decision.allowed).toBe(true);
   });
 
+  it("permite a un rol no-ot_admin de un tenant OT en /admin/transit-offices", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "gestor_ot", entity_type: "TRANSIT_OFFICE" }),
+      "/admin/transit-offices/abc/client-procedures",
+    );
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("deniega a un rol de empresa (COMPANY) en /admin/transit-offices", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "gestor_ot", entity_type: "COMPANY" }),
+      "/admin/transit-offices/abc/client-procedures",
+    );
+    expect(decision.allowed).toBe(false);
+  });
+
   it("deniega ot_admin fuera de /admin/transit-offices", () => {
     const decision = evaluateAdminAccess(
       makeToken({ sub: "u1", role: "ot_admin" }),
@@ -144,6 +160,12 @@ describe("getUserRole (refactor adminOT)", () => {
 
   it("devuelve 'ot_admin' para un token ot_admin", () => {
     expect(getUserRole(makeToken({ sub: "u1", role: "ot_admin" }))).toBe("ot_admin");
+  });
+
+  it("devuelve 'ot_admin' para cualquier rol de un tenant TRANSIT_OFFICE", () => {
+    expect(
+      getUserRole(makeToken({ sub: "u1", role: "gestor_ot", entity_type: "TRANSIT_OFFICE" })),
+    ).toBe("ot_admin");
   });
 
   it("devuelve 'user' para un rol desconocido o sin token", () => {

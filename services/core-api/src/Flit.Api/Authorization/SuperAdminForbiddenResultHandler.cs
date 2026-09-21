@@ -64,6 +64,11 @@ public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareR
 
     private static string ResolveForbiddenMessage(AuthorizationPolicy policy)
     {
+        if (policy.Requirements.OfType<OtModuleRequirement>().Any())
+        {
+            return AdminAuthorization.OtModuleForbiddenMessage;
+        }
+
         var roles = policy.Requirements
             .OfType<RolesAuthorizationRequirement>()
             .SelectMany(r => r.AllowedRoles)

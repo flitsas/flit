@@ -65,6 +65,12 @@ import {
 import { defaultRange, lastDaysRange } from "@/components/admin/transit-offices/_reportes/filters";
 import { formatHours } from "@/components/admin/transit-offices/_reportes/report-columns";
 
+/** Hero del dashboard OT (A18 es N/A: no se unifica con «Hola, {nombre}»). */
+export const OT_DASHBOARD_HERO_TITLE = "Tu cola de trabajo";
+/** KPIs de métrica OT (A19 es N/A: no se clonan ni se unifican con COPY.E03). */
+export const OT_KPI_ESPERAN_MI_DECISION = "Esperan mi decisión";
+export const OT_KPI_ENTREGADOS_HOY = "Entregados hoy";
+
 /**
  * Ventana de la mediana de decisión. Fija y declarada en la propia tarjeta: el usuario no la eligió,
  * así que no puede deducirla. Coincide con el rango que se manda al endpoint (`defaultRange`).
@@ -264,7 +270,7 @@ function mensajesDelOrganismo(
   const fijo: MensajeSlide = {
     kind: "mensaje",
     id: "bienvenida",
-    title: "Tu cola de trabajo",
+    title: OT_DASHBOARD_HERO_TITLE,
     body: `${cola}${medianaTexto} Los datos son del día calendario de Bogotá.`,
   };
 
@@ -764,12 +770,12 @@ function PanelOperativoKpis({
   return (
     <div className="grid grid-cols-2 gap-3">
       <Kpi
-        label="Esperan mi decisión"
+        label={OT_KPI_ESPERAN_MI_DECISION}
         value={cola?.porRevisar}
         cargando={cargando}
         color="#557EFF"
         icon={Inbox}
-        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.porRevisar, "Esperan mi decisión")}
+        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.porRevisar, OT_KPI_ESPERAN_MI_DECISION)}
       />
       <Kpi
         label="Pendientes en total"
@@ -781,12 +787,12 @@ function PanelOperativoKpis({
         onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.pendientes, "Pendientes en total")}
       />
       <Kpi
-        label="Entregados hoy"
+        label={OT_KPI_ENTREGADOS_HOY}
         value={movimiento?.entregadosHoy}
         cargando={cargando}
         color="#8CC63F"
         icon={CheckCircle2}
-        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entregadosHoy, "Entregados hoy")}
+        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entregadosHoy, OT_KPI_ENTREGADOS_HOY)}
       />
       <Kpi
         label="Tiempo mediano de decisión"

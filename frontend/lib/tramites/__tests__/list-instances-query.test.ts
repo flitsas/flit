@@ -81,7 +81,7 @@ describe('tramitesSortOptions — HU #12108', () => {
     // aserción se quedó en `texto` al mergear aquel PR y llevaba roja desde entonces.
     expect(tramitesSortOptions('radicado', DEFAULT_TRAMITES_VISIBLE_COLUMNS)).toEqual([
       { id: 'radicado', label: 'Radicado', sort: 'radicado', kind: 'numero' },
-      { id: 'fechaCreacion', label: 'Fecha de creación', sort: 'createdAt', kind: 'fecha' },
+      { id: 'fechaCreacion', label: 'Fecha radicación', sort: 'createdAt', kind: 'fecha' },
       {
         id: 'fechaActualizacion',
         label: 'Fecha de actualización',
@@ -94,7 +94,7 @@ describe('tramitesSortOptions — HU #12108', () => {
       'placa',
       'vin',
     ]);
-    // "Trámite / Estado" apila el tipo y el estado.
+    // "Trámite" apila el tipo y el estado.
     expect(tramitesSortOptions('tramite', DEFAULT_TRAMITES_VISIBLE_COLUMNS).map((o) => o.sort)).toEqual([
       'tipo_tramite',
       'estado',
