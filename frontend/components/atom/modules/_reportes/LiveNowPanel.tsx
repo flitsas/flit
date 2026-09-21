@@ -16,6 +16,7 @@ import {
 } from "./useLiveOverview";
 
 import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { COPY } from "@/lib/copy/copy-catalog";
 export interface LiveNowPanelProps {
 
   tenantId?: string;
@@ -36,7 +37,7 @@ export function LiveNowPanel({ tenantId, stuckDays, skip, onDrillDown }: LiveNow
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="live-now-title" className="text-sm font-bold flex items-center gap-2">
           <Radio className="h-4 w-4 animate-pulse" style={{ color: "#00DBD5" }} aria-hidden="true" />
-          Ahora mismo
+          {COPY.A22}
         </h2>
         {!skip && (
           <div className="flex items-center gap-2">
