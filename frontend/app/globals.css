@@ -171,6 +171,11 @@
   --nav-duracion: 180ms;
   --nav-ease: cubic-bezier(0.2, 0, 0, 1);
   --alto-navegacion: 0px;
+
+  /* Dashboard hero (HU #12725 B.1) — alto compartido entre banner y columna derecha
+   * (fila filtros + KPIs 2×2). Filtros: label 14px + gap 4px + campo 40px = 58px;
+   * gap columna 12px; KPIs: 2× ~88px + gap 12px ≈ 188px → 260px redondeado. */
+  --dashboard-hero-h: 260px;
 }
 
 .dark {

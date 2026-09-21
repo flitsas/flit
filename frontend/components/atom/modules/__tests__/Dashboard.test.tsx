@@ -11,6 +11,8 @@
 // HU #12242 — el carrusel de bienvenida del gestor deja de anunciar mensajes de relleno
 // hardcodeados y pasa a mostrar, después del slide fijo, los banners Activos que configura el
 // Administrador (endpoint público `GET /api/v1/public/banners/active`).
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -127,11 +129,11 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(screen.queryByText("Tu compañía no tiene módulos adicionales activados.")).not.toBeInTheDocument();
   });
 
-  it("BUG12588: mapea Otros Trámites y capitaliza los estados en la Distribución General (vocabulario ADR-0022)", async () => {
+  it("BUG12588 / HU #12725 D3: «Otros» ya no es KPI aparte (absorbido en Total) y capitaliza estados en Distribución General", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
     await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalled());
-    expect(await screen.findByText("Otros Trámites")).toBeInTheDocument();
+    expect(screen.queryByText("Otros Trámites")).not.toBeInTheDocument();
     expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
     // Labels de negocio capitalizados (estadoLabel), no los códigos crudos que persiste la BD.
     expect(await screen.findByText("Aprobado")).toBeInTheDocument();
@@ -233,7 +235,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
     expect(mocks.listTenantBiometricValidations).not.toHaveBeenCalled();
     expect(screen.queryByText("Validaciones Biométricas")).not.toBeInTheDocument();
@@ -250,7 +252,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
     expect(mocks.listTenantBiometricValidations).not.toHaveBeenCalled();
   });
@@ -550,21 +552,21 @@ describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
     expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].to).toBeFalsy();
   });
 
-  it("«Todo el periodo» devuelve a la vista sin acotar y queda deshabilitado ahí", async () => {
+  it("Limpiar en el picker devuelve a la vista sin acotar (HU #12724 / #12725)", async () => {
     const user = userEvent.setup();
     render(<Dashboard onNewTramite={noop} />);
 
-    const limpiar = await screen.findByRole("button", { name: /Todo el periodo/i });
-    // Ya se está mostrando todo al abrir: no hay nada que limpiar.
-    expect(limpiar).toBeDisabled();
-
     await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
-    const dialog = await screen.findByRole("dialog", { name: "Elegir rango de fechas" });
+    let dialog = await screen.findByRole("dialog", { name: "Elegir rango de fechas" });
     await user.click(within(dialog).getByTestId("day-2026-09-01"));
     await user.click(within(dialog).getByTestId("date-range-apply"));
-    await waitFor(() => expect(limpiar).not.toBeDisabled());
+    await waitFor(() => {
+      expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].from).toBe("2026-09-01");
+    });
 
-    await user.click(limpiar);
+    await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
+    dialog = await screen.findByRole("dialog", { name: "Elegir rango de fechas" });
+    await user.click(within(dialog).getByTestId("date-range-clear"));
 
     expect(
       await screen.findByRole("button", { name: /Rango de fechas: Seleccionar rango/i }),
@@ -594,7 +596,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
     mocks.getActiveBanners.mockResolvedValue([]);
   });
 
-  it.each(["Total trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
+  it.each(["Total trámites", "Matrículas", "Traspasos", "Completados"])(
     "«%s» se renderiza completo, sin recortar",
     async (label) => {
       render(<Dashboard onNewTramite={noop} />);
@@ -622,5 +624,75 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
     const cifra = await screen.findByText("7");
     expect(cifra).toHaveClass("tabular-nums");
     expect(cifra).not.toHaveClass("truncate");
+  });
+});
+
+// ── HU #12725 — banner alto estándar, filtros en fila, KPIs 2×2 (B.1 / D3) ───
+
+describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getToken.mockReturnValue("token");
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
+    mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
+    mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
+    mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
+    mocks.getActiveBanners.mockResolvedValue([]);
+  });
+
+  it("AC1 — banner y columna derecha comparten min-height del token --dashboard-hero-h", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const banner = await screen.findByTestId("dashboard-hero-banner");
+    const column = screen.getByTestId("dashboard-hero-column");
+    expect(banner.className).toContain("min-h-[var(--dashboard-hero-h)]");
+    expect(column.className).toContain("min-h-[var(--dashboard-hero-h)]");
+    expect(banner.style.minHeight).toBe("");
+  });
+
+  it("AC2 — SuperAdmin ve DateRangePicker y CompanySelector en la misma fila de filtros", async () => {
+    mocks.isSuperAdmin.mockReturnValue(true);
+    mocks.fetchAllCompanies.mockResolvedValue([
+      { id: "c1", razonSocial: "Acme SA", nit: "900" },
+    ]);
+
+    render(<Dashboard onNewTramite={noop} />);
+
+    const filterRow = await screen.findByTestId("dashboard-filter-row");
+    expect(within(filterRow).getByTestId("date-range-picker")).toBeInTheDocument();
+    expect(within(filterRow).getByRole("combobox", { name: /Compañía/i })).toBeInTheDocument();
+    expect(filterRow.className).toMatch(/grid-cols-2/);
+  });
+
+  it("AC3 — KPIs en grilla 2×2 (Total, Matrículas, Traspasos, Completados); sin «Otros Trámites»", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const grid = await screen.findByTestId("dashboard-kpi-grid");
+    expect(grid.className).toContain("grid-cols-2");
+    expect(within(grid).getByText("Total trámites")).toBeInTheDocument();
+    expect(within(grid).getByText("Matrículas")).toBeInTheDocument();
+    expect(within(grid).getByText("Traspasos")).toBeInTheDocument();
+    expect(within(grid).getByText("Completados")).toBeInTheDocument();
+    expect(within(grid).queryByText("Otros Trámites")).not.toBeInTheDocument();
+    // Total incluye todas las categorías (5+2+0 = 7 en FULL_OVERVIEW).
+    expect(within(grid).getByText("7")).toBeInTheDocument();
+  });
+
+  it("AC4 — el slide de bienvenida recorta título y cuerpo con line-clamp", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const banner = await screen.findByTestId("dashboard-hero-banner");
+    const title = within(banner).getByRole("heading", { name: /Hola,/i });
+    expect(title).toHaveClass("line-clamp-2");
+    const body = within(banner).getByText(/Tienes 7 trámites|Tus procesos y validaciones/i);
+    expect(body).toHaveClass("line-clamp-3");
+  });
+
+  it("AC5 — el token --dashboard-hero-h está definido en globals.css (:root)", () => {
+    const css = readFileSync(resolve(__dirname, "../../../../app/globals.css"), "utf8");
+    expect(css).toMatch(/--dashboard-hero-h:\s*260px/);
   });
 });
