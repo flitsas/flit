@@ -32,7 +32,7 @@ import {
   canReadIctLogs,
   canReadLogQx,
   decodeJwtPayload,
-  isOtAdmin,
+  isOtUser,
   isSuperAdmin,
 } from "@/lib/auth/jwt";
 
@@ -49,7 +49,7 @@ function HomeContent() {
   } = useAccessibleModules(authed);
   // Claims JWT: lectura perezosa (no reactiva) — el token no cambia en la sesión SPA.
   const [isSuperAdminUser] = useState<boolean>(() => isSuperAdmin(decodeJwtPayload(getToken())));
-  const [isOtAdminUser] = useState<boolean>(() => isOtAdmin(decodeJwtPayload(getToken())));
+  const [isOtAdminUser] = useState<boolean>(() => isOtUser(decodeJwtPayload(getToken())));
   const [canLogQx] = useState<boolean>(() => canReadLogQx(decodeJwtPayload(getToken())));
   const [canIctLogs] = useState<boolean>(() => canReadIctLogs(decodeJwtPayload(getToken())));
 
@@ -160,7 +160,7 @@ function HomeContent() {
       {/* Hold / loading RBAC: no montar módulo pedido (sin flash). */}
       {/* El inicio se bifurca por rol (HU #11940): el tablero del gestor mide producción de una
           empresa y consulta endpoints acotados al tenant de la empresa cliente, donde el organismo
-          no tiene ni una fila. El Admin OT ve su propia cola. */}
+          no tiene ni una fila. Cualquier usuario de un organismo (isOtUser) ve su propia cola. */}
       {moduleReady && module === "dashboard" && isOtAdminUser && <OtDashboard />}
       {moduleReady && module === "dashboard" && !isOtAdminUser && (
         <Dashboard onNewTramite={() => handleNav("tramites")} />

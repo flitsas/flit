@@ -39,9 +39,16 @@ public static class AdminAuthorization
 
     /// <summary>
     /// Policy del módulo OT: catálogo <c>/admin/transit-offices</c> y API
-    /// <c>/api/v1/admin/ot/*</c>. SuperAdmin y ot_admin (HU #10218 / #10236).
+    /// <c>/api/v1/admin/ot/*</c>. SuperAdmin, ot_admin o cualquier usuario de un tenant
+    /// organismo de tránsito (HU #10218 / #10236; ver <see cref="OtModuleRequirement"/>).
     /// </summary>
     public const string OtModulePolicy = "OtModule";
+
+    /// <summary>Claim del JWT con el tipo de entidad del tenant (HU #10616).</summary>
+    public const string EntityTypeClaimType = "entity_type";
+
+    /// <summary>Valor de <see cref="EntityTypeClaimType"/> para un organismo de tránsito.</summary>
+    public const string TransitOfficeEntityType = "TRANSIT_OFFICE";
 
     /// <summary>Valor del claim de rol para administrador OT.</summary>
     public const string OtAdminRole = "ot_admin";
@@ -49,9 +56,9 @@ public static class AdminAuthorization
     /// <summary>Mensaje de error 403 cuando falta el rol ot_admin.</summary>
     public const string OtAdminForbiddenMessage = "Acceso restringido: se requiere rol ot_admin";
 
-    /// <summary>Mensaje de error 403 para el módulo OT (SuperAdmin u ot_admin).</summary>
+    /// <summary>Mensaje de error 403 para el módulo OT (SuperAdmin, ot_admin o tenant OT).</summary>
     public const string OtModuleForbiddenMessage =
-        "Acceso restringido: se requiere rol SuperAdmin u ot_admin";
+        "Acceso restringido: se requiere rol SuperAdmin, ot_admin o pertenecer a un organismo de tránsito";
 
     /// <summary>
     /// Policy de administración de usuarios del PROPIO alcance: SuperAdmin, AdminCompany

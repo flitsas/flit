@@ -114,6 +114,9 @@ builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHand
 // Handler para la policy AdminCompany (roles de empresa + SuperAdmin bypass).
 builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHandler>();
 
+// Handler para la policy OtModule (SuperAdmin, ot_admin o tenant organismo de tránsito).
+builder.Services.AddSingleton<IAuthorizationHandler, OtModuleAuthorizationHandler>();
+
 // HU #12345 — cabeza de grupo (AdminCompany + is_group_parent en BD).
 builder.Services.AddScoped<IAuthorizationHandler, GroupHeadCompanyAuthorizationHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, MarcaBlancaHeadCompanyAuthorizationHandler>();

@@ -6,7 +6,7 @@ import {
   canReadGeneracionDocumental,
   decodeJwtPayload,
   isAdminCompany,
-  isOtAdmin,
+  isOtUser,
   isSuperAdmin,
 } from "./jwt";
 
@@ -30,7 +30,8 @@ export interface AdminAccessDecision {
  * Reglas:
  * - Sin token, token malformado o token expirado → no renderizar, redirigir a /403.
  * - SuperAdmin → permitido en todo /admin/*.
- * - ot_admin → permitido solo en /admin/transit-offices/* (HU #10218).
+ * - Usuario de un tenant OT (ot_admin o entity_type TRANSIT_OFFICE) → permitido solo en
+ *   /admin/transit-offices/* (HU #10218).
  * - AdminCompany → permitido en /admin/companies/* (HU #11228; la página redirige a su tenant).
  * - Cualquier rol con `generacion-documental.read` → permitido en /admin/generacion-documental/* (Feature #12201).
  * - Cualquier rol con `runt_confirmation.settings.manage` o `runt_confirmation.history.read` →
@@ -55,7 +56,7 @@ export function evaluateAdminAccess(
   if (
     pathname?.startsWith("/admin/transit-offices") &&
     payload &&
-    isOtAdmin(payload)
+    isOtUser(payload)
   ) {
     return { allowed: true };
   }
@@ -127,7 +128,7 @@ export function getUserRole(token: string | null | undefined): UserRole {
   const payload = decodeJwtPayload(token);
   if (payload && isSuperAdmin(payload)) return "superadmin";
   if (payload && isAdminCompany(payload)) return "admincompany";
-  if (payload && isOtAdmin(payload)) return "ot_admin";
+  if (payload && isOtUser(payload)) return "ot_admin";
   return "user";
 }
 
