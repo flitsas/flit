@@ -80,7 +80,7 @@ describe('TramiteDetalleModal', () => {
     expect(dialog).toHaveTextContent('RAD-001');
     expect(dialog).toHaveTextContent('ABC123');
     expect(within(dialog).getByRole('button', { name: /Trazabilidad de Identidad/i })).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: /Línea de Tiempo del Trámite/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Línea de Tiempo del Trámite' })).toBeInTheDocument();
   });
 
   it('toggle línea de tiempo reemplaza el body del grid', async () => {
@@ -88,9 +88,33 @@ describe('TramiteDetalleModal', () => {
     render(
       <TramiteDetalleModal open instanceId="inst-1" item={ITEM} onClose={() => undefined} />,
     );
-    await user.click(screen.getByRole('button', { name: /Línea de Tiempo del Trámite/i }));
+    await user.click(screen.getByRole('button', { name: 'Línea de Tiempo del Trámite' }));
     expect(await screen.findByText('Línea de tiempo del trámite')).toBeInTheDocument();
     expect(screen.queryByLabelText('Datos del vehículo')).not.toBeInTheDocument();
+  });
+
+  it('HU #12726 (C.2) — initialPanel=timeline abre directo en la línea de tiempo', async () => {
+    render(
+      <TramiteDetalleModal
+        open
+        instanceId="inst-1"
+        item={ITEM}
+        initialPanel="timeline"
+        onClose={() => undefined}
+      />,
+    );
+    expect(await screen.findByText('Línea de tiempo del trámite')).toBeInTheDocument();
+  });
+
+  it('HU #12726 (C.2) — el chip del header alterna la línea de tiempo', async () => {
+    const user = userEvent.setup();
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={ITEM} onClose={() => undefined} />,
+    );
+    await user.click(
+      screen.getByRole('button', { name: /Estado: Entregado\. Ver línea de tiempo del trámite/i }),
+    );
+    expect(await screen.findByText('Línea de tiempo del trámite')).toBeInTheDocument();
   });
 
   it('toggle identidad muestra firma del baúl en nodos', async () => {
@@ -129,7 +153,7 @@ describe('TramiteDetalleModal', () => {
     render(
       <TramiteDetalleModal open instanceId="inst-1" item={ITEM} onClose={() => undefined} />,
     );
-    await user.click(screen.getByRole('button', { name: /Línea de Tiempo del Trámite/i }));
+    await user.click(screen.getByRole('button', { name: 'Línea de Tiempo del Trámite' }));
     await user.click(await screen.findByText('Reasignación de gestor'));
     expect(screen.getByText('De Carlos Gómez a Diana Ruiz')).toBeInTheDocument();
   });
@@ -166,7 +190,7 @@ describe('TramiteDetalleModal', () => {
     render(
       <TramiteDetalleModal open instanceId="inst-1" item={ITEM} onClose={() => undefined} />,
     );
-    await user.click(screen.getByRole('button', { name: /Línea de Tiempo del Trámite/i }));
+    await user.click(screen.getByRole('button', { name: 'Línea de Tiempo del Trámite' }));
     expect(await screen.findByText('Línea de tiempo del trámite')).toBeInTheDocument();
     const tablist = screen.getByRole('tablist', { name: /Pasos del trámite/i });
     await user.click(within(tablist).getByRole('tab', { name: /Trámite y vehículo/i }));
@@ -425,7 +449,7 @@ describe('TramiteDetalleModal — sub-estado de revocatoria (HU #12575)', () => 
       <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
     );
 
-    await user.click(screen.getByRole('button', { name: /Línea de Tiempo del Trámite/i }));
+    await user.click(screen.getByRole('button', { name: 'Línea de Tiempo del Trámite' }));
     expect(await screen.findByText('Solicitud de revocatoria · Intento 1')).toBeInTheDocument();
     // El hito de estado "Aprobado" del historial sigue pintándose: el evento se AGREGA, no reemplaza.
     expect(screen.getAllByText('Aprobado').length).toBeGreaterThan(0);

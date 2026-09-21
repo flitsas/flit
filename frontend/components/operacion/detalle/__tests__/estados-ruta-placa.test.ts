@@ -1,6 +1,7 @@
 // HU #12601 (Feature #12595, ADR-0059) — el detalle y el historial del gestor hablan de los estados
 // reales de la ruta de placa y del distintivo de rechazo desde Preasignación.
 import { describe, expect, it } from 'vitest';
+import { estadoChipStyle } from '@/lib/tramites/estados';
 import { detalleEstadoHeader } from '../detalle-estado-header';
 import { mapStatusHistoryToTimelineNodes } from '../timeline-mappers';
 import type { StatusHistory } from '@/lib/api/types/procedure-runtime';
@@ -23,12 +24,20 @@ describe('detalleEstadoHeader — ruta de placa (ADR-0059)', () => {
     expect(pre.label).toBe('Preasignación');
     expect(pre.pendiente).toBe(true);
     expect(pre.alert).toMatch(/asignarla/);
+    expect(pre.color).toBe(estadoChipStyle('preasignacion').accent);
 
     const asg = detalleEstadoHeader('asignado');
     expect(asg.label).toBe('Asignado');
     expect(asg.pendiente).toBe(true);
     expect(asg.alert).toMatch(/SOAT/);
     expect(asg.alert).toMatch(/envía/);
+    expect(asg.color).toBe(estadoChipStyle('asignado').accent);
+  });
+
+  it('HU #12726 (C.1) — entregado usa el accent del catálogo (teal), no morado ni dorado', () => {
+    const hdr = detalleEstadoHeader('entregado');
+    expect(hdr.color).toBe(estadoChipStyle('entregado').accent);
+    expect(hdr.color).toBe('#00A99D');
   });
 
   it('AC3 — rechazado desde preasignacion dice «Rechazado preasignación» y explica la vuelta a la cola', () => {

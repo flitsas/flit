@@ -120,6 +120,11 @@
   --badge-danger-bg: rgba(255, 78, 0, 0.12);
   --badge-danger-fg: #c2410c;
   --badge-danger-border: rgba(255, 78, 0, 0.32);
+  /* HU #12726 (C.3) — alertas «pendiente por acción» en detalle de trámite. Basado en
+     --color-flit-alert (#FF4E00); texto #BF3B00 ≈ 5.2:1 sobre el fondo tintado (AA). */
+  --badge-pending-bg: rgba(255, 78, 0, 0.12);
+  --badge-pending-fg: #bf3b00;
+  --badge-pending-border: rgba(255, 78, 0, 0.32);
   --badge-info-bg: rgba(85, 126, 255, 0.14);
   --badge-info-fg: #3b4fd6;
   --badge-info-border: rgba(85, 126, 255, 0.35);
@@ -223,6 +228,9 @@
   --badge-danger-bg: rgba(255, 78, 0, 0.2);
   --badge-danger-fg: #fca574;
   --badge-danger-border: rgba(255, 78, 0, 0.4);
+  --badge-pending-bg: rgba(255, 78, 0, 0.2);
+  --badge-pending-fg: #fca574;
+  --badge-pending-border: rgba(255, 78, 0, 0.4);
   --badge-info-bg: rgba(85, 126, 255, 0.22);
   --badge-info-fg: #a5b8ff;
   --badge-info-border: rgba(85, 126, 255, 0.4);

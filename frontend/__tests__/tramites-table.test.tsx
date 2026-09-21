@@ -1194,52 +1194,31 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     expect(within(dialog).getByText(/Preparado desde Borrador/)).toBeInTheDocument();
   });
 
-  it('el badge de Estado abre el panel del trámite sin abrir el detalle ni navegar', async () => {
+  it('HU #12726 (C.2) — el chip de Estado abre el detalle en la línea de tiempo', async () => {
     mocks.listInstances.mockResolvedValue([
       { ...base, id: 'rad-tl', referenceNumber: 'TR-TL', placa: 'RADTL1', estado: 'entregado' },
     ]);
-    // HU #12185 — el panel lee el historial PAGINADO, no el `statusHistory` del detalle: ese no
-    // trae quién movió cada estado ni desde qué compañía, que es la mitad de lo que se viene a ver.
-    mocks.getStatusHistory.mockResolvedValue({
-      items: [
-        {
-          id: 'h2',
-          fromStatus: 'borrador',
-          toStatus: 'entregado',
-          changedAt: '2026-07-03T09:00:00Z',
-          changedByUserId: 'u1',
-          changedByName: 'Laura Restrepo',
-          changedByCompania: 'Renting Colombia S.A.S',
-          reason: null,
-        },
-        {
-          id: 'h1',
-          fromStatus: null,
-          toStatus: 'borrador',
-          changedAt: '2026-07-01T09:00:00Z',
-          changedByUserId: null,
-          changedByName: null,
-          changedByCompania: null,
-          reason: null,
-        },
+    mocks.getInstance.mockResolvedValue({
+      id: 'rad-tl',
+      status: 'entregado',
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
+        { fromStatus: 'borrador', toStatus: 'entregado', changedAt: '2026-07-03T09:00:00Z', reason: null },
       ],
-      total: 2,
-      page: 1,
-      pageSize: 50,
     });
+    mocks.getAttachments.mockResolvedValue([]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(
-      await screen.findByRole('button', { name: /Ver trazabilidad del trámite TR-TL/i }),
+      await screen.findByRole('button', { name: /Ver línea de tiempo de TR-TL/i }),
     );
 
-    expect(await screen.findByRole('dialog', { name: /Trámite TR-TL/i })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: /Detalle de traspaso/ })).toBeNull();
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Trámite TR-TL/i })).toBeNull();
     expect(routerPush).not.toHaveBeenCalled();
-    // La ficha identifica el trámite; el historial dice por dónde va y quién lo movió.
-    expect(await screen.findByRole('region', { name: 'Resumen del trámite' })).toBeInTheDocument();
-    expect(await screen.findByText(/Entregado desde Borrador/)).toBeInTheDocument();
-    expect(screen.getByText('Renting Colombia S.A.S · Laura Restrepo')).toBeInTheDocument();
+    expect(await within(dialog).findByText('Línea de tiempo del trámite')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Entregado desde Borrador/)).toBeInTheDocument();
   });
 
   it('la línea Firmas abre el modal de tracking de identidad de esa parte sin navegar', async () => {

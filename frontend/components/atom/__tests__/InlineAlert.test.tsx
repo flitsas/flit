@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { InlineAlert } from '../InlineAlert';
 
 describe('InlineAlert', () => {
-  it('anuncia error y aviso como alert assertive (interrumpen una acción del usuario)', () => {
+  it('anuncia error, aviso y pendiente como alert assertive (interrumpen una acción del usuario)', () => {
     const { rerender } = render(<InlineAlert tone="error">Algo falló</InlineAlert>);
     const error = screen.getByRole('alert');
     expect(error).toHaveTextContent('Algo falló');
@@ -11,6 +11,12 @@ describe('InlineAlert', () => {
 
     rerender(<InlineAlert tone="warning">Revisa el SOAT</InlineAlert>);
     expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive');
+
+    rerender(<InlineAlert tone="pending">Pendiente por aprobación del OT</InlineAlert>);
+    const pending = screen.getByRole('alert');
+    expect(pending).toHaveAttribute('aria-live', 'assertive');
+    expect(pending).toHaveTextContent('Pendiente por aprobación del OT');
+    expect(pending.getAttribute('style')).toContain('--badge-pending-bg');
   });
 
   it('anuncia info y éxito como status polite', () => {
