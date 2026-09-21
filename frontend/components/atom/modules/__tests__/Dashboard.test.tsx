@@ -110,7 +110,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     render(<Dashboard onNewTramite={noop} />);
 
     await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalled());
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     // "Matrículas"/"Traspasos" también aparecen en la leyenda del gráfico de tendencia.
     expect(screen.getAllByText("Matrículas").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Traspasos").length).toBeGreaterThan(0);
@@ -213,7 +213,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     render(<Dashboard onNewTramite={noop} />);
 
     // El resto de secciones (independientes) sigue operativo.
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
     expect(await screen.findByText("Validaciones Biométricas")).toBeInTheDocument();
     expect(await screen.findByText("Seguimiento operativo")).toBeInTheDocument();
@@ -233,7 +233,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
 
     // Para este endpoint (sin vista global) un tenantId vacío respondería 400 del backend —
@@ -336,7 +336,7 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
     await waitFor(() => expect(mocks.getActiveBanners).toHaveBeenCalled());
     expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(1);
     // El resto del dashboard (KPIs) se sigue viendo con normalidad.
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
   });
 
   it("AC3 — si la imagen de un banner no carga, ese slide se retira sin romper el carrusel", async () => {
@@ -549,7 +549,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
     mocks.getActiveBanners.mockResolvedValue([]);
   });
 
-  it.each(["Total Trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
+  it.each(["Total trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
     "«%s» se renderiza completo, sin recortar",
     async (label) => {
       render(<Dashboard onNewTramite={noop} />);
@@ -566,7 +566,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
   it("el rótulo respeta el piso tipográfico de 12px de la línea base", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
-    const rotulo = await screen.findByText("Total Trámites");
+    const rotulo = await screen.findByText("Total trámites");
     expect(rotulo).toHaveClass("text-xs");
     expect(rotulo.className).not.toMatch(/text-\[1[01]px\]/);
   });
