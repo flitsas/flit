@@ -33,12 +33,13 @@ public class TramiteCambioEstadoEmailComposerTests
         var (subject, html) = TramiteCambioEstadoEmailComposer.ComposeFlit(
             TraspasoRechazado, "https://cdn.example/email-assets");
 
-        subject.Should().Contain("GSR101").And.Contain("RECHAZADO");
+        subject.Should().Contain("GSR101").And.Contain("Rechazado");
         html.Should().Contain("https://cdn.example/email-assets/tramite-cambio-estado-header.png");
         html.Should().Contain("https://cdn.example/email-assets/flit-logo.png");
         html.Should().Contain("¡NOTIFICACIÓN RADICACIÓN DEL TRÁMITE!");
         html.Should().Contain("❌");
-        html.Should().Contain("RECHAZADO");
+        html.Should().Contain("Rechazado");
+        html.Should().NotContain("RECHAZADO");
         html.Should().Contain("POLÍTICA DE PRIVACIDAD");
     }
 
@@ -48,8 +49,9 @@ public class TramiteCambioEstadoEmailComposerTests
         var (subject, html) = TramiteCambioEstadoEmailComposer.ComposeFlit(
             TraspasoAprobado, "https://cdn.example/email-assets");
 
-        subject.Should().Contain("APROBADO");
-        html.Should().Contain("APROBADO");
+        subject.Should().Contain("Aprobado");
+        html.Should().Contain("Aprobado");
+        html.Should().NotContain("APROBADO");
         html.Should().Contain("✓");
         html.Should().NotContain("❌");
         html.Should().Contain("BANCOLOMBIA S.A");
@@ -87,7 +89,8 @@ public class TramiteCambioEstadoEmailComposerTests
             TraspasoAprobado, "https://cdn.example/email-assets");
 
         html.Should().Contain("¡Buenas Noticias!");
-        html.Should().Contain("APROBADO");
+        html.Should().Contain("Aprobado");
+        html.Should().NotContain("APROBADO");
         html.Should().Contain("del trámite de traspaso de propiedad del vehículo");
         html.Should().Contain("Tu tarjeta de propiedad/matrícula llegará pronto");
     }
@@ -104,9 +107,11 @@ public class TramiteCambioEstadoEmailComposerTests
             NotificationChannel.TenantApi,
             "https://cdn.example/email-assets");
 
-        aprobadoFlit.Html.Should().Contain("APROBADO");
+        aprobadoFlit.Html.Should().Contain("Aprobado");
+        aprobadoFlit.Html.Should().NotContain("APROBADO");
         aprobadoFlit.Html.Should().Contain("tramite-cambio-estado-header.png");
-        rechazadoRenting.Html.Should().Contain("RECHAZADO");
+        rechazadoRenting.Html.Should().Contain("Rechazado");
+        rechazadoRenting.Html.Should().NotContain("RECHAZADO");
         rechazadoRenting.Html.Should().Contain("tramite-cambio-estado-renting-header.png");
         aprobadoFlit.Html.Should().NotBe(rechazadoRenting.Html);
     }
@@ -172,7 +177,8 @@ public class TramiteCambioEstadoEmailComposerTests
     {
         var (_, html) = TramiteEmailPreviewSample.BuildFlitAprobado("http://localhost:3000/email-assets");
         html.Should().Contain("http://localhost:3000/email-assets/tramite-cambio-estado-header.png");
-        html.Should().Contain("APROBADO");
+        html.Should().Contain("Aprobado");
+        html.Should().NotContain("APROBADO");
     }
 
     [Fact]
@@ -180,7 +186,8 @@ public class TramiteCambioEstadoEmailComposerTests
     {
         var (_, html) = TramiteEmailPreviewSample.BuildRentingRechazado("http://localhost:3000/email-assets");
         html.Should().Contain("http://localhost:3000/email-assets/tramite-cambio-estado-renting-header.png");
-        html.Should().Contain("RECHAZADO");
+        html.Should().Contain("Rechazado");
+        html.Should().NotContain("RECHAZADO");
         html.Should().Contain("Motivo de rechazo");
         html.Should().Contain("Observación");
     }
@@ -269,5 +276,19 @@ public class TramiteCambioEstadoEmailComposerTests
 
         html.Should().Contain("soporte@flitsas.com");
         html.Should().NotContain("soporte@flit.com");
+    }
+
+    [Fact]
+    public void ComposeFlit_AsuntoYCuerpo_UsanGanadorCatalogoB_NoMayusculas()
+    {
+        var (subjectAprobado, htmlAprobado) = TramiteCambioEstadoEmailComposer.ComposeFlit(
+            TraspasoAprobado, "https://cdn.example/email-assets");
+        var (subjectRechazado, htmlRechazado) = TramiteCambioEstadoEmailComposer.ComposeFlit(
+            TraspasoRechazado, "https://cdn.example/email-assets");
+
+        subjectAprobado.Should().Be("[FLIT] Notificación radicación del trámite — GSR101 — Aprobado");
+        subjectRechazado.Should().Be("[FLIT] Notificación radicación del trámite — GSR101 — Rechazado");
+        htmlAprobado.Should().Contain(">Aprobado<").And.NotContain("APROBADO");
+        htmlRechazado.Should().Contain(">Rechazado<").And.NotContain("RECHAZADO");
     }
 }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using Flit.Infrastructure.Copy;
 using Flit.Modules.Security.Domain.Auth;
 
 namespace Flit.Infrastructure.Notifications.Tramites;
@@ -102,7 +103,7 @@ public static class TramiteCambioEstadoEmailComposer
         var approved = IsApproved(estado);
         var estadoColor = approved ? ApprovedGreen : RejectedRed;
         var estadoIcon = approved ? "✓" : "❌";
-        var estadoEnc = Enc(estado);
+        var estadoEnc = Enc(EstadoLabel(estado));
         var linkColor = BrandedEmailChrome.LinkColor(theme);
 
         var destinatario = Enc(GreetingName(model));
@@ -169,16 +170,28 @@ public static class TramiteCambioEstadoEmailComposer
             : model.DestinatarioNombre.Trim();
 
     private static string BuildSubject(string placa, string estado) =>
-        $"[FLIT] Notificación radicación del trámite — {placa} — {estado}";
+        $"[FLIT] Notificación radicación del trámite — {placa} — {EstadoLabel(estado)}";
 
+    /// <summary>
+    /// Código interno (APROBADO/RECHAZADO). El texto visible usa <see cref="EstadoLabel"/>.
+    /// </summary>
     private static string NormalizeEstado(string estado)
     {
-        if (string.Equals(estado, "APROBADO", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(estado, "APROBADO", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(estado, HomologacionCopy.Aprobado, StringComparison.OrdinalIgnoreCase))
             return "APROBADO";
-        if (string.Equals(estado, "RECHAZADO", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(estado, "RECHAZADO", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(estado, HomologacionCopy.Rechazado, StringComparison.OrdinalIgnoreCase))
             return "RECHAZADO";
         return string.IsNullOrWhiteSpace(estado) ? "RECHAZADO" : estado.Trim().ToUpperInvariant();
     }
+
+    private static string EstadoLabel(string estadoCode) =>
+        IsApproved(estadoCode)
+            ? HomologacionCopy.Aprobado
+            : string.Equals(estadoCode, "RECHAZADO", StringComparison.Ordinal)
+                ? HomologacionCopy.Rechazado
+                : estadoCode;
 
     private static bool IsApproved(string estado) =>
         string.Equals(estado, "APROBADO", StringComparison.Ordinal);
@@ -195,7 +208,7 @@ public static class TramiteCambioEstadoEmailComposer
         var estadoIcon = approved ? "✓" : "❌";
         var headerUrl = EncAttr(ResolveHeaderUrl(assetsBaseUrl));
         var logoUrl = EncAttr(ResolveLogoUrl(assetsBaseUrl));
-        var estadoEnc = Enc(estado);
+        var estadoEnc = Enc(EstadoLabel(estado));
 
         var destinatario = Enc(GreetingName(model));
         var saludo = model.DestinatarioEsEmpresa
@@ -269,7 +282,7 @@ public static class TramiteCambioEstadoEmailComposer
         var ciudad = Enc(model.CiudadOt);
         var ot = Enc(model.NombreOt);
         var approved = IsApproved(estado);
-        var estadoEnc = Enc(estado);
+        var estadoEnc = Enc(EstadoLabel(estado));
         var estadoColor = approved ? ApprovedGreen : RejectedRed;
         var headerUrl = EncAttr(ResolveRentingHeaderUrl(assetsBaseUrl));
         var footerUrl = EncAttr(ResolveRentingFooterUrl(assetsBaseUrl));
