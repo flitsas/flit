@@ -45,7 +45,6 @@ describe('homologación dock e Identidad (HU #12699)', () => {
     expect(DOCK_GROUP_LABEL.tramites).toBe(COPY.B21Tramites);
     expect(DOCK_GROUP_LABEL.reportes).toBe(COPY.B21Reportes);
     expect(DOCK_GROUP_LABEL.usuarios).toBe(COPY.B21Usuarios);
-    expect(DOCK_GROUP_LABEL.ayuda).toBe(COPY.B21Ayuda);
 
     const otTramites = OT_HUB_TABS.find((t) => t.id === 'client-procedures')?.label;
     const otUsuarios = OT_HUB_TABS.find((t) => t.id === 'usuarios')?.label;

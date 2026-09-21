@@ -13,6 +13,7 @@
    * tech/alert/bg/gray son decorativos/semánticos de FLIT y no varían por red. */
   --color-flit-primary: var(--brand-primary, #162744);
   --color-flit-brand: var(--brand-secondary, #557eff);
+  --color-flit-brand-ink: var(--flit-brand-ink);
   --color-flit-tech: #00dbd5;
   --color-flit-alert: #ff4e00;
   --color-flit-bg: #eef5ff;
@@ -135,6 +136,11 @@
      apagado y sin razón para existiendo este—. */
   --flit-success-ink: #4f7a12;
 
+  /* Tinta legible del azul de marca (#557eff) cuando se usa como TEXTO pequeño: sobre blanco da
+     3,61:1 (no AA). El azul de marca sigue en iconos, bordes y rellenos; esta variable es solo
+     para labels y copy. HU #12723 — #476BD9 sobre #FFFFFF = 4,80:1 (WCAG 2.1 AA). */
+  --flit-brand-ink: #476bd9;
+
   /* Tabla card-list (HU #10844) — tokens de superficie para que el DataTable se lea como
      tarjeta en CUALQUIER fondo (página tintada app-bg o panel blanco). La cabecera usa el
      gris de marca #DFE5ED (== CompanyListTable, la tabla de referencia), NO el --muted casi
@@ -222,6 +228,9 @@
   /* Verde de marca como texto: sobre el fondo oscuro el mismo tono ya es legible (no necesita el
      oscurecimiento que sí requiere sobre blanco). */
   --flit-success-ink: #8cc63f;
+
+  /* Azul de marca como texto sobre fondo dock oscuro (#162744): #6FA5FF = 6,04:1 (HU #12723). */
+  --flit-brand-ink: #6fa5ff;
 
   /* Tabla card-list — variantes para modo oscuro (HU #10844). */
   --table-header-bg: rgba(255, 255, 255, 0.06);
@@ -402,15 +411,38 @@
     color: var(--nav-texto-fuerte);
   }
 
-  .dock-pill[aria-current="page"] {
-    background: var(--nav-activo);
-    box-shadow: var(--nav-sombra-activo);
-    color: #ffffff;
+  .dock-pill[aria-current="page"],
+  .dock-pill[data-ancestor-active="true"] {
+    background: transparent;
+    box-shadow: none;
+    color: var(--flit-brand-ink);
+    font-weight: 600;
   }
 
-  .dock-pill[aria-current="page"]:hover {
-    background: var(--nav-activo);
-    color: #ffffff;
+  .dock-pill[aria-current="page"] svg,
+  .dock-pill[data-ancestor-active="true"] svg {
+    color: var(--color-flit-brand);
+  }
+
+  .dock-pill[aria-current="page"]:hover,
+  .dock-pill[data-ancestor-active="true"]:hover {
+    background: var(--nav-app-bg);
+    color: var(--flit-brand-ink);
+  }
+
+  .dock-panel-item[aria-current="page"] {
+    background: transparent;
+    color: var(--flit-brand-ink);
+    font-weight: 600;
+  }
+
+  .dock-panel-item[aria-current="page"] > svg:first-of-type {
+    color: var(--color-flit-brand);
+  }
+
+  .dock-panel-item[aria-current="page"]:hover {
+    background: var(--nav-app-bg);
+    color: var(--flit-brand-ink);
   }
 
   .dock-fab {

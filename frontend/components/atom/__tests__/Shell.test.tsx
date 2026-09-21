@@ -1,4 +1,4 @@
-// Dock del Shell: FAB centrado, Ayuda universal, agrupadores menú/submenú.
+// Dock del Shell: FAB centrado, reparto por lado declarado, agrupadores menú/submenú.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -26,19 +26,40 @@ function renderShell(visibleModuleCodes?: string[]) {
 }
 
 describe("Shell — dock", () => {
-  it("muestra 'Ayuda' aunque RBAC no la incluya en los módulos visibles", () => {
+  it("no muestra 'Ayuda' en el dock; la entrada vive en el menú de usuario", async () => {
     renderShell(["dashboard", "reportes"]);
-    expect(screen.getByRole("button", { name: "Ayuda" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ayuda" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
+    expect(screen.getByText("Ayuda")).toBeInTheDocument();
   });
 
-  it("mantiene el FAB de inicio centrado: mismo nº de elementos a cada lado", () => {
-    renderShell(["dashboard", "reportes", "validaciones"]);
+  it("reparte el dock por lado declarado: Trámites a la izquierda del FAB, Usuarios a la derecha", () => {
+    renderShell(["tramites", "usuarios", "reportes", "validaciones"]);
     const fab = screen.getByRole("button", { name: "Inicio FLIT" });
     const dock = fab.parentElement;
     expect(dock).not.toBeNull();
     const children = Array.from(dock!.children);
     const fabIndex = children.indexOf(fab);
-    expect(fabIndex).toBe(children.length - fabIndex - 1);
+    const labelsBeforeFab = children
+      .slice(0, fabIndex)
+      .map((el) => el.getAttribute("aria-label"));
+    const labelsAfterFab = children
+      .slice(fabIndex + 1)
+      .map((el) => el.getAttribute("aria-label"));
+    expect(labelsBeforeFab).toContain("Trámites");
+    expect(labelsAfterFab).toContain("Usuarios");
+  });
+
+  it("ítem activo del dock (aria-current) no lleva fondo degradado inline", () => {
+    render(
+      <Shell active="reportes" onNav={vi.fn()} visibleModuleCodes={["reportes", "tramites"]}>
+        <div>contenido</div>
+      </Shell>,
+    );
+    const active = screen.getByRole("button", { name: "Reportes" });
+    expect(active).toHaveAttribute("aria-current", "page");
+    expect(active.style.background).toBe("");
+    expect(active.style.backgroundImage).toBe("");
   });
 
   it("usa favicon.svg en el FAB central", () => {
@@ -250,6 +271,12 @@ describe("Shell — topbar (campana y menú de usuario)", () => {
     renderShell();
     await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
     expect(screen.queryByText("Actualización de la información")).not.toBeInTheDocument();
+  });
+
+  it("al abrir el menú de usuario SÍ aparece 'Ayuda' (manual /manual)", async () => {
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
+    expect(screen.getByText("Ayuda")).toBeInTheDocument();
   });
 
   it("al abrir el menú de usuario SÍ aparece 'Cambio de contraseña'", async () => {

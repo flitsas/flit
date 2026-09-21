@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import type { DockEntryLike, DockGroupView } from "./dockGroups";
+import { DOCK_GROUP_SIDE, type DockEntryLike, type DockGroupView } from "./dockGroups";
 import { useDisclosureNav } from "./useDisclosureNav";
 import { useEdgeClamp } from "./useEdgeClamp";
 
@@ -28,9 +28,8 @@ export function DockDesktop({ groups, atBottom, onHome, homeActive }: Props) {
   const showLabels = !atBottom || !!openSection;
   const large = atBottom && !openSection;
 
-  const half = Math.ceil(groups.length / 2);
-  const left = groups.slice(0, half);
-  const right = groups.slice(half);
+  const left = groups.filter((g) => DOCK_GROUP_SIDE[g.id] === "left");
+  const right = groups.filter((g) => DOCK_GROUP_SIDE[g.id] === "right");
   const sideLen = Math.max(left.length, right.length);
   const leftPad = sideLen - left.length;
   const rightPad = sideLen - right.length;
@@ -123,17 +122,14 @@ function DockGroupPill({
   const { ref: panelRef, shift } = useEdgeClamp<HTMLDivElement>(open ? group.id : null);
   const multi = group.items.length > 1;
   const sole = !multi ? group.items[0] : null;
-  const lit = group.active || open;
+  const pillActive = sole ? sole.active : group.active;
+  const emphasized = pillActive || open;
   const Icon = sole?.icon ?? group.icon;
   const pillLabel = sole ? sole.label : group.label;
 
   const base = `dock-pill relative flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full transition-all duration-[var(--nav-duracion)] ease-[var(--nav-ease)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2 ${
     large ? "h-11" : "h-9"
-  } ${showLabels ? "px-3" : "w-11 px-0"} ${lit ? "font-semibold text-white" : "font-medium"}`;
-
-  const litStyle = lit
-    ? { background: "var(--nav-activo)", boxShadow: "var(--nav-sombra-activo)", color: "#ffffff" }
-    : undefined;
+  } ${showLabels ? "px-3" : "w-11 px-0"} ${emphasized ? "font-semibold" : "font-medium"}`;
 
   if (sole && !sole.children?.length) {
     return (
@@ -144,16 +140,14 @@ function DockGroupPill({
           sole.onClick();
         }}
         className={base}
-        style={litStyle}
         aria-label={pillLabel}
         title={!showLabels ? pillLabel : undefined}
         aria-current={sole.active ? "page" : undefined}
       >
         <Icon
           className={large ? "h-[18px] w-[18px] shrink-0" : "h-4 w-4 shrink-0"}
-          strokeWidth={lit ? 2.4 : 1.8}
+          strokeWidth={pillActive ? 2.4 : 1.8}
           aria-hidden="true"
-          style={{ color: lit ? "#ffffff" : undefined }}
         />
         <span className={showLabels ? "truncate text-sm" : "sr-only"}>{pillLabel}</span>
       </button>
@@ -167,17 +161,16 @@ function DockGroupPill({
         type="button"
         onClick={onToggle}
         className={base}
-        style={litStyle}
         aria-label={pillLabel}
         title={!showLabels ? pillLabel : undefined}
         aria-expanded={open}
         aria-controls={panelId}
+        data-ancestor-active={group.active ? "true" : undefined}
       >
         <Icon
           className={large ? "h-[18px] w-[18px] shrink-0" : "h-4 w-4 shrink-0"}
-          strokeWidth={lit ? 2.4 : 1.8}
+          strokeWidth={pillActive ? 2.4 : 1.8}
           aria-hidden="true"
-          style={{ color: lit ? "#ffffff" : undefined }}
         />
         <span className={showLabels ? "truncate text-sm" : "sr-only"}>{pillLabel}</span>
         {showLabels && (
@@ -238,14 +231,14 @@ function DockPanelItem({
             onNavigate();
             item.onClick();
           }}
-          className="group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] aria-[current=page]:bg-[var(--nav-app-bg)] aria-[current=page]:font-semibold aria-[current=page]:text-[var(--nav-texto-fuerte)]"
+          className="dock-panel-item group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)]"
           aria-current={item.active ? "page" : undefined}
         >
           <ItemIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="truncate">{item.label}</span>
           <span
             aria-hidden="true"
-            className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--acc)] group-aria-[current=page]:bg-[var(--acc)]"
+            className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--color-flit-brand)] group-aria-[current=page]:bg-[var(--color-flit-brand)]"
           />
         </button>
       </li>
@@ -288,14 +281,14 @@ function DockPanelItem({
                     onNavigate();
                     child.onClick();
                   }}
-                  className="group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] aria-[current=page]:bg-[var(--nav-app-bg)] aria-[current=page]:font-semibold aria-[current=page]:text-[var(--nav-texto-fuerte)]"
+                  className="dock-panel-item group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)]"
                   aria-current={child.active ? "page" : undefined}
                 >
                   <ChildIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span className="truncate">{child.label}</span>
                   <span
                     aria-hidden="true"
-                    className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--acc)] group-aria-[current=page]:bg-[var(--acc)]"
+                    className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--color-flit-brand)] group-aria-[current=page]:bg-[var(--color-flit-brand)]"
                   />
                 </button>
               </li>
