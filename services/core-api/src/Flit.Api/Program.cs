@@ -105,6 +105,9 @@ builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.GetActiveRevocat
 // composición API-layer que la decisión de arriba (compone Admin + Tramites).
 builder.Services.AddScoped<Flit.Api.UseCases.RevocationRequests.ListOtRevocationRequestsHandler>();
 
+// HU #12711 — ¿el tenant del caller es un organismo de tránsito? (filtro de Validación de Identidad).
+builder.Services.AddScoped<ITransitOfficeTenantProbe, TransitOfficeTenantProbe>();
+
 // Handler de autorización por permisos del JWT (HU #10165).
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

@@ -3,6 +3,7 @@
 import { Building2, CalendarDays, Check, FileText, X } from "lucide-react";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { COPY } from "@/lib/copy/copy-catalog";
 import { formatOtDate, formatOtProcedureStatus, procedureStatusChip } from "./ot-utils";
 
 export interface TramitesProcedureListProps {
@@ -92,7 +93,7 @@ export function TramitesProcedureList({
                       onClick={() => onReject?.(procedure.id)}
                     >
                       <X className="h-4 w-4" aria-hidden="true" />
-                      Rechazar
+                      {COPY.E01Rechazar}
                     </button>
                     <button
                       type="button"
@@ -101,7 +102,7 @@ export function TramitesProcedureList({
                       onClick={() => onApprove?.(procedure.id)}
                     >
                       <Check className="h-4 w-4" aria-hidden="true" />
-                      Aprobar
+                      {COPY.E01Aprobar}
                     </button>
                   </>
                 )}
@@ -122,7 +123,7 @@ export function TramitesProcedureList({
                     disabled={consolidadoActingId === procedure.id}
                     onClick={() => onVerConsolidado(procedure)}
                   >
-                    Ver consolidado
+                    {COPY.A12}
                   </button>
                 )}
               </div>

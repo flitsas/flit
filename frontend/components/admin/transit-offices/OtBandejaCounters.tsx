@@ -100,6 +100,8 @@ const TARJETAS: TarjetaDef[] = [
   },
 ];
 
+export const OT_BANDEJA_TARJETAS: readonly TarjetaDef[] = TARJETAS;
+
 export interface OtBandejaCountersStripProps {
   counters: Counters | null;
   /** Tarjeta activa; vacío = ninguna. */

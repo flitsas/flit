@@ -37,6 +37,7 @@ vi.mock("@/lib/api/analytics", () => ({
 }));
 vi.mock("@/lib/api/admin-companies", () => ({ fetchAllCompanies: mocks.fetchAllCompanies }));
 vi.mock("@/lib/api/tramites-client", () => ({
+  ALL_TENANTS: "*",
   tramitesClient: { listTenantBiometricValidations: mocks.listTenantBiometricValidations },
 }));
 vi.mock("@/lib/api/client", () => ({ getToken: mocks.getToken }));
@@ -96,7 +97,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
     mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
@@ -110,7 +111,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     render(<Dashboard onNewTramite={noop} />);
 
     await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalled());
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     // "Matrículas"/"Traspasos" también aparecen en la leyenda del gráfico de tendencia.
     expect(screen.getAllByText("Matrículas").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Traspasos").length).toBeGreaterThan(0);
@@ -213,7 +214,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     render(<Dashboard onNewTramite={noop} />);
 
     // El resto de secciones (independientes) sigue operativo.
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
     expect(await screen.findByText("Validaciones Biométricas")).toBeInTheDocument();
     expect(await screen.findByText("Seguimiento operativo")).toBeInTheDocument();
@@ -227,13 +228,40 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(screen.queryByText("Resoluciones")).not.toBeInTheDocument();
   });
 
-  it("SuperAdmin en 'Todas las compañías': no llama al endpoint (no hay un tenant concreto) y no queda en error permanente", async () => {
+  it("HU #12711 — sin permiso de Validaciones ni dashboard.read, la tarjeta de validaciones no se pide ni se pinta", async () => {
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Rada", email: "rada@flit.io", permissions: ["tramites.read"] });
+
+    render(<Dashboard onNewTramite={noop} />);
+
+    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+    expect(mocks.listTenantBiometricValidations).not.toHaveBeenCalled();
+    expect(screen.queryByText("Validaciones Biométricas")).not.toBeInTheDocument();
+    expect(screen.queryByText("No se pudieron cargar las métricas del dashboard.")).not.toBeInTheDocument();
+  });
+
+  it("HU #12711 — un usuario de organismo no ve la tarjeta aunque tenga dashboard.read", async () => {
+    mocks.decodeJwtPayload.mockReturnValue({
+      display_name: "Ot",
+      email: "ot@flit.io",
+      entity_type: "TRANSIT_OFFICE",
+      permissions: ["dashboard.read"],
+    });
+
+    render(<Dashboard onNewTramite={noop} />);
+
+    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+    expect(mocks.listTenantBiometricValidations).not.toHaveBeenCalled();
+  });
+
+  it("SuperAdmin en 'Todas las compañías': las validaciones se piden de todas (ALL_TENANTS) y no queda en error permanente", async () => {
     mocks.isSuperAdmin.mockReturnValue(true);
     mocks.fetchAllCompanies.mockResolvedValue([]);
 
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
 
     // Para este endpoint (sin vista global) un tenantId vacío respondería 400 del backend —
@@ -241,6 +269,14 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     // qué se cambiara en configuración de compañía. Ahora, sin una compañía concreta elegida,
     // la sección completa no ocupa espacio: ni tarjeta, ni mensaje, ni alerta de error.
     await waitFor(() => expect(mocks.fetchAllCompanies).toHaveBeenCalled());
+    // HU #12706 (AC4) — el listado plano ya tiene vista global: se pide sin compañía, nunca con el
+    // tenant del JWT del SuperAdmin. (El primer render, antes de saber que es SuperAdmin, lanza una
+    // carga que se aborta; cuentan las dos últimas: stats y por vencer.)
+    await waitFor(() => {
+      const calls = mocks.listTenantBiometricValidations.mock.calls;
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+      expect(calls.slice(-2).map((c) => c[1])).toEqual(["*", "*"]);
+    });
     expect(screen.queryByText("Selecciona una compañía para ver sus módulos activos.")).not.toBeInTheDocument();
     expect(screen.queryByText("Próximamente")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -267,7 +303,7 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchAnalyticsOverview.mockResolvedValue(OVERVIEW);
     mocks.fetchMonthlyTrend.mockResolvedValue(CAROUSEL_TREND);
@@ -336,7 +372,7 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
     await waitFor(() => expect(mocks.getActiveBanners).toHaveBeenCalled());
     expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(1);
     // El resto del dashboard (KPIs) se sigue viendo con normalidad.
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
   });
 
   it("AC3 — si la imagen de un banner no carga, ese slide se retira sin romper el carrusel", async () => {
@@ -385,7 +421,7 @@ describe("Dashboard — cuerpo dinámico del slide de bienvenida (Opción A)", (
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchMonthlyTrend.mockResolvedValue(CAROUSEL_TREND);
     mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
@@ -460,7 +496,7 @@ describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
     mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
@@ -539,7 +575,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io" });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
     mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
@@ -549,7 +585,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
     mocks.getActiveBanners.mockResolvedValue([]);
   });
 
-  it.each(["Total Trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
+  it.each(["Total trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
     "«%s» se renderiza completo, sin recortar",
     async (label) => {
       render(<Dashboard onNewTramite={noop} />);
@@ -566,7 +602,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
   it("el rótulo respeta el piso tipográfico de 12px de la línea base", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
-    const rotulo = await screen.findByText("Total Trámites");
+    const rotulo = await screen.findByText("Total trámites");
     expect(rotulo).toHaveClass("text-xs");
     expect(rotulo.className).not.toMatch(/text-\[1[01]px\]/);
   });

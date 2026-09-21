@@ -34,6 +34,7 @@ import { fetchRejectionReasons } from "@/lib/api/ot-metrics";
 import { fetchMandateSigners, type MandateSigner } from "@/lib/api/admin-mandate-signers";
 import { ApiError } from "@/lib/api/types";
 import { getToken } from "@/lib/api/client";
+import { COPY } from "@/lib/copy/copy-catalog";
 import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
@@ -1556,7 +1557,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 onClick={() => void handleExportExcel()}
                 disabled={exporting || status === "loading" || totalCount === 0}
                 aria-label="Exportar la bandeja de trámites a Excel"
-                title="Exportar a Excel"
+                title={COPY.A13}
                 className={controlCls(false)}
                 data-testid="ot-bandeja-export-xlsx"
               >
@@ -1564,7 +1565,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   className={`h-3.5 w-3.5 ${exporting ? "animate-pulse" : ""}`}
                   aria-hidden="true"
                 />
-                {exporting ? "Exportando…" : "Exportar"}
+                {exporting ? "Exportando…" : COPY.A13}
               </button>
             }
           />
@@ -2248,7 +2249,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   ? "Adjuntando…"
                   : ltOcr?.fase === "analizando"
                     ? "Analizando la LT…"
-                    : "Adjuntar LT"}
+                    : COPY.E02}
               </button>
             </div>
           </div>

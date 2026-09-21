@@ -37,6 +37,15 @@ public static class NetworkAccessVocabulary
 
         /// <summary>Descarga o visualización proxeada de un documento de un hijo (HU #12410).</summary>
         public const string AttachmentsDownload = "network.attachments.download";
+
+        /// <summary>Personas y validaciones de identidad de la red (<c>GET /network/identity-validations/by-person</c>, HU #12708).</summary>
+        public const string IdentityValidationsSearch = "network.identity_validations.search";
+
+        /// <summary>Historial de identidad de una persona de un hijo (<c>…/by-person/detail</c>, HU #12708).</summary>
+        public const string IdentityValidationsDetail = "network.identity_validations.detail";
+
+        /// <summary>Bitácora de una validación de identidad de un hijo (<c>…/{validationId}/audit</c>, HU #12708).</summary>
+        public const string IdentityValidationsAudit = "network.identity_validations.audit";
     }
 
     public static class Results

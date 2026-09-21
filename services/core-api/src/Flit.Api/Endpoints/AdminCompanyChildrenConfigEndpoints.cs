@@ -27,18 +27,33 @@ public static class AdminCompanyChildrenConfigEndpoints
             .WithTags("Admin · Configuración de hijos");
 
         group.MapGet("/settings", GetSettingsAsync)
+            // HU #12710 — sección reservada al SuperAdmin: la cabeza gestiona de sus hijas solo
+            // Representantes y Mandatarios (Epic #12685).
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminCompanyChildGetSettings");
 
         group.MapPut("/settings", UpdateSettingsAsync)
+            // HU #12710 — sección reservada al SuperAdmin: la cabeza gestiona de sus hijas solo
+            // Representantes y Mandatarios (Epic #12685).
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminCompanyChildUpdateSettings");
 
         group.MapPost("/whitelist", AddWhitelistAsync)
+            // HU #12710 — sección reservada al SuperAdmin: la cabeza gestiona de sus hijas solo
+            // Representantes y Mandatarios (Epic #12685).
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminCompanyChildAddWhitelist");
 
         group.MapGet("/whitelist", GetWhitelistAsync)
+            // HU #12710 — sección reservada al SuperAdmin: la cabeza gestiona de sus hijas solo
+            // Representantes y Mandatarios (Epic #12685).
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminCompanyChildGetWhitelist");
 
         group.MapGet("/audit-log", GetAuditLogAsync)
+            // HU #12710 — sección reservada al SuperAdmin: la cabeza gestiona de sus hijas solo
+            // Representantes y Mandatarios (Epic #12685).
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminCompanyChildGetAuditLog");
 
         // Mandatarios, representantes, baúl y documentos personalizados — misma consola, tenant = hijo.
@@ -52,12 +67,18 @@ public static class AdminCompanyChildrenConfigEndpoints
             .MapAdminCompanySignatureVaultChildRoutes();
 
         group.MapGroup("/personalized-documents")
+            // HU #12710 — sección reservada al SuperAdmin: la cabeza gestiona de sus hijas solo
+            // Representantes y Mandatarios (Epic #12685).
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .MapAdminCompanyPersonalizedDocumentsChildRoutes();
 
         group.MapGroup("/deeds")
             .MapAdminCompanyDeedsChildRoutes();
 
         group.MapGroup("/document-params")
+            // HU #12710 — sección reservada al SuperAdmin: la cabeza gestiona de sus hijas solo
+            // Representantes y Mandatarios (Epic #12685).
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .MapAdminCompanyDocumentParamsChildRoutes();
 
         return app;

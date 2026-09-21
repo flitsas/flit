@@ -10,6 +10,7 @@ import {
   describeCondition,
 } from '@/components/consultas/QueryFilterBar';
 import type { QueryCondition, QueryField } from '@/lib/api/queries';
+import { COPY } from '@/lib/copy/copy-catalog';
 
 /**
  * Fila de acciones compactas del listado de trámites (Track A). Reemplaza a la tarjeta blanca de
@@ -37,9 +38,9 @@ export const PERIODOS = [
 ] as const;
 export type Periodo = (typeof PERIODOS)[number];
 
-const INPUT_CLS =
+export const INPUT_CLS =
   'h-9 rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs text-[#162744] outline-none transition focus:border-[#557EFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-white/5 dark:text-white';
-const POPOVER_SURFACE_CLS =
+export const POPOVER_SURFACE_CLS =
   'rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#162744]';
 
 
@@ -87,7 +88,7 @@ export function rangoDePeriodo(periodo: string, hoy: Date): { desde: string; has
 }
 
 /** Rótulo + control apilados, mismo patrón `Field` de la propuesta (label real, no placeholder). */
-function Field({
+export function Field({
   label,
   children,
   className = '',
@@ -105,7 +106,7 @@ function Field({
 }
 
 /** Cierre por clic fuera Y por Escape, con el foco devuelto al disparador. */
-function usePopoverDismiss(
+export function usePopoverDismiss(
   open: boolean,
   onClose: () => void,
   triggerRef: RefObject<HTMLElement | null>,
@@ -136,13 +137,17 @@ function usePopoverDismiss(
 }
 
 const RANGO_SOBRE_OPTIONS: { value: RangoSobre; label: string }[] = [
-  { value: 'created', label: 'Fecha de creación' },
+  { value: 'created', label: COPY.A04 },
   { value: 'updated', label: 'Última actualización' },
 ];
 
-interface PeriodoPopoverProps {
-  rangoSobre: RangoSobre;
-  onRangoSobreChange: (v: RangoSobre) => void;
+export interface PeriodoPopoverProps {
+  /**
+   * Sobre qué fecha se aplica el periodo. Opcional: una pantalla con una sola fecha filtrable
+   * (Validación de Identidad, HU #12707) no lo pasa y el selector «Rango sobre» no se pinta.
+   */
+  rangoSobre?: RangoSobre;
+  onRangoSobreChange?: (v: RangoSobre) => void;
   periodo: string;
   onPeriodoChange: (v: string) => void;
   rangoPropioDesde: string;
@@ -152,7 +157,7 @@ interface PeriodoPopoverProps {
   onAplicar: () => void;
 }
 
-function PeriodoPopover({
+export function PeriodoPopover({
   rangoSobre,
   onRangoSobreChange,
   periodo,
@@ -203,21 +208,25 @@ function PeriodoPopover({
           aria-label="Elegir periodo"
           className={`absolute right-0 top-full z-30 mt-2 w-64 p-3 ${POPOVER_SURFACE_CLS}`}
         >
-          <Field label="Rango sobre">
-            <select
-              value={rangoSobre}
-              onChange={(e) => onRangoSobreChange(e.target.value as RangoSobre)}
-              className={INPUT_CLS}
-            >
-              {RANGO_SOBRE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </Field>
+          {rangoSobre && onRangoSobreChange ? (
+            <>
+              <Field label="Rango sobre">
+                <select
+                  value={rangoSobre}
+                  onChange={(e) => onRangoSobreChange(e.target.value as RangoSobre)}
+                  className={INPUT_CLS}
+                >
+                  {RANGO_SOBRE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-          <div className="h-2" aria-hidden="true" />
+              <div className="h-2" aria-hidden="true" />
+            </>
+          ) : null}
 
           <Field label="Periodo">
             <select
@@ -639,9 +648,38 @@ export function TramitesFiltrosChips({
   fields,
   onQuitarCondicion,
 }: TramitesFiltrosChipsProps) {
+  return (
+    <FiltrosChipsTira
+      periodo={periodo}
+      onQuitarPeriodo={onQuitarPeriodo}
+      chips={condiciones.map((c) => ({ key: c.fieldId, label: describeCondition(c, fields) }))}
+      onQuitarChip={onQuitarCondicion}
+    />
+  );
+}
+
+export interface FiltrosChipsTiraProps {
+  periodo: string;
+  onQuitarPeriodo: () => void;
+  /** Un chip por filtro APLICADO, ya rotulado por quien conoce su catálogo. */
+  chips: readonly { key: string; label: string }[];
+  onQuitarChip: (key: string) => void;
+  /**
+   * «Limpiar todo» al final de la tira (HU #12707). Opcional: Trámites no lo pinta porque ya ofrece
+   * «Empezar de cero» dentro del panel de filtros.
+   */
+  onLimpiarTodo?: () => void;
+}
+
+/**
+ * La tira de chips en sí, independiente del catálogo de filtros: Trámites la alimenta con las
+ * condiciones de la gramática de Consultas y Validación de Identidad con las suyas (HU #12707), y
+ * así las dos pantallas pintan exactamente la misma tira.
+ */
+export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip, onLimpiarTodo }: FiltrosChipsTiraProps) {
   const periodoActivo = periodo !== 'Sin periodo';
 
-  if (!periodoActivo && condiciones.length === 0) return null;
+  if (!periodoActivo && chips.length === 0) return null;
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -658,22 +696,31 @@ export function TramitesFiltrosChips({
           </button>
         </span>
       ) : null}
-      {condiciones.map((condicion) => (
+      {chips.map((chip) => (
         <span
-          key={condicion.fieldId}
+          key={chip.key}
           className="flex items-center gap-1.5 rounded-full border border-[#557EFF] px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]"
         >
-          {describeCondition(condicion, fields)}
+          {chip.label}
           <button
             type="button"
-            onClick={() => onQuitarCondicion(condicion.fieldId)}
-            aria-label={`Quitar filtro ${describeCondition(condicion, fields)}`}
+            onClick={() => onQuitarChip(chip.key)}
+            aria-label={`Quitar filtro ${chip.label}`}
             className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
           >
             <X className="h-3 w-3" aria-hidden="true" />
           </button>
         </span>
       ))}
+      {onLimpiarTodo ? (
+        <button
+          type="button"
+          onClick={onLimpiarTodo}
+          className="rounded-full px-2 py-1 text-xs font-semibold text-[#59677D] underline-offset-2 transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+        >
+          Limpiar todo
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -135,8 +135,14 @@ export function IdentityValidationTrackingPanel({
   defaultOpen = false,
   embebido = false,
   detailLayout = false,
+  network = false,
 }: {
   validationId: string;
+  /**
+   * HU #12709 — la validación es de la red de la cabeza (modo consulta): la bitácora se lee por la ruta
+   * `network/**` (el servidor comprueba que la compañía dueña esté en su red). Ignora `tenantId`.
+   */
+  network?: boolean;
   /**
    * Compañía DUEÑA de la validación. El endpoint compara el tenant de la validación con el header
    * `X-Tenant-Id` y responde 404 si no coinciden, así que sin esto la bitácora sale vacía cada vez
@@ -168,7 +174,9 @@ export function IdentityValidationTrackingPanel({
     setLoading(true);
     setError(null);
     try {
-      const res = await tramitesClient.getBiometricAuditByValidation(validationId, tenantId ?? undefined);
+      const res = network
+        ? await tramitesClient.getNetworkIdentityAudit(validationId)
+        : await tramitesClient.getBiometricAuditByValidation(validationId, tenantId ?? undefined);
       setEvents(res.events);
       setReferenced(res.referencedFromOtherProcedure ?? false);
     } catch (err) {
@@ -176,7 +184,7 @@ export function IdentityValidationTrackingPanel({
     } finally {
       setLoading(false);
     }
-  }, [validationId, tenantId]);
+  }, [validationId, tenantId, network]);
 
   // Carga inicial si defaultOpen; re-sync cuando el padre hace poll (refreshKey).
   useEffect(() => {

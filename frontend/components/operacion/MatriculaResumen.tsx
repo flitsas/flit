@@ -13,6 +13,7 @@ import type {
 import { estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import { actorsOrderedByOrdinal, validationsForActor, isCoveredByVaultForActor } from '@/lib/tramites/ownership-share';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import { COPY } from '@/lib/copy/copy-catalog';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { formatDateOnly } from '@/lib/format/date-only';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -908,9 +909,9 @@ export default function MatriculaResumen({
     },
     { label: 'Llantas', value: especificaciones.llantas },
     { label: 'Estado', value: especificaciones.estado },
-    { label: 'N. Motor', value: especificaciones.motor },
-    { label: 'N. Chasis', value: especificaciones.chasis },
-    { label: 'N. Serie', value: especificaciones.serie },
+    { label: COPY.A09Motor, value: especificaciones.motor },
+    { label: COPY.A09Chasis, value: especificaciones.chasis },
+    { label: COPY.A09Serie, value: especificaciones.serie },
   ].filter((s) => !!s.value);
 
   return (
@@ -1027,7 +1028,7 @@ export default function MatriculaResumen({
           {specs.length > 0 ? (
             <div className="mt-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
-                Especificaciones técnicas
+                {COPY.A08}
               </p>
               {/* Especificaciones del vehículo: `grid-cols-2 sm:grid-cols-4` (captura Step5). */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

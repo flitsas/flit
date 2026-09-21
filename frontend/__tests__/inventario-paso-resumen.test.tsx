@@ -277,9 +277,9 @@ describe('MatriculaResumen — inventario: cabecera y vehículo', () => {
       'Largo',
       'Llantas',
       'Estado',
-      'N. Motor',
-      'N. Chasis',
-      'N. Serie',
+      'Nº Motor',
+      'Nº Chasis',
+      'Nº Serie',
     ]) {
       expect(within(vehiculo).getByText(etiqueta)).toBeInTheDocument();
     }

@@ -1,4 +1,5 @@
 import type { ManualArticle } from "../types";
+import { COPY } from "@/lib/copy/copy-catalog";
 
 export const INTRO_ARTICLES: ManualArticle[] = [
   {
@@ -7,14 +8,14 @@ export const INTRO_ARTICLES: ManualArticle[] = [
     audience: "Todos",
     sectionId: "introduccion",
     keywords: ["bienvenida", "manual", "ayuda", "documentacion", "inicio", "centro", "flit"],
-    summary: "Portal de documentación operativa para Gestor y Organismo de Tránsito.",
+    summary: `Portal de documentación operativa para ${COPY.A06} y ${COPY.A05}.`,
     blocks: [
       {
         id: "para-que",
         title: "1. ¿Para qué sirve este manual?",
         paragraphs: [
           "Bienvenido al ecosistema de FLIT. Este portal está diseñado para que resuelvas dudas sobre el uso de la plataforma en segundos, sin depender de una llamada a soporte en cada paso.",
-          "Documenta las acciones del Gestor (empresa cliente que radica trámites vehiculares) y del Gestor de Organismo de Tránsito (OT). No incluye consolas exclusivas de SuperAdmin ni la administración de compañía (AdminCompany).",
+          `Documenta las acciones del ${COPY.A06} (empresa cliente que radica trámites vehiculares) y del Gestor de ${COPY.A05} (OT). No incluye consolas exclusivas de SuperAdmin ni la administración de compañía (AdminCompany).`,
         ],
       },
       {
@@ -22,7 +23,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         title: "2. Pasos rápidos para navegar",
         paragraphs: [],
         bullets: [
-          "Utiliza el menú lateral izquierdo para explorar Introducción, Gestor u Organismo de Tránsito.",
+          `Utiliza el menú lateral izquierdo para explorar Introducción, ${COPY.A06} u ${COPY.A05}.`,
           "Si buscas algo específico (ej. «cómo crear un trámite» o «preasignación de placas»), usa la barra de Búsqueda en la parte superior (⌘ K / Ctrl K).",
           "Si el artículo es largo, usa la tabla de contenidos «En este artículo» a la derecha para saltar a la sección que necesitas.",
         ],
@@ -51,7 +52,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         id: "sidebar",
         title: "1. Menú lateral",
         paragraphs: [
-          "Las secciones agrupan artículos por audiencia. Introducción aplica a todos; Gestor documenta al operador de compañía; Organismo de Tránsito documenta al perfil OT (rol ot_admin).",
+          `Las secciones agrupan artículos por audiencia. Introducción aplica a todos; ${COPY.A06} documenta al operador de compañía; ${COPY.A05} documenta al perfil OT (rol ot_admin).`,
           "Puedes colapsar cada sección haciendo clic en su título. El artículo activo se resalta con fondo turquesa suave.",
         ],
       },
@@ -81,7 +82,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
   },
   {
     slug: "0-introduccion/3-perfiles-y-roles",
-    title: "Perfiles: Gestor vs Organismo de Tránsito",
+    title: `Perfiles: ${COPY.A06} vs ${COPY.A05}`,
     audience: "Todos",
     sectionId: "introduccion",
     keywords: ["perfil", "gestor", "ot", "radicador", "ot_admin", "roles", "diferencia"],
@@ -89,7 +90,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
     blocks: [
       {
         id: "gestor",
-        title: "1. Perfil Gestor (empresa cliente)",
+        title: `1. Perfil ${COPY.A06} (empresa cliente)`,
         paragraphs: [
           "Corresponde a usuarios de una compañía que radica trámites vehiculares (concesionario, renting, gestoría). En el dock típico de un operador (rol Radicador) verás Inicio, Trámites y Ayuda.",
           "Módulos adicionales (Identidad, Reportes, Usuarios) solo aparecen si tu rol custom tiene los permisos RBAC correspondientes.",
@@ -97,12 +98,12 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         bullets: [
           "Ruta principal de trámites: /tramites",
           "Wizard server-driven: el backend define pasos, bloqueos y cuándo puedes radicar.",
-          "No tiene acceso al hub del Organismo de Tránsito ni a consolas /admin de plataforma.",
+          `No tiene acceso al hub del ${COPY.A05} ni a consolas /admin de plataforma.`,
         ],
       },
       {
         id: "ot",
-        title: "2. Perfil Organismo de Tránsito",
+        title: `2. Perfil ${COPY.A05}`,
         paragraphs: [
           "Usuarios con rol ot_admin administran la operación de su organismo: bandeja de trámites de compañías, preasignación, reportes, usuarios OT y parametrización (Reglas, Documentos, Requisitos).",
           "El menú del OT vive en el dock (no duplica módulos SPA homónimos). Las rutas del hub siguen el patrón /admin/transit-offices/{id}/…",
