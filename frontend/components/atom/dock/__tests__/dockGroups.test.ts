@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDockGroups,
+  DOCK_GROUP_ORDER,
   DOCK_GROUP_SIDE,
   flattenDockEntries,
   type DockEntryLike,
@@ -124,6 +125,11 @@ describe("buildDockGroups", () => {
     expect(DOCK_GROUP_SIDE.administracion).toBe("right");
     expect(DOCK_GROUP_SIDE.administradores).toBe("right");
     expect(DOCK_GROUP_SIDE.integraciones).toBe("right");
+  });
+
+  it("HU #12723 — Ayuda no está en DOCK_GROUP_ORDER (sale del dock)", () => {
+    expect(DOCK_GROUP_ORDER).not.toContain("ayuda");
+    expect(Object.keys(DOCK_GROUP_SIDE)).not.toContain("ayuda");
   });
 
   it("Integraciones agrupa Log QX e ICT, con Log ICT y Reportes ICT anidados bajo ICT", () => {
