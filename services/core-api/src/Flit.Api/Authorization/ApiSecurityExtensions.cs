@@ -125,9 +125,7 @@ public static class ApiSecurityExtensions
                     AdminAuthorization.OtAdminRole))
             .AddPolicy(AdminAuthorization.OtModulePolicy, policy => policy
                 .RequireAuthenticatedUser()
-                .RequireRole(
-                    AdminAuthorization.SuperAdminRole,
-                    AdminAuthorization.OtAdminRole))
+                .AddRequirements(new OtModuleRequirement()))
             // gRPC ICT: exige el service-token (esquema IctService) + scope ict.orchestration.
             .AddPolicy(IctServicePolicy, policy => policy
                 .AddAuthenticationSchemes(IctServiceScheme)

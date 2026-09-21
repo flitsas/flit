@@ -41,7 +41,7 @@ public sealed class AdminOtAuthorizationTests : IClassFixture<WebApplicationFact
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         var body = await response.Content.ReadFromJsonAsync<ErrorBody>(cancellationToken: TestContext.Current.CancellationToken);
-        body!.Error.Should().Be("Acceso restringido: se requiere rol SuperAdmin u ot_admin");
+        body!.Error.Should().Be("Acceso restringido: se requiere rol SuperAdmin, ot_admin o pertenecer a un organismo de tránsito");
     }
 
     [Fact]
