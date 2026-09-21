@@ -10,6 +10,7 @@ import { fetchTransitOfficesOperationalStatus } from "@/lib/api/admin-transit-of
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isOtUser, isSuperAdmin } from "@/lib/auth/jwt";
 import { OtTabBar } from "@/components/admin/transit-offices/OtTabBar";
+import { ADMIN_BACK_LINK_CLS } from "@/components/admin/admin-ui-styles";
 import {
   OT_HUB_TABS,
   otHubListPath,
@@ -128,8 +129,7 @@ export function OtHubLayout({
         <button
           type="button"
           onClick={() => router.push(otHubListPath())}
-          className="mb-4 flex items-center gap-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 rounded-md"
-          style={{ color: "#557EFF" }}
+          className={`mb-4 ${ADMIN_BACK_LINK_CLS}`}
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Volver al listado de OT

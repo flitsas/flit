@@ -50,4 +50,18 @@ describe("PledgeDocumentOverrideToggle — prenda opcional por compañía", () =
       await screen.findByText(/no hay compañías habilitadas/i),
     ).toBeInTheDocument();
   });
+
+  it("HU #12731 — AC5 grilla xl:grid-cols-3 con descripción Prenda opcional", async () => {
+    fetchOtPrendaDocumentPoliciesForOffice.mockResolvedValue([
+      { tenantId: "t1", tenantName: "Gestora Uno", documentOptional: false },
+      { tenantId: "t2", tenantName: "Gestora Dos", documentOptional: true },
+      { tenantId: "t3", tenantName: "Gestora Tres", documentOptional: false },
+    ]);
+    render(<PledgeDocumentOverrideToggle transitOfficeId={OT} />);
+    await screen.findByRole("switch", { name: /gestora uno/i });
+    const list = document.querySelector("ul.grid");
+    expect(list?.className).toMatch(/xl:grid-cols-3/);
+    expect(list?.className).toMatch(/md:grid-cols-2/);
+    expect(screen.getAllByText("Prenda opcional").length).toBeGreaterThanOrEqual(3);
+  });
 });

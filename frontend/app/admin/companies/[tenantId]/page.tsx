@@ -30,6 +30,11 @@ import { fetchCompany, fetchCompanyChildren, fetchTenantSettings, updateTenantSe
 import { isHeadTenantType } from "@/lib/api/types";
 import type { CompanyListItem, TenantDomainResponse, TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import {
+  ADMIN_BACK_LINK_CLS,
+  ADMIN_BRAND_OUTLINE_BTN_CLS,
+  ADMIN_CONTENT_SURFACE_CLS,
+} from "@/components/admin/admin-ui-styles";
 
 export default function AdminCompanyDetailPage() {
   return (
@@ -218,41 +223,32 @@ function CompanyDetail() {
 
   return (
     <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
-      <button
-        type="button"
-        onClick={() => router.push(backHref)}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
-      >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> {backLabel}
+      <button type="button" onClick={() => router.push(backHref)} className={ADMIN_BACK_LINK_CLS}>
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> {backLabel}
       </button>
 
       {managingChild && company && <AdminChildContextBanner childName={company.razonSocial} />}
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <ModuleTitle
-          title="Configuración de compañía"
-          subtitle={
-            restrictedToRepresentatives
-              ? managingChild
-                ? "Gestiona los representantes legales, los mandatarios y los usuarios de esta compañía de tu red."
-                : "Gestiona los representantes legales y los mandatarios de tu compañía."
-              : "Edita las políticas operativas y revisa el historial de cambios."
-          }
-        />
-        {showNetworkLink && (
-          <Link
-            href={`/admin/companies/${tenantId}/children`}
-            className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold"
-            style={{ color: "#557EFF", borderColor: "#557EFF" }}
-          >
-            <Network className="h-3.5 w-3.5" aria-hidden />
-            Panel de red
-          </Link>
-        )}
-      </div>
+      <ModuleTitle
+        title="Configuración de compañía"
+        subtitle={
+          restrictedToRepresentatives
+            ? managingChild
+              ? "Gestiona los representantes legales, los mandatarios y los usuarios de esta compañía de tu red."
+              : "Gestiona los representantes legales y los mandatarios de tu compañía."
+            : "Edita las políticas operativas y revisa el historial de cambios."
+        }
+        action={
+          showNetworkLink ? (
+            <Link href={`/admin/companies/${tenantId}/children`} className={ADMIN_BRAND_OUTLINE_BTN_CLS}>
+              <Network className="h-3.5 w-3.5" aria-hidden="true" />
+              Panel de red
+            </Link>
+          ) : undefined
+        }
+      />
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+      <div className={ADMIN_CONTENT_SURFACE_CLS}>
         <UiStateBoundary
           status={status}
           onRetry={() => void load()}

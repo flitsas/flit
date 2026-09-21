@@ -14,6 +14,7 @@ import { BannerListTable } from "@/components/admin/banners/BannerListTable";
 import { BannerFormPanel } from "@/components/admin/banners/BannerFormPanel";
 import { BannerDeleteDialog } from "@/components/admin/banners/BannerDeleteDialog";
 import { createBanner, fetchBanners, updateBanner, type Banner, type BannerPagedResult } from "@/lib/api/admin-banners";
+import { ADMIN_BACK_LINK_CLS } from "@/components/admin/admin-ui-styles";
 
 const PAGE_SIZE = 20;
 
@@ -108,22 +109,15 @@ function BannersList() {
 
   return (
     <div className="flex min-h-screen flex-col gap-4 px-4 md:px-6 pt-6 pb-10">
-      <button
-        type="button"
-        onClick={() => router.push("/")}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
-      >
+      <button type="button" onClick={() => router.push("/")} className={ADMIN_BACK_LINK_CLS}>
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Volver al inicio
       </button>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <ModuleTitle
-          title="Banners promocionales"
-          subtitle="Configura y programa el contenido informativo del carrusel de banners, sin intervención técnica."
-        />
-        <CreateButton label="Nuevo banner" icon={ImageIcon} onClick={() => setFormTarget("new")} />
-      </div>
+      <ModuleTitle
+        title="Banners promocionales"
+        subtitle="Configura y programa el contenido informativo del carrusel de banners, sin intervención técnica."
+        action={<CreateButton label="Nuevo banner" icon={ImageIcon} onClick={() => setFormTarget("new")} />}
+      />
 
       {/* Sin tarjeta blanca envolvente: mismo lenguaje visual que TramitesTable — la tabla es una
           pila de filas-tarjeta directamente sobre el fondo de la app, no un bloque encapsulado.
