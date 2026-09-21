@@ -71,7 +71,7 @@ public sealed class IdentityVigenciaPorDocumentoResolverTests
         var ct = TestContext.Current.CancellationToken;
         var tenantA = Guid.NewGuid();
         var tenantB = Guid.NewGuid();
-        // El handler clasifica con DateTimeOffset.UtcNow (no recibe reloj): la ventana debe ser
+        // HandleAsync clasifica con DateTimeOffset.UtcNow (no recibe reloj): la ventana debe ser
         // relativa a la hora real, no al `Now` congelado — con fecha fija el test caducaba solo.
         var hoy = DateTimeOffset.UtcNow;
         var aprobada = Aprobada(hoy.AddDays(-1), hoy.AddDays(29));
