@@ -19,6 +19,21 @@ describe('InlineAlert', () => {
     expect(pending.getAttribute('style')).toContain('--badge-pending-bg');
   });
 
+  // Uso de ejemplo: INLINE_ALERT_TONES contracts — AC5 no regresión de tonos base.
+  it('HU #12726 (AC5) — tonos error/warning/info/success conservan tokens (no pending)', () => {
+    const { rerender } = render(<InlineAlert tone="error">E</InlineAlert>);
+    expect(screen.getByRole('alert').getAttribute('style')).toContain('--badge-danger-bg');
+
+    rerender(<InlineAlert tone="warning">W</InlineAlert>);
+    expect(screen.getByRole('alert').getAttribute('style')).toContain('--badge-warning-bg');
+
+    rerender(<InlineAlert tone="info">I</InlineAlert>);
+    expect(screen.getByRole('status').getAttribute('style')).toContain('--badge-info-bg');
+
+    rerender(<InlineAlert tone="success">S</InlineAlert>);
+    expect(screen.getByRole('status').getAttribute('style')).toContain('--badge-success-bg');
+  });
+
   it('anuncia info y éxito como status polite', () => {
     const { rerender } = render(<InlineAlert tone="info">Dato de contexto</InlineAlert>);
     expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');

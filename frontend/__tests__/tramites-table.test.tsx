@@ -1221,6 +1221,28 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     expect(within(dialog).getByText(/Entregado desde Borrador/)).toBeInTheDocument();
   });
 
+  // Uso de ejemplo: clic en radicado (no en chip) → panel por defecto, sin TimelineTrackPanel (AC2).
+  it('HU #12726 (AC2) — clic fuera del chip abre el detalle en panel por defecto', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-def', referenceNumber: 'TR-DEF', placa: 'RADDEF', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({
+      id: 'rad-def',
+      status: 'entregado',
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
+        { fromStatus: 'borrador', toStatus: 'entregado', changedAt: '2026-07-03T09:00:00Z', reason: null },
+      ],
+    });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByText('TR-DEF'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(within(dialog).queryByText('Línea de tiempo del trámite')).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Datos del vehículo')).toBeInTheDocument();
+  });
+
   it('la línea Firmas abre el modal de tracking de identidad de esa parte sin navegar', async () => {
     mocks.listInstances.mockResolvedValue([
       {

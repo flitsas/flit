@@ -117,6 +117,41 @@ describe('TramiteDetalleModal', () => {
     expect(await screen.findByText('Línea de tiempo del trámite')).toBeInTheDocument();
   });
 
+  // Uso de ejemplo: segundo clic en el badge de cabecera oculta TimelineTrackPanel (AC3).
+  it('HU #12726 (AC3) — segundo clic en el badge oculta la línea de tiempo', async () => {
+    const user = userEvent.setup();
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={ITEM} onClose={() => undefined} />,
+    );
+    const badge = screen.getByRole('button', {
+      name: /Estado: Entregado\. Ver línea de tiempo del trámite/i,
+    });
+    await user.click(badge);
+    expect(await screen.findByText('Línea de tiempo del trámite')).toBeInTheDocument();
+    await user.click(badge);
+    expect(screen.queryByText('Línea de tiempo del trámite')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Datos del vehículo')).toBeInTheDocument();
+  });
+
+  // Uso de ejemplo: preasignacion → InlineAlert tone=pending con alerta de OT (AC4).
+  it('HU #12726 (AC4) — pendiente por aprobación usa InlineAlert pending (naranja)', async () => {
+    render(
+      <TramiteDetalleModal
+        open
+        instanceId="inst-1"
+        item={{ ...ITEM, estado: 'preasignacion' }}
+        onClose={() => undefined}
+      />,
+    );
+    const alerta = await screen.findByRole('alert');
+    expect(alerta).toHaveTextContent(/Organismo de Tránsito debe asignarla/i);
+    expect(alerta.getAttribute('style')).toContain('--badge-pending-bg');
+    const badge = screen.getByRole('button', {
+      name: /Estado: Preasignación\. Ver línea de tiempo del trámite/i,
+    });
+    expect(badge).toHaveStyle({ background: '#E08A00' });
+  });
+
   it('toggle identidad muestra firma del baúl en nodos', async () => {
     const user = userEvent.setup();
     render(

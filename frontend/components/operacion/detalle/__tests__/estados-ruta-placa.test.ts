@@ -40,6 +40,24 @@ describe('detalleEstadoHeader — ruta de placa (ADR-0059)', () => {
     expect(hdr.color).toBe('#00A99D');
   });
 
+  // Uso de ejemplo: detalleEstadoHeader(estado).color === estadoChipStyle(estado).accent (AC1 contrato).
+  it('HU #12726 (AC1) — cabecera coincide con chip de fila para todo el catálogo', () => {
+    for (const estado of [
+      'borrador',
+      'preparado',
+      'preasignacion',
+      'asignado',
+      'entregado',
+      'aprobado',
+      'rechazado',
+      'revocado',
+      'anulado',
+      'subsanacion',
+    ] as const) {
+      expect(detalleEstadoHeader(estado).color).toBe(estadoChipStyle(estado).accent);
+    }
+  });
+
   it('AC3 — rechazado desde preasignacion dice «Rechazado preasignación» y explica la vuelta a la cola', () => {
     const hdr = detalleEstadoHeader('rechazado', 'preasignacion');
     expect(hdr.label).toBe('Rechazado preasignación');
