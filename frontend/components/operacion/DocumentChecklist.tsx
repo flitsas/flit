@@ -790,7 +790,7 @@ export function DocumentSlot({
       }
       style={{ borderColor: '#E2E8F0' }}
     >
-      {/* Badges esquina superior derecha (prototipo DocSlot). */}
+      {/* Badges + OCR en cabecera (HU #12728 D.2): Opcional en brand-ink; chip obligatorio por token danger. */}
       <div className="absolute right-3 top-3 flex items-center gap-1.5">
         {showValidado ? (
           <span
@@ -802,12 +802,13 @@ export function DocumentSlot({
         ) : ocrRejected ? (
           <StatusBadge tone="danger" label="No coincide" />
         ) : item.obligatorio ? (
-          <span className="whitespace-nowrap rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600">
-            Por cargar
-          </span>
+          <StatusBadge tone="danger" label="Por cargar" />
         ) : (
-          <span className="text-xs font-medium opacity-60">Opcional</span>
+          <span className="text-xs font-medium" style={{ color: 'var(--flit-brand-ink)' }}>
+            Opcional
+          </span>
         )}
+        {ocr && !analyzing ? <OcrStatusPanel tipo={tipo} ocr={ocr} /> : null}
       </div>
 
       <p
@@ -861,12 +862,6 @@ export function DocumentSlot({
           />
         </div>
       )}
-
-      {ocr && !analyzing ? (
-        <div className="mt-2">
-          <OcrStatusPanel tipo={tipo} ocr={ocr} />
-        </div>
-      ) : null}
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
         {isAuto ? (
