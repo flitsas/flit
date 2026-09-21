@@ -695,4 +695,48 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
     const css = readFileSync(resolve(__dirname, "../../../../app/globals.css"), "utf8");
     expect(css).toMatch(/--dashboard-hero-h:\s*260px/);
   });
+
+  // Edge / contrato adicionales (mapeo ADO AC1–AC5; los `it` anteriores usan numeración histórica del PR)
+
+  it("AC1 edge — no declara minHeight inline de 220px (alto vía token CSS)", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+    const banner = await screen.findByTestId("dashboard-hero-banner");
+    expect(banner.getAttribute("style") ?? "").not.toMatch(/minHeight|min-height/i);
+    expect(banner.className).not.toMatch(/min-h-\[220px\]/);
+  });
+
+  it("AC3 contrato — fila de filtros siempre incluye DateRangePicker; KPI grid queda debajo", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+    const filterRow = await screen.findByTestId("dashboard-filter-row");
+    const kpiGrid = screen.getByTestId("dashboard-kpi-grid");
+    expect(within(filterRow).getByTestId("date-range-picker")).toBeInTheDocument();
+    expect(filterRow.compareDocumentPosition(kpiGrid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("AC4 contrato — exactamente 4 tarjetas KPI en el grid (sin quinta «Otros»)", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+    const grid = await screen.findByTestId("dashboard-kpi-grid");
+    const cards = grid.querySelectorAll(":scope > div");
+    expect(cards).toHaveLength(4);
+  });
+
+  it("AC5 contrato — layout apila en mobile (grid-cols-1) y items-stretch; dark tokens en KPI", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+    const banner = await screen.findByTestId("dashboard-hero-banner");
+    const heroRow = banner.parentElement;
+    expect(heroRow?.className).toMatch(/grid-cols-1/);
+    expect(heroRow?.className).toMatch(/md:grid-cols-3/);
+    expect(heroRow?.className).toMatch(/items-stretch/);
+    const grid = screen.getByTestId("dashboard-kpi-grid");
+    const firstCard = grid.querySelector(":scope > div");
+    expect(firstCard?.className).toMatch(/dark:bg-\[#0B0F14\]/);
+  });
+
+  it("AC5 edge — bannerAmbientGradient y useDominantColor siguen exportados sin cambio de firma", async () => {
+    const mod = await import("@/hooks/useDominantColor");
+    expect(typeof mod.bannerAmbientGradient).toBe("function");
+    expect(typeof mod.useDominantColor).toBe("function");
+    expect(mod.bannerAmbientGradient(null)).toMatch(/linear-gradient/i);
+    expect(mod.bannerAmbientGradient("85,126,255")).toMatch(/radial-gradient|rgb\(85,\s*126,\s*255\)/i);
+  });
 });
