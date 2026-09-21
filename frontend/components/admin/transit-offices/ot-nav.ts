@@ -1,3 +1,5 @@
+import { COPY } from "@/lib/copy/copy-catalog";
+
 /** Rutas del hub consola OT (HU #10236). */
 export type OtHubTabId =
   | "tramites"
@@ -28,13 +30,13 @@ export interface OtHubTab {
  * "Trámites"/"Webhooks" (ids legacy) siguen fuera de la oferta; rutas por URL siguen vivas.
  */
 export const OT_HUB_TABS: OtHubTab[] = [
-  { id: "client-procedures", label: "Trámites", segment: "client-procedures" },
+  { id: "client-procedures", label: COPY.B21Tramites, segment: "client-procedures" },
   { id: "rules", label: "Reglas", segment: "rules" },
   { id: "documents", label: "Documentos", segment: "documents" },
   { id: "requirements", label: "Requisitos", segment: "requirements" },
   { id: "plate-ranges", label: "Preasignación", segment: "plate-ranges" },
-  { id: "usuarios", label: "Usuarios", segment: "usuarios" },
-  { id: "reportes", label: "Reportes", segment: "reportes" },
+  { id: "usuarios", label: COPY.B21Usuarios, segment: "usuarios" },
+  { id: "reportes", label: COPY.B21Reportes, segment: "reportes" },
   { id: "mandatos", label: "Mandatos", segment: "mandatos" },
   { id: "imprint-validation", label: "Validar impronta", segment: "imprint-validation" },
   // HU #12578 (Feature #12565) — vista dedicada "Revocatorias": todos los intentos de solicitud de

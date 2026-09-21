@@ -6,7 +6,11 @@ using Xunit;
 
 namespace Flit.Admin.Tests.Companies;
 
-/// <summary>HU #11228 — AdminCompany puede operar su tenant; no el de otro.</summary>
+/// <summary>
+/// HU #11228 — AdminCompany opera su tenant y no el de otro. HU #12710 reserva la configuración
+/// (settings y demás secciones) al SuperAdmin y a la cabeza de red: el AdminCompany sin red ya no la
+/// lee ni en su propio tenant (la suite completa vive en <c>AdminCompanyReservedSectionsTests</c>).
+/// </summary>
 public sealed class AdminCompanyOwnTenantAuthorizationTests
     : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -21,14 +25,14 @@ public sealed class AdminCompanyOwnTenantAuthorizationTests
     }
 
     [Fact]
-    public async Task Settings_AdminCompany_OwnTenant_NotForbidden()
+    public async Task Settings_AdminCompany_sin_red_OwnTenant_Returns403()
     {
+        // HU #12710 (D4) — antes 200 (HU #11228); la configuración la gestiona el SuperAdmin.
         var client = Client(OwnTenant);
         var response = await client.GetAsync(
             $"/api/v1/admin/companies/{OwnTenant}/settings",
             TestContext.Current.CancellationToken);
-        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
-        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]

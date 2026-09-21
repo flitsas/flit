@@ -13,6 +13,7 @@
  */
 import { bogotaClock, type XlsxCell } from '@/lib/xlsx';
 import { formatFechaHora } from '@/lib/format/date';
+import { COPY } from '@/lib/copy/copy-catalog';
 import type { OtClientProcedure } from '@/lib/api/types-ot';
 import { OT_PROCEDURES_COLUMNS } from './ot-procedures-columns';
 import { formatOtProcedureStatus } from '@/components/admin/transit-offices/ot-utils';
@@ -37,7 +38,7 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
   radicado: [
     {
       id: 'radicado',
-      label: 'Radicado',
+      label: COPY.B15,
       // TEXTO, no número: FT1-0000012 (HU #12371) es un identificador con prefijo. Misma regla y
       // mismo ancho que el export del gestor, para que los dos archivos se lean igual.
       value: (r) => texto(r.referenceNumber),
@@ -57,7 +58,7 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
   vin: [
     {
       id: 'vin',
-      label: 'VIN',
+      label: COPY.A02Vin,
       value: (r) => texto(r.vin),
       raw: (r) => texto(r.vin) || null,
       width: 20,
@@ -66,7 +67,7 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
   placa: [
     {
       id: 'placa',
-      label: 'Placa',
+      label: COPY.A02Placa,
       value: (r) => texto(r.placa),
       raw: (r) => texto(r.placa) || null,
       width: 10,
@@ -75,7 +76,7 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
   vendedor: [
     {
       id: 'vendedor',
-      label: 'Propietario / vendedor',
+      label: COPY.A01,
       value: (r) => texto(r.vendedorNombre),
       raw: (r) => texto(r.vendedorNombre) || null,
       width: 28,
@@ -84,7 +85,7 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
   comprador: [
     {
       id: 'comprador',
-      label: 'Comprador',
+      label: COPY.B17,
       value: (r) => texto(r.compradorNombre),
       raw: (r) => texto(r.compradorNombre) || null,
       width: 28,
@@ -93,7 +94,7 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
   tipoTramite: [
     {
       id: 'tipoTramite',
-      label: 'Tipo de trámite',
+      label: COPY.A03,
       value: (r) => texto(r.procedureTypeName),
       raw: (r) => texto(r.procedureTypeName) || null,
       width: 24,
@@ -111,7 +112,7 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
     },
     {
       id: 'gestor',
-      label: 'Gestor',
+      label: COPY.A06,
       value: (r) => texto(r.gestorNombre),
       raw: (r) => texto(r.gestorNombre) || null,
       width: 26,
@@ -121,7 +122,7 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
   estado: [
     {
       id: 'estado',
-      label: 'Estado',
+      label: COPY.B18,
       value: (r) => formatOtProcedureStatus(r.status),
       raw: (r) => formatOtProcedureStatus(r.status),
       width: 16,
@@ -130,7 +131,7 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
   fechaRadicacion: [
     {
       id: 'fechaRadicacion',
-      label: 'Fecha de radicación',
+      label: COPY.A04,
       // `value` es el texto de respaldo (CSV); `raw` es lo que hace que Excel la trate como FECHA
       // y no como una cadena que no se puede ordenar ni restar.
       value: (r) => (r.createdAt ? formatFechaHora(r.createdAt) : ''),

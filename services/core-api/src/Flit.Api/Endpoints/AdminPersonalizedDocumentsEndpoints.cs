@@ -30,6 +30,9 @@ public static class AdminPersonalizedDocumentsEndpoints
         var group = app
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/personalized-documents")
             .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            // HU #12710 — sección reservada al SuperAdmin: el Administrador de Compañía (también el de
+            // una cabeza de red) solo conserva Representantes y Mandatarios (Epic #12685).
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithTags("Admin · Documentos personalizados");
 

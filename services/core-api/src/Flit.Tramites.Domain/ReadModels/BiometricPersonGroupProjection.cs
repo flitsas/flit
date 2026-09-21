@@ -6,6 +6,11 @@ namespace Flit.Tramites.Domain.ReadModels;
 /// </summary>
 public sealed class BiometricPersonGroupProjection
 {
+    /// <summary>
+    /// Compañía dueña de la persona (HU #12706). La persona se agrupa por compañía + documento: la
+    /// misma cédula en dos compañías son dos filas, cada una con su historial.
+    /// </summary>
+    public Guid TenantId { get; init; }
     public Guid LatestValidationId { get; init; }
     public string DocumentType { get; init; } = string.Empty;
     public string DocumentNumber { get; init; } = string.Empty;

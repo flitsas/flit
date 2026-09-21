@@ -219,6 +219,48 @@ public interface IProcedureInstanceRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// HU #12706 — mismo listado plano que <see cref="ListBiometricValidationsByTenantAsync(Guid, int, int, BiometricValidationListFilter?, DateTimeOffset, CancellationToken)"/>
+    /// acotado por <see cref="TenantScope"/> (<c>WhereTenantInScope</c>): todas las compañías solo con
+    /// <c>TenantScope.All</c> (SuperAdmin sin acotar), un conjunto de lectura vacío ⇒ cero filas. La
+    /// firma por <see cref="Guid"/> equivale a <c>TenantScope.Single</c>.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(
+        TenantScope scope,
+        int skip,
+        int take,
+        BiometricValidationListFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct = default);
+
+    /// <summary>HU #12706 — KPIs por estado del listado plano, acotados por <see cref="TenantScope"/>.</summary>
+    Task<IReadOnlyDictionary<string, int>> CountBiometricValidationsByEstadoAsync(
+        TenantScope scope,
+        BiometricValidationListFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12706 — listado agrupado por persona acotado por <see cref="TenantScope"/>. La persona es
+    /// compañía + documento: la misma cédula en dos compañías son dos filas
+    /// (<see cref="ReadModels.BiometricPersonGroupProjection.TenantId"/>).
+    /// </summary>
+    Task<(IReadOnlyList<ReadModels.BiometricPersonGroupProjection> Rows, int TotalPersons)>
+        ListBiometricValidationsGroupedByPersonAsync(
+            TenantScope scope,
+            int skip,
+            int take,
+            BiometricPersonGroupFilter? filter,
+            DateTimeOffset now,
+            CancellationToken ct = default);
+
+    /// <summary>HU #12706 — KPIs (personas por estado) de la grilla agrupada, acotados por <see cref="TenantScope"/>.</summary>
+    Task<IReadOnlyDictionary<string, int>> CountBiometricPersonsByEstadoAsync(
+        TenantScope scope,
+        BiometricPersonGroupFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// HU #11270 — candidatos para calcular la peor alerta de las personas de una página:
     /// validaciones no terminales o creadas/actualizadas en los últimos <paramref name="alertWindowDays"/> días.
     /// Clave de documento ya normalizada (Trim+Upper). Solo lectura.

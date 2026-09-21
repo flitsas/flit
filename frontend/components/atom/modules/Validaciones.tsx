@@ -1,14 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import {
   AlertCircle,
   AlertTriangle,
   Bell,
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   Copy,
   ExternalLink,
@@ -23,14 +30,34 @@ import {
 } from 'lucide-react';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ModuleTitle } from './ModuleTitle';
+import { COPY } from '@/lib/copy/copy-catalog';
+
+/** H1 canónico del módulo Identidad (HU #12699 / A17). El id SPA permanece `validaciones`. */
+export const IDENTIDAD_MODULE_TITLE = COPY.A17;
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { ValidacionesFiltrosBar } from './ValidacionesFiltrosBar';
 import {
-  ValidacionesFilterToolbar,
-  EMPTY_VALIDACIONES_FILTERS,
+  buildPersonApiFilters,
+  describeIdentityFilter,
   hasActiveValidacionesFilters,
-  splitPersonaODocumentoQuery,
+  toUiFilters,
+  type IdentityFilterCondition,
   type ValidacionesUiFilters,
-} from './ValidacionesFilterToolbar';
+} from '@/lib/identidad/validaciones-filtros';
+import { FiltrosChipsTira, rangoDePeriodo } from '@/components/operacion/TramitesFiltrosBar';
+import { controlCls } from '@/components/operacion/tramites-control-styles';
+import { PageNav } from '@/components/atom/PageNav';
+import { ColumnSelector } from '@/components/atom/ColumnSelector';
+import { SearchableSelect } from '@/components/atom/SearchableSelect';
+import { useUiPreferences } from '@/hooks/useUiPreferences';
+import { useNetworkScope } from '@/hooks/useNetworkScope';
+import { NetworkScopeSelector } from '@/components/operacion/NetworkScopeSelector';
+import { NetworkScopeBadge } from '@/components/operacion/NetworkScopeBadge';
+import {
+  ETIQUETA_SOLO_CONSULTA,
+  isNetworkReadOnly,
+  isScopeRejection,
+} from '@/lib/tramites/network-scope';
 import { PersonIdentityDetailDrawer } from './PersonIdentityDetailDrawer';
 import {
   PrevalidacionForm,
@@ -44,6 +71,7 @@ import {
   type RateLimitInfo,
 } from './PrevalidacionEditForm';
 import {
+  ALL_TENANTS,
   setActiveTramitesTenant,
   tramitesClient,
   TramitesApiError,
@@ -63,7 +91,6 @@ import type {
   StuckIdentityValidation,
   StuckIdentityValidationsResponse,
   TenantBiometricPerson,
-  TenantBiometricPersonFilters,
   TenantBiometricValidation,
 } from '@/lib/api/types/procedure-runtime';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
@@ -154,38 +181,55 @@ function vigenciaBadge(dias: number | null): { label: string; color: string; bg:
   return { label: 'Vigente', color: '#70CF3A', bg: 'rgba(140,198,63,0.16)' };
 }
 
-/**
- * Filtros de persona para el endpoint agrupado (HU #11271), única grilla del módulo: solo semántica
- * de persona (los campos propios de UNA validación —referencia, modalidad, rol, proveedor, score,
- * motivo de rechazo— no aplican a un grupo y viven en el detalle). Vacíos → undefined (no se envían),
- * fechas a ISO con `createdTo`/`expiraHasta` a fin de día para incluir la fecha elegida.
- */
-function buildPersonApiFilters(f: ValidacionesUiFilters): TenantBiometricPersonFilters {
-  const text = (s: string) => (s.trim() === '' ? undefined : s.trim());
-  const num = (s: string) => {
-    if (s.trim() === '') return undefined;
-    const n = Number(s);
-    return Number.isNaN(n) ? undefined : n;
-  };
-  return {
-    name: text(f.name),
-    documentNumber: text(f.documentNumber),
-    status: f.status || undefined,
-    createdFrom: f.createdFrom ? `${f.createdFrom}T00:00:00` : undefined,
-    createdTo: f.createdTo ? `${f.createdTo}T23:59:59` : undefined,
-    vigenciaEstado: f.vigenciaEstado || undefined,
-    expiraDesde: f.expiraDesde ? `${f.expiraDesde}T00:00:00` : undefined,
-    expiraHasta: f.expiraHasta ? `${f.expiraHasta}T23:59:59` : undefined,
-    venceEnDias: num(f.venceEnDias),
-  };
-}
-
 /** Cadencia del auto-refresco en vivo de la grilla (fase 2). 15 s: fresco sin presionar el backend. */
 const AUTO_REFRESH_MS = 15_000;
 
-/** Opciones de filas por página (el cliente decide; de 10 en 10 hasta 50). */
-const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
-const DEFAULT_PAGE_SIZE = 20;
+/**
+ * HU #12707 (AC9) — mismo pie que Trámites: 10, 25, 50 o 100 filas, recordado durante la sesión
+ * (`sessionStorage`, no preferencia de servidor: es una comodidad del rato).
+ */
+const TAMANOS_DE_PAGINA = [10, 25, 50, 100] as const;
+const PAGE_SIZE_POR_DEFECTO = 10;
+const CLAVE_PAGE_SIZE = 'identidad.pageSize';
+
+function suscripcionInerte(): () => void {
+  return () => {};
+}
+
+function leerPageSizeGuardado(): number {
+  try {
+    const guardado = Number(sessionStorage.getItem(CLAVE_PAGE_SIZE));
+    return TAMANOS_DE_PAGINA.includes(guardado as (typeof TAMANOS_DE_PAGINA)[number])
+      ? guardado
+      : PAGE_SIZE_POR_DEFECTO;
+  } catch {
+    return PAGE_SIZE_POR_DEFECTO;
+  }
+}
+
+/** Retardo del buscador: se aplica al dejar de teclear, como hacía el panel anterior. */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * HU #12707 — columnas de la grilla. «Compañía» no se elige: aparece sola cuando la vista abarca más
+ * de una compañía (SuperAdmin; red de la cabeza) y siempre en primer lugar. «Acciones» tampoco.
+ */
+const IDENTIDAD_COLUMNS = [
+  { key: 'tramite', label: 'Trámite', width: 'minmax(0,1.5fr)' },
+  { key: 'persona', label: 'Persona', width: 'minmax(0,1.4fr)' },
+  { key: 'documento', label: 'Documento', width: 'minmax(0,1.1fr)' },
+  { key: 'correo', label: 'Correo', width: 'minmax(0,1.3fr)' },
+  { key: 'estado', label: 'Estado', width: 'minmax(0,1.2fr)' },
+  { key: 'score', label: 'Score', width: 'minmax(0,0.5fr)' },
+  { key: 'registro', label: 'Registro', width: 'minmax(0,1.1fr)' },
+  { key: 'aprobacion', label: 'Aprobación', width: 'minmax(0,1fr)' },
+  { key: 'vigencia', label: 'Vigencia', width: 'minmax(0,1.4fr)' },
+  { key: 'enlace', label: 'Enlace vigente', width: 'minmax(0,1.2fr)' },
+] as const;
+type IdentidadColumnKey = (typeof IDENTIDAD_COLUMNS)[number]['key'] | 'compania';
+const IDENTIDAD_COLUMN_KEYS = IDENTIDAD_COLUMNS.map((c) => c.key);
+const COMPANIA_COLUMN = { key: 'compania', label: 'Compañía', width: 'minmax(0,1.4fr)' } as const;
+const ACCIONES_WIDTH = 'minmax(0,0.9fr)';
 
 /** HU #10944 (D10) — tope y cooldown de reenvíos, seguidos client-side (el contrato no los expone). */
 const MAX_REENVIOS = 3;
@@ -261,10 +305,12 @@ interface ResendResultState {
 }
 
 export function Validaciones() {
-  // El admin FLIT puede mirar las validaciones de UNA empresa a la vez. El tenant elegido se fija en
-  // el cliente de trámites (`setActiveTramitesTenant`), que es quien resuelve el header X-Tenant-Id de
-  // TODA la pantalla — incluidos los drawers y formularios anidados, que así no necesitan recibirlo por
-  // props. Para un usuario de compañía esto no cambia nada: el backend le impone su tenant desde el JWT.
+  // HU #12706/#12707 — el admin FLIT ve por defecto TODAS las compañías («Todas») y puede acotar a una.
+  // El alcance del listado y de las incidencias viaja EXPLÍCITO en cada llamada (`listTenant`): ya no se
+  // fija global con `setActiveTramitesTenant`, porque en «Todas» cada fila es de una compañía distinta.
+  // El tenant activo del cliente solo se fija mientras está abierto un drawer, formulario o modal de UNA
+  // fila (`openForTenant`), para que sus llamadas internas salgan con la compañía de ESA fila (AC6).
+  // Para un usuario de compañía nada de esto cambia: el backend le impone su tenant desde el JWT.
   const [isFlitAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
   // HU #12164 — mismo permiso `AdminTramiteReenviarValidacion` (catálogo HU #12157) que gatea la
   // acción homónima del Dashboard de Trámites (`AdminTramiteAcciones.tsx`, HU #12163): AC1 exige que
@@ -277,9 +323,38 @@ export function Validaciones() {
   });
   const { show: showToast } = useToast();
   const [companies, setCompanies] = useState<CompanyItem[] | null>(null);
+  // '' = «Todas las compañías» (solo SuperAdmin).
   const [companyId, setCompanyId] = useState<string>('');
-  const [showFiltros, setShowFiltros] = useState(false);
   const [incidenciasOpen, setIncidenciasOpen] = useState(false);
+
+  // Alcance de las lecturas transversales: el SuperAdmin pide «todas» (sin header) o una compañía; el
+  // resto no pasa nada y el cliente cae a su tenant (el backend lo impone igual).
+  const listTenant = isFlitAdmin ? companyId || ALL_TENANTS : undefined;
+  const listTenantRef = useRef(listTenant);
+  listTenantRef.current = listTenant;
+  // «Todas»: la vista mezcla compañías, así que se pinta la columna Compañía y las acciones de lote
+  // (reintentar todas las incidencias) necesitan una compañía elegida.
+  const viendoTodas = isFlitAdmin && companyId === '';
+
+  // HU #12709 — alcance de red de la cabeza (Concesión / Marca Blanca), con preferencia PROPIA del
+  // módulo. Para quien no es administrador de una cabeza (Radicador, hija, sin red, SuperAdmin) el hook
+  // no hace ninguna petición y el alcance es siempre «Mi compañía» (AC6).
+  // Mismo idioma que `isFlitAdmin`: el tenant del JWT, leído una vez.
+  const [callerTenantId] = useState<string | null>(() => decodeJwtPayload(getToken())?.tenant_id ?? null);
+  const red = useNetworkScope('identidad.scope');
+  // AC7 — la red respondió 403/404 (freno `group_read_scope`, red deshecha): se vuelve a «Mi compañía»
+  // sin mostrar un fallo con reintento.
+  const [redNoDisponible, setRedNoDisponible] = useState(false);
+  const networkActive = red.networkActive && !redNoDisponible;
+  const networkChild = networkActive ? red.scope.childTenantId : undefined;
+  const networkRef = useRef({ active: networkActive, child: networkChild });
+  networkRef.current = { active: networkActive, child: networkChild };
+  const showCompanyColumn = isFlitAdmin || networkActive;
+  /** AC3 — fila de una compañía hija vista por la cabeza: solo consulta (las propias conservan acciones). */
+  const esSoloConsulta = useCallback(
+    (tenantId: string | undefined) => networkActive && isNetworkReadOnly({ tenantId }, callerTenantId),
+    [networkActive, callerTenantId],
+  );
 
   const [persons, setPersons] = useState<TenantBiometricPerson[] | null>(null);
   const [stats, setStats] = useState<BiometricValidationStats | null>(null);
@@ -287,22 +362,28 @@ export function Validaciones() {
   const [fetching, setFetching] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
-  // Eventos de identidad ATASCADOS (dead-letter) del tenant + ids que se están reencolando.
+  // Eventos de identidad ATASCADOS (dead-letter) + ids que se están reencolando.
   // HU #11268 — cuatro estados del panel: loading / error / vacío / lleno.
   const [stuck, setStuck] = useState<StuckIdentityValidationsResponse | null>(null);
   const [stuckLoading, setStuckLoading] = useState(true);
   const [stuckError, setStuckError] = useState<string | null>(null);
   const [requeuing, setRequeuing] = useState<Set<string>>(() => new Set());
   const [requeuingAll, setRequeuingAll] = useState(false);
-  // HU #11273 — historial multi-validación por persona: el desglose por validación y sus bitácoras.
+  // HU #11273 — historial multi-validación por persona. HU #12707 — con la compañía de la fila: la
+  // misma cédula puede estar en dos compañías.
   const [personDetail, setPersonDetail] = useState<{
     documentType: string;
     documentNumber: string;
+    tenantId?: string;
+    /** HU #12709 — persona de una hija vista por la cabeza: detalle por la ruta de red, en lectura. */
+    soloConsulta?: boolean;
   } | null>(null);
 
   // Gestión de prevalidaciones, absorbida de la pantalla retirada /tramites/prevalidaciones.
   const [showForm, setShowForm] = useState(false);
   const [prefillNueva, setPrefillNueva] = useState<PrefillNueva | undefined>(undefined);
+  // HU #12707 (AC7) — en «Todas», «Nueva prevalidación» pide primero la compañía.
+  const [pickingCompanyForNew, setPickingCompanyForNew] = useState(false);
   const [successResult, setSuccessResult] = useState<IniciarPrevalidacionResult | null>(null);
   const [editingRow, setEditingRow] = useState<TenantBiometricValidation | null>(null);
   // Confirmación de envío. Dos modos con endpoints distintos:
@@ -336,20 +417,44 @@ export function Validaciones() {
 
   // Paginación server-side (el listado ya NO se topa a 500; se navega por páginas).
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  // Tamaño recordado en la sesión; se lee sin efecto (mismo patrón que Trámites).
+  const pageSizeGuardado = useSyncExternalStore(suscripcionInerte, leerPageSizeGuardado, () => PAGE_SIZE_POR_DEFECTO);
+  const [pageSizeElegido, setPageSizeElegido] = useState<number | null>(null);
+  const pageSize = pageSizeElegido ?? pageSizeGuardado;
   const [total, setTotal] = useState(0);
   const pageRef = useRef(page);
   pageRef.current = page;
   const pageSizeRef = useRef(pageSize);
   pageSizeRef.current = pageSize;
 
-  // `filters` = controles de la UI (instantáneos); `applied` = lo que se consulta al backend. Los chips
-  // y fechas aplican de inmediato; los inputs de texto aplican tras un debounce (~300 ms). El filtrado
-  // se delega al backend (HU #10347) — NO se filtra client-side sobre el cap de 500 filas.
-  const [filters, setFilters] = useState<ValidacionesUiFilters>(EMPTY_VALIDACIONES_FILTERS);
-  const [applied, setApplied] = useState<ValidacionesUiFilters>(EMPTY_VALIDACIONES_FILTERS);
-  const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+  // HU #12707 — barra de Trámites. Borrador (lo que se está eligiendo en los popovers) vs. aplicado (lo
+  // que se consulta). El buscador aplica solo tras un retardo; Periodo y «+ Filtro», con «Aplicar».
+  const [search, setSearch] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [periodo, setPeriodo] = useState<string>('Sin periodo');
+  const [rangoPropioDesde, setRangoPropioDesde] = useState('');
+  const [rangoPropioHasta, setRangoPropioHasta] = useState('');
+  const [appliedPeriodo, setAppliedPeriodo] = useState<{
+    label: string;
+    range: { desde: string; hasta: string } | null;
+  }>({ label: 'Sin periodo', range: null });
+  const [draftCondiciones, setDraftCondiciones] = useState<IdentityFilterCondition[]>([]);
+  const [appliedCondiciones, setAppliedCondiciones] = useState<IdentityFilterCondition[]>([]);
+  const applied = useMemo<ValidacionesUiFilters>(
+    () => toUiFilters(appliedSearch, appliedPeriodo.range, appliedCondiciones),
+    [appliedSearch, appliedPeriodo, appliedCondiciones],
+  );
+
+  // HU #12707 — columnas elegidas por el usuario (persistidas en el servidor, scope propio).
+  const {
+    visible: visibleColumns,
+    saving: savingColumns,
+    setVisible: setVisibleColumns,
+  } = useUiPreferences('identidad.columns', IDENTIDAD_COLUMN_KEYS, { catalog: IDENTIDAD_COLUMN_KEYS });
+  const tableColumns = useMemo<IdentidadColumnKey[]>(() => {
+    const elegidas = IDENTIDAD_COLUMN_KEYS.filter((k) => visibleColumns.includes(k));
+    return showCompanyColumn ? ['compania', ...elegidas] : elegidas;
+  }, [visibleColumns, showCompanyColumn]);
 
   // Refs para el auto-refresco: el intervalo lee lo último sin re-suscribirse y se evitan carreras.
   const appliedRef = useRef(applied);
@@ -365,11 +470,15 @@ export function Validaciones() {
       fetchingRef.current = true;
       if (!opts?.background) setFetching(true);
       try {
-        const res = await tramitesClient.listTenantBiometricPersons({
+        const filtros = {
           ...buildPersonApiFilters(uiFilters),
           page: pageRef.current,
           pageSize: pageSizeRef.current,
-        });
+        };
+        // HU #12709 — en «Toda la red» o una hija, las rutas de red (el alcance lo decide el servidor).
+        const res = networkRef.current.active
+          ? await tramitesClient.listNetworkIdentityPersons(filtros, networkRef.current.child)
+          : await tramitesClient.listTenantBiometricPersons(filtros, listTenantRef.current);
         if (reqId !== reqIdRef.current) return;
         setPersons(res.persons);
         setStats(res.stats);
@@ -378,6 +487,12 @@ export function Validaciones() {
         setLastUpdatedAt(new Date());
       } catch (err) {
         if (reqId !== reqIdRef.current) return;
+        // AC7 — un 403/404 de la red no es un fallo técnico: la red no está disponible para este usuario
+        // ahora (freno general, red deshecha). Se vuelve a «Mi compañía» y la pantalla recarga sola.
+        if (networkRef.current.active && isScopeRejection(err)) {
+          setRedNoDisponible(true);
+          return;
+        }
         // En auto-refresco con datos ya en pantalla, un fallo transitorio NO machaca la vista con el error.
         if (opts?.background && personsRef.current !== null) {
           return;
@@ -397,7 +512,7 @@ export function Validaciones() {
   );
 
   // Empresas disponibles para el admin FLIT. Un fallo aquí no rompe la pantalla: el selector
-  // simplemente no aparece y se sigue viendo el tenant propio.
+  // simplemente no aparece y se sigue viendo «Todas».
   useEffect(() => {
     if (!isFlitAdmin) return;
     let vivo = true;
@@ -414,22 +529,28 @@ export function Validaciones() {
     };
   }, [isFlitAdmin]);
 
-  // Al salir del módulo se devuelve el cliente a su tenant natural: el override es de ESTA pantalla,
-  // no de la sesión (si no, el admin seguiría viendo la empresa elegida en Trámites o Dashboard).
-  useEffect(() => () => setActiveTramitesTenant(undefined), []);
+  const companiesById = useMemo(
+    () => new Map((companies ?? []).map((c) => [c.id, c])),
+    [companies],
+  );
 
-  const handleCompanyChange = (nextId: string) => {
-    setCompanyId(nextId);
-    // Se fija ANTES de recargar para que la petición ya salga con el tenant nuevo.
-    setActiveTramitesTenant(nextId === '' ? undefined : nextId);
-    setPersons(null);
-    setStats(null);
-    setHasLoadedOnce(false);
-    setPage(1);
-    pageRef.current = 1;
-    void load(appliedRef.current);
-    void refreshStuck();
-  };
+  /**
+   * Fija la compañía con la que salen las llamadas internas de un drawer/formulario/modal de UNA fila.
+   * Solo para el admin FLIT: a un usuario de compañía el backend le impone la suya y aquí no se toca.
+   */
+  const openForTenant = useCallback(
+    (tenantId: string | undefined) => {
+      if (!isFlitAdmin) return;
+      setActiveTramitesTenant(tenantId ?? (companyId || undefined));
+    },
+    [isFlitAdmin, companyId],
+  );
+  const closeTenantScope = useCallback(() => {
+    if (isFlitAdmin) setActiveTramitesTenant(undefined);
+  }, [isFlitAdmin]);
+
+  // Al salir del módulo se devuelve el cliente a su tenant natural: el override es de ESTA pantalla.
+  useEffect(() => () => setActiveTramitesTenant(undefined), []);
 
   // Eventos atascados (dead-letter): independiente de los filtros. HU #11268 — expone error/carga
   // sin romper la grilla principal (el fallo queda acotado al panel de atascadas).
@@ -438,7 +559,7 @@ export function Validaciones() {
   const refreshStuck = useCallback(async (opts?: { background?: boolean }) => {
     if (!opts?.background) setStuckLoading(true);
     try {
-      const res = await tramitesClient.listStuckIdentityValidations();
+      const res = await tramitesClient.listStuckIdentityValidations(listTenantRef.current);
       setStuck(res);
       setStuckError(null);
     } catch (err) {
@@ -452,12 +573,28 @@ export function Validaciones() {
     }
   }, []);
 
-  // Refetch cuando cambian los filtros aplicados O la página/tamaño (carga inicial incluida).
-  useEffect(() => {
-    void load(applied);
-  }, [applied, page, pageSize, load]);
+  const handleCompanyChange = (nextId: string) => {
+    setCompanyId(nextId);
+    // El alcance viaja por ref: se fija ANTES de recargar para que la petición salga con el nuevo.
+    listTenantRef.current = isFlitAdmin ? nextId || ALL_TENANTS : undefined;
+    setPersons(null);
+    setStats(null);
+    setHasLoadedOnce(false);
+    setPage(1);
+    pageRef.current = 1;
+    void load(appliedRef.current);
+    void refreshStuck();
+  };
 
-  // Los eventos atascados son por-tenant (independientes de filtros/página): refrescan con los filtros.
+  // Refetch cuando cambian los filtros aplicados, la página/tamaño o el alcance de red (carga inicial
+  // incluida). Espera a saber el alcance guardado de la cabeza: así no pide primero «lo propio» y luego
+  // «la red» a quien ya la había elegido.
+  useEffect(() => {
+    if (!red.ready) return;
+    void load(applied);
+  }, [applied, page, pageSize, load, red.ready, networkActive, networkChild]);
+
+  // Los eventos atascados son por-alcance (independientes de filtros/página): refrescan con los filtros.
   useEffect(() => {
     void refreshStuck();
   }, [applied, refreshStuck]);
@@ -485,56 +622,100 @@ export function Validaciones() {
     };
   }, [hasLoadedOnce, load, refreshStuck]);
 
+  // Enlace con `?q=` (búsqueda global): llega aplicado.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const q = new URLSearchParams(window.location.search).get('q');
     if (!q?.trim()) return;
-    const next = { ...EMPTY_VALIDACIONES_FILTERS, ...splitPersonaODocumentoQuery(q) };
-    setFilters(next);
-    setApplied(next);
-    setShowFiltros(true);
+    setSearch(q);
+    setAppliedSearch(q);
     setPage(1);
   }, []);
 
-  const applyChange = useCallback((patch: Partial<ValidacionesUiFilters>) => {
-    setFilters({ ...filtersRef.current, ...patch });
-  }, []);
+  // El buscador aplica al dejar de teclear (misma sensación que el panel anterior, sin botón «Buscar»).
+  useEffect(() => {
+    if (search === appliedSearch) return;
+    const t = window.setTimeout(() => {
+      setAppliedSearch(search);
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(t);
+  }, [search, appliedSearch]);
 
-  const handleSearch = useCallback(() => {
-    setApplied(filtersRef.current);
+  /** «Aplicar» de Periodo o de «+ Filtro»: aplica el borrador completo (periodo + condiciones). */
+  const handleAplicar = useCallback(() => {
+    const range =
+      periodo === 'Rango propio'
+        ? rangoPropioDesde || rangoPropioHasta
+          ? { desde: rangoPropioDesde, hasta: rangoPropioHasta }
+          : null
+        : rangoDePeriodo(periodo, new Date());
+    setAppliedPeriodo({ label: range ? periodo : 'Sin periodo', range });
+    setAppliedCondiciones(draftCondiciones);
     setPage(1);
-  }, []);
+  }, [periodo, rangoPropioDesde, rangoPropioHasta, draftCondiciones]);
+
+  const quitarPeriodo = () => {
+    setPeriodo('Sin periodo');
+    setRangoPropioDesde('');
+    setRangoPropioHasta('');
+    setAppliedPeriodo({ label: 'Sin periodo', range: null });
+    setPage(1);
+  };
+
+  const quitarCondicion = (fieldId: string) => {
+    const next = appliedCondiciones.filter((c) => c.fieldId !== fieldId);
+    setAppliedCondiciones(next);
+    setDraftCondiciones(next);
+    setPage(1);
+  };
+
+  const handleClearFilters = () => {
+    setSearch('');
+    setAppliedSearch('');
+    setPeriodo('Sin periodo');
+    setRangoPropioDesde('');
+    setRangoPropioHasta('');
+    setAppliedPeriodo({ label: 'Sin periodo', range: null });
+    setDraftCondiciones([]);
+    setAppliedCondiciones([]);
+    setPage(1);
+  };
+
+  const handleEmpezarDeCero = () => {
+    setDraftCondiciones([]);
+    setAppliedCondiciones([]);
+    setPage(1);
+  };
 
   const handleRefresh = async () => {
     await load(appliedRef.current);
     void refreshStuck();
   };
 
-  const handleClearFilters = useCallback(() => {
-    setFilters(EMPTY_VALIDACIONES_FILTERS);
-    setApplied(EMPTY_VALIDACIONES_FILTERS);
-    setPage(1);
-  }, []);
-
-  const handleCancelConsulta = useCallback(() => {
-    handleClearFilters();
-    setShowFiltros(false);
-  }, [handleClearFilters]);
-
   const handlePageChange = useCallback((p: number) => setPage(Math.max(1, p)), []);
   const handlePageSizeChange = useCallback((size: number) => {
-    setPageSize(size);
+    setPageSizeElegido(size);
+    try {
+      sessionStorage.setItem(CLAVE_PAGE_SIZE, String(size));
+    } catch {
+      /* ventana privada: se recuerda solo en memoria */
+    }
     setPage(1); // cambiar el tamaño reinicia a la primera página
   }, []);
 
-  // Reencolar ("desatascar") un evento: reinicia sus intentos en el backend y refresca atascados + grilla.
+  // Reencolar ("desatascar") un evento: con la compañía DEL EVENTO (en «Todas» cada fila es de una).
   const handleRequeue = useCallback(
-    async (id: string) => {
+    async (event: StuckIdentityValidation) => {
+      const id = event.id;
       setRequeuing((s) => new Set(s).add(id));
       try {
-        await tramitesClient.requeueStuckIdentityValidation(id);
+        await tramitesClient.requeueStuckIdentityValidation(
+          id,
+          isFlitAdmin ? (event.tenantId ?? (companyId || undefined)) : undefined,
+        );
         // El worker lo retomará; ya no figura como atascado. Refresca ambas vistas.
-        await Promise.all([refreshStuck(), load(filtersRef.current, { background: true })]);
+        await Promise.all([refreshStuck(), load(appliedRef.current, { background: true })]);
       } catch {
         void refreshStuck(); // refleja el estado real si el reencolado falló
       } finally {
@@ -545,21 +726,21 @@ export function Validaciones() {
         });
       }
     },
-    [refreshStuck, load],
+    [refreshStuck, load, isFlitAdmin, companyId],
   );
 
-  // Reencolar TODOS los atascados de una vez.
+  // Reencolar TODOS los atascados de una vez: solo con UNA compañía (la ruta es por compañía).
   const handleRequeueAll = useCallback(async () => {
     setRequeuingAll(true);
     try {
-      await tramitesClient.requeueAllStuckIdentityValidations();
-      await Promise.all([refreshStuck(), load(filtersRef.current, { background: true })]);
+      await tramitesClient.requeueAllStuckIdentityValidations(isFlitAdmin ? companyId || undefined : undefined);
+      await Promise.all([refreshStuck(), load(appliedRef.current, { background: true })]);
     } catch {
       void refreshStuck();
     } finally {
       setRequeuingAll(false);
     }
-  }, [refreshStuck, load]);
+  }, [refreshStuck, load, isFlitAdmin, companyId]);
 
   // ── Gestión de prevalidaciones (crear / editar / reenviar) ────────────────────
 
@@ -585,9 +766,14 @@ export function Validaciones() {
     });
   }, []);
 
-  const handleCreated = (result: IniciarPrevalidacionResult) => {
+  const closeForm = () => {
     setShowForm(false);
     setPrefillNueva(undefined);
+    closeTenantScope();
+  };
+
+  const handleCreated = (result: IniciarPrevalidacionResult) => {
+    closeForm();
     setSuccessResult(result);
     void load(appliedRef.current);
   };
@@ -597,8 +783,7 @@ export function Validaciones() {
    * correo (si venía distinto) y reenvió el enlace; aquí solo se refleja el resultado y se refresca.
    */
   const handleReused = (info: PrevalidacionReuseInfo) => {
-    setShowForm(false);
-    setPrefillNueva(undefined);
+    closeForm();
     bumpResendMeta(info.validationId);
     const nextCount = (resendMeta[info.validationId]?.count ?? 0) + 1;
     const notice =
@@ -616,24 +801,37 @@ export function Validaciones() {
     void load(appliedRef.current);
   };
 
-  const handleNew = () => {
-    setSuccessResult(null);
-    setPrefillNueva(undefined);
+  /** Abre el formulario de nueva prevalidación en la compañía indicada (o la natural del usuario). */
+  const openNewForm = (tenantId: string | undefined, prefill?: PrefillNueva) => {
+    openForTenant(tenantId);
+    setPrefillNueva(prefill);
     setShowForm(true);
+  };
+
+  const handleNew = () => {
+    // AC4 — crear es solo en lo propio: con la red o una hija elegida el botón está deshabilitado.
+    if (networkActive) return;
+    setSuccessResult(null);
+    // AC7 — en «Todas» no hay compañía que suponer: se pide antes de abrir el formulario.
+    if (viendoTodas) {
+      setPickingCompanyForNew(true);
+      return;
+    }
+    openNewForm(undefined);
   };
 
   /** HU #10944 (D9/borde) — "Nueva prevalidación" para la misma persona desde un registro aprobado. */
   const handleNewFor = (row: TenantBiometricValidation) => {
-    setPrefillNueva({
+    openNewForm(row.tenantId, {
       documentType: row.documentType,
       documentNumber: row.documentNumber,
       name: row.name,
     });
-    setShowForm(true);
   };
 
   const handleEditSaved = (row: TenantBiometricValidation, result: EditarPrevalidacionResult) => {
     setEditingRow(null);
+    closeTenantScope();
     if (result.resent) {
       bumpResendMeta(row.id);
       const nextCount = (resendMeta[row.id]?.count ?? 0) + 1;
@@ -649,9 +847,13 @@ export function Validaciones() {
     void load(appliedRef.current);
   };
 
+  /** Compañía con la que sale una acción directa sobre la fila (solo el admin FLIT la envía). */
+  const rowTenant = (row: TenantBiometricValidation) =>
+    isFlitAdmin ? (row.tenantId ?? (companyId || undefined)) : undefined;
+
   /** Reenvío de una prevalidación standalone: mismo registro, enlace nuevo. */
   const confirmarReenvio = async (row: TenantBiometricValidation) => {
-    const result = await tramitesClient.resendPrevalidacion(row.id);
+    const result = await tramitesClient.resendPrevalidacion(row.id, rowTenant(row));
     const nextCount = (resendMeta[row.id]?.count ?? 0) + 1;
     bumpResendMeta(row.id);
     setResendResult({
@@ -678,9 +880,9 @@ export function Validaciones() {
     if (!row.instanceId || !row.partyRole) throw new Error('La fila no identifica el trámite ni la parte.');
     const parte = row.partyRole as BiometricParte;
     if (row.provider === 'mock') {
-      await tramitesClient.simulateBiometric(row.instanceId, { parte });
+      await tramitesClient.simulateBiometric(row.instanceId, { parte }, rowTenant(row));
     } else {
-      await tramitesClient.iniciarBiometric(row.instanceId, { parte });
+      await tramitesClient.iniciarBiometric(row.instanceId, { parte }, rowTenant(row));
     }
     setLiveMessage(
       `Se lanzó una validación de identidad nueva para ${row.name} en el trámite ${row.referenceNumber ?? ''}.`.trim(),
@@ -732,8 +934,48 @@ export function Validaciones() {
   const isEmpty = persons !== null && persons.length === 0;
   // "Sin resultados" (AC2) vs "Aún no hay validaciones" se decide por los filtros EFECTIVAMENTE aplicados.
   const filtersActive = hasActiveValidacionesFilters(applied);
-  // Empresa ajena que está mirando el admin FLIT (undefined = la suya).
-  const empresaVista = companyId === '' ? undefined : companies?.find((c) => c.id === companyId);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // Compañía concreta que está mirando el admin FLIT (undefined = «Todas»).
+  const empresaVista = isFlitAdmin && companyId !== '' ? companiesById.get(companyId) : undefined;
+  const companyLabel = (tenantId: string | undefined, tenantName: string | null | undefined) => {
+    const c = tenantId ? companiesById.get(tenantId) : undefined;
+    return { nombre: c?.razonSocial ?? tenantName ?? '—', nit: c?.nit ?? null };
+  };
+
+  // HU #12709 — selector de alcance de la cabeza de red (mismo componente que Trámites).
+  const networkSelector = red.isGroupParent ? (
+    <div className="flex shrink-0 items-center gap-2">
+      <NetworkScopeSelector
+        scope={redNoDisponible ? { mode: 'own' } : red.scope}
+        onChange={(next) => {
+          setRedNoDisponible(false);
+          red.setScope(next);
+          setPage(1);
+        }}
+        hijos={red.children}
+        childrenStatus={red.childrenStatus}
+        disabled={red.saving}
+        testId="identidad-network-scope-select"
+      />
+      {networkActive ? <NetworkScopeBadge scope={red.scope} hijos={red.children} testId="identidad-network-scope-badge" /> : null}
+    </div>
+  ) : null;
+
+  const companySelector =
+    isFlitAdmin && companies !== null && companies.length > 0 ? (
+      <div className="w-64 shrink-0">
+        <SearchableSelect
+          id="identidad-compania"
+          label="Compañía"
+          hideLabel
+          options={companies.map((c) => ({ value: c.id, label: c.razonSocial, hint: c.nit }))}
+          value={companyId}
+          onChange={handleCompanyChange}
+          defaultLabel="Todas las compañías"
+          placeholder="Buscar compañía…"
+        />
+      </div>
+    ) : null;
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
@@ -743,7 +985,7 @@ export function Validaciones() {
       </div>
 
       <ModuleTitle
-        title="Validaciones"
+        title={IDENTIDAD_MODULE_TITLE}
         subtitle="Monitoreo, verificación biométrica y gestión de estados de identidad en tiempo real."
         right={
           <div className="flex items-center gap-2">
@@ -782,39 +1024,68 @@ export function Validaciones() {
         <button
           type="button"
           onClick={handleNew}
+          disabled={networkActive}
           aria-label="Crear nueva prevalidación de identidad"
-          className="flex h-[88px] w-full shrink-0 flex-col items-center justify-center rounded-2xl px-4 text-[13px] font-semibold leading-tight text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] sm:w-36"
+          aria-describedby={networkActive ? 'val-nueva-solo-propio' : undefined}
+          title={networkActive ? 'Disponible en Mi compañía' : undefined}
+          className="flex h-[88px] w-full shrink-0 flex-col items-center justify-center rounded-2xl px-4 text-[13px] font-semibold leading-tight text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50 sm:w-36"
           style={{ background: 'linear-gradient(90deg, #557EFF 0%, #00DBD5 100%)' }}
         >
           <span>Nueva</span>
           <span>prevalidación</span>
+          {networkActive ? (
+            <span id="val-nueva-solo-propio" className="mt-1 text-[10px] font-medium opacity-90">
+              Disponible en Mi compañía
+            </span>
+          ) : null}
         </button>
       </div>
 
-      <ValidacionesFilterToolbar
-        filters={filters}
-        onChange={applyChange}
-        onSearch={handleSearch}
-        onClearFilters={handleClearFilters}
-        onCancelConsulta={handleCancelConsulta}
-        open={showFiltros}
-        onToggle={() => setShowFiltros((v) => !v)}
-        loading={fetching}
-        resultCount={persons?.length ?? 0}
-        resultCountLabel={
-          total === 0 ? 'Sin resultados' : `${total} persona${total === 1 ? '' : 's'}`
-        }
-        companyScope={
-          isFlitAdmin && companies !== null && companies.length > 0
-            ? {
-                companies,
-                companyId,
-                onCompanyChange: handleCompanyChange,
-                empresaVista,
-              }
-            : null
-        }
-      />
+      <div>
+        <ValidacionesFiltrosBar
+          scopeSelector={companySelector ?? networkSelector}
+          search={search}
+          onSearchChange={setSearch}
+          periodo={periodo}
+          onPeriodoChange={setPeriodo}
+          rangoPropioDesde={rangoPropioDesde}
+          rangoPropioHasta={rangoPropioHasta}
+          onRangoPropioDesdeChange={setRangoPropioDesde}
+          onRangoPropioHastaChange={setRangoPropioHasta}
+          draftCondiciones={draftCondiciones}
+          onDraftCondicionesChange={setDraftCondiciones}
+          condicionesAplicadasCount={appliedCondiciones.length}
+          onAplicar={handleAplicar}
+          onEmpezarDeCero={handleEmpezarDeCero}
+          columnSelector={
+            <ColumnSelector
+              columns={IDENTIDAD_COLUMNS.map(({ key, label }) => ({ key, label }))}
+              visible={visibleColumns}
+              onChange={setVisibleColumns}
+              disabled={savingColumns}
+              buttonClassName={controlCls(visibleColumns.length < IDENTIDAD_COLUMN_KEYS.length)}
+            />
+          }
+        />
+        <FiltrosChipsTira
+          periodo={appliedPeriodo.label}
+          onQuitarPeriodo={quitarPeriodo}
+          chips={appliedCondiciones.map((c) => ({ key: c.fieldId, label: describeIdentityFilter(c) }))}
+          onQuitarChip={quitarCondicion}
+          onLimpiarTodo={filtersActive ? handleClearFilters : undefined}
+        />
+        {empresaVista ? (
+          // Salvaguarda que ya tenía el panel anterior: mirando UNA compañía ajena, lo que se haga
+          // desde aquí la afecta a ella. En «Todas» cada fila lleva su compañía en la columna.
+          <p className="mt-2 text-xs" style={{ color: '#557EFF' }} role="status" aria-live="polite">
+            Estás viendo los datos de <strong>{empresaVista.razonSocial}</strong>. Todo lo que hagas desde
+            esta pantalla afecta a esa empresa.
+          </p>
+        ) : null}
+        <p className="sr-only" role="status" aria-live="polite">
+          {fetching ? 'Buscando…' : total === 0 ? 'Sin resultados' : `${total} persona${total === 1 ? '' : 's'}`}
+        </p>
+      </div>
 
       {incidenciasOpen ? (
         <StuckIncidenciasDialog
@@ -825,6 +1096,11 @@ export function Validaciones() {
           requeuingAll={requeuingAll}
           onRequeue={handleRequeue}
           onRequeueAll={() => void handleRequeueAll()}
+          requeueAllDisabledReason={
+            viendoTodas ? 'Elige una compañía para reintentar todas sus incidencias.' : null
+          }
+          showCompany={viendoTodas}
+          companyName={(e) => companyLabel(e.tenantId, e.tenantName).nombre}
           onRetryLoad={() => void refreshStuck()}
           onClose={() => setIncidenciasOpen(false)}
         />
@@ -892,37 +1168,75 @@ export function Validaciones() {
       )}
 
       {!initialLoading && !isEmpty && persons !== null && (
-        <PersonasTable
-          rows={persons}
-          now={nowTick}
-          resendMeta={resendMeta}
-          onOpenPerson={(docType, docNumber) =>
-            setPersonDetail({ documentType: docType, documentNumber: docNumber })
-          }
-          onEdit={setEditingRow}
-          onResendClick={(row) => {
-            setResendConfirmError(null);
-            setConfirmAction({ row, mode: 'resend' });
-          }}
-          onRetryClick={(row) => {
-            setResendConfirmError(null);
-            setConfirmAction({ row, mode: 'retry' });
-          }}
-          onNewFor={handleNewFor}
-          canAdminReenviar={puedeReenviarValidacionAdmin}
-          onAdminReenviarClick={setAdminReenviarRow}
-        />
-      )}
+        <div className="flex flex-col">
+          <PersonasTable
+            rows={persons}
+            columns={tableColumns}
+            esSoloConsulta={esSoloConsulta}
+            companyLabel={companyLabel}
+            now={nowTick}
+            resendMeta={resendMeta}
+            onOpenPerson={(docType, docNumber, tenantId) => {
+              openForTenant(tenantId);
+              setPersonDetail({
+                documentType: docType,
+                documentNumber: docNumber,
+                tenantId,
+                soloConsulta: esSoloConsulta(tenantId),
+              });
+            }}
+            onEdit={(row) => {
+              openForTenant(row.tenantId);
+              setEditingRow(row);
+            }}
+            onResendClick={(row) => {
+              setResendConfirmError(null);
+              setConfirmAction({ row, mode: 'resend' });
+            }}
+            onRetryClick={(row) => {
+              setResendConfirmError(null);
+              setConfirmAction({ row, mode: 'retry' });
+            }}
+            onNewFor={handleNewFor}
+            canAdminReenviar={puedeReenviarValidacionAdmin}
+            onAdminReenviarClick={(row) => {
+              openForTenant(row.tenantId);
+              setAdminReenviarRow(row);
+            }}
+          />
 
-      {!initialLoading && persons !== null && persons.length > 0 && (
-        <PaginationBar
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          disabled={fetching}
-          onPageChange={handlePageChange}
-          onPageSizeChange={handlePageSizeChange}
-        />
+          {/* HU #12707 (AC9) — pie de Trámites: «Filas por página» + navegación numerada. */}
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <label className="flex items-center gap-2 pt-3 text-xs opacity-70">
+              Filas por página
+              <select
+                value={pageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                disabled={fetching}
+                className={controlCls(false)}
+                aria-label="Filas por página"
+              >
+                {TAMANOS_DE_PAGINA.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <PageNav
+              page={page}
+              totalPages={totalPages}
+              resumen={
+                total === 0
+                  ? 'Sin validaciones que mostrar'
+                  : `Mostrando ${(page - 1) * pageSize + 1}–${(page - 1) * pageSize + persons.length} de ${total}`
+              }
+              ariaLabel="Paginación de validaciones"
+              onPageChange={handlePageChange}
+              className="flex-1"
+            />
+          </div>
+        </div>
       )}
 
       {/* Detalle de la persona: desglose por validación + bitácoras de envío/reenvío/aprobación/rechazo. */}
@@ -930,18 +1244,31 @@ export function Validaciones() {
         <PersonIdentityDetailDrawer
           documentType={personDetail.documentType}
           documentNumber={personDetail.documentNumber}
-          onClose={() => setPersonDetail(null)}
+          networkTenantId={personDetail.soloConsulta ? personDetail.tenantId : undefined}
+          onClose={() => {
+            setPersonDetail(null);
+            closeTenantScope();
+          }}
           onStatusChanged={() => void load(appliedRef.current, { background: true })}
+        />
+      )}
+
+      {/* AC7 — «Nueva prevalidación» en «Todas»: primero la compañía. */}
+      {pickingCompanyForNew && companies && (
+        <CompanyPickerDialog
+          companies={companies}
+          onCancel={() => setPickingCompanyForNew(false)}
+          onPick={(tenantId) => {
+            setPickingCompanyForNew(false);
+            openNewForm(tenantId);
+          }}
         />
       )}
 
       {/* Modal: creación (también "Nueva prevalidación" precargada para revalidar, D9/borde) */}
       {showForm && (
         <PrevalidacionForm
-          onClose={() => {
-            setShowForm(false);
-            setPrefillNueva(undefined);
-          }}
+          onClose={closeForm}
           onSuccess={handleCreated}
           onReused={handleReused}
           initialValues={prefillNueva}
@@ -960,7 +1287,10 @@ export function Validaciones() {
       {editingRow && (
         <PrevalidacionEditForm
           row={editingRow}
-          onClose={() => setEditingRow(null)}
+          onClose={() => {
+            setEditingRow(null);
+            closeTenantScope();
+          }}
           onSaved={(result) => handleEditSaved(editingRow, result)}
           onRateLimited={(info) => applyRateLimit(editingRow.id, info)}
         />
@@ -1043,7 +1373,10 @@ export function Validaciones() {
       {adminReenviarRow && adminReenviarRow.instanceId && (
         <ReenviarValidacionIdentidadModal
           open
-          onClose={() => setAdminReenviarRow(null)}
+          onClose={() => {
+            setAdminReenviarRow(null);
+            closeTenantScope();
+          }}
           instanceId={adminReenviarRow.instanceId}
           referenceNumber={adminReenviarRow.referenceNumber ?? ''}
           initialValidationId={adminReenviarRow.id}
@@ -1051,6 +1384,67 @@ export function Validaciones() {
           onError={handleAdminReenviarError}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * HU #12707 (AC7) — elegir la compañía antes de crear una prevalidación cuando el admin FLIT está en
+ * «Todas»: una prevalidación es siempre de UNA compañía y no hay ninguna que suponer.
+ */
+function CompanyPickerDialog({
+  companies,
+  onCancel,
+  onPick,
+}: {
+  companies: CompanyItem[];
+  onCancel: () => void;
+  onPick: (tenantId: string) => void;
+}) {
+  const [elegida, setElegida] = useState('');
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="val-pick-company-title"
+    >
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-[#0B0F14]">
+        <h2 id="val-pick-company-title" className="text-base font-semibold text-[#162744] dark:text-white">
+          ¿Para qué compañía es la prevalidación?
+        </h2>
+        <p className="mt-1 text-sm opacity-70">
+          Estás viendo todas las compañías. La prevalidación queda registrada en la que elijas.
+        </p>
+        <div className="mt-4">
+          <SearchableSelect
+            id="identidad-nueva-compania"
+            label="Compañía"
+            options={companies.map((c) => ({ value: c.id, label: c.razonSocial, hint: c.nit }))}
+            value={elegida}
+            onChange={setElegida}
+            placeholder="Buscar compañía…"
+          />
+        </div>
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-[#162744] transition hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => onPick(elegida)}
+            disabled={elegida === ''}
+            className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-50"
+            style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+          >
+            Continuar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1089,7 +1483,9 @@ function LiveIndicator({ at }: { at: Date | null }) {
 export function stuckPersonGroupKey(event: StuckIdentityValidation): string {
   const tipo = (event.documentType ?? '').trim().toUpperCase();
   const numero = (event.documentNumber ?? '').trim().toUpperCase();
-  if (tipo || numero) return `${tipo}|${numero}`;
+  // HU #12707 — la persona es compañía + documento: en «Todas» la misma cédula de dos compañías son
+  // dos grupos. Con una sola compañía el prefijo es el mismo para todos y el agrupado no cambia.
+  if (tipo || numero) return `${event.tenantId ?? ''}|${tipo}|${numero}`;
   return '__unidentified__';
 }
 
@@ -1138,6 +1534,9 @@ function StuckIncidenciasDialog({
   requeuingAll,
   onRequeue,
   onRequeueAll,
+  requeueAllDisabledReason,
+  showCompany,
+  companyName,
   onRetryLoad,
   onClose,
 }: {
@@ -1146,8 +1545,13 @@ function StuckIncidenciasDialog({
   stuckError: string | null;
   requeuing: Set<string>;
   requeuingAll: boolean;
-  onRequeue: (id: string) => void;
+  onRequeue: (event: StuckIdentityValidation) => void;
   onRequeueAll: () => void;
+  /** HU #12707 (AC7) — en «Todas» reintentar TODAS exige elegir una compañía: se explica por qué. */
+  requeueAllDisabledReason: string | null;
+  /** HU #12707 (AC7) — «Todas»: cada incidencia muestra su compañía. */
+  showCompany: boolean;
+  companyName: (event: StuckIdentityValidation) => string;
   onRetryLoad: () => void;
   onClose: () => void;
 }) {
@@ -1188,16 +1592,24 @@ function StuckIncidenciasDialog({
             </p>
           </div>
           {total > 1 ? (
-            <button
-              type="button"
-              onClick={onRequeueAll}
-              disabled={requeuingAll}
-              className="h-11 shrink-0 rounded-xl px-6 text-[13px] font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ background: '#FF4E00' }}
-              aria-label="Reintentar todas las validaciones atascadas"
-            >
-              {requeuingAll ? 'Reencolando…' : 'Reintentar todos'}
-            </button>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <button
+                type="button"
+                onClick={onRequeueAll}
+                disabled={requeuingAll || requeueAllDisabledReason !== null}
+                className="h-11 shrink-0 rounded-xl px-6 text-[13px] font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                style={{ background: '#FF4E00' }}
+                aria-label="Reintentar todas las validaciones atascadas"
+                aria-describedby={requeueAllDisabledReason ? 'requeue-all-reason' : undefined}
+              >
+                {requeuingAll ? 'Reencolando…' : 'Reintentar todos'}
+              </button>
+              {requeueAllDisabledReason ? (
+                <span id="requeue-all-reason" className="max-w-[16rem] text-right text-[11px] opacity-70">
+                  {requeueAllDisabledReason}
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </div>
 
@@ -1235,6 +1647,8 @@ function StuckIncidenciasDialog({
               requeuingAll={requeuingAll}
               onRequeue={onRequeue}
               onRequeueAll={onRequeueAll}
+              showCompany={showCompany}
+              companyName={companyName}
               embedded
             />
           </div>
@@ -1254,13 +1668,17 @@ function StuckEventsBanner({
   requeuingAll,
   onRequeue,
   onRequeueAll,
+  showCompany = false,
+  companyName,
   embedded = false,
 }: {
   stuck: StuckIdentityValidationsResponse;
   requeuing: Set<string>;
   requeuingAll: boolean;
-  onRequeue: (id: string) => void;
+  onRequeue: (event: StuckIdentityValidation) => void;
   onRequeueAll: () => void;
+  showCompany?: boolean;
+  companyName?: (event: StuckIdentityValidation) => string;
   embedded?: boolean;
 }) {
   const groups = groupStuckByPerson(stuck.stuck);
@@ -1320,7 +1738,13 @@ function StuckEventsBanner({
                   {open && (
                     <ul id={panelId} className="space-y-2 pt-3">
                       {group.events.map((e) => (
-                        <StuckRow key={e.id} event={e} busy={requeuing.has(e.id)} onRequeue={onRequeue} />
+                        <StuckRow
+                          key={e.id}
+                          event={e}
+                          busy={requeuing.has(e.id)}
+                          onRequeue={onRequeue}
+                          company={showCompany && companyName ? companyName(e) : null}
+                        />
                       ))}
                     </ul>
                   )}
@@ -1391,10 +1815,13 @@ function StuckRow({
   event,
   busy,
   onRequeue,
+  company,
 }: {
   event: StuckIdentityValidation;
   busy: boolean;
-  onRequeue: (id: string) => void;
+  onRequeue: (event: StuckIdentityValidation) => void;
+  /** HU #12707 (AC7) — compañía del evento cuando la vista mezcla compañías («Todas»). */
+  company: string | null;
 }) {
   // El envío al proveedor (Kyverum) vs. el encadenamiento async firma/FUR son etapas distintas; etiquetar
   // ayuda al gestor a entender qué se trabó. Default 'encadenamiento' si el backend no lo envía (transición).
@@ -1412,6 +1839,7 @@ function StuckRow({
         >
           {kindLabel}
         </span>
+        {company ? <span className="mr-1.5 font-semibold text-[#4F74C9]">{company} ·</span> : null}
         <span className="font-medium">{event.name ?? 'Persona no disponible'}</span>
         <span className="opacity-60">
           {event.documentNumber ? ` · ${maskDoc(event.documentType ?? '', event.documentNumber)}` : ''}
@@ -1421,7 +1849,7 @@ function StuckRow({
       </span>
       <button
         type="button"
-        onClick={() => onRequeue(event.id)}
+        onClick={() => onRequeue(event)}
         disabled={busy}
         className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         style={{ background: '#F05A35' }}
@@ -1431,77 +1859,6 @@ function StuckRow({
         {busy ? 'Reencolando…' : 'Reintentar'}
       </button>
     </li>
-  );
-}
-
-/** Barra de paginación: selector de filas por página (10–50) + navegación + "X–Y de N". */
-function PaginationBar({
-  page,
-  pageSize,
-  total,
-  disabled,
-  onPageChange,
-  onPageSizeChange,
-}: {
-  page: number;
-  pageSize: number;
-  total: number;
-  disabled: boolean;
-  onPageChange: (p: number) => void;
-  onPageSizeChange: (size: number) => void;
-}) {
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, total);
-  return (
-    <div
-      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-3 dark:bg-[#0B0F14] shrink-0"
-    >
-      <div className="flex items-center gap-3 text-[11px]">
-        <label className="flex items-center gap-1.5">
-          <span className="opacity-60">Filas por página</span>
-          <select
-            value={pageSize}
-            onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            disabled={disabled}
-            aria-label="Filas por página"
-            className="rounded-lg border bg-white px-2 py-1 text-xs outline-none focus:border-[#4F74C9] disabled:opacity-50 dark:bg-[#0B0F14]"
-          >
-            {PAGE_SIZE_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="opacity-60" role="status" aria-live="polite">
-          {from}–{to} de {total}
-        </span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => onPageChange(page - 1)}
-          disabled={disabled || page <= 1}
-          aria-label="Página anterior"
-          className="flex h-7 w-7 items-center justify-center rounded-lg border disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <span className="px-1 text-[11px] opacity-70">
-          Página {page} de {totalPages}
-        </span>
-        <button
-          type="button"
-          onClick={() => onPageChange(page + 1)}
-          disabled={disabled || page >= totalPages}
-          aria-label="Página siguiente"
-          className="flex h-7 w-7 items-center justify-center rounded-lg border disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        >
-          <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -1575,12 +1932,24 @@ function ValidacionesSkeleton() {
 }
 
 /**
- * Plantilla de columnas compartida por cabecera y filas. Columnas DESACOPLADas: Registro, Aprobación y
- * Vigencia van por separado (cada dato en su propia columna y filtrable desde el toolbar). minmax(0,..)
- * permite truncar el contenido dentro de cada celda del grid.
+ * Plantilla de columnas compartida por cabecera y filas, calculada desde las columnas visibles (HU #12707).
+ * minmax(0,..) permite truncar el contenido dentro de cada celda del grid.
  */
-const GRID_COLS =
-  'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,0.9fr)';
+function gridColsFor(columns: readonly IdentidadColumnKey[]): string {
+  const widths = columns.map((key) =>
+    key === 'compania' ? COMPANIA_COLUMN.width : (IDENTIDAD_COLUMNS.find((c) => c.key === key)?.width ?? 'minmax(0,1fr)'),
+  );
+  return [...widths, ACCIONES_WIDTH].join(' ');
+}
+
+function columnLabel(key: IdentidadColumnKey): string {
+  return key === 'compania' ? COMPANIA_COLUMN.label : (IDENTIDAD_COLUMNS.find((c) => c.key === key)?.label ?? key);
+}
+
+type CompanyLabelFn = (
+  tenantId: string | undefined,
+  tenantName: string | null | undefined,
+) => { nombre: string; nit: string | null };
 
 /**
  * Única grilla del módulo: una fila por PERSONA (documento), sin repetir cédula. Cada fila muestra los
@@ -1589,6 +1958,9 @@ const GRID_COLS =
  */
 function PersonasTable({
   rows,
+  columns,
+  esSoloConsulta,
+  companyLabel,
   now,
   resendMeta,
   onOpenPerson,
@@ -1600,9 +1972,14 @@ function PersonasTable({
   onAdminReenviarClick,
 }: {
   rows: TenantBiometricPerson[];
+  columns: readonly IdentidadColumnKey[];
+  /** HU #12709 — ¿la fila de esta compañía es de solo consulta (hija vista por la cabeza)? */
+  esSoloConsulta: (tenantId: string | undefined) => boolean;
+  companyLabel: CompanyLabelFn;
   now: number;
   resendMeta: Record<string, ResendMeta>;
-  onOpenPerson: (documentType: string, documentNumber: string) => void;
+  /** HU #12707 (AC6) — con la compañía de la fila: la misma cédula puede estar en dos compañías. */
+  onOpenPerson: (documentType: string, documentNumber: string, tenantId: string | undefined) => void;
   onEdit: (row: TenantBiometricValidation) => void;
   onResendClick: (row: TenantBiometricValidation) => void;
   onRetryClick: (row: TenantBiometricValidation) => void;
@@ -1614,6 +1991,8 @@ function PersonasTable({
   const byLatestId = new Map(rows.map((r) => [r.latestValidationId, r]));
   const mapped: TenantBiometricValidation[] = rows.map((p) => ({
     id: p.latestValidationId,
+    tenantId: p.tenantId,
+    tenantName: p.tenantName,
     instanceId: p.instanceId,
     referenceNumber: p.referenceNumber,
     modalidad: p.modalidad,
@@ -1643,12 +2022,15 @@ function PersonasTable({
   return (
     <ValidacionesTable
       rows={mapped}
+      columns={columns}
+      esSoloConsulta={esSoloConsulta}
+      companyLabel={companyLabel}
       now={now}
       resendMeta={resendMeta}
       validationCounts={counts}
       onViewProcess={(latestValidationId) => {
         const person = byLatestId.get(latestValidationId);
-        if (person) onOpenPerson(person.documentType, person.documentNumber);
+        if (person) onOpenPerson(person.documentType, person.documentNumber, person.tenantId);
       }}
       onEdit={onEdit}
       onResendClick={onResendClick}
@@ -1663,6 +2045,9 @@ function PersonasTable({
 /** Tabla de validaciones. Cada fila es no navegable; el proceso se abre desde Acciones. */
 function ValidacionesTable({
   rows,
+  columns,
+  esSoloConsulta,
+  companyLabel,
   now,
   resendMeta,
   validationCounts,
@@ -1675,6 +2060,9 @@ function ValidacionesTable({
   onAdminReenviarClick,
 }: {
   rows: TenantBiometricValidation[];
+  columns: readonly IdentidadColumnKey[];
+  esSoloConsulta: (tenantId: string | undefined) => boolean;
+  companyLabel: CompanyLabelFn;
   now: number;
   resendMeta: Record<string, ResendMeta>;
   validationCounts: Map<string, number>;
@@ -1686,24 +2074,20 @@ function ValidacionesTable({
   canAdminReenviar: boolean;
   onAdminReenviarClick: (row: TenantBiometricValidation) => void;
 }) {
+  const gridCols = gridColsFor(columns);
+  // Ancho mínimo proporcional a las columnas visibles: con pocas no fuerza scroll horizontal.
+  const minWidth = Math.max(640, 100 * (columns.length + 1));
   return (
     <div className="overflow-x-auto shrink-0">
-      <div className="min-w-[1080px]">
+      <div style={{ minWidth: `${minWidth}px` }}>
         <div
           className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
-          style={{ background: '#DDE5F0', color: '#162744', gridTemplateColumns: GRID_COLS }}
+          style={{ background: '#DDE5F0', color: '#162744', gridTemplateColumns: gridCols }}
           aria-hidden="true"
         >
-          <div>Trámite</div>
-          <div>Persona</div>
-          <div>Documento</div>
-          <div>Correo</div>
-          <div>Estado</div>
-          <div>Score</div>
-          <div>Registro</div>
-          <div>Aprobación</div>
-          <div>Vigencia</div>
-          <div>Enlace vigente</div>
+          {columns.map((key) => (
+            <div key={key}>{columnLabel(key)}</div>
+          ))}
           <div>Acciones</div>
         </div>
         <ul className="space-y-2 pt-2" aria-label="Validaciones de identidad">
@@ -1711,6 +2095,10 @@ function ValidacionesTable({
             <ValidacionRow
               key={r.id}
               row={r}
+              columns={columns}
+              soloConsulta={esSoloConsulta(r.tenantId)}
+              gridCols={gridCols}
+              companyLabel={companyLabel}
               now={now}
               resendMeta={resendMeta[r.id] ?? { count: 0, cooldownUntil: null }}
               validationCount={validationCounts.get(r.id) ?? 1}
@@ -1731,6 +2119,10 @@ function ValidacionesTable({
 
 function ValidacionRow({
   row: r,
+  columns,
+  soloConsulta,
+  gridCols,
+  companyLabel,
   now,
   resendMeta,
   validationCount,
@@ -1743,6 +2135,11 @@ function ValidacionRow({
   onAdminReenviarClick,
 }: {
   row: TenantBiometricValidation;
+  columns: readonly IdentidadColumnKey[];
+  /** HU #12709 (AC3) — fila de una compañía hija: solo «Ver proceso», con el distintivo visible. */
+  soloConsulta: boolean;
+  gridCols: string;
+  companyLabel: CompanyLabelFn;
   now: number;
   resendMeta: ResendMeta;
   validationCount: number;
@@ -1796,6 +2193,8 @@ function ValidacionRow({
   const emailLabel = r.email ?? '—';
   const enlaceUtilizable = tieneEnlaceUtilizable(r, now);
   const ariaLabel =
+    (columns.includes('compania') ? `Compañía ${companyLabel(r.tenantId, r.tenantName).nombre}. ` : '') +
+    (soloConsulta ? `${ETIQUETA_SOLO_CONSULTA}. ` : '') +
     `Validación de ${r.name}${parte}, trámite ${refLabel} (${modalidad}), ` +
     `proveedor ${provider}, correo ${emailLabel}, estado ${badgeLabel}` +
     (intentosInfo ? `, intentos ${intentosInfo.intentos} de ${intentosInfo.maxIntentos}` : '') +
@@ -1936,11 +2335,17 @@ function ValidacionRow({
     });
   }
 
-  const rowContent = (
-    <div
-      className="grid gap-2 items-center px-4 py-3 text-xs"
-      style={{ gridTemplateColumns: GRID_COLS }}
-    >
+  const compania = companyLabel(r.tenantId, r.tenantName);
+  const cells: Record<IdentidadColumnKey, ReactNode> = {
+    compania: (
+      <div className="min-w-0">
+        <span className="block truncate font-semibold" title={compania.nombre}>
+          {compania.nombre}
+        </span>
+        {compania.nit ? <span className="block text-[10px] opacity-60 truncate">NIT {compania.nit}</span> : null}
+      </div>
+    ),
+    tramite: (
       <div className="min-w-0">
         {r.referenceNumber ? (
           <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#4F74C9' }}>
@@ -1955,6 +2360,8 @@ function ValidacionRow({
           </span>
         )}
       </div>
+    ),
+    persona: (
       <div className="min-w-0">
         <span className="block font-semibold truncate">{r.name}</span>
         {/* Subtítulo: solo lo que distingue a ESTA persona. El proveedor (siempre el mismo dentro de
@@ -1967,12 +2374,18 @@ function ValidacionRow({
           </span>
         )}
       </div>
+    ),
+    documento: (
       <div className="min-w-0 font-mono text-[11px] opacity-80 truncate">
         {r.documentType} {r.documentNumber}
       </div>
+    ),
+    correo: (
       <div className="min-w-0 text-[11px] opacity-80 truncate" title={emailLabel}>
         {emailLabel}
       </div>
+    ),
+    estado: (
       <div className="min-w-0">
         <StatusBadge label={badgeLabel} tone={badgeTone} ariaLabel={`Estado: ${badgeLabel}`} />
         {/* HU #11505 (AC1) — contador de intentos, mismo criterio que el drawer. AC4: si falta
@@ -1988,11 +2401,15 @@ function ValidacionRow({
           </span>
         )}
       </div>
-      <div className="font-semibold">{r.score ?? '—'}</div>
-      <div className="min-w-0 text-[10px] leading-tight opacity-80">{formatFecha(r.createdAt)}</div>
+    ),
+    score: <div className="font-semibold">{r.score ?? '—'}</div>,
+    registro: <div className="min-w-0 text-[10px] leading-tight opacity-80">{formatFecha(r.createdAt)}</div>,
+    aprobacion: (
       <div className="min-w-0 text-[10px] leading-tight opacity-80">
         {r.validatedAt ? formatFechaCorta(r.validatedAt) : '—'}
       </div>
+    ),
+    vigencia: (
       <div className="min-w-0 text-[10px] leading-tight">
         {vigencia ? (
           <span
@@ -2006,6 +2423,8 @@ function ValidacionRow({
           <span className="opacity-80">—</span>
         )}
       </div>
+    ),
+    enlace: (
       <div className="min-w-0 text-[11px] leading-tight">
         {enlaceUtilizable ? (
           <span title={r.captureUrl ?? undefined}>Sí</span>
@@ -2013,10 +2432,27 @@ function ValidacionRow({
           <span className="opacity-70">No</span>
         )}
       </div>
+    ),
+  };
+
+  // AC3 — fila de una hija: ni reenviar, ni editar, ni simular, ni iniciar, ni reintentar. Solo verla.
+  const menuItems = soloConsulta ? actionItems.filter((i) => i.key === 'proceso') : actionItems;
+
+  const rowContent = (
+    <div
+      className="grid gap-2 items-center px-4 py-3 text-xs"
+      style={{ gridTemplateColumns: gridCols }}
+    >
+      {columns.map((key) => (
+        <Fragment key={key}>{cells[key]}</Fragment>
+      ))}
       <div className="flex min-w-0 flex-col items-end gap-0.5">
+        {soloConsulta ? (
+          <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel={ETIQUETA_SOLO_CONSULTA} />
+        ) : null}
         <ActionsMenu
           ariaLabel={`Acciones de validación de ${r.name}`}
-          items={actionItems}
+          items={menuItems}
           className="bg-white dark:bg-[#0B0F14]"
         />
         {!isTramite && admiteReenvio && resendDisabledReason && (

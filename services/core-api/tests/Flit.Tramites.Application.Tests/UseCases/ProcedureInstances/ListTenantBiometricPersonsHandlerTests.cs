@@ -1,3 +1,4 @@
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.ReadModels;
@@ -17,6 +18,11 @@ public sealed class ListTenantBiometricPersonsHandlerTests
 
     private ListTenantBiometricPersonsHandler Handler() => new(_repo, _outbox);
 
+
+    /// <summary>HU #12706 — alcance de UNA compañía, tal como lo arma el handler desde el Guid.</summary>
+    private static TenantScope OnlyTenant(Guid tenant) =>
+        Arg.Is<TenantScope>(s => !s.IsAll && s.ReadTenantIds.Count == 1 && s.ReadTenantIds.Contains(tenant));
+
     public ListTenantBiometricPersonsHandlerTests()
     {
         _outbox.ListStuckAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
@@ -24,7 +30,7 @@ public sealed class ListTenantBiometricPersonsHandlerTests
         // Los KPIs de esta grilla cuentan PERSONAS (una fila por documento), no validaciones: 7
         // validaciones de la misma persona son 1 persona aprobada.
         _repo.CountBiometricPersonsByEstadoAsync(
-                Arg.Any<Guid>(), Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+                Arg.Any<TenantScope>(), Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<string, int> { [BiometricEstados.Aprobado] = 1 });
     }
 
@@ -34,12 +40,13 @@ public sealed class ListTenantBiometricPersonsHandlerTests
         var tenantId = Guid.NewGuid();
         var latestId = Guid.NewGuid();
         _repo.ListBiometricValidationsGroupedByPersonAsync(
-                tenantId, 0, 20, Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+                OnlyTenant(tenantId), 0, 20, Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns((
                 (IReadOnlyList<BiometricPersonGroupProjection>)
                 [
                     new BiometricPersonGroupProjection
                     {
+                        TenantId = tenantId,
                         LatestValidationId = latestId,
                         DocumentType = "CC",
                         DocumentNumber = "123",
@@ -80,12 +87,13 @@ public sealed class ListTenantBiometricPersonsHandlerTests
         var rejectedId = Guid.NewGuid();
 
         _repo.ListBiometricValidationsGroupedByPersonAsync(
-                tenantId, 0, 20, Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+                OnlyTenant(tenantId), 0, 20, Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns((
                 (IReadOnlyList<BiometricPersonGroupProjection>)
                 [
                     new BiometricPersonGroupProjection
                     {
+                        TenantId = tenantId,
                         LatestValidationId = rejectedId,
                         DocumentType = "CC",
                         DocumentNumber = "999",
@@ -159,12 +167,13 @@ public sealed class ListTenantBiometricPersonsHandlerTests
         var tenantId = Guid.NewGuid();
         var latestId = Guid.NewGuid();
         _repo.ListBiometricValidationsGroupedByPersonAsync(
-                tenantId, 0, 20, Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+                OnlyTenant(tenantId), 0, 20, Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns((
                 (IReadOnlyList<BiometricPersonGroupProjection>)
                 [
                     new BiometricPersonGroupProjection
                     {
+                        TenantId = tenantId,
                         LatestValidationId = latestId,
                         DocumentType = "CC",
                         DocumentNumber = "444",
@@ -226,12 +235,13 @@ public sealed class ListTenantBiometricPersonsHandlerTests
         var detalleMaxIntentos = validation.MaxAttempts;
 
         _repo.ListBiometricValidationsGroupedByPersonAsync(
-                tenantId, 0, 20, Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+                OnlyTenant(tenantId), 0, 20, Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns((
                 (IReadOnlyList<BiometricPersonGroupProjection>)
                 [
                     new BiometricPersonGroupProjection
                     {
+                        TenantId = tenantId,
                         LatestValidationId = validation.Id,
                         DocumentType = validation.DocumentType,
                         DocumentNumber = validation.DocumentNumber,
