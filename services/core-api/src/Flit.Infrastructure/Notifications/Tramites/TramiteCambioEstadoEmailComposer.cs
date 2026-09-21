@@ -131,7 +131,7 @@ public static class TramiteCambioEstadoEmailComposer
                 $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{linkColor};\">Ciudad:</strong> {ciudad}</p>");
         }
         body.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{linkColor};\">Secretaría de Tránsito:</strong> {ot}</p>");
+            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{linkColor};\">{HomologacionCopy.OrganismoDeTransito}:</strong> {ot}</p>");
         var rejectionLines = BuildRejectionLines(model, estado);
         var estadoMargin = rejectionLines.Count > 0 ? "6px" : "16px";
         body.Append(CultureInfo.InvariantCulture,
@@ -245,7 +245,7 @@ public static class TramiteCambioEstadoEmailComposer
                 $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Ciudad:</strong> {ciudad}</p>");
         }
         sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Secretaría de Tránsito:</strong> {ot}</p>");
+            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">{HomologacionCopy.OrganismoDeTransito}:</strong> {ot}</p>");
         var rejectionLines = BuildRejectionLines(model, estado);
         var estadoMargin = rejectionLines.Count > 0 ? "6px" : "16px";
         sb.Append(CultureInfo.InvariantCulture,
@@ -340,7 +340,7 @@ public static class TramiteCambioEstadoEmailComposer
                 $"<p style=\"margin:0 0 6px;\"><strong>Ciudad:</strong> {ciudad}</p>");
         }
         sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 6px;\"><strong>Secretaría de Tránsito:</strong> {ot}</p>");
+            $"<p style=\"margin:0 0 6px;\"><strong>{HomologacionCopy.OrganismoDeTransito}:</strong> {ot}</p>");
         var rejectionLines = BuildRejectionLines(model, estado);
         var estadoMargin = rejectionLines.Count > 0 ? "6px" : "18px";
         sb.Append(CultureInfo.InvariantCulture,

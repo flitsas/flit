@@ -276,6 +276,8 @@ public class TramiteCambioEstadoEmailComposerTests
 
         html.Should().Contain("soporte@flitsas.com");
         html.Should().NotContain("soporte@flit.com");
+        html.Should().Contain("Organismo de tránsito");
+        html.Should().NotContain("Secretaría de Tránsito");
     }
 
     [Fact]
