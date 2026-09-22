@@ -36,10 +36,22 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
-    public async Task<IReadOnlyList<ResolvedDeedDocument>> ResolveForActorsAsync(
+    /// <summary>
+    /// Escritura emparejada con un actor, con la ruta en storage que solo necesita quien va a leer el
+    /// PDF. La ruta NO sale de Infrastructure: <see cref="ActorDeedPresence"/>, que es el contrato de
+    /// Application, no la expone.
+    /// </summary>
+    private sealed record DeedMatch(ActorDeedPresence Presence, string StoragePath);
+
+    /// <summary>
+    /// HU #12775 — el emparejamiento actor ↔ escritura vigente, sin leer storage. Es el primitivo del
+    /// que salen los dos métodos públicos, para que la presencia que ve el paso del actor y el
+    /// documento que entra al expediente nunca puedan divergir.
+    /// </summary>
+    private async Task<IReadOnlyList<DeedMatch>> MatchForActorsAsync(
         Guid tenantId,
         IEnumerable<ProcedureInstanceActor> actors,
-        CancellationToken ct = default)
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(actors);
 
@@ -60,7 +72,7 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
             return [];
         }
 
-        var result = new List<ResolvedDeedDocument>(nitActors.Count);
+        var result = new List<DeedMatch>(nitActors.Count);
         var seenTipos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var actor in nitActors)
@@ -131,7 +143,44 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                 continue;
             }
 
-            var stream = await _storage.OpenReadAsync(deed.StoragePath, ct).ConfigureAwait(false);
+            result.Add(new DeedMatch(
+                new ActorDeedPresence(
+                    tipo,
+                    company.DocumentNumber,
+                    actor.ActorType ?? string.Empty,
+                    deed.Id),
+                deed.StoragePath));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ActorDeedPresence>> ResolvePresenceForActorsAsync(
+        Guid tenantId,
+        IEnumerable<ProcedureInstanceActor> actors,
+        CancellationToken ct = default)
+    {
+        var matches = await MatchForActorsAsync(tenantId, actors, ct).ConfigureAwait(false);
+        return matches.Select(m => m.Presence).ToArray();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ResolvedDeedDocument>> ResolveForActorsAsync(
+        Guid tenantId,
+        IEnumerable<ProcedureInstanceActor> actors,
+        CancellationToken ct = default)
+    {
+        var matches = await MatchForActorsAsync(tenantId, actors, ct).ConfigureAwait(false);
+        if (matches.Count == 0)
+        {
+            return [];
+        }
+
+        var result = new List<ResolvedDeedDocument>(matches.Count);
+        foreach (var (presencia, storagePath) in matches)
+        {
+            var stream = await _storage.OpenReadAsync(storagePath, ct).ConfigureAwait(false);
             if (stream is null)
             {
                 continue;
@@ -145,18 +194,20 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
                 content = ms.ToArray();
             }
 
+            // Un PDF de cero bytes no es una escritura: se omite en vez de adjuntar un archivo vacío
+            // al expediente (comportamiento previo a la HU #12775, conservado).
             if (content.Length == 0)
             {
                 continue;
             }
 
             result.Add(new ResolvedDeedDocument(
-                tipo,
-                $"{tipo}.pdf",
+                presencia.Tipo,
+                $"{presencia.Tipo}.pdf",
                 content,
-                company.DocumentNumber,
-                actor.ActorType ?? string.Empty,
-                deed.Id));
+                presencia.Nit,
+                presencia.Rol,
+                presencia.DeedId));
         }
 
         return result;

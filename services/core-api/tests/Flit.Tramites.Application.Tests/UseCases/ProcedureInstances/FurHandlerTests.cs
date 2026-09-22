@@ -1857,6 +1857,16 @@ public sealed class FurHandlerTests
             Calls++;
             return Task.FromResult(ToReturn);
         }
+
+        /// <summary>
+        /// HU #12775 — la presencia se deriva de <see cref="ToReturn"/> y no se configura aparte: en la
+        /// implementación real las dos salen del mismo emparejamiento, así que un fake que las dejara
+        /// contradecirse probaría un escenario que no puede ocurrir.
+        /// </summary>
+        public Task<IReadOnlyList<ActorDeedPresence>> ResolvePresenceForActorsAsync(
+            Guid tenantId, IEnumerable<ProcedureInstanceActor> actors, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ActorDeedPresence>>(
+                [.. ToReturn.Select(d => new ActorDeedPresence(d.Tipo, d.Nit, d.Rol, d.DeedId))]);
     }
 
     private static ProcedureInstanceAttachment EscrituraSistema(

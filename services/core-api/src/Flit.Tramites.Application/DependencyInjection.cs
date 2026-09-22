@@ -92,6 +92,10 @@ public static class DependencyInjection
         services.AddScoped<StartSubsanacionHandler>();
         services.AddScoped<CancelSubsanacionHandler>();
         services.AddScoped<GetActorsHandler>();
+        // HU #12775 — escalera de obligatoriedad del certificado de Cámara de Comercio. El resolutor
+        // es scoped porque depende de los puertos del baúl y de las escrituras, que ya lo son.
+        services.AddScoped<CamaraComercioRequirementResolver>();
+        services.AddScoped<GetCamaraComercioRequirementsHandler>();
         services.AddScoped<PutActorsHandler>();
         // HU #10955 (AC2/AC3/AC4/AC5) — lookup de datos de contacto ya conocidos (ciudad/email/
         // dirección/teléfono) de una persona, sin gate de consentimiento.
