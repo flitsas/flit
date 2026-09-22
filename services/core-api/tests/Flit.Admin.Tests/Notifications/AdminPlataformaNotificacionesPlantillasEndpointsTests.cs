@@ -121,9 +121,9 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
     }
 
     [Theory]
-    [InlineData("tramites.aprobado", "FLIT_SMTP", "APROBADO")]
+    [InlineData("tramites.aprobado", "FLIT_SMTP", "Aprobado")]
     [InlineData("tramites.aprobado", "TENANT_API", "¡Buenas Noticias!")]
-    [InlineData("tramites.rechazado", "FLIT_SMTP", "RECHAZADO")]
+    [InlineData("tramites.rechazado", "FLIT_SMTP", "Rechazado")]
     [InlineData("tramites.rechazado", "TENANT_API", "¡Es un gusto saludarte!")]
     [InlineData("tramites.asignacion-placa", "FLIT_SMTP", "soporte@flitsas.com")]
     [InlineData("tramites.asignacion-placa", "TENANT_API", "servicio@rentingcolombia.com")]
