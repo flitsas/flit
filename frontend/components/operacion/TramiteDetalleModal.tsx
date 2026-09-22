@@ -207,7 +207,14 @@ export function TramiteDetalleModal({
   const [attFueraDeAlcance, setAttFueraDeAlcance] = useState(false);
   const [attReloadKey, setAttReloadKey] = useState(0);
 
-  const [panelTracking, setPanelTracking] = useState<PanelTracking>(null);
+  const [panelTracking, setPanelTracking] = useState<PanelTracking>(
+    open && initialPanel ? initialPanel : null,
+  );
+  const [panelEpoch, setPanelEpoch] = useState({ open, initialPanel });
+  if (panelEpoch.open !== open || panelEpoch.initialPanel !== initialPanel) {
+    setPanelEpoch({ open, initialPanel });
+    if (open && initialPanel) setPanelTracking(initialPanel);
+  }
 
   // Activación/retoma de la subsanación (POST /subsanar + salto al asistente).
   const [abriendoSubsanacion, setAbriendoSubsanacion] = useState(false);
@@ -233,11 +240,6 @@ export function TramiteDetalleModal({
 
   // HU #12411 — en consulta, «Archivos finales» ve/descarga por la ruta de red (nunca preview-url).
   const preview = useAttachmentPreview(instanceId, tenantId, { consultaMode });
-
-  useEffect(() => {
-    if (!open || !initialPanel) return;
-    setPanelTracking(initialPanel);
-  }, [open, initialPanel]);
 
   useEffect(() => {
     if (!open || !instanceId) {

@@ -133,13 +133,6 @@ export function DateRangePicker({
   /** Clicks de selección en la sesión abierta (rdp v9 puede fijar from=to en el primer click). */
   const selectEventsRef = useRef(0);
 
-  useEffect(() => {
-    if (!open) {
-      setDraft(value);
-      draftRef.current = value;
-    }
-  }, [value, open]);
-
   const close = () => setOpen(false);
   const panelRef = usePopoverDismiss(open, close, triggerRef);
 
