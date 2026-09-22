@@ -7,10 +7,17 @@
 //   isFlitHost("localhost:3000")            // → true
 //   isFlitHost("dev.flitsas.online")        // → true (matchea "*.flitsas.online")
 //   isFlitHost("app.movilidadandina.com")   // → false
+//
+// La lista admite excepciones con prefijo "!" (coincidencia EXACTA, sin comodín), que se evalúan
+// ANTES que los patrones positivos. Con
+// `NEXT_PUBLIC_FLIT_HOSTS="*.flitsas.online,!marcablancadev.flitsas.online"` (HU #12761):
+//   isFlitHost("marcablancadev.flitsas.online")      // → false (negado, aunque matchee el comodín)
+//   isFlitHost("sub.marcablancadev.flitsas.online")  // → true  (la negación no cubre subdominios)
 
 /**
  * Lista por defecto cuando `NEXT_PUBLIC_FLIT_HOSTS` no está definida (dev local y respaldo).
  * `*.dominio` matchea cualquier subdominio de `dominio` (no el dominio raíz sin subdominio).
+ * `!host` excluye ese host exacto aunque otro patrón lo cubra.
  */
 const DEFAULT_FLIT_HOSTS = ["localhost", "127.0.0.1", "*.flitsas.online", "*.flitsas.com"];
 
@@ -50,5 +57,13 @@ export function isFlitHost(hostHeader: string | null | undefined): boolean {
   if (!hostHeader || !hostHeader.trim()) return true;
   const host = stripPort(hostHeader.trim().toLowerCase());
   const patterns = parseHostList(process.env.NEXT_PUBLIC_FLIT_HOSTS);
-  return patterns.some((pattern) => matchesPattern(host, pattern));
+
+  // Las exclusiones (`!host`) ganan siempre y cortan la evaluación: un host de prueba de marca
+  // blanca bajo un dominio propio (HU #12761) debe tratarse como dominio de red.
+  const isExcluded = patterns.some(
+    (pattern) => pattern.startsWith("!") && host === pattern.slice(1),
+  );
+  if (isExcluded) return false;
+
+  return patterns.some((pattern) => !pattern.startsWith("!") && matchesPattern(host, pattern));
 }

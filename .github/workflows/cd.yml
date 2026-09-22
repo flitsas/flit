@@ -234,7 +234,11 @@ jobs:
             # Marca Blanca (HU #12419, delta-hechos-post-adr.md #25) — hosts que se consideran
             # FLIT (sin marca de red). No hay salida de dominio de frontend en `needs.setup`,
             # así que se usa el respaldo de dominios propios de la plataforma.
-            NEXT_PUBLIC_FLIT_HOSTS=*.flitsas.online,*.flitsas.com
+            # Las entradas con "!" (HU #12761) excluyen los hosts de prueba de marca blanca, que
+            # viven bajo *.flitsas.online pero deben tratarse como dominios de red. Se hornean los
+            # tres a la vez porque este workflow construye una imagen por ambiente y cada ambiente
+            # solo sirve su propio host: las negaciones de los otros dos son inertes.
+            NEXT_PUBLIC_FLIT_HOSTS=*.flitsas.online,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
