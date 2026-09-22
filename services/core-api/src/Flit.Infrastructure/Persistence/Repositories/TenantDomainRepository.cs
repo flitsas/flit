@@ -87,6 +87,11 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
             // único parcial uq_tenant_domains_tenant_id (WHERE deleted_at IS NULL) solo cuenta la fila
             // vigente, así que esto no colisiona (AC5). Solo toca deleted_at/updated_at — el disparador
             // tr_tenant_domains_marca_blanca vigila tenant_id/host, no estas columnas.
+            // SUPUESTO (no garantizado por contrato de EF Core): el índice parcial solo salva la
+            // colisión si el UPDATE que retira la fila vigente se emite ANTES del INSERT de la nueva.
+            // EF ordena hoy Modified antes que Added dentro del mismo SaveChanges; si esa heurística
+            // cambiara, haría falta partirlo en dos SaveChanges con transacción explícita. Lo fija
+            // TenantDomainLifecycleTests.Bug12766_CambioDeHostPorElRepositorio_RetiraElAnteriorYAuditaAmbosValores.
             oldHost = current.Host;
             current.DeletedAt = now;
             current.DeletedBy = changedBy;
@@ -115,7 +120,7 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
             _context.ChangeTracker.Clear();
             throw new DomainAlreadyRegisteredForTenantException(tenantId);
         }
-        catch (DbUpdateException ex) when (IsCheckViolation(ex))
+        catch (DbUpdateException ex) when (IsHostCheckViolation(ex))
         {
             _context.ChangeTracker.Clear();
             throw new DomainHostInvalidException(host);
@@ -423,8 +428,13 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
             TenantId = tenantId,
             EntityName = "TenantDomain",
             FieldName = "host",
-            OldValue = oldHost,
-            NewValue = newHost,
+            // Columnas jsonb (TenantConfigAuditLogConfiguration, DDL 07): el host va como cadena JSON
+            // desnuda — texto plano provoca 22P02 (invalid_text_representation). Cadena suelta, no
+            // objeto, porque FieldName = "host" ya nombra el campo (misma convención que
+            // CompanyWriteRepository). La guarda de null es obligatoria: JsonSerializer.Serialize(null)
+            // escribiría el literal JSON null en vez de NULL SQL, y RetireAsync los distingue.
+            OldValue = oldHost is null ? null : JsonSerializer.Serialize(oldHost),
+            NewValue = newHost is null ? null : JsonSerializer.Serialize(newHost),
             ChangedAt = now,
             ChangedBy = changedBy,
             ClientIp = _auditContext.ClientIp,
@@ -439,8 +449,18 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
     private static bool IsConstraint(DbUpdateException ex, string constraintName) =>
         ex.InnerException is PostgresException pg && pg.ConstraintName == constraintName;
 
-    private static bool IsCheckViolation(DbUpdateException ex) =>
-        ex.InnerException is PostgresException pg && pg.SqlState == PostgresErrorCodes.CheckViolation;
+    /// <summary>
+    /// Solo los CHECK de FORMATO DEL HOST (<c>ck_tenant_domains_host_lower</c>,
+    /// <c>ck_tenant_domains_host_length</c>, <c>ck_tenant_domains_host_format</c>) se traducen a
+    /// <see cref="DomainHostInvalidException"/>. Antes bastaba con el SqlState 23514, así que un
+    /// <c>ck_tenant_domains_verification_token</c> o <c>ck_tenant_domains_status</c> le habría dicho al
+    /// usuario "host inválido" (mensaje falso); esos siguen saliendo como <see cref="DbUpdateException"/>.
+    /// </summary>
+    private static bool IsHostCheckViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException pg
+        && pg.SqlState == PostgresErrorCodes.CheckViolation
+        && pg.ConstraintName is not null
+        && pg.ConstraintName.StartsWith("ck_tenant_domains_host", StringComparison.Ordinal);
 
     private static TenantDomain Map(TenantDomainEntity entity) => new()
     {
