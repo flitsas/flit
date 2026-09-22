@@ -76,6 +76,14 @@ public static class AttachmentRules
         // `source`, así que una carga manual bajo ese código no sobreviviría a la siguiente regeneración.
         "escritura_representante", "escritura_representante_vendedor",
         "escritura_representante_locatario",
+        // HU #12774 — certificado de Cámara de Comercio del actor persona jurídica. Misma familia que
+        // la escritura (ambos acreditan quién representa a la sociedad) y por eso el mismo trato: un
+        // código por rol, carga manual en el paso del actor y fuera de la matriz documental. NO se
+        // reutiliza 'camara_comercio': ese es el código del catálogo de paridad FLIT 1.0 y arrastra los
+        // datos migrados de V1, donde las tres llaves del legado colapsan en él.
+        CamaraComercioAttachmentTipo.Vendedor,
+        CamaraComercioAttachmentTipo.Comprador,
+        CamaraComercioAttachmentTipo.Locatario,
     };
 
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
