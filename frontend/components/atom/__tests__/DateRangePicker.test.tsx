@@ -189,7 +189,10 @@ describe("DateRangePicker — HU #12724", () => {
     // Uso de ejemplo: package.json declara react-day-picker y no otra lib de fechas de UI
     it("declara react-day-picker y no agrega otra librería de calendario", async () => {
       const pkg = await import("../../../package.json");
-      const deps = { ...pkg.default.dependencies, ...pkg.default.devDependencies };
+      const deps: Record<string, string | undefined> = {
+        ...pkg.default.dependencies,
+        ...pkg.default.devDependencies,
+      };
       expect(deps["react-day-picker"]).toBeDefined();
       expect(deps["@mui/x-date-pickers"]).toBeUndefined();
       expect(deps["react-datepicker"]).toBeUndefined();

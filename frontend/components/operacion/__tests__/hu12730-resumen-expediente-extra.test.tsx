@@ -19,14 +19,16 @@ const sampleHistory: StatusHistory[] = [
     fromStatus: null,
     toStatus: 'borrador',
     changedAt: '2026-09-01T10:00:00Z',
-    changedBy: 'ops',
-  } as StatusHistory,
+    reason: null,
+    changedByName: 'ops',
+  },
   {
     fromStatus: 'borrador',
-    toStatus: 'en_revision',
+    toStatus: 'preparado',
     changedAt: '2026-09-02T12:00:00Z',
-    changedBy: 'ops',
-  } as StatusHistory,
+    reason: null,
+    changedByName: 'ops',
+  },
 ];
 
 describe('HU #12730 — AC1/AC2 resumen dos columnas alineadas', () => {

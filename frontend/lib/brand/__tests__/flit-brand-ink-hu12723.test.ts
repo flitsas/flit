@@ -53,13 +53,13 @@ describe("Dock — ítem seleccionado con el degradado del isotipo central", () 
       /--nav-activo:\s*linear-gradient\(90deg,\s*#557eff\s+0%,\s*#00dbd5\s+100%\)/i,
     );
     expect(GLOBALS).toMatch(
-      /\.dock-pill\[aria-current="page"\],\s*\.dock-pill\[data-ancestor-active="true"\]\s*\{[^}]*background:\s*var\(--nav-activo\)/s,
+      /\.dock-pill\[aria-current="page"\],\s*\.dock-pill\[data-ancestor-active="true"\]\s*\{[^}]*background:\s*var\(--nav-activo\)/,
     );
     expect(GLOBALS).toMatch(
-      /\.dock-pill\[aria-current="page"\] svg,\s*\.dock-pill\[data-ancestor-active="true"\] svg\s*\{[^}]*color:\s*#ffffff/s,
+      /\.dock-pill\[aria-current="page"\] svg,\s*\.dock-pill\[data-ancestor-active="true"\] svg\s*\{[^}]*color:\s*#ffffff/,
     );
     expect(GLOBALS).toMatch(
-      /\.dock-panel-item\[aria-current="page"\]\s*\{[^}]*background:\s*var\(--nav-activo\)/s,
+      /\.dock-panel-item\[aria-current="page"\]\s*\{[^}]*background:\s*var\(--nav-activo\)/,
     );
   });
 
