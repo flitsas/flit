@@ -73,6 +73,26 @@ public sealed class PersistOcrFieldsHandler(
                 ["fecha_vencimiento"] = "rtm_vencimiento",
                 ["estado"] = "rtm_estado",
             },
+            // HU #12776 — fecha de expedición del certificado de Cámara de Comercio. Es lo único que
+            // se persiste de este prompt: el resto de lo que extrae (razón social, NIT, representante)
+            // ya lo tiene el trámite por el RUES y por la captura del actor, y escribirlo aquí sería
+            // dejar que un PDF escaneado compitiera con la fuente oficial.
+            //
+            // Una llave POR ROL, como los códigos de adjunto: con una sola, en un traspaso entre dos
+            // sociedades la fecha del comprador pisaría la del vendedor y la alerta de vigencia se
+            // calcularía sobre el documento equivocado.
+            [CamaraComercioAttachmentTipo.Vendedor] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fecha_expedicion"] = CamaraComercioFieldKeys.Expedicion("vendedor"),
+            },
+            [CamaraComercioAttachmentTipo.Comprador] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fecha_expedicion"] = CamaraComercioFieldKeys.Expedicion("comprador"),
+            },
+            [CamaraComercioAttachmentTipo.Locatario] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fecha_expedicion"] = CamaraComercioFieldKeys.Expedicion("locatario"),
+            },
         };
 
     /// <summary>¿El tipo de documento tiene campos persistibles por OCR?</summary>
