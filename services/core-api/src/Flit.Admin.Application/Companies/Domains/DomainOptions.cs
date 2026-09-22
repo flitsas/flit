@@ -13,6 +13,13 @@ public sealed class DomainOptions
     /// <summary>Dominio de FLIT y sus subdominios, y el portal de organismos de tránsito. Ver <see cref="Flit.Admin.Domain.Companies.Domains.ReservedHosts"/>.</summary>
     public IReadOnlyList<string> Reserved { get; set; } = [];
 
+    /// <summary>
+    /// Hosts de prueba de marca blanca exceptuados de <see cref="Reserved"/> (HU #12761). La
+    /// coincidencia es EXACTA, sin comodines: solo el host listado deja de ser reservado; sus
+    /// subdominios siguen siéndolo. Ver <see cref="Flit.Admin.Domain.Companies.Domains.ReservedHosts"/>.
+    /// </summary>
+    public IReadOnlyList<string> Allowed { get; set; } = [];
+
     /// <summary>Destino CNAME que el SuperAdmin debe apuntar (borde #12421), informativo en el contrato de instrucciones DNS.</summary>
     public string EdgeTarget { get; set; } = string.Empty;
 }
