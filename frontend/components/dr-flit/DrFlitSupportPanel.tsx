@@ -56,32 +56,34 @@ export function DrFlitSupportPanel({
               </span>
             </a>
           </li>
-          <li>
-            <a
-              href={`tel:${DR_FLIT_SUPPORT_PHONE.replace(/\s/g, "")}`}
-              className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-[var(--dr-flit-bubble)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)]"
-            >
-              <Phone
-                className="h-4 w-4 shrink-0"
-                style={{ color: "var(--dr-flit-brand-blue)" }}
-                aria-hidden
-              />
-              <span className="min-w-0">
-                <span
-                  className="block text-xs font-medium"
-                  style={{ color: "var(--dr-flit-text-muted)" }}
-                >
-                  Línea de atención
+          {DR_FLIT_SUPPORT_PHONE ? (
+            <li>
+              <a
+                href={`tel:${DR_FLIT_SUPPORT_PHONE.replace(/\s/g, "")}`}
+                className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-[var(--dr-flit-bubble)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)]"
+              >
+                <Phone
+                  className="h-4 w-4 shrink-0"
+                  style={{ color: "var(--dr-flit-brand-blue)" }}
+                  aria-hidden
+                />
+                <span className="min-w-0">
+                  <span
+                    className="block text-xs font-medium"
+                    style={{ color: "var(--dr-flit-text-muted)" }}
+                  >
+                    Línea de atención
+                  </span>
+                  <span
+                    className="block text-sm font-semibold"
+                    style={{ color: "var(--dr-flit-text)" }}
+                  >
+                    {DR_FLIT_SUPPORT_PHONE}
+                  </span>
                 </span>
-                <span
-                  className="block text-sm font-semibold"
-                  style={{ color: "var(--dr-flit-text)" }}
-                >
-                  {DR_FLIT_SUPPORT_PHONE}
-                </span>
-              </span>
-            </a>
-          </li>
+              </a>
+            </li>
+          ) : null}
         </ul>
       </div>
 

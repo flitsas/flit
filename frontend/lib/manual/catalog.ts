@@ -8,15 +8,25 @@ export type {
   ManualAudience,
   ManualCallout,
   ManualNavSection,
+  ManualProfile,
   ManualSectionBlock,
+  ManualSource,
 } from "./types";
 
 export { MANUAL_ARTICLES } from "./articles";
 export { MANUAL_HOME_SLUG, MANUAL_NAV_SECTIONS } from "./articles/meta";
+export { visibleAudiences } from "./audience";
+export {
+  NORMATIVA_RESOLUCION_PDF_HREF,
+  NORMATIVA_RESOLUCION_SLUG,
+  NORMATIVA_RESOLUCION_WEB_HREF,
+} from "./articles/normativa";
+export { resolveContextArticle } from "./context";
 
 import { MANUAL_ARTICLES } from "./articles";
 import { MANUAL_NAV_SECTIONS } from "./articles/meta";
-import type { ManualArticle, ManualNavSection } from "./types";
+import { isVisibleFor } from "./audience";
+import type { ManualArticle, ManualAudience, ManualNavSection, ManualSource } from "./types";
 
 export function getArticleBySlug(slug: string): ManualArticle | undefined {
   const normalized = slug.replace(/^\/+|\/+$/g, "");
@@ -52,7 +62,17 @@ export type ManualSearchHit = {
   summary: string;
   href: string;
   score: number;
+  /** Fuentes del artículo (norma, concepto); la primera es la que DR. FLIT ofrece abrir. */
+  sources?: ManualSource[];
+  primarySource?: boolean;
 };
+
+/**
+ * Bonificación de la FUENTE PRINCIPAL (la norma que avala la plataforma): solo cuando el artículo ya
+ * casó por keyword o título. No fuerza la norma en preguntas operativas («cómo creo un trámite»
+ * sigue devolviendo el how-to), pero ante «qué exige la norma para el traspaso» la norma va primero.
+ */
+const PRIMARY_SOURCE_BONUS = 3;
 
 const SEARCH_STOPWORDS = new Set([
   "el",
@@ -109,13 +129,26 @@ function articleHaystack(article: ManualArticle): string {
   ].join(" ");
 }
 
+export interface ManualSearchOptions {
+  /**
+   * HU-F — audiencias visibles para quien pregunta (ver `visibleAudiences`). Sin definir, no se
+   * filtra: es lo que hace el portal público `/manual`.
+   */
+  audiences?: readonly ManualAudience[];
+}
+
 /** Match por keywords/título para búsqueda del manual y DR-FLIT. */
-export function searchManualArticles(query: string, limit = 8): ManualSearchHit[] {
+export function searchManualArticles(
+  query: string,
+  limit = 8,
+  options: ManualSearchOptions = {},
+): ManualSearchHit[] {
   const tokens = tokenize(query);
   if (tokens.length === 0) return [];
 
   const hits: ManualSearchHit[] = [];
   for (const article of MANUAL_ARTICLES) {
+    if (!isVisibleFor(article.audience, options.audiences)) continue;
     const titleNorm = article.title
       .toLowerCase()
       .normalize("NFD")
@@ -147,6 +180,7 @@ export function searchManualArticles(query: string, limit = 8): ManualSearchHit[
       }
     }
     if (score >= 3 && strongHits > 0) {
+      if (article.primarySource) score += PRIMARY_SOURCE_BONUS;
       hits.push({
         slug: article.slug,
         title: article.title,
@@ -154,6 +188,8 @@ export function searchManualArticles(query: string, limit = 8): ManualSearchHit[
         summary: article.summary,
         href: `/manual/${article.slug}`,
         score,
+        ...(article.sources?.length ? { sources: article.sources } : {}),
+        ...(article.primarySource ? { primarySource: true } : {}),
       });
     }
   }
