@@ -27,6 +27,24 @@ internal static class ActorEndpoints
                 : Results.Ok(result);
         }).WithName("GetProcedureInstanceActors");
 
+        // HU #12775 — obligatoriedad del certificado de Cámara de Comercio por actor jurídico. Va en
+        // su propio GET y no dentro de la respuesta de actores porque se recalcula por su cuenta: la
+        // firma del baúl y la escritura vigente pueden cambiar sin que cambie ningún dato del actor.
+        group.MapGet("/instances/{id:guid}/camara-comercio-requirements", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetCamaraComercioRequirementsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
+                : Results.Ok(result);
+        }).WithName("GetCamaraComercioRequirements");
+
         group.MapPut("/instances/{id:guid}/actors", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
