@@ -18,8 +18,25 @@
  * Lista por defecto cuando `NEXT_PUBLIC_FLIT_HOSTS` no está definida (dev local y respaldo).
  * `*.dominio` matchea cualquier subdominio de `dominio` (no el dominio raíz sin subdominio).
  * `!host` excluye ese host exacto aunque otro patrón lo cubra.
+ *
+ * Las negaciones de los hosts de prueba de marca blanca viven TAMBIÉN aquí, no solo en el
+ * build-arg de `.github/workflows/cd.yml` (HU #12761): tratarlos como dominio de red es una
+ * decisión de seguridad y no puede depender de que la variable llegue al build. Si
+ * `NEXT_PUBLIC_FLIT_HOSTS` faltara o llegara vacía (build local, `docker build` sin el arg,
+ * una ruta de build por compose, un typo en el workflow), el respaldo volvería a clasificarlos
+ * como FLIT en silencio, sin que nada fallara ni avisara. Con las negaciones horneadas aquí,
+ * el respaldo es simétrico al `appsettings.json` del backend, que sí viaja con la imagen.
+ * Mantener sincronizadas estas tres entradas con `cd.yml` y `frontend/.env.example`.
  */
-const DEFAULT_FLIT_HOSTS = ["localhost", "127.0.0.1", "*.flitsas.online", "*.flitsas.com"];
+const DEFAULT_FLIT_HOSTS = [
+  "localhost",
+  "127.0.0.1",
+  "*.flitsas.online",
+  "*.flitsas.com",
+  "!marcablancadev.flitsas.online",
+  "!marcablancaqa.flitsas.online",
+  "!marcablancapdn.flitsas.online",
+];
 
 function parseHostList(raw: string | undefined): string[] {
   if (!raw || !raw.trim()) return DEFAULT_FLIT_HOSTS;

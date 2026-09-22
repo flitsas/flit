@@ -116,13 +116,24 @@ describe("isFlitHost — excepciones con '!' (AC6/AC8 #12761)", () => {
     expect(isFlitHost("MarcaBlancaDev.Flitsas.Online")).toBe(false);
   });
 
-  it("sin NEXT_PUBLIC_FLIT_HOSTS el respaldo por defecto no cambia (no regresión, contrato)", async () => {
+  it("sin NEXT_PUBLIC_FLIT_HOSTS el respaldo por defecto TAMBIÉN excluye los hosts de prueba (contrato)", async () => {
     const isFlitHost = await loadIsFlitHost(undefined);
+    // Las negaciones viven también en DEFAULT_FLIT_HOSTS: si el build-arg falta o llega vacío,
+    // los hosts de prueba siguen siendo dominio de red (no pueden depender de la variable).
+    expect(isFlitHost("marcablancadev.flitsas.online")).toBe(false);
+    expect(isFlitHost("marcablancaqa.flitsas.online")).toBe(false);
+    expect(isFlitHost("marcablancapdn.flitsas.online")).toBe(false);
+    // El resto del respaldo no cambia respecto de #12419 (no regresión).
     expect(isFlitHost("localhost:3000")).toBe(true);
+    expect(isFlitHost("127.0.0.1:3000")).toBe(true);
     expect(isFlitHost("dev.flitsas.online")).toBe(true);
-    // Sin negaciones horneadas, los hosts de prueba siguen matcheando el comodín.
-    expect(isFlitHost("marcablancadev.flitsas.online")).toBe(true);
     expect(isFlitHost("app.movilidadandina.com")).toBe(false);
+  });
+
+  it("con lista vacía o en blanco cae al respaldo, que conserva las negaciones (edge case)", async () => {
+    const isFlitHost = await loadIsFlitHost("   ");
+    expect(isFlitHost("marcablancadev.flitsas.online")).toBe(false);
+    expect(isFlitHost("dev.flitsas.online")).toBe(true);
   });
 
   it("host vacío/null sigue asumiéndose FLIT con negaciones presentes (AC5 #12419)", async () => {

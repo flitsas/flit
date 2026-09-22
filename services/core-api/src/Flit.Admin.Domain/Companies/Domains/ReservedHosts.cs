@@ -13,6 +13,14 @@ namespace Flit.Admin.Domain.Companies.Domains;
 /// evalúa ANTES que los patrones y la coincidencia es EXACTA — sin comodines: un subdominio de un
 /// host exceptuado sigue siendo reservado.
 /// </para>
+/// <para>
+/// Comparación: TODAS las comprobaciones (permitidos y reservados, exactos y comodín) usan
+/// <see cref="StringComparison.OrdinalIgnoreCase"/>, insensible a mayúsculas en AMBOS lados — host y
+/// entrada de configuración. Es deliberado que el bucle de reservados también lo sea: ante un host sin
+/// minusculizar el guardarraíl debe fallar CERRADO (clasificarlo como reservado) en vez de dejarlo
+/// escapar. Aun así, normalizar el host antes de llamar (ver <see cref="HostNormalizer"/>) sigue
+/// siendo responsabilidad del llamador: aquí solo se compara, no se convierte IDN ni se valida formato.
+/// </para>
 /// </summary>
 public static class ReservedHosts
 {
@@ -33,7 +41,7 @@ public static class ReservedHosts
                     continue;
                 }
 
-                if (string.Equals(normalizedHost.Trim(), rawAllowed.Trim().ToLowerInvariant(), StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(normalizedHost.Trim(), rawAllowed.Trim(), StringComparison.OrdinalIgnoreCase))
                 {
                     return false;
                 }
@@ -54,13 +62,13 @@ public static class ReservedHosts
                 var baseDomain = pattern[2..];
                 var suffix = pattern[1..]; // ".flitsas.online"
 
-                if (string.Equals(normalizedHost, baseDomain, StringComparison.Ordinal)
-                    || normalizedHost.EndsWith(suffix, StringComparison.Ordinal))
+                if (string.Equals(normalizedHost, baseDomain, StringComparison.OrdinalIgnoreCase)
+                    || normalizedHost.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
             }
-            else if (string.Equals(normalizedHost, pattern, StringComparison.Ordinal))
+            else if (string.Equals(normalizedHost, pattern, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

@@ -86,7 +86,12 @@ public sealed class ReservedHostsTests
     [Fact]
     public void AC8_ComparacionInsensibleAMayusculas_ElHostPermitidoSeExceptua()
     {
+        // Con la excepción: no reservado.
         ReservedHosts.IsReserved("MarcaBlancaDev.FLITSAS.online", Patterns, Allowed).Should().BeFalse();
+
+        // Sin ella: el mismo host SÍ es reservado — esta línea es la que prueba que la excepción actúa
+        // (y que el bucle de reservados también compara insensible a mayúsculas: falla abierto si no).
+        ReservedHosts.IsReserved("MarcaBlancaDev.FLITSAS.online", Patterns, []).Should().BeTrue();
     }
 
     [Fact]
