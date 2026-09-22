@@ -5,6 +5,7 @@ import { Eye, Rocket, Save, Undo2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { contrastRatio, isValidHexColor, meetsMinimumContrast } from "@/lib/brand/contrast";
 import {
+  brandLogoUrl,
   brandingErrorCode,
   getBranding,
   isBrandingNotFound,
@@ -44,6 +45,8 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
   const [draftName, setDraftName] = useState("");
   const [draftColors, setDraftColors] = useState<BrandColors>(DEFAULT_COLORS);
   const [draftLogoId, setDraftLogoId] = useState<string | null>(null);
+  // Bug #12735 — siempre URL absoluta de la API: la capa `lib/api/branding` ya la normaliza al
+  // parsear; se repite aquí (idempotente) para que ningún caller/mocks cuele la relativa en <img>.
   const [draftLogoUrl, setDraftLogoUrl] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
@@ -67,7 +70,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
         setDraftName(data.draft.platformName ?? "");
         setDraftColors(data.draft.colors ?? DEFAULT_COLORS);
         setDraftLogoId(data.draft.logoId ?? null);
-        setDraftLogoUrl(data.logoUrl ?? null);
+        setDraftLogoUrl(brandLogoUrl(data.logoUrl));
         setStatus("ready");
       } catch (err) {
         if (signal?.aborted) return;
@@ -137,7 +140,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
     setDraftName(updated.draft.platformName ?? "");
     setDraftColors(updated.draft.colors ?? DEFAULT_COLORS);
     setDraftLogoId(updated.draft.logoId ?? null);
-    setDraftLogoUrl(updated.logoUrl ?? null);
+    setDraftLogoUrl(brandLogoUrl(updated.logoUrl));
     return updated;
   }
 
@@ -164,7 +167,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
       setDraftName(published.draft.platformName ?? "");
       setDraftColors(published.draft.colors ?? DEFAULT_COLORS);
       setDraftLogoId(published.draft.logoId ?? null);
-      setDraftLogoUrl(published.logoUrl ?? null);
+      setDraftLogoUrl(brandLogoUrl(published.logoUrl));
       setPublishOpen(false);
       setSuccessMessage("Identidad de marca publicada.");
     } catch (err) {
@@ -192,7 +195,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
 
   function handleLogoUploaded(logo: BrandLogoResponse) {
     setDraftLogoId(logo.logoId);
-    setDraftLogoUrl(logo.logoUrl);
+    setDraftLogoUrl(brandLogoUrl(logo.logoUrl));
     setSuccessMessage(null);
   }
 

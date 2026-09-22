@@ -157,6 +157,15 @@ public static class AdminInfrastructureExtensions
             services.AddSingleton(new Flit.Admin.Application.Companies.Domains.DomainOptions());
         }
 
+        // HU #12416 — handlers de la consola SuperAdmin de dominio (alta/cambio, consulta y retiro).
+        // Bug #12735: los endpoints de AdminCompaniesDomainEndpoints los resuelven por [FromServices],
+        // pero quedaron sin registrar (solo se registraron los de verificación de #12425), lo que
+        // provocaba 500 "No service for type ...Handler has been registered". Dependen solo de
+        // ITenantDomainRepository (Scoped, arriba) y DomainOptions (Singleton, arriba).
+        services.AddScoped<Flit.Admin.Application.Companies.Domains.RegisterDomain.RegisterDomainHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.Domains.GetDomain.GetDomainHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.Domains.RemoveDomain.RemoveDomainHandler>();
+
         // HU #12425 (Feature #12370, Épica #12237) — comprobación de titularidad por TXT DNS y ciclo
         // de estados pending → verified → active. Mismo patrón que DomainOptions: Application consume
         // el POCO ya resuelto por IOptions, sin depender de Microsoft.Extensions.Options.

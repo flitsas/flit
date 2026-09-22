@@ -74,6 +74,34 @@ function baseUrl(source: BrandingSource, tenantId?: string): string {
 }
 
 /**
+ * URL pública del logotipo, SIEMPRE absoluta contra la API (Bug #12735). El backend devuelve
+ * `logoUrl` como ruta relativa (`/api/v1/public/branding/logos/{logoId}`, `TenantBrandingResponse`
+ * y `BrandLogoResponse`); pintarla cruda en `<img src>` funciona en un host de red (el borde
+ * enruta `/api/v1/*` al Gateway en el mismo origen) pero en un host FLIT (consola SuperAdmin en
+ * `qa.flitsas.online`) la API es cross-origin (`NEXT_PUBLIC_API_BASE_URL=https://api.qa...`) y
+ * el navegador pedía la imagen al host del front → 404 → "guarda pero no se carga" al recargar.
+ * Mismo patrón que `bannerImageUrl` (`admin-banners.ts`): `resolveApiUrl` + `new URL(path, origin)`
+ * respeta un valor ya absoluto (idempotente) y en host de red cae a `window.location.origin`.
+ * Acepta la ruta que manda el backend o un `logoId` pelado.
+ */
+export function brandLogoUrl(logoUrlOrId: string | null | undefined): string | null {
+  if (!logoUrlOrId) return null;
+  const value = logoUrlOrId.trim();
+  if (!value) return null;
+  const isPathOrAbsolute = value.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(value);
+  return resolveApiUrl(isPathOrAbsolute ? value : `/api/v1/public/branding/logos/${value}`);
+}
+
+/** Único punto donde `logoUrl` de la respuesta de branding pasa a URL absoluta de la API. */
+function normalizeBranding(response: TenantBrandingResponse): TenantBrandingResponse {
+  return { ...response, logoUrl: brandLogoUrl(response.logoUrl) };
+}
+
+function normalizeLogo(response: BrandLogoResponse): BrandLogoResponse {
+  return { ...response, logoUrl: brandLogoUrl(response.logoUrl) ?? response.logoUrl };
+}
+
+/**
  * GET .../branding (HU #12412 AC1/AC3). `404` = aún sin configuración inicial.
  * `async` a propósito: si `source="admin"` sin `tenantId` (uso incorrecto del componente),
  * `baseUrl` lanza — envolver en una función async convierte ese throw síncrono en un rechazo
@@ -84,7 +112,7 @@ export async function getBranding(
   tenantId?: string,
   signal?: AbortSignal,
 ): Promise<TenantBrandingResponse> {
-  return apiFetch<TenantBrandingResponse>(baseUrl(source, tenantId), { signal });
+  return normalizeBranding(await apiFetch<TenantBrandingResponse>(baseUrl(source, tenantId), { signal }));
 }
 
 async function readErrorBody(response: Response): Promise<unknown> {
@@ -137,7 +165,7 @@ export async function upsertBrandingDraft(
   body: UpsertBrandingDraftRequest,
   tenantId?: string,
 ): Promise<TenantBrandingResponse> {
-  return requestJson<TenantBrandingResponse>(baseUrl(source, tenantId), "PUT", body);
+  return normalizeBranding(await requestJson<TenantBrandingResponse>(baseUrl(source, tenantId), "PUT", body));
 }
 
 /** POST .../branding/publish (HU #12412 AC4, HU #12413 AC6). */
@@ -146,12 +174,16 @@ export async function publishBranding(
   rowVersion: number,
   tenantId?: string,
 ): Promise<TenantBrandingResponse> {
-  return requestJson<TenantBrandingResponse>(`${baseUrl(source, tenantId)}/publish`, "POST", { rowVersion });
+  return normalizeBranding(
+    await requestJson<TenantBrandingResponse>(`${baseUrl(source, tenantId)}/publish`, "POST", { rowVersion }),
+  );
 }
 
 /** POST /admin/companies/{tenantId}/branding/retire — solo SuperAdmin (HU #12412 AC5/AC6). */
 export async function retireBranding(tenantId: string): Promise<TenantBrandingResponse> {
-  return requestJson<TenantBrandingResponse>(`/api/v1/admin/companies/${tenantId}/branding/retire`, "POST");
+  return normalizeBranding(
+    await requestJson<TenantBrandingResponse>(`/api/v1/admin/companies/${tenantId}/branding/retire`, "POST"),
+  );
 }
 
 /**
@@ -179,7 +211,7 @@ export async function uploadBrandLogo(
     throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
   }
 
-  return (await response.json()) as BrandLogoResponse;
+  return normalizeLogo((await response.json()) as BrandLogoResponse);
 }
 
 /** `true` si el error es "aún sin configuración inicial" (404 `BRANDING_NOT_FOUND`). */
