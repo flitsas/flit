@@ -24,6 +24,19 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <c>escritura_representante</c>, donde el código sin sufijo es el del comprador.
 /// </para>
 /// </summary>
+/// <summary>
+/// HU #12776 — llaves de <c>field_values</c> derivadas del certificado de Cámara de Comercio.
+/// <para>Una por rol, por el mismo motivo que los códigos de adjunto: con una sola llave, en un
+/// traspaso entre dos sociedades la fecha del comprador pisaría la del vendedor y la alerta de
+/// vigencia se calcularía sobre el documento equivocado.</para>
+/// </summary>
+public static class CamaraComercioFieldKeys
+{
+    /// <summary>Fecha de expedición leída por el OCR, en <c>YYYY-MM-DD</c>.</summary>
+    public static string Expedicion(string rol) =>
+        $"camara_comercio_expedicion_{(rol ?? string.Empty).Trim().ToLowerInvariant()}";
+}
+
 public static class CamaraComercioAttachmentTipo
 {
     public const string Prefijo = "camara_comercio";

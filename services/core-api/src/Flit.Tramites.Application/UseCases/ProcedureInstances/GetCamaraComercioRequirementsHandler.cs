@@ -1,4 +1,6 @@
+using Flit.Queries.Domain.Time;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -13,7 +15,12 @@ public sealed record CamaraComercioRequirementDto(
     string Rol,
     string Tipo,
     bool EsObligatorio,
-    string Exencion);
+    string Exencion,
+    // HU #12776 — vigencia del certificado ya cargado: `vigente` | `excedida` | `indeterminada`.
+    // `indeterminada` es el caso en que el OCR no pudo leer la fecha, y NO se pinta alerta: una
+    // fecha ilegible no es un documento vencido.
+    string Vigencia,
+    int? DiasDesdeExpedicion);
 
 public sealed record CamaraComercioRequirementsResponse(
     IReadOnlyList<CamaraComercioRequirementDto> Requirements);
@@ -24,14 +31,19 @@ public sealed record CamaraComercioRequirementsResponse(
 /// </summary>
 public sealed class GetCamaraComercioRequirementsHandler(
     IProcedureInstanceRepository repo,
-    CamaraComercioRequirementResolver resolver)
+    CamaraComercioRequirementResolver resolver,
+    TimeProvider? timeProvider = null)
 {
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+
     public async Task<(CamaraComercioRequirementsResponse? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         CancellationToken ct = default)
     {
-        var instance = await repo.GetByIdWithActorsAsync(id, tenantId, ct).ConfigureAwait(false);
+        // WithDetails y no WithActors: la vigencia se calcula sobre la fecha que el OCR dejó en
+        // field_values al cargar el certificado.
+        var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct).ConfigureAwait(false);
         if (instance is null)
             return (null, "not_found");
 
@@ -39,9 +51,28 @@ public sealed class GetCamaraComercioRequirementsHandler(
             .ResolveAsync(tenantId, instance.Actors, ct)
             .ConfigureAwait(false);
 
+        // Día calendario de Colombia (UTC-5, sin DST — ADR-0025 §3): a las 7 p. m. de Bogotá ya es el
+        // día siguiente en UTC, y contar con esa fecha envejecería el certificado medio día antes.
+        var hoy = DateOnly.FromDateTime(
+            _time.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
+
         return (new CamaraComercioRequirementsResponse(
-            [.. requirements.Select(r => new CamaraComercioRequirementDto(
-                r.Rol, r.Tipo, r.EsObligatorio, ToWire(r.Exencion)))]), null);
+            [.. requirements.Select(r =>
+            {
+                var expedicion = instance.FieldValues
+                    .FirstOrDefault(f => string.Equals(
+                        f.FieldKey, CamaraComercioFieldKeys.Expedicion(r.Rol), StringComparison.OrdinalIgnoreCase))
+                    ?.ValueText;
+                var vigencia = CamaraComercioVigencia.EvaluarTexto(expedicion, hoy);
+
+                return new CamaraComercioRequirementDto(
+                    r.Rol,
+                    r.Tipo,
+                    r.EsObligatorio,
+                    ToWire(r.Exencion),
+                    CamaraComercioVigencia.ToWire(vigencia.Estado),
+                    vigencia.Dias);
+            })]), null);
     }
 
     /// <summary>
