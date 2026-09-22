@@ -47,20 +47,25 @@ describe("HU #12723 — --flit-brand-ink (AC1)", () => {
   });
 });
 
-describe("HU #12723 — CSS activo dock (AC2/AC3/AC6)", () => {
-  it("ítem activo y ancestro activo: sin fondo de relleno, ink + brand en icono", () => {
+describe("Dock — ítem seleccionado con el degradado del isotipo central", () => {
+  it("píldora, ancestro y subítem activos usan --nav-activo e icono blanco", () => {
     expect(GLOBALS).toMatch(
-      /\.dock-pill\[aria-current="page"\],\s*\.dock-pill\[data-ancestor-active="true"\]\s*\{[^}]*background:\s*transparent/s,
+      /--nav-activo:\s*linear-gradient\(90deg,\s*#557eff\s+0%,\s*#00dbd5\s+100%\)/i,
     );
     expect(GLOBALS).toMatch(
-      /\.dock-pill\[aria-current="page"\] svg,\s*\.dock-pill\[data-ancestor-active="true"\] svg\s*\{[^}]*color:\s*var\(--color-flit-brand\)/s,
+      /\.dock-pill\[aria-current="page"\],\s*\.dock-pill\[data-ancestor-active="true"\]\s*\{[^}]*background:\s*var\(--nav-activo\)/s,
     );
-    expect(GLOBALS).toMatch(/\.dock-panel-item\[aria-current="page"\]\s*\{[^}]*background:\s*transparent/s);
+    expect(GLOBALS).toMatch(
+      /\.dock-pill\[aria-current="page"\] svg,\s*\.dock-pill\[data-ancestor-active="true"\] svg\s*\{[^}]*color:\s*#ffffff/s,
+    );
+    expect(GLOBALS).toMatch(
+      /\.dock-panel-item\[aria-current="page"\]\s*\{[^}]*background:\s*var\(--nav-activo\)/s,
+    );
   });
 
-  it("hover del activo usa --nav-app-bg; .dock-fab conserva --nav-activo", () => {
+  it("el hover del activo conserva el degradado; .dock-fab usa el mismo token", () => {
     expect(GLOBALS).toMatch(
-      /\.dock-pill\[aria-current="page"\]:hover[\s\S]*?background:\s*var\(--nav-app-bg\)/,
+      /\.dock-pill\[aria-current="page"\]:hover[\s\S]*?background:\s*var\(--nav-activo\)/,
     );
     expect(GLOBALS).toMatch(/\.dock-fab[\s\S]*?--nav-activo|--nav-activo[\s\S]*?\.dock-fab/);
   });

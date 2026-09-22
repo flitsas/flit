@@ -231,14 +231,18 @@ function DockPanelItem({
             onNavigate();
             item.onClick();
           }}
-          className="dock-panel-item group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)]"
+          className={`dock-panel-item group flex w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-sm transition-colors ${
+            item.active
+              ? "text-white"
+              : "text-[var(--nav-texto)] hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)]"
+          }`}
           aria-current={item.active ? "page" : undefined}
         >
           <ItemIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="truncate">{item.label}</span>
           <span
             aria-hidden="true"
-            className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--color-flit-brand)] group-aria-[current=page]:bg-[var(--color-flit-brand)]"
+            className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--color-flit-brand)] group-aria-[current=page]:bg-white"
           />
         </button>
       </li>
@@ -252,7 +256,7 @@ function DockPanelItem({
       <button
         type="button"
         onClick={() => setNestedOpen((v) => !v)}
-        className={`group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] ${
+        className={`group flex w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] ${
           itemLit
             ? "font-semibold text-[var(--nav-texto-fuerte)]"
             : "text-[var(--nav-texto)]"
@@ -281,14 +285,18 @@ function DockPanelItem({
                     onNavigate();
                     child.onClick();
                   }}
-                  className="dock-panel-item group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)]"
+                  className={`dock-panel-item group flex w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-sm transition-colors ${
+                    child.active
+                      ? "text-white"
+                      : "text-[var(--nav-texto)] hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)]"
+                  }`}
                   aria-current={child.active ? "page" : undefined}
                 >
                   <ChildIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span className="truncate">{child.label}</span>
                   <span
                     aria-hidden="true"
-                    className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--color-flit-brand)] group-aria-[current=page]:bg-[var(--color-flit-brand)]"
+                    className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--color-flit-brand)] group-aria-[current=page]:bg-white"
                   />
                 </button>
               </li>

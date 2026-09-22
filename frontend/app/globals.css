@@ -167,7 +167,8 @@
   --nav-texto-fuerte: #162744;
   --nav-texto-tenue: #667085;
   --nav-focus: #4f74c9;
-  --nav-activo: linear-gradient(90deg, #4fd4cc 0%, #4f74c9 100%);
+  /* Mismo degradado horizontal del isotipo central (favicon.svg: #557EFF → #00DBD5). */
+  --nav-activo: linear-gradient(90deg, #557eff 0%, #00dbd5 100%);
   --nav-radio-pill: 999px;
   --nav-radio-panel: 18px;
   --nav-sombra-dock: 0 8px 24px rgba(22, 39, 68, 0.08);
@@ -426,36 +427,37 @@
 
   .dock-pill[aria-current="page"],
   .dock-pill[data-ancestor-active="true"] {
-    background: transparent;
-    box-shadow: none;
-    color: var(--flit-brand-ink);
+    background: var(--nav-activo);
+    box-shadow: var(--nav-sombra-activo);
+    color: #ffffff;
     font-weight: 600;
   }
 
   .dock-pill[aria-current="page"] svg,
   .dock-pill[data-ancestor-active="true"] svg {
-    color: var(--color-flit-brand);
+    color: #ffffff;
   }
 
   .dock-pill[aria-current="page"]:hover,
   .dock-pill[data-ancestor-active="true"]:hover {
-    background: var(--nav-app-bg);
-    color: var(--flit-brand-ink);
+    background: var(--nav-activo);
+    color: #ffffff;
   }
 
   .dock-panel-item[aria-current="page"] {
-    background: transparent;
-    color: var(--flit-brand-ink);
+    background: var(--nav-activo);
+    box-shadow: var(--nav-sombra-activo);
+    color: #ffffff;
     font-weight: 600;
   }
 
   .dock-panel-item[aria-current="page"] > svg:first-of-type {
-    color: var(--color-flit-brand);
+    color: #ffffff;
   }
 
   .dock-panel-item[aria-current="page"]:hover {
-    background: var(--nav-app-bg);
-    color: var(--flit-brand-ink);
+    background: var(--nav-activo);
+    color: #ffffff;
   }
 
   .dock-fab {

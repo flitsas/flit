@@ -387,13 +387,8 @@ export function BiometricStep({
   const partesContent = initialLoading ? (
     <BiometricSkeleton partes={partes} gridClass={gridClass} />
   ) : (
-    // Feature 05 (rediseño) — cada parte ahora trae DOS tarjetas (firma + biométrica, ver
-    // `ParteBlock`), así que la rejilla exterior deja de repartir partes en columnas: cada bloque va
-    // a ancho completo y apilado, con su propio encabezado de rol para no confundir vendedor y
-    // comprador cuando hay dos (traspaso).
-    // Paso Validación (prototipo AccordionRow + ValidacionCard): cuando !embedded, cada parte es
-    // un acordeón desplegable separado con badge de estado en la cabecera.
-    <div className="space-y-4">
+    // Cada tarjeta de validación ocupa media pantalla y fluye en horizontal (2 columnas desde md).
+    <div className={`grid grid-cols-1 items-stretch gap-4 ${gridClass}`}>
       {partes.map((parte) => {
         // ADR-0053 (Múltiple Propietario) — un lado puede traer 1..4 actores. `actorsOrderedByOrdinal`
         // es la MISMA función que usan las pantallas de solo lectura (FirmaFurStep, TramiteDetalleActores):
@@ -420,18 +415,19 @@ export function BiometricStep({
             : entriesDelLado;
 
         return (
-          <div key={parte} role="group" aria-label={`Biométrica ${PARTE_LABEL[parte]}`}>
-            <div className="space-y-4">
+          <div key={parte} role="group" aria-label={`Biométrica ${PARTE_LABEL[parte]}`} className="contents">
               {/*
                * HU #11666 — `motivosNoEnvio` es y sigue siendo POR LADO (el backend lo calcula así,
                * `EnvioValidacionBloqueoRules` no distingue copropietarios dentro de un mismo rol —
                * ver comentario de `EnvioValidacionMotivo`). Se pinta UNA sola vez por lado, no
                * repetido por cada actor: repetirlo por actor sería mentir precisión que el dato no
                * tiene. Vive fuera de cada acordeón de actor para que no dependa de cuál esté
-               * expandido.
+               * expandido. En la rejilla de dos columnas ocupa la fila completa.
                */}
               {motivoLado && (
-                <MotivoNoEnvioAviso parte={parte} motivo={motivoLado} onIrAActores={onIrAActores} />
+                <div className={gridClass ? 'md:col-span-2' : undefined}>
+                  <MotivoNoEnvioAviso parte={parte} motivo={motivoLado} onIrAActores={onIrAActores} />
+                </div>
               )}
               {entries.map(({ item: actor, ordinal }) => {
                 // Correlación por `ordinal` (fallback a documento en filas históricas sin ordinal) —
@@ -480,11 +476,12 @@ export function BiometricStep({
                 );
 
                 return (
-                  <div key={`${parte}-${ordinal}`}>
+                  <div key={`${parte}-${ordinal}`} className="h-full min-w-0">
                     {!embedded ? (
                       <WizardAccordion
                         title={titulo}
                         defaultOpen
+                        className="h-full"
                         badge={<StatusBadge label={badge.label} tone={badge.tone} />}
                       >
                         {inner}
@@ -495,7 +492,6 @@ export function BiometricStep({
                   </div>
                 );
               })}
-            </div>
           </div>
         );
       })}
