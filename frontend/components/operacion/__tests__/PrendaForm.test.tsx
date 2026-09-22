@@ -95,7 +95,7 @@ describe('PrendaForm (matrícula, R4)', () => {
     expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toBeInTheDocument();
     expect(screen.getByLabelText('Documento de soporte de prenda')).toBeInTheDocument();
     expect(screen.getByText('Certificado / registro de prenda')).toBeInTheDocument();
-    expect(screen.getByText(/Obligatorio/i)).toBeInTheDocument();
+    expect(screen.getByText(/Por cargar/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Adjuntar/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/Subir Certificado/i)).toBeInTheDocument();
     await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
@@ -188,6 +188,28 @@ describe('PrendaForm (matrícula, R4)', () => {
     expect(screen.getByRole('option', { name: /Continuar sin gestionar/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Sí' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'No' })).not.toBeInTheDocument();
+  });
+
+  it('HU #12727 — traspaso: decisión, acreedor y certificado comparten grilla md:grid-cols-3', async () => {
+    const { container } = render(
+      <PrendaForm
+        instanceId="abc"
+        modalidad="traspaso"
+        decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+        embeddedInWizard
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByLabelText('¿Al vehículo se le asociará una prenda?'), {
+      target: { value: 'registrar' },
+    });
+
+    const grid = container.querySelector('.md\\:grid-cols-3');
+    expect(grid).toBeTruthy();
+    expect(within(grid as HTMLElement).getByLabelText('Acreedor (beneficiario)')).toBeInTheDocument();
+    expect(within(grid as HTMLElement).getByLabelText('Documento de soporte de prenda')).toBeInTheDocument();
+    expect((grid as HTMLElement).querySelector('.md\\:col-span-3')).toBeNull();
   });
 
   it('en traspaso, al elegir registrar muestra acreedor', async () => {
@@ -331,7 +353,9 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
     );
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Solicitar constitución de prenda' }));
+    fireEvent.change(screen.getByLabelText('¿Al vehículo se le asociará una prenda?'), {
+      target: { value: 'solicitar' },
+    });
     fireEvent.change(screen.getByLabelText('Acreedor (beneficiario)', { exact: false }), {
       target: { value: 'Banco ABC' },
     });
@@ -400,9 +424,9 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
     );
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.click(
-      screen.getByRole('radio', { name: 'Continuar sin gestionar (asumo el riesgo)' }),
-    );
+    fireEvent.change(screen.getByLabelText('¿Al vehículo se le asociará una prenda?'), {
+      target: { value: 'omitir' },
+    });
 
     const ok = await ref.current!.save();
     expect(ok).toBe(true);

@@ -10,7 +10,7 @@ import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react';
 // una acción del usuario; info y éxito usan `status` (polite) para no cortar al lector de pantalla.
 // El icono es decorativo (aria-hidden): el texto ya comunica el mensaje completo.
 
-export type InlineAlertTone = 'error' | 'warning' | 'info' | 'success';
+export type InlineAlertTone = 'error' | 'warning' | 'info' | 'success' | 'pending';
 
 /**
  * Paleta e icono por tono. Se exporta porque hay avisos que NO pueden usar `InlineAlert` como
@@ -48,6 +48,14 @@ export const INLINE_ALERT_TONES: Record<
     border: 'var(--badge-success-border)',
     Icon: CheckCircle2,
   },
+  pending: {
+    // Naranja corporativo FLIT — `--color-flit-alert` (#FF4E00). Texto `--badge-pending-fg`
+    // (#BF3B00) ≈ 5.2:1 sobre `--badge-pending-bg`; cumple WCAG 2.1 AA en texto pequeño.
+    color: 'var(--badge-pending-fg)',
+    background: 'var(--badge-pending-bg)',
+    border: 'var(--badge-pending-border)',
+    Icon: AlertTriangle,
+  },
 };
 
 export interface InlineAlertProps {
@@ -75,7 +83,7 @@ export function InlineAlert({
   compact = false,
 }: InlineAlertProps) {
   const { color, background, border, Icon } = INLINE_ALERT_TONES[tone];
-  const interrumpe = tone === 'error' || tone === 'warning';
+  const interrumpe = tone === 'error' || tone === 'warning' || tone === 'pending';
 
   return (
     <div

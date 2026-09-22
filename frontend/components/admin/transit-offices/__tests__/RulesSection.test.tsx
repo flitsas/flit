@@ -75,4 +75,15 @@ describe("RulesSection — HU #10223", () => {
     expect(await screen.findByText(/No hay reglas configuradas/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Crear primera regla/i })).toBeInTheDocument();
   });
+
+  it("HU #12731 — sin columnas Lógica/Acción; editar abre panel precargado", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Bloqueo por deuda");
+    expect(screen.queryByRole("columnheader", { name: /Lógica/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("bloquear")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Editar regla Bloqueo por deuda/i }));
+    expect(await screen.findByRole("dialog", { name: /Editar regla Bloqueo por deuda/i })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Bloqueo por deuda")).toBeInTheDocument();
+  });
 });

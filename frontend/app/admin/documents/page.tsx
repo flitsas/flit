@@ -29,6 +29,11 @@ import {
 } from "@/lib/api/admin-document-types";
 import { ApiError } from "@/lib/api/types";
 import type { DocumentType, DocumentTypePagedResult } from "@/lib/api/types-documents";
+import {
+  ADMIN_BACK_LINK_CLS,
+  ADMIN_BRAND_OUTLINE_BTN_CLS,
+  ADMIN_CONTENT_SURFACE_CLS,
+} from "@/components/admin/admin-ui-styles";
 
 const PAGE_SIZE = 20;
 
@@ -179,34 +184,28 @@ function DocumentsCatalog() {
 
   return (
     <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
-      <button
-        type="button"
-        onClick={() => router.push("/")}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
-      >
-        <ArrowLeft className="h-3.5 w-3.5" /> Volver al inicio
+      <button type="button" onClick={() => router.push("/")} className={ADMIN_BACK_LINK_CLS}>
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Volver al inicio
       </button>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <ModuleTitle
-          title="Gestión documental"
-          subtitle="Administra el catálogo de documentos y la configuración documental por trámite."
-        />
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => router.push("/admin/documents/procedures")}
-            className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold"
-            style={{ borderColor: "#557EFF", color: "#557EFF" }}
-          >
-            <Layers className="h-4 w-4" /> Configurar por trámite
-          </button>
-          <CreateButton label="Crear documento" icon={FilePlus} onClick={openCreate} />
-        </div>
-      </div>
+      <ModuleTitle
+        title="Gestión documental"
+        subtitle="Administra el catálogo de documentos y la configuración documental por trámite."
+        action={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push("/admin/documents/procedures")}
+              className={ADMIN_BRAND_OUTLINE_BTN_CLS}
+            >
+              <Layers className="h-4 w-4" aria-hidden="true" /> Configurar por trámite
+            </button>
+            <CreateButton label="Crear documento" icon={FilePlus} onClick={openCreate} />
+          </div>
+        }
+      />
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+      <div className={ADMIN_CONTENT_SURFACE_CLS}>
         <DocumentTypeFiltersBar
           value={draftFilters}
           onChange={setDraftFilters}

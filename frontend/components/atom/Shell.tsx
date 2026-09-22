@@ -103,7 +103,6 @@ const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   // id distinto del slug del permiso dejaría la entrada invisible para todos.
   { id: "historial-placa", label: SPA_DOCK_ITEM_LABEL["historial-placa"], icon: History },
   { id: "usuarios", label: SPA_DOCK_ITEM_LABEL.usuarios, icon: Users },
-  { id: "ayuda", label: SPA_DOCK_ITEM_LABEL.ayuda, icon: HelpCircle },
 ];
 
 // Entrada normalizada del dock: módulos de la SPA y accesos admin/empresa comparten
@@ -229,13 +228,12 @@ export function Shell({
   }, [dockOpen]);
 
   // Filtra los módulos del dock según permisos RBAC del JWT cuando visibleModuleCodes
-  // está disponible. "Ayuda" es soporte universal (no es un módulo con permiso RBAC),
-  // por lo que se muestra siempre, en todas las pantallas del dock.
+  // está disponible. "Ayuda" vive en el menú de usuario (⋮) → /manual (HU #12723).
   // Admin OT: las pestañas del hub viven en el dock (Trámites / Usuarios / Reportes / …);
   // se omiten los módulos SPA homónimos para no duplicar píldoras (OT_ADMIN_SPA_OMIT
   // compartido con resolveNavigableModuleIds — invariante dock ≡ URL).
   const visibleDock = (visibleModuleCodes
-    ? DOCK.filter((it) => it.id === "ayuda" || visibleModuleCodes.includes(it.id))
+    ? DOCK.filter((it) => visibleModuleCodes.includes(it.id))
     : DOCK
   ).filter((it) => !(currentUser?.isOtUser && OT_ADMIN_SPA_OMIT.has(it.id)));
 
@@ -677,6 +675,14 @@ export function Shell({
                   color: dark ? "#FFFFFF" : "var(--color-flit-primary)",
                 }}
               >
+                <MenuItem
+                  icon={HelpCircle}
+                  label={COPY.B21Ayuda}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    router.push("/manual");
+                  }}
+                />
                 <MenuItem
                   icon={KeyRound}
                   label="Cambio de contraseña"

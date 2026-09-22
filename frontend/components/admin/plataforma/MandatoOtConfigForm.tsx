@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, FileText, Search, Trash2, Upload } from "lucide-react";
+import { Copy, Eye, FileText, Search, Trash2, Upload } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import {
@@ -766,6 +766,11 @@ export function MandatoOtConfigForm({
           </>
         ) : (
           <div className="space-y-4">
+            <MandatarioActualReadOnly
+              lockToCompanyId={lockToCompanyId}
+              office={view}
+              companyRules={companyRules}
+            />
             {!lockToCompanyId ? (
               <label className="block space-y-1.5">
                 <span className="text-xs font-semibold text-[#162244] dark:text-white">
@@ -964,4 +969,84 @@ function messageFromSaveError(err: unknown, fallback: string): string {
       if (err.status >= 500) return "Error del servidor al guardar. Revisa que la API esté actualizada.";
       return fallback;
   }
+}
+
+/** HU #12731 — detalle de mandatario (tipo doc, número, hash) fuera de la tabla, en el panel. */
+function MandatarioActualReadOnly({
+  lockToCompanyId,
+  office,
+  companyRules,
+}: {
+  lockToCompanyId?: string | null;
+  office: MandateOtConfigView;
+  companyRules: CompanyOtMandateRuleView[];
+}) {
+  const row = lockToCompanyId
+    ? companyRules.find((r) => r.companyTenantId === lockToCompanyId)
+    : null;
+  const name = row?.defaultMandateSignerName ?? office.defaultMandateSignerName;
+  const docType = row?.defaultMandateSignerDocumentType ?? office.defaultMandateSignerDocumentType;
+  const docNumber =
+    row?.defaultMandateSignerDocumentNumber ?? office.defaultMandateSignerDocumentNumber;
+  const hash = row?.defaultMandateSignerIntegrityHash ?? office.defaultMandateSignerIntegrityHash;
+
+  const copyHash = async () => {
+    if (!hash?.trim()) return;
+    try {
+      await navigator.clipboard?.writeText(hash);
+    } catch {
+      /* sin portapapeles */
+    }
+  };
+
+  return (
+    <section
+      className="rounded-xl border border-[#DFE5ED] bg-[#F8FAFC] p-3 dark:border-white/10 dark:bg-white/5"
+      aria-labelledby="mandatario-actual-heading"
+      data-testid="mandatario-actual-readonly"
+    >
+      <h3
+        id="mandatario-actual-heading"
+        className="text-xs font-semibold text-[#162244] dark:text-white"
+      >
+        Mandatario actual
+      </h3>
+      <dl className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+        <div>
+          <dt className="font-medium text-[#59677D] dark:text-white/65">Nombre</dt>
+          <dd className="font-semibold text-[#162244] dark:text-white">{name?.trim() || "Sin definir"}</dd>
+        </div>
+        <div>
+          <dt className="font-medium text-[#59677D] dark:text-white/65">Tipo documento</dt>
+          <dd className="font-mono">{docType?.trim() || "—"}</dd>
+        </div>
+        <div>
+          <dt className="font-medium text-[#59677D] dark:text-white/65">N.º documento</dt>
+          <dd className="font-mono">{docNumber?.trim() || "—"}</dd>
+        </div>
+        <div>
+          <dt className="font-medium text-[#59677D] dark:text-white/65">Hash de integridad</dt>
+          <dd className="flex items-center gap-2 font-mono">
+            {hash?.trim() ? (
+              <>
+                <span className="truncate" title={hash}>
+                  {hash.length > 16 ? `${hash.slice(0, 8)}…${hash.slice(-4)}` : hash}
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-lg p-1 text-[#557EFF] hover:bg-[#EFF6FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                  aria-label="Copiar hash de integridad"
+                  onClick={() => void copyHash()}
+                >
+                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </>
+            ) : (
+              "—"
+            )}
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
 }

@@ -1047,7 +1047,7 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
     await abrirAcciones();
     await userEvent.click(screen.getByRole('menuitem', { name: 'Ver consolidado' }));
 
-    expect(await screen.findByText('Expediente consolidado')).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Consolidado' })).toBeInTheDocument();
     // Se abre con el id que trae el resumen: no se consultan los adjuntos del trámite.
     expect(mocks.fetchAttachmentPreviewUrl).toHaveBeenCalledWith(
       'inst-0001',
@@ -1093,18 +1093,16 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     ]);
     const { unmount } = render(<ToastProvider><TramitesTable /></ToastProvider>);
     await userEvent.click(await screen.findByText('PASO01'));
-    // Se comparan los NOMBRES ACCESIBLES: llevan el ordinal, el rótulo y el estado del paso, que
-    // es justo el contrato que hay que blindar. El número visible lo pinta el círculo del stepper,
-    // no el rótulo. Un trámite «entregado» tiene la captura cumplida y el expediente pendiente.
+    // Se comparan los NOMBRES ACCESIBLES: ordinal + rótulo (el estado visual lo lleva el círculo).
     const tabsTraspaso = within(
       await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
     ).getAllByRole('tab');
     expect(tabsTraspaso.map((t) => t.getAttribute('aria-label'))).toEqual([
-      'Paso 1: Trámite y vehículo — completado',
-      'Paso 2: Actores y validación — completado',
-      'Paso 3: Documentos — completado',
-      'Paso 4: Datos comerciales — completado',
-      'Paso 5: FUR y expediente — pendiente',
+      'Paso 1: Trámite y vehículo',
+      'Paso 2: Actores y validación',
+      'Paso 3: Documentos',
+      'Paso 4: Datos comerciales',
+      'Paso 5: FUR y expediente',
     ]);
     unmount();
 
@@ -1124,10 +1122,10 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
       await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
     ).getAllByRole('tab');
     expect(tabsMatricula.map((t) => t.getAttribute('aria-label'))).toEqual([
-      'Paso 1: Consulta VIN y placa — completado',
-      'Paso 2: Comprador y rep. legal — completado',
-      'Paso 3: Documentos — completado',
-      'Paso 4: FUR y expediente — pendiente',
+      'Paso 1: Consulta VIN y placa',
+      'Paso 2: Comprador y rep. legal',
+      'Paso 3: Documentos',
+      'Paso 4: FUR y expediente',
     ]);
   });
 
@@ -1194,52 +1192,53 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     expect(within(dialog).getByText(/Preparado desde Borrador/)).toBeInTheDocument();
   });
 
-  it('el badge de Estado abre el panel del trámite sin abrir el detalle ni navegar', async () => {
+  it('HU #12726 (C.2) — el chip de Estado abre el detalle en la línea de tiempo', async () => {
     mocks.listInstances.mockResolvedValue([
       { ...base, id: 'rad-tl', referenceNumber: 'TR-TL', placa: 'RADTL1', estado: 'entregado' },
     ]);
-    // HU #12185 — el panel lee el historial PAGINADO, no el `statusHistory` del detalle: ese no
-    // trae quién movió cada estado ni desde qué compañía, que es la mitad de lo que se viene a ver.
-    mocks.getStatusHistory.mockResolvedValue({
-      items: [
-        {
-          id: 'h2',
-          fromStatus: 'borrador',
-          toStatus: 'entregado',
-          changedAt: '2026-07-03T09:00:00Z',
-          changedByUserId: 'u1',
-          changedByName: 'Laura Restrepo',
-          changedByCompania: 'Renting Colombia S.A.S',
-          reason: null,
-        },
-        {
-          id: 'h1',
-          fromStatus: null,
-          toStatus: 'borrador',
-          changedAt: '2026-07-01T09:00:00Z',
-          changedByUserId: null,
-          changedByName: null,
-          changedByCompania: null,
-          reason: null,
-        },
+    mocks.getInstance.mockResolvedValue({
+      id: 'rad-tl',
+      status: 'entregado',
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
+        { fromStatus: 'borrador', toStatus: 'entregado', changedAt: '2026-07-03T09:00:00Z', reason: null },
       ],
-      total: 2,
-      page: 1,
-      pageSize: 50,
     });
+    mocks.getAttachments.mockResolvedValue([]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(
-      await screen.findByRole('button', { name: /Ver trazabilidad del trámite TR-TL/i }),
+      await screen.findByRole('button', { name: /Ver línea de tiempo de TR-TL/i }),
     );
 
-    expect(await screen.findByRole('dialog', { name: /Trámite TR-TL/i })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: /Detalle de traspaso/ })).toBeNull();
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Trámite TR-TL/i })).toBeNull();
     expect(routerPush).not.toHaveBeenCalled();
-    // La ficha identifica el trámite; el historial dice por dónde va y quién lo movió.
-    expect(await screen.findByRole('region', { name: 'Resumen del trámite' })).toBeInTheDocument();
-    expect(await screen.findByText(/Entregado desde Borrador/)).toBeInTheDocument();
-    expect(screen.getByText('Renting Colombia S.A.S · Laura Restrepo')).toBeInTheDocument();
+    expect(await within(dialog).findByText('Línea de tiempo del trámite')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Entregado desde Borrador/)).toBeInTheDocument();
+  });
+
+  // Uso de ejemplo: clic en radicado (no en chip) → panel por defecto, sin TimelineTrackPanel (AC2).
+  it('HU #12726 (AC2) — clic fuera del chip abre el detalle en panel por defecto', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-def', referenceNumber: 'TR-DEF', placa: 'RADDEF', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({
+      id: 'rad-def',
+      status: 'entregado',
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
+        { fromStatus: 'borrador', toStatus: 'entregado', changedAt: '2026-07-03T09:00:00Z', reason: null },
+      ],
+    });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByText('TR-DEF'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(within(dialog).queryByText('Línea de tiempo del trámite')).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Datos del vehículo')).toBeInTheDocument();
   });
 
   it('la línea Firmas abre el modal de tracking de identidad de esa parte sin navegar', async () => {
@@ -1328,11 +1327,11 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
 
     await userEvent.click(await screen.findByText('RAD006'));
     const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
-    expect(within(dialog).getByRole('status', { name: 'Cargando trazabilidad' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('status', { name: 'Cargando historial' })).toBeInTheDocument();
 
     resolveGetInstance({ id: 'rad-6', statusHistory: [] });
     await vi.waitFor(() => {
-      expect(within(dialog).queryByRole('status', { name: 'Cargando trazabilidad' })).toBeNull();
+      expect(within(dialog).queryByRole('status', { name: 'Cargando historial' })).toBeNull();
     });
   });
 
@@ -1349,11 +1348,9 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     expect(await within(dialog).findByText('Fallo de red')).toBeInTheDocument();
 
     mocks.getInstance.mockResolvedValueOnce({ id: 'rad-7', statusHistory: [] });
-    // El panel de trazabilidad tiene tres bloques que fallan por separado (cronología, archivos e
-    // identidad), así que el reintento se pide por su nombre accesible concreto y no por el
-    // genérico «Reintentar», que ahora sería ambiguo.
+    // El historial de auditoría tiene reintento propio (no el genérico «Reintentar»).
     await userEvent.click(
-      within(dialog).getByRole('button', { name: 'Reintentar la trazabilidad' }),
+      within(dialog).getByRole('button', { name: 'Reintentar el historial de auditoría' }),
     );
 
     await vi.waitFor(() => {
@@ -1406,13 +1403,13 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     expect(screen.queryByText('Pausado')).not.toBeInTheDocument();
   });
 
-  it('con pausado Y placa asignada (sin revocatoria), solo se ve "Pausado"', async () => {
+  it('con pausado Y asignado (sin revocatoria), solo se ve "Pausado"', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       {
         ...item,
+        estado: 'asignado',
         isPaused: true,
-        plateFlowStatus: 'asignado',
       },
     ]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
@@ -1422,13 +1419,14 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     expect(screen.queryByText('Placa asignada por el OT')).not.toBeInTheDocument();
   });
 
-  it('sin revocatoria ni pausa, la nota de placa asignada sí se ve', async () => {
+  it('sin revocatoria ni pausa, el estado asignado lo dice el chip principal (ADR-0059)', async () => {
     const [item] = makeInstances(1);
-    mocks.listInstances.mockResolvedValue([{ ...item, plateFlowStatus: 'asignado' }]);
+    mocks.listInstances.mockResolvedValue([{ ...item, estado: 'asignado' }]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    await screen.findByText('P0001');
-    expect(screen.getByText('Placa asignada por el OT')).toBeInTheDocument();
+    const row = (await screen.findByText('P0001')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('Asignado')).toBeInTheDocument();
+    expect(within(row).queryByText('Placa asignada por el OT')).not.toBeInTheDocument();
   });
 
   it('en un borrador ICT el menú de acciones ofrece "Pausar" y al elegirlo llama a pauseInstance (optimista → "Reanudar")', async () => {

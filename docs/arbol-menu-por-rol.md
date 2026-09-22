@@ -1,7 +1,7 @@
 # Árbol del menú por rol — FLIT 2.0
 
 > Generado: 2026-08-04 · **Regenerado: 2026-09-21** (rama `feature/dr-flit-mejoras-v3`, Fase 3 de
-> `docs/plan-tecnico-dr-flit-v3.md`) · fuente: `frontend/components/atom/Shell.tsx`,
+> `docs/plan-tecnico-dr-flit-v3.md`) · actualizado HU #12723 (Ayuda en menú ⋮) · fuente: `frontend/components/atom/Shell.tsx`,
 > `frontend/components/atom/dock/dockGroups.ts`, `frontend/components/admin/transit-offices/ot-nav.ts`,
 > `frontend/components/admin/companies/CompanyConfigTabs.tsx`, `frontend/hooks/useAccessibleModules.ts`,
 > seed DEV `DevelopmentAuthSeeder.cs`.
@@ -19,10 +19,11 @@ FLIT **no** usa un sidebar vertical. La navegación principal es un **dock infer
 | Pieza | Comportamiento |
 |---|---|
 | **FAB central** (`Inicio FLIT`) | Abre el módulo Dashboard (`/?m=dashboard`). No aparece como ítem del dock. |
-| **Píldora de un solo ítem** | Navega directo (ej. Trámites, Ayuda, Administración). |
+| **Píldora de un solo ítem** | Navega directo (ej. Trámites, Administración). |
 | **Píldora con varios ítems** | Abre submenú hacia arriba (ej. Administradores → Compañías / Tránsito / RBAC). |
 | **Móvil (`<lg`)** | Lanzador FAB + hoja agrupada por secciones. |
-| **Menú de usuario (⋮)** | Común a todos: Actualización de información, Cambio de contraseña, Salir. |
+| **Menú de usuario (⋮)** | Común a todos: **Ayuda** (`/manual`), Cambio de contraseña, Salir. |
+| **Reparto izq/der del FAB** | Declarado en `DOCK_GROUP_SIDE` (izq: trámites, preasignación, identidad, reportes · der: usuarios, administración, administradores, integraciones). |
 
 ### Capas que deciden qué se ve
 
@@ -30,7 +31,6 @@ FLIT **no** usa un sidebar vertical. La navegación principal es un **dock infer
 ┌─────────────────────────────────────────────────────────┐
 │ 1. RBAC — GET /api/v1/security/modules                  │
 │    → visibleModuleCodes (filtra DOCK base de la SPA)     │
-│    → "ayuda" siempre visible                            │
 ├─────────────────────────────────────────────────────────┤
 │ 2. Rol JWT — isSuperAdmin / isAdminCompany / isOtAdmin  │
 │    → empuja entradas admin/OT/empresa al dock           │
@@ -81,7 +81,8 @@ Orden estable (`DOCK_GROUP_ORDER`):
 | `administracion` | Administración | Submenú Admin OT (Reglas / Documentos / Requisitos) |
 | `administradores` | Administradores | SuperAdmin: Compañías, Documental, Improntas, Quipux, RBAC, Auditoría y los submenús anidados Tránsito (Organismos, Causales de rechazo) y Plataforma (Mandatos). AdminCompany: píldora “Administración”. |
 | `integraciones` | Integraciones | Log QX / Log ICT si hay permiso |
-| `ayuda` | Ayuda | Universal |
+
+**Ayuda** ya no es agrupador del dock: vive en el menú de usuario (⋮) → `/manual` (`ManualShell`).
 
 ---
 
@@ -127,8 +128,9 @@ FAB Inicio FLIT (Dashboard)
 │       ├── Log ICT                   → ?m=ict-logs
 │       ├── Trazabilidad ICT          → ?m=ict-trazabilidad
 │       └── Reportes ICT              → ?m=ict-reportes
-└── Ayuda                             → ?m=ayuda
 ```
+
+**Menú usuario (⋮):** Ayuda → `/manual`
 
 ### Navegación secundaria (fuera del dock)
 
@@ -211,12 +213,13 @@ FAB Inicio FLIT (Dashboard)
 │   ├── Red de clientes               → /admin/companies/{id}/children  (solo cabeza de grupo: CONCESION | MARCA_BLANCA — HU #12356)
 │   ├── Generación documental         → /admin/generacion-documental  (solo con módulo generacion-documental.read)
 │   └── Plataforma ▾ → Banners        → /admin/banners  (solo con permiso banners.manage)
-└── Ayuda                             → ?m=ayuda
 ```
 
 **No ve:** Compañías (listado global), Documental plataforma, Improntas, Quipux, Procesos periódicos, Tránsito, RBAC Admin, Auditoría global, Tipos de trámites/Mandatos/FUR/Notificaciones.
 
 **Alcance de red (HU #12363/#12652):** solo el AdminCompany de una cabeza de grupo ve el selector «Alcance» (Mi compañía · Toda la red · cliente) en Trámites y Reportes; un Radicador/Operador de la cabeza ve solo su compañía. La cabeza Marca Blanca además configura marca (HU #12414) y dominio (HU #12427) desde su ficha.
+
+**Menú usuario (⋮):** Ayuda → `/manual`
 
 ### Consola “Administración” (misma ficha de compañía)
 
@@ -283,16 +286,17 @@ FAB Inicio FLIT (Dashboard)
 │   ├── Mandatos                      → hub OT …/mandatos
 │   ├── Validar impronta              → hub OT …/imprint-validation
 │   └── Configuración                 → hub OT …/configuracion  (modo FLIT/Quipux, ventana de revocatoria HU #12569, flags)
-└── Ayuda                             → ?m=ayuda
 ```
 
 Vista secundaria: **Revocatorias** (`…/revocation-requests`, F12565) se abre desde la tarjeta «Solicitudes de revocatoria» de la bandeja; ya no es ítem del dock (HU #12569).
+
+**Menú usuario (⋮):** Ayuda → `/manual`
 
 **No ve:** Compañías, Documental plataforma, Improntas, Quipux, Tránsito (listado), RBAC Admin, Auditoría.
 
 Rutas del hub: `/admin/transit-offices/{transitOfficeId}/{segment}`. El `transitOfficeId` **no viaja en el JWT**: se resuelve al hacer clic — primero de la URL, luego de `sessionStorage`, y si no, del perfil OT (`resolveOtHubHref`, `ot-nav.ts`).
 
-> **Nota — el dock del Admin OT es casi todo claim, no RBAC.** El rol `ot_admin` se crea **sin permisos** (`CreateTransitOfficeHandler`), así que su catálogo de módulos accesibles llega vacío: del bloque SPA solo sobrevive Ayuda (universal) y todo lo demás lo empuja el claim `ot_admin`. "Identidad" solo aparece si alguien le concede `validaciones.read` explícitamente en RBAC.
+> **Nota — el dock del Admin OT es casi todo claim, no RBAC.** El rol `ot_admin` se crea **sin permisos** (`CreateTransitOfficeHandler`), así que su catálogo de módulos accesibles llega vacío: del bloque SPA no queda ninguna píldora y todo lo visible lo empuja el claim `ot_admin`. "Identidad" solo aparece si alguien le concede `validaciones.read` explícitamente en RBAC. Ayuda sigue universal vía menú de usuario (⋮).
 
 Otras diferencias frente a SuperAdmin dentro del hub: no se pinta `OtTabBar` ni el enlace "Volver al listado de OT" (`OtHubLayout`). Las rutas legacy `…/tramites` y `…/webhooks` siguen vivas por URL pero salieron de la oferta de menú, y los **mandatarios** ya no cuelgan del perfil OT (HU #11202): los registra la compañía.
 
@@ -308,8 +312,9 @@ Operador de compañía. Seed DEV (`radicador@empresa.local`): solo `dashboard.re
 FAB Inicio FLIT (Dashboard)
 │
 ├── Trámites                          → /tramites
-└── Ayuda                             → ?m=ayuda
 ```
+
+**Menú usuario (⋮):** Ayuda → `/manual`
 
 **No ve** entradas de rol admin (`Administración`, OT hub, Compañías, RBAC, etc.). Cualquier módulo SPA adicional solo aparece si el rol tiene el permiso RBAC correspondiente en catálogo (no hardcodeado en `Shell`).
 
@@ -342,7 +347,7 @@ Dentro del wizard, `tramites.create` es lo que habilita `/tramites/nuevo/{modali
 | Administración OT ▾ (Reglas/Docs/Requisitos) | vía tabs | ❌ | ✅ | ❌ |
 | Preasignación (dock) | vía tabs | ❌ | ✅ | ❌ |
 | Integraciones ▾ (Log QX / Log ICT) | permiso o bypass | permiso | permiso | permiso |
-| Ayuda | ✅ | ✅ | ✅ | ✅ |
+| Ayuda (menú usuario ⋮ → `/manual`) | ✅ | ✅ | ✅ | ✅ |
 
 ¹ Omitidos a propósito en dock Admin OT (`otAdminSpaOmit`).  
 ² SuperAdmin entra por **Administradores → Compañías** (listado), no por la píldora “Administración”.
@@ -361,7 +366,6 @@ flowchart TB
     SA_U[Usuarios]
     SA_A[Administradores ▾]
     SA_INT[Integraciones ▾]
-    SA_H[Ayuda]
   end
 
   subgraph AC["Admin de Compañía"]
@@ -371,7 +375,6 @@ flowchart TB
     AC_R[Reportes ▾]
     AC_U[Usuarios]
     AC_ADM[Administración]
-    AC_H[Ayuda]
   end
 
   subgraph OT["Admin OT"]
@@ -381,14 +384,18 @@ flowchart TB
     OT_R[Reportes hub]
     OT_U[Usuarios hub]
     OT_ADM[Administración ▾]
-    OT_H[Ayuda]
   end
 
   subgraph RAD["Radicador"]
     RAD_FAB[FAB Dashboard]
     RAD_T[Trámites]
-    RAD_H[Ayuda]
   end
+
+  USER_MENU["Menú usuario ⋮ — Ayuda /manual"]
+  SA --> USER_MENU
+  AC --> USER_MENU
+  OT --> USER_MENU
+  RAD --> USER_MENU
 ```
 
 ---
@@ -413,7 +420,7 @@ flowchart TB
 
 1. El menú es **UX**: ocultar ítems no sustituye policies backend (`context/06-permisos-y-rbac.md`).
 2. Multi-rol (HU #10506): si el JWT trae varios roles, pueden aplicarse **varias** ramas (`isSuperAdmin` + `isAdminCompany` + `isOtAdmin`) a la vez.
-3. Mientras cargan módulos (`modulesLoading`), `visibleModuleCodes` se pasa vacío: solo quedan Ayuda + entradas empujadas por rol.
+3. Mientras cargan módulos (`modulesLoading`), `visibleModuleCodes` se pasa vacío: solo quedan entradas empujadas por rol (Ayuda sigue en menú usuario).
 4. En ambientes sin seed DEV, el árbol del Radicador (y de cualquier rol custom) depende del catálogo RBAC real, no de hardcodes en el front.
 
 ### Trampas verificadas

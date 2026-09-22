@@ -6,6 +6,7 @@ import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ToastProvider } from "@/components/admin/Toast";
 import { DocumentProcedureTabs } from "@/components/admin/documents/DocumentProcedureTabs";
 import { useProcedureTypes } from "@/hooks/useProcedureTypes";
+import { ADMIN_BACK_LINK_CLS, ADMIN_CONTENT_SURFACE_CLS } from "@/components/admin/admin-ui-styles";
 
 // Consola documental por trámite (HU #10198, AC2–AC5/AC7). Recibe el procedureTypeId
 // por la URL y orquesta las pestañas: documentos asociados, overrides OT y matriz
@@ -30,10 +31,9 @@ function DocumentProcedureConsole() {
       <button
         type="button"
         onClick={() => router.push("/admin/documents/procedures")}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
+        className={ADMIN_BACK_LINK_CLS}
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> Volver a los trámites
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Volver a los trámites
       </button>
 
       <ModuleTitle
@@ -45,7 +45,7 @@ function DocumentProcedureConsole() {
         }
       />
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+      <div className={ADMIN_CONTENT_SURFACE_CLS}>
         <DocumentProcedureTabs procedureTypeId={procedureTypeId} />
       </div>
     </main>
