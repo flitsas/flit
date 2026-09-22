@@ -1,8 +1,14 @@
 # Árbol del menú por rol — FLIT 2.0
 
-> Generado: 2026-08-04 · fuente: `frontend/components/atom/Shell.tsx`, `frontend/components/atom/dock/dockGroups.ts`, `frontend/components/admin/transit-offices/ot-nav.ts`, `frontend/components/admin/companies/CompanyConfigTabs.tsx`, `frontend/hooks/useAccessibleModules.ts`, seed DEV `DevelopmentAuthSeeder.cs`.
+> Generado: 2026-08-04 · **Regenerado: 2026-09-21** (rama `feature/dr-flit-mejoras-v3`, Fase 3 de
+> `docs/plan-tecnico-dr-flit-v3.md`) · fuente: `frontend/components/atom/Shell.tsx`,
+> `frontend/components/atom/dock/dockGroups.ts`, `frontend/components/admin/transit-offices/ot-nav.ts`,
+> `frontend/components/admin/companies/CompanyConfigTabs.tsx`, `frontend/hooks/useAccessibleModules.ts`,
+> seed DEV `DevelopmentAuthSeeder.cs`.
 >
-> Documento descriptivo del **menú real en código** (dock inferior). No decide producto: si contradice al código, regenerar.
+> Documento descriptivo del **menú real en código** (dock inferior). No decide producto: si contradice al
+> código, regenerar. Desde 2026-09-21 incluye el **mapa menú → artículo del manual** (§11) que DR. FLIT usa
+> para sugerir documentación según el módulo activo (`frontend/lib/manual/articles/meta.ts`).
 
 ---
 
@@ -88,7 +94,9 @@ Acceso global. Bypass de permisos en runtime; el dock RBAC suele exponer **todos
 ```
 FAB Inicio FLIT (Dashboard)
 │
-├── Trámites                          → /tramites  (o ?m=tramites)
+├── Trámites ▾
+│   ├── Trámites                      → /tramites  (o ?m=tramites)
+│   └── Historial por placa           → ?m=historial-placa   (HU #12194; módulo RBAC)
 ├── Identidad                         → ?m=validaciones
 ├── Reportes ▾
 │   ├── Reportes                      → ?m=reportes
@@ -102,13 +110,23 @@ FAB Inicio FLIT (Dashboard)
 │   ├── Documental                    → /admin/documents
 │   ├── Improntas                     → /admin/improntas
 │   ├── Quipux                        → /admin/quipux
+│   ├── Procesos periódicos           → /admin/jobs  (ADR-0059, Feature #12122)
 │   ├── RBAC Admin                    → ?m=rbac
 │   ├── Auditoría                     → ?m=auditoria
-│   └── Plataforma ▾
-│       └── Mandatos                  → /admin/plataforma/mandatos  (404 placeholder)
+│   ├── Plataforma ▾
+│   │   ├── Tipos de trámites         → /admin/plataforma/tipos-tramite
+│   │   ├── Confirmación RUNT         → /admin/plataforma/confirmacion-runt  (permiso runt_confirmation.*; bypass SA)
+│   │   ├── Mandatos                  → /admin/plataforma/mandatos
+│   │   ├── FUR                       → /admin/plataforma/fur
+│   │   ├── Notificaciones            → /admin/plataforma/notificaciones
+│   │   └── Banners                   → /admin/banners  (permiso banners.manage; bypass SA)
+│   └── Generación documental         → /admin/generacion-documental  (módulo accesible, no rol)
 ├── Integraciones ▾ (si aplica)
-│   ├── Log QX                        → ?m=log-qx
-│   └── Log ICT                       → ?m=ict-logs
+│   ├── Log QX                        → ?m=log-qx  (logqx.read; bypass SA)
+│   └── ICT ▾                         (ict.logs.read; bypass SA)
+│       ├── Log ICT                   → ?m=ict-logs
+│       ├── Trazabilidad ICT          → ?m=ict-trazabilidad
+│       └── Reportes ICT              → ?m=ict-reportes
 └── Ayuda                             → ?m=ayuda
 ```
 
@@ -180,17 +198,25 @@ Administra **su tenant**. Seed DEV: casi todos los permisos SPA excepto `rbac.ma
 ```
 FAB Inicio FLIT (Dashboard)
 │
-├── Trámites                          → /tramites
+├── Trámites ▾
+│   ├── Trámites                      → /tramites   (botón «Revocatorias» → /tramites/revocatorias, solo AdminCompany — F12565)
+│   └── Historial por placa           → ?m=historial-placa  (si RBAC concede el módulo)
 ├── Identidad                         → ?m=validaciones
 ├── Reportes ▾
 │   ├── Reportes                      → ?m=reportes
 │   └── Reportes Detallados           → ?m=reportes-detallados
 ├── Usuarios                          → ?m=usuarios   (módulo RBAC, no ítem “extra” junto a Administración)
-├── Administración                    → /admin/companies  (redirige a su tenant — HU #11228)
+├── Administradores ▾ (o píldora directa si es el único ítem)
+│   ├── Administración                → /admin/companies  (redirige a su tenant — HU #11228)
+│   ├── Red de clientes               → /admin/companies/{id}/children  (solo cabeza de grupo: CONCESION | MARCA_BLANCA — HU #12356)
+│   ├── Generación documental         → /admin/generacion-documental  (solo con módulo generacion-documental.read)
+│   └── Plataforma ▾ → Banners        → /admin/banners  (solo con permiso banners.manage)
 └── Ayuda                             → ?m=ayuda
 ```
 
-**No ve:** Compañías (listado global), Documental plataforma, Improntas, Quipux, Tránsito, RBAC Admin, Auditoría global.
+**No ve:** Compañías (listado global), Documental plataforma, Improntas, Quipux, Procesos periódicos, Tránsito, RBAC Admin, Auditoría global, Tipos de trámites/Mandatos/FUR/Notificaciones.
+
+**Alcance de red (HU #12363/#12652):** solo el AdminCompany de una cabeza de grupo ve el selector «Alcance» (Mi compañía · Toda la red · cliente) en Trámites y Reportes; un Radicador/Operador de la cabeza ve solo su compañía. La cabeza Marca Blanca además configura marca (HU #12414) y dominio (HU #12427) desde su ficha.
 
 ### Consola “Administración” (misma ficha de compañía)
 
@@ -245,7 +271,7 @@ Consola del organismo. Las pestañas del hub **viven en el dock**; se omiten los
 ```
 FAB Inicio FLIT (Dashboard)
 │
-├── Trámites                          → hub OT …/client-procedures
+├── Trámites                          → hub OT …/client-procedures  (bandeja por estado real, ADR-0059)
 ├── Preasignación                     → hub OT …/plate-ranges
 ├── Identidad                         → ?m=validaciones  (solo si RBAC lo concede; ver nota)
 ├── Reportes                          → hub OT …/reportes
@@ -253,9 +279,14 @@ FAB Inicio FLIT (Dashboard)
 ├── Administración ▾
 │   ├── Reglas                        → hub OT …/rules
 │   ├── Documentos                    → hub OT …/documents
-│   └── Requisitos                    → hub OT …/requirements
+│   ├── Requisitos                    → hub OT …/requirements
+│   ├── Mandatos                      → hub OT …/mandatos
+│   ├── Validar impronta              → hub OT …/imprint-validation
+│   └── Configuración                 → hub OT …/configuracion  (modo FLIT/Quipux, ventana de revocatoria HU #12569, flags)
 └── Ayuda                             → ?m=ayuda
 ```
+
+Vista secundaria: **Revocatorias** (`…/revocation-requests`, F12565) se abre desde la tarjeta «Solicitudes de revocatoria» de la bandeja; ya no es ítem del dock (HU #12569).
 
 **No ve:** Compañías, Documental plataforma, Improntas, Quipux, Tránsito (listado), RBAC Admin, Auditoría.
 
@@ -294,6 +325,8 @@ Dentro del wizard, `tramites.create` es lo que habilita `/tramites/nuevo/{modali
 |---|:-:|:-:|:-:|:-:|
 | Dashboard (FAB) | ✅ | ✅ | ✅ | ✅ |
 | Trámites (SPA `/tramites`) | ✅ | ✅ | ❌¹ | ✅ |
+| Historial por placa (SPA) | ✅ | RBAC | ❌ | RBAC |
+| Revocatorias (`/tramites/revocatorias`) | ✅ | ✅ | vía bandeja OT | ❌ |
 | Trámites (hub OT) | vía Tránsito + tabs | ❌ | ✅ | ❌ |
 | Identidad | ✅ | ✅ | condicional RBAC | ❌ |
 | Reportes / Reportes Detallados (SPA) | ✅ | ✅ | ❌¹ | ❌ |
@@ -302,6 +335,10 @@ Dentro del wizard, `tramites.create` es lo que habilita `/tramites/nuevo/{modali
 | Usuarios (hub OT) | vía tabs | ❌ | ✅ | ❌ |
 | Administradores ▾ (… + Plataforma → Mandatos) | ✅ | ❌ | ❌ | ❌ |
 | Administración → consola compañía | ❌² | ✅ | ❌ | ❌ |
+| Red de clientes | vía ficha | solo cabeza | ❌ | ❌ |
+| Generación documental | ✅ | por módulo | ❌ | por módulo |
+| Administración OT → Mandatos / Validar impronta / Configuración | vía tabs | ❌ | ✅ | ❌ |
+| Procesos periódicos · Plataforma (Tipos, Mandatos, FUR, Notificaciones, Confirmación RUNT, Banners) | ✅ | Banners por permiso | ❌ | ❌ |
 | Administración OT ▾ (Reglas/Docs/Requisitos) | vía tabs | ❌ | ✅ | ❌ |
 | Preasignación (dock) | vía tabs | ❌ | ✅ | ❌ |
 | Integraciones ▾ (Log QX / Log ICT) | permiso o bypass | permiso | permiso | permiso |
@@ -385,3 +422,41 @@ flowchart TB
 6. **`logqx` (código en BD) ≠ `log-qx` (id de módulo en la SPA).** No casan, así que el catálogo RBAC nunca haría visible LOG QX: el gate real es el permiso `logqx.read` evaluado en el dock y en el render. `log-qx` se declara como módulo "universal" solo para que `parseModule` no rebote a Dashboard tras el `router.replace`. Mismo patrón para `auditoria` e `ict-logs`.
 7. **Una entrada sin fila en `DOCK_ITEM_GROUP` desaparece en silencio**: `buildDockGroups` hace `continue` con los ítems sin agrupador. Agregar una entrada al `Shell` sin registrarla en el mapa la vuelve invisible sin ningún error.
 8. **Dashboard e "Inicio" son el mismo módulo**: `dashboard` es un módulo RBAC real (`dashboard.read`), pero nunca se pinta como píldora — su única puerta es el FAB, que se muestra siempre, tenga o no el permiso.
+
+---
+
+## 11. Mapa menú → artículo del manual (DR. FLIT)
+
+Fuente: `frontend/lib/manual/articles/meta.ts` (`MANUAL_MODULE_ARTICLES`, `MANUAL_OT_TAB_ARTICLES`,
+`MANUAL_PATH_ARTICLES`, `MANUAL_PATH_SUFFIX_ARTICLES`) y `frontend/lib/manual/context.ts`. DR. FLIT recibe
+`routeScope = "${pathname}|${moduleId}"` desde `Shell` y, al pulsar «Necesito ayuda», sugiere el artículo del
+lugar donde está el usuario **si aplica a su perfil** (`visibleAudiences`). Orden de resolución: pestaña del
+hub OT (segmento de URL) → ruta por sufijo → ruta por prefijo → módulo `?m=` (solo en `/`).
+
+| Dónde está el usuario | Artículo sugerido | Aplica para |
+|---|---|---|
+| `?m=dashboard` | `1-gestor/1-inicio` | Gestor |
+| `/tramites`, `?m=tramites`, `/tramites/{id}` | `1-gestor/5-seguimiento` | Gestor |
+| `/tramites/nuevo` | `1-gestor/2-crear-tramite` | Gestor |
+| `/tramites/revocatorias` | `1-gestor/10-revocatorias` | Gestor |
+| `?m=validaciones` | `1-gestor/8-identidad` | Gestor |
+| `?m=historial-placa` | `1-gestor/9-historial-placa` | Gestor |
+| `?m=reportes`, `?m=reportes-detallados` | `1-gestor/11-reportes` | Gestor |
+| `?m=usuarios` | `1-gestor/12-usuarios` | Gestor |
+| `?m=ayuda` | `0-introduccion/1-bienvenida` | Todos |
+| hub OT `client-procedures` | `2-ot/1-tramites-bandeja` | OT |
+| hub OT `plate-ranges` | `2-ot/2-preasignacion` | OT |
+| hub OT `reportes` · `usuarios` · `rules` · `documents` · `requirements` | `2-ot/3…7` | OT |
+| hub OT `revocation-requests` · `mandatos` · `imprint-validation` · `configuracion` | `2-ot/9…12` | OT |
+| `/admin/companies/{id}` | `3-admin-company/1-consola` | Admin de Compañía |
+| `/admin/companies/{id}/children` | `3-admin-company/3-red-de-clientes` | Admin de Compañía |
+| `/admin/generacion-documental` | `3-admin-company/5-generacion-documental` | Admin de Compañía |
+| `/admin/companies` (listado) · `/admin/transit-offices` · `/admin/causales-rechazo` | `4-superadmin/1-companias-y-organismos` | Super Admin |
+| `/admin/documents` · `/admin/improntas` | `4-superadmin/2-documental-e-improntas` | Super Admin |
+| `/admin/plataforma/*` · `/admin/banners` | `4-superadmin/3-plataforma` | Super Admin |
+| `/admin/quipux` · `/admin/jobs` · `/admin/migracion` · `?m=log-qx` · `?m=ict*` | `4-superadmin/4-integraciones-y-procesos` | Super Admin |
+| `/admin/rbac` · `?m=rbac` · `?m=auditoria` | `4-superadmin/5-rbac-y-auditoria` | Super Admin |
+
+Un test (`lib/manual/__tests__/audience-context.test.ts`) garantiza que cada slug del mapa existe y que un
+perfil nunca recibe un artículo de otra audiencia (un Gestor en una URL del hub OT no ve documentación del
+organismo).

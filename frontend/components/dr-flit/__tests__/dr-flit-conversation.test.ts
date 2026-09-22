@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 
+import { getArticleBySlug } from "@/lib/manual/catalog";
+
 import {
   applyBackToSearch,
   applyClientBranch,
@@ -10,12 +12,15 @@ import {
   applyValidacionesSuccess,
   createInitialState,
   hasActiveConversation,
+  isComposerEnabled,
+  queryLabelForIntent,
   resetMessageIdSeq,
 } from "../dr-flit-conversation";
 
 import {
   buildGreeting,
   buildHelpValuePrompt,
+  buildHistorialPlacaHref,
   buildValuePrompt,
   DR_FLIT_FREE_TEXT_HINT,
   DR_FLIT_GESTION_INTENTS,
@@ -83,17 +88,140 @@ describe("dr-flit-conversation", () => {
     expect(next.pendingClientBranch).toBe("tramites");
   });
 
+  it("HU-C — buildHistorialPlacaHref normaliza la placa", () => {
+    expect(buildHistorialPlacaHref(" abc 123 ")).toBe("/?m=historial-placa&placa=ABC123");
+  });
+
+  it("HU-C — el atajo al historial solo se conserva con resultados y se limpia al volver", () => {
+    const awaiting = applySelectIntent(createInitialState(), "placa")!.next;
+    const loading = applyUserText(awaiting, "ABC123");
+    const row = {
+      id: "11111111-1111-4111-a111-111111111111",
+      radicado: "R-1",
+      fecha: "01/01/2026 08:00",
+      estado: "borrador",
+      placa: "ABC123",
+      vin: "X",
+      tipoTramite: "Traspaso",
+      compania: null,
+      href: "/tramites/11111111-1111-4111-a111-111111111111",
+    };
+    const href = buildHistorialPlacaHref("ABC123");
+
+    const conResultados = applyTramitesSuccess(loading, "placa", [row], 1, href);
+    expect(conResultados.historialPlacaHref).toBe(href);
+    expect(hasActiveConversation(conResultados)).toBe(true);
+
+    const sinResultados = applyTramitesSuccess(loading, "placa", [], 0, href);
+    expect(sinResultados.historialPlacaHref).toBeNull();
+
+    const back = applyBackToSearch(conResultados);
+    expect(back.historialPlacaHref).toBeNull();
+  });
+
+  it("HU-F — applyUserText en ayuda respeta las audiencias", () => {
+    const help = applySelectHelpOption(createInitialState(), "necesito-ayuda")!;
+    const gestor = applyUserText(help, "preasignacion de placas", {
+      helpAudiences: ["Todos", "Gestor"],
+    });
+    expect(gestor.phase).toBe("showing_help");
+    expect((gestor.helpResults ?? []).some((h) => h.audience === "Organismo de Tránsito")).toBe(false);
+
+    const ot = applyUserText(help, "preasignacion de placas", {
+      helpAudiences: ["Todos", "Organismo de Tránsito"],
+    });
+    expect((ot.helpResults ?? []).some((h) => h.slug === "2-ot/2-preasignacion")).toBe(true);
+  });
+
+  it("HU-G — applySelectHelpOption con artículo de contexto lo ofrece como primer chip", () => {
+    const article = getArticleBySlug("1-gestor/2-crear-tramite")!;
+    const next = applySelectHelpOption(createInitialState(), "necesito-ayuda", {
+      contextArticle: article,
+    })!;
+    expect(next.phase).toBe("awaiting_help_query");
+    expect(next.helpResults).toHaveLength(1);
+    expect(next.helpResults![0]!.href).toBe("/manual/1-gestor/2-crear-tramite");
+    expect(next.messages[next.messages.length - 1]!.text).toContain(article.title);
+    expect(isComposerEnabled(next)).toBe(true);
+
+    // Al escribir, la búsqueda reemplaza la sugerencia.
+    const searched = applyUserText(next, "documentos de matricula");
+    expect(searched.phase).toBe("showing_help");
+    expect(searched.helpResults!.some((h) => h.slug === "1-gestor/3-documentos-tramite")).toBe(true);
+  });
+
+  it("Normativa — la opción ofrece la resolución como fuente principal con su PDF", () => {
+    const next = applySelectHelpOption(createInitialState(), "normativa")!;
+    expect(next.phase).toBe("showing_help");
+    expect(next.session).toBe("ayuda");
+    expect(next.showBackToSearch).toBe(true);
+    expect(next.helpResults).toHaveLength(1);
+    const r = next.helpResults![0]!;
+    expect(r.slug).toBe("5-normativa/1-resolucion-20233040017145-2023");
+    expect(r.primarySource).toBe(true);
+    expect(r.sourceHref).toBe("/legal/resolucion-20233040017145-2023-mintransporte.pdf");
+    expect(r.sourceLabel).toBe("Abrir la norma (PDF)");
+    expect(next.messages[next.messages.length - 1]!.text).toContain("20233040017145");
+    expect(hasActiveConversation(next)).toBe(true);
+  });
+
+  it("Normativa — una pregunta normativa en «Necesito ayuda» trae la norma con su PDF; una operativa no", () => {
+    const help = applySelectHelpOption(createInitialState(), "necesito-ayuda")!;
+    const norma = applyUserText(help, "qué dice la norma sobre la preasignación de placa", {
+      helpAudiences: ["Todos", "Gestor"],
+    });
+    expect(norma.helpResults![0]!.sourceHref).toBe(
+      "/legal/resolucion-20233040017145-2023-mintransporte.pdf",
+    );
+    const howto = applyUserText(help, "cómo creo un trámite", { helpAudiences: ["Todos", "Gestor"] });
+    expect(howto.helpResults![0]!.slug).toBe("1-gestor/2-crear-tramite");
+    expect(howto.helpResults![0]!.sourceHref).toBeUndefined();
+  });
+
+  it("HU-B — el intent trámite pide el radicado, no un GUID", () => {
+    const next = applySelectIntent(createInitialState(), "tramite")!.next;
+    const last = next.messages[next.messages.length - 1]!.text;
+    expect(last).toMatch(/radicado/i);
+    expect(last).not.toMatch(/GUID/);
+    expect(queryLabelForIntent("tramite")).toBe("radicado");
+  });
+
+  it("éxito con total mayor al mostrado avisa cuántos se muestran (HU #12104)", () => {
+    const awaiting = applySelectIntent(createInitialState(), "placa")!.next;
+    const loading = applyUserText(awaiting, "ABC123");
+    const row = {
+      id: "11111111-1111-4111-a111-111111111111",
+      radicado: "R-1",
+      fecha: "01/01/2026 08:00",
+      estado: "borrador",
+      placa: "ABC123",
+      vin: "X",
+      tipoTramite: "Traspaso",
+      compania: null,
+      href: "/tramites/11111111-1111-4111-a111-111111111111",
+    };
+    const next = applyTramitesSuccess(loading, "placa", [row], 37);
+    const last = next.messages[next.messages.length - 1]!.text;
+    expect(last).toContain("37 trámites");
+    expect(last).toContain("Te muestro los 1 más recientes");
+
+    const exacto = applyTramitesSuccess(loading, "placa", [row], 1);
+    expect(exacto.messages[exacto.messages.length - 1]!.text).not.toContain("Te muestro");
+  });
+
   it("éxito de trámites muestra resultados", () => {
     const awaiting = applySelectIntent(createInitialState(), "placa")!.next;
     const loading = applyUserText(awaiting, "ABC123");
     const next = applyTramitesSuccess(loading, "placa", [
       {
         id: "11111111-1111-4111-a111-111111111111",
-        fecha: "2026-01-01",
+        radicado: "R-1",
+        fecha: "01/01/2026 08:00",
         estado: "borrador",
         placa: "ABC123",
         vin: "X",
         tipoTramite: "Traspaso",
+        compania: null,
         href: "/tramites/11111111-1111-4111-a111-111111111111",
       },
     ]);

@@ -7,14 +7,14 @@ export const INTRO_ARTICLES: ManualArticle[] = [
     audience: "Todos",
     sectionId: "introduccion",
     keywords: ["bienvenida", "manual", "ayuda", "documentacion", "inicio", "centro", "flit"],
-    summary: "Portal de documentación operativa para Gestor y Organismo de Tránsito.",
+    summary: "Portal de documentación operativa de FLIT para Gestor, Organismo de Tránsito, Administración de compañía y Super Admin.",
     blocks: [
       {
         id: "para-que",
         title: "1. ¿Para qué sirve este manual?",
         paragraphs: [
           "Bienvenido al ecosistema de FLIT. Este portal está diseñado para que resuelvas dudas sobre el uso de la plataforma en segundos, sin depender de una llamada a soporte en cada paso.",
-          "Documenta las acciones del Gestor (empresa cliente que radica trámites vehiculares) y del Gestor de Organismo de Tránsito (OT). No incluye consolas exclusivas de SuperAdmin ni la administración de compañía (AdminCompany).",
+          "Documenta las acciones del Gestor (empresa cliente que radica trámites vehiculares), del Organismo de Tránsito (OT), del Administrador de compañía (consola, red de clientes, marca) y del equipo FLIT (Super Admin: compañías, plataforma, integraciones, RBAC). Cada artículo indica «Aplica para» y DR. FLIT solo sugiere los de tu perfil.",
         ],
       },
       {
@@ -22,7 +22,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         title: "2. Pasos rápidos para navegar",
         paragraphs: [],
         bullets: [
-          "Utiliza el menú lateral izquierdo para explorar Introducción, Gestor u Organismo de Tránsito.",
+          "Utiliza el menú lateral izquierdo para explorar Introducción, Normativa (la resolución que respalda a FLIT), Gestor, Organismo de Tránsito, Administración de compañía y Super Admin.",
           "Si buscas algo específico (ej. «cómo crear un trámite» o «preasignación de placas»), usa la barra de Búsqueda en la parte superior (⌘ K / Ctrl K).",
           "Si el artículo es largo, usa la tabla de contenidos «En este artículo» a la derecha para saltar a la sección que necesitas.",
         ],
@@ -34,7 +34,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         bullets: [
           "¿Por qué veo manuales de cosas a las que no tengo acceso? El manual es público para fomentar transparencia. En la aplicación real, el sistema restringe el acceso según tu rol. Por eso, al inicio de cada artículo verás la etiqueta «Aplica para».",
           "¿Encontré un error en el manual? FLIT se actualiza constantemente. Si una pantalla se ve distinta a lo descrito, notifícalo a soporte@flitsas.com para que el equipo actualice el documento.",
-          "¿Puede ayudarme DR. FLIT? Sí. En el chat elige «Necesito ayuda», describe tu duda y, si existe artículo, te ofrecemos el enlace directo a esta documentación.",
+          "¿Puede ayudarme DR. FLIT? Sí. En el chat elige «Necesito ayuda»: si estás en un módulo con documentación te la sugiere de entrada; si describes tu duda, te ofrece los artículos que aplican a tu perfil. En Gestión busca trámites por placa, VIN, radicado o cliente.",
         ],
       },
     ],
@@ -109,18 +109,60 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         ],
       },
       {
-        id: "fuera",
-        title: "3. Qué NO cubre este manual",
-        paragraphs: [],
+        id: "administracion",
+        title: "3. Perfiles de administración",
+        paragraphs: [
+          "Además de Gestor y Organismo hay dos perfiles de administración con secciones propias en este manual, visibles según tu rol:",
+        ],
         bullets: [
-          "SuperAdmin: compañías globales, documental plataforma, improntas, Quipux, RBAC, auditoría.",
-          "AdminCompany: consola «Administración» de la compañía (matrícula inicial habilitada, mandatarios, RL, etc.).",
+          "Admin de Compañía: consola «Administración» de la compañía, usuarios, revocatorias y, si la compañía es cabeza de red (concesión o marca blanca), la red de clientes y la marca.",
+          "Super Admin (equipo FLIT): compañías, organismos, documental de plataforma, improntas, integraciones, RBAC, auditoría y procesos periódicos.",
         ],
         callouts: [
           {
             variant: "info",
             text: "El menú es UX: ocultar un ítem no sustituye la validación de permisos en la API.",
           },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "0-introduccion/4-fechas-y-horas",
+    title: "Fechas, horas y formatos",
+    audience: "Todos",
+    sectionId: "introduccion",
+    keywords: [
+      "fecha",
+      "hora",
+      "formato de fecha",
+      "zona horaria",
+      "hora de colombia",
+      "dd/mm/yyyy",
+      "vigencia",
+      "exportar",
+    ],
+    summary: "Cómo se muestran fechas y horas en FLIT y por qué una vigencia no lleva hora.",
+    blocks: [
+      {
+        id: "instantes",
+        title: "1. Instantes: DD/MM/YYYY HH:mm en hora de Colombia",
+        paragraphs: [
+          "Todo lo que representa un momento (radicación, cambio de estado, asignación de placa, firma, línea de tiempo, correos) se muestra como DD/MM/YYYY HH:mm en hora de Colombia, sin importar la zona horaria del navegador. Sin segundos: no aportan a la lectura operativa.",
+        ],
+      },
+      {
+        id: "calendario",
+        title: "2. Fechas de calendario: sin hora",
+        paragraphs: [
+          "Las vigencias (SOAT, RTM, identidad, escrituras, baúl de firmas) son fechas de calendario: se muestran como DD/MM/YYYY y no se convierten de zona horaria. Por eso una vigencia nunca aparece «un día antes».",
+        ],
+      },
+      {
+        id: "exportables",
+        title: "3. Exportables y documentos",
+        paragraphs: [
+          "Los archivos Excel y los documentos generados usan el mismo formato estándar que la interfaz. Los certificados del consolidado conservan la hora; el sello de tiempo de la impronta conserva los segundos por exigencia normativa.",
         ],
       },
     ],

@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowUpRight, BookOpen, Headphones } from "lucide-react";
+import { ArrowUpRight, BookOpen, Headphones, Scale } from "lucide-react";
 import { DR_FLIT_HELP_OPTIONS, type DrFlitHelpOptionId } from "./dr-flit-intents";
 
 const ICONS: Record<DrFlitHelpOptionId, typeof BookOpen> = {
   "necesito-ayuda": BookOpen,
+  normativa: Scale,
   soporte: Headphones,
 };
 

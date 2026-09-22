@@ -709,10 +709,14 @@ export function Shell({
           homeActive={!onAdminRoute && active === "dashboard"}
         />
 
-        {/* DR. FLIT — asistente conversacional (UI-only; sin APIs). */}
+        {/* DR. FLIT — asistente conversacional sobre APIs existentes (búsqueda por rol/alcance). */}
         <DrFlitAssistant
           displayName={currentUser?.displayName ?? currentUser?.email ?? null}
           routeScope={`${pathname}|${active}`}
+          // Mismo criterio que el dock: sin filtro RBAC se ve todo; con filtro, solo si el módulo viene.
+          historialPlacaEnabled={
+            visibleModuleCodes ? visibleModuleCodes.includes("historial-placa") : true
+          }
         />
 
         {/* Bottom dock — móvil/tablet (<lg): lanzador + hoja agrupada. */}

@@ -8,12 +8,15 @@ import { useDrFlitChat } from "./useDrFlitChat";
 export function DrFlitAssistant({
   displayName,
   routeScope,
+  historialPlacaEnabled,
 }: {
   displayName?: string | null;
   /** Identificador de módulo/ruta; al cambiar se cierra el panel (sin limpiar chat). */
   routeScope?: string;
+  /** HU-C — el usuario tiene el módulo «Historial por placa» (por defecto sí). */
+  historialPlacaEnabled?: boolean;
 }) {
-  const chat = useDrFlitChat(displayName, routeScope);
+  const chat = useDrFlitChat(displayName, routeScope, { historialPlacaEnabled });
 
   return (
     <>

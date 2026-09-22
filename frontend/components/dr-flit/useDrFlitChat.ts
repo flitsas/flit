@@ -1,12 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import {
-  decodeJwtPayload,
-  isOtAdmin as checkOtAdmin,
-  TOKEN_STORAGE_KEY,
-} from "@/lib/auth/jwt";
-import { getToken } from "@/lib/api/client";
+import { useNetworkScope } from "@/hooks/useNetworkScope";
+import { resolveContextArticle, visibleAudiences } from "@/lib/manual/catalog";
+import { readJwtPayload, resolveDrFlitContext } from "./dr-flit-context";
+import { buildHistorialPlacaHref } from "./dr-flit-intents";
 import {
   applyBackToSearch,
   applyClientBranch,
@@ -32,24 +30,27 @@ import {
 } from "./dr-flit-session-store";
 import { searchTramites, searchValidaciones } from "./dr-flit-search";
 
-function resolveIsOtAdmin(): boolean {
-  const token =
-    typeof window !== "undefined"
-      ? getToken() ?? window.localStorage.getItem(TOKEN_STORAGE_KEY)
-      : null;
-  return checkOtAdmin(decodeJwtPayload(token));
-}
-
 function errorMessage(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
   return "Error de red o permisos. Intenta de nuevo.";
+}
+
+export interface UseDrFlitChatOptions {
+  /**
+   * HU-C — el usuario tiene el módulo «Historial por placa» (RBAC `visibleModuleCodes`). Sin él no
+   * se ofrece el atajo: llevaría a un módulo que el dock no muestra. Por defecto `true` (sin filtro
+   * RBAC, como el propio dock).
+   */
+  historialPlacaEnabled?: boolean;
 }
 
 export function useDrFlitChat(
   displayName?: string | null,
   /** Cambia al navegar entre módulos; cierra el panel sin borrar la conversación. */
   routeScope?: string,
+  options: UseDrFlitChatOptions = {},
 ) {
+  const historialPlacaEnabled = options.historialPlacaEnabled ?? true;
   const hydrated = useRef(loadDrFlitSession());
   // Tras remount (p. ej. layout de otro módulo) el panel arranca cerrado;
   // la conversación sí se restaura hasta “Terminar chat”.
@@ -63,6 +64,9 @@ export function useDrFlitChat(
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchGen = useRef(0);
+  // HU #12363 — DR-FLIT busca donde el usuario está mirando: el mismo alcance (propio / red / un
+  // hijo) que eligió para la tabla de trámites. Para quien no es cabeza el hook no hace llamadas.
+  const { networkActive, scope: networkScope } = useNetworkScope();
   /** Solo enfocar al abrir por gesto del usuario, no al remount por navegación. */
   const shouldFocusOnOpen = useRef(false);
   const prevRouteScope = useRef(routeScope);
@@ -126,7 +130,7 @@ export function useDrFlitChat(
 
     void (async () => {
       try {
-        const role = { isOtAdmin: resolveIsOtAdmin() };
+        const ctx = currentContext();
 
         if (branch === "validaciones" && value) {
           const results = await searchValidaciones(value);
@@ -145,17 +149,20 @@ export function useDrFlitChat(
           return;
         }
 
-        const results = await searchTramites(
-          searchIntent === "cliente" ? "cliente" : searchIntent,
-          value,
-          role,
-        );
+        const results = await searchTramites(searchIntent, value, ctx);
         if (gen !== searchGen.current) return;
+        // El OT no tiene la SPA «Historial por placa» (su universo es la bandeja del organismo).
+        const historialHref =
+          searchIntent === "placa" && historialPlacaEnabled && ctx.role !== "ot_admin"
+            ? buildHistorialPlacaHref(value)
+            : null;
         setState((prev) =>
           applyTramitesSuccess(
             prev,
             queryLabelForIntent(searchIntent),
-            results,
+            results.items,
+            results.total,
+            historialHref,
           ),
         );
       } catch (err) {
@@ -163,6 +170,9 @@ export function useDrFlitChat(
         setState((prev) => applySearchFailure(prev, errorMessage(err)));
       }
     })();
+    // Ni `currentContext` (alcance de red) ni `historialPlacaEnabled` son dependencias: un cambio a
+    // mitad de búsqueda no la relanza; la siguiente ya lo toma. Relanzarla duplicaría resultados.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     state.phase,
     state.pendingIntent,
@@ -170,13 +180,25 @@ export function useDrFlitChat(
     state.pendingClientBranch,
   ]);
 
-  const selectHelpOption = useCallback((optionId: DrFlitHelpOptionId) => {
-    setState((prev) => {
-      const next = applySelectHelpOption(prev, optionId);
-      return next ?? prev;
-    });
-    queueMicrotask(() => inputRef.current?.focus());
-  }, []);
+  /** Contexto de rol/red vigente; se resuelve al momento (el JWT o el alcance pueden cambiar). */
+  const currentContext = useCallback(
+    () => resolveDrFlitContext(readJwtPayload(), { networkActive, scope: networkScope }),
+    [networkActive, networkScope],
+  );
+
+  const selectHelpOption = useCallback(
+    (optionId: DrFlitHelpOptionId) => {
+      // HU-G — artículo del módulo actual, solo si aplica al perfil (HU-F).
+      const audiences = visibleAudiences(currentContext().role);
+      const contextArticle = resolveContextArticle(routeScope, audiences);
+      setState((prev) => {
+        const next = applySelectHelpOption(prev, optionId, { contextArticle });
+        return next ?? prev;
+      });
+      queueMicrotask(() => inputRef.current?.focus());
+    },
+    [routeScope, currentContext],
+  );
 
   const selectIntent = useCallback((intentId: DrFlitIntentId) => {
     setState((prev) => {
@@ -195,9 +217,14 @@ export function useDrFlitChat(
     setState((prev) => applyBackToSearch(prev));
   }, []);
 
-  const sendText = useCallback((text: string) => {
-    setState((prev) => applyUserText(prev, text));
-  }, []);
+  const sendText = useCallback(
+    (text: string) => {
+      // HU-F — la búsqueda del manual solo devuelve artículos del perfil de quien pregunta.
+      const helpAudiences = visibleAudiences(currentContext().role);
+      setState((prev) => applyUserText(prev, text, { helpAudiences }));
+    },
+    [currentContext],
+  );
 
   const resetConversation = useCallback(() => {
     searchGen.current += 1;
