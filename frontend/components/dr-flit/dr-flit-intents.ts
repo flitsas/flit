@@ -128,7 +128,7 @@ export function buildSupportIntro(): string {
 }
 
 export function buildClientBranchPrompt(cliente: string): string {
-  return `¿Qué deseas consultar para **${cliente.trim()}**? Validación de identidad o trámites.`;
+  return `¿Qué deseas consultar para **${cliente.trim()}**?`;
 }
 
 export function buildTramitesIntro(

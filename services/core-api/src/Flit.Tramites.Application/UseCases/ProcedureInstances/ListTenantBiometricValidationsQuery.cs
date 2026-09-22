@@ -1,3 +1,4 @@
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 
@@ -63,7 +64,11 @@ public sealed record TenantBiometricValidationDto(
     DateTimeOffset? LinkExpiresAt,
     // Feature #11066 — otros trámites del tenant con validaciones de la misma identidad (documento).
     // El trámite primario sigue en InstanceId/ReferenceNumber para compatibilidad.
-    IReadOnlyList<LinkedProcedureDto> LinkedProcedures);
+    IReadOnlyList<LinkedProcedureDto> LinkedProcedures,
+    // HU #12706 — compañía dueña de la validación (columna Compañía del SuperAdmin). Aditivos: el
+    // front que no los lee sigue funcionando. TenantName null si la compañía no resuelve nombre.
+    Guid TenantId = default,
+    string? TenantName = null);
 
 /// <summary>KPIs del submódulo: totales por estado (exactos, sin el cap de filas de la tabla).</summary>
 public sealed record BiometricValidationStatsDto(
@@ -98,11 +103,22 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
     // se trae un lote acotado de rechazadas, se filtra y se pagina en memoria.
     private const int MotivoScanCap = 2000;
 
-    public async Task<(TenantBiometricValidationsResponse? Result, string? Error)> HandleAsync(
+    public Task<(TenantBiometricValidationsResponse? Result, string? Error)> HandleAsync(
         Guid tenantId,
         TenantBiometricValidationListQuery? query = null,
+        CancellationToken ct = default) =>
+        HandleAsync(TenantScope.Single(tenantId), query, ct);
+
+    /// <summary>
+    /// HU #12706 — listado acotado por <see cref="TenantScope"/>: <c>All</c> solo lo fabrica el
+    /// middleware para el SuperAdmin sin compañía elegida; el resto de roles llega con <c>Single</c>.
+    /// </summary>
+    public async Task<(TenantBiometricValidationsResponse? Result, string? Error)> HandleAsync(
+        TenantScope scope,
+        TenantBiometricValidationListQuery? query,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(scope);
         query ??= new TenantBiometricValidationListQuery();
         var validationError = query.Validate();
         if (validationError is not null)
@@ -119,11 +135,12 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
         // ya viene acotado a rechazadas; se filtra por el texto sanitizado y se pagina en memoria.
         if (!string.IsNullOrWhiteSpace(filter.MotivoRechazo))
         {
-            var scan = await repo.ListBiometricValidationsByTenantAsync(tenantId, 0, MotivoScanCap, activeFilter, now, ct);
+            var scan = await repo.ListBiometricValidationsByTenantAsync(scope, 0, MotivoScanCap, activeFilter, now, ct);
             var term = filter.MotivoRechazo;
-            var linkedByIdentity = await LoadLinkedProceduresAsync(tenantId, scan, ct);
+            var linkedByIdentity = await LoadLinkedProceduresAsync(scan, ct);
+            var namesMotivo = await LoadTenantNamesAsync(scan, ct);
             var all = scan
-                .Select(v => ToDto(v, now, linkedByIdentity))
+                .Select(v => ToDto(v, now, linkedByIdentity, namesMotivo))
                 .Where(d => d.RejectionReason is not null
                     && d.RejectionReason.Contains(term, StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -134,48 +151,77 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
         }
 
         // Caso general: KPIs + total exactos por conteo agrupado en BD; filas de la página por Skip/Take.
-        var stats = BuildStats(await repo.CountBiometricValidationsByEstadoAsync(tenantId, activeFilter, now, ct));
+        var stats = BuildStats(await repo.CountBiometricValidationsByEstadoAsync(scope, activeFilter, now, ct));
         var rows = await repo.ListBiometricValidationsByTenantAsync(
-            tenantId, (page - 1) * pageSize, pageSize, activeFilter, now, ct);
-        var linked = await LoadLinkedProceduresAsync(tenantId, rows, ct);
-        var dtos = rows.Select(v => ToDto(v, now, linked)).ToList();
+            scope, (page - 1) * pageSize, pageSize, activeFilter, now, ct);
+        var linked = await LoadLinkedProceduresAsync(rows, ct);
+        var names = await LoadTenantNamesAsync(rows, ct);
+        var dtos = rows.Select(v => ToDto(v, now, linked, names)).ToList();
 
         return (new TenantBiometricValidationsResponse(dtos, stats, page, pageSize, stats.Total), null);
     }
 
     /// <summary>
     /// Resuelve en lote los trámites vinculados por identidad (documento) para las filas de la página.
+    /// <para>
+    /// HU #12706 — cada trámite vinculado se busca en la compañía de SU fila (una consulta por compañía
+    /// presente en la página, no por fila): con el SuperAdmin sin acotar la página mezcla compañías y
+    /// un trámite de otra compañía nunca debe colgarse de la identidad. La clave del diccionario
+    /// (<see cref="BiometricRules.IdentidadKey"/>) ya incluye la compañía, así que las mezclas no chocan.
+    /// </para>
     /// </summary>
     private async Task<IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureDto>>> LoadLinkedProceduresAsync(
-        Guid tenantId,
+        IReadOnlyList<ProcedureInstanceBiometricValidation> rows,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<string, IReadOnlyList<LinkedProcedureDto>>(StringComparer.Ordinal);
+        if (rows.Count == 0)
+            return result;
+
+        foreach (var byTenant in rows.GroupBy(v => v.TenantId))
+        {
+            var documents = byTenant
+                .Where(v => !string.IsNullOrWhiteSpace(v.DocumentType) && !string.IsNullOrWhiteSpace(v.DocumentNumber))
+                .Select(v => (v.DocumentType, v.DocumentNumber))
+                .Distinct()
+                .ToList();
+
+            if (documents.Count == 0)
+                continue;
+
+            var summaries = await repo.ListLinkedProceduresByIdentityDocumentsAsync(byTenant.Key, documents, ct);
+            foreach (var kv in summaries)
+            {
+                result[kv.Key] = kv.Value
+                    .Select(s => new LinkedProcedureDto(s.InstanceId, s.ReferenceNumber, s.Status, s.Modalidad))
+                    .ToList();
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// HU #12706 — nombre de la compañía de cada fila de la página, en UNA consulta
+    /// (<c>WHERE id IN …</c>), igual que la columna Compañía de Trámites.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, string>> LoadTenantNamesAsync(
         IReadOnlyList<ProcedureInstanceBiometricValidation> rows,
         CancellationToken ct)
     {
         if (rows.Count == 0)
-            return new Dictionary<string, IReadOnlyList<LinkedProcedureDto>>();
+            return new Dictionary<Guid, string>();
 
-        var documents = rows
-            .Where(v => !string.IsNullOrWhiteSpace(v.DocumentType) && !string.IsNullOrWhiteSpace(v.DocumentNumber))
-            .Select(v => (v.DocumentType, v.DocumentNumber))
-            .Distinct()
-            .ToList();
-
-        if (documents.Count == 0)
-            return new Dictionary<string, IReadOnlyList<LinkedProcedureDto>>();
-
-        var summaries = await repo.ListLinkedProceduresByIdentityDocumentsAsync(tenantId, documents, ct);
-        return summaries.ToDictionary(
-            kv => kv.Key,
-            kv => (IReadOnlyList<LinkedProcedureDto>)kv.Value
-                .Select(s => new LinkedProcedureDto(s.InstanceId, s.ReferenceNumber, s.Status, s.Modalidad))
-                .ToList());
+        var ids = rows.Select(v => v.TenantId).Distinct().ToList();
+        return await repo.GetTenantNamesAsync(ids, ct) ?? new Dictionary<Guid, string>();
     }
 
     /// <summary>Mapea una validación a su DTO de fila (incluye flag expirada + motivo sanitizado).</summary>
     private static TenantBiometricValidationDto ToDto(
         ProcedureInstanceBiometricValidation v,
         DateTimeOffset now,
-        IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureDto>> linkedByIdentity)
+        IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureDto>> linkedByIdentity,
+        IReadOnlyDictionary<Guid, string> tenantNames)
     {
         var identityKey = BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber);
         var linked = linkedByIdentity.GetValueOrDefault(identityKey) ?? [];
@@ -213,7 +259,9 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
             BiometricRules.DiasRestantesVigencia(v, now),
             EnlaceVigente(v, now),
             v.ExpiresAt,
-            linkedOthers);
+            linkedOthers,
+            v.TenantId,
+            tenantNames.GetValueOrDefault(v.TenantId));
     }
 
     /// <summary>

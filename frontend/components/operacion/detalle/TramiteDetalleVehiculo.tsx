@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { COPY } from '@/lib/copy/copy-catalog';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { useConsultaMode } from '@/components/operacion/ConsultaModeContext';
 import {
@@ -78,16 +79,16 @@ function buildEspecificaciones(fieldValues: FieldValue[]): { campo: string; valo
     },
     { campo: 'Combustible', valor: valorDe('vehicle_fuel') },
     { campo: 'Carrocería', valor: valorDe('vehicle_body_type') },
-    { campo: 'Capacidad', valor: valorDe('vehicle_passengers') },
+    { campo: COPY.A10, valor: valorDe('vehicle_passengers') },
     { campo: 'Ejes', valor: valorDe('vehicle_axles') },
     { campo: 'Alto', valor: conMm(valorDe('vehicle_height')) },
     { campo: 'Ancho', valor: conMm(valorDe('vehicle_width')) },
     { campo: 'Largo', valor: conMm(valorDe('vehicle_length')) },
     { campo: 'Llantas', valor: valorDe('vehicle_tires') },
     { campo: 'Estado', valor: valorDe('vehicle_state') },
-    { campo: 'N. Motor', valor: valorDe('vehicle_engine_number') },
-    { campo: 'N. Chasis', valor: valorDe('vehicle_chassis') },
-    { campo: 'N. Serie', valor: valorDe('vehicle_series') },
+    { campo: COPY.A09Motor, valor: valorDe('vehicle_engine_number') },
+    { campo: COPY.A09Chasis, valor: valorDe('vehicle_chassis') },
+    { campo: COPY.A09Serie, valor: valorDe('vehicle_series') },
     // Solo las que sí llegaron: una clave ausente en `fieldValues` se omite, nunca se deja en «—».
   ].filter((s) => s.valor !== '');
 }
@@ -189,7 +190,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <TarjetaDetalle titulo="Especificaciones técnicas">
+      <TarjetaDetalle titulo={COPY.A08}>
         {especificaciones.loading ? (
           <SeccionCargando etiqueta="Cargando especificaciones técnicas" />
         ) : especificaciones.error ? (

@@ -25,6 +25,7 @@ import {
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
+import { COPY } from "@/lib/copy/copy-catalog";
 import { OtTablePagination } from "./OtTablePagination";
 import { ActionsMenu, type ActionsMenuItem } from "@/components/atom/ActionsMenu";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
@@ -414,7 +415,7 @@ export function ClientProceduresTable({
     if (decidible) {
       items.push({
         key: "aprobar",
-        label: "Aprobar",
+        label: COPY.E01Aprobar,
         icon: Check,
         onSelect: () => onApprove(row),
       });
@@ -432,7 +433,7 @@ export function ClientProceduresTable({
     if (decidible || enColaDePlaca) {
       items.push({
         key: "rechazar",
-        label: "Rechazar",
+        label: COPY.E01Rechazar,
         icon: X,
         onSelect: () => onReject(row),
       });
@@ -479,13 +480,13 @@ export function ClientProceduresTable({
     }
 
     if (row.status === "aprobado" && onAdjuntarLt) {
-      items.push({ key: "adjuntar-lt", label: "Adjuntar LT", icon: Paperclip, onSelect: () => onAdjuntarLt(row) });
+      items.push({ key: "adjuntar-lt", label: COPY.E02, icon: Paperclip, onSelect: () => onAdjuntarLt(row) });
     }
 
     if ((row.status === "entregado" || row.status === "aprobado") && onConsolidado) {
       items.push({
         key: "consolidado",
-        label: consolidadoActingId === row.id ? "Abriendo…" : "Ver consolidado",
+        label: COPY.A12,
         icon: FileStack,
         // Se deshabilita mientras se abre: el consolidado puede tener que generarse, y un segundo
         // clic dispararía una segunda generación del mismo expediente.

@@ -28,6 +28,7 @@ import { CATEGORY_META, CATEGORY_ORDER } from "../categories";
 import { compareRange, type ReportFilters } from "../filters";
 import { formatInt } from "../format";
 import { KpiCard } from "../KpiCard";
+import { COPY } from "@/lib/copy/copy-catalog";
 import { LiveNowPanel } from "../LiveNowPanel";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
 
@@ -146,7 +147,7 @@ export function ResumenTab({
           {/* KPIs grandes con variación y tooltip "cómo se calcula" */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <KpiCard
-              label="Total trámites"
+              label={COPY.E03}
               value={formatInt(totals.total)}
               tooltip="Suma de trámites de todas las categorías creados en el rango de fechas."
               variation={variation("total")}

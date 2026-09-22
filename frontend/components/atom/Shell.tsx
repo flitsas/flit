@@ -11,6 +11,7 @@ import {
   isAdminCompany,
   isGroupParent,
   isOtAdmin,
+  isOtUser,
   isSuperAdmin,
   TOKEN_STORAGE_KEY,
 } from "@/lib/auth/jwt";
@@ -29,7 +30,8 @@ import {
   GENERACION_DOCUMENTAL_BASE_PATH,
 } from "@/components/admin/generacion-documental/generacion-documental-nav";
 import { useDockScrollCondense } from "./useDockScrollCondense";
-import { buildDockGroups, flattenDockEntries } from "./dock/dockGroups";
+import { buildDockGroups, flattenDockEntries, SPA_DOCK_ITEM_LABEL } from "./dock/dockGroups";
+import { COPY } from "@/lib/copy/copy-catalog";
 import { DockDesktop } from "./dock/DockDesktop";
 import { DrFlitAssistant } from "@/components/dr-flit";
 import { BrandLogo } from "@/components/brand/BrandLogo";
@@ -92,16 +94,16 @@ export type ModuleId =
 
 const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   // Dashboard no va en el dock: el FAB central (Inicio FLIT) abre el mismo módulo.
-  { id: "tramites", label: "Trámites", icon: FileStack },
-  { id: "reportes", label: "Reportes", icon: BarChart3 },
-  { id: "reportes-detallados", label: "Reportes Detallados", icon: FileSpreadsheet },
-  { id: "validaciones", label: "Identidad", icon: ShieldCheck },
+  { id: "tramites", label: SPA_DOCK_ITEM_LABEL.tramites, icon: FileStack },
+  { id: "reportes", label: SPA_DOCK_ITEM_LABEL.reportes, icon: BarChart3 },
+  { id: "reportes-detallados", label: SPA_DOCK_ITEM_LABEL["reportes-detallados"], icon: FileSpreadsheet },
+  { id: "validaciones", label: SPA_DOCK_ITEM_LABEL.validaciones, icon: ShieldCheck },
   // HU #12194 — historial operativo por placa. El id coincide con el `Code` del módulo RBAC
   // (`historial-placa`): el dock lo filtra con `visibleModuleCodes.includes(it.id)`, así que un
   // id distinto del slug del permiso dejaría la entrada invisible para todos.
-  { id: "historial-placa", label: "Historial por placa", icon: History },
-  { id: "usuarios", label: "Usuarios", icon: Users },
-  { id: "ayuda", label: "Ayuda", icon: HelpCircle },
+  { id: "historial-placa", label: SPA_DOCK_ITEM_LABEL["historial-placa"], icon: History },
+  { id: "usuarios", label: SPA_DOCK_ITEM_LABEL.usuarios, icon: Users },
+  { id: "ayuda", label: SPA_DOCK_ITEM_LABEL.ayuda, icon: HelpCircle },
 ];
 
 // Entrada normalizada del dock: módulos de la SPA y accesos admin/empresa comparten
@@ -153,7 +155,9 @@ function useCurrentUser() {
         ? "Admin de Compañía"
         : roleCodes.includes("ot_admin")
           ? "Admin OT"
-          : roleCodes[0] || "Usuario";
+          : isOtUser(payload)
+            ? roleCodes[0] || "Usuario OT"
+            : roleCodes[0] || "Usuario";
     return {
       displayName:
         (payload.display_name as string | undefined) ??
@@ -166,6 +170,8 @@ function useCurrentUser() {
       isAdminCompany: isAdminCompany(payload),
       isGroupParent: isGroupParent(payload),
       isOtAdmin: isOtAdmin(payload),
+      // Cualquier rol de un tenant OT (no solo ot_admin) opera la superficie del organismo.
+      isOtUser: isOtUser(payload),
       tenantId: (payload.tenant_id as string) ?? null,
       canReadLogQx: canReadLogQx(payload),
       canReadIctLogs: canReadIctLogs(payload),
@@ -231,7 +237,7 @@ export function Shell({
   const visibleDock = (visibleModuleCodes
     ? DOCK.filter((it) => it.id === "ayuda" || visibleModuleCodes.includes(it.id))
     : DOCK
-  ).filter((it) => !(currentUser?.isOtAdmin && OT_ADMIN_SPA_OMIT.has(it.id)));
+  ).filter((it) => !(currentUser?.isOtUser && OT_ADMIN_SPA_OMIT.has(it.id)));
 
   // Una sola lista con TODAS las entradas del dock (módulos + botones admin/empresa
   // según rol). El FAB de inicio va siempre en el centro y las entradas se reparten
@@ -428,13 +434,15 @@ export function Shell({
     });
   }
 
-  // Admin OT: pestañas del hub trasladadas al dock (Administración = Reglas/Docs/Requisitos;
+  // Usuario OT: pestañas del hub trasladadas al dock (Administración = Reglas/Docs/Requisitos;
   // Trámites, Preasignación, Usuarios y Reportes como ítems del dock). Sin Compañías/RBAC.
-  if (currentUser?.isOtAdmin) {
+  // Todo rol de un tenant OT entra aquí; "Usuarios" queda solo para ot_admin porque su API
+  // (UserAdminPolicy) sigue siendo de administradores.
+  if (currentUser?.isOtUser) {
     entries.push(
       {
         key: OT_ADM_DOCK.tramites,
-        label: "Trámites",
+        label: COPY.B21Tramites,
         icon: FileStack,
         active: isOtHubSegmentActive(pathname, "client-procedures"),
         onClick: () => goOtHub("client-procedures"),
@@ -467,16 +475,20 @@ export function Shell({
         active: isOtHubSegmentActive(pathname, "plate-ranges"),
         onClick: () => goOtHub("plate-ranges"),
       },
-      {
-        key: OT_ADM_DOCK.usuarios,
-        label: "Usuarios",
-        icon: Users,
-        active: isOtHubSegmentActive(pathname, "usuarios"),
-        onClick: () => goOtHub("usuarios"),
-      },
+      ...(currentUser.isOtAdmin
+        ? [
+            {
+              key: OT_ADM_DOCK.usuarios,
+              label: COPY.B21Usuarios,
+              icon: Users,
+              active: isOtHubSegmentActive(pathname, "usuarios"),
+              onClick: () => goOtHub("usuarios"),
+            },
+          ]
+        : []),
       {
         key: OT_ADM_DOCK.reportes,
-        label: "Reportes",
+        label: COPY.B21Reportes,
         icon: BarChart3,
         active: isOtHubSegmentActive(pathname, "reportes"),
         onClick: () => goOtHub("reportes"),
@@ -717,6 +729,7 @@ export function Shell({
           historialPlacaEnabled={
             visibleModuleCodes ? visibleModuleCodes.includes("historial-placa") : true
           }
+          canSearchValidaciones={visibleDock.some((it) => it.id === "validaciones")}
         />
 
         {/* Bottom dock — móvil/tablet (<lg): lanzador + hoja agrupada. */}

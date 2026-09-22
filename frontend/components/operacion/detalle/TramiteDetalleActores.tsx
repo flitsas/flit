@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { COPY } from '@/lib/copy/copy-catalog';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { useDetalleConsolidado } from '@/components/operacion/ConsultaModeContext';
 import {
@@ -237,7 +238,7 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
 
   if (cargando) {
     return (
-      <TarjetaDetalle titulo="Actores del trámite">
+      <TarjetaDetalle titulo={COPY.A07}>
         <SeccionCargando etiqueta="Cargando actores del trámite" />
       </TarjetaDetalle>
     );
@@ -245,7 +246,7 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
 
   if (mensajeError) {
     return (
-      <TarjetaDetalle titulo="Actores del trámite">
+      <TarjetaDetalle titulo={COPY.A07}>
         <SeccionError
           mensaje={mensajeError}
           // En consulta el modal ya describió el error: el copy de alcance va sin reintento.
@@ -271,7 +272,7 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
   // firma es su representante. Ocultarlo por fidelidad a la maqueta escondería a un actor real
   // del trámite, que es peor que apartarse de ella.
   const representantes = [
-    { parteBase: 'Propietario / vendedor', actores: vendedores },
+    { parteBase: COPY.A01, actores: vendedores },
     { parteBase: 'Comprador', actores: compradores },
   ].flatMap(({ parteBase, actores }) =>
     actores
@@ -286,7 +287,7 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
 
   if (vendedores.length === 0 && compradores.length === 0) {
     return (
-      <TarjetaDetalle titulo="Actores del trámite">
+      <TarjetaDetalle titulo={COPY.A07}>
         <SeccionVacia mensaje="Este trámite no tiene actores registrados." />
       </TarjetaDetalle>
     );
@@ -297,7 +298,7 @@ export function TramiteDetalleActores({ instanceId, tenantId, item }: SeccionDet
       {vendedores.map(({ actor, ordinal }) => (
         <ActorCard
           key={`vendedor-${ordinal}`}
-          titulo={vendedores.length > 1 ? `Propietario / vendedor ${ordinal}` : 'Propietario / vendedor'}
+          titulo={vendedores.length > 1 ? `${COPY.A01} ${ordinal}` : COPY.A01}
           actor={actor}
           firmaEstado={item.firmaVendedorEstado}
           mostrarFirma={ordinal === 1}

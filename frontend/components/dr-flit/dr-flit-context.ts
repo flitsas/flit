@@ -1,7 +1,7 @@
 import {
   decodeJwtPayload,
   isAdminCompany,
-  isOtAdmin,
+  isOtUser,
   isSuperAdmin,
   TOKEN_STORAGE_KEY,
   type JwtPayload,
@@ -15,6 +15,9 @@ import type { NetworkScopePreference } from "@/lib/tramites/network-scope";
  *
  *  - `superadmin`: ve todas las compañías por rol (sin `X-Tenant-Id`), nunca «su red».
  *  - `ot_admin`: su universo es la bandeja del organismo, no el listado de trámites del tenant.
+ *    Se decide con `isOtUser` (rol `ot_admin` **o** tenant de tipo TRANSIT_OFFICE): desde AB#12711
+ *    la API de trámites del tenant rechaza a los organismos, así que cualquier usuario de un OT
+ *    tiene que ir por la bandeja aunque su rol no sea `ot_admin`.
  *  - `admin_company`: listado del tenant y, si es cabeza de red con alcance activo, la red.
  *  - `gestor`: Radicador/Operador — solo su compañía (HU #12652).
  */
@@ -43,7 +46,7 @@ export const DR_FLIT_NO_NETWORK: DrFlitNetworkScope = { active: false };
 
 export function roleFromPayload(payload: JwtPayload | null): DrFlitRole {
   if (isSuperAdmin(payload)) return "superadmin";
-  if (isOtAdmin(payload)) return "ot_admin";
+  if (isOtUser(payload)) return "ot_admin";
   if (isAdminCompany(payload)) return "admin_company";
   return "gestor";
 }

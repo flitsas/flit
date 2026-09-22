@@ -29,6 +29,12 @@ describe("dr-flit-context", () => {
       expect(roleFromPayload({ role_code: "adminCompany" })).toBe("admin_company");
     });
 
+    it("cualquier usuario de un tenant OT es ot_admin (AB#12711: la API del tenant lo rechaza)", () => {
+      expect(
+        roleFromPayload({ role: "Gestor OT", entity_type: "TRANSIT_OFFICE" }),
+      ).toBe("ot_admin");
+    });
+
     it("Radicador es gestor", () => {
       expect(roleFromPayload({ role: "Radicador", roles: [{ code: "Radicador" }] })).toBe("gestor");
     });

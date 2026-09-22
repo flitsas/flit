@@ -9,7 +9,7 @@ import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from '@/lib/validatio
  * Barra de filtros del módulo "Auditoría" (HU #10680). Presentacional: el estado de los
  * filtros vive en el contenedor (Auditoria.tsx), que delega el filtrado al backend vía
  * query params (GET /api/v1/superadmin/audit, HU #10679) — no hay filtrado client-side.
- * Calcado de ValidacionesFilterToolbar: dropdowns/fechas aplican de inmediato, texto con
+ * Calcado del antiguo ValidacionesFilterToolbar: dropdowns/fechas aplican de inmediato, texto con
  * debounce (a cargo del contenedor). WCAG 2.1 AA: cada control tiene etiqueta asociada, el
  * toggle de "Más filtros" expone aria-expanded y el contador es aria-live.
  */

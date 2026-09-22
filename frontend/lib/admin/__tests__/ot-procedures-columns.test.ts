@@ -9,15 +9,15 @@ describe("ot-procedures-columns", () => {
   it("incluye VIN, placa, propietario/vendedor, comprador y gestor", () => {
     const keys = OT_PROCEDURES_COLUMNS.map((c) => c.key);
     expect(keys).toEqual(
-      expect.arrayContaining(["vin", "placa", "vendedor", "comprador", "gestor"]),
+      expect.arrayContaining(["vin", "placa", "vendedor", "comprador", "empresaGestor"]),
     );
     expect(OT_PROCEDURES_COLUMNS.find((c) => c.key === "vendedor")?.label).toBe(
-      "Propietario / vendedor",
+      "Vendedor",
     );
   });
 
   it("marca como ordenables las columnas pedidas", () => {
-    for (const key of ["vin", "placa", "vendedor", "comprador", "gestor"]) {
+    for (const key of ["vin", "placa", "vendedor", "comprador", "empresaGestor"]) {
       expect(OT_PROCEDURES_COLUMNS.find((c) => c.key === key)?.sortable).toBe(true);
     }
   });

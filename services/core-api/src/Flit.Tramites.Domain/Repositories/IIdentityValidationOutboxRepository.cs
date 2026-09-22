@@ -1,3 +1,4 @@
+using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Domain.Entities;
 
 namespace Flit.Tramites.Domain.Repositories;
@@ -34,7 +35,9 @@ public sealed record StuckIdentityValidationRow(
     string? Name,
     string? DocumentType,
     string? DocumentNumber,
-    string Kind);
+    string Kind,
+    // HU #12706 — compañía dueña de la fila, para la columna Compañía del SuperAdmin sin acotar.
+    Guid TenantId = default);
 
 /// <summary>
 /// Acceso de solo lectura + reencolado para observabilidad operativa de validación de identidad
@@ -53,6 +56,14 @@ public interface IIdentityValidationOutboxRepository
     /// </summary>
     Task<IReadOnlyList<StuckIdentityValidationRow>> ListStuckAsync(
         Guid tenantId, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12706 — mismas filas atascadas que <see cref="ListStuckAsync(Guid, int, CancellationToken)"/>
+    /// acotadas por <see cref="TenantScope"/>: todas las compañías solo con <c>TenantScope.All</c>
+    /// (SuperAdmin sin acotar); la firma por <see cref="Guid"/> equivale a <c>TenantScope.Single</c>.
+    /// </summary>
+    Task<IReadOnlyList<StuckIdentityValidationRow>> ListStuckAsync(
+        TenantScope scope, int limit, CancellationToken ct = default);
 
     /// <summary>
     /// Reencola ("desatasca") UNA validación atascada del tenant por id, sea de la cola de envío o de la

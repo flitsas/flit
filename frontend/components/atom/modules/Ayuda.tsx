@@ -3,8 +3,9 @@ import { LifeBuoy, MessageCircle, BookOpen, Mail, Scale } from "lucide-react";
 import { DR_FLIT_SUPPORT_EMAIL } from "@/components/dr-flit/dr-flit-intents";
 import { NORMATIVA_RESOLUCION_SLUG } from "@/lib/manual/articles/normativa";
 import { ModuleTitle } from "./ModuleTitle";
+import { COPY } from "@/lib/copy/copy-catalog";
 
-const FAQ = [
+export const AYUDA_FAQ = [
   {
     q: "¿Cómo inicio un nuevo trámite?",
     a: "Ve a Trámites, elige el tipo disponible para tu compañía y sigue el asistente. Detalle en el Centro de Ayuda.",
@@ -19,7 +20,7 @@ const FAQ = [
   },
   {
     q: "¿El manual es para administradores?",
-    a: "Cubre Gestor, Organismo de Tránsito y las consolas de administración según tu perfil. DR. FLIT solo te sugiere artículos que aplican a tu rol.",
+    a: `Cubre ${COPY.A06}, ${COPY.A05} y las consolas de administración según tu perfil. DR. FLIT solo te sugiere artículos que aplican a tu rol.`,
   },
 ];
 
@@ -81,7 +82,7 @@ export function Ayuda() {
           </Link>
         </div>
         <div className="space-y-3">
-          {FAQ.map((f) => (
+          {AYUDA_FAQ.map((f) => (
             <details key={f.q} className="p-3 rounded-xl border">
               <summary className="text-xs font-semibold cursor-pointer">{f.q}</summary>
               <p className="text-xs opacity-70 mt-2">{f.a}</p>

@@ -46,7 +46,7 @@ const PROCEDURE: OtClientProcedure = {
 
 const ACORDEONES = [
   "Detalles del trámite y vehículo",
-  "Actores del Trámite",
+      "Actores del trámite",
   "Documentos del Trámite",
 ];
 
@@ -159,12 +159,12 @@ describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => 
 
     // La ficha se reparte en tandas de cuatro columnas; basta con que exista.
     expect(
-      (await screen.findAllByRole("table", { name: /^Especificaciones del vehículo/ })).length,
+      (await screen.findAllByRole("table", { name: /^Especificaciones técnicas/ })).length,
     ).toBeGreaterThan(0);
     expect(screen.getByText("1600 cc")).toBeInTheDocument();
     expect(screen.getByText("MOT-1")).toBeInTheDocument();
     // Sin número de chasis capturado, la fila no se pinta (no se inventa ni se rellena con otra).
-    expect(screen.queryByText("N. Chasis")).not.toBeInTheDocument();
+    expect(screen.queryByText("Nº Chasis")).not.toBeInTheDocument();
   });
 
   it("cierra con el control de cierre y con Escape", async () => {

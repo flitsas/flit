@@ -11,6 +11,7 @@ import {
 } from "./OtDetalleTransformaciones";
 import { soatEstadoLabel } from "./ot-detalle-pendientes";
 import { formatOtDate } from "../ot-utils";
+import { COPY } from "@/lib/copy/copy-catalog";
 
 /**
  * Catálogo cerrado de decisiones de prenda, el mismo que captura el gestor.
@@ -55,8 +56,8 @@ function camposVehiculo(
 
   return [
     // Primera banda del prototipo, tal cual.
-    { campo: "VIN", valor: procedure.vin },
-    { campo: "Placa", valor: procedure.placa },
+    { campo: COPY.A02Vin, valor: procedure.vin },
+    { campo: COPY.A02Placa, valor: procedure.placa },
     { campo: "Marca", valor: procedure.marca },
     { campo: "Línea", valor: procedure.linea },
     // Segunda banda: el prototipo pone «Peso», que no existe en el contrato del OT; su hueco lo
@@ -80,13 +81,13 @@ function camposVehiculo(
             ? cilindraje
             : `${cilindraje} cc`,
     },
-    { campo: "Capacidad", valor: procedure.capacidad },
+    { campo: COPY.A10, valor: procedure.capacidad },
     { campo: "Ejes", valor: procedure.ejes },
     { campo: "Estado", valor: procedure.estadoVehiculo },
     { campo: "SOAT RUNT", valor: soatEstadoLabel(procedure.soatEstado) },
-    { campo: "N. Motor", valor: procedure.numeroMotor },
-    { campo: "N. Chasis", valor: procedure.numeroChasis },
-    { campo: "N. Serie", valor: procedure.numeroSerie },
+    { campo: COPY.A09Motor, valor: procedure.numeroMotor },
+    { campo: COPY.A09Chasis, valor: procedure.numeroChasis },
+    { campo: COPY.A09Serie, valor: procedure.numeroSerie },
   ]
     .map((s) => ({ campo: s.campo, valor: s.valor?.trim() ?? "" }))
     // El guion no es un valor: un campo sin dato se va, no se pinta vacío.
@@ -167,14 +168,14 @@ export function OtDetalleTramiteVehiculo({
   const transformaciones = transformacionesDelTramite(procedure);
   const transformados = new Set(transformaciones.map((t) => t.tipo));
   const celdaPlaca: { campo: string; valor: ReactNode } = {
-    campo: "Placa",
+    campo: COPY.A02Placa,
     valor: <CeldaPlaca procedure={procedure} onAssignPlate={onAssignPlate} />,
   };
 
   // «Placa» NUNCA se filtra por estar vacía: sin placa es cuando más falta hace la celda, porque
   // es la que lleva la preasignación. Por eso se inserta aquí y no se deja pasar por el filtro.
   const campos: { campo: string; valor: ReactNode }[] = camposVehiculo(procedure, transformados)
-    .filter((c) => c.campo !== "Placa")
+    .filter((c) => c.campo !== COPY.A02Placa)
     .map((c) => ({ campo: c.campo, valor: c.valor as ReactNode }));
   const camposConPlaca = [...campos.slice(0, 1), celdaPlaca, ...campos.slice(1)];
 
@@ -183,8 +184,8 @@ export function OtDetalleTramiteVehiculo({
       <OtRejilla
         etiqueta="Datos del trámite"
         columnas={[
-          "Radicado",
-          "Fecha radicación",
+          COPY.B15,
+          COPY.A04,
           "Empresa / Gestor",
           "Tipo trámite solicitado",
           "Transformaciones solicitadas",
@@ -211,7 +212,7 @@ export function OtDetalleTramiteVehiculo({
       {campos.length === 0 ? (
         <OtVacio mensaje="Este trámite no tiene especificaciones técnicas del vehículo registradas todavía." />
       ) : null}
-      <OtFichaCampos etiqueta="Especificaciones del vehículo" campos={camposConPlaca} />
+      <OtFichaCampos etiqueta={COPY.A08} campos={camposConPlaca} />
 
       <OtDetalleTransformaciones procedure={procedure} />
     </div>

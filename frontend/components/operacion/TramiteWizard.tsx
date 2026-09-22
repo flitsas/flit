@@ -88,6 +88,7 @@ import {
   type VehicleStateBlockInfo,
 } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
+import { COPY } from '@/lib/copy/copy-catalog';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import {
   isTenantOwnDocument,
@@ -2375,24 +2376,24 @@ const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
  * nombra el dato— y sí compiten con el valor, que es lo único que el gestor viene a leer.
  */
 const VEHICLE_DETAILS: { key: string; label: string }[] = [
-  { key: 'vin', label: 'VIN' },
+  { key: 'vin', label: COPY.A02Vin },
   { key: 'vehicle_color', label: 'Color' },
   { key: 'vehicle_class', label: 'Clase' },
   { key: 'vehicle_service', label: 'Servicio' },
   { key: 'vehicle_fuel', label: 'Combustible' },
   { key: 'vehicle_engine_displacement', label: 'Cilindraje' },
   { key: 'vehicle_body_type', label: 'Carrocería' },
-  { key: 'vehicle_engine_number', label: 'Nº Motor' },
-  { key: 'vehicle_chassis', label: 'Nº Chasis' },
-  { key: 'vehicle_series', label: 'Nº Serie' },
-  { key: 'vehicle_passengers', label: 'Pasajeros' },
+  { key: 'vehicle_engine_number', label: COPY.A09Motor },
+  { key: 'vehicle_chassis', label: COPY.A09Chasis },
+  { key: 'vehicle_series', label: COPY.A09Serie },
+  { key: 'vehicle_passengers', label: COPY.A10 },
   { key: 'vehicle_axles', label: 'Ejes' },
   { key: 'vehicle_height', label: 'Alto' },
   { key: 'vehicle_width', label: 'Ancho' },
   { key: 'vehicle_length', label: 'Largo' },
   { key: 'vehicle_tires', label: 'Llantas' },
   { key: 'vehicle_registration_date', label: 'Fecha matrícula' },
-  { key: 'transit_office_name', label: 'Organismo de tránsito' },
+  { key: 'transit_office_name', label: COPY.A05 },
 ];
 
 /**
@@ -2401,25 +2402,25 @@ const VEHICLE_DETAILS: { key: string; label: string }[] = [
  */
 const VEHICLE_GRID_PDF: { key: string; label: string }[][] = [
   [
-    { key: 'vin', label: 'VIN' },
+    { key: 'vin', label: COPY.A02Vin },
     { key: 'vehicle_service', label: 'Servicio' },
-    { key: 'vehicle_chassis', label: 'Nº Chasis' },
+    { key: 'vehicle_chassis', label: COPY.A09Chasis },
   ],
   [
     { key: 'vehicle_color', label: 'Color' },
     { key: 'vehicle_fuel', label: 'Combustible' },
-    { key: 'vehicle_series', label: 'Nº Serie' },
+    { key: 'vehicle_series', label: COPY.A09Serie },
   ],
   [
     { key: 'vehicle_class', label: 'Clase' },
     { key: 'vehicle_engine_displacement', label: 'Cilindraje' },
-    { key: 'vehicle_passengers', label: 'Pasajeros' },
+    { key: 'vehicle_passengers', label: COPY.A10 },
     { key: 'vehicle_axles', label: 'Ejes' },
   ],
   [
     { key: 'vehicle_body_type', label: 'Carrocería' },
-    { key: 'vehicle_engine_number', label: 'Nº Motor' },
-    { key: 'transit_office_name', label: 'Organismo de Tránsito' },
+    { key: 'vehicle_engine_number', label: COPY.A09Motor },
+    { key: 'transit_office_name', label: COPY.A05 },
     { key: 'vehicle_height', label: 'Alto' },
     { key: 'vehicle_length', label: 'Largo' },
     { key: 'vehicle_width', label: 'Ancho' },

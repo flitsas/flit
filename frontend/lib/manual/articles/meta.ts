@@ -1,11 +1,13 @@
 import type { ManualNavSection } from "../types";
+import { COPY } from "@/lib/copy/copy-catalog";
 
 export const MANUAL_NAV_SECTIONS: readonly ManualNavSection[] = [
   { id: "introduccion", label: "Introducción", order: 0 },
   // Fuente principal de la plataforma: va antes que los perfiles para que se vea de entrada.
   { id: "normativa", label: "Normativa", order: 1 },
-  { id: "gestor", label: "Gestor", order: 2 },
-  { id: "ot", label: "Organismo de Tránsito", order: 3 },
+  // HU #12702 — los nombres de perfil salen del glosario canónico, no se escriben a mano.
+  { id: "gestor", label: COPY.A06, order: 2 },
+  { id: "ot", label: COPY.A05, order: 3 },
   { id: "admin-company", label: "Administración de compañía", order: 4 },
   { id: "superadmin", label: "Super Admin", order: 5 },
 ] as const;

@@ -9,8 +9,11 @@ export function DrFlitAssistant({
   displayName,
   routeScope,
   historialPlacaEnabled,
+  canSearchValidaciones,
 }: {
   displayName?: string | null;
+  /** HU #12711 — `true` si el usuario ve el módulo de Validación de Identidad en el menú. */
+  canSearchValidaciones?: boolean;
   /** Identificador de módulo/ruta; al cambiar se cierra el panel (sin limpiar chat). */
   routeScope?: string;
   /** HU-C — el usuario tiene el módulo «Historial por placa» (por defecto sí). */
@@ -43,6 +46,7 @@ export function DrFlitAssistant({
         onBackToSearch={chat.backToSearch}
         onSend={chat.sendText}
         onNavigate={chat.navigate}
+        canSearchValidaciones={canSearchValidaciones}
         panelRef={chat.panelRef}
         closeButtonRef={chat.closeButtonRef}
         inputRef={chat.inputRef}
