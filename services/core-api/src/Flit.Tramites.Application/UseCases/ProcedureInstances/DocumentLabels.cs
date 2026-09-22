@@ -19,6 +19,12 @@ public static class DocumentLabels
         // comprador") y el pie del consolidado no dejaba claro de qué parte era cada una.
         ["escritura"] = "Escrituras del vendedor",
         ["escritura_comprador"] = "Escrituras del comprador",
+        // HU #12774 — sin curar caerían a la humanización genérica ("Camara comercio vendedor"), que
+        // pierde la tilde y no se lee como el nombre del documento. El rol va entre paréntesis, igual
+        // que en `certificado_identidad_vendedor`, para que el expediente diga de qué parte es cada uno.
+        [CamaraComercioAttachmentTipo.Vendedor] = "Cámara de Comercio (vendedor)",
+        [CamaraComercioAttachmentTipo.Comprador] = "Cámara de Comercio (comprador)",
+        [CamaraComercioAttachmentTipo.Locatario] = "Cámara de Comercio (locatario)",
         ["certificado_rues"] = "Certificado RUES",
         ["certificado_rnmc"] = "Certificado RNMC",
         ["soat"] = "SOAT",
