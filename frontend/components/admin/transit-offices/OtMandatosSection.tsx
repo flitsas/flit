@@ -158,23 +158,6 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
         render: (row) => signerCell(row.defaultMandateSignerName),
       },
       {
-        key: "docType",
-        header: "Tipo doc.",
-        render: (row) => dash(row.defaultMandateSignerDocumentType),
-      },
-      {
-        key: "docNumber",
-        header: "N.º documento",
-        cellClassName: "font-mono",
-        render: (row) => dash(row.defaultMandateSignerDocumentNumber),
-      },
-      {
-        key: "hash",
-        header: "Hash",
-        cellClassName: "font-mono",
-        render: (row) => hashCell(row.defaultMandateSignerIntegrityHash),
-      },
-      {
         key: "actions",
         header: "Acción",
         align: "right",
@@ -238,23 +221,6 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
       render: (row) => (
         <span data-testid="ot-mandatos-general-signer">{signerCell(row.signerName)}</span>
       ),
-    },
-    {
-      key: "docType",
-      header: "Tipo doc.",
-      render: (row) => dash(row.docType),
-    },
-    {
-      key: "docNumber",
-      header: "N.º documento",
-      cellClassName: "font-mono",
-      render: (row) => dash(row.docNumber),
-    },
-    {
-      key: "hash",
-      header: "Hash",
-      cellClassName: "font-mono",
-      render: (row) => hashCell(row.hash),
     },
     {
       key: "actions",
@@ -334,7 +300,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
           rows={[generalRow]}
           getRowKey={(row) => row.id}
           ariaLabel="Mandatario general del organismo"
-          minWidth={980}
+          minWidth={720}
         />
       </div>
 
@@ -361,7 +327,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
             rows={pageRows}
             getRowKey={(row) => row.companyTenantId}
             ariaLabel="Empresas que radican en este organismo"
-            minWidth={980}
+            minWidth={720}
             emptyMessage={
               companies.length === 0
                 ? "No hay empresas con este organismo habilitado. Habilita el OT en la ficha de la compañía para que aparezca aquí y puedas registrar su mandato."
@@ -465,20 +431,6 @@ function signerCell(name: string | null | undefined) {
     return <span className="text-[#59677D] dark:text-white/55">Sin definir</span>;
   }
   return text;
-}
-
-function hashCell(hash: string | null | undefined) {
-  if (!hash?.trim()) return "—";
-  return (
-    <span title={hash} className="inline-block max-w-[9rem] truncate">
-      {shortIntegrityHash(hash)}
-    </span>
-  );
-}
-
-function shortIntegrityHash(hash: string): string {
-  if (hash.length <= 12) return hash;
-  return `${hash.slice(0, 8)}…${hash.slice(-4)}`;
 }
 
 type GeneralMandatarioRow = {

@@ -13,6 +13,7 @@ import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCapti
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
 import { WizardCardHeader } from './wizard-atoms';
+import { WizardAccordion } from './WizardAccordion';
 import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import type {
   ChecklistItemView,
@@ -145,6 +146,9 @@ export async function openAttachmentInNewTab(
   }
 }
 
+const CONSOLIDADO_SUBTITLE =
+  'Un solo PDF con el FUR, el certificado de identidad, la impronta y los documentos cargados en el trámite. Al generarlo se producen también los documentos que falten.';
+
 export default function ExpedienteVisor({
   instanceId,
   attachments,
@@ -154,17 +158,30 @@ export default function ExpedienteVisor({
   onBeforeGenerateConsolidado,
   onAttachmentsChange,
 }: Props) {
+  const subtitle =
+    modalidad === 'traspaso'
+      ? `${CONSOLIDADO_SUBTITLE.slice(0, -1)} (incluye el contrato de compraventa).`
+      : CONSOLIDADO_SUBTITLE;
+
   return (
     <section aria-label="Expediente digital" className="space-y-3">
       <DocumentosCargadosCard instanceId={instanceId} attachments={attachments} checklist={checklist} />
-      <ExpedienteConsolidadoCard
-        instanceId={instanceId}
-        attachments={attachments}
-        modalidad={modalidad}
-        status={status}
-        onBeforeGenerateConsolidado={onBeforeGenerateConsolidado}
-        onAttachmentsChange={onAttachmentsChange}
-      />
+      <WizardAccordion
+        title="Expediente consolidado"
+        subtitle={subtitle}
+        defaultOpen
+        level="h3"
+        regionLabel="Expediente consolidado del trámite"
+      >
+        <ExpedienteConsolidadoBody
+          instanceId={instanceId}
+          attachments={attachments}
+          modalidad={modalidad}
+          status={status}
+          onBeforeGenerateConsolidado={onBeforeGenerateConsolidado}
+          onAttachmentsChange={onAttachmentsChange}
+        />
+      </WizardAccordion>
     </section>
   );
 }
@@ -252,7 +269,7 @@ function DocumentosCargadosCard({
  * «Expediente consolidado»: tarjeta propia, separada de los documentos. Genera y abre el PDF;
  * no pide confirmaciones al gestor ni bloquea la radicación.
  */
-function ExpedienteConsolidadoCard({
+function ExpedienteConsolidadoBody({
   instanceId,
   attachments,
   modalidad,
@@ -382,10 +399,7 @@ function ExpedienteConsolidadoCard({
   };
 
   return (
-    <VisorCard
-      title="Expediente consolidado"
-      subtitle={`Un solo PDF con el FUR, el certificado de identidad, la impronta y los documentos cargados en el trámite${modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}. Al generarlo se producen también los documentos que falten.`}
-    >
+    <>
       {error && (
         <div
           className="mb-3 rounded-xl border p-3 text-xs"
@@ -433,7 +447,7 @@ function ExpedienteConsolidadoCard({
           </button>
         ) : null}
       </div>
-    </VisorCard>
+    </>
   );
 }
 

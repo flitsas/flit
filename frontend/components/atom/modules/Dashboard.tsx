@@ -20,7 +20,6 @@ import {
   FileText,
   CheckCircle,
   Car,
-  Layers,
 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -43,8 +42,8 @@ import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelecto
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
 import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
+import { DateRangePicker } from "@/components/atom/DateRangePicker";
 import { CompanySelector } from "./_reportes/CompanySelector";
-import { DateRangeFilter } from "./_reportes/DateRangeFilter";
 import { isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
 import { ApiError } from "@/lib/api/types";
 import type {
@@ -446,7 +445,6 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   }, [slides.length]);
   const matriculas = categories.find((c) => c.category === "matriculas")?.total ?? 0;
   const traspasos = categories.find((c) => c.category === "traspasos")?.total ?? 0;
-  const otros = categories.find((c) => c.category === "otros")?.total ?? 0;
   const completados = countCompleted(categories);
 
   // Distribución consolidada por estado de TODAS las categorías (no solo traspasos).
@@ -504,12 +502,12 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
-      {/* Fila superior: Banner + KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0">
+      {/* Fila superior: Banner + KPIs — la columna derecha fija el alto; el banner se estira (HU #12725 B.1). */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0 items-stretch">
         {/* Banner carousel */}
         <div
-          className="relative md:col-span-2 rounded-2xl text-white overflow-hidden flex flex-col justify-between"
-          style={{ minHeight: "220px" }}
+          className="relative md:col-span-2 rounded-2xl text-white overflow-hidden flex flex-col justify-between h-full min-h-[var(--dashboard-hero-h)]"
+          data-testid="dashboard-hero-banner"
         >
           {/* Capa de fondo: gradiente de marca fijo en el slide de bienvenida; en un banner, el
               color PROMEDIO de esa misma imagen (así combina con cualquier banner, no solo con
@@ -544,15 +542,15 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-15 bg-white" />
           )}
           {s.type === "welcome" ? (
-            <div className="relative flex flex-col gap-3 max-w-[85%] px-6 pt-5">
-              <div className="flex items-center gap-3">
+            <div className="relative flex flex-col gap-2 max-w-[85%] px-6 pt-5 overflow-hidden">
+              <div className="flex items-center gap-3 min-w-0">
                 <div
                   className="h-10 w-10 rounded-xl grid place-items-center shrink-0"
                   style={{ background: "rgba(255,255,255,0.18)" }}
                 >
                   <Activity className="h-5 w-5" />
                 </div>
-                <h2 className="text-2xl md:text-3xl font-bold leading-tight">{s.title}</h2>
+                <h2 className="text-2xl md:text-3xl font-bold leading-tight line-clamp-2 min-w-0">{s.title}</h2>
               </div>
               <p className="text-sm md:text-base opacity-95 leading-snug line-clamp-3">{s.body}</p>
             </div>
@@ -619,14 +617,18 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           </div>
         </div>
 
-        {/* KPIs 2×2 (con filtro de fechas y selector de compañía para SuperAdmin encima) */}
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2">
-            <DateRangeFilter
+        {/* Columna derecha: filtros en fila + KPIs 2×2 (HU #12725 B.1 / D3). */}
+        <div
+          className="flex flex-col gap-3 min-h-[var(--dashboard-hero-h)]"
+          data-testid="dashboard-hero-column"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end" data-testid="dashboard-filter-row">
+            <DateRangePicker
               value={range}
               onChange={setRange}
               disabled={status === "loading"}
-              permiteSinRango
+              label="Rango de fechas"
+              className="min-w-0"
             />
             {isSuper && (
               <CompanySelector
@@ -635,29 +637,30 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 onChange={setTenantId}
                 disabled={status === "loading"}
                 defaultLabel="Todas las compañías"
-              />
-            )}
-            {/* HU #12364 — solo para una cabeza de red (AC4: nadie más lo ve). */}
-            {net.isGroupParent && (
-              <NetworkScopeSelector
-                scope={net.scope}
-                onChange={net.setScope}
-                hijos={net.children}
-                childrenStatus={net.childrenStatus}
-                disabled={net.saving}
-                testId="dashboard-network-scope-select"
+                id="dashboard-compania"
+                className="min-w-0"
               />
             )}
           </div>
+          {/* HU #12364 — solo para una cabeza de red (AC4: nadie más lo ve). */}
+          {net.isGroupParent && (
+            <NetworkScopeSelector
+              scope={net.scope}
+              onChange={net.setScope}
+              hijos={net.children}
+              childrenStatus={net.childrenStatus}
+              disabled={net.saving}
+              testId="dashboard-network-scope-select"
+            />
+          )}
           {/* KPIs de Trámites — solo visibles si el módulo está habilitado para el tenant
               (AC1: `true` por defecto mientras carga, evita ocultar la sección con parpadeo). */}
           {tramitesModuleEnabled !== false && (
-            <div className="grid grid-cols-3 gap-3 flex-1">
+            <div className="grid grid-cols-2 gap-3 flex-1" data-testid="dashboard-kpi-grid">
               {[
                 { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, icon: FileText, color: "#557EFF" },
                 { label: "Matrículas", value: matriculas, icon: Car, color: "#00DBD5" },
                 { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00" },
-                { label: "Otros Trámites", value: otros, icon: Layers, color: "#162744" },
                 { label: "Completados", value: completados, icon: CheckCircle, color: "#8CC63F" },
               ].map((k) => {
                 const Icon = k.icon;

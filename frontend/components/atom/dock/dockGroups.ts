@@ -6,7 +6,6 @@ import {
   Users,
   Lock,
   Radar,
-  HelpCircle,
   FolderCog,
   Tag,
 } from "lucide-react";
@@ -33,10 +32,23 @@ export const DOCK_GROUP_ORDER = [
   "administracion",
   "administradores",
   "integraciones",
-  "ayuda",
 ] as const;
 
 export type DockGroupId = (typeof DOCK_GROUP_ORDER)[number];
+
+export type DockGroupSide = "left" | "right";
+
+/** Reparto izquierda/derecha del FAB — declarado, no por mitades (HU #12723). */
+export const DOCK_GROUP_SIDE: Record<DockGroupId, DockGroupSide> = {
+  tramites: "left",
+  preasignacion: "left",
+  identidad: "left",
+  reportes: "left",
+  usuarios: "right",
+  administracion: "right",
+  administradores: "right",
+  integraciones: "right",
+};
 
 export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
   tramites: COPY.B21Tramites,
@@ -47,7 +59,6 @@ export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
   administracion: "Administración",
   administradores: "Administradores",
   integraciones: "Integraciones",
-  ayuda: COPY.B21Ayuda,
 };
 
 /** Labels de las píldoras SPA (HU #12699 / A17 + B21). El id de Identidad sigue siendo `validaciones`. */
@@ -81,7 +92,6 @@ export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
   administracion: FolderCog,
   administradores: Lock,
   integraciones: Radar,
-  ayuda: HelpCircle,
 };
 
 /** Mapeo entrada del dock → agrupador (por key estable). */
@@ -123,7 +133,6 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   "log-qx": "integraciones",
   // ICT anida Log ICT y Reportes ICT; solo el padre necesita grupo (mismo patrón que Tránsito).
   ict: "integraciones",
-  ayuda: "ayuda",
 };
 
 export type DockEntryLike = {

@@ -106,7 +106,13 @@ import {
   TramiteDocumentosModal,
   useAttachmentPreview,
 } from './TramiteDocumentosModal';
-import { TramiteDetalleModal } from './TramiteDetalleModal';
+import {
+  TramiteDetalleModal,
+  type TramiteDetalleInitialPanel,
+} from './TramiteDetalleModal';
+
+/** HU #12726 (C.2) — opciones al abrir el modal de detalle desde la fila. */
+export type OpenDetalleOptions = { panel?: TramiteDetalleInitialPanel };
 import { TramiteTrackingModal } from './TramiteTrackingModal';
 import { useAdminTramiteAcciones } from './AdminTramiteAcciones';
 import type {
@@ -483,6 +489,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   // Frente C, etapa 1 — modal de detalle para trámites YA RADICADOS (estado ≠ 'borrador'). El
   // borrador sigue navegando al asistente; ver `TramiteRow.handleOpen`.
   const [detalleTramite, setDetalleTramite] = useState<InstanceSummary | null>(null);
+  const [detalleInitialPanel, setDetalleInitialPanel] =
+    useState<TramiteDetalleInitialPanel | null>(null);
+  const abrirDetalle = useCallback((item: InstanceSummary, opts?: OpenDetalleOptions) => {
+    setDetalleTramite(item);
+    setDetalleInitialPanel(opts?.panel ?? null);
+  }, []);
   /** HU #12362 — el detalle abierto es de un cliente hijo: solo consulta. */
   const detalleConsulta = isNetworkReadOnly(detalleTramite, currentTenantId);
   /**
@@ -747,6 +759,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       setItems(page1.items);
       setTotal(page1.total);
       setEstadoCounts(counts);
+      // HU #12726 (C.4) — si el detalle está abierto, sincronizar la fila con el listado recién pedido.
+      setDetalleTramite((prev) => {
+        if (!prev) return null;
+        return page1.items.find((i) => i.id === prev.id) ?? prev;
+      });
 
       // Red de seguridad: si el universo encogió por debajo de la página en la que estaba el gestor
       // —al volver del asistente, o porque otro usuario cerró trámites— la respuesta llega vacía y
@@ -1446,7 +1463,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           onOpen={abrirAsistente}
           onVerDocumentos={setDocsTramite}
           onVerConsolidado={setConsolidadoTramite}
-          onOpenDetalle={setDetalleTramite}
+          onOpenDetalle={abrirDetalle}
           onOpenTrackingTramite={setTrackingTramite}
           onOpenIdentidadTracking={setIdentidadTracking}
           puedeVerHistorialPlaca={puedeVerHistorialPlaca}
@@ -1480,10 +1497,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       {/* Frente C, etapa 1 — modal de detalle para trámites ya radicados (estado ≠ 'borrador'). */}
       <TramiteDetalleModal
         open={detalleTramite !== null}
-        onClose={() => setDetalleTramite(null)}
+        onClose={() => {
+          setDetalleTramite(null);
+          setDetalleInitialPanel(null);
+        }}
         instanceId={detalleTramite?.id ?? null}
         tenantId={isAdmin ? detalleTramite?.tenantId : undefined}
         item={detalleTramite}
+        initialPanel={detalleInitialPanel}
         // HU #12362 — trámite de un cliente hijo: solo lectura y sin gestión de documentos.
         readOnly={detalleConsulta}
         consultaMode={detalleConsulta}
@@ -1840,7 +1861,7 @@ function TableBody({
   onVerDocumentos: (item: InstanceSummary) => void;
   onVerConsolidado: (item: InstanceSummary) => void;
   /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
-  onOpenDetalle: (item: InstanceSummary) => void;
+  onOpenDetalle: (item: InstanceSummary, opts?: OpenDetalleOptions) => void;
   /** Click en badge Estado → modal de línea de tiempo del trámite. */
   onOpenTrackingTramite: (item: InstanceSummary) => void;
   onOpenIdentidadTracking: (target: {
@@ -2201,7 +2222,7 @@ function TramiteRow({
   onVerDocumentos: (item: InstanceSummary) => void;
   onVerConsolidado: (item: InstanceSummary) => void;
   /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
-  onOpenDetalle: (item: InstanceSummary) => void;
+  onOpenDetalle: (item: InstanceSummary, opts?: OpenDetalleOptions) => void;
   onOpenTrackingTramite: (item: InstanceSummary) => void;
   onOpenIdentidadTracking: (target: {
     item: InstanceSummary;
@@ -2616,10 +2637,10 @@ function TramiteRow({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onOpenTrackingTramite(item);
+              onOpenDetalle(item, { panel: 'timeline' });
             }}
-            aria-label={`Ver trazabilidad del trámite ${item.referenceNumber}`}
-            title="Ver línea de tiempo del trámite"
+            aria-label={`Ver línea de tiempo de ${item.referenceNumber}`}
+            title={`Ver línea de tiempo de ${item.referenceNumber}`}
             className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
           >
             {ayudaIdentidad ? (
