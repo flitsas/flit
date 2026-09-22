@@ -24,7 +24,7 @@ public sealed class RegisterDomainHandler(ITenantDomainRepository repository, Do
             return RegisterDomainResult.Invalid(formatErrorCode!);
         }
 
-        if (ReservedHosts.IsReserved(normalizedHost, _options.Reserved))
+        if (ReservedHosts.IsReserved(normalizedHost, _options.Reserved, _options.Allowed))
         {
             return RegisterDomainResult.Invalid(DomainErrors.HostReserved);
         }
