@@ -298,9 +298,19 @@ internal static class ProcedureInstanceEndpoints
             // parece correcto.
             if (TramitesQueryConditions.Validate(body.Condiciones) is { } problema)
                 return Results.BadRequest(new { error = problema });
+            if (BusquedaRapida.Validate(body.BusquedaRapida) is { } atajoInvalido)
+                return Results.BadRequest(new { error = atajoInvalido });
 
-            var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId), ct);
-            return Results.Ok(new { items, total });
+            try
+            {
+                var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId), ct);
+                return Results.Ok(new { items, total });
+            }
+            catch (BusquedaRapidaDemasiadoAmpliaException ex)
+            {
+                // Epic #12686 — mejor pedir que acote que devolver un resultado truncado que parece completo.
+                return Results.UnprocessableEntity(new { error = ex.Message });
+            }
         })
             .WithName("SearchProcedureInstances")
             .WithSummary("Listado de trámites filtrado con la gramática de consultas")
@@ -320,8 +330,17 @@ internal static class ProcedureInstanceEndpoints
 
             if (TramitesQueryConditions.Validate(body.Condiciones) is { } problema)
                 return Results.BadRequest(new { error = problema });
+            if (BusquedaRapida.Validate(body.BusquedaRapida) is { } atajoInvalido)
+                return Results.BadRequest(new { error = atajoInvalido });
 
-            return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId), ct));
+            try
+            {
+                return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId), ct));
+            }
+            catch (BusquedaRapidaDemasiadoAmpliaException ex)
+            {
+                return Results.UnprocessableEntity(new { error = ex.Message });
+            }
         })
             .WithName("SearchProcedureInstanceEstadoCounts")
             .WithSummary("Conteo por estado del universo que cumple las condiciones")
@@ -1415,6 +1434,9 @@ internal record TramitesSearchRequest
     public DateTimeOffset? UpdatedFrom { get; init; }
     public DateTimeOffset? UpdatedTo { get; init; }
 
+    /// <summary>Epic #12686 — atajo de la búsqueda rápida (<see cref="BusquedaRapida"/>).</summary>
+    public string? BusquedaRapida { get; init; }
+
     public string? SortBy { get; init; }
     public string? SortDir { get; init; }
     public int? Skip { get; init; }
@@ -1422,6 +1444,7 @@ internal record TramitesSearchRequest
 
     public ProcedureInstanceListRequest ToRequest(Guid? tenantId) => new()
     {
+        BusquedaRapida = BusquedaRapida,
         TenantId = tenantId,
         Skip = Skip ?? 0,
         Take = Take ?? ListProcedureInstancesHandler.MaxItems,

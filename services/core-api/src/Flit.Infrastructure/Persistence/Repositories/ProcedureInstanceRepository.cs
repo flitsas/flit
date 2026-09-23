@@ -2392,6 +2392,24 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         if (filter.UpdatedTo is { } updatedTo)
             query = query.Where(x => x.UpdatedAt != null && x.UpdatedAt <= updatedTo);
 
+        // Epic #12686 — atajo evaluado en memoria (sin firmas / sin documento / pausados).
+        if (filter.IdsIncluidos is { } idsIncluidos)
+        {
+            var ids = idsIncluidos.ToList();
+            query = query.Where(x => ids.Contains(x.Id));
+        }
+
+        // Epic #12686 — «más de N días en gestión»: la ÚLTIMA entrada a Entregado, porque un trámite
+        // rechazado y vuelto a radicar empieza a contar de nuevo. Sin historial, la radicación.
+        if (filter.EntregadoAntesDe is { } corte)
+        {
+            query = query.Where(x => x.Status == TramiteEstado.Entregado
+                && (x.StatusHistory
+                        .Where(h => h.ToStatus == TramiteEstado.Entregado)
+                        .Max(h => (DateTimeOffset?)h.ChangedAt)
+                    ?? x.SubmittedAt) < corte);
+        }
+
         return query;
     }
 
