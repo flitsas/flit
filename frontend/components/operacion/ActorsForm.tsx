@@ -2135,6 +2135,30 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     });
   }, [instanceId, actors]);
 
+  /**
+   * ¿Es una parte YA GUARDADA cuyo tipo y número de documento no cambiaron? Lo guardado salió de una
+   * consulta RUNT/RUES, así que no hay que volver a consultarla: ni para habilitar «Continuar» ni en
+   * la consulta automática al abrir el paso. Exigirla costaba una consulta paga cada vez que el gestor
+   * volvía al paso o reabría el borrador en otra pestaña (donde la consulta de la sesión no existe).
+   * Cambiar el tipo o el número del documento sí vuelve a exigirla.
+   */
+  const parteGuardadaSinCambios = (index: number): boolean => {
+    const actual = actors[index];
+    if (!actual?.numeroDocumento?.trim()) return false;
+    const guardado = (state.actors ?? []).find(
+      (p) => p.rol === actual.rol && (p.ordinal ?? 1) === (actual.ordinal ?? 1),
+    );
+    return (
+      !!guardado?.numeroDocumento?.trim() &&
+      samePersonDocument(
+        guardado.tipoDocumento || 'CC',
+        guardado.numeroDocumento,
+        actual.tipoDocumento || 'CC',
+        actual.numeroDocumento,
+      )
+    );
+  };
+
   // ── Paso del propietario: dispara la consulta en cuanto el documento está disponible (sembrado desde
   // el paso 1 o rehidratado del backend), sin clic manual. La razón social jurídica sale de RUES;
   // el directorio de RL aporta datos básicos de empresa y representante.
@@ -2166,6 +2190,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     }
     const lookupKey = `${propietarioTipo}:${documentNumber}`;
     if (autoLookupTriggeredRef.current === lookupKey) return;
+    // Propietario ya guardado con el mismo documento: no se vuelve a consultar al abrir el paso.
+    if (parteGuardadaSinCambios(propietarioIndex)) {
+      autoLookupTriggeredRef.current = lookupKey;
+      return;
+    }
     autoLookupTriggeredRef.current = lookupKey;
     void handleIdentityLookup(propietarioIndex);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleIdentityLookup lee actors actuales
@@ -2261,6 +2290,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     }
   };
 
+  /** ¿La parte ya está consultada? Consulta exitosa en esta sesión, o parte guardada sin cambios. */
+  const consultaLista = (index: number): boolean =>
+    isIdentityConsultationReady(runt[index]?.status) || parteGuardadaSinCambios(index);
+
   // Valida + guarda. Núcleo compartido por el submit propio y el save() del ref.
   const submitActors = async (): Promise<boolean> => {
     setShowErrors(true);
@@ -2278,7 +2311,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (
       actors.some(
         (_, i) =>
-          !isIdentityConsultationReady(runt[i]?.status) ||
+          !consultaLista(i) ||
           needsRlDirectoryApply(i) ||
           (needsRlRunt(i) && !isIdentityConsultationReady(rlRunt[i]?.status)),
       )
@@ -2316,7 +2349,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // línea base exige su consulta RUNT exitosa.
   const consultationReady = actors.every(
     (_, i) =>
-      isIdentityConsultationReady(runt[i]?.status) &&
+      consultaLista(i) &&
       !needsRlDirectoryApply(i) &&
       (!needsRlRunt(i) || isIdentityConsultationReady(rlRunt[i]?.status)),
   );
@@ -2332,7 +2365,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         .map((a, i) => ({ a, i }))
         .filter(
           ({ i }) =>
-            !isIdentityConsultationReady(runt[i]?.status) ||
+            !consultaLista(i) ||
             needsRlDirectoryApply(i) ||
             (needsRlRunt(i) && !isIdentityConsultationReady(rlRunt[i]?.status)),
         )

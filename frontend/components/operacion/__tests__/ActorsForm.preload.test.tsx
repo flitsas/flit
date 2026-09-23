@@ -334,7 +334,7 @@ describe('ActorsForm — la consulta RUES conserva el representante guardado del
     expect(screen.getByDisplayValue('pedro@valle.co')).toBeInTheDocument();
   });
 
-  it('el gate de consulta dice qué parte falta por consultar', async () => {
+  it('una parte guardada sin cambios en su documento no exige volver a consultar', async () => {
     mocks.getActors.mockResolvedValue([
       compradorGuardado({ numeroDocumento: '79123456', nombreCompleto: 'Carlos Ramírez Núñez', email: 'c@valle.co' }),
     ]);
@@ -343,6 +343,28 @@ describe('ActorsForm — la consulta RUES conserva el representante guardado del
     render(
       <ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" onConsultationGateChange={onGate} />,
     );
+
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith(true, []));
+    expect(mocks.ruesPersonLookup).not.toHaveBeenCalled();
+  });
+
+  it('cambiar el número de documento de una parte guardada sí exige consultarla, y el gate dice cuál', async () => {
+    mocks.getActors.mockResolvedValue([
+      compradorGuardado({ numeroDocumento: '79123456', nombreCompleto: 'Carlos Ramírez Núñez', email: 'c@valle.co' }),
+    ]);
+    const onGate = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" onConsultationGateChange={onGate} />,
+    );
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith(true, []));
+
+    const nit = (await screen.findAllByDisplayValue('900555666')).find(
+      (el) => el.id === 'comprador-numeroDoc',
+    )!;
+    await user.clear(nit);
+    await user.type(nit, '900777888');
 
     await waitFor(() => expect(onGate).toHaveBeenLastCalledWith(false, ['Comprador']));
   });
