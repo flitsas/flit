@@ -25,6 +25,8 @@ interface Props {
   /** Clave de almacenamiento del estado abierto/cerrado, distinta por pantalla. */
   storageKey: string;
   disabled?: boolean;
+  /** Fondo en modo oscuro: cada pantalla conserva el de su superficie. */
+  darkBgClassName?: string;
 }
 
 function leerAbierto(storageKey: string): boolean {
@@ -56,7 +58,14 @@ function suscribir(avisar: () => void) {
   };
 }
 
-export function BusquedaRapidaAcordeon({ items, selected, onSelect, storageKey, disabled = false }: Props) {
+export function BusquedaRapidaAcordeon({
+  items,
+  selected,
+  onSelect,
+  storageKey,
+  disabled = false,
+  darkBgClassName = 'dark:bg-[#162744]',
+}: Props) {
   // En el servidor siempre abierto; en el navegador, lo que el usuario dejó. Así el HTML del
   // servidor y el primer render del cliente coinciden y no hay desajuste de hidratación.
   const abierto = useSyncExternalStore(
@@ -69,7 +78,7 @@ export function BusquedaRapidaAcordeon({ items, selected, onSelect, storageKey, 
   const alternar = () => guardarAbierto(storageKey, !abierto);
 
   return (
-    <section className="rounded-2xl border border-[#DFE5ED] bg-white dark:border-white/10 dark:bg-[#162744]">
+    <section className={`rounded-2xl border border-[#DFE5ED] bg-white dark:border-white/10 ${darkBgClassName}`}>
       <h2 className="m-0">
         <button
           type="button"
