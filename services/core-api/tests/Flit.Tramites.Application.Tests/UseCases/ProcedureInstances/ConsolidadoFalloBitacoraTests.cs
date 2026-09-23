@@ -92,7 +92,8 @@ public sealed class ConsolidadoFalloBitacoraTests
         var payload = JsonDocument.Parse(_traza.Eventos.Single().Payload).RootElement;
         payload.GetProperty("error").GetString().Should().Be(ConsolidadoFalloBitacora.CausaExcepcion);
         payload.GetProperty("detalle").GetString().Should().Be(nameof(IOException));
-        payload.GetProperty("mensaje").GetString().Should().Be("disco lleno");
+        payload.TryGetProperty("mensaje", out _).Should().BeFalse("security B1: el mensaje de la excepción no se persiste");
+        _traza.Eventos.Single().Payload.Should().NotContain("disco lleno");
     }
 
     [Fact]
@@ -426,30 +427,26 @@ public sealed class ConsolidadoFalloBitacoraTests
             .And.NotContain(" at ", "nunca se persiste ex.ToString() con la traza de pila")
             .And.NotContain(instance.ReferenceNumber);
         JsonDocument.Parse(payload).RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
-            ["origen", "documento", "error", "detalle", "mensaje", "fallido_at", "tenant_id"]);
+            ["origen", "documento", "error", "detalle", "fallido_at", "tenant_id"]);
     }
 
-    [Theory]
-    [InlineData("ver https://bucket.s3.amazonaws.com/a.pdf?X-Amz-Signature=zz ahora", "ver [url] ahora")]
-    [InlineData("correo ana@dominio.co invalido", "correo [email] invalido")]
-    [InlineData("cedula 1023456789 duplicada", "cedula # duplicada")]
-    [InlineData("Key (placa)=(ABC123) already exists", "Key (***)=(***) already exists")]
-    [InlineData("nombre 'Ana Gómez' rechazado", "nombre '***' rechazado")]
-    [InlineData(@"ruta D:\datos\x.pdf y /var/lib/flit/y.pdf", "ruta [ruta] y [ruta]")]
-    [InlineData("linea1\r\nlinea2", "linea1 linea2")]
-    public void AC6_Sanear_QuitaDatosSensibles(string entrada, string esperado) =>
-        ConsolidadoFalloBitacora.Sanear(entrada).Should().Be(esperado);
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void AC6_Sanear_VacioDevuelveNull(string? entrada) =>
-        ConsolidadoFalloBitacora.Sanear(entrada).Should().BeNull();
-
     [Fact]
-    public void AC6_Sanear_AcotaLaLongitud() =>
-        ConsolidadoFalloBitacora.Sanear(new string('x', 500))!.Length.Should().Be(ConsolidadoFalloBitacora.MensajeMaximo);
+    public async Task AC6_Payload_SoloCodigoYTipoDeExcepcion_SinMensaje()
+    {
+        // security B1 (Épica #12760) — ni saneado: el mensaje de un proveedor o de la BD puede citar el dato.
+        var instance = Instancia(TramiteEstado.Entregado);
+        await _bitacora.RegistrarAsync(
+            instance.TenantId, instance.Id, ConsolidadoFalloBitacora.Origenes.RegeneracionAnticipada,
+            "consolidado_maestro", ConsolidadoFalloBitacora.CausaExcepcion,
+            new InvalidOperationException("placa ABC123 del titular 1023456789"), conAnterior: true, Ct);
+
+        var payload = _traza.Eventos.Single().Payload;
+        var root = JsonDocument.Parse(payload).RootElement;
+        root.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
+            ["origen", "documento", "error", "detalle", "fallido_at", "tenant_id"]);
+        root.GetProperty("detalle").GetString().Should().Be(nameof(InvalidOperationException));
+        payload.Should().NotContain("ABC123").And.NotContain("1023456789");
+    }
 
     // ── Infraestructura del test ────────────────────────────────────────────────────────────────
 

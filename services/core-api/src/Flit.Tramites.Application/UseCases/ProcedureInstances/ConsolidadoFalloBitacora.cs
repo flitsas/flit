@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Microsoft.Extensions.Logging;
@@ -22,8 +21,9 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <see cref="EntregarConsolidadoHandler"/> y <see cref="RegenerarConsolidadoAnticipadoHandler"/>, así que
 /// nunca llegan aquí.</para>
 ///
-/// <para><b>Sin datos sensibles (AC6).</b> El payload lleva código de causa, tipo de excepción y un
-/// mensaje saneado (<see cref="Sanear"/>); nunca <c>ex.ToString()</c>, trazas, URLs ni rutas.</para>
+/// <para><b>Sin datos sensibles (AC6).</b> El payload lleva solo el código de causa y el TIPO de la
+/// excepción; nunca su mensaje (el proveedor o la BD suelen citar ahí el dato), <c>ex.ToString()</c>,
+/// trazas, URLs ni rutas (security B1).</para>
 ///
 /// <para>Uso de ejemplo:
 /// <code>
@@ -42,9 +42,6 @@ public sealed partial class ConsolidadoFalloBitacora(
 
     /// <summary>Código de causa cuando el generador lanzó una excepción en vez de devolver un código.</summary>
     public const string CausaExcepcion = "excepcion";
-
-    /// <summary>Longitud máxima del mensaje saneado que se persiste.</summary>
-    public const int MensajeMaximo = 160;
 
     /// <summary>Desde qué flujo se intentó la regeneración (campo <c>origen</c> del payload).</summary>
     public static class Origenes
@@ -83,7 +80,23 @@ public sealed partial class ConsolidadoFalloBitacora(
     /// <paramref name="anterior"/> disponible (HU #12797: el reemplazo seguro lo deja intacto) devuelve ESE
     /// PDF con el aviso en <see cref="GenerarConsolidadoResult.AvisosCascada"/> en lugar del error (AC4);
     /// sin anterior, el error viaja como siempre (código de error o la excepción relanzada).
+    /// <para>HU #12797 (F4) — <paramref name="resolverTrasExcepcion"/>: si el generador lanzó y este
+    /// delegado devuelve un resultado (p. ej. un conflicto de concurrencia con la regeneración anticipada,
+    /// que ya dejó un PDF vigente), se entrega ESE resultado sin aviso ni bitácora: no hubo fallo de
+    /// regeneración, otro camino ganó la carrera. <c>null</c> ⇒ el tratamiento de fallo de siempre.</para>
     /// </summary>
+    public Task<ConsolidadoConRespaldo> GenerarConRespaldoAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string documento,
+        string origen,
+        ProcedureInstanceAttachment? anterior,
+        Func<CancellationToken, Task<(GenerarConsolidadoResult? Result, string? Error)>> generar,
+        CancellationToken ct = default) =>
+        GenerarConRespaldoAsync(
+            tenantId, procedureInstanceId, documento, origen, anterior, generar, resolverTrasExcepcion: null, ct);
+
+    /// <inheritdoc cref="GenerarConRespaldoAsync(Guid, Guid, string, string, ProcedureInstanceAttachment?, Func{CancellationToken, Task{ValueTuple{GenerarConsolidadoResult, string}}}, CancellationToken)"/>
     public async Task<ConsolidadoConRespaldo> GenerarConRespaldoAsync(
         Guid tenantId,
         Guid procedureInstanceId,
@@ -91,6 +104,7 @@ public sealed partial class ConsolidadoFalloBitacora(
         string origen,
         ProcedureInstanceAttachment? anterior,
         Func<CancellationToken, Task<(GenerarConsolidadoResult? Result, string? Error)>> generar,
+        Func<Exception, CancellationToken, Task<GenerarConsolidadoResult?>>? resolverTrasExcepcion,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(generar);
@@ -102,6 +116,12 @@ public sealed partial class ConsolidadoFalloBitacora(
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
+            if (resolverTrasExcepcion is not null
+                && await resolverTrasExcepcion(ex, ct).ConfigureAwait(false) is { } vigente)
+            {
+                return new ConsolidadoConRespaldo(vigente, null, SirvioAnterior: false);
+            }
+
             await RegistrarAsync(
                 tenantId, procedureInstanceId, origen, documento, CausaExcepcion, ex, anterior is not null, ct)
                 .ConfigureAwait(false);
@@ -159,8 +179,8 @@ public sealed partial class ConsolidadoFalloBitacora(
 
     /// <summary>
     /// Payload persistido: <c>origen</c>, <c>documento</c>, <c>error</c> (código de causa),
-    /// <c>detalle</c> (tipo de la excepción o null), <c>mensaje</c> (saneado o null),
-    /// <c>fallido_at</c> (UTC) y <c>tenant_id</c> — mismas claves que la traza del Bug #11613 más las nuevas.
+    /// <c>detalle</c> (tipo de la excepción o null), <c>fallido_at</c> (UTC) y <c>tenant_id</c> — mismas
+    /// claves que la traza del Bug #11613 más las nuevas. Sin <c>mensaje</c> (security B1: sin PII).
     /// </summary>
     internal static string Payload(
         string origen, string documento, string causa, Exception? excepcion, Guid tenantId, DateTimeOffset instante) =>
@@ -170,31 +190,9 @@ public sealed partial class ConsolidadoFalloBitacora(
             documento,
             error = causa,
             detalle = excepcion?.GetType().Name,
-            mensaje = Sanear(excepcion?.Message),
             fallido_at = instante,
             tenant_id = tenantId,
         });
-
-    /// <summary>
-    /// AC6 — mensaje de excepción apto para persistir: sin URLs (presignadas o con credenciales), correos,
-    /// rutas de disco, valores entre comillas o paréntesis (donde el proveedor/BD suele citar el dato) ni
-    /// secuencias numéricas de 4+ dígitos (documentos, teléfonos); una sola línea y acotado.
-    /// </summary>
-    public static string? Sanear(string? mensaje)
-    {
-        if (string.IsNullOrWhiteSpace(mensaje))
-            return null;
-
-        var s = UrlRegex().Replace(mensaje, "[url]");
-        s = EmailRegex().Replace(s, "[email]");
-        s = RutaWindowsRegex().Replace(s, "[ruta]");
-        s = RutaUnixRegex().Replace(s, "$1[ruta]");
-        s = ComillasRegex().Replace(s, "'***'");
-        s = ParentesisRegex().Replace(s, "(***)");
-        s = DigitosRegex().Replace(s, "#");
-        s = EspaciosRegex().Replace(s, " ").Trim();
-        return s.Length <= MensajeMaximo ? s : s[..MensajeMaximo];
-    }
 
     private static GenerarConsolidadoResult ServirAnterior(
         ProcedureInstanceAttachment anterior, string documento, string causa) =>
@@ -202,30 +200,6 @@ public sealed partial class ConsolidadoFalloBitacora(
             new ConsolidadoDocumentDto(anterior.Id, anterior.Tipo, anterior.Filename, anterior.Sha256),
             Regenerado: false,
             AvisosCascada: [Aviso(documento, causa)]);
-
-    [GeneratedRegex(@"[A-Za-z][A-Za-z0-9+.\-]*://\S+")]
-    private static partial Regex UrlRegex();
-
-    [GeneratedRegex(@"[^\s@'""()]+@[^\s@'""()]+\.[A-Za-z]{2,}")]
-    private static partial Regex EmailRegex();
-
-    [GeneratedRegex(@"[A-Za-z]:\\\S*")]
-    private static partial Regex RutaWindowsRegex();
-
-    [GeneratedRegex(@"(^|\s)/\S+")]
-    private static partial Regex RutaUnixRegex();
-
-    [GeneratedRegex(@"'[^']*'|""[^""]*""")]
-    private static partial Regex ComillasRegex();
-
-    [GeneratedRegex(@"\([^)]*\)")]
-    private static partial Regex ParentesisRegex();
-
-    [GeneratedRegex(@"\d{4,}")]
-    private static partial Regex DigitosRegex();
-
-    [GeneratedRegex(@"\s+")]
-    private static partial Regex EspaciosRegex();
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Regeneración del consolidado {Documento} fallida (instancia {InstanceId}, tenant {TenantId}, origen {Origen}): {Causa} [{TipoExcepcion}]. Se entrega el anterior: {ConAnterior}.")]
@@ -277,7 +251,10 @@ public sealed class GenerarConsolidadoConRespaldoHandler(
         var salida = await _bitacora
             .GenerarConRespaldoAsync(
                 tenantId, id, TipoAdjunto, ConsolidadoFalloBitacora.Origenes.GeneracionWizard, anterior,
-                c => generar.HandleAsync(id, tenantId, userId, force, c), ct)
+                c => generar.HandleAsync(id, tenantId, userId, force, c),
+                // HU #12797 (F4) — conflicto con la regeneración anticipada ⇒ el vigente real.
+                (ex, c) => ConsolidadoVigenteTrasConflicto.ResolverAsync(repo, ex, id, tenantId, TipoAdjunto, c),
+                ct)
             .ConfigureAwait(false);
 
         return (salida.Result, salida.Error);
