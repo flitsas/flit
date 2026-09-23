@@ -62,8 +62,12 @@ import {
   estadoDeContador,
   revocatoriaActivaDeContador,
   tarjetasDeFamilia,
+  ATAJOS_OT,
+  contadorDeAtajoOt,
+  type AtajoOt,
   type OtCounterKey,
 } from "./OtBandejaCounters";
+import { BusquedaRapidaAcordeon } from "@/components/operacion/BusquedaRapidaAcordeon";
 import { formatDocumentWithType } from "@/lib/display/document-number";
 import { ColumnSelector } from "@/components/atom/ColumnSelector";
 import { useUiPreferences } from "@/hooks/useUiPreferences";
@@ -425,6 +429,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [contadorActivo, setContadorActivo] = useState<OtCounterKey | "">("");
   /** Epic #12686 (HU #12804) — pestaña de familia; vacío = Todos. */
   const [familia, setFamilia] = useState<"" | ProcedureFamily>("");
+  /** Epic #12686 (HU #12807) — atajo de la búsqueda rápida; vacío = ninguno. */
+  const [atajoOt, setAtajoOt] = useState<"" | AtajoOt>("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -878,11 +884,23 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
    * no se toca: son dos formas de acotar que conviven, y la tarjeta manda sobre el estado porque es
    * la que el operador acaba de pulsar. ADR-0059: tarjeta = estado real.
    */
-  const handleContadorSelect = (key: OtCounterKey | "") => {
+  const aplicarContador = (key: OtCounterKey | "") => {
     setContadorActivo(key);
     setStatusFilter(key === "" ? ESTADO_POR_DEFECTO : estadoDeContador(key));
     setHasActiveRevocationRequestFilter(revocatoriaActivaDeContador(key) ?? false);
     setPage(1);
+  };
+
+  const handleContadorSelect = (key: OtCounterKey | "") => {
+    // Epic #12686 — tarjeta y atajo no se acumulan: elegir una tarjeta suelta el atajo.
+    setAtajoOt("");
+    aplicarContador(key);
+  };
+
+  /** Epic #12686 (HU #12807) — el atajo aplica su tarjeta; quitarlo vuelve a la bandeja por defecto. */
+  const handleAtajoOtSelect = (key: "" | AtajoOt) => {
+    setAtajoOt(key);
+    aplicarContador(contadorDeAtajoOt(key));
   };
 
   /**
@@ -898,6 +916,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       .split(",")
       .every((e) => e.trim() === "" || familiaUsaEstado(v, e.trim()));
     if (!tarjetaSigue || !estadoSigue) {
+      setAtajoOt("");
       setContadorActivo("");
       setHasActiveRevocationRequestFilter(false);
       setStatusFilter(ESTADO_POR_DEFECTO);
@@ -907,6 +926,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
   const clearFilters = useCallback(() => {
     setFamilia("");
+    setAtajoOt("");
     setContadorActivo("");
     setHasActiveRevocationRequestFilter(false);
     setStatusFilter(ESTADO_POR_DEFECTO);
@@ -1669,9 +1689,23 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         familia={familia}
       />
 
+      {/* Epic #12686 (HU #12807) — atajos del organismo, sin conteo. */}
+      <BusquedaRapidaAcordeon
+        items={ATAJOS_OT}
+        selected={atajoOt}
+        onSelect={(key) => handleAtajoOtSelect(key as "" | AtajoOt)}
+        storageKey="ot-bandeja.busqueda-rapida"
+        darkBgClassName="dark:bg-[#0B0F14]"
+      />
+
       <UiStateBoundary
         status={status}
-        emptyMessage="No hay trámites pendientes de tus clientes."
+        emptyMessage={
+          // Epic #12686 — «Por preasignar» en una familia sin ruta de placa: vacío explicado, no un error.
+          atajoOt === "por_preasignar" && !familiaUsaEstado(familia, "preasignacion")
+            ? "Esta familia de trámites no pasa por preasignación de placa."
+            : "No hay trámites pendientes de tus clientes."
+        }
         errorMessage="Error al cargar trámites de clientes."
         onRetry={() => void load()}
         skeletonRows={5}

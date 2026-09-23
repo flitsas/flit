@@ -7,7 +7,9 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
+  ATAJOS_OT,
   OtBandejaCountersStrip,
+  contadorDeAtajoOt,
   contadorDeEstado,
   estadoDeContador,
   revocatoriaActivaDeContador,
@@ -140,5 +142,23 @@ describe("OtBandejaCountersStrip — familia y nombres de estado", () => {
   it("sin cifras todavía pinta guion, no cero", () => {
     render(<OtBandejaCountersStrip counters={null} selected="" onSelect={vi.fn()} />);
     expect(screen.getByRole("button", { name: /^Entregado: sin dato/ })).toHaveTextContent("—");
+  });
+});
+
+// Epic #12686 — HU #12807.
+describe("ATAJOS_OT — búsqueda rápida del organismo", () => {
+  it("AC1 — tres atajos sin conteo, en el orden de la épica", () => {
+    expect(ATAJOS_OT.map((a) => a.label)).toEqual(["Por aprobar", "Por preasignar", "Revocatorias"]);
+  });
+
+  it("AC2-AC4 — cada atajo aplica la tarjeta de su cola", () => {
+    expect(estadoDeContador(contadorDeAtajoOt("por_aprobar"))).toBe("entregado");
+    expect(estadoDeContador(contadorDeAtajoOt("por_preasignar"))).toBe("preasignacion");
+    expect(contadorDeAtajoOt("revocatorias")).toBe("solicitudesRevocatoria");
+    expect(revocatoriaActivaDeContador(contadorDeAtajoOt("revocatorias"))).toBe(true);
+  });
+
+  it("sin atajo no hay tarjeta", () => {
+    expect(contadorDeAtajoOt("")).toBe("");
   });
 });

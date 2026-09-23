@@ -169,6 +169,37 @@ export function OtBandejaCountersStrip({
 }
 
 /**
+ * Epic #12686 (HU #12807) — atajos de la «Búsqueda rápida» del OT. Los tres son colas que ya tienen
+ * tarjeta, así que cada atajo aplica su tarjeta (y la resalta) en vez de inventar otro filtro.
+ */
+export type AtajoOt = "por_aprobar" | "por_preasignar" | "revocatorias";
+
+export const ATAJOS_OT: readonly { key: AtajoOt; label: string; hint: string; contador: OtCounterKey }[] = [
+  {
+    key: "por_aprobar",
+    label: "Por aprobar",
+    hint: "Entregados a la espera de tu decisión",
+    contador: "porDecidir",
+  },
+  {
+    key: "por_preasignar",
+    label: "Por preasignar",
+    hint: "Trámites en Preasignación: todavía sin placa asignada",
+    contador: "preasignacion",
+  },
+  {
+    key: "revocatorias",
+    label: "Revocatorias",
+    hint: "Aprobados con una solicitud de revocatoria activa",
+    contador: "solicitudesRevocatoria",
+  },
+];
+
+export function contadorDeAtajoOt(key: AtajoOt | ""): OtCounterKey | "" {
+  return ATAJOS_OT.find((a) => a.key === key)?.contador ?? "";
+}
+
+/**
  * Estado del listado que corresponde a cada tarjeta. Vive junto a la tira para que contar y filtrar
  * no puedan divergir: la tarjeta dice «N» y, al pulsarla, el filtro es exactamente ese estado.
  */
