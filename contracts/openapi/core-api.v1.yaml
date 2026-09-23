@@ -14070,6 +14070,7 @@ components:
           description: >
             HU #12791 — vigencia + sello del consolidado del wizard de la fila. Se deriva en la MISMA
             consulta del listado (sin N+1). Aditivo: ausente en versiones anteriores del backend.
+          type: object
           allOf:
             - $ref: "#/components/schemas/ConsolidadoVigencia"
           nullable: true
@@ -14124,11 +14125,13 @@ components:
       properties:
         consolidadoWizard:
           description: HU #12791 — vigencia + sello del consolidado del wizard. Aditivo.
+          type: object
           allOf:
             - $ref: "#/components/schemas/ConsolidadoVigencia"
           nullable: true
         consolidadoMaestro:
           description: HU #12791 — vigencia + sello del consolidado maestro del OT. Aditivo.
+          type: object
           allOf:
             - $ref: "#/components/schemas/ConsolidadoVigencia"
           nullable: true
@@ -14144,11 +14147,13 @@ components:
       properties:
         consolidadoWizard:
           description: HU #12791 — vigencia + sello del consolidado del wizard. Aditivo.
+          type: object
           allOf:
             - $ref: "#/components/schemas/ConsolidadoVigencia"
           nullable: true
         consolidadoMaestro:
           description: HU #12791 — vigencia + sello del consolidado maestro del OT. Aditivo.
+          type: object
           allOf:
             - $ref: "#/components/schemas/ConsolidadoVigencia"
           nullable: true
