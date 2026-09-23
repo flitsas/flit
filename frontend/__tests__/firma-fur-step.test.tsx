@@ -350,7 +350,8 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     ).not.toBeInTheDocument();
 
     await user.click(boton);
-    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true));
+    // HU #12788 — abrir el visor ya no fuerza: el backend decide por la bandera de vigencia.
+    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE));
   });
 
   it('lista el FUR en Documentos del expediente y regenera para pintar la placa', async () => {
@@ -409,7 +410,7 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
 
     await waitFor(() => expect(mocks.patchFieldValues).toHaveBeenCalled());
     await waitFor(() =>
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true),
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE),
     );
     const ordenGuardado = mocks.patchFieldValues.mock.invocationCallOrder[0]!;
     const ordenGenerado = mocks.generarConsolidado.mock.invocationCallOrder[0]!;

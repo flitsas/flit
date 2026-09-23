@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Eye } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
@@ -292,6 +292,10 @@ function ExpedienteConsolidadoBody({
   const [error, setError] = useState<string | null>(null);
   const estadoFinal = status === 'aprobado' || status === 'anulado';
   const busy = generating || opening;
+  // HU #12788 — candado síncrono: `disabled={busy}` solo llega tras el re-render, así que un doble
+  // clic rápido lanzaría dos POST /consolidado (y, con force, dos reconstrucciones). El ref corta el
+  // segundo antes de que salga la petición: una acción del gestor = una única petición.
+  const inFlight = useRef(false);
 
   const applyAvisos = (generado: Awaited<ReturnType<typeof tramitesClient.generarConsolidado>>) => {
     const avisos: string[] = [];
@@ -336,8 +340,13 @@ function ExpedienteConsolidadoBody({
     return null;
   };
 
+  /**
+   * Acción EXPLÍCITA «Re-generar expediente consolidado»: única que envía force=true (HU #12788 AC3).
+   * Invalida la vigencia y reconstruye consolidado y FUR (HU #11642) sin anidar un consolidado previo.
+   */
   const handleGenerate = async () => {
-    if (!instanceId) return;
+    if (!instanceId || inFlight.current) return;
+    inFlight.current = true;
     setGenerating(true);
     setError(null);
     try {
@@ -355,6 +364,7 @@ function ExpedienteConsolidadoBody({
               'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.',
       );
     } finally {
+      inFlight.current = false;
       setGenerating(false);
     }
   };
@@ -364,16 +374,21 @@ function ExpedienteConsolidadoBody({
    * captura vigente (`MatriculaInicial`) dice literal «Ver expediente consolidado (PDF)», y es lo
    * que decía FLIT antes de que una generación anterior (`WizardTramite`) lo cambiara a descarga
    * directa. Cada documento suelto del checklist abre igual, con «Ver PDF» (`DocRow`).
-   * Regenerar con force=true evita mostrar todos los documentos duplicados si se había generado
-   * anidando un consolidado_maestro u otro paquete previo.
+   *
+   * HU #12788 — abrir va SIN force: el backend respeta la bandera `consolidado_wizard_vigente`; si
+   * está vigente devuelve el PDF en caché y, si no (algún dato cambió), reconstruye una sola vez. Antes
+   * iba con force=true y regeneraba en cada apertura, destruyendo el PDF anterior. Forzar queda solo
+   * en «Re-generar expediente consolidado». El PDF no se cachea en cliente: cada apertura usa el
+   * `attachmentId` que devuelve esta petición y un object URL nuevo (`openAttachmentInNewTab`).
    */
   const handleVerExpediente = async () => {
-    if (!instanceId) return;
+    if (!instanceId || inFlight.current) return;
+    inFlight.current = true;
     setOpening(true);
     setError(null);
     try {
       await onBeforeGenerateConsolidado?.();
-      const generado = await tramitesClient.generarConsolidado(instanceId, undefined, true);
+      const generado = await tramitesClient.generarConsolidado(instanceId);
       applyAvisos(generado);
       const doc = consolidadoIdFromResult(generado);
       if (doc) {
@@ -394,6 +409,7 @@ function ExpedienteConsolidadoBody({
               'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.',
       );
     } finally {
+      inFlight.current = false;
       setOpening(false);
     }
   };
