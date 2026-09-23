@@ -183,6 +183,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // Marca de vigencia (Feature #10701): el consolidado recién generado refleja el estado
         // actual del expediente. La bajarán a false las transiciones de estado y el adjuntar LT.
         instance.ConsolidadoMaestroVigente = true;
+        instance.ConsolidadoMaestroGeneradoEn = now; // HU #12790 — sello UTC de generacion (misma marca que UploadedAt).
 
         var evento = new ProcedureInstanceEvent
         {

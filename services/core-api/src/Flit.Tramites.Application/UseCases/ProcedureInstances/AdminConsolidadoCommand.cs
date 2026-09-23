@@ -140,6 +140,7 @@ public sealed class CargarConsolidadoExternoHandler(
         // encima de lo que el admin acaba de cargar (aunque la protección de Source="user" en
         // GenerarConsolidadoHandler ya lo cubriría igual).
         instance.ConsolidadoWizardVigente = true;
+        instance.ConsolidadoWizardGeneradoEn = now; // HU #12790 AC4 — sello UTC de la carga manual (Source="user").
 
         // AC4 — trazabilidad.
         await repo.AddEventAsync(new ProcedureInstanceEvent

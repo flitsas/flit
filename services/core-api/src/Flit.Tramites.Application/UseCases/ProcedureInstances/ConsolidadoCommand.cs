@@ -398,6 +398,7 @@ public sealed class GenerarConsolidadoHandler(
 
         // HU #10860 — el consolidado recién generado refleja el expediente actual: marca vigente.
         instance.ConsolidadoWizardVigente = true;
+        instance.ConsolidadoWizardGeneradoEn = now; // HU #12790 — sello UTC de generacion (misma marca que UploadedAt).
 
         await ConsolidadoReemplazoSeguro.ConfirmarAsync(
             instance, repo, storage, stored, newAttachment, previos,
