@@ -11,12 +11,14 @@ import {
 import { documentLabel, catalogDocumentTitle } from '@/lib/tramites/document-labels';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import { IndicadorVigenciaConsolidado } from '@/components/shared/IndicadorVigenciaConsolidado';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
 import { WizardCardHeader } from './wizard-atoms';
 import { WizardAccordion } from './WizardAccordion';
 import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import type {
   ChecklistItemView,
+  ConsolidadoVigencia,
   InstanceStatus,
   ProcedureAttachment,
   WizardModalidad,
@@ -45,6 +47,11 @@ interface Props {
   status?: InstanceStatus;
   onBeforeGenerateConsolidado?: () => Promise<void>;
   onAttachmentsChange?: () => void;
+  /**
+   * HU #12792 — vigencia del consolidado del wizard (`ProcedureInstanceDetail.consolidadoWizard`).
+   * `null`/`undefined` (backend anterior al campo) ⇒ el indicador no se pinta.
+   */
+  consolidadoWizard?: ConsolidadoVigencia | null;
 }
 
 const BLUE = '#557EFF';
@@ -157,6 +164,7 @@ export default function ExpedienteVisor({
   status = 'borrador',
   onBeforeGenerateConsolidado,
   onAttachmentsChange,
+  consolidadoWizard,
 }: Props) {
   const subtitle =
     modalidad === 'traspaso'
@@ -173,6 +181,8 @@ export default function ExpedienteVisor({
         level="h3"
         regionLabel="Expediente consolidado del trámite"
       >
+        {/* HU #12792 — indicador de vigencia en la cabecera del cuerpo del visor. */}
+        <IndicadorVigenciaConsolidado vigencia={consolidadoWizard} className="mb-3" />
         <ExpedienteConsolidadoBody
           instanceId={instanceId}
           attachments={attachments}
