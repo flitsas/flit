@@ -12,7 +12,14 @@ import { documentLabel, catalogDocumentTitle } from '@/lib/tramites/document-lab
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { IndicadorVigenciaConsolidado } from '@/components/shared/IndicadorVigenciaConsolidado';
+import { AvisoFalloRegeneracion } from '@/components/shared/AvisoFalloRegeneracion';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
+import {
+  avisosSinFalloConsolidado,
+  detectarFalloRegeneracion,
+  vigenciaTrasApertura,
+  type FalloRegeneracionConsolidado,
+} from '@/lib/tramites/fallo-regeneracion-consolidado';
 import {
   COPY_ACTUALIZADO,
   COPY_RECONSTRUCCION_EN_CURSO,
@@ -28,6 +35,7 @@ import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import type {
   ChecklistItemView,
   ConsolidadoVigencia,
+  GenerarConsolidadoResult,
   InstanceStatus,
   ProcedureAttachment,
   WizardModalidad,
@@ -194,8 +202,8 @@ export default function ExpedienteVisor({
         level="h3"
         regionLabel="Expediente consolidado del trámite"
       >
-        {/* HU #12792 — indicador de vigencia en la cabecera del cuerpo del visor. */}
-        <IndicadorVigenciaConsolidado vigencia={consolidadoWizard} className="mb-3" />
+        {/* HU #12792 — el indicador de vigencia abre el cuerpo del visor (lo pinta el cuerpo: el aviso
+            de fallo de regeneración de la HU #12799 sale de su estado). */}
         <ExpedienteConsolidadoBody
           instanceId={instanceId}
           attachments={attachments}
@@ -314,6 +322,40 @@ function ExpedienteConsolidadoBody({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const estadoFinal = status === 'aprobado' || status === 'anulado';
+  /**
+   * HU #12799 — fallo de la última regeneración (respuesta con `regenerado: false` + aviso
+   * `consolidado: …`). El backend no guarda un «último fallo» consultable: se conoce por la respuesta
+   * de la apertura o de «Re-generar» y se limpia con la siguiente respuesta sin fallo.
+   */
+  const [fallo, setFallo] = useState<FalloRegeneracionConsolidado | null>(null);
+  /**
+   * HU #12799 (AC1/AC2) — vigencia refrescada en local tras abrir/regenerar: con fallo queda gris
+   * con la fecha del PDF conservado; con éxito, verde. Atada a la prop de la que partió (`base`): en
+   * cuanto el padre recarga la vigencia del backend, esa gana.
+   */
+  const [vigenciaLocal, setVigenciaLocal] = useState<{
+    base: ConsolidadoVigencia | null | undefined;
+    valor: ConsolidadoVigencia;
+  } | null>(null);
+  // Cambio de trámite: el fallo y la vigencia local del anterior no le pertenecen a este.
+  const [instanciaVista, setInstanciaVista] = useState(instanceId);
+  if (instanciaVista !== instanceId) {
+    setInstanciaVista(instanceId);
+    setFallo(null);
+    setVigenciaLocal(null);
+  }
+  const vigencia =
+    vigenciaLocal && vigenciaLocal.base === consolidadoWizard
+      ? vigenciaLocal.valor
+      : consolidadoWizard;
+
+  /** HU #12799 — registra el resultado de una generación/apertura: fallo + vigencia local. */
+  const registrarResultado = (generado: GenerarConsolidadoResult | null | undefined) => {
+    if (!generado) return;
+    setFallo(detectarFalloRegeneracion(generado));
+    const nueva = vigenciaTrasApertura(vigencia, generado, new Date());
+    if (nueva) setVigenciaLocal({ base: consolidadoWizard, valor: nueva });
+  };
 
   const applyAvisos = (generado: Awaited<ReturnType<typeof tramitesClient.generarConsolidado>>) => {
     const avisos: string[] = [];
@@ -325,7 +367,9 @@ function ExpedienteConsolidadoBody({
           : 'Faltan documentos obligatorios.',
       );
     }
-    for (const aviso of generado?.avisosCascada ?? []) {
+    // HU #12799 — el fallo del propio consolidado lo cuenta el aviso junto al indicador: aquí solo
+    // quedan los avisos de los OTROS documentos de la cascada (sin duplicar mensajes).
+    for (const aviso of avisosSinFalloConsolidado(generado?.avisosCascada)) {
       // HU #11642 — el aviso de FUR es distinto del resto de la cascada: el documento SÍ existe, lo
       // que falló fue rehacerlo, así que el consolidado que el gestor tiene delante conserva la
       // versión anterior. Decirle "no se pudo generar el FUR" le haría creer que falta, cuando el
@@ -339,7 +383,12 @@ function ExpedienteConsolidadoBody({
       avisos.push(`No se pudo generar ${consolidadoAvisoLabel(aviso)}.`);
     }
     if (avisos.length > 0) {
-      setError(`Expediente consolidado generado. ${avisos.join(' ')}`);
+      // HU #12799 — con `regenerado: false` NO se generó nada nuevo: no se dice «generado».
+      setError(
+        generado?.regenerado === false
+          ? avisos.join(' ')
+          : `Expediente consolidado generado. ${avisos.join(' ')}`,
+      );
     }
   };
 
@@ -359,6 +408,7 @@ function ExpedienteConsolidadoBody({
       await onBeforeGenerateConsolidado?.();
       // force=true: invalida caché y reconstruye sin anidar un consolidado previo (evita docs duplicados).
       const generado = await tramitesClient.generarConsolidado(instanceId, undefined, true);
+      registrarResultado(generado);
       applyAvisos(generado);
       onAttachmentsChange?.();
     } catch (err) {
@@ -380,11 +430,12 @@ function ExpedienteConsolidadoBody({
    */
   const apertura = useAperturaConsolidado({
     instanceId,
-    vigencia: consolidadoWizard,
+    vigencia,
     consolidadoPrevio: consolidado ?? null,
     abrirAdjunto: openAttachmentInNewTab,
     onBeforeGenerate: onBeforeGenerateConsolidado,
     onEntregado: (generado) => {
+      registrarResultado(generado);
       if (generado) applyAvisos(generado);
       onAttachmentsChange?.();
     },
@@ -395,6 +446,19 @@ function ExpedienteConsolidadoBody({
 
   return (
     <>
+      {/* HU #12792 — indicador de vigencia; HU #12799 — aviso de fallo junto a él (fuera de su
+          región etiquetada) con la fecha del PDF conservado y «Reintentar» = «Re-generar». */}
+      <IndicadorVigenciaConsolidado vigencia={vigencia} className="mb-3">
+        {fallo && !estadoFinal ? (
+          <AvisoFalloRegeneracion
+            fallo={fallo}
+            generadoEn={vigencia?.generadoEn ?? null}
+            onReintentar={instanceId ? () => void handleGenerate() : undefined}
+            reintentando={busy}
+          />
+        ) : null}
+      </IndicadorVigenciaConsolidado>
+
       {errorVisible && (
         <div
           className="mb-3 rounded-xl border p-3 text-xs"

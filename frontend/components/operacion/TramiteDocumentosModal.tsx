@@ -20,6 +20,8 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { esDocumentoDefinitivo } from '@/lib/tramites/consolidado-entrega';
 import { AvisoDocumentoFinal } from '@/components/shared/AvisoDocumentoFinal';
+import { AvisoFalloRegeneracion } from '@/components/shared/AvisoFalloRegeneracion';
+import { detectarFalloRegeneracion } from '@/lib/tramites/fallo-regeneracion-consolidado';
 import { findConsolidadoAttachment } from './ExpedienteVisor';
 
 /**
@@ -296,6 +298,11 @@ export function useAttachmentPreview(
     entrega,
     /** HU #12786 (AC4) — el consolidado servido es el documento final del trámite. */
     definitivo: esDocumentoDefinitivo(entrega),
+    /**
+     * HU #12799 — la entrega sirvió el consolidado ANTERIOR porque regenerarlo falló. Esta vía no
+     * conoce la vigencia del trámite, así que el aviso va sin fecha (no se inventa).
+     */
+    fallo: detectarFalloRegeneracion(entrega),
     openConsolidado,
     downloadConsolidado,
   };
@@ -351,7 +358,14 @@ export function AttachmentPreview({
       error={preview.error}
       // HU #12786 — el marcador del consolidado (sin id) aún no tiene adjunto que descargar.
       onDownload={preview.doc?.id ? () => void preview.download() : undefined}
-      notice={preview.definitivo ? <AvisoDocumentoFinal /> : undefined}
+      notice={
+        preview.definitivo || preview.fallo ? (
+          <div className="space-y-2">
+            {preview.definitivo ? <AvisoDocumentoFinal /> : null}
+            {preview.fallo ? <AvisoFalloRegeneracion fallo={preview.fallo} /> : null}
+          </div>
+        ) : undefined
+      }
     />
   );
 }

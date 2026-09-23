@@ -39,6 +39,11 @@ import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
 import { AvisoDocumentoFinal } from "@/components/shared/AvisoDocumentoFinal";
+import { AvisoFalloRegeneracion } from "@/components/shared/AvisoFalloRegeneracion";
+import {
+  detectarFalloRegeneracion,
+  type FalloRegeneracionConsolidado,
+} from "@/lib/tramites/fallo-regeneracion-consolidado";
 import { AvisoMaestroRadicado } from "@/components/shared/AvisoMaestroRadicado";
 import { esDocumentoDefinitivo } from "@/lib/tramites/consolidado-entrega";
 import {
@@ -573,6 +578,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     definitivo?: boolean;
     /** HU #12787 (AC2) — el consolidado abierto es el maestro radicado en Quipux (fecha ISO). */
     radicadoEn?: string | null;
+    /**
+     * HU #12799 (AC3) — la regeneración del maestro falló y se sirvió el anterior; `generadoEn` es
+     * la fecha de ese PDF conservado (vigencia de la fila).
+     */
+    fallo?: { detalle: FalloRegeneracionConsolidado; generadoEn: string | null } | null;
   }>({ open: false, title: "Consolidado", mimetype: null, url: null, loading: false, error: null, download: null });
   // Diagnóstico de bandeja (R09): entregados hacia el OT que no aparecen por falta de grant.
   const [health, setHealth] = useState<OtBandejaHealth | null>(null);
@@ -1325,6 +1335,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         download: null,
         definitivo: false,
         radicadoEn: null,
+        fallo: null,
       };
     });
   };
@@ -1349,6 +1360,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         download: null,
         definitivo: false,
         radicadoEn: null,
+        fallo: null,
       };
     });
     try {
@@ -1357,11 +1369,13 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       const mimetype = "application/pdf";
       let definitivo = false;
       let radicadoEn: string | null = null;
+      let fallo: FalloRegeneracionConsolidado | null = null;
       if (!isReadOnly) {
         const res = await generarOtConsolidadoMaestro(row.id, scope, force);
         attId = res.document.attachmentId;
         filename = res.document.filename;
         if (res.regenerado) show("Consolidado generado.", "success");
+        fallo = detectarFalloRegeneracion(res);
       } else {
         // HU #12787 (AC2, «maestro radicado, fijo») — si el trámite ya se radicó en Quipux y se
         // conoce el adjunto, se sirve ESE maestro por la ruta de documentos, sin pasar por la
@@ -1385,6 +1399,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           attId = res.document.attachmentId;
           filename = res.document.filename;
           definitivo = esDocumentoDefinitivo(res);
+          // Maestro radicado (fijo): no se regenera, así que nunca hay aviso de fallo.
+          fallo = radicadoEn ? null : detectarFalloRegeneracion(res);
         }
       }
       const { url } = await fetchOtAttachmentPreviewUrl(row.id, attId, scope);
@@ -1403,6 +1419,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         download: { procId: row.id, attId, filename },
         definitivo,
         radicadoEn,
+        fallo: fallo
+          ? { detalle: fallo, generadoEn: row.consolidadoMaestro?.generadoEn ?? null }
+          : null,
       }));
     } catch {
       setPreview((p) => ({
@@ -2324,10 +2343,17 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         error={preview.error}
         onDownload={preview.download ? () => void handlePreviewDownload() : undefined}
         notice={
-          preview.radicadoEn || preview.definitivo ? (
+          preview.radicadoEn || preview.definitivo || preview.fallo ? (
             <div className="space-y-2">
               {preview.radicadoEn ? <AvisoMaestroRadicado radicadoEn={preview.radicadoEn} /> : null}
               {preview.definitivo ? <AvisoDocumentoFinal /> : null}
+              {/* HU #12799 (AC3) — el maestro servido es el anterior: fallo + fecha disponible. */}
+              {preview.fallo ? (
+                <AvisoFalloRegeneracion
+                  fallo={preview.fallo.detalle}
+                  generadoEn={preview.fallo.generadoEn}
+                />
+              ) : null}
             </div>
           ) : undefined
         }

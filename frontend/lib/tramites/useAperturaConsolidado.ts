@@ -8,6 +8,7 @@ import type {
   GenerarConsolidadoResult,
   ProcedureAttachment,
 } from '@/lib/api/types/procedure-runtime';
+import { detectarFalloRegeneracion } from '@/lib/tramites/fallo-regeneracion-consolidado';
 
 /**
  * HU #12800 (Épica #12760) — apertura NO bloqueante del expediente consolidado en el visor.
@@ -263,8 +264,11 @@ export function useAperturaConsolidado({
         win.close();
       }
       if (signal.aborted) return;
-      if (reconstruir) setEntregadoTrasVigencia(true);
-      setFase(vencido ? 'actualizado' : 'inactivo');
+      // HU #12799 — con fallo de regeneración se sirvió el PDF anterior: NO queda vigente (la
+      // siguiente apertura vuelve a intentar) y tampoco se anuncia «se cargó la nueva versión».
+      const fallo = detectarFalloRegeneracion(generado);
+      if (reconstruir && !fallo) setEntregadoTrasVigencia(true);
+      setFase(vencido && !fallo ? 'actualizado' : 'inactivo');
       onEntregado?.(generado ?? null);
     } catch (err) {
       if (signal.aborted) return;

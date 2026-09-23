@@ -8,6 +8,7 @@ import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
 import { AvisoDocumentoFinal } from "@/components/shared/AvisoDocumentoFinal";
 import { AvisoMaestroRadicado } from "@/components/shared/AvisoMaestroRadicado";
 import { IndicadorVigenciaConsolidado } from "@/components/shared/IndicadorVigenciaConsolidado";
+import { AvisoFalloRegeneracion } from "@/components/shared/AvisoFalloRegeneracion";
 import {
   entregarOtConsolidado,
   fetchOtAttachmentPreviewUrl,
@@ -20,6 +21,10 @@ import {
   resolverFuenteMaestroOt,
   vigenciaMaestroTrasApertura,
 } from "@/lib/tramites/consolidado-entrega-ot";
+import {
+  detectarFalloRegeneracion,
+  type FalloRegeneracionConsolidado,
+} from "@/lib/tramites/fallo-regeneracion-consolidado";
 import type {
   ConsolidadoVigencia,
   GenerarConsolidadoResult,
@@ -152,10 +157,21 @@ export function OtDetalleDocumentos({
   /** HU #12793 (AC3) — solo en read-only la radicación fija el maestro («maestro radicado, fijo»). */
   const radicadoIndicador = readOnly ? quipuxRadicadoEn?.trim() || null : null;
 
-  const refrescarVigencia = (res: Pick<GenerarConsolidadoResult, "regenerado" | "modo">) => {
+  /**
+   * HU #12799 (AC3) — fallo de la última regeneración del maestro (`regenerado: false` + aviso
+   * `consolidado_maestro: …`). Solo se conoce por la respuesta de abrir/actualizar: se limpia con la
+   * siguiente respuesta sin fallo. En el maestro radicado (read-only, fijo) no aplica.
+   */
+  const [falloMaestro, setFalloMaestro] = useState<FalloRegeneracionConsolidado | null>(null);
+
+  const refrescarVigencia = (
+    res: Pick<GenerarConsolidadoResult, "regenerado" | "modo" | "avisosCascada">,
+  ) => {
+    setFalloMaestro(detectarFalloRegeneracion(res));
     const nueva = vigenciaMaestroTrasApertura(vigenciaMaestro, res, new Date());
     if (nueva) setVigenciaLocal({ base: consolidadoMaestro, valor: nueva });
   };
+  const falloVisible = radicadoIndicador ? null : falloMaestro;
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -358,6 +374,12 @@ export function OtDetalleDocumentos({
     await handlePreview(att);
   };
 
+  // Solo sobre el maestro abierto (no sobre otro adjunto ni el consolidado del wizard).
+  const falloEnVisor =
+    falloVisible && previewItem?.tipo === "consolidado_maestro" && !previewRadicadoEn
+      ? falloVisible
+      : null;
+
   return (
     <>
       <DocumentPreviewModal
@@ -370,10 +392,17 @@ export function OtDetalleDocumentos({
         error={previewError}
         onDownload={previewItem ? () => void handleDownload(previewItem) : undefined}
         notice={
-          previewRadicadoEn || previewDefinitivo ? (
+          previewRadicadoEn || previewDefinitivo || falloEnVisor ? (
             <div className="space-y-2">
               {previewRadicadoEn ? <AvisoMaestroRadicado radicadoEn={previewRadicadoEn} /> : null}
               {previewDefinitivo ? <AvisoDocumentoFinal /> : null}
+              {/* HU #12799 — el visor tapa la página: el aviso también va sobre el PDF servido. */}
+              {falloEnVisor ? (
+                <AvisoFalloRegeneracion
+                  fallo={falloEnVisor}
+                  generadoEn={vigenciaMaestro?.generadoEn ?? null}
+                />
+              ) : null}
             </div>
           ) : undefined
         }
@@ -390,7 +419,19 @@ export function OtDetalleDocumentos({
           variante="completa"
           leyendaDesactualizado={LEYENDA_MAESTRO_DESACTUALIZADO_OT}
           radicadoEn={radicadoIndicador}
-        />
+        >
+          {/* HU #12799 (AC3) — aviso de fallo con la fecha del maestro que sí está disponible.
+              «Reintentar» es la misma acción del contenedor: reconstruir (o, en read-only, volver a
+              pedir la entrega, que regenera si la bandera sigue abajo). */}
+          {falloVisible ? (
+            <AvisoFalloRegeneracion
+              fallo={falloVisible}
+              generadoEn={vigenciaMaestro?.generadoEn ?? null}
+              onReintentar={() => void handleConsolidado(!readOnly)}
+              reintentando={consolidadoActing}
+            />
+          ) : null}
+        </IndicadorVigenciaConsolidado>
         {/* El consolidado NO puede quedar dentro del guardián de estado: con el expediente vacío
             este pinta su mensaje en lugar de los hijos, y precisamente entonces —cuando no hay
             adjuntos— el organismo sigue necesitando poder abrir o reconstruir el consolidado. */}

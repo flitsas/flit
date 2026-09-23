@@ -6,6 +6,7 @@ import type {
   GenerarConsolidadoResult,
 } from '@/lib/api/types/procedure-runtime';
 import { formatFechaHora } from '@/lib/format/date';
+import { vigenciaTrasApertura } from '@/lib/tramites/fallo-regeneracion-consolidado';
 
 /**
  * HU #12787 — mensaje cuando la ruta de entrega OT del consolidado falla. El 404
@@ -94,18 +95,11 @@ export function conservarCamposConsolidadoOt(
   return resultado;
 }
 
-/** Modos de la entrega que garantizan que el PDF servido refleja el expediente actual. */
-const MODOS_ENTREGA_VIGENTE: ReadonlySet<string> = new Set(['vigente', 'regenerado']);
-
 /**
  * HU #12793 — refresca en local la vigencia del maestro tras abrirlo o reconstruirlo, sin pedir de
- * nuevo el listado. La generación (POST) y la entrega en modo `vigente`/`regenerado` dejan el
- * maestro vigente: si se reconstruyó, la fecha es `ahora` (aproximación cliente del sello del
- * backend, que no viaja en la respuesta); si se reutilizó, se conserva la fecha previa.
- *
- * Devuelve `null` (no tocar el indicador) cuando no hay vigencia previa —backend anterior al campo,
- * la UI no infiere—, o cuando la entrega sirvió el adjunto tal cual (`solo_lectura`, definitivo,
- * migrado, cargado por usuario): ahí no se sabe si refleja el expediente.
+ * nuevo el listado. Delegada en {@link vigenciaTrasApertura} (HU #12799): con fallo de regeneración
+ * (`regenerado: false` + aviso `consolidado_maestro: …`) el maestro queda desactualizado (gris) con
+ * la fecha del PDF conservado; antes, la entrega con `modo: null` lo pintaba vigente por error.
  *
  * Uso de ejemplo:
  *   const nueva = vigenciaMaestroTrasApertura(row.consolidadoMaestro, res, new Date());
@@ -113,18 +107,8 @@ const MODOS_ENTREGA_VIGENTE: ReadonlySet<string> = new Set(['vigente', 'regenera
  */
 export function vigenciaMaestroTrasApertura(
   previa: ConsolidadoVigencia | null | undefined,
-  res: Pick<GenerarConsolidadoResult, 'regenerado' | 'modo'>,
+  res: Pick<GenerarConsolidadoResult, 'regenerado' | 'modo' | 'avisosCascada'>,
   ahora: Date,
 ): ConsolidadoVigencia | null {
-  if (!previa) return null;
-  // `modo` null/omitido = ruta POST de generación: siempre deja el maestro vigente.
-  if (res.modo != null && !MODOS_ENTREGA_VIGENTE.has(res.modo)) return null;
-  const regenerado = res.regenerado === true || res.modo === 'regenerado';
-  const generadoEn = regenerado ? ahora.toISOString() : previa.generadoEn;
-  return {
-    ...previa,
-    estado: 'vigente',
-    generadoEn,
-    origen: regenerado ? 'system' : previa.origen,
-  };
+  return vigenciaTrasApertura(previa, res, ahora);
 }

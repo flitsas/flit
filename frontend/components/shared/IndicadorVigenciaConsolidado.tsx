@@ -57,7 +57,9 @@ export function IndicadorVigenciaConsolidado({
     leyendaDesactualizado,
     radicadoEn,
   });
-  if (!vista) return null;
+  // Sin vigencia fiable no hay indicador, pero un aviso extra (fallo de regeneración, #12799) se
+  // sigue pintando: el fallo se conoce por la respuesta, no por la vigencia.
+  if (!vista) return children ? <div className={className}>{children}</div> : null;
 
   return variante === 'compacta' ? (
     <IndicadorCompacto vista={vista} className={className}>
