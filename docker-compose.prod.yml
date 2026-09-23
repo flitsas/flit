@@ -561,6 +561,28 @@ services:
       # X-Flit-Domain (#12419); server-only, SIN prefijo NEXT_PUBLIC_. MISMA clave que
       # Internal__ApiKey de gateway y core-api (ver mas abajo).
       FLIT_INTERNAL_API_KEY: ${FLIT_INTERNAL_API_KEY:-}
+      # -- Reescritura /api/v1/* del BFF (Marca Blanca #12419/#12421/#12761) -----------
+      # En un dominio de RED el navegador llama a la API en el MISMO origen: base-url.ts
+      # (frontend/lib/api) devuelve "" cuando isFlitHost(host) es false, en vez de la base
+      # cross-origin horneada en build (NEXT_PUBLIC_API_BASE_URL). Lo normal es que el borde
+      # resuelva ese /api/v1/* con su propio location hacia el Gateway (plantilla
+      # deploy/edge/nginx/flit-network-domains.conf.example); pero si el server{} que sirve
+      # ese host NO lo tiene, la peticion aterriza en ESTE contenedor y la atiende el rewrite
+      # de next.config.ts, que la reenvia a CORE_API_ORIGIN / CORE_ICT_ORIGIN.
+      #
+      # Sin estas dos variables el rewrite cae a su respaldo de desarrollo local
+      # (http://localhost:4003 / :4020) — dentro de ESTE contenedor, donde no escucha nadie —
+      # y CUALQUIER /api/v1/* que llegue aqui responde 500 "Internal Server Error" en texto
+      # plano, sin cuerpo de error de la plataforma y sin rastro en los logs de core-api.
+      #
+      # Apuntan al GATEWAY, nunca a core-api:4003 / core-ict:4020 directo: el Gateway es quien
+      # sella X-Flit-Domain (DomainSealTransform, #12417). Ir directo dejaria la peticion SIN
+      # sello y DomainContextMiddleware la trataria como dominio FLIT — un 401/403 silencioso
+      # en vez de un 500 ruidoso, que es peor de diagnosticar. Mismo criterio y mismo motivo
+      # que MIGRACION_API_URL y BRANDING_INTERNAL_API_URL de arriba.
+      CORE_API_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
+      # ict-admin-route del Gateway (/api/v1/ict/{**catch-all}) -> core-ict-cluster.
+      CORE_ICT_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-4001}:${FRONTEND_PORT:-4001}"
     depends_on:
