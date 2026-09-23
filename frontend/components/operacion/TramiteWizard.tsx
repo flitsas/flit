@@ -713,6 +713,12 @@ export function TramiteWizard(props: Props) {
    */
   const [escrituraRlGateOk, setEscrituraRlGateOk] = useState(true);
   /**
+   * HU #12777 — certificado de Cámara de Comercio OBLIGATORIO de alguna parte jurídica sin cargar.
+   * Arranca en `true` por el mismo motivo que el de la escritura: mientras el paso no se monta no
+   * hay nada que exigir, y `ActorsForm` lo corrige en cuanto el backend resuelve los requisitos.
+   */
+  const [camaraComercioGateOk, setCamaraComercioGateOk] = useState(true);
+  /**
    * Campos obligatorios de las partes del paso de actores. Arranca en `false`: hasta que
    * `ActorsForm` monte y diga lo contrario, lo correcto es no dejar avanzar — al revés, el botón
    * quedaría habilitado en el instante en que el paso todavía no ha dicho nada.
@@ -1370,6 +1376,10 @@ export function TramiteWizard(props: Props) {
     // se pasa a Requisitos. El documento se carga en el propio paso, junto a los datos del
     // representante, y `ActorsForm` es quien decide si aplica.
     (isActorStep && !escrituraRlGateOk) ||
+    // Parte jurídica sin su certificado de Cámara de Comercio cuando es obligatorio (no tiene ni
+    // firma precargada ni escritura vigente). Gate separado del de la escritura a propósito: son
+    // dos documentos distintos y el gestor tiene que poder ver cuál le falta.
+    (isActorStep && !camaraComercioGateOk) ||
     // Campos obligatorios de las partes sin completar: no Continuar. Es la misma validación que
     // aplicaba `ActorsForm.save()` tras el clic, adelantada al estado del botón.
     (isActorStep && !actoresCamposGateOk) ||
@@ -1940,6 +1950,7 @@ export function TramiteWizard(props: Props) {
                 prendaFormRef={prendaFormRef}
                 onActorsConsultationGateChange={setActorsConsultationReady}
                 onEscrituraRepresentanteGateChange={setEscrituraRlGateOk}
+                onCamaraComercioGateChange={setCamaraComercioGateOk}
                 onCamposRequeridosGateChange={setActoresCamposGateOk}
                 rotulosActores={rotulosDeActores(steps)}
                 onIrAActores={irAPasoActor}
@@ -4562,6 +4573,7 @@ function StepBody({
   prendaFormRef,
   onActorsConsultationGateChange,
   onEscrituraRepresentanteGateChange,
+  onCamaraComercioGateChange,
   onCamposRequeridosGateChange,
   rotulosActores,
   onIrAActores,
@@ -4624,6 +4636,7 @@ function StepBody({
   onActorsConsultationGateChange?: (ready: boolean) => void;
   /** Gate Continuar: escritura del representante legal fuera del directorio ya adjunta (o no aplica). */
   onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
+  onCamaraComercioGateChange?: (ready: boolean) => void;
   /** Gate Continuar: campos obligatorios de las partes del paso de actores ya completos. */
   onCamposRequeridosGateChange?: (ready: boolean) => void;
   /**
@@ -5068,6 +5081,7 @@ function StepBody({
           rnmcEnabled={rnmcEnabled}
           onConsultationGateChange={onActorsConsultationGateChange}
           onEscrituraRepresentanteGateChange={onEscrituraRepresentanteGateChange}
+          onCamaraComercioGateChange={onCamaraComercioGateChange}
           onCamposRequeridosGateChange={onCamposRequeridosGateChange}
           // Quien sabe cómo se llama la parte es el CATÁLOGO: en `TRASPASO_UNILATERAL` el rol
           // persistido es `comprador` pero el paso se llama «Locatario», que es la parte real del

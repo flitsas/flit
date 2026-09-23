@@ -24,6 +24,7 @@ import type {
 // El mock cubre a la vez el formulario suelto y el asistente completo: `vi.mock` es por archivo,
 // así que la misma superficie sirve para los dos montajes de más abajo.
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   // Datos comerciales y avalúo (lo que este archivo inventaría).
   getCommercial: vi.fn(),
   putCommercial: vi.fn(),

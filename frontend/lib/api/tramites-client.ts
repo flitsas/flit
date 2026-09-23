@@ -6,6 +6,7 @@ import type {
   ActorContactLookupInput,
   ActorContactLookupResult,
   ActorsResponse,
+  CamaraComercioRequirement,
   AttachmentsResponse,
   BiometriaPublicView,
   BiometricParte,
@@ -1183,6 +1184,31 @@ export const tramitesClient = {
       { headers: tenantHeader(tenantId) },
     );
     return res?.actors ?? [];
+  },
+
+  /**
+   * HU #12775/#12776 — obligatoriedad del certificado de Cámara de Comercio por actor jurídico.
+   *
+   * <p>Endpoint propio y no parte de `getActors` a propósito: lo que devuelve depende de la firma
+   * del baúl y de las escrituras vigentes del tenant, que pueden cambiar sin que cambie ningún dato
+   * del actor. Colgarlo de la respuesta de actores obligaría a recargarlos para refrescarlo.</p>
+   *
+   * <p>Ante un fallo devuelve lista vacía, no lanza: sin requisitos el paso se comporta como antes
+   * de esta HU —sin buzón— en vez de dejar al gestor con el asistente roto.</p>
+   */
+  getCamaraComercioRequirements: async (
+    instanceId: string,
+    tenantId?: string,
+  ): Promise<CamaraComercioRequirement[]> => {
+    try {
+      const res = await request<{ requirements: CamaraComercioRequirement[] }>(
+        `/api/v1/tramites/instances/${instanceId}/camara-comercio-requirements`,
+        { headers: tenantHeader(tenantId) },
+      );
+      return res?.requirements ?? [];
+    } catch {
+      return [];
+    }
   },
 
   // PUT set completo de actores (reemplaza el conjunto guardado).

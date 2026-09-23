@@ -6,6 +6,7 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
+    getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
     getInstance: vi.fn(),
     getAttachments: vi.fn(),
     listBiometricExpediente: vi.fn(),

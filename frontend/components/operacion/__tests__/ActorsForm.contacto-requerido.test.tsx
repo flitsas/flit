@@ -8,6 +8,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   getActors: vi.fn(),
   saveActors: vi.fn(),
   runtPersonLookup: vi.fn(),
@@ -21,6 +22,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
+    getCamaraComercioRequirements: mocks.getCamaraComercioRequirements,
     getActors: mocks.getActors,
     saveActors: mocks.saveActors,
     runtPersonLookup: mocks.runtPersonLookup,

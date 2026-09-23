@@ -11,6 +11,7 @@ import type { WizardState } from '@/lib/api/types/procedure-runtime';
  * qué falta, con copy accionable.
  */
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   getInstance: vi.fn(),
   getWizardState: vi.fn(),
   getActors: vi.fn(),

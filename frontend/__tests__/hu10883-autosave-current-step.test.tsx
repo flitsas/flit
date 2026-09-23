@@ -21,6 +21,7 @@ import type {
  * derivado de los gates (fallback intacto).
  */
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   createInstance: vi.fn(),
   getInstance: vi.fn(),
   getWizardState: vi.fn(),
