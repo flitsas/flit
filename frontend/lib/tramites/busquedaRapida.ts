@@ -10,8 +10,8 @@ import { FILTRO_RECHAZADO_PREASIGNACION, type EstadoFiltro } from './estados';
  * filtro de la tira, así su tarjeta se resalta.</p>
  *
  * <p>«Mis trámites» son los que el usuario tiene a su cargo HOY (opción B, 2026-09-23): si Ana crea
- * un trámite y se lo pasan a Carlos, aparece en el de Carlos. No se ofrece al SuperAdmin, que no
- * tiene trámites a su cargo: el atajo le saldría siempre vacío.</p>
+ * un trámite y se lo pasan a Carlos, aparece en el de Carlos. También lo ve el SuperAdmin: hoy no
+ * tiene trámites a su cargo, pero si algún día radica, el atajo ya le sirve (decisión de Samuel).</p>
  */
 export type AtajoGestor =
   | 'en_subsanacion'
@@ -98,11 +98,6 @@ export const ATAJOS_GESTOR: readonly AtajoDef<AtajoGestor>[] = [
     busquedaRapida: 'pausados',
   },
 ];
-
-/** Atajos de la perspectiva: el SuperAdmin no ve «Mis trámites». */
-export function atajosDePerspectiva(esSuperAdmin: boolean): readonly AtajoDef<AtajoGestor>[] {
-  return esSuperAdmin ? ATAJOS_GESTOR.filter((a) => a.key !== 'mis_tramites') : ATAJOS_GESTOR;
-}
 
 export function atajoGestor(key: AtajoGestor | ''): AtajoDef<AtajoGestor> | undefined {
   return key ? ATAJOS_GESTOR.find((a) => a.key === key) : undefined;

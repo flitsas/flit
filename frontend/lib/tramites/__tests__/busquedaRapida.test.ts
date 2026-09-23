@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ATAJOS_GESTOR, atajoGestor, atajosDePerspectiva } from '../busquedaRapida';
+import { ATAJOS_GESTOR, atajoGestor } from '../busquedaRapida';
 import { FILTRO_RECHAZADO_PREASIGNACION } from '../estados';
 
 // Epic #12686 — HU #12806.
@@ -43,12 +43,6 @@ describe('ATAJOS_GESTOR', () => {
 
   it('sin atajo no hay definición', () => {
     expect(atajoGestor('')).toBeUndefined();
-  });
-
-  it('«Mis trámites» no se ofrece al SuperAdmin; el gestor sí lo ve', () => {
-    expect(atajosDePerspectiva(false).some((a) => a.key === 'mis_tramites')).toBe(true);
-    expect(atajosDePerspectiva(true).some((a) => a.key === 'mis_tramites')).toBe(false);
-    expect(atajosDePerspectiva(true)).toHaveLength(ATAJOS_GESTOR.length - 1);
   });
 
   it('«Mis trámites» no fija estado: trae los del usuario en cualquier estado', () => {
