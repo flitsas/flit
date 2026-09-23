@@ -65,6 +65,29 @@ public sealed class CamaraComercioRequirementResolver(
     private readonly IProcedureDeedResolver _deedResolver = deedResolver ?? NullProcedureDeedResolver.Instance;
 
     /// <summary>
+    /// HU #12775 AC3 — primer rol cuyo certificado es OBLIGATORIO y no está cargado en el trámite, o
+    /// <c>null</c> si ninguno falta. Es la misma escalera del paso del actor, aplicada al radicar: el
+    /// bloqueo del asistente es solo del cliente, y un borrador que ya había pasado ese paso (o una
+    /// llamada directa a la API) llegaría a preparación sin el documento.
+    /// </summary>
+    public async Task<string?> RolSinCertificadoAsync(
+        Guid tenantId,
+        ProcedureInstance instance,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        var requisitos = await ResolveAsync(tenantId, instance.Actors, ct).ConfigureAwait(false);
+        var cargados = new HashSet<string>(
+            instance.Attachments.Select(a => a.Tipo), StringComparer.OrdinalIgnoreCase);
+
+        return requisitos
+            .Where(r => r.EsObligatorio && !cargados.Contains(r.Tipo))
+            .Select(r => r.Rol)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
     /// Un requisito por actor persona jurídica con rol conocido. Los actores persona natural no
     /// aparecen: el certificado no les aplica.
     /// </summary>

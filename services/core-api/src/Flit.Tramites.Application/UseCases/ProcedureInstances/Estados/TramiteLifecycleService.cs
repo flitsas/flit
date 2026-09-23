@@ -41,7 +41,10 @@ public sealed class TramiteLifecycleService(
     IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
     // HU #10970 — se añade AL FINAL, después de los parámetros que traía develop, para no desplazar
     // ninguna posición existente (varios call sites pasan estos opcionales por posición).
-    TramiteValidationPolicy? validationPolicy = null) : ITramiteLifecycleService
+    TramiteValidationPolicy? validationPolicy = null,
+    // HU #12775 AC3 — al final por la misma razón que el anterior. Null en tests que no lo ejercitan:
+    // sin resolutor el gate de Cámara de Comercio se omite (comportamiento previo a la HU).
+    CamaraComercioRequirementResolver? camaraComercioResolver = null) : ITramiteLifecycleService
 {
     // ADR-0036 (HU #10912/#10916) — config de mandato del OT (plantilla / exige a PN). Default seguro
     // (NUNCA resuelve ⇒ solo PJ, plantilla genérica) en tests que no lo ejercitan.
@@ -316,6 +319,7 @@ public sealed class TramiteLifecycleService(
     private static string FaltanteGatePreparacion(string code) => code switch
     {
         TramiteEstadoErrores.DocumentosIncompletos => "cargar los documentos obligatorios del checklist",
+        TramiteEstadoErrores.CamaraComercioPendiente => "cargar el certificado de Cámara de Comercio de la parte persona jurídica",
         TramiteEstadoErrores.IdentidadNoAprobada => "aprobar la validación de identidad de las partes (comprador/vendedor)",
         SubmitGate.FurRequerido => "generar el FUR",
         SubmitGate.OrganismoRequerido => "seleccionar el organismo de tránsito",
@@ -366,6 +370,20 @@ public sealed class TramiteLifecycleService(
             : SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos);
         if (gateErrors.Count > 0)
             return (gateErrors[0], DetalleGatePreparacion(gateErrors));
+
+        // HU #12775 AC3 — parte jurídica sin firma precargada ni escritura vigente y sin certificado
+        // de Cámara de Comercio. El paso del actor ya lo impide en el asistente; esto cierra la puerta
+        // de atrás (borradores anteriores a la HU, llamadas directas a la API).
+        if (camaraComercioResolver is not null)
+        {
+            var rolSinCertificado = await camaraComercioResolver
+                .RolSinCertificadoAsync(instance.TenantId, instance, ct).ConfigureAwait(false);
+            if (rolSinCertificado is not null)
+            {
+                return (TramiteEstadoErrores.CamaraComercioPendiente,
+                    $"No se puede preparar el trámite: falta cargar el certificado de Cámara de Comercio del {rolSinCertificado}.");
+            }
+        }
 
         // Precondición del tipo, no un requisito documental: un cambio de carrocería necesita una
         // carrocería de partida. El preflight ya lo corta en el paso 1; esto cierra la puerta de atrás

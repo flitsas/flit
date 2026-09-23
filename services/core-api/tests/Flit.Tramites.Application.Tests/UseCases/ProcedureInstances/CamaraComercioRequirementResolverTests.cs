@@ -296,4 +296,64 @@ public sealed class CamaraComercioRequirementResolverTests
     [InlineData(CamaraComercioExencion.EscrituraVigente, "escritura_vigente")]
     public void ElContratoDeLaExencionEsTextoEstable(CamaraComercioExencion exencion, string esperado) =>
         GetCamaraComercioRequirementsHandler.ToWire(exencion).Should().Be(esperado);
+
+    // ── HU #12775 AC3 — el gate de radicación ────────────────────────────────
+
+    private static ProcedureInstance ConActores(params ProcedureInstanceActor[] actores)
+    {
+        var instance = new ProcedureInstance { Id = Guid.NewGuid(), TenantId = Tenant };
+        foreach (var a in actores)
+            instance.Actors.Add(a);
+        return instance;
+    }
+
+    private static void Adjuntar(ProcedureInstance instance, string tipo) =>
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Tenant,
+            ProcedureInstanceId = instance.Id,
+            Tipo = tipo,
+            StoragePath = $"p/{tipo}",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+
+    [Fact]
+    public async Task RolSinCertificado_ObligatorioSinCargar_DevuelveElRol()
+    {
+        var instance = ConActores(Juridico("vendedor", "900111222", rlDoc: null));
+
+        var rol = await new CamaraComercioRequirementResolver(new FakeVault(), new FakeDeeds())
+            .RolSinCertificadoAsync(Tenant, instance, TestContext.Current.CancellationToken);
+
+        rol.Should().Be("vendedor");
+    }
+
+    [Fact]
+    public async Task RolSinCertificado_CargadoOExento_DevuelveNull()
+    {
+        var instance = ConActores(
+            Juridico("vendedor", "900111222", rlDoc: null),
+            Juridico("comprador", "900333444", rlDoc: "555"));
+        Adjuntar(instance, CamaraComercioAttachmentTipo.Vendedor);
+
+        var rol = await new CamaraComercioRequirementResolver(new FakeVault("555"), new FakeDeeds())
+            .RolSinCertificadoAsync(Tenant, instance, TestContext.Current.CancellationToken);
+
+        rol.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RolSinCertificado_ElDelOtroRolNoSatisface()
+    {
+        var instance = ConActores(
+            Juridico("vendedor", "900111222", rlDoc: null),
+            Juridico("comprador", "900333444", rlDoc: null));
+        Adjuntar(instance, CamaraComercioAttachmentTipo.Vendedor);
+
+        var rol = await new CamaraComercioRequirementResolver(new FakeVault(), new FakeDeeds())
+            .RolSinCertificadoAsync(Tenant, instance, TestContext.Current.CancellationToken);
+
+        rol.Should().Be("comprador");
+    }
 }

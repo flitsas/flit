@@ -43,6 +43,12 @@ public static class TramiteEstadoErrores
     /// <summary>RF03 — gate Borrador→Preparado: faltan documentos obligatorios del checklist (422).</summary>
     public const string DocumentosIncompletos = "documentos_incompletos";
 
+    /// <summary>
+    /// HU #12775 AC3 — gate Borrador→Preparado: una parte persona jurídica sin firma precargada ni
+    /// escritura vigente no cargó su certificado de Cámara de Comercio (422).
+    /// </summary>
+    public const string CamaraComercioPendiente = "camara_comercio_pendiente";
+
     /// <summary>El estado destino no es un estado de negocio conocido (422).</summary>
     public const string EstadoDesconocido = "estado_desconocido";
 
