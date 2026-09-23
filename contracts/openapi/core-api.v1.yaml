@@ -8726,14 +8726,33 @@ paths:
         schema: { type: string, format: uuid }
     delete:
       tags: [Trámites · Documentos]
-      summary: Borrar un adjunto (solo en borrador)
+      summary: Borrar un adjunto (solo en borrador o con subsanación activa)
+      description: >
+        Los consolidados (tipos `consolidado` y `consolidado_maestro`) son documentos del sistema y no se
+        borran por esta ruta, igual que cualquier adjunto referenciado por una radicación ante Quipux
+        (re-review Épica #12760, M-N1): 409 con `error = adjunto_protegido`.
       operationId: deleteProcedureInstanceAttachment
       security:
         - bearerAuth: []
       responses:
         "204": { description: "Adjunto borrado." }
         "404": { description: "Trámite o adjunto no encontrado." }
-        "409": { description: "El trámite no está en borrador." }
+        "409":
+          description: >
+            El trámite no está en borrador ni con subsanación activa (`not_draft`, solo detail), o el
+            adjunto es un documento del sistema (`adjunto_protegido`).
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  title: { type: string, example: Conflict }
+                  status: { type: integer, example: 409 }
+                  detail: { type: string, example: "Este documento lo genera el sistema y no se puede eliminar." }
+                  error:
+                    type: string
+                    enum: [adjunto_protegido]
+                    description: Solo presente cuando el adjunto es un documento del sistema.
 
   /api/v1/tramites/instances/{id}/checklist:
     parameters:
@@ -11781,8 +11800,11 @@ components:
           nullable: true
           enum: [vigente, regenerado, definitivo_estado_final, migrado_solo_lectura, cargado_por_usuario, solo_lectura, radicado_fijo]
           description: >
-            Cómo se resolvió la entrega. null en las rutas POST de generación. radicado_fijo (HU #12787,
-            aditivo): el maestro ya se radicó ante Quipux y se sirvió el adjunto radicado sin regenerar.
+            Cómo se resolvió la entrega. Las rutas POST de generación lo devuelven en null, salvo el POST
+            OT de consolidado maestro cuando el maestro ya se radicó ante Quipux: ahí devuelve
+            radicado_fijo (el adjunto radicado, sin regenerar) o solo_lectura (el adjunto radicado ya no
+            existe y se sirve el maestro existente). radicado_fijo (HU #12787, aditivo): radicación vigente
+            (registrado/aprobado); un rechazo de Quipux deja de fijar el maestro.
     AttachmentDto:
       type: object
       properties:

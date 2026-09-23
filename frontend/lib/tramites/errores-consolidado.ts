@@ -20,6 +20,8 @@ export const ERRORES_CONSOLIDADO: Readonly<Record<string, string>> = {
     'El trámite ya está aprobado o anulado: su documentación es definitiva y no se regenera.',
   // Defecto del cliente (un GET nunca debe forzar): al usuario solo le sirve reintentar.
   force_no_permitido_en_get: 'No se pudo abrir el consolidado. Intenta de nuevo.',
+  // Re-review #12760 (M-N1) — DELETE de un consolidado o de un adjunto radicado ante Quipux (409).
+  adjunto_protegido: 'Este documento lo genera el sistema y no se puede eliminar.',
   ...Object.fromEntries(
     Object.entries(CAUSAS_FALLO_CONSOLIDADO).map(([codigo, texto]) => [
       codigo,
@@ -84,8 +86,8 @@ export function mensajeErrorConsolidadoAmigable(
   const codigo = codigoErrorConsolidado(err);
   if (codigo) return ERRORES_CONSOLIDADO[codigo] ?? respaldo;
   const status = statusDelError(err);
-  // 403 — p. ej. un gestor que pide `tipo=consolidado_maestro` (solo OT/SuperAdmin). El código exacto
-  // de ese rechazo aún no está en el OpenAPI: se resuelve por estado, sin inventar el código.
+  // 403 — p. ej. un gestor que pide `tipo=consolidado_maestro` (solo OT/SuperAdmin). El OpenAPI ya
+  // documenta ese código (`maestro_solo_ot`, HU #12787); se resuelve por estado para cubrir cualquier 403.
   if (status === 403) return ERROR_CONSOLIDADO_SIN_PERMISO;
   if (status === 404) return ERRORES_CONSOLIDADO.consolidado_no_generado ?? respaldo;
   if (status === 0 || (status !== null && status >= 500)) return ERROR_CONSOLIDADO_SERVICIO;

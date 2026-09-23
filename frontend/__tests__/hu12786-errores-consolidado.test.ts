@@ -135,3 +135,28 @@ describe('modo radicado_fijo (entrega OT) — versión radicada', () => {
     ).toBeNull();
   });
 });
+
+// Uso de ejemplo: mensajeErrorConsolidadoAmigable(new TramitesApiError(409, 'Conflict', { error: 'adjunto_protegido' }))
+describe('re-review #12760 (M-N1) — adjunto_protegido del DELETE de adjuntos', () => {
+  it('traduce el 409 adjunto_protegido del ProblemDetails a copy amigable', () => {
+    const err = new TramitesApiError(409, 'Conflict', {
+      title: 'Conflict',
+      status: 409,
+      detail: 'Este documento lo genera el sistema y no se puede eliminar.',
+      error: 'adjunto_protegido',
+    });
+    expect(codigoErrorConsolidado(err)).toBe('adjunto_protegido');
+    expect(mensajeErrorConsolidadoAmigable(err)).toBe(
+      'Este documento lo genera el sistema y no se puede eliminar.',
+    );
+  });
+
+  it('el código viene en el mapa y nunca se pinta crudo', () => {
+    expect(ERRORES_CONSOLIDADO.adjunto_protegido).toBe(
+      'Este documento lo genera el sistema y no se puede eliminar.',
+    );
+    expect(mensajeErrorConsolidadoAmigable(new Error('409: adjunto_protegido'))).not.toContain(
+      'adjunto_protegido',
+    );
+  });
+});
