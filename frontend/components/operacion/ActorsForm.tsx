@@ -370,6 +370,17 @@ export function validateActors(
  * `lib/tramites/ownership-share.ts`): con un solo actor por lado el resultado es byte a byte el
  * mismo contrato de siempre (`ordinal:1`, `porcentaje:null`).
  */
+/**
+ * Representante con el tipo de documento que el selector muestra por defecto («CC»). Cubre también
+ * los actores guardados antes de que `updateRepLegal` lo escribiera: sin tipo, el backend no puede
+ * buscar la firma del baúl ni la escritura del representante.
+ */
+function conTipoDocumentoRl(a: ProcedureActor): ProcedureActor {
+  const rl = a.representanteLegal;
+  if (!rl || rl.tipoDocumento || !rl.numeroDocumento?.trim()) return a;
+  return { ...a, representanteLegal: { ...rl, tipoDocumento: 'CC' } };
+}
+
 function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
   const blankToUndef = (v?: string) => (v?.trim() ? v.trim() : undefined);
   const withOwnership = withOwnershipFields(actors);
@@ -379,7 +390,7 @@ function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
     const rest = { ...a };
     delete rest.autorizaReutilizacionDatos;
     return {
-      ...rest,
+      ...conTipoDocumentoRl(rest),
       telefono: blankToUndef(a.telefono),
       ciudad: blankToUndef(a.ciudad),
       direccion: blankToUndef(a.direccion),
@@ -1117,7 +1128,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const consulta = ++camaraConsulta.current;
     const firma = camaraFirmaRef.current;
     void tramitesClient
-      .getCamaraComercioRequirements(instanceId, undefined, camaraActorsRef.current)
+      .getCamaraComercioRequirements(instanceId, undefined, camaraActorsRef.current.map(conTipoDocumentoRl))
       .then((rs) => {
         if (consulta !== camaraConsulta.current) return;
         setCamaraFallo(rs === null);
@@ -1609,10 +1620,22 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     // automática se disparó sola al abrir el paso. Marcar esta vía obligaría a guardar un paso que
     // el gestor solo abrió para mirar — y con un actor persistido incompleto lo dejaría atrapado.
     if (!opts?.preserveConsultation) markDirty();
+    // Otro NIT es otra sociedad: su representante legal ya no es el que estaba capturado. Si RUES no
+    // trae uno del directorio para el NIT nuevo, el anterior se quedaba y podía eximir de la Cámara
+    // de Comercio a una empresa que no representa. Solo cambios del gestor: el autopoblado de una
+    // consulta (preserveConsultation) escribe el NIT que acaba de validar.
+    const cambiaSociedad =
+      !opts?.preserveConsultation &&
+      patch.numeroDocumento !== undefined &&
+      !!prevActor &&
+      isJuridical(prevActor) &&
+      !!prevActor.representanteLegal &&
+      normalizeNitKey(patch.numeroDocumento) !== normalizeNitKey(prevActor.numeroDocumento);
     setActors((prev) =>
       prev.map((a, i) => {
         if (i !== index) return a;
         const next = { ...a, ...patch };
+        if (cambiaSociedad) delete next.representanteLegal;
         // Saneo de caracteres por tipo de campo (Ajuste 3): número de documento según
         // el tipo (pasaporte alfanumérico, resto solo dígitos) y nombre sin caracteres
         // especiales. Se re-sanea el documento al cambiar de tipo (p.ej. PAS→CC).
@@ -1632,6 +1655,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     );
     // Cambio MANUAL de identidad invalida la consulta. El autopoblado post-RUNT/RUES
     // usa preserveConsultation para no disparar un segundo lookup ni perder el `found`.
+    if (cambiaSociedad) {
+      const sinIndice = <T,>(m: Record<number, T>): Record<number, T> => {
+        if (!(index in m)) return m;
+        const next = { ...m };
+        delete next[index];
+        return next;
+      };
+      setRlRunt(sinIndice);
+      setSelectedRepIdx(sinIndice);
+      setDirectoryAbandoned(sinIndice);
+    }
     if (identityChanged && !opts?.preserveConsultation) {
       if (prevActor?.numeroDocumento) unlockRuesRazonSocial(prevActor.numeroDocumento);
       if (prevActor) forgetActorConsultation(instanceId, prevActor.rol);
@@ -1744,6 +1778,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       prev.map((a, i) => {
         if (i !== index) return a;
         const rl = { ...a.representanteLegal, ...patch };
+        // El selector pinta «CC» cuando no hay tipo, así que ese es el tipo que el gestor ve. Sin
+        // escribirlo en el estado, el representante viajaba sin tipo y el backend no podía buscar su
+        // firma en el baúl ni su escritura: la exención de Cámara de Comercio nunca aplicaba.
+        rl.tipoDocumento = rl.tipoDocumento ?? 'CC';
         if (patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined) {
           rl.numeroDocumento = sanitizeDocNumber(
             rl.numeroDocumento ?? '',
