@@ -379,37 +379,26 @@ describe('ActorsForm — representante legal que llega al backend (hallazgos de 
   });
 });
 
-describe('ActorsForm — el gate del certificado dice a quién le falta (HU #12777 AC2)', () => {
-  it('reporta el nombre de la parte con el certificado obligatorio pendiente', async () => {
+describe('ActorsForm — gate del certificado de Cámara de Comercio (HU #12777 AC2)', () => {
+  it('sin el certificado obligatorio el paso no puede avanzar', async () => {
     mocks.getActors.mockResolvedValue([actorJuridico('comprador', '900111222')]);
     mocks.getCamaraComercioRequirements.mockResolvedValue([requisito('comprador')]);
     const onGate = vi.fn();
 
-    render(
-      <ActorsForm
-        instanceId={INSTANCE}
-        modalidad="matricula_inicial"
-        onCamaraComercioGateChange={onGate}
-      />,
-    );
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" onCamaraComercioGateChange={onGate} />);
 
-    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith(false, ['Comprador']));
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith(false));
   });
 
-  it('con el certificado cargado el gate se abre y no hay partes pendientes', async () => {
+  it('con el certificado cargado el paso puede avanzar', async () => {
     mocks.getActors.mockResolvedValue([actorJuridico('comprador', '900111222')]);
     mocks.getCamaraComercioRequirements.mockResolvedValue([requisito('comprador')]);
     mocks.getAttachments.mockResolvedValue([adjunto('att-c', 'camara_comercio_comprador')]);
     const onGate = vi.fn();
 
-    render(
-      <ActorsForm
-        instanceId={INSTANCE}
-        modalidad="matricula_inicial"
-        onCamaraComercioGateChange={onGate}
-      />,
-    );
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" onCamaraComercioGateChange={onGate} />);
 
-    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith(true, []));
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith(true));
   });
 });
+
