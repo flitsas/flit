@@ -1,4 +1,5 @@
 import type { QueryCondition } from '@/lib/api/queries';
+import type { ConsolidadoVigencia } from '@/lib/api/types/procedure-runtime';
 
 /** Tipos del módulo Administración OT (HU #10215 / #10217 / #10218). */
 
@@ -137,6 +138,20 @@ export interface OtClientProcedure {
   revocationDecisionAt?: string | null;
   revocationRequestReason?: string | null;
   revocationDecisionReason?: string | null;
+  /**
+   * HU #12791 (Épica #12760) — vigencia de los consolidados del trámite. Las respuestas de
+   * aprobar/rechazar/revocar los devuelven en `null` (no los recalculan): no deben pisar el valor
+   * que ya tiene el estado local (ver `conservarCamposConsolidadoOt`).
+   */
+  consolidadoWizard?: ConsolidadoVigencia | null;
+  consolidadoMaestro?: ConsolidadoVigencia | null;
+  /**
+   * HU #12791 — ISO UTC de la última radicación Quipux exitosa (`RegisteredAt` no nulo y estado
+   * distinto de fallido). `null` si el trámite no se ha radicado.
+   */
+  quipuxRadicadoEn?: string | null;
+  /** HU #12791 — uuid del adjunto maestro que se radicó en Quipux; `null` si no se conoce. */
+  quipuxMaestroAttachmentId?: string | null;
 }
 
 export interface OtClientProcedureVehicleSnapshot {

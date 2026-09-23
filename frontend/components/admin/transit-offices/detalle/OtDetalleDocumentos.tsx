@@ -5,11 +5,19 @@ import { Check, Download, Eye, RefreshCw } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
+import { AvisoDocumentoFinal } from "@/components/shared/AvisoDocumentoFinal";
+import { AvisoMaestroRadicado } from "@/components/shared/AvisoMaestroRadicado";
 import {
+  entregarOtConsolidado,
   fetchOtAttachmentPreviewUrl,
   fetchOtDocuments,
   generarOtConsolidadoMaestro,
 } from "@/lib/api/admin-ot";
+import { esDocumentoDefinitivo } from "@/lib/tramites/consolidado-entrega";
+import {
+  mensajeEntregaOtFallida,
+  resolverFuenteMaestroOt,
+} from "@/lib/tramites/consolidado-entrega-ot";
 import { downloadFile } from "@/lib/api/download";
 import type { OtApiScope, OtProcedureAttachment } from "@/lib/api/admin-ot";
 import { OtVacio } from "./OtDetallePrimitivos";
@@ -24,6 +32,13 @@ export interface OtDetalleDocumentosProps {
   scope?: OtApiScope;
   /** Si es true el OT no puede reconstruir el consolidado (solo ver documentos). */
   readOnly?: boolean;
+  /**
+   * HU #12787 (AC2) — ISO UTC de la radicación Quipux del trámite. Si no es null, la vista de solo
+   * lectura sirve el maestro radicado tal cual y no lo regenera.
+   */
+  quipuxRadicadoEn?: string | null;
+  /** HU #12787 (AC2) — adjunto maestro que se radicó; se abre por la ruta de documentos. */
+  quipuxMaestroAttachmentId?: string | null;
 }
 
 function formatSize(bytes: number): string {
@@ -90,6 +105,8 @@ export function OtDetalleDocumentos({
   procedureId,
   scope,
   readOnly = false,
+  quipuxRadicadoEn = null,
+  quipuxMaestroAttachmentId = null,
 }: OtDetalleDocumentosProps) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -101,6 +118,10 @@ export function OtDetalleDocumentos({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  /** HU #12787 (AC3) — el consolidado abierto es el definitivo del trámite (estado final). */
+  const [previewDefinitivo, setPreviewDefinitivo] = useState(false);
+  /** HU #12787 (AC2) — el consolidado abierto es el maestro radicado en Quipux (fecha ISO). */
+  const [previewRadicadoEn, setPreviewRadicadoEn] = useState<string | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -125,8 +146,14 @@ export function OtDetalleDocumentos({
     return () => c.abort();
   }, [load]);
 
-  const handlePreview = async (item: OtProcedureAttachment) => {
+  const handlePreview = async (
+    item: OtProcedureAttachment,
+    definitivo = false,
+    radicadoEn: string | null = null,
+  ) => {
     setRevisados((prev) => new Set(prev).add(item.id));
+    setPreviewDefinitivo(definitivo);
+    setPreviewRadicadoEn(radicadoEn);
     setPreviewItem(item);
     setPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
@@ -159,6 +186,8 @@ export function OtDetalleDocumentos({
     });
     setPreviewItem(null);
     setPreviewError(null);
+    setPreviewDefinitivo(false);
+    setPreviewRadicadoEn(null);
   };
 
   const handleDownload = async (item: OtProcedureAttachment) => {
@@ -203,19 +232,94 @@ export function OtDetalleDocumentos({
         });
         return;
       }
-      const consolidado =
-        attachments.find((a) => a.tipo === "consolidado_maestro") ??
-        attachments.find((a) => a.tipo === "consolidado");
-      if (!consolidado) {
-        show("El trámite aún no tiene consolidado generado.", "error");
-        return;
-      }
-      await handlePreview(consolidado);
-    } catch {
-      show("No se pudo abrir el consolidado.", "error");
+      // HU #12787 (AC1/AC3) — en modo QX read-only el maestro ya NO se toma del adjunto de
+      // `GET …/documents` (puede estar desactualizado): se pide a la ruta de entrega OT, que lo
+      // reconstruye solo si la bandera está abajo y en estado final sirve el definitivo.
+      await abrirMaestroReadOnly();
+    } catch (e: unknown) {
+      show(mensajeEntregaOtFallida(e), "error");
     } finally {
       setConsolidadoActing(false);
     }
+  };
+
+  /**
+   * HU #12787 — abre por la ruta de entrega OT el consolidado pedido (maestro por defecto; el del
+   * wizard si la fila es `consolidado`). Lanza si la entrega falla: el llamador decide el aviso.
+   */
+  const abrirEntregaReadOnly = async (
+    tipo: "consolidado_maestro" | "consolidado",
+    soloLectura = false,
+    radicadoEn: string | null = null,
+  ) => {
+    const res = await entregarOtConsolidado(
+      procedureId,
+      scope,
+      soloLectura ? { tipo, soloLectura: true } : { tipo },
+    );
+    await handlePreview(
+      {
+        id: res.document.attachmentId,
+        tipo: res.document.tipo,
+        filename: res.document.filename,
+        mimetype: "application/pdf",
+        sizeBytes: 0,
+        sha256: res.document.sha256,
+        source: "system",
+        uploadedAt: "",
+      },
+      esDocumentoDefinitivo(res),
+      radicadoEn,
+    );
+  };
+
+  /**
+   * HU #12787 (AC2, «maestro radicado, fijo») — maestro en solo lectura. Radicado con adjunto
+   * conocido ⇒ ese adjunto por la ruta de documentos, SIN llamar a la entrega (que podría
+   * regenerar). Radicado sin adjunto ⇒ entrega con `soloLectura`. No radicado ⇒ AC1.
+   */
+  const abrirMaestroReadOnly = async () => {
+    const fuente = resolverFuenteMaestroOt({ quipuxRadicadoEn, quipuxMaestroAttachmentId });
+    if (fuente.via === "adjunto_radicado") {
+      const listado = attachments.find((a) => a.id === fuente.attachmentId);
+      await handlePreview(
+        listado ?? {
+          id: fuente.attachmentId,
+          tipo: "consolidado_maestro",
+          filename: "consolidado-maestro-radicado.pdf",
+          mimetype: "application/pdf",
+          sizeBytes: 0,
+          sha256: "",
+          source: "system",
+          uploadedAt: "",
+        },
+        false,
+        fuente.radicadoEn,
+      );
+      return;
+    }
+    await abrirEntregaReadOnly(
+      "consolidado_maestro",
+      fuente.params.soloLectura === true,
+      fuente.radicadoEn,
+    );
+  };
+
+  /**
+   * HU #12787 (AC1) — en read-only, previsualizar la fila del consolidado (maestro o wizard) también
+   * pasa por la entrega: la fila de `GET …/documents` puede ser el PDF antiguo.
+   */
+  const previsualizarFila = async (att: OtProcedureAttachment) => {
+    if (readOnly && (att.tipo === "consolidado_maestro" || att.tipo === "consolidado")) {
+      try {
+        if (att.tipo === "consolidado_maestro") await abrirMaestroReadOnly();
+        else await abrirEntregaReadOnly(att.tipo);
+      } catch (e: unknown) {
+        show(mensajeEntregaOtFallida(e), "error");
+      }
+      return;
+    }
+    await handlePreview(att);
   };
 
   return (
@@ -229,6 +333,14 @@ export function OtDetalleDocumentos({
         loading={previewLoading}
         error={previewError}
         onDownload={previewItem ? () => void handleDownload(previewItem) : undefined}
+        notice={
+          previewRadicadoEn || previewDefinitivo ? (
+            <div className="space-y-2">
+              {previewRadicadoEn ? <AvisoMaestroRadicado radicadoEn={previewRadicadoEn} /> : null}
+              {previewDefinitivo ? <AvisoDocumentoFinal /> : null}
+            </div>
+          ) : undefined
+        }
       />
 
       <div className="space-y-3" data-testid="ot-detalle-documentos">
@@ -285,7 +397,7 @@ export function OtDetalleDocumentos({
                   <AccionDoc
                     icon={Eye}
                     label={`Previsualizar ${att.filename}`}
-                    onClick={() => void handlePreview(att)}
+                    onClick={() => void previsualizarFila(att)}
                   />
                   <AccionDoc
                     icon={Download}

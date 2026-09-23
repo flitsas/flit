@@ -14,9 +14,9 @@ import {
   fetchOtBandejaFilterFields,
   fetchOtBandejaHealth,
   fetchOtClientProcedure,
-  fetchOtDocuments,
   fetchOtProfile,
   generarOtConsolidadoMaestro,
+  entregarOtConsolidado,
   rejectOtClientProcedure,
   rejectOtRevocationRequest,
   searchOtClientProcedures,
@@ -38,6 +38,14 @@ import { COPY } from "@/lib/copy/copy-catalog";
 import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
+import { AvisoDocumentoFinal } from "@/components/shared/AvisoDocumentoFinal";
+import { AvisoMaestroRadicado } from "@/components/shared/AvisoMaestroRadicado";
+import { esDocumentoDefinitivo } from "@/lib/tramites/consolidado-entrega";
+import {
+  conservarCamposConsolidadoOt,
+  mensajeEntregaOtFallida,
+  resolverFuenteMaestroOt,
+} from "@/lib/tramites/consolidado-entrega-ot";
 import { Download, RefreshCw } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
 import {
@@ -561,6 +569,10 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     loading: boolean;
     error: string | null;
     download: { procId: string; attId: string; filename: string } | null;
+    /** HU #12787 (AC3) — el consolidado abierto es el definitivo del trámite (estado final). */
+    definitivo?: boolean;
+    /** HU #12787 (AC2) — el consolidado abierto es el maestro radicado en Quipux (fecha ISO). */
+    radicadoEn?: string | null;
   }>({ open: false, title: "Consolidado", mimetype: null, url: null, loading: false, error: null, download: null });
   // Diagnóstico de bandeja (R09): entregados hacia el OT que no aparecen por falta de grant.
   const [health, setHealth] = useState<OtBandejaHealth | null>(null);
@@ -986,7 +998,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       // en 'asignado', así que adjuntar antes fallaba con estado_invalido; tras aprobar queda
       // 'aprobado' (válido para la LT). El consolidado se genera on-demand y toma la LT vigente.
       const updated = await approveOtClientProcedure(target.id, mandateSignerId);
-      reconciliarFila(updated.id, () => updated);
+      // HU #12787 — la respuesta trae en null la vigencia y la radicación: no pisan las locales.
+      reconciliarFila(updated.id, (r) => conservarCamposConsolidadoOt(r, updated));
       refreshCounters();
 
       if (ltFile) {
@@ -1304,7 +1317,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const closePreview = () => {
     setPreview((p) => {
       if (p.url) URL.revokeObjectURL(p.url);
-      return { ...p, open: false, url: null, error: null, download: null };
+      return {
+        ...p,
+        open: false,
+        url: null,
+        error: null,
+        download: null,
+        definitivo: false,
+        radicadoEn: null,
+      };
     });
   };
 
@@ -1326,33 +1347,45 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         loading: true,
         error: null,
         download: null,
+        definitivo: false,
+        radicadoEn: null,
       };
     });
     try {
       let attId: string;
       let filename: string;
-      let mimetype = "application/pdf";
+      const mimetype = "application/pdf";
+      let definitivo = false;
+      let radicadoEn: string | null = null;
       if (!isReadOnly) {
         const res = await generarOtConsolidadoMaestro(row.id, scope, force);
         attId = res.document.attachmentId;
         filename = res.document.filename;
         if (res.regenerado) show("Consolidado generado.", "success");
       } else {
-        const docs = await fetchOtDocuments(row.id, scope);
-        const consol =
-          docs.data.find((a) => a.tipo === "consolidado_maestro") ??
-          docs.data.find((a) => a.tipo === "consolidado");
-        if (!consol) {
-          setPreview((p) => ({
-            ...p,
-            loading: false,
-            error: "El trámite aún no tiene consolidado generado.",
-          }));
-          return;
+        // HU #12787 (AC2, «maestro radicado, fijo») — si el trámite ya se radicó en Quipux y se
+        // conoce el adjunto, se sirve ESE maestro por la ruta de documentos, sin pasar por la
+        // entrega (que podría regenerarlo). Radicado sin adjunto ⇒ entrega con `soloLectura`.
+        const fuente = resolverFuenteMaestroOt(row);
+        radicadoEn = fuente.radicadoEn;
+        if (fuente.via === "adjunto_radicado") {
+          attId = fuente.attachmentId;
+          filename = `consolidado-maestro-${row.referenceNumber}.pdf`;
+        } else {
+          // HU #12787 (AC1/AC3) — en modo QX read-only el maestro se pide a la ruta de entrega OT (no
+          // al adjunto de `GET …/documents`, que puede estar desactualizado). La entrega reconstruye
+          // solo si la bandera está abajo y en estado final sirve el definitivo sin regenerar.
+          let res;
+          try {
+            res = await entregarOtConsolidado(row.id, scope, fuente.params);
+          } catch (e: unknown) {
+            setPreview((p) => ({ ...p, loading: false, error: mensajeEntregaOtFallida(e) }));
+            return;
+          }
+          attId = res.document.attachmentId;
+          filename = res.document.filename;
+          definitivo = esDocumentoDefinitivo(res);
         }
-        attId = consol.id;
-        filename = consol.filename;
-        mimetype = consol.mimetype || "application/pdf";
       }
       const { url } = await fetchOtAttachmentPreviewUrl(row.id, attId, scope);
       // El file-manager sirve el objeto como binary/octet-stream: re-empaquetamos como Blob con el
@@ -1368,6 +1401,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         url: objectUrl,
         mimetype,
         download: { procId: row.id, attId, filename },
+        definitivo,
+        radicadoEn,
       }));
     } catch {
       setPreview((p) => ({
@@ -1435,7 +1470,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         reason: rejectReason.trim(),
         rejectionReasonIds: rejectReasonIds.length > 0 ? rejectReasonIds : undefined,
       });
-      reconciliarFila(updated.id, () => updated);
+      // HU #12787 — la respuesta trae en null la vigencia y la radicación: no pisan las locales.
+      reconciliarFila(updated.id, (r) => conservarCamposConsolidadoOt(r, updated));
       refreshCounters();
       setRejectTarget(null);
       setDetailProcedure(null);
@@ -2287,6 +2323,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         loading={preview.loading}
         error={preview.error}
         onDownload={preview.download ? () => void handlePreviewDownload() : undefined}
+        notice={
+          preview.radicadoEn || preview.definitivo ? (
+            <div className="space-y-2">
+              {preview.radicadoEn ? <AvisoMaestroRadicado radicadoEn={preview.radicadoEn} /> : null}
+              {preview.definitivo ? <AvisoDocumentoFinal /> : null}
+            </div>
+          ) : undefined
+        }
       />
     </div>
   );

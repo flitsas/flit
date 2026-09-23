@@ -790,6 +790,8 @@ function normalizeInstances(items: InstanceSummary[] | undefined): InstanceSumma
     firmaVendedorEstado: item.firmaVendedorEstado ?? null,
     firmaCompradorEstado: item.firmaCompradorEstado ?? null,
     consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
+    // HU #12791 — backend anterior al campo ⇒ null (la UI no infiere vigencia).
+    consolidadoWizard: item.consolidadoWizard ?? null,
   }));
 }
 

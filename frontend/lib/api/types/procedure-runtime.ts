@@ -339,6 +339,11 @@ export interface InstanceSummary {
    * generado ⇒ la fila NO ofrece la acción (el botón no dispara generación).
    */
   consolidadoAttachmentId?: string | null;
+  /**
+   * HU #12791 (Épica #12760) — vigencia del consolidado del wizard. `null`/ausente en backends
+   * anteriores al campo: la UI no infiere vigencia, pide la entrega.
+   */
+  consolidadoWizard?: ConsolidadoVigencia | null;
   // ── ICT (PR #204) — pausa de trámites de la integración ──────────────────────────
   /**
    * ICT (servicio v1 pauseDraftProcess / bandera starts_procedure_in_paused): el trámite está pausado
@@ -569,6 +574,10 @@ export interface ProcedureInstanceDetail {
   activeRevocationRequest?: ActiveRevocationRequest | null;
   /** Ver {@link RevocationDecision}. */
   lastRevocationDecision?: RevocationDecision | null;
+  /** HU #12791 (Épica #12760) — vigencia del consolidado del wizard. Ver {@link ConsolidadoVigencia}. */
+  consolidadoWizard?: ConsolidadoVigencia | null;
+  /** HU #12791 (Épica #12760) — vigencia del consolidado maestro. Ver {@link ConsolidadoVigencia}. */
+  consolidadoMaestro?: ConsolidadoVigencia | null;
 }
 
 /** Ver `ProcedureInstanceDetail.events`. */
@@ -2204,6 +2213,24 @@ export type ConsolidadoEntregaModo =
   | 'migrado_solo_lectura'
   | 'cargado_por_usuario'
   | 'solo_lectura';
+
+/**
+ * HU #12791 (Épica #12760) — vigencia de un consolidado (wizard o maestro) tal como la exponen el
+ * listado y el detalle del trámite (gestor y OT).
+ * - `estado`: `vigente` (el PDF refleja el expediente), `desactualizado` (la bandera bajó: la
+ *   próxima entrega lo reconstruye) o `inexistente` (nunca se generó).
+ * - `generadoEn`: ISO UTC del sello de generación; `null` si no existe.
+ * - `origen`: `system` (generado) o `user` (cargado por el SuperAdmin); `null` si no existe.
+ * - `definitivo`: el trámite está en estado final y el PDF ya no se regenera.
+ * - `modo`: cómo se resolvería la entrega en estado final o carga manual; `null` en el caso normal.
+ */
+export interface ConsolidadoVigencia {
+  estado: 'vigente' | 'desactualizado' | 'inexistente';
+  generadoEn: string | null;
+  origen: 'system' | 'user' | null;
+  definitivo: boolean;
+  modo: 'definitivo_estado_final' | 'migrado_solo_lectura' | 'cargado_por_usuario' | null;
+}
 
 /** HU #12785 — tipo de PDF que se pide a la ruta de entrega. */
 export type ConsolidadoEntregaTipo = 'consolidado' | 'consolidado_maestro';
