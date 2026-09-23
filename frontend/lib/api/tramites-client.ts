@@ -2781,6 +2781,8 @@ const TRANSITION_ERROR_COPY: Record<string, string> = {
   firma_pendiente:
     'Falta la validación de identidad o firma de una de las partes: no se puede enviar al organismo de tránsito un trámite sin firmar.',
   documentos_incompletos: 'Faltan documentos obligatorios del trámite.',
+  // HU #12775 AC3 — parte jurídica sin firma precargada ni escritura vigente y sin certificado.
+  camara_comercio_pendiente: 'Falta el certificado de Cámara de Comercio de una parte persona jurídica.',
   motivo_requerido: 'Debes indicar el motivo para esta transición.',
   conflicto_concurrencia: 'El trámite fue modificado por otro usuario, recarga e intenta de nuevo.',
   estado_desconocido: 'El estado destino no es válido.',
