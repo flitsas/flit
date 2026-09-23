@@ -185,6 +185,40 @@ describe('ActorsForm — descarte del certificado al dejar de ser persona juríd
   });
 
   /**
+   * Carrera (hallazgo del code review): el gestor vuelve a persona jurídica ANTES de que el descarte
+   * termine. La promesa en vuelo no puede borrar el certificado: la parte ya no es persona natural.
+   */
+  it('volver a jurídica antes de que termine el descarte no borra el certificado', async () => {
+    const user = userEvent.setup();
+    mocks.getActors.mockResolvedValue([actorJuridico('comprador', '900111222')]);
+    mocks.getCamaraComercioRequirements.mockResolvedValue([requisito('comprador')]);
+    // La primera lectura (la del buzón) responde de inmediato; la del descarte queda en vuelo.
+    let liberarDescarte: (v: ReturnType<typeof adjunto>[]) => void = () => {};
+    let lecturas = 0;
+    mocks.getAttachments.mockImplementation(() => {
+      lecturas += 1;
+      // Solo la 2.ª lectura (la del descarte) queda en vuelo; las del buzón responden al instante.
+      if (lecturas !== 2) return Promise.resolve([adjunto('att-c', 'camara_comercio_comprador')]);
+      return new Promise((resolve) => {
+        liberarDescarte = resolve;
+      });
+    });
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    expect(await within(await buzon()).findByText('Cargado')).toBeInTheDocument();
+
+    const selects = await screen.findAllByLabelText('Tipo de documento');
+    await user.selectOptions(selects[0], 'CC');
+    await waitFor(() => expect(lecturas).toBe(2));
+    await user.selectOptions((await screen.findAllByLabelText('Tipo de documento'))[0], 'NIT');
+
+    liberarDescarte([adjunto('att-nuevo', 'camara_comercio_comprador')]);
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(mocks.deleteAttachment).not.toHaveBeenCalled();
+  });
+
+  /**
    * AC3 — el descarte es por rol. Si las dos partes eran jurídicas y solo una cambió, la otra
    * conserva su certificado: son documentos de sociedades distintas.
    */
