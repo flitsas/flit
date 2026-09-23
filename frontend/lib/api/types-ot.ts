@@ -1,3 +1,4 @@
+import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import type { QueryCondition } from '@/lib/api/queries';
 
 /** Tipos del módulo Administración OT (HU #10215 / #10217 / #10218). */
@@ -194,6 +195,8 @@ export interface OtClientProceduresParams {
    */
   hasActiveRevocationRequest?: boolean;
   procedureTypeId?: string;
+  /** Epic #12686 — pestaña de familia (`MATRICULAS` / `TRASPASO` / `OTROS`). */
+  familia?: ProcedureFamily;
   vin?: string;
   placa?: string;
   vendedor?: string;
