@@ -10,7 +10,6 @@ import {
   approveOtRevocationRequest,
   fetchActiveOtRevocationRequestDetail,
   fetchOtAttachmentPreviewUrl,
-  fetchOtBandejaCounters,
   fetchOtBandejaFilterFields,
   fetchOtBandejaHealth,
   fetchOtClientProcedure,
@@ -19,8 +18,12 @@ import {
   generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
   rejectOtRevocationRequest,
+  searchOtBandejaCounters,
   searchOtClientProcedures,
 } from "@/lib/api/admin-ot";
+import type { ProcedureFamily } from "@/lib/api/types/procedure-parametrization";
+import { familiaUsaEstado } from "@/lib/tramites/panelesEstado";
+import { FamiliaTabs } from "@/components/operacion/FamiliaTabs";
 import type {
   OtActiveRevocationRequestDetail,
   OtBandejaCounters,
@@ -58,8 +61,15 @@ import {
   contadorDeEstado,
   estadoDeContador,
   revocatoriaActivaDeContador,
+  tarjetasDeFamilia,
+  ATAJOS_OT,
+  contadorDeAtajoOt,
+  type AtajoOt,
   type OtCounterKey,
 } from "./OtBandejaCounters";
+import { BusquedaRapidaAcordeon } from "@/components/operacion/BusquedaRapidaAcordeon";
+import { AvisoHayCambios } from "@/components/operacion/AvisoHayCambios";
+import { useSondeoDeConteos } from "@/hooks/useSondeoDeConteos";
 import { formatDocumentWithType } from "@/lib/display/document-number";
 import { ColumnSelector } from "@/components/atom/ColumnSelector";
 import { useUiPreferences } from "@/hooks/useUiPreferences";
@@ -419,6 +429,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [hasActiveRevocationRequestFilter, setHasActiveRevocationRequestFilter] = useState(false);
   const [counters, setCounters] = useState<OtBandejaCounters | null>(null);
   const [contadorActivo, setContadorActivo] = useState<OtCounterKey | "">("");
+  /** Epic #12686 (HU #12804) — pestaña de familia; vacío = Todos. */
+  const [familia, setFamilia] = useState<"" | ProcedureFamily>("");
+  /** Epic #12686 (HU #12807) — atajo de la búsqueda rápida; vacío = ninguno. */
+  const [atajoOt, setAtajoOt] = useState<"" | AtajoOt>("");
+  /** Epic #12686 (HU #12808) — el sondeo vio un conteo distinto al de la tabla. */
+  const [hayCambios, setHayCambios] = useState(false);
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -673,6 +689,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
    */
   const buildListQuery = useCallback(
     (): OtClientProceduresParams => ({
+      familia: familia || undefined,
       status: statusFilter || undefined,
       hasActiveRevocationRequest: hasActiveRevocationRequestFilter || undefined,
       condiciones: appliedCondiciones.length > 0 ? appliedCondiciones : undefined,
@@ -685,6 +702,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       sortDir,
     }),
     [
+      familia,
       statusFilter,
       hasActiveRevocationRequestFilter,
       appliedCondiciones,
@@ -708,7 +726,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     // Mismo blindaje que en `load`: la tira es orientativa y ni un fallo de red ni uno SÍNCRONO
     // (el módulo sin esa función en una prueba) pueden interrumpir la decisión que acaba de cuajar.
     try {
-      fetchOtBandejaCounters(undefined, transitOfficeId ? { transitOfficeId } : undefined)
+      // Epic #12686 — bajo los mismos filtros que la tabla, o la tarjeta prometería otras filas.
+      searchOtBandejaCounters(
+        buildListQuery(),
+        undefined,
+        transitOfficeId ? { transitOfficeId } : undefined,
+      )
         .then(setCounters)
         .catch(() => {
           /* conserva el último valor conocido */
@@ -716,7 +739,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     } catch {
       /* idem */
     }
-  }, [transitOfficeId]);
+  }, [buildListQuery, transitOfficeId]);
 
   /**
    * Fila tras una decisión del OT. Si la bandeja está filtrada por estado y el trámite acaba de
@@ -758,6 +781,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         setRows(result.data);
         setTotalCount(result.totalCount);
         setPage(result.page);
+        setHayCambios(false);
         setStatus(result.data.length === 0 ? "empty" : "ready");
         // Diagnóstico (R09) y contadores de la cabecera: acompañan a la lista y NUNCA la bloquean.
         // Van en su propio `try` y no solo con `.catch`, porque un fallo SÍNCRONO —el módulo sin
@@ -771,7 +795,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             .catch(() => {
               /* el diagnóstico es informativo: su fallo no afecta la bandeja */
             });
-          fetchOtBandejaCounters(signal, transitOfficeId ? { transitOfficeId } : undefined)
+          // Epic #12686 — mismos filtros que la tabla: la tarjeta elegida dice cuántas filas trae.
+          searchOtBandejaCounters(
+            buildListQuery(),
+            signal,
+            transitOfficeId ? { transitOfficeId } : undefined,
+          )
             .then((c) => {
               if (!signal?.aborted) setCounters(c);
             })
@@ -787,6 +816,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     },
     [buildListQuery, page, transitOfficeId],
   );
+
+  // Epic #12686 (HU #12808) — la tira se mantiene al día sola; la tabla, no. La tarjeta que manda
+  // es la elegida o, sin elegir, la de la bandeja por defecto (Entregado).
+  useSondeoDeConteos({
+    pedir: (signal) =>
+      searchOtBandejaCounters(buildListQuery(), signal, transitOfficeId ? { transitOfficeId } : undefined),
+    alRecibir: (conteos) => {
+      setCounters(conteos);
+      const tarjeta = contadorActivo || contadorDeEstado(statusFilter);
+      if (tarjeta && conteos[tarjeta] !== totalCount) setHayCambios(true);
+    },
+  });
 
   useEffect(() => {
     const c = new AbortController();
@@ -831,6 +872,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   }, [draftCondiciones, search, periodo, rangoPropioDesde, rangoPropioHasta, rangoSobre]);
 
   const hasActiveFilters =
+    familia !== "" ||
     appliedCondiciones.length > 0 ||
     busquedaAplicada.trim() !== "" ||
     periodo !== "Sin periodo" ||
@@ -859,14 +901,49 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
    * no se toca: son dos formas de acotar que conviven, y la tarjeta manda sobre el estado porque es
    * la que el operador acaba de pulsar. ADR-0059: tarjeta = estado real.
    */
-  const handleContadorSelect = (key: OtCounterKey | "") => {
+  const aplicarContador = (key: OtCounterKey | "") => {
     setContadorActivo(key);
     setStatusFilter(key === "" ? ESTADO_POR_DEFECTO : estadoDeContador(key));
     setHasActiveRevocationRequestFilter(revocatoriaActivaDeContador(key) ?? false);
     setPage(1);
   };
 
+  const handleContadorSelect = (key: OtCounterKey | "") => {
+    // Epic #12686 — tarjeta y atajo no se acumulan: elegir una tarjeta suelta el atajo.
+    setAtajoOt("");
+    aplicarContador(key);
+  };
+
+  /** Epic #12686 (HU #12807) — el atajo aplica su tarjeta; quitarlo vuelve a la bandeja por defecto. */
+  const handleAtajoOtSelect = (key: "" | AtajoOt) => {
+    setAtajoOt(key);
+    aplicarContador(contadorDeAtajoOt(key));
+  };
+
+  /**
+   * Epic #12686 — cambiar de familia. Si la tarjeta elegida (o el estado de la URL) no existe en la
+   * nueva pestaña —Preasignación o Asignado en Traspaso/Otros—, se vuelve a la bandeja por defecto:
+   * dejar ese filtro aplicado mostraría una tabla vacía sin tarjeta que lo explique.
+   */
+  const handleFamiliaChange = (v: "" | ProcedureFamily) => {
+    setFamilia(v);
+    const tarjetaSigue =
+      contadorActivo === "" || tarjetasDeFamilia(v).some((t) => t.key === contadorActivo);
+    const estadoSigue = statusFilter
+      .split(",")
+      .every((e) => e.trim() === "" || familiaUsaEstado(v, e.trim()));
+    if (!tarjetaSigue || !estadoSigue) {
+      setAtajoOt("");
+      setContadorActivo("");
+      setHasActiveRevocationRequestFilter(false);
+      setStatusFilter(ESTADO_POR_DEFECTO);
+    }
+    setPage(1);
+  };
+
   const clearFilters = useCallback(() => {
+    setFamilia("");
+    setAtajoOt("");
     setContadorActivo("");
     setHasActiveRevocationRequestFilter(false);
     setStatusFilter(ESTADO_POR_DEFECTO);
@@ -1503,89 +1580,93 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         producto ya usa al otro lado del trámite.
       */}
       <div className="flex min-w-0 flex-col">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <TramitesFiltrosBar
-            rangoSobre={rangoSobre}
-            onRangoSobreChange={setRangoSobre}
-            periodo={periodo}
-            onPeriodoChange={setPeriodo}
-            rangoPropioDesde={rangoPropioDesde}
-            rangoPropioHasta={rangoPropioHasta}
-            onRangoPropioDesdeChange={setRangoPropioDesde}
-            onRangoPropioHastaChange={setRangoPropioHasta}
-            queryFields={queryFields}
-            draftCondiciones={draftCondiciones}
-            onDraftCondicionesChange={setDraftCondiciones}
-            condicionesCount={appliedCondiciones.length}
-            filtrosTestIdPrefix="ot-bandeja-filtros"
-            fieldsError={
-              fieldsError ? (
-                <div className="p-1 text-xs">
-                  <p className="mb-2 text-[#C2410C]">
-                    No se pudieron cargar los filtros disponibles.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setFieldsKey((k) => k + 1)}
-                    className="rounded-lg border border-[#DFE5ED] px-2.5 py-1.5 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10"
-                  >
-                    Reintentar
-                  </button>
-                </div>
-              ) : undefined
-            }
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Buscar radicado (FT1-0000012), placa, VIN..."
-            searchAriaLabel="Buscar en la bandeja de trámites"
-            onAplicar={applyFilters}
-            onEmpezarDeCero={clearFilters}
-            empezarDeCeroDisabled={!hasActiveFilters && draftCondiciones.length === 0}
-            columnSelector={
-              <ColumnSelector
-                columns={OT_PROCEDURES_COLUMNS.map((c) => ({ key: c.key, label: c.label }))}
-                visible={visibleColumns}
-                onChange={setVisibleColumns}
-                label="Columnas"
-                disabled={savingColumns}
-                buttonClassName={controlCls(columnasPersonalizadas)}
-              />
-            }
-            exportAction={
-              <button
-                type="button"
-                onClick={() => void handleExportExcel()}
-                disabled={exporting || status === "loading" || totalCount === 0}
-                aria-label="Exportar la bandeja de trámites a Excel"
-                title={COPY.A13}
-                className={controlCls(false)}
-                data-testid="ot-bandeja-export-xlsx"
-              >
-                <Download
-                  className={`h-3.5 w-3.5 ${exporting ? "animate-pulse" : ""}`}
-                  aria-hidden="true"
+        {/* Epic #12686 — pestañas de familia a la izquierda, como en el listado del gestor. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
+          <FamiliaTabs value={familia} onChange={handleFamiliaChange} />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <TramitesFiltrosBar
+              rangoSobre={rangoSobre}
+              onRangoSobreChange={setRangoSobre}
+              periodo={periodo}
+              onPeriodoChange={setPeriodo}
+              rangoPropioDesde={rangoPropioDesde}
+              rangoPropioHasta={rangoPropioHasta}
+              onRangoPropioDesdeChange={setRangoPropioDesde}
+              onRangoPropioHastaChange={setRangoPropioHasta}
+              queryFields={queryFields}
+              draftCondiciones={draftCondiciones}
+              onDraftCondicionesChange={setDraftCondiciones}
+              condicionesCount={appliedCondiciones.length}
+              filtrosTestIdPrefix="ot-bandeja-filtros"
+              fieldsError={
+                fieldsError ? (
+                  <div className="p-1 text-xs">
+                    <p className="mb-2 text-[#C2410C]">
+                      No se pudieron cargar los filtros disponibles.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setFieldsKey((k) => k + 1)}
+                      className="rounded-lg border border-[#DFE5ED] px-2.5 py-1.5 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : undefined
+              }
+              search={search}
+              onSearchChange={setSearch}
+              searchPlaceholder="Buscar radicado (FT1-0000012), placa, VIN..."
+              searchAriaLabel="Buscar en la bandeja de trámites"
+              onAplicar={applyFilters}
+              onEmpezarDeCero={clearFilters}
+              empezarDeCeroDisabled={!hasActiveFilters && draftCondiciones.length === 0}
+              columnSelector={
+                <ColumnSelector
+                  columns={OT_PROCEDURES_COLUMNS.map((c) => ({ key: c.key, label: c.label }))}
+                  visible={visibleColumns}
+                  onChange={setVisibleColumns}
+                  label="Columnas"
+                  disabled={savingColumns}
+                  buttonClassName={controlCls(columnasPersonalizadas)}
                 />
-                {exporting ? "Exportando…" : COPY.A13}
-              </button>
-            }
-          />
-          {/* Actualizar cierra la fila, como en el listado del gestor: la bandeja cambia por lo que
-              hacen los gestores al otro lado, y recargar la página entera para enterarse costaba
-              perder los filtros puestos. */}
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={status === "loading"}
-            aria-label="Actualizar la bandeja de trámites"
-            title="Actualizar"
-            className={controlCls(false)}
-          >
-            <RefreshCw
-              className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`}
-              aria-hidden="true"
+              }
+              exportAction={
+                <button
+                  type="button"
+                  onClick={() => void handleExportExcel()}
+                  disabled={exporting || status === "loading" || totalCount === 0}
+                  aria-label="Exportar la bandeja de trámites a Excel"
+                  title={COPY.A13}
+                  className={controlCls(false)}
+                  data-testid="ot-bandeja-export-xlsx"
+                >
+                  <Download
+                    className={`h-3.5 w-3.5 ${exporting ? "animate-pulse" : ""}`}
+                    aria-hidden="true"
+                  />
+                  {exporting ? "Exportando…" : COPY.A13}
+                </button>
+              }
             />
-            Actualizar
-          </button>
+            {/* Actualizar cierra la fila, como en el listado del gestor: la bandeja cambia por lo que
+                hacen los gestores al otro lado, y recargar la página entera para enterarse costaba
+                perder los filtros puestos. */}
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={status === "loading"}
+              aria-label="Actualizar la bandeja de trámites"
+              title="Actualizar"
+              className={controlCls(false)}
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+              Actualizar
+            </button>
+          </div>
         </div>
 
         <TramitesFiltrosChips
@@ -1619,14 +1700,33 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           Actualizar, que se mudó a la fila de controles. */}
       <OtBandejaCountersStrip
         counters={counters}
-        selected={contadorActivo}
+        // Sin tarjeta elegida a mano, se resalta la del estado vigente: la bandeja abre filtrada en
+        // Entregado y la tira tiene que decirlo (pedido en la revisión de la Epic #12686).
+        selected={contadorActivo || contadorDeEstado(statusFilter)}
         onSelect={handleContadorSelect}
         loading={status === "loading"}
+        familia={familia}
+      />
+
+      {hayCambios && status !== "loading" ? <AvisoHayCambios onActualizar={() => void load()} /> : null}
+
+      {/* Epic #12686 (HU #12807) — atajos del organismo, sin conteo. */}
+      <BusquedaRapidaAcordeon
+        items={ATAJOS_OT}
+        selected={atajoOt}
+        onSelect={(key) => handleAtajoOtSelect(key as "" | AtajoOt)}
+        storageKey="ot-bandeja.busqueda-rapida"
+        darkBgClassName="dark:bg-[#0B0F14]"
       />
 
       <UiStateBoundary
         status={status}
-        emptyMessage="No hay trámites pendientes de tus clientes."
+        emptyMessage={
+          // Epic #12686 — «Por preasignar» en una familia sin ruta de placa: vacío explicado, no un error.
+          atajoOt === "por_preasignar" && !familiaUsaEstado(familia, "preasignacion")
+            ? "Esta familia de trámites no pasa por preasignación de placa."
+            : "No hay trámites pendientes de tus clientes."
+        }
         errorMessage="Error al cargar trámites de clientes."
         onRetry={() => void load()}
         skeletonRows={5}

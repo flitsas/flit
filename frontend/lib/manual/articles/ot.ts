@@ -29,7 +29,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "1. Cómo entrar y qué muestra",
         paragraphs: [
           "Con rol de administrador del organismo, «Trámites» en el dock abre la bandeja del hub. Solo ves trámites que las compañías ya te entregaron: Borrador, Preparado y Anulado no llegan aquí.",
-          "La cabecera cuenta el universo completo por clase de trabajo: Preasignación (radicados sin placa), Asignados (con placa; el gestor gestiona SOAT e impuestos), Por decidir (entregados), Aprobados, Solicitudes de revocatoria, Rechazados (desde entregado o desde preasignación) y Revocados. Pulsar una tarjeta filtra la tabla. La bandeja abre en Por decidir: es tu trabajo pendiente.",
+          "La cabecera cuenta el universo completo por clase de trabajo: Preasignación (radicados sin placa), Asignado (con placa; el gestor gestiona SOAT e impuestos), Entregado (esperando tu decisión), Aprobado, Solicitud de revocatoria, Rechazado (desde entregado o desde preasignación) y Revocado. Las pestañas Todos, Matrículas, Traspaso y Otros trámites acotan la tabla y las tarjetas a esa familia; en Traspaso y Otros no hay Preasignación ni Asignado. Pulsar una tarjeta filtra la tabla. La bandeja abre en Entregado: es tu trabajo pendiente.",
         ],
         bullets: [
           "Búsqueda libre «Buscar radicado (FT1-0000012), placa, VIN...»: el radicado casa exacto; placa, VIN, nombre y documento de las partes y razón social de la compañía, por texto parcial.",
@@ -46,7 +46,7 @@ export const OT_ARTICLES: ManualArticle[] = [
           "Preasignación → «Asignar placa»: elige una placa del rango del organismo o registra una fuera de rango. El dígito de preferencia que indicó el gestor aparece como guía. Al asignar, el trámite pasa a Asignado y la compañía recibe correo.",
           "Asignado → «Corregir placa»: una única corrección dentro de la hora siguiente a la asignación. Vencida la hora, la acción se deshabilita.",
           "Asignado → «Liberar placa» (con motivo): el trámite vuelve a Preasignación y la placa queda disponible. Queda en el historial.",
-          "El gestor, en Asignado, gestiona SOAT e impuestos y «Envía al OT»: el trámite entra a Por decidir.",
+          "El gestor, en Asignado, gestiona SOAT e impuestos y «Envía al OT»: el trámite entra a Entregado.",
         ],
       },
       {
@@ -357,7 +357,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "2. Dónde verlas",
         paragraphs: [],
         bullets: [
-          "Tarjeta «Solicitudes de revocatoria» en la cabecera de la bandeja: cuenta los aprobados con una solicitud esperando decisión y filtra la tabla al pulsarla.",
+          "Tarjeta «Solicitud de revocatoria» en la cabecera de la bandeja: cuenta los aprobados con una solicitud esperando decisión y filtra la tabla al pulsarla.",
           "Distintivo «Revocatoria solicitada» / «Revocatoria en revisión» en la fila.",
           "Vista «Revocatorias» del hub: listado de todas las solicitudes (activas y cerradas) con filtros por fecha y estado.",
         ],

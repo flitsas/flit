@@ -93,6 +93,25 @@ public sealed record ProcedureInstanceListFilter
     public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
 
     /// <summary>
+    /// Epic #12686 (HU #12805) — resultado de un atajo de búsqueda rápida evaluado en memoria (sin
+    /// firmas, sin documento, pausados): solo estos trámites. <c>null</c> = sin restricción; vacío =
+    /// ninguno.
+    /// </summary>
+    public IReadOnlyCollection<Guid>? IdsIncluidos { get; init; }
+
+    /// <summary>
+    /// Epic #12686 (HU #12805) — «más de N días en gestión»: trámites en Entregado cuya última entrada
+    /// a Entregado fue antes de este instante (o, sin historial, su radicación).
+    /// </summary>
+    public DateTimeOffset? EntregadoAntesDe { get; init; }
+
+    /// <summary>
+    /// Epic #12686 — «Mis trámites»: trámites cuyo responsable de hoy es este usuario, con la misma
+    /// regla que la columna Gestor: el asignado o, si nunca se reasignó, quien lo creó.
+    /// </summary>
+    public Guid? ResponsableId { get; init; }
+
+    /// <summary>
     /// HU #12187 — búsqueda de texto libre del listado, transversal a varios campos.
     ///
     /// <para><b>Por qué es un filtro del servidor y no del cliente.</b> Este cruce se hacía en el
