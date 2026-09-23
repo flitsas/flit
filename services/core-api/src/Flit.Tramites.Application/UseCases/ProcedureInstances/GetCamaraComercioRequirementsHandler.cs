@@ -56,8 +56,19 @@ public sealed class GetCamaraComercioRequirementsHandler(
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(borrador);
+        // Tope del borrador: el preview consulta el baúl y el directorio por cada actor jurídico y no
+        // persiste nada, así que sin límite un solo POST serviría para sondear en lote qué documentos
+        // tienen firma o escritura vigente. Ningún trámite real pasa de este número.
+        if (borrador.Count > MaxActoresBorrador)
+            return Task.FromResult<(CamaraComercioRequirementsResponse?, string?)>((null, "demasiados_actores"));
         return ResolveAsync(id, tenantId, borrador, ct);
     }
+
+    /// <summary>
+    /// Máximo de actores de un trámite: tres roles (vendedor, comprador, locatario) con hasta cuatro
+    /// copropietarios cada uno (ordinal 1–4, la misma regla que valida <c>PUT /actors</c>).
+    /// </summary>
+    public const int MaxActoresBorrador = 3 * 4;
 
     private async Task<(CamaraComercioRequirementsResponse? Result, string? Error)> ResolveAsync(
         Guid id,
@@ -104,11 +115,6 @@ public sealed class GetCamaraComercioRequirementsHandler(
     }
 
     /// <summary>
-    /// Nombre estable de la exención en el contrato. Se escribe a mano en vez de derivarlo del enum
-    /// con <c>ToString()</c>: renombrar un valor del enum es refactor interno y no puede cambiar en
-    /// silencio lo que el cliente ya interpreta.
-    /// </summary>
-    /// <summary>
     /// Actor en memoria con lo único que la escalera lee: rol, documento y el representante legal de
     /// la metadata (sujeto del baúl de firmas). Nunca se agrega a la instancia ni al contexto de EF.
     /// </summary>
@@ -127,6 +133,11 @@ public sealed class GetCamaraComercioRequirementsHandler(
             Ordinal = a.Ordinal,
         };
 
+    /// <summary>
+    /// Nombre estable de la exención en el contrato. Se escribe a mano en vez de derivarlo del enum
+    /// con <c>ToString()</c>: renombrar un valor del enum es refactor interno y no puede cambiar en
+    /// silencio lo que el cliente ya interpreta.
+    /// </summary>
     public static string ToWire(CamaraComercioExencion exencion) => exencion switch
     {
         CamaraComercioExencion.FirmaYEscritura => "firma_y_escritura",

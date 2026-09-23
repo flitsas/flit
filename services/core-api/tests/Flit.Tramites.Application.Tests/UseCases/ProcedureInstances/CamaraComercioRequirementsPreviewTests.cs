@@ -135,6 +135,27 @@ public sealed class CamaraComercioRequirementsPreviewTests
         result.Requirements[0].Exencion.Should().Be("firma_y_escritura");
     }
 
+    /// <summary>
+    /// El preview no persiste nada y consulta baúl y directorio por cada actor: sin tope serviría para
+    /// sondear en lote qué documentos tienen firma o escritura vigente (hallazgo de seguridad).
+    /// </summary>
+    [Fact]
+    public async Task BorradorConMasActoresDeLosPosibles_SeRechazaSinConsultar()
+    {
+        var id = Guid.NewGuid();
+        var ct = TestContext.Current.CancellationToken;
+        _repo.GetByIdWithDetailsAsync(id, Tenant, ct).Returns(Instance(id));
+        var borrador = Enumerable.Range(0, GetCamaraComercioRequirementsHandler.MaxActoresBorrador + 1)
+            .Select(i => Input("vendedor", "NIT", $"90011{i:D4}"))
+            .ToList();
+
+        var (result, error) = await Handler().HandlePreviewAsync(id, Tenant, borrador, ct);
+
+        result.Should().BeNull();
+        error.Should().Be("demasiados_actores");
+        await _repo.DidNotReceive().GetByIdWithDetailsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task TramiteInexistente_DevuelveNotFound()
     {
