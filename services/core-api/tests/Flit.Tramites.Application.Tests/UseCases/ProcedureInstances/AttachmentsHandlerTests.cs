@@ -998,8 +998,14 @@ public sealed class AttachmentsHandlerTests
         var error = await _delete.HandleAsync(id, tenant, attachmentId, ct);
 
         error.Should().BeNull();
-        await _repo.Received(1).DeleteOcrFieldValueAsync(
-            id, tenant, CamaraComercioFieldKeys.Expedicion("comprador"), Arg.Any<CancellationToken>());
+        // Adjunto y fecha en la misma transacción: se marca la fecha y LUEGO un único SaveChanges.
+        Received.InOrder(() =>
+        {
+            _repo.RemoveOcrFieldValueAsync(
+                id, tenant, CamaraComercioFieldKeys.Expedicion("comprador"), Arg.Any<CancellationToken>());
+            _repo.SaveChangesAsync(Arg.Any<CancellationToken>());
+        });
+        await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1022,7 +1028,7 @@ public sealed class AttachmentsHandlerTests
 
         await _delete.HandleAsync(id, tenant, attachmentId, ct);
 
-        await _repo.DidNotReceive().DeleteOcrFieldValueAsync(
+        await _repo.DidNotReceive().RemoveOcrFieldValueAsync(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

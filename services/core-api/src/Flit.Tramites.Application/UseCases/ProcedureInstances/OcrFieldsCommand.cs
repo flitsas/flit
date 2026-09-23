@@ -191,10 +191,12 @@ public sealed class PersistOcrFieldsHandler(
         // HU #12776 — un certificado nuevo SIN fecha legible no puede heredar la fecha del anterior:
         // la alerta de vigencia hablaría de otro documento. Aquí la «celda en blanco» de la regla
         // HU #10856 no basta, porque la llave ya existe; hay que retirarla. Solo la de origen OCR.
-        if (llaveFechaCamara is not null && !fechaCamaraLeida)
-            await repo.DeleteOcrFieldValueAsync(instance.Id, tenantId, llaveFechaCamara, ct);
+        var retirados = llaveFechaCamara is not null && !fechaCamaraLeida
+            ? await repo.RemoveOcrFieldValueAsync(instance.Id, tenantId, llaveFechaCamara, ct)
+            : 0;
 
-        if (persistidos > 0)
+        // Un solo SaveChanges: lo escrito y lo retirado se confirman juntos o no se confirman.
+        if (persistidos > 0 || retirados > 0)
             await repo.SaveChangesAsync(ct);
 
         // HU #11304 — lo que el OCR extrajo también entra al almacén canónico, con procedencia `ocr`.

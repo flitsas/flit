@@ -301,7 +301,7 @@ public sealed class PersistOcrFieldsHandlerTests
 
         result!.Persistidos.Should().Be(1);
         ValueOf(instance, CamaraComercioFieldKeys.Expedicion("vendedor")).Should().Be("2026-08-10");
-        await _repo.DidNotReceive().DeleteOcrFieldValueAsync(
+        await _repo.DidNotReceive().RemoveOcrFieldValueAsync(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
@@ -318,10 +318,18 @@ public sealed class PersistOcrFieldsHandlerTests
         var instance = Instance();
         Seed(instance, CamaraComercioFieldKeys.Expedicion("vendedor"), "2026-08-01", PersistOcrFieldsHandler.OcrSource);
 
+        _repo.RemoveOcrFieldValueAsync(_id, _tenantId, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(1);
+
         await _sut.HandleAsync(_id, _tenantId, CamaraOcr(("fecha_expedicion", fecha)), ct);
 
-        await _repo.Received(1).DeleteOcrFieldValueAsync(
-            _id, _tenantId, CamaraComercioFieldKeys.Expedicion("vendedor"), Arg.Any<CancellationToken>());
+        // Marcar y después un único SaveChanges: la fecha se retira en la misma transacción.
+        Received.InOrder(() =>
+        {
+            _repo.RemoveOcrFieldValueAsync(
+                _id, _tenantId, CamaraComercioFieldKeys.Expedicion("vendedor"), Arg.Any<CancellationToken>());
+            _repo.SaveChangesAsync(Arg.Any<CancellationToken>());
+        });
+        await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -332,7 +340,7 @@ public sealed class PersistOcrFieldsHandlerTests
 
         await _sut.HandleAsync(_id, _tenantId, SoatOcr(("numero_poliza", "123")), ct);
 
-        await _repo.DidNotReceive().DeleteOcrFieldValueAsync(
+        await _repo.DidNotReceive().RemoveOcrFieldValueAsync(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

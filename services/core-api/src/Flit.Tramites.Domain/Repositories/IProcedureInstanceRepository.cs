@@ -476,14 +476,13 @@ public interface IProcedureInstanceRepository
     void RemoveAttachment(ProcedureInstanceAttachment attachment);
 
     /// <summary>
-    /// HU #12776 — borra UNA llave de <c>field_values</c> escrita por el OCR (origen <c>ocr</c>).
-    /// Existe para que la fecha de expedición del certificado de Cámara de Comercio no sobreviva al
-    /// documento del que salió: sin esto, borrar el certificado —o cargar uno cuya fecha no se pudo
-    /// leer— dejaba la fecha del anterior y la alerta de vigencia hablaba de otro papel. Solo toca
-    /// valores de origen OCR: un valor digitado o de consulta nunca se borra por esta vía. Se ejecuta
-    /// de inmediato, fuera del <c>SaveChangesAsync</c> del caso de uso. Devuelve las filas borradas.
+    /// HU #12776 — MARCA para borrar UNA llave de <c>field_values</c> escrita por el OCR (origen
+    /// <c>ocr</c>); el borrado se confirma con el <c>SaveChangesAsync</c> del caso de uso, en la misma
+    /// transacción que el resto de sus cambios. Existe para que la fecha de expedición del certificado
+    /// de Cámara de Comercio no sobreviva al documento del que salió. Solo toca valores de origen OCR:
+    /// un valor digitado o de consulta nunca se borra por esta vía. Devuelve cuántas filas marcó.
     /// </summary>
-    Task<int> DeleteOcrFieldValueAsync(
+    Task<int> RemoveOcrFieldValueAsync(
         Guid instanceId, Guid tenantId, string fieldKey, CancellationToken ct = default);
 
     /// <summary>

@@ -629,16 +629,17 @@ public sealed class DeleteAttachmentHandler(
         // dejaba el ítem "satisfecho" y el gate seguía pasando sin el documento.
         ChecklistEstadoJson.AutoUnmark(instance, tipo);
 
-        await repo.SaveChangesAsync(ct);
-
         // HU #12776 — la fecha de expedición que el OCR leyó del certificado de Cámara de Comercio se
         // va con el certificado. Si se quedara, el siguiente certificado cuyo OCR no lea la fecha
         // heredaría la del borrado y la alerta de vigencia hablaría de un documento que ya no existe.
+        // Se marca ANTES del SaveChanges para que adjunto y fecha se borren en la misma transacción.
         if (CamaraComercioAttachmentTipo.RoleOf(tipo) is { } rol
             && !instance.Attachments.Any(a => string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)))
         {
-            await repo.DeleteOcrFieldValueAsync(id, tenantId, CamaraComercioFieldKeys.Expedicion(rol), ct);
+            await repo.RemoveOcrFieldValueAsync(id, tenantId, CamaraComercioFieldKeys.Expedicion(rol), ct);
         }
+
+        await repo.SaveChangesAsync(ct);
 
         return null;
     }
