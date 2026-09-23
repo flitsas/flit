@@ -147,7 +147,7 @@ interface Props {
    * Gate de avance del wizard: `true` cuando TODOS los actores del formulario tienen consulta de
    * identidad exitosa (RUNT / RUES / directorio). Sin consulta OK, Continuar permanece deshabilitado.
    */
-  onConsultationGateChange?: (ready: boolean) => void;
+  onConsultationGateChange?: (ready: boolean, partesPendientes: string[]) => void;
   /**
    * Gate de avance del paso: `false` mientras alguna parte jurídica tenga un representante legal que
    * NO está en el módulo de representantes de la compañía y todavía no haya cargado la escritura que
@@ -1838,22 +1838,34 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setActors((prev) => {
       const nextActors = prev.map((a, i) => {
         if (i !== actorIndex) return a;
+        const numero = sanitizeDocNumber(match.rep.documento ?? '', tipo);
+        // Si el representante precargado es la MISMA persona que ya estaba capturada, lo que el
+        // gestor escribió se conserva donde el directorio no trae dato: una ficha del directorio sin
+        // correo no puede vaciar el correo que ya se guardó (el paso quedaba bloqueado por un campo
+        // obligatorio que el gestor ya había llenado).
+        const capturado = a.representanteLegal;
+        const mismaPersona =
+          !!capturado?.numeroDocumento &&
+          samePersonDocument(capturado.tipoDocumento || 'CC', capturado.numeroDocumento, tipo, numero);
+        const oCapturado = (delDirectorio: string, previo?: string) =>
+          delDirectorio || (mismaPersona ? (previo ?? '').trim() : '');
         const next: ProcedureActor = {
           ...a,
           representanteLegal: {
             tipoDocumento: tipo,
-            numeroDocumento: sanitizeDocNumber(match.rep.documento ?? '', tipo),
+            numeroDocumento: numero,
             nombreCompleto: sanitizeName(repFullName(match.rep)),
-            email: (match.rep.email ?? '').trim(),
-            telefono: digitsOnly(match.rep.telefono ?? ''),
+            email: oCapturado((match.rep.email ?? '').trim(), capturado?.email),
+            telefono: oCapturado(digitsOnly(match.rep.telefono ?? ''), capturado?.telefono),
             mecanismoFirma: opts?.mecanismoFirma,
           },
         };
         if (opts?.applyCompanyContact && company) {
-          next.email = (match.rep.companyEmail ?? company.email ?? '').trim();
-          next.direccion = (match.rep.companyAddress ?? company.address ?? '').trim();
-          next.ciudad = (match.rep.companyCity ?? company.city ?? '').trim();
-          next.telefono = digitsOnly(match.rep.companyPhone ?? company.phone ?? '');
+          // Mismo criterio para el contacto de la compañía: el directorio completa, no borra.
+          next.email = (match.rep.companyEmail ?? company.email ?? '').trim() || a.email;
+          next.direccion = (match.rep.companyAddress ?? company.address ?? '').trim() || a.direccion;
+          next.ciudad = (match.rep.companyCity ?? company.city ?? '').trim() || a.ciudad;
+          next.telefono = digitsOnly(match.rep.companyPhone ?? company.phone ?? '') || a.telefono;
         }
         return next;
       });
@@ -1925,13 +1937,23 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             },
             { preserveConsultation: true },
           );
-          if (directory && reps[0]) {
-            commitDirectoryRep(
-              index,
-              { rep: reps[0], index: 0 },
-              directory.company,
-              { preserveConsultation: true, applyCompanyContact: true },
-            );
+          // Un borrador que ya tiene representante conserva EL SUYO: la consulta automática al abrir
+          // el paso solo lo enlaza con su ficha del directorio si está ahí. Antes se precargaba
+          // siempre el primero del directorio, que podía ser otra persona o venir sin correo, y el
+          // gestor encontraba el paso bloqueado sin haber tocado nada.
+          const rlCapturado = actor.representanteLegal;
+          const elegido = rlCapturado?.numeroDocumento?.trim()
+            ? directory
+              ? findDirectoryRep(directory, rlCapturado.tipoDocumento || 'CC', rlCapturado.numeroDocumento)
+              : null
+            : reps[0]
+              ? { rep: reps[0], index: 0 }
+              : null;
+          if (directory && elegido) {
+            commitDirectoryRep(index, elegido, directory.company, {
+              preserveConsultation: true,
+              applyCompanyContact: true,
+            });
           }
           const foundRues = {
             status: 'found' as const,
@@ -2307,9 +2329,31 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       !needsRlDirectoryApply(i) &&
       (!needsRlRunt(i) || isIdentityConsultationReady(rlRunt[i]?.status)),
   );
+  /**
+   * Partes cuya consulta de identidad falta, por su nombre en pantalla. Al reabrir un borrador en
+   * otra pestaña solo el propietario se consulta solo; las demás partes quedan sin consulta y el
+   * botón se apagaba sin decir por qué. Se publica como clave de texto por la misma razón que el
+   * gate del certificado: no disparar el efecto con un arreglo nuevo en cada render.
+   */
+  const consultaPendientesClave = [
+    ...new Set(
+      actors
+        .map((a, i) => ({ a, i }))
+        .filter(
+          ({ i }) =>
+            !isIdentityConsultationReady(runt[i]?.status) ||
+            needsRlDirectoryApply(i) ||
+            (needsRlRunt(i) && !isIdentityConsultationReady(rlRunt[i]?.status)),
+        )
+        .map(({ a }) => rotuloDelActor(a.rol)),
+    ),
+  ].join('|');
   useEffect(() => {
-    onConsultationGateChange?.(consultationReady);
-  }, [consultationReady, onConsultationGateChange]);
+    onConsultationGateChange?.(
+      consultationReady,
+      consultaPendientesClave ? consultaPendientesClave.split('|') : [],
+    );
+  }, [consultationReady, consultaPendientesClave, onConsultationGateChange]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
