@@ -12,6 +12,7 @@ using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Domain.Enums;
 using Flit.Queries.Domain;
+using Flit.Queries.Domain.Documentos;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -168,6 +169,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Where(x => x.ValidationId == validationId)
             .OrderBy(x => x.OccurredAt)
             .ToListAsync(ct);
+
+    // HU #12791 — una sola lectura de los adjuntos de consolidado (solo tipo/source/fecha, sin grafo).
+    public async Task<IReadOnlyDictionary<string, string>> GetConsolidadoSourcesAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct)
+    {
+        var rows = await db.ProcedureInstanceAttachments
+            .AsNoTracking()
+            .Where(a => a.ProcedureInstanceId == procedureInstanceId
+                && a.TenantId == tenantId
+                && (a.Tipo == ConsolidadoVigencia.TipoWizard || a.Tipo == ConsolidadoVigencia.TipoMaestro))
+            .Select(a => new { a.Tipo, a.Source, a.UploadedAt })
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(r => r.Tipo, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(r => r.UploadedAt).First().Source,
+                StringComparer.OrdinalIgnoreCase);
+    }
 
     public Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances

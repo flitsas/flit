@@ -3,7 +3,9 @@ using Flit.Admin.Domain.Common;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtQueries;
 using Flit.Admin.Domain.PlatePreassign;
+using Flit.Modules.Quipux.Domain.Envios;
 using Flit.Queries.Domain;
+using Flit.Queries.Domain.Documentos;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -72,10 +74,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         }
 
                         var ordered = ApplyListSort(query, filter);
-                        var items = await ordered
+                        var rows = await ordered
                             .Skip((filter.Page - 1) * filter.PageSize)
                             .Take(filter.PageSize)
-                            .Select(p => new OtClientProcedure
+                            .Select(p => new
+                            {
+                                Row = new OtClientProcedure
                             {
                                 Id = p.Id,
                                 ClientTenantId = p.TenantId,
@@ -133,9 +137,58 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                     .OrderByDescending(r => r.AttemptNumber)
                                     .Select(r => r.Status)
                                     .FirstOrDefault(),
+                            },
+                                // HU #12791 — vigencia de los consolidados en la MISMA consulta de la fila:
+                                // columnas de la instancia + Source del adjunto más reciente de cada tipo por
+                                // subconsulta correlacionada (mismo patrón que el resto de la proyección).
+                                // Sin consultas por fila: la derivación ocurre en memoria tras materializar.
+                                Consolidado = new ConsolidadoColumnas(
+                                    p.Status,
+                                    p.IsMigrated,
+                                    p.ConsolidadoWizardVigente,
+                                    p.ConsolidadoWizardGeneradoEn,
+                                    _context.ProcedureInstanceAttachments
+                                        .Where(a => a.ProcedureInstanceId == p.Id && a.Tipo == ConsolidadoVigencia.TipoWizard)
+                                        .OrderByDescending(a => a.UploadedAt)
+                                        .Select(a => a.Source)
+                                        .FirstOrDefault(),
+                                    p.ConsolidadoMaestroVigente,
+                                    p.ConsolidadoMaestroGeneradoEn,
+                                    _context.ProcedureInstanceAttachments
+                                        .Where(a => a.ProcedureInstanceId == p.Id && a.Tipo == ConsolidadoVigencia.TipoMaestro)
+                                        .OrderByDescending(a => a.UploadedAt)
+                                        .Select(a => a.Source)
+                                        .FirstOrDefault()),
+                                // HU #12791 (ampliación #12787 AC2) — última radicación EXITOSA ante Quipux
+                                // (RegisteredAt con valor; una submission 'fallido' nunca radicó). Subconsulta
+                                // correlacionada en la misma consulta de la fila.
+                                QuipuxRadicadoEn = _context.QuipuxSubmissions
+                                        .Where(q => q.ProcedureInstanceId == p.Id
+                                            && q.RegisteredAt != null
+                                            && q.Status != QuipuxSubmissionEstado.Fallido)
+                                        .OrderByDescending(q => q.RegisteredAt)
+                                        .Select(q => q.RegisteredAt)
+                                        .FirstOrDefault(),
+                                QuipuxMaestroAttachmentId = _context.QuipuxSubmissions
+                                        .Where(q => q.ProcedureInstanceId == p.Id
+                                            && q.RegisteredAt != null
+                                            && q.Status != QuipuxSubmissionEstado.Fallido)
+                                        .OrderByDescending(q => q.RegisteredAt)
+                                        .Select(q => (Guid?)q.AttachmentId)
+                                        .FirstOrDefault(),
                             })
                             .ToListAsync(cancellationToken)
                             .ConfigureAwait(false);
+
+                        var items = rows
+                            .Select(r => r.Row with
+                            {
+                                ConsolidadoWizard = r.Consolidado.Wizard(),
+                                ConsolidadoMaestro = r.Consolidado.Maestro(),
+                                QuipuxRadicadoEn = r.QuipuxRadicadoEn,
+                                QuipuxMaestroAttachmentId = r.QuipuxRadicadoEn is null ? null : r.QuipuxMaestroAttachmentId,
+                            })
+                            .ToList();
 
                         var enriched = await EnrichDisplayNamesAsync(items, cancellationToken)
                             .ConfigureAwait(false);
@@ -1214,6 +1267,39 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         _context.Users
                             .Where(u => u.Id == p.CreatedByUserId)
                             .Select(u => u.DisplayName)
+                            .FirstOrDefault(),
+                        // HU #12791 — vigencia de los consolidados en la misma lectura de la instancia.
+                        new ConsolidadoColumnas(
+                            p.Status,
+                            p.IsMigrated,
+                            p.ConsolidadoWizardVigente,
+                            p.ConsolidadoWizardGeneradoEn,
+                            _context.ProcedureInstanceAttachments
+                                .Where(a => a.ProcedureInstanceId == p.Id && a.Tipo == ConsolidadoVigencia.TipoWizard)
+                                .OrderByDescending(a => a.UploadedAt)
+                                .Select(a => a.Source)
+                                .FirstOrDefault(),
+                            p.ConsolidadoMaestroVigente,
+                            p.ConsolidadoMaestroGeneradoEn,
+                            _context.ProcedureInstanceAttachments
+                                .Where(a => a.ProcedureInstanceId == p.Id && a.Tipo == ConsolidadoVigencia.TipoMaestro)
+                                .OrderByDescending(a => a.UploadedAt)
+                                .Select(a => a.Source)
+                                .FirstOrDefault()),
+                        // HU #12791 (ampliación #12787 AC2) — última radicación exitosa ante Quipux.
+                        _context.QuipuxSubmissions
+                            .Where(q => q.ProcedureInstanceId == p.Id
+                                && q.RegisteredAt != null
+                                && q.Status != QuipuxSubmissionEstado.Fallido)
+                            .OrderByDescending(q => q.RegisteredAt)
+                            .Select(q => q.RegisteredAt)
+                            .FirstOrDefault(),
+                        _context.QuipuxSubmissions
+                            .Where(q => q.ProcedureInstanceId == p.Id
+                                && q.RegisteredAt != null
+                                && q.Status != QuipuxSubmissionEstado.Fallido)
+                            .OrderByDescending(q => q.RegisteredAt)
+                            .Select(q => (Guid?)q.AttachmentId)
                             .FirstOrDefault()))
                     .FirstOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
@@ -1347,6 +1433,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     RevocationDecisionAt = revocationDecided ? revocation!.DecidedAt : null,
                     RevocationRequestReason = revocationDecided ? revocation!.Reason : null,
                     RevocationDecisionReason = revocationDecided ? revocation!.DecisionReason : null,
+                    ConsolidadoWizard = mapped.Consolidado.Wizard(),
+                    ConsolidadoMaestro = mapped.Consolidado.Maestro(),
+                    QuipuxRadicadoEn = mapped.QuipuxRadicadoEn,
+                    QuipuxMaestroAttachmentId = mapped.QuipuxRadicadoEn is null ? null : mapped.QuipuxMaestroAttachmentId,
                 };
 
                 var enriched = await EnrichDisplayNamesAsync([procedure], cancellationToken)
@@ -1374,7 +1464,32 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         string? Vin,
         string? VendedorNombre,
         string? CompradorNombre,
-        string? GestorNombre);
+        string? GestorNombre,
+        ConsolidadoColumnas Consolidado,
+        DateTimeOffset? QuipuxRadicadoEn,
+        Guid? QuipuxMaestroAttachmentId);
+
+    /// <summary>
+    /// HU #12791 (Épica #12760) — insumos de la vigencia de los dos consolidados, proyectados en la
+    /// MISMA consulta de la fila (bandeja y detalle). <c>*Source</c> = <c>Source</c> del adjunto más
+    /// reciente del tipo, <c>null</c> si no existe. La regla vive en <see cref="ConsolidadoVigencia.Derivar"/>.
+    /// </summary>
+    private sealed record ConsolidadoColumnas(
+        string Status,
+        bool IsMigrated,
+        bool WizardVigente,
+        DateTimeOffset? WizardGeneradoEn,
+        string? WizardSource,
+        bool MaestroVigente,
+        DateTimeOffset? MaestroGeneradoEn,
+        string? MaestroSource)
+    {
+        public ConsolidadoVigenciaDto Wizard() =>
+            ConsolidadoVigencia.Derivar(WizardSource, WizardVigente, WizardGeneradoEn, TramiteEstado.EsFinal(Status), IsMigrated);
+
+        public ConsolidadoVigenciaDto Maestro() =>
+            ConsolidadoVigencia.Derivar(MaestroSource, MaestroVigente, MaestroGeneradoEn, TramiteEstado.EsFinal(Status), IsMigrated);
+    }
 
     /// <summary>
     /// Todos los <c>field_values</c> de la instancia en una sola lectura. La última repetición de una

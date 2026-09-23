@@ -13778,13 +13778,14 @@ components:
           nullable: true
           description: Razón social del cliente dueño.
         instance:
-          type: object
           description: >
             El mismo objeto que devuelve `GET /api/v1/tramites/instances/{id}` al propio cliente
             (id, referenceNumber, status, procedureTypeId, tenantId, createdAt, submittedAt,
             completedAt, fieldValues, statusHistory, actors, draftFinalizedAt, rejectedFrom,
-            currentStep, subsanacionActiva, subsanacionCount, prioritario, events).
-          additionalProperties: true
+            currentStep, subsanacionActiva, subsanacionCount, prioritario, events,
+            consolidadoWizard, consolidadoMaestro).
+          allOf:
+            - $ref: "#/components/schemas/ProcedureInstanceDetail"
       required: [tenantId, instance]
 
     NetworkTramitesSearchRequest:
@@ -14029,7 +14030,107 @@ components:
           description: >
             Razón social de la compañía dueña. La columna solo tiene sentido para SuperAdmin, que
             es quien puede ver filas de varias compañías en la misma respuesta.
+        consolidadoWizard:
+          description: >
+            HU #12791 — vigencia + sello del consolidado del wizard de la fila. Se deriva en la MISMA
+            consulta del listado (sin N+1). Aditivo: ausente en versiones anteriores del backend.
+          allOf:
+            - $ref: "#/components/schemas/ConsolidadoVigencia"
+          nullable: true
       required: [id, referenceNumber, modalidad, estado, createdAt, tenantId]
+
+    ConsolidadoVigencia:
+      type: object
+      description: >
+        HU #12791 (Épica #12760) — estado de vigencia de UN consolidado (wizard `consolidado` o maestro
+        `consolidado_maestro`). Misma forma en todas las superficies (detalle y listado del gestor,
+        vista de red, bandeja y detalle OT / SuperAdmin). Precedencia: sin adjunto del tipo ⇒
+        `inexistente`; estado final ⇒ `definitivo=true` y `estado=vigente` (el PDF definitivo no se
+        regenera); `Source=user` ⇒ `origen=user`, `modo=cargado_por_usuario`; resto ⇒ la bandera
+        `consolidado_*_vigente` decide `vigente`/`desactualizado`.
+      properties:
+        estado:
+          type: string
+          enum: [vigente, desactualizado, inexistente]
+          description: "`inexistente` = no hay adjunto del tipo (sin importar la bandera)."
+        generadoEn:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Sello UTC de la generación (columna `consolidado_*_generado_en`, HU #12790). Null si no hay
+            PDF o si el trámite es anterior a la columna («fecha no disponible»; no invalida el PDF).
+        origen:
+          type: string
+          nullable: true
+          enum: [system, user, null]
+          description: "`system` = generado por FLIT; `user` = cargado por el SuperAdmin; null sin PDF."
+        definitivo:
+          type: boolean
+          description: True en estado final (aprobado, anulado, revocado) con PDF — documentación definitiva.
+        modo:
+          type: string
+          nullable: true
+          enum: [definitivo_estado_final, migrado_solo_lectura, cargado_por_usuario, null]
+          description: >
+            Caso especial con los mismos literales de la ruta de entrega (HU #12785,
+            `GET …/consolidado/entrega`). Null en el caso normal. `migrado_solo_lectura` aplica al
+            migrado V1 en estado final (también sin PDF).
+      required: [estado, generadoEn, origen, definitivo, modo]
+
+    ProcedureInstanceDetail:
+      type: object
+      description: >
+        Detalle de `GET /api/v1/tramites/instances/{id}` (gestor y SuperAdmin) y objeto `instance` de
+        `GET /api/v1/tramites/network/instances/{id}`. Aquí se documentan solo los campos de vigencia de
+        la HU #12791; el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
+      additionalProperties: true
+      properties:
+        consolidadoWizard:
+          description: HU #12791 — vigencia + sello del consolidado del wizard. Aditivo.
+          allOf:
+            - $ref: "#/components/schemas/ConsolidadoVigencia"
+          nullable: true
+        consolidadoMaestro:
+          description: HU #12791 — vigencia + sello del consolidado maestro del OT. Aditivo.
+          allOf:
+            - $ref: "#/components/schemas/ConsolidadoVigencia"
+          nullable: true
+
+    OtClientProcedureResponse:
+      type: object
+      description: >
+        Fila de `GET /api/v1/admin/ot/client-procedures` (bandeja OT y vista SuperAdmin de trámites por
+        organismo, `data[]`) y cuerpo de `GET /api/v1/admin/ot/client-procedures/{id}`. Aquí se
+        documentan solo los campos de vigencia de la HU #12791, proyectados en la MISMA consulta de la
+        fila (sin N+1). Son null en las respuestas de aprobar/rechazar/revocar, que no los recalculan.
+      additionalProperties: true
+      properties:
+        consolidadoWizard:
+          description: HU #12791 — vigencia + sello del consolidado del wizard. Aditivo.
+          allOf:
+            - $ref: "#/components/schemas/ConsolidadoVigencia"
+          nullable: true
+        consolidadoMaestro:
+          description: HU #12791 — vigencia + sello del consolidado maestro del OT. Aditivo.
+          allOf:
+            - $ref: "#/components/schemas/ConsolidadoVigencia"
+          nullable: true
+        quipuxRadicadoEn:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            HU #12791 (para #12787 AC2) — instante UTC de la ÚLTIMA radicación exitosa del trámite ante
+            Quipux (`quipux_submissions.registered_at` con valor y estado distinto de `fallido`). Null si
+            no se ha radicado. La vista read-only del OT lo usa para rotular la «versión radicada».
+        quipuxMaestroAttachmentId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            HU #12791 — adjunto `consolidado_maestro` enviado en esa radicación
+            (`quipux_submissions.attachment_id`). Null si no se ha radicado.
 
     ProcedureInstanceSummary:
       type: object

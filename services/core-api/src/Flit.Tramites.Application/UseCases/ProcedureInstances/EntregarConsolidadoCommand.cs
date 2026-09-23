@@ -24,13 +24,13 @@ public static class ConsolidadoEntregaModos
     public const string Regenerado = "regenerado";
 
     /// <summary>Trámite en estado final: se sirve el PDF existente sin regenerar (AC3).</summary>
-    public const string DefinitivoEstadoFinal = "definitivo_estado_final";
+    public const string DefinitivoEstadoFinal = Flit.Queries.Domain.Documentos.ConsolidadoVigencia.ModoDefinitivoEstadoFinal;
 
     /// <summary>Trámite migrado de V1 en estado final: foto de solo lectura (AC5).</summary>
-    public const string MigradoSoloLectura = "migrado_solo_lectura";
+    public const string MigradoSoloLectura = Flit.Queries.Domain.Documentos.ConsolidadoVigencia.ModoMigradoSoloLectura;
 
     /// <summary>PDF cargado a mano por el SuperAdmin (<c>Source="user"</c>): prevalece siempre (AC4).</summary>
-    public const string CargadoPorUsuario = "cargado_por_usuario";
+    public const string CargadoPorUsuario = Flit.Queries.Domain.Documentos.ConsolidadoVigencia.ModoCargadoPorUsuario;
 
     /// <summary>
     /// El llamador pidió el adjunto tal cual, sin comprobar vigencia (p. ej. la vista read-only del OT

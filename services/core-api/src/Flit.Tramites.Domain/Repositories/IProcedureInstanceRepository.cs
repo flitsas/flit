@@ -55,6 +55,16 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #12791 (Épica #12760) — <c>Source</c> del adjunto MÁS RECIENTE (por <c>UploadedAt</c>) de cada
+    /// tipo de consolidado (<c>consolidado</c>, <c>consolidado_maestro</c>) de la instancia, indexado por
+    /// tipo (sin distinguir mayúsculas). Tipo ausente del diccionario = no hay PDF de ese tipo
+    /// (estado <c>inexistente</c>). UNA consulta lean (sin blobs ni grafo): la usa el detalle del trámite,
+    /// cuyo grafo (<see cref="GetByIdWithDetailsAsync(Guid, Guid, CancellationToken)"/>) no carga adjuntos.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> GetConsolidadoSourcesAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
     /// Carga la instancia con el grafo necesario para computar el checklist condicional
     /// (RF30/31/35): <c>Attachments</c> (auto-marcado), <c>Actors</c> (NIT vs persona natural),
     /// <c>FieldValues</c> (servicio especial, tipo de documento del propietario) y
