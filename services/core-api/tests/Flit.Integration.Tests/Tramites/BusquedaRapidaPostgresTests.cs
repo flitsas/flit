@@ -95,6 +95,45 @@ public sealed class BusquedaRapidaPostgresTests(PostgresDatabaseFixture fixture)
         total.Should().Be(items.Count);
     }
 
+    [PostgresFact] // AC8 — opción B: Ana crea, se lo pasan a Carlos → está en el «Mis trámites» de Carlos.
+    public async Task MisTramites_EsDelResponsableDeHoyNoDeQuienLoCreo()
+    {
+        await SembrarAsync();
+        var carlos = new Guid("5a5a5a5a-0005-4000-8000-000000012686");
+        await using (var ctx = NewContext())
+        {
+            ctx.Users.Add(new User
+            {
+                Id = carlos,
+                Email = "it-12686-carlos@flit.test",
+                DisplayName = "Carlos 12686",
+                Status = "active",
+                HomeTenantId = Cliente,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await ctx.SaveChangesAsync();
+            var reasignado = await ctx.ProcedureInstances.SingleAsync(p => p.Id == Borrador);
+            reasignado.AssignedToUserId = carlos;
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var lectura = NewContext();
+        var handler = new ListProcedureInstancesFilteredHandler(new ProcedureInstanceRepository(lectura));
+        var (deCarlos, totalCarlos) = await handler.HandleAsync(new ProcedureInstanceListRequest
+        {
+            TenantId = Cliente, BusquedaRapida = BusquedaRapida.MisTramites, UsuarioActualId = carlos,
+        });
+        var (deAna, totalAna) = await handler.HandleAsync(new ProcedureInstanceListRequest
+        {
+            TenantId = Cliente, BusquedaRapida = BusquedaRapida.MisTramites, UsuarioActualId = Gestor,
+        });
+
+        totalCarlos.Should().Be(1);
+        deCarlos.Single().Id.Should().Be(Borrador);
+        totalAna.Should().Be(5, "creó los seis y solo le quitaron uno");
+        deAna.Select(i => i.Id).Should().NotContain(Borrador);
+    }
+
     // ── Escenario ─────────────────────────────────────────────────────────────────────────
 
     private async Task SembrarAsync()

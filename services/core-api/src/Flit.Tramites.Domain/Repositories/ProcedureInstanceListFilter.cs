@@ -106,6 +106,12 @@ public sealed record ProcedureInstanceListFilter
     public DateTimeOffset? EntregadoAntesDe { get; init; }
 
     /// <summary>
+    /// Epic #12686 — «Mis trámites»: trámites cuyo responsable de hoy es este usuario, con la misma
+    /// regla que la columna Gestor: el asignado o, si nunca se reasignó, quien lo creó.
+    /// </summary>
+    public Guid? ResponsableId { get; init; }
+
+    /// <summary>
     /// HU #12187 — búsqueda de texto libre del listado, transversal a varios campos.
     ///
     /// <para><b>Por qué es un filtro del servidor y no del cliente.</b> Este cruce se hacía en el

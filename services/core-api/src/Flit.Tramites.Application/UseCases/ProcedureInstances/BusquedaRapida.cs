@@ -33,7 +33,15 @@ public static class BusquedaRapida
     /// <summary>Borradores que no pueden salir al OT: sin firmas, sin documento o pausados.</summary>
     public const string Pausados = "pausados";
 
-    public static readonly IReadOnlyList<string> Todos = [MasDe5Dias, MasDe10Dias, SinFirmas, SinDocumento, Pausados];
+    /// <summary>
+    /// Trámites que el usuario tiene a su cargo HOY: el responsable asignado o, si nunca se
+    /// reasignó, quien lo creó (el «gestor efectivo»). Decisión del 2026-09-23 (opción B): si Ana
+    /// crea un trámite y se lo pasan a Carlos, aparece en el «Mis trámites» de Carlos, no en el de Ana.
+    /// </summary>
+    public const string MisTramites = "mis_tramites";
+
+    public static readonly IReadOnlyList<string> Todos =
+        [MasDe5Dias, MasDe10Dias, SinFirmas, SinDocumento, Pausados, MisTramites];
 
     /// <summary>Mensaje de error si el atajo no existe; <c>null</c> si es válido o no viene.</summary>
     public static string? Validate(string? atajo) =>
@@ -103,6 +111,7 @@ public sealed class BusquedaRapidaResolver(
         ProcedureInstanceListFilter filter,
         string? atajo,
         CargarCandidatos cargar,
+        Guid? usuarioActualId = null,
         CancellationToken ct = default)
     {
         var ahora = (clock ?? TimeProvider.System).GetUtcNow();
@@ -110,6 +119,11 @@ public sealed class BusquedaRapidaResolver(
         {
             case null:
                 return filter;
+            case BusquedaRapida.MisTramites:
+                // Sin usuario identificado no hay «míos»: ninguno, nunca «todos».
+                return usuarioActualId is { } usuario
+                    ? filter with { ResponsableId = usuario }
+                    : filter with { IdsIncluidos = [] };
             case BusquedaRapida.MasDe5Dias:
                 return filter with { EntregadoAntesDe = BusquedaRapida.CorteDeDias(5, ahora) };
             case BusquedaRapida.MasDe10Dias:

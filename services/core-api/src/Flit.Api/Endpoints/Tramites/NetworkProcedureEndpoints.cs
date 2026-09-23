@@ -134,7 +134,7 @@ internal static class NetworkProcedureEndpoints
             if (BusquedaRapida.Validate(body.BusquedaRapida) is { } atajoInvalido)
                 return Results.BadRequest(new { error = atajoInvalido });
 
-            var request = body.ToRequest(tenantId: null);
+            var request = body.ToRequest(tenantId: null) with { UsuarioActualId = UsuarioActual(http.User) };
             IReadOnlyList<InstanceSummaryDto> items;
             int total;
             string? error;
@@ -169,7 +169,7 @@ internal static class NetworkProcedureEndpoints
             if (BusquedaRapida.Validate(body.BusquedaRapida) is { } atajoInvalido)
                 return Results.BadRequest(new { error = atajoInvalido });
 
-            var request = body.ToRequest(tenantId: null);
+            var request = body.ToRequest(tenantId: null) with { UsuarioActualId = UsuarioActual(http.User) };
             NetworkStatusCountsResult? result;
             string? error;
             try
@@ -239,6 +239,13 @@ internal static class NetworkProcedureEndpoints
         group.MapNetworkIdentityValidations();
 
         return app;
+    }
+
+    /// <summary>Epic #12686 — id del usuario autenticado (claim <c>sub</c>/NameIdentifier) para «Mis trámites».</summary>
+    private static Guid? UsuarioActual(System.Security.Claims.ClaimsPrincipal user)
+    {
+        var raw = user.FindFirst("sub")?.Value ?? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(raw, out var id) ? id : null;
     }
 
     private static IResult Forbidden(string error) =>

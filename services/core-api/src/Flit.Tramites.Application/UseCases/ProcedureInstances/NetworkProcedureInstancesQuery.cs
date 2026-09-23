@@ -59,6 +59,7 @@ public sealed class NetworkListProcedureInstancesHandler(
             request.BusquedaRapida,
             (f, take, token) => repo.ListWithSummaryGraphFilteredAsync(
                 alcance, 0, take, f, ProcedureInstanceSortBy.Default, SortDirection.Descending, token),
+            request.UsuarioActualId,
             ct).ConfigureAwait(false);
     }
 }
