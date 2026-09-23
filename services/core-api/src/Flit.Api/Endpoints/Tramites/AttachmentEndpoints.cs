@@ -193,6 +193,12 @@ internal static class AttachmentEndpoints
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "attachment_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Attachment not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden borrar documentos en borrador o con subsanación activa."),
+                // Re-review #12760 (M-N1) — consolidados y maestro radicado: documentos del sistema.
+                DeleteAttachmentHandler.AdjuntoProtegido => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "Este documento lo genera el sistema y no se puede eliminar.",
+                    extensions: new Dictionary<string, object?> { ["error"] = DeleteAttachmentHandler.AdjuntoProtegido }),
                 _ => Results.NoContent(),
             };
         }).WithName("DeleteProcedureInstanceAttachment");

@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Consolidados;
 using Flit.Admin.Domain.OtDocumentPrecedence;
 
 namespace Flit.Admin.Application.OtDocumentPrecedence.UpdateOtDocumentPrecedence;
@@ -40,10 +41,18 @@ public sealed class UpdateOtDocumentPrecedenceHandler
     private const int MaxBatchSize = 50;
 
     private readonly IOtDocumentPrecedenceRepository _repository;
+    private readonly IConsolidadoInvalidacionMasiva? _invalidacion;
 
-    public UpdateOtDocumentPrecedenceHandler(IOtDocumentPrecedenceRepository repository)
+    /// <param name="invalidacion">
+    /// HU #12789 — invalida en bloque los consolidados afectados. Opcional para no romper los
+    /// llamadores que no lo necesitan; en DI siempre se inyecta.
+    /// </param>
+    public UpdateOtDocumentPrecedenceHandler(
+        IOtDocumentPrecedenceRepository repository,
+        IConsolidadoInvalidacionMasiva? invalidacion = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _invalidacion = invalidacion;
     }
 
     public async Task<UpdateOtDocumentPrecedenceResult> HandleAsync(
@@ -85,6 +94,16 @@ public sealed class UpdateOtDocumentPrecedenceHandler
             // queda el caso de un documento que no existe en el catálogo.
             return UpdateOtDocumentPrecedenceResult.ValidationFailed(
                 new FieldError("items", "UNKNOWN_DOCUMENT_TYPE"));
+        }
+
+        // HU #12789 AC1 — el nuevo orden cambia el PDF de los trámites de ese tipo radicados ante el
+        // OT: se bajan sus banderas de vigencia en una sola operación y el siguiente acceso lo
+        // reconstruye con la prelación nueva (ADR-0038).
+        if (_invalidacion is not null)
+        {
+            await _invalidacion
+                .InvalidarPorPrelacionOtAsync(command.TenantId, command.Request.ProcedureTypeId, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         return UpdateOtDocumentPrecedenceResult.Updated(updated.Select(OtDocumentPrecedenceMapper.ToResponse).ToList());

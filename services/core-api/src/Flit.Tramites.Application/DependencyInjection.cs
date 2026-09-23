@@ -265,6 +265,15 @@ public static class DependencyInjection
         // Feature #10701 — presigned view URL inline (HU #10702) y consolidado maestro (HU #10706).
         services.AddScoped<GetAttachmentPreviewUrlHandler>();
         services.AddScoped<GenerarConsolidadoMaestroHandler>();
+        // HU #12785 — ruta única de entrega de ambos consolidados (reconstruye solo si está desactualizado).
+        services.AddScoped<EntregarConsolidadoHandler>();
+        // HU #12795 (Épica #12760) — un trabajo de la cola de regeneración anticipada: comprueba
+        // vigencia / estado final / migrado / Source=user y delega en los dos handlers de arriba.
+        services.AddScoped<RegenerarConsolidadoAnticipadoHandler>();
+        // HU #12798 — bitácora de fallos de regeneración del consolidado (evento
+        // consolidado_regeneracion_fallida + aviso en cascada) y POST del wizard con respaldo del anterior.
+        services.AddScoped<ConsolidadoFalloBitacora>();
+        services.AddScoped<GenerarConsolidadoConRespaldoHandler>();
         // Perfil OT: visualizar el consolidado y adjuntar la Licencia de Tránsito (LT) sobre
         // trámites de clientes (se ejecutan en el scope RLS del tenant cliente vía AdminOtEndpoints).
         services.AddScoped<DescargarConsolidadoHandler>();

@@ -9,6 +9,8 @@ using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 
@@ -41,8 +43,15 @@ public sealed class TramiteLifecycleService(
     IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
     // HU #10970 — se añade AL FINAL, después de los parámetros que traía develop, para no desplazar
     // ninguna posición existente (varios call sites pasan estos opcionales por posición).
-    TramiteValidationPolicy? validationPolicy = null) : ITramiteLifecycleService
+    TramiteValidationPolicy? validationPolicy = null,
+    // HU #12796 (Épica #12760, D1) — cola de regeneración anticipada del consolidado. AL FINAL por la
+    // misma razón que validationPolicy. Null en tests que no la ejercitan: sin cola, solo el perezoso.
+    IConsolidadoRegeneracionQueue? regeneracionQueue = null,
+    ILogger<TramiteLifecycleService>? logger = null) : ITramiteLifecycleService
 {
+    private readonly ILogger<TramiteLifecycleService> _logger =
+        logger ?? NullLogger<TramiteLifecycleService>.Instance;
+
     // ADR-0036 (HU #10912/#10916) — config de mandato del OT (plantilla / exige a PN). Default seguro
     // (NUNCA resuelve ⇒ solo PJ, plantilla genérica) en tests que no lo ejercitan.
     private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
@@ -232,7 +241,40 @@ public sealed class TramiteLifecycleService(
                 TramiteEstadoErrores.ConflictoConcurrencia,
                 "El trámite fue modificado por otro proceso. Recargue el trámite e intente de nuevo.");
 
+        // HU #12796 — hitos anticipados, SIEMPRE después del commit (una transición revertida no puede
+        // dejar trabajo en cola). AC1: la radicación deja el trámite en el OT y lo primero que el organismo
+        // abre es el consolidado maestro. AC2: un expediente entregado que el OT devuelve por esta vía
+        // (decisión sincronizada desde Quipux) vuelve al gestor, así que se anticipan los dos. La decisión
+        // desde la consola OT no pasa por aquí: la cubre OtClientProcedureRepository. Aprobar (AC4) y el
+        // resto de aristas se quedan con la invalidación de arriba y el camino perezoso.
+        // HU #12787 (AC2) — la radicación del canal Quipux (actor Quipux) NO encola el maestro: el que se
+        // acaba de radicar es el documento de la secretaría y queda fijo. El worker también lo omite
+        // (`maestro_radicado`), pero la submission se marca radicada DESPUÉS de esta transición: sin este
+        // corte, un worker rápido podría ganar esa ventana.
+        if (esRadicacion && command.Actor != TramiteActor.Quipux)
+        {
+            EncolarRegeneracionAnticipada(instance.TenantId, instance.Id, TipoConsolidado.Maestro);
+        }
+        else if (from == TramiteEstado.Entregado && command.ToStatus == TramiteEstado.Rechazado)
+        {
+            EncolarRegeneracionAnticipada(instance.TenantId, instance.Id, TipoConsolidado.Wizard);
+            EncolarRegeneracionAnticipada(instance.TenantId, instance.Id, TipoConsolidado.Maestro);
+        }
+
         return TramiteTransitionOutcome.Ok(instance);
+    }
+
+    /// <summary>
+    /// HU #12796 — pide la regeneración anticipada sin afectar al hito: la cola no bloquea y un descarte
+    /// (<c>false</c>) solo se registra, porque la bandera ya quedó abajo y el perezoso lo reconstruye.
+    /// </summary>
+    private void EncolarRegeneracionAnticipada(Guid tenantId, Guid instanceId, TipoConsolidado documento)
+    {
+        if (regeneracionQueue is null)
+            return;
+
+        if (!regeneracionQueue.Encolar(tenantId, instanceId, documento))
+            TramiteLifecycleLog.RegeneracionAnticipadaDescartada(_logger, instanceId, tenantId, documento);
     }
 
     /// <summary>
@@ -839,4 +881,13 @@ public sealed class TramiteLifecycleService(
         return false;
     }
 
+}
+
+/// <summary>Logging source-generated (CA1848) del ciclo de vida. Sin PII.</summary>
+internal static partial class TramiteLifecycleLog
+{
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "HU #12796 — la regeneración anticipada del consolidado {Documento} del trámite {InstanceId} (tenant {TenantId}) se descartó; lo cubre la regeneración perezosa.")]
+    public static partial void RegeneracionAnticipadaDescartada(
+        ILogger logger, Guid instanceId, Guid tenantId, TipoConsolidado documento);
 }

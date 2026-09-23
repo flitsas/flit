@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Queries.Domain.Documentos;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.RevocationRequests;
@@ -192,7 +193,13 @@ public sealed record ProcedureInstanceDetailDto(
     // dos campos de arriba: null en la vista de red.
     ProcedureInstanceRevocationDecisionDto? LastRevocationDecision = null,
     /// <summary>ADR-0059 — estado desde el que el OT rechazó por última vez (entregado | preasignacion); null si no aplica.</summary>
-    string? RejectedFrom = null);
+    string? RejectedFrom = null,
+    // HU #12791 (Épica #12760) — vigencia + sello de tiempo de cada consolidado (ver XML doc de
+    // ConsolidadoVigenciaDto). Opcionales (default null) y ADITIVOS: consumidores que no los lean no
+    // cambian. Los arma BuildDetailAsync (detalle propio y vista de red por igual); null solo si el
+    // detalle se construye sin repositorio (ToDetail directo en tests antiguos).
+    ConsolidadoVigenciaDto? ConsolidadoWizard = null,
+    ConsolidadoVigenciaDto? ConsolidadoMaestro = null);
 
 public sealed class GetProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
@@ -345,7 +352,11 @@ public sealed class GetProcedureInstanceHandler(
     {
         var events = await BuildEventsAsync(repo, instance.Events, ct).ConfigureAwait(false);
         var actorInfo = await BuildStatusHistoryActorInfoAsync(repo, instance.StatusHistory, ct).ConfigureAwait(false);
-        return ToDetail(instance, events, actorInfo, revocationEligibility, activeRevocationRequest, lastRevocationDecision);
+        // HU #12791 — el grafo del detalle no carga adjuntos: UNA lectura lean de los consolidados.
+        var sources = await repo.GetConsolidadoSourcesAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
+        var (wizard, maestro) = ConsolidadoVigenciaProyeccion.Desde(instance, sources);
+        return ToDetail(instance, events, actorInfo, revocationEligibility, activeRevocationRequest, lastRevocationDecision)
+            with { ConsolidadoWizard = wizard, ConsolidadoMaestro = maestro };
     }
 
     /// <summary>

@@ -161,6 +161,15 @@ public sealed class ProcedureInstance
     public bool ConsolidadoMaestroVigente { get; set; }
 
     /// <summary>
+    /// HU #12790 (Épica #12760) — instante UTC en que se generó el <c>consolidado_maestro</c>
+    /// vigente. Lo sella <c>GenerarConsolidadoMaestroHandler</c> junto con
+    /// <see cref="ConsolidadoMaestroVigente"/>. <c>null</c> en trámites históricos (anteriores a la
+    /// columna): no invalida el documento, solo indica «fecha no disponible». Columna agregada por
+    /// migración SQL cruda (tabla ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public DateTimeOffset? ConsolidadoMaestroGeneradoEn { get; set; }
+
+    /// <summary>
     /// Migración V1→V2 (traspasos) — marca de "trámite histórico importado desde Flit V1". En
     /// <c>true</c> el trámite es una FOTO de solo lectura: no se capturó paso a paso en V2, así que
     /// no debe someterse al gating del wizard vivo (que exige datos —comercial, biométrica, FUR—
@@ -222,6 +231,15 @@ public sealed class ProcedureInstance
     /// ExcludeFromMigrations); aquí solo se mapea al modelo EF.
     /// </summary>
     public bool ConsolidadoWizardVigente { get; set; }
+
+    /// <summary>
+    /// HU #12790 (Épica #12760) — instante UTC en que se generó (<c>GenerarConsolidadoHandler</c>) o
+    /// se cargó a mano (<c>CargarConsolidadoExternoHandler</c>, <c>Source="user"</c>) el consolidado
+    /// del wizard vigente. <c>null</c> en trámites históricos: no invalida el documento, solo indica
+    /// «fecha no disponible». Columna agregada por migración SQL cruda (tabla
+    /// ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public DateTimeOffset? ConsolidadoWizardGeneradoEn { get; set; }
 
     /// <summary>
     /// Invalida los consolidados persistidos (maestro y wizard) tras un cambio que altera el

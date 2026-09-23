@@ -303,6 +303,21 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
+        // HU #12785 — ruta ÚNICA de entrega del consolidado (maestro por defecto; ?tipo=consolidado para el
+        // del wizard): reconstruye SOLO si la bandera de vigencia está abajo; estado final, Source=user y
+        // migrado V1 se sirven tal cual. ?soloLectura=true devuelve el adjunto sin mirar la bandera (vista
+        // read-only del OT tras radicar ante Quipux, HU #12787 AC2). Devuelve metadatos: el binario se baja
+        // por /documents/{attachmentId}/download o /preview-url.
+        group.MapGet("/client-procedures/{id:guid}/consolidado/entrega", DeliverClientProcedureConsolidadoAsync)
+            .WithName("AdminOtDeliverClientProcedureConsolidado")
+            .WithSummary("Entrega el consolidado vigente (maestro o wizard) de un trámite de cliente OT; reconstruye solo si está desactualizado")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         group.MapGet("/client-procedures/{id:guid}/documents", ListClientProcedureDocumentsAsync)
             .WithName("AdminOtListClientProcedureDocuments")
             .WithSummary("Lista los adjuntos del trámite de un cliente OT (sin binarios, con flags de consolidado)")
@@ -2054,25 +2069,13 @@ public static class AdminOtEndpoints
             access!.ClientTenantId,
             async () =>
             {
-                // HU #10706 AC1 — orden por la matriz documental resuelta del trámite con la
-                // precedencia del OT. Se resuelve DENTRO del scope RLS del tenant cliente (los
-                // requisitos base viven en tramites del cliente). Si el resolver falla o no hay
-                // matriz configurada, la lista vacía hace que el handler caiga al orden por modalidad.
-                IReadOnlyList<string> precedencia;
-                try
-                {
-                    var matriz = await matrixResolver
-                        .ResolveAsync(access.ProcedureTypeId, access.TransitOfficeId, cancellationToken)
-                        .ConfigureAwait(false);
-                    precedencia = matriz.Select(m => m.Codigo).ToList();
-                }
-                catch
-                {
-                    precedencia = [];
-                }
+                var precedencia = await ResolverPrecedenciaMatrizAsync(matrixResolver, access, cancellationToken)
+                    .ConfigureAwait(false);
 
+                // HU #12787 (AC2) — radicado ante Quipux ⇒ el maestro radicado tal cual (modo
+                // radicado_fijo), ni con `force` se regenera.
                 return await handler
-                    .HandleAsync(id, access.ClientTenantId, precedencia, force ?? false, cancellationToken)
+                    .HandleRespetandoRadicacionAsync(id, access.ClientTenantId, precedencia, force ?? false, cancellationToken)
                     .ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
@@ -2080,10 +2083,127 @@ public static class AdminOtEndpoints
         return error switch
         {
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
+            Flit.Tramites.Application.UseCases.ProcedureInstances.EntregarConsolidadoHandler.ConsolidadoNoGenerado =>
+                Results.NotFound(new { error = "consolidado_no_generado" }),
             "sin_adjuntos" => Results.Conflict(new { error = "sin_adjuntos" }),
             "adjunto_no_disponible" => Results.Conflict(new { error = "adjunto_no_disponible" }),
             "mimetype_no_soportado" => Results.Conflict(new { error = "mimetype_no_soportado" }),
             _ => Results.Ok(result),
+        };
+    }
+
+    /// <summary>
+    /// Orden de la matriz documental resuelta del trámite con la precedencia del OT (HU #10706 AC1). Se
+    /// llama DENTRO del scope RLS del tenant cliente (los requisitos base viven en tramites del
+    /// cliente). Si el resolver falla o no hay matriz configurada, la lista vacía hace que el handler
+    /// caiga al orden por modalidad.
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> ResolverPrecedenciaMatrizAsync(
+        Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
+        Flit.Admin.Domain.OtClientProcedures.OtClientProcedure access,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var matriz = await matrixResolver
+                .ResolveAsync(access.ProcedureTypeId, access.TransitOfficeId, cancellationToken)
+                .ConfigureAwait(false);
+            return matriz.Select(m => m.Codigo).ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    // ── Entrega del consolidado vigente (HU #12785, épica #12760) ────────────────────────────────
+
+    private static async Task<IResult> DeliverClientProcedureConsolidadoAsync(
+        Guid id,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        Flit.Admin.Domain.OtProfile.IQuipuxReadOnlyGuard quipuxReadOnlyGuard,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.EntregarConsolidadoHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        // `consolidado_maestro` (default) | `consolidado`.
+        [FromQuery] string? tipo,
+        // Nullable a propósito (Bug #11139): omitirlos = comportamiento normal.
+        [FromQuery] bool? force,
+        [FromQuery] bool? soloLectura,
+        CancellationToken cancellationToken)
+    {
+        if (!Flit.Api.Endpoints.Tramites.ConsolidadoEndpoints.TryParseTipo(
+                tipo,
+                Flit.Tramites.Application.UseCases.ProcedureInstances.ConsolidadoEntregaTipo.Maestro,
+                out var tipoEntrega))
+        {
+            return Results.BadRequest(new { error = "tipo_invalido", message = "tipo debe ser 'consolidado' o 'consolidado_maestro'." });
+        }
+
+        // Épica #12760 (security M1) — un GET no fuerza escrituras: `force` queda para el POST
+        // `consolidado-maestro` («Regenerar»). Ningún cliente del frontend lo manda por esta ruta.
+        if (force == true)
+        {
+            return Results.BadRequest(new
+            {
+                error = Flit.Api.Endpoints.Tramites.ConsolidadoEndpoints.ForceNoPermitidoEnGetError,
+                message = "force no se admite en GET: para reconstruir use POST consolidado-maestro.",
+            });
+        }
+
+        var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        // Un OT en modo Quipux read-only no puede generar (HU #10215 AC4): en vez de 403, la entrega le
+        // sirve el adjunto tal cual — ver no es generar.
+        var esMaestro = tipoEntrega == Flit.Tramites.Application.UseCases.ProcedureInstances.ConsolidadoEntregaTipo.Maestro;
+        var guardResult = await quipuxReadOnlyGuard
+            .ValidateActionAsync(tenantId, esMaestro ? "generar_consolidado_maestro" : "generar_consolidado", cancellationToken)
+            .ConfigureAwait(false);
+        var sinGenerar = (soloLectura ?? false) || !guardResult.IsAllowed;
+
+        var (result, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            async () =>
+            {
+                IReadOnlyList<string>? precedencia = esMaestro && !sinGenerar
+                    ? await ResolverPrecedenciaMatrizAsync(matrixResolver, access, cancellationToken).ConfigureAwait(false)
+                    : null;
+
+                return await handler
+                    .HandleAsync(
+                        new Flit.Tramites.Application.UseCases.ProcedureInstances.EntregarConsolidadoRequest(
+                            id,
+                            access.ClientTenantId,
+                            tipoEntrega,
+                            ResolveUserId(httpContext.User),
+                            Force: false,
+                            sinGenerar,
+                            precedencia),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            null => Results.Ok(result),
+            "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
+            Flit.Tramites.Application.UseCases.ProcedureInstances.EntregarConsolidadoHandler.ConsolidadoNoGenerado =>
+                Results.NotFound(new { error = "consolidado_no_generado" }),
+            Flit.Tramites.Application.UseCases.ProcedureInstances.SubmitGate.FurRequerido =>
+                Results.Conflict(new { error = "fur_requerido" }),
+            "storage_unavailable" => Results.Json(
+                new { error = "storage_unavailable" },
+                statusCode: StatusCodes.Status503ServiceUnavailable),
+            // migrado_solo_lectura, sin_adjuntos, adjunto_no_disponible, mimetype_no_soportado,
+            // organismo_requerido: mismo formato { error } que el resto de la consola OT.
+            _ => Results.Conflict(new { error }),
         };
     }
 
@@ -2095,6 +2215,7 @@ public static class AdminOtEndpoints
         Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
         ITransitOfficeCatalog transitOfficeCatalog,
         Flit.Tramites.Application.UseCases.ProcedureInstances.ListAttachmentsHandler listHandler,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.IMaestroRadicadoLookup maestroRadicado,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
@@ -2104,15 +2225,27 @@ public static class AdminOtEndpoints
         if (accessError is not null)
             return accessError;
 
-        var (attachments, error) = await repository.ExecuteInClientTenantScopeAsync(
+        var (attachments, radicadoId, error) = await repository.ExecuteInClientTenantScopeAsync(
             access!.ClientTenantId,
-            () => listHandler.HandleAsync(id, access.ClientTenantId, cancellationToken),
+            async () =>
+            {
+                var (listado, err) = await listHandler
+                    .HandleAsync(id, access.ClientTenantId, cancellationToken).ConfigureAwait(false);
+                var radicado = listado is null
+                    ? null
+                    : await maestroRadicado
+                        .AttachmentRadicadoAsync(access.ClientTenantId, id, cancellationToken).ConfigureAwait(false);
+                return (listado, radicado, err);
+            },
             cancellationToken).ConfigureAwait(false);
 
         if (error is "not_found")
             return Results.NotFound(new { error = "Trámite no encontrado" });
 
-        var docs = attachments!.Attachments;
+        // Re-review #12760 (N5) — una fila por tipo de consolidado: la que sirve la entrega (el maestro
+        // radicado fijo si aplica; si no, el más reciente). Mismo contrato { data, consolidado, … }.
+        var docs = Flit.Tramites.Application.UseCases.ProcedureInstances.ConsolidadoListado
+            .UnoPorTipo(attachments!.Attachments, radicadoId);
         var hasConsolidado = docs.Any(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
         var hasConsolidadoMaestro = docs.Any(a => string.Equals(a.Tipo, "consolidado_maestro", StringComparison.OrdinalIgnoreCase));
 

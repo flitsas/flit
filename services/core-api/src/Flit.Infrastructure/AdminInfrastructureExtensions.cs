@@ -471,6 +471,12 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IOtDocumentPrecedenceRepository, OtDocumentPrecedenceRepository>();
         services.AddScoped<IOtDocumentTagRepository, OtDocumentTagRepository>();
 
+        // HU #12789 (Épica #12760) — invalidación masiva (un UPDATE set-based) de consolidados ante
+        // cambios de configuración externos: prelación OT, escrituras/RL y firmas del baúl.
+        services.AddScoped<
+            Flit.Admin.Application.Consolidados.IConsolidadoInvalidacionMasiva,
+            Services.ConsolidadoInvalidacionMasiva>();
+
         // HU #10466 — historial de improntas generadas (ADR-0022).
         services.AddScoped<IImprontaRepository, ImprontaRepository>();
 

@@ -339,6 +339,11 @@ export interface InstanceSummary {
    * generado ⇒ la fila NO ofrece la acción (el botón no dispara generación).
    */
   consolidadoAttachmentId?: string | null;
+  /**
+   * HU #12791 (Épica #12760) — vigencia del consolidado del wizard. `null`/ausente en backends
+   * anteriores al campo: la UI no infiere vigencia, pide la entrega.
+   */
+  consolidadoWizard?: ConsolidadoVigencia | null;
   // ── ICT (PR #204) — pausa de trámites de la integración ──────────────────────────
   /**
    * ICT (servicio v1 pauseDraftProcess / bandera starts_procedure_in_paused): el trámite está pausado
@@ -574,6 +579,10 @@ export interface ProcedureInstanceDetail {
   activeRevocationRequest?: ActiveRevocationRequest | null;
   /** Ver {@link RevocationDecision}. */
   lastRevocationDecision?: RevocationDecision | null;
+  /** HU #12791 (Épica #12760) — vigencia del consolidado del wizard. Ver {@link ConsolidadoVigencia}. */
+  consolidadoWizard?: ConsolidadoVigencia | null;
+  /** HU #12791 (Épica #12760) — vigencia del consolidado maestro. Ver {@link ConsolidadoVigencia}. */
+  consolidadoMaestro?: ConsolidadoVigencia | null;
 }
 
 /** Ver `ProcedureInstanceDetail.events`. */
@@ -2180,7 +2189,72 @@ export interface GenerarConsolidadoResult {
    * salía sin ese documento sin que el gestor supiera por qué. No bloquea: el consolidado se entrega.
    */
   avisosCascada?: string[] | null;
+  /**
+   * HU #12785/#12786 — true si el PDF se reconstruyó en esta petición. Las rutas POST de generación
+   * y la ruta GET de entrega lo devuelven; en la entrega, `false` significa que se sirvió el cacheado.
+   */
+  regenerado?: boolean;
+  /**
+   * HU #12785/#12786 (AC4) — el trámite está en estado final (aprobado/anulado/revocado): el PDF es
+   * la documentación definitiva y no se regenera. La UI lo avisa como «documento final».
+   */
+  definitivoPorEstadoFinal?: boolean;
+  /** HU #12785 — cómo se resolvió la entrega. `null` en las rutas POST de generación. */
+  modo?: ConsolidadoEntregaModo | null;
 }
+
+/**
+ * HU #12785 — modos de `GET …/consolidado/entrega` (schema `ConsolidadoEntregaResponse.modo`).
+ * - `vigente`: bandera arriba, se sirvió el adjunto cacheado sin escribir.
+ * - `regenerado`: bandera abajo (o sin PDF), se reconstruyó en esta petición.
+ * - `definitivo_estado_final` / `migrado_solo_lectura`: estado final, PDF definitivo sin regenerar.
+ * - `cargado_por_usuario`: PDF cargado por el SuperAdmin (Source="user"), nunca se pisa.
+ * - `solo_lectura`: `?soloLectura=true` o un OT que no puede generar; adjunto tal cual.
+ * - `radicado_fijo`: el maestro ya se radicó en Quipux y se sirve el radicado tal cual (HU #12787
+ *   AC2, «maestro radicado, fijo»): nunca se regenera, así que no hay fallo ni vigencia que refrescar.
+ */
+export type ConsolidadoEntregaModo =
+  | 'vigente'
+  | 'regenerado'
+  | 'definitivo_estado_final'
+  | 'migrado_solo_lectura'
+  | 'cargado_por_usuario'
+  | 'solo_lectura'
+  | 'radicado_fijo';
+
+/**
+ * HU #12791 (Épica #12760) — vigencia de un consolidado (wizard o maestro) tal como la exponen el
+ * listado y el detalle del trámite (gestor y OT).
+ * - `estado`: `vigente` (el PDF refleja el expediente), `desactualizado` (la bandera bajó: la
+ *   próxima entrega lo reconstruye) o `inexistente` (nunca se generó).
+ * - `generadoEn`: ISO UTC del sello de generación; `null` si no existe.
+ * - `origen`: `system` (generado) o `user` (cargado por el SuperAdmin); `null` si no existe.
+ * - `definitivo`: el trámite está en estado final y el PDF ya no se regenera.
+ * - `modo`: cómo se resolvería la entrega en estado final o carga manual; `null` en el caso normal.
+ */
+export interface ConsolidadoVigencia {
+  estado: 'vigente' | 'desactualizado' | 'inexistente';
+  generadoEn: string | null;
+  origen: 'system' | 'user' | null;
+  definitivo: boolean;
+  modo: 'definitivo_estado_final' | 'migrado_solo_lectura' | 'cargado_por_usuario' | null;
+}
+
+/** HU #12785 — tipo de PDF que se pide a la ruta de entrega. */
+export type ConsolidadoEntregaTipo = 'consolidado' | 'consolidado_maestro';
+
+/** HU #12785 — query de `GET …/consolidado/entrega`. Omitidos = comportamiento normal. */
+export interface ConsolidadoEntregaParams {
+  tipo?: ConsolidadoEntregaTipo;
+  force?: boolean;
+  soloLectura?: boolean;
+}
+
+/**
+ * HU #12785 — respuesta de la ruta de entrega (`ConsolidadoEntregaResponse`): mismo shape que la
+ * generación. El binario se baja por la descarga / `preview-url` de `document.attachmentId`.
+ */
+export type ConsolidadoEntregaResult = GenerarConsolidadoResult;
 
 // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───
 // Contrato FIJO acordado con backend:

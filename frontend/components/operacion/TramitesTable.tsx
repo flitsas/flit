@@ -1034,23 +1034,19 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     [isAdmin, currentTenantId],
   );
 
-  // HU #11055 — visor del consolidado. El resumen ya trae el id del adjunto, así que no hace falta
-  // consultar los adjuntos del trámite: se abre directo. El disparo va en un effect porque el hook
-  // toma el instanceId del render, y en el clic el trámite elegido todavía no está en estado.
+  // HU #11055 — visor del consolidado. El disparo va en un effect porque el hook toma el instanceId
+  // del render, y en el clic el trámite elegido todavía no está en estado.
+  // HU #12786 (AC1/AC3) — el id del resumen solo dice que HAY consolidado (gobierna si la acción se
+  // ofrece); el PDF se pide a la ruta de entrega, que lo reconstruye solo si está desactualizado.
+  // Una petición de entrega por clic: el effect depende del trámite elegido, no del resultado.
   const consolidadoPreview = useAttachmentPreview(
     consolidadoTramite?.id ?? null,
     isAdmin ? consolidadoTramite?.tenantId : undefined,
   );
-  const abrirConsolidado = consolidadoPreview.open;
+  const abrirConsolidado = consolidadoPreview.openConsolidado;
   useEffect(() => {
-    const attachmentId = consolidadoTramite?.consolidadoAttachmentId;
-    if (!consolidadoTramite || !attachmentId) return;
-    void abrirConsolidado({
-      id: attachmentId,
-      tipo: 'consolidado',
-      filename: `expediente-consolidado-${consolidadoTramite.referenceNumber}.pdf`,
-      mimetype: 'application/pdf',
-    });
+    if (!consolidadoTramite?.consolidadoAttachmentId) return;
+    void abrirConsolidado(`expediente-consolidado-${consolidadoTramite.referenceNumber}.pdf`);
   }, [consolidadoTramite, abrirConsolidado]);
 
   // ICT (paridad v1) — pausar/reanudar un trámite ICT con actualización optimista; revierte si falla.

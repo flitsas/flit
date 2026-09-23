@@ -324,6 +324,8 @@ function ConsolidadoModal({
   const [error, setError] = useState<string | null>(null);
   const busy = busyLimpiar || busyCargar;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // HU #12794, AC3 — tras limpiar/cargar el modal sigue abierto y vuelve a leer el detalle, para que
+  // el SuperAdmin vea el estado resultante (vigencia, sello, origen) sobre el que decidir.
 
   useEffect(() => {
     if (!open) return;
@@ -339,7 +341,6 @@ function ConsolidadoModal({
     try {
       await tramitesClient.adminLimpiarConsolidado(item.id, tenantId);
       onSuccess('Consolidado regenerado.');
-      onClose();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'No se pudo regenerar el consolidado.';
       setError(msg);
@@ -356,7 +357,7 @@ function ConsolidadoModal({
     try {
       await tramitesClient.adminCargarConsolidado(item.id, file, tenantId);
       onSuccess('Consolidado cargado.');
-      onClose();
+      setFile(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'No se pudo cargar el consolidado.';
       setError(msg);
