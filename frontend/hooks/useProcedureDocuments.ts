@@ -65,7 +65,15 @@ export function esTipoOcr(tipos: ReadonlySet<string> | null, tipo: string): bool
  * documento, pero no alimentan ningún certificado. La whitelist real (y la regla de precedencia frente
  * al RUNT) vive en el backend; esto solo evita mandar peticiones que se descartarían.
  */
-export const OCR_TIPOS_PERSISTIBLES: readonly string[] = ['soat', 'rtm'];
+export const OCR_TIPOS_PERSISTIBLES: readonly string[] = [
+  'soat',
+  'rtm',
+  // HU #12776 — la fecha de expedición del certificado alimenta la alerta de vigencia (>30 días).
+  // Sin persistirla, el backend nunca la tiene y la señal se queda en `indeterminada` para siempre.
+  'camara_comercio_vendedor',
+  'camara_comercio_comprador',
+  'camara_comercio_locatario',
+];
 
 /** Límite del OCR (10 MB, el del endpoint). Archivos mayores (≤20 MB) se suben sin analizar. */
 export const OCR_MAX_BYTES = 10 * 1024 * 1024;
@@ -347,6 +355,8 @@ export function useProcedureDocuments(
       if (!instanceId) return false;
 
       let fileToUpload = file;
+      // HU #12776 — ¿este cargue ya le dijo al backend qué fecha tiene el certificado?
+      let ocrPersistido = false;
       const usaOcr = esTipoOcr(await cargarTiposOcr(), tipo);
       const analizaAhora = usaOcr && file.size <= OCR_MAX_BYTES;
 
@@ -413,6 +423,7 @@ export function useProcedureDocuments(
         if (!evaluation.rechazado && ocr.data && OCR_TIPOS_PERSISTIBLES.some((x) => x.toLowerCase() === tipo.toLowerCase())) {
           try {
             await tramitesClient.persistOcrFields(instanceId, tipo.toLowerCase(), ocr.data, tenantId);
+            ocrPersistido = true;
           } catch {
             // Silencio intencionado: ver comentario de arriba.
           }
@@ -431,6 +442,17 @@ export function useProcedureDocuments(
             },
           },
         }));
+      }
+
+      // HU #12776 — certificado de Cámara de Comercio cuyo OCR no se pudo usar (rechazado, fallido o
+      // saltado por tamaño): se avisa igual, sin campos, para que el backend retire la fecha del
+      // certificado ANTERIOR. Si se quedara, la alerta de vigencia hablaría de otro documento.
+      if (!ocrPersistido && /^camara_comercio_/i.test(tipo)) {
+        try {
+          await tramitesClient.persistOcrFields(instanceId, tipo.toLowerCase(), {}, tenantId);
+        } catch {
+          // Best-effort, igual que la persistencia normal: el cargue no depende de esto.
+        }
       }
 
       // 2) Subida a S3 (flujo presign → S3 → register existente). Varios tipos en paralelo.

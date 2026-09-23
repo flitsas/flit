@@ -284,4 +284,55 @@ public sealed class PersistOcrFieldsHandlerTests
 
         error.Should().Be("not_found");
     }
+
+    // ── HU #12776 — la fecha del certificado de Cámara de Comercio no sobrevive a otro documento ──
+
+    private static PersistOcrFieldsRequest CamaraOcr(params (string Key, string? Value)[] fields) =>
+        new(CamaraComercioAttachmentTipo.Vendedor,
+            fields.ToDictionary(f => f.Key, f => f.Value, StringComparer.OrdinalIgnoreCase));
+
+    [Fact]
+    public async Task Camara_ConFechaLegible_LaPersisteYNoBorraNada()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance();
+
+        var (result, _) = await _sut.HandleAsync(_id, _tenantId, CamaraOcr(("fecha_expedicion", "2026-08-10")), ct);
+
+        result!.Persistidos.Should().Be(1);
+        ValueOf(instance, CamaraComercioFieldKeys.Expedicion("vendedor")).Should().Be("2026-08-10");
+        await _repo.DidNotReceive().DeleteOcrFieldValueAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Un certificado nuevo cuyo OCR no leyó la fecha no puede heredar la del anterior: la alerta de
+    /// vigencia hablaría de otro documento.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task Camara_SinFechaLegible_BorraLaFechaOcrAnteriorDelRol(string? fecha)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance();
+        Seed(instance, CamaraComercioFieldKeys.Expedicion("vendedor"), "2026-08-01", PersistOcrFieldsHandler.OcrSource);
+
+        await _sut.HandleAsync(_id, _tenantId, CamaraOcr(("fecha_expedicion", fecha)), ct);
+
+        await _repo.Received(1).DeleteOcrFieldValueAsync(
+            _id, _tenantId, CamaraComercioFieldKeys.Expedicion("vendedor"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task OtroTipoDeDocumento_NoTocaLaFechaDelCertificado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Instance();
+
+        await _sut.HandleAsync(_id, _tenantId, SoatOcr(("numero_poliza", "123")), ct);
+
+        await _repo.DidNotReceive().DeleteOcrFieldValueAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
 }

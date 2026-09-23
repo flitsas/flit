@@ -126,6 +126,10 @@ public sealed class PersistOcrFieldsHandler(
         var persistidos = 0;
         var omitidos = new List<string>();
         var ignorados = new List<string>();
+        // HU #12776 — llave de la fecha del certificado de Cámara de Comercio, si este OCR es de uno.
+        var rolCamara = CamaraComercioAttachmentTipo.RoleOf(request.Tipo);
+        var llaveFechaCamara = rolCamara is null ? null : CamaraComercioFieldKeys.Expedicion(rolCamara);
+        var fechaCamaraLeida = false;
 
         foreach (var (ocrKey, rawValue) in request.Fields)
         {
@@ -140,6 +144,9 @@ public sealed class PersistOcrFieldsHandler(
             var value = Normalizar(fieldKey, rawValue);
             if (string.IsNullOrWhiteSpace(value))
                 continue; // valor ausente ⇒ NO se escribe la llave ⇒ celda en blanco (regla HU #10856).
+
+            if (string.Equals(fieldKey, llaveFechaCamara, StringComparison.OrdinalIgnoreCase))
+                fechaCamaraLeida = true;
 
             var existing = instance.FieldValues.FirstOrDefault(f =>
                 string.Equals(f.FieldKey, fieldKey, StringComparison.OrdinalIgnoreCase));
@@ -180,6 +187,12 @@ public sealed class PersistOcrFieldsHandler(
             repo.Add(fieldValue);
             persistidos++;
         }
+
+        // HU #12776 — un certificado nuevo SIN fecha legible no puede heredar la fecha del anterior:
+        // la alerta de vigencia hablaría de otro documento. Aquí la «celda en blanco» de la regla
+        // HU #10856 no basta, porque la llave ya existe; hay que retirarla. Solo la de origen OCR.
+        if (llaveFechaCamara is not null && !fechaCamaraLeida)
+            await repo.DeleteOcrFieldValueAsync(instance.Id, tenantId, llaveFechaCamara, ct);
 
         if (persistidos > 0)
             await repo.SaveChangesAsync(ct);
