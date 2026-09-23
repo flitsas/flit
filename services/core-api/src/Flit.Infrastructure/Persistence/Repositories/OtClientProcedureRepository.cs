@@ -1687,8 +1687,27 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         return await action().ConfigureAwait(false);
     }
 
-    private async Task<T> ExecuteInOtTenantScopeAsync<T>(
+    private Task<T> ExecuteInOtTenantScopeAsync<T>(
         Guid otTenantId,
+        Func<Task<T>> action,
+        CancellationToken cancellationToken) =>
+        ExecuteInTenantTransactionAsync(otTenantId, action, cancellationToken);
+
+    public Task<T> ExecuteInClientTenantScopeAsync<T>(
+        Guid clientTenantId,
+        Func<Task<T>> action,
+        CancellationToken cancellationToken = default) =>
+        ExecuteInTenantTransactionAsync(clientTenantId, action, cancellationToken);
+
+    /// <summary>
+    /// Transacción con el GUC de tenant (<c>app.current_tenant_id</c>, local a la transacción) alrededor
+    /// de <paramref name="action"/>. HU #12797 (F2) — es la transacción GESTIONADA de
+    /// <see cref="AccionesPostTransaccion"/>: lo que los casos de uso difieran dentro (borrado de binarios
+    /// del consolidado anterior, bitácora de fallos) se ejecuta DESPUÉS de que termine de verdad — los
+    /// borrados solo si el commit confirmó; la bitácora siempre, ya fuera de la transacción.
+    /// </summary>
+    private async Task<T> ExecuteInTenantTransactionAsync<T>(
+        Guid tenantId,
         Func<Task<T>> action,
         CancellationToken cancellationToken)
     {
@@ -1699,45 +1718,29 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             {
                 var transaction = await _context.Database
                     .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+                var transactionId = transaction.TransactionId;
+                var confirmada = false;
+                _context.AccionesPostTransaccion.Abrir(transactionId);
 
-                await using (transaction.ConfigureAwait(false))
+                try
                 {
-                    await _context.Database.ExecuteSqlInterpolatedAsync(
-                        $"SELECT set_config('app.current_tenant_id', {otTenantId.ToString()}, true)",
-                        cancellationToken).ConfigureAwait(false);
+                    await using (transaction.ConfigureAwait(false))
+                    {
+                        await _context.Database.ExecuteSqlInterpolatedAsync(
+                            $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)",
+                            cancellationToken).ConfigureAwait(false);
 
-                    var result = await action().ConfigureAwait(false);
-                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                    return result;
+                        var result = await action().ConfigureAwait(false);
+                        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                        confirmada = true;
+                        return result;
+                    }
                 }
-            }).ConfigureAwait(false);
-        }
-
-        return await action().ConfigureAwait(false);
-    }
-
-    public async Task<T> ExecuteInClientTenantScopeAsync<T>(
-        Guid clientTenantId,
-        Func<Task<T>> action,
-        CancellationToken cancellationToken = default)
-    {
-        if (_context.Database.IsRelational())
-        {
-            var strategy = _context.Database.CreateExecutionStrategy();
-            return await strategy.ExecuteAsync(async () =>
-            {
-                var transaction = await _context.Database
-                    .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-                await using (transaction.ConfigureAwait(false))
+                finally
                 {
-                    await _context.Database.ExecuteSqlInterpolatedAsync(
-                        $"SELECT set_config('app.current_tenant_id', {clientTenantId.ToString()}, true)",
-                        cancellationToken).ConfigureAwait(false);
-
-                    var result = await action().ConfigureAwait(false);
-                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                    return result;
+                    // Tras el Dispose: la transacción ya confirmó o ya se revirtió.
+                    await _context.AccionesPostTransaccion
+                        .CerrarAsync(transactionId, confirmada).ConfigureAwait(false);
                 }
             }).ConfigureAwait(false);
         }

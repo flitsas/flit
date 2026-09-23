@@ -513,6 +513,23 @@ public interface IProcedureInstanceRepository
     Task<bool> SaveChangesWithConcurrencyGuardAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// HU #12797 (Épica #12760) — ¿<paramref name="ex"/> es un conflicto de concurrencia optimista del
+    /// guardado (otro proceso cambió o borró las filas entre la carga y el commit)? La capa Application
+    /// no referencia EF: el mapeo de <c>DbUpdateConcurrencyException</c> vive en el repositorio. Por
+    /// defecto <c>false</c> (dobles de prueba y composiciones sin EF).
+    /// </summary>
+    bool IsConcurrencyConflict(Exception ex) => false;
+
+    /// <summary>
+    /// HU #12797 (Épica #12760) — difiere <paramref name="alConfirmar"/> hasta que la transacción AMBIENTE
+    /// (abierta por quien envuelve el caso de uso, p. ej. el scope de tenant de la consola OT) confirme de
+    /// verdad, y <paramref name="alRevertir"/> hasta que se revierta. Devuelve <c>false</c> si no hay una
+    /// transacción ambiente gestionada: entonces el guardado que acaba de hacer el llamador YA confirmó y
+    /// debe ejecutar la acción él mismo. Por defecto <c>false</c> (sin transacción ambiente).
+    /// </summary>
+    bool TryDeferUntilTransactionEnds(Action alConfirmar, Action? alRevertir = null) => false;
+
+    /// <summary>
     /// Página del historial de transiciones de estado de la instancia (HU-2 N03, RF05), ordenada
     /// por <c>changed_at</c> DESC, con el nombre del usuario resuelto contra <c>identity.users</c>
     /// (null si el usuario no existe). Devuelve <c>null</c> si la instancia no existe o no

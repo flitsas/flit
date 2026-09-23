@@ -1742,6 +1742,29 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     /// <summary>HU #11029 — ver <see cref="IProcedureInstanceRepository.ResetTracking"/>.</summary>
     public void ResetTracking() => db.ChangeTracker.Clear();
 
+    /// <summary>HU #12797 — ver <see cref="IProcedureInstanceRepository.IsConcurrencyConflict"/>.</summary>
+    public bool IsConcurrencyConflict(Exception ex) => ex is DbUpdateConcurrencyException;
+
+    /// <summary>HU #12797 (F2) — ver <see cref="IProcedureInstanceRepository.TryDeferUntilTransactionEnds"/>.</summary>
+    public bool TryDeferUntilTransactionEnds(Action alConfirmar, Action? alRevertir = null)
+    {
+        ArgumentNullException.ThrowIfNull(alConfirmar);
+        return db.AccionesPostTransaccion.TryDiferir(
+            db.Database.CurrentTransaction?.TransactionId,
+            () =>
+            {
+                alConfirmar();
+                return Task.CompletedTask;
+            },
+            alRevertir is null
+                ? null
+                : () =>
+                {
+                    alRevertir();
+                    return Task.CompletedTask;
+                });
+    }
+
     // N 03 (RNF01) — commit con guarda de concurrencia optimista: row_version es concurrency
     // token (lo incrementa el trigger tr_procedure_instances_row_version); si otro proceso
     // transicionó la instancia entre carga y commit, EF lanza DbUpdateConcurrencyException y

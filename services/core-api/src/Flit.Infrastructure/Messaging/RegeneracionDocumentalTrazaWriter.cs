@@ -72,6 +72,25 @@ internal sealed class RegeneracionDocumentalTrazaWriter(FlitDbContext db)
         if (tenantId == Guid.Empty || procedureInstanceId == Guid.Empty)
             return false;
 
+        // HU #12797 (F2) — dentro de la transacción gestionada de la consola OT el INSERT viajaría en la
+        // misma transacción del intento fallido: un rollback (o una transacción abortada) se lo llevaría
+        // en silencio. Se difiere a DESPUÉS de su fin, confirme o no; ya fuera de ella es autocommit.
+        // `true` = programada (el fallo, si lo hay, ya quedó en el log del llamador).
+        Func<Task> escribir = () => InsertarAsync(tenantId, procedureInstanceId, tipoEvento, payloadJson, CancellationToken.None);
+        if (db.AccionesPostTransaccion.TryDiferir(db.Database.CurrentTransaction?.TransactionId, escribir, escribir))
+            return true;
+
+        return await InsertarAsync(tenantId, procedureInstanceId, tipoEvento, payloadJson, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<bool> InsertarAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string tipoEvento,
+        string payloadJson,
+        CancellationToken cancellationToken)
+    {
         var tipo = tipoEvento;
         var payload = payloadJson;
         var id = Guid.CreateVersion7();
