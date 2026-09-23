@@ -12,6 +12,7 @@ import type { WizardState } from '@/lib/api/types/procedure-runtime';
  * (VehicleOwnershipGuard); esto evita el intento.
  */
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   createInstance: vi.fn(),
   createInstanceFromConsulta: vi.fn(),
   runPreflightPreview: vi.fn(),

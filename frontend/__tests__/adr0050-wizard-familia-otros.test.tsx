@@ -14,6 +14,7 @@ import type { WizardCapabilities, WizardState } from '@/lib/api/types/procedure-
  * nada fallara. Estas pruebas fijan el comportamiento de la familia OTROS, que es la que no existía.
  */
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   createInstance: vi.fn(),
   createInstanceFromConsulta: vi.fn(),
   runPreflightPreview: vi.fn(),

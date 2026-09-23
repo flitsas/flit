@@ -34,6 +34,7 @@ import type {
   ActorDocumentType,
   ActorPersonType,
   ActorRol,
+  CamaraComercioRequirement,
   LegalRepresentativeLookupCompany,
   LegalRepresentativeLookupResult,
   LegalRepresentativeOption,
@@ -58,6 +59,7 @@ import {
   escrituraRepresentanteRlDocFieldKey,
   representanteDocIdentity,
 } from './EscrituraRepresentanteUpload';
+import { CamaraComercioUpload } from './CamaraComercioUpload';
 import { WizardCardHeader } from './wizard-atoms';
 import { cn } from '@/lib/utils';
 import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
@@ -157,6 +159,10 @@ interface Props {
    * camino normal para capturarlo— y aun así seguir sin escritura que lo faculte.</p>
    */
   onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
+  /** HU #12777 — ninguna parte jurídica se quedó sin su certificado de Cámara de Comercio
+   *  OBLIGATORIO. Gate propio y separado del de la escritura: son dos documentos distintos y el
+   *  gestor tiene que poder ver cuál le falta. */
+  onCamaraComercioGateChange?: (ready: boolean) => void;
   /**
    * Gate del paso: ¿están completos los campos OBLIGATORIOS de todas las partes que captura este
    * paso? Lo consume la shell para deshabilitar "Continuar y guardar". Antes el botón estaba
@@ -751,6 +757,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     rnmcEnabled = false,
     onConsultationGateChange,
     onEscrituraRepresentanteGateChange,
+    onCamaraComercioGateChange,
     onCamposRequeridosGateChange,
     rotuloPorRol,
   },
@@ -1047,6 +1054,50 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   useEffect(() => {
     onEscrituraRepresentanteGateChange?.(escrituraRlGateOk);
   }, [escrituraRlGateOk, onEscrituraRepresentanteGateChange]);
+
+  // ── HU #12777 · Cámara de Comercio de las partes jurídicas ─────────────────
+  /**
+   * Requisitos resueltos por el backend, por rol. La obligatoriedad NO se calcula aquí: depende de
+   * la firma del baúl y de las escrituras vigentes del tenant, que el cliente no conoce. Lo único
+   * que decide el formulario es a quién se le pregunta (las partes jurídicas).
+   */
+  const [camaraRequirements, setCamaraRequirements] = useState<CamaraComercioRequirement[]>([]);
+  /** Adjunto presente por rol, reportado por cada buzón. */
+  const [camaraSatisfecha, setCamaraSatisfecha] = useState<Record<string, boolean>>({});
+
+  const marcarCamara = useCallback((rol: string, satisfied: boolean) => {
+    setCamaraSatisfecha((prev) => (prev[rol] === satisfied ? prev : { ...prev, [rol]: satisfied }));
+  }, []);
+
+  /**
+   * Firma de lo único que cambia la respuesta: qué roles son persona jurídica. Sin ella el efecto
+   * se dispararía en cada render — `actors` es un arreglo nuevo siempre — y con él la consulta.
+   */
+  const camaraFirma = actors.map((a) => (isJuridical(a) ? a.rol : '-')).join('|');
+
+  const recargarCamara = useCallback(() => {
+    if (!instanceId) return;
+    void tramitesClient
+      .getCamaraComercioRequirements(instanceId)
+      .then((rs) => setCamaraRequirements(rs));
+  }, [instanceId]);
+
+  useEffect(() => {
+    recargarCamara();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instanceId, camaraFirma]);
+
+  /** Requisito de esta parte, si el backend lo devolvió para su rol. */
+  const camaraRequirementDe = (rol: string): CamaraComercioRequirement | undefined =>
+    camaraRequirements.find((r) => r.rol === rol);
+
+  /** Gate del paso: ninguna parte con certificado OBLIGATORIO se quedó sin cargarlo. */
+  const camaraGateOk = camaraRequirements.every(
+    (r) => !r.esObligatorio || camaraSatisfecha[r.rol] === true,
+  );
+  useEffect(() => {
+    onCamaraComercioGateChange?.(camaraGateOk);
+  }, [camaraGateOk, onCamaraComercioGateChange]);
   const [rlSwitchConfirm, setRlSwitchConfirm] = useState<{ variant: 'runt' | 'preload' } | null>(
     null,
   );
@@ -2890,6 +2941,22 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               />
             </div>
           )}
+          {/* HU #12777 — certificado de Cámara de Comercio de la sociedad. Va junto a la escritura
+              porque son de la misma familia: los dos acreditan quién representa a la sociedad. El
+              buzón NO se oculta cuando es opcional; solo deja de bloquear, y dice por qué. */}
+          {(() => {
+            const req = camaraRequirementDe(actor.rol);
+            return req ? (
+              <div className="lg:col-span-4">
+                <CamaraComercioUpload
+                  instanceId={instanceId}
+                  requirement={req}
+                  onSatisfiedChange={(satisfied) => marcarCamara(actor.rol, satisfied)}
+                  onChanged={recargarCamara}
+                />
+              </div>
+            ) : null;
+          })()}
         </div>
       </div>
     );
