@@ -23,7 +23,7 @@ import {
 // preasignación» no es un estado sino un pseudo-filtro (rechazado + rejectedFrom): el gestor lo
 // pidió como tarjeta propia para priorizar los rechazos que hay que volver a mandar a la cola de
 // placa. Comparte icono y color con Rechazado a propósito: sigue siendo un rechazo.
-const FUNNEL_ORDER: EstadoFiltro[] = [
+const FUNNEL_ORDER: readonly EstadoFiltro[] = [
   'borrador',
   'preparado',
   'preasignacion',
@@ -36,6 +36,18 @@ const FUNNEL_ORDER: EstadoFiltro[] = [
   'revocado',
   'anulado',
 ];
+
+// Columnas en pantalla ancha: una por tarjeta. Clases literales para que Tailwind las genere.
+const XL_COLS: Record<number, string> = {
+  4: 'xl:grid-cols-4',
+  5: 'xl:grid-cols-5',
+  6: 'xl:grid-cols-6',
+  7: 'xl:grid-cols-7',
+  8: 'xl:grid-cols-8',
+  9: 'xl:grid-cols-9',
+  10: 'xl:grid-cols-10',
+  11: 'xl:grid-cols-11',
+};
 
 function estiloDe(estado: EstadoFiltro) {
   return estado === FILTRO_RECHAZADO_PREASIGNACION
@@ -59,17 +71,27 @@ export interface EstadoFunnelProps {
   /** Estado actualmente filtrado; vacío = todos. */
   selected?: EstadoFiltro | '';
   onSelect?: (estado: EstadoFiltro | '') => void;
+  /**
+   * Epic #12686 — tarjetas a pintar, en orden (ver `lib/tramites/panelesEstado.ts`). Sin valor se
+   * pintan las 11 de siempre.
+   */
+  estados?: readonly EstadoFiltro[];
 }
 
 /** Tira de KPIs clicable: el filtro por estado vive aquí, no en "+ Filtro". */
-export function EstadoFunnel({ counts, selected = '', onSelect }: EstadoFunnelProps) {
+export function EstadoFunnel({
+  counts,
+  selected = '',
+  onSelect,
+  estados = FUNNEL_ORDER,
+}: EstadoFunnelProps) {
   return (
     <div
       role="group"
       aria-label="Estados de los trámites"
-      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-6 xl:grid-cols-11 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
+      className={`grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-6 ${XL_COLS[estados.length] ?? 'xl:grid-cols-11'} dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]`}
     >
-      {FUNNEL_ORDER.map((estado) => {
+      {estados.map((estado) => {
         const style = estiloDe(estado);
         const label = labelDe(estado);
         const count = counts[estado] ?? 0;

@@ -101,6 +101,7 @@ import { ColumnSelector } from '@/components/atom/ColumnSelector';
 import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { EstadoFunnel } from './EstadoFunnel';
+import { panelesDeEstado } from '@/lib/tramites/panelesEstado';
 import {
   AttachmentPreview,
   TramiteDocumentosModal,
@@ -480,6 +481,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    */
   const { tenantId: tenantDelUsuario, isSuperAdmin: esSuperAdmin } = usePermissions();
   const currentTenantId = esSuperAdmin ? null : tenantDelUsuario;
+
+  // Epic #12686 (HU #12802) — tarjetas de la tira según perspectiva y familia. El administrador de
+  // una compañía y la vista de red son perspectiva de gestor: solo el SuperAdmin ve Preparado.
+  const perspectivaPaneles = esSuperAdmin ? 'superadmin' : 'gestor';
+  const panelesVisibles = useMemo(
+    () => panelesDeEstado(perspectivaPaneles, modalidad),
+    [perspectivaPaneles, modalidad],
+  );
 
   // HU #11054 / HU #11055 — consulta de documentos desde el listado, sin abrir el wizard. Se guarda
   // el trámite elegido (no solo su id) porque el panel se titula con el radicado y el SuperAdmin
@@ -936,6 +945,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   };
   const handleModalidadChange = (v: '' | ProcedureFamily) => {
     setModalidad(v);
+    // Epic #12686 — si la tarjeta elegida no existe en la nueva pestaña (p. ej. Asignado en
+    // Traspaso), el filtro de estado se quita: dejarlo aplicado filtraría por una tarjeta que ya no
+    // se ve y la tabla quedaría vacía sin explicación.
+    if (estado && !panelesDeEstado(perspectivaPaneles, v).includes(estado)) setEstado('');
     setPage(1);
   };
   const handleEstadoChange = (v: '' | EstadoFiltro) => {
@@ -1351,6 +1364,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             <div className="min-w-0 flex-1">
               <EstadoFunnel
                 counts={estadoCountsMostrados}
+                estados={panelesVisibles}
                 selected={estado}
                 onSelect={handleEstadoChange}
               />
