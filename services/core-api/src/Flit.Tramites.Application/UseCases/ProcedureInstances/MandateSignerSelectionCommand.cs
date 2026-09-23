@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
@@ -128,7 +129,8 @@ public sealed class ListMandateSignerOptionsHandler(
 /// </summary>
 public sealed class SetMandateSignerHandler(
     IProcedureInstanceRepository repo,
-    IMandateSignerDirectory directory)
+    IMandateSignerDirectory directory,
+    IAttachmentStorage? storage = null)
 {
     public async Task<string?> HandleAsync(
         Guid instanceId,
@@ -156,10 +158,37 @@ public sealed class SetMandateSignerHandler(
         if (candidatos.All(c => c.Id != mandateSignerId))
             return "mandatario_no_habilitado";
 
+        // HU #12784 (AC2) — re-elegir al mismo mandatario no cambia el expediente: sin escritura, y los
+        // consolidados vigentes siguen sirviéndose tal cual.
+        if (instance.MandateSignerId == mandateSignerId)
+            return null;
+
+        // HU #12784 (AC1) — el firmante sale impreso en el mandato que va dentro de ambos consolidados:
+        // cambiarlo los deja obsoletos. Se invalida aquí, de forma explícita, y NO ampliando
+        // ConsolidadoVigenciaTracker a la tabla padre (dispararía en cada PATCH de current-step o
+        // priority). AC3 (estados finales) queda cubierto por la guarda not_draft de arriba: fuera de
+        // borrador/subsanación nunca se llega a este punto.
         instance.MandateSignerId = mandateSignerId;
+        instance.InvalidarConsolidados();
+
+        // Bajar las banderas no basta: con el FUR ya persistido el consolidado solo re-fusiona los
+        // adjuntos (Feature #11066) y volvería a meter el mandato con el firmante anterior. Se retira
+        // el mandato GENERADO POR EL SISTEMA (un personalizado de la compañía o uno cargado a mano no
+        // se tocan); sin él, GenerarConsolidadoHandler regenera los documentos en caliente en la
+        // siguiente solicitud y el mandato sale con el firmante nuevo. No se regenera aquí.
+        if (storage is not null)
+        {
+            var conAdjuntos = await repo.GetByIdWithAttachmentsAsync(instanceId, tenantId, ct).ConfigureAwait(false);
+            if (conAdjuntos is not null)
+                AttachmentCleanup.RetirarGenerados(conAdjuntos, repo, storage, EsMandato);
+        }
+
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         return null;
     }
+
+    private static bool EsMandato(Flit.Tramites.Domain.Entities.ProcedureInstanceAttachment a) =>
+        string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>Resolución compartida del organismo del trámite, para no duplicarla entre los dos casos.</summary>
