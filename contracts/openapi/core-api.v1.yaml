@@ -8790,6 +8790,58 @@ paths:
         "404": { description: "Trámite no encontrado." }
         "409": { description: "Modalidad no soportada, FUR faltante, documentos incompletos o adjunto no disponible." }
 
+  /api/v1/tramites/instances/{id}/consolidado/entrega:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Trámites · Documentos]
+      summary: Entregar el consolidado vigente (reconstruye solo si está desactualizado)
+      operationId: entregarProcedureInstanceConsolidado
+      security:
+        - bearerAuth: []
+      description: >
+        HU #12785 — ruta única de obtención del consolidado para gestor y SuperAdmin. Si la bandera de
+        vigencia está abajo (o no hay PDF) en un trámite no final, lo reconstruye y responde
+        regenerado=true; si está arriba, devuelve el adjunto cacheado sin escribir en storage. En estado
+        final (aprobado/anulado/revocado) devuelve el PDF existente sin regenerarlo y marca
+        definitivoPorEstadoFinal=true (migrado V1 ⇒ modo "migrado_solo_lectura"). Un PDF cargado por el
+        SuperAdmin (Source="user") nunca se pisa, ni con force. Devuelve metadatos: el binario se obtiene
+        por la descarga / preview-url del adjunto con document.attachmentId.
+      parameters:
+        - name: tipo
+          in: query
+          required: false
+          schema: { type: string, enum: [consolidado, consolidado_maestro] }
+          description: PDF pedido. Default "consolidado".
+        - name: force
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Reconstruye saltando la caché de vigencia. Nunca aplica en estado final, sobre un PDF
+            cargado por el SuperAdmin (Source="user") ni con soloLectura=true.
+        - name: soloLectura
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Devuelve el adjunto existente tal cual, sin comprobar vigencia ni escribir nada (modo
+            "solo_lectura"). Vía de la vista read-only del OT tras la radicación ante Quipux (HU #12787 AC2).
+      responses:
+        "200":
+          description: Consolidado entregado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsolidadoEntregaResponse" }
+        "400": { description: "Falta X-Tenant-Id o tipo inválido." }
+        "404": { description: "Trámite no encontrado, o estado final / soloLectura sin consolidado generado." }
+        "409": { description: "Migrado V1 sin consolidado, FUR faltante, sin adjuntos, adjunto no disponible o formato no soportado." }
+        "503": { description: "No se pudo guardar el consolidado reconstruido en el almacenamiento." }
+
   # ── Admin · Trámites · Gestión avanzada del consolidado (Feature #12155, HU #12158) ──────────
 
   /api/v1/admin/tramites/{id}/consolidado/limpiar:
@@ -9238,6 +9290,61 @@ paths:
         "403": { description: "Sin acceso a este trámite." }
         "404": { description: "Adjunto no encontrado." }
         "503": { description: "No se pudo obtener la URL de previsualización del backend de almacenamiento." }
+
+  /api/v1/admin/ot/client-procedures/{id}/consolidado/entrega:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: ID del trámite del cliente.
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+        description: ID de la OT a la que pertenece el trámite (requerido para superadmin; opcional para OT admin).
+    get:
+      tags: [Admin · OT · Documentos]
+      summary: Entregar el consolidado vigente de un trámite de cliente OT (reconstruye solo si está desactualizado)
+      operationId: adminOtDeliverClientProcedureConsolidado
+      security:
+        - bearerAuth: []
+      description: >
+        HU #12785 — mismas reglas que GET /api/v1/tramites/instances/{id}/consolidado/entrega, sobre el
+        maestro por defecto. Un OT en modo Quipux read-only que no puede generar el tipo pedido recibe el
+        adjunto tal cual (modo "solo_lectura") en vez de 403.
+      parameters:
+        - name: tipo
+          in: query
+          required: false
+          schema: { type: string, enum: [consolidado, consolidado_maestro] }
+          description: PDF pedido. Default "consolidado_maestro".
+        - name: force
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Reconstruye saltando la caché de vigencia. Nunca aplica en estado final, sobre un PDF
+            cargado por el SuperAdmin (Source="user") ni con soloLectura=true.
+        - name: soloLectura
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Devuelve el adjunto existente tal cual, sin comprobar vigencia ni escribir nada (modo
+            "solo_lectura"). Vía de la vista read-only del OT tras la radicación ante Quipux (HU #12787 AC2).
+      responses:
+        "200":
+          description: Consolidado entregado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsolidadoEntregaResponse" }
+        "400": { description: "tipo inválido." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin acceso a este trámite." }
+        "404": { description: "Trámite no encontrado, o estado final / soloLectura sin consolidado generado." }
+        "409": { description: "Migrado V1 sin consolidado, FUR faltante, sin adjuntos, adjunto no disponible o formato no soportado." }
+        "503": { description: "No se pudo guardar el consolidado reconstruido en el almacenamiento." }
 
   /api/v1/admin/ot/client-procedures/{id}/consolidado-maestro:
     parameters:
@@ -11624,6 +11731,44 @@ components:
               conditionGroup: { type: string, nullable: true }
               sortOrder: { type: integer }
     # ── Trámites · Documentos (HU #10520, RNF01) ──────────────────────────────
+    ConsolidadoEntregaResponse:
+      type: object
+      description: >
+        HU #12785 — resultado de la ruta de entrega del consolidado. Misma forma que el resultado de
+        generación (GenerarConsolidadoResult) más dos campos opcionales nuevos.
+      required: [document, regenerado]
+      properties:
+        document:
+          type: object
+          required: [attachmentId, tipo, filename, sha256]
+          properties:
+            attachmentId: { type: string, format: uuid }
+            tipo: { type: string, enum: [consolidado, consolidado_maestro] }
+            filename: { type: string }
+            sha256: { type: string }
+        regenerado:
+          type: boolean
+          description: true si el PDF se reconstruyó en esta petición.
+        incompleto: { type: boolean }
+        documentosFaltantes:
+          type: array
+          nullable: true
+          items: { type: string }
+        avisosCascada:
+          type: array
+          nullable: true
+          items: { type: string }
+        definitivoPorEstadoFinal:
+          type: boolean
+          default: false
+          description: >
+            true si el trámite está en estado final (aprobado/anulado/revocado): el PDF es la
+            documentación definitiva y no se regenera. Las rutas POST de generación lo devuelven en false.
+        modo:
+          type: string
+          nullable: true
+          enum: [vigente, regenerado, definitivo_estado_final, migrado_solo_lectura, cargado_por_usuario, solo_lectura]
+          description: Cómo se resolvió la entrega. null en las rutas POST de generación.
     AttachmentDto:
       type: object
       properties:

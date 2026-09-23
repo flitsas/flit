@@ -23,6 +23,16 @@ public sealed record ConsolidadoDocumentDto(Guid AttachmentId, string Tipo, stri
 /// consolidado salía sin ese documento y el gestor no tenía forma de saber por qué. No bloquea: el
 /// consolidado se entrega igual (misma decisión que la HU #11017 con los documentos obligatorios).
 /// </param>
+/// <param name="DefinitivoPorEstadoFinal">
+/// HU #12785 (AC3/AC5) — <c>true</c> cuando el trámite está en estado final (aprobado, anulado,
+/// revocado): el PDF devuelto es la documentación definitiva que el organismo tuvo a la vista y NO se
+/// regenera aunque la bandera de vigencia esté abajo. Campo nuevo y opcional: las rutas de generación
+/// existentes lo dejan en <c>false</c>.
+/// </param>
+/// <param name="Modo">
+/// HU #12785 — cómo resolvió la ruta de entrega el documento (<see cref="ConsolidadoEntregaModos"/>).
+/// <c>null</c> en las rutas de generación existentes (POST), que no pasan por la entrega.
+/// </param>
 public sealed record GenerarConsolidadoResult(
     ConsolidadoDocumentDto Document,
     bool Regenerado = true,
@@ -31,7 +41,9 @@ public sealed record GenerarConsolidadoResult(
     // negarle el documento sin explicacion.
     bool Incompleto = false,
     IReadOnlyList<string>? DocumentosFaltantes = null,
-    IReadOnlyList<string>? AvisosCascada = null);
+    IReadOnlyList<string>? AvisosCascada = null,
+    bool DefinitivoPorEstadoFinal = false,
+    string? Modo = null);
 
 /// <summary>
 /// Regenera los documentos "en caliente" del expediente del wizard (FUR + certificados generados)
