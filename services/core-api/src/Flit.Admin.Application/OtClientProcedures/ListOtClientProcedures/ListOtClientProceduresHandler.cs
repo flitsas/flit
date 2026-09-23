@@ -32,6 +32,7 @@ public sealed class ListOtClientProceduresHandler
                 Status = query.Status,
                 HasActiveRevocationRequest = query.HasActiveRevocationRequest,
                 ProcedureTypeId = query.ProcedureTypeId,
+                Familia = query.Familia,
                 Vin = query.Vin,
                 Placa = query.Placa,
                 Vendedor = query.Vendedor,
