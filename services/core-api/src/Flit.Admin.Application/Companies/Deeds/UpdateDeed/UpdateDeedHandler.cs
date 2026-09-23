@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Consolidados;
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
 
 namespace Flit.Admin.Application.Companies.Deeds.UpdateDeed;
@@ -12,9 +13,18 @@ public sealed class UpdateDeedHandler
 {
     private readonly IDeedDocumentStorage _storage;
     private readonly IDeedRepository _repository;
+    private readonly IConsolidadoInvalidacionMasiva? _invalidacion;
 
-    public UpdateDeedHandler(IDeedDocumentStorage storage, IDeedRepository repository)
+    /// <param name="invalidacion">
+    /// HU #12789 — invalida en bloque los consolidados de la compañía. Opcional para no romper a los
+    /// llamadores que no lo necesitan; en DI siempre se inyecta.
+    /// </param>
+    public UpdateDeedHandler(
+        IDeedDocumentStorage storage,
+        IDeedRepository repository,
+        IConsolidadoInvalidacionMasiva? invalidacion = null)
     {
+        _invalidacion = invalidacion;
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     }
@@ -54,6 +64,17 @@ public sealed class UpdateDeedHandler
                 command.UpdatedBy),
             cancellationToken).ConfigureAwait(false);
 
-        return updated ? UpdateDeedResult.Updated(ticket) : UpdateDeedResult.NotFound();
+        if (!updated)
+        {
+            return UpdateDeedResult.NotFound();
+        }
+
+        // HU #12789 AC2 — la escritura/RL entra al expediente: sus consolidados en curso quedan invalidados.
+        if (_invalidacion is not null)
+        {
+            await _invalidacion.InvalidarPorCompaniaAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
+        }
+
+        return UpdateDeedResult.Updated(ticket);
     }
 }

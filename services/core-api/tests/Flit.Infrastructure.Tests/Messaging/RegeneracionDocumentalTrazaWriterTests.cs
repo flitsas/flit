@@ -106,4 +106,39 @@ public sealed class RegeneracionDocumentalTrazaWriterTests
         eventos.Should().HaveCount(2);
         eventos.Select(e => e.Id).Should().OnlyHaveUniqueItems();
     }
+
+    [Fact]
+    public async Task HU12798_EscribirEventoAsync_PersisteElFalloDelConsolidadoConSuTipoYPayload()
+    {
+        // HU #12798 (AC1) — la bitácora de fallos del consolidado reutiliza esta tabla con su propio tipo.
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+        await using var db = Context(nameof(HU12798_EscribirEventoAsync_PersisteElFalloDelConsolidadoConSuTipoYPayload));
+        var payload = """{"origen":"entrega_consolidado","documento":"consolidado","error":"storage_unavailable"}""";
+
+        var ok = await new RegeneracionDocumentalTrazaWriter(db).EscribirEventoAsync(
+            tenantId, instanceId, ConsolidadoFalloBitacora.EventoFallo, payload, ct);
+
+        ok.Should().BeTrue();
+        var evento = await db.ProcedureInstanceEvents.SingleAsync(ct);
+        evento.Tipo.Should().Be("consolidado_regeneracion_fallida");
+        evento.TenantId.Should().Be(tenantId);
+        evento.ProcedureInstanceId.Should().Be(instanceId);
+        evento.Payload.Should().Be(payload);
+        evento.CreatedAt.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public async Task HU12798_EscribirEventoAsync_SinTenant_NoEscribe()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = Context(nameof(HU12798_EscribirEventoAsync_SinTenant_NoEscribe));
+
+        var ok = await new RegeneracionDocumentalTrazaWriter(db).EscribirEventoAsync(
+            Guid.Empty, Guid.NewGuid(), ConsolidadoFalloBitacora.EventoFallo, "{}", ct);
+
+        ok.Should().BeFalse();
+        (await db.ProcedureInstanceEvents.CountAsync(ct)).Should().Be(0);
+    }
 }

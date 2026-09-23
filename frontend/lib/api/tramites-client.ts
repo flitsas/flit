@@ -35,6 +35,8 @@ import type {
   GenerarFurResult,
   FurTemplateFormatResult,
   GenerarConsolidadoResult,
+  ConsolidadoEntregaParams,
+  ConsolidadoEntregaResult,
   GenerarImprontaAttachmentResult,
   IdentityAuditResponse,
   IdentityValidationAlertsResponse,
@@ -789,6 +791,8 @@ function normalizeInstances(items: InstanceSummary[] | undefined): InstanceSumma
     firmaVendedorEstado: item.firmaVendedorEstado ?? null,
     firmaCompradorEstado: item.firmaCompradorEstado ?? null,
     consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
+    // HU #12791 — backend anterior al campo ⇒ null (la UI no infiere vigencia).
+    consolidadoWizard: item.consolidadoWizard ?? null,
   }));
 }
 
@@ -2447,6 +2451,30 @@ export const tramitesClient = {
         headers: tenantHeader(tenantId),
       },
     ),
+
+  /**
+   * HU #12785/#12786 — ruta ÚNICA de obtención del consolidado para el gestor y el SuperAdmin:
+   * `GET /api/v1/tramites/instances/{id}/consolidado/entrega`. Reconstruye SOLO si la bandera de
+   * vigencia está abajo (`modo: "regenerado"`); si está arriba devuelve el adjunto cacheado
+   * (`modo: "vigente"`) y en estado final el definitivo (`definitivoPorEstadoFinal: true`). Devuelve
+   * metadatos: el PDF se baja por `downloadAttachment` / `fetchAttachmentPreviewUrl` con
+   * `document.attachmentId`. Los parámetros omitidos no viajan (default del backend).
+   */
+  entregarConsolidado: (
+    instanceId: string,
+    params: ConsolidadoEntregaParams = {},
+    tenantId?: string,
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.tipo) qs.set('tipo', params.tipo);
+    if (params.force) qs.set('force', 'true');
+    if (params.soloLectura) qs.set('soloLectura', 'true');
+    const query = qs.toString();
+    return request<ConsolidadoEntregaResult>(
+      `/api/v1/tramites/instances/${instanceId}/consolidado/entrega${query ? `?${query}` : ''}`,
+      { headers: tenantHeader(tenantId) },
+    );
+  },
 
   // POST generar impronta (Kyverum RUNT) con los datos del trámite y adjuntarla. Idempotente por
   // NO-regeneración: 409 impronta_ya_existe si ya hay un adjunto tipo 'impronta' (manual o generado).

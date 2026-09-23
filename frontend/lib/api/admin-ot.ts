@@ -4,6 +4,11 @@ import { downloadFile } from "./download";
 import { ApiError } from "./types";
 import type { QueryField } from "./queries";
 import type {
+  ConsolidadoEntregaParams,
+  ConsolidadoEntregaResult,
+  GenerarConsolidadoResult,
+} from "./types/procedure-runtime";
+import type {
   CreateOtWebhookRequest,
   CreateOtDocumentTagRequest,
   CreateOtRuleRequest,
@@ -148,6 +153,24 @@ export function fetchOtBandejaCounters(
   scope?: OtApiScope,
 ): Promise<OtBandejaCounters> {
   return apiFetch<OtBandejaCounters>(`${base}/client-procedures/counters`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
+}
+
+/**
+ * Epic #12686 (HU #12803) — los mismos contadores, bajo los filtros de la tabla (familia, búsqueda,
+ * condiciones, periodo). Por POST porque las condiciones no caben en una query string. El servidor
+ * ignora el estado, la revocatoria, el orden y la página: cada tarjeta cuenta su propia clase.
+ */
+export function searchOtBandejaCounters(
+  params: OtClientProceduresParams = {},
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtBandejaCounters> {
+  return apiFetch<OtBandejaCounters>(`${base}/client-procedures/counters`, {
+    method: "POST",
+    body: params,
     query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     signal,
   });
@@ -430,16 +453,37 @@ export function generarOtConsolidadoMaestro(
   id: string,
   scope?: OtApiScope,
   force = false,
-): Promise<{
-  document: { attachmentId: string; tipo: string; filename: string; sha256: string };
-  regenerado: boolean;
-}> {
+): Promise<GenerarConsolidadoResult> {
   return apiFetch(`${base}/client-procedures/${id}/consolidado-maestro`, {
     method: "POST",
     query: {
       ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
       // Solo se manda cuando se fuerza: omitido es el camino normal (ver el comentario del endpoint).
       ...(force ? { force: true } : {}),
+    },
+  });
+}
+
+/**
+ * HU #12785/#12787 — ruta de ENTREGA del consolidado de un trámite de cliente OT:
+ * `GET /admin/ot/client-procedures/{id}/consolidado/entrega` (maestro por defecto). Reconstruye
+ * solo si la bandera de vigencia está abajo; en estado final sirve el definitivo
+ * (`definitivoPorEstadoFinal: true`); un OT en modo Quipux read-only que no puede generar recibe el
+ * adjunto tal cual (`modo: "solo_lectura"`). `soloLectura=true` sirve el adjunto sin mirar la
+ * bandera (404 `consolidado_no_generado` si no existe). Devuelve metadatos: el PDF se baja por
+ * `/documents/{attachmentId}/download` o `preview-url`. Parámetros omitidos no viajan.
+ */
+export function entregarOtConsolidado(
+  id: string,
+  scope?: OtApiScope,
+  params: ConsolidadoEntregaParams = {},
+): Promise<ConsolidadoEntregaResult> {
+  return apiFetch<ConsolidadoEntregaResult>(`${base}/client-procedures/${id}/consolidado/entrega`, {
+    query: {
+      ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
+      ...(params.tipo ? { tipo: params.tipo } : {}),
+      ...(params.force ? { force: true } : {}),
+      ...(params.soloLectura ? { soloLectura: true } : {}),
     },
   });
 }

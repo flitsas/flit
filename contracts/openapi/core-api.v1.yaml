@@ -8726,14 +8726,33 @@ paths:
         schema: { type: string, format: uuid }
     delete:
       tags: [Trámites · Documentos]
-      summary: Borrar un adjunto (solo en borrador)
+      summary: Borrar un adjunto (solo en borrador o con subsanación activa)
+      description: >
+        Los consolidados (tipos `consolidado` y `consolidado_maestro`) son documentos del sistema y no se
+        borran por esta ruta, igual que cualquier adjunto referenciado por una radicación ante Quipux
+        (re-review Épica #12760, M-N1): 409 con `error = adjunto_protegido`.
       operationId: deleteProcedureInstanceAttachment
       security:
         - bearerAuth: []
       responses:
         "204": { description: "Adjunto borrado." }
         "404": { description: "Trámite o adjunto no encontrado." }
-        "409": { description: "El trámite no está en borrador." }
+        "409":
+          description: >
+            El trámite no está en borrador ni con subsanación activa (`not_draft`, solo detail), o el
+            adjunto es un documento del sistema (`adjunto_protegido`).
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  title: { type: string, example: Conflict }
+                  status: { type: integer, example: 409 }
+                  detail: { type: string, example: "Este documento lo genera el sistema y no se puede eliminar." }
+                  error:
+                    type: string
+                    enum: [adjunto_protegido]
+                    description: Solo presente cuando el adjunto es un documento del sistema.
 
   /api/v1/tramites/instances/{id}/checklist:
     parameters:
@@ -8789,6 +8808,63 @@ paths:
               schema: { $ref: "#/components/schemas/AttachmentDto" }
         "404": { description: "Trámite no encontrado." }
         "409": { description: "Modalidad no soportada, FUR faltante, documentos incompletos o adjunto no disponible." }
+
+  /api/v1/tramites/instances/{id}/consolidado/entrega:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Trámites · Documentos]
+      summary: Entregar el consolidado vigente (reconstruye solo si está desactualizado)
+      operationId: entregarProcedureInstanceConsolidado
+      security:
+        - bearerAuth: []
+      description: >
+        HU #12785 — ruta única de obtención del consolidado para gestor y SuperAdmin. Si la bandera de
+        vigencia está abajo (o no hay PDF) en un trámite no final, lo reconstruye y responde
+        regenerado=true; si está arriba, devuelve el adjunto cacheado sin escribir en storage. En estado
+        final (aprobado/anulado/revocado) devuelve el PDF existente sin regenerarlo y marca
+        definitivoPorEstadoFinal=true (migrado V1 ⇒ modo "migrado_solo_lectura"). Un PDF cargado por el
+        SuperAdmin (Source="user") nunca se pisa, ni con force. Devuelve metadatos: el binario se obtiene
+        por la descarga / preview-url del adjunto con document.attachmentId.
+        Épica #12760 — un GET no fuerza escrituras: force=true responde 400 force_no_permitido_en_get (la
+        reconstrucción forzada queda en el POST de generación). HU #12787 — el consolidado maestro es del
+        OT: tipo=consolidado_maestro solo lo pide el SuperAdmin (el resto recibe 403 maestro_solo_ot); si el
+        trámite ya se radicó ante Quipux se sirve el maestro radicado tal cual (modo "radicado_fijo").
+      parameters:
+        - name: tipo
+          in: query
+          required: false
+          schema: { type: string, enum: [consolidado, consolidado_maestro] }
+          description: PDF pedido. Default "consolidado".
+        - name: force
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Reservado: en esta ruta GET solo se admite false u omitido. force=true responde 400
+            force_no_permitido_en_get (Épica #12760, security M1); para reconstruir use el POST de generación.
+        - name: soloLectura
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Devuelve el adjunto existente tal cual, sin comprobar vigencia ni escribir nada (modo
+            "solo_lectura"). Vía de la vista read-only del OT tras la radicación ante Quipux (HU #12787 AC2).
+      responses:
+        "200":
+          description: Consolidado entregado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsolidadoEntregaResponse" }
+        "400": { description: "Falta X-Tenant-Id, tipo inválido o force=true (error force_no_permitido_en_get)." }
+        "403": { description: "tipo=consolidado_maestro pedido por un usuario que no es SuperAdmin (error maestro_solo_ot, HU #12787)." }
+        "404": { description: "Trámite no encontrado, o estado final / soloLectura sin consolidado generado." }
+        "409": { description: "Migrado V1 sin consolidado, FUR faltante, sin adjuntos, adjunto no disponible o formato no soportado." }
+        "503": { description: "No se pudo guardar el consolidado reconstruido en el almacenamiento." }
 
   # ── Admin · Trámites · Gestión avanzada del consolidado (Feature #12155, HU #12158) ──────────
 
@@ -9239,6 +9315,64 @@ paths:
         "404": { description: "Adjunto no encontrado." }
         "503": { description: "No se pudo obtener la URL de previsualización del backend de almacenamiento." }
 
+  /api/v1/admin/ot/client-procedures/{id}/consolidado/entrega:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: ID del trámite del cliente.
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+        description: ID de la OT a la que pertenece el trámite (requerido para superadmin; opcional para OT admin).
+    get:
+      tags: [Admin · OT · Documentos]
+      summary: Entregar el consolidado vigente de un trámite de cliente OT (reconstruye solo si está desactualizado)
+      operationId: adminOtDeliverClientProcedureConsolidado
+      security:
+        - bearerAuth: []
+      description: >
+        HU #12785 — mismas reglas que GET /api/v1/tramites/instances/{id}/consolidado/entrega, sobre el
+        maestro por defecto. Un OT en modo Quipux read-only que no puede generar el tipo pedido recibe el
+        adjunto tal cual (modo "solo_lectura") en vez de 403. HU #12787 (AC2) — si el trámite ya se radicó
+        ante Quipux, el maestro radicado se sirve tal cual (modo "radicado_fijo") y nunca se regenera, sea
+        cual sea soloLectura; si ese adjunto ya no existe se aplica el comportamiento de solo lectura.
+        force=true responde 400 force_no_permitido_en_get (Épica #12760, security M1).
+      parameters:
+        - name: tipo
+          in: query
+          required: false
+          schema: { type: string, enum: [consolidado, consolidado_maestro] }
+          description: PDF pedido. Default "consolidado_maestro".
+        - name: force
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Reservado: en esta ruta GET solo se admite false u omitido. force=true responde 400
+            force_no_permitido_en_get (Épica #12760, security M1); para reconstruir use el POST de generación.
+        - name: soloLectura
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Devuelve el adjunto existente tal cual, sin comprobar vigencia ni escribir nada (modo
+            "solo_lectura"). Vía de la vista read-only del OT tras la radicación ante Quipux (HU #12787 AC2).
+      responses:
+        "200":
+          description: Consolidado entregado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsolidadoEntregaResponse" }
+        "400": { description: "tipo inválido o force=true (error force_no_permitido_en_get)." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin acceso a este trámite." }
+        "404": { description: "Trámite no encontrado, o estado final / soloLectura sin consolidado generado." }
+        "409": { description: "Migrado V1 sin consolidado, FUR faltante, sin adjuntos, adjunto no disponible o formato no soportado." }
+        "503": { description: "No se pudo guardar el consolidado reconstruido en el almacenamiento." }
+
   /api/v1/admin/ot/client-procedures/{id}/consolidado-maestro:
     parameters:
       - name: id
@@ -9259,6 +9393,10 @@ paths:
         Fusiona todos los adjuntos activos del trámite del cliente (tabla maestra) en un PDF único,
         excluyendo consolidados previos. No requiere gate FUR a diferencia del consolidado del wizard.
         Si ya existe un consolidado_maestro previo, se reemplaza (Feature #10701 / HU #10706).
+        HU #12787 (AC2) — si el trámite ya se radicó ante Quipux, NO se regenera (ni con force): se
+        devuelve el maestro radicado tal cual (modo "radicado_fijo"); un maestro radicado nunca se retira
+        ni se borra. Si ese adjunto ya no existe, se devuelve el maestro existente (modo "solo_lectura") o
+        404 consolidado_no_generado.
       security:
         - bearerAuth: []
       responses:
@@ -9276,7 +9414,7 @@ paths:
                 required: [id, tipo, filename, sha256]
         "401": { description: "No autenticado." }
         "403": { description: "Sin acceso a este trámite o entidad en modo sólo lectura (QUIPUX_READONLY)." }
-        "404": { description: "Trámite no encontrado." }
+        "404": { description: "Trámite no encontrado, o radicado ante Quipux sin consolidado maestro disponible (consolidado_no_generado)." }
         "409": { description: "sin_adjuntos — No hay adjuntos disponibles para consolidar; o adjunto_no_disponible / mimetype_no_soportado." }
 
   # ── Admin · Baúl de Firmas (HU #10643, #11175) ──────────────────────────────
@@ -11624,6 +11762,49 @@ components:
               conditionGroup: { type: string, nullable: true }
               sortOrder: { type: integer }
     # ── Trámites · Documentos (HU #10520, RNF01) ──────────────────────────────
+    ConsolidadoEntregaResponse:
+      type: object
+      description: >
+        HU #12785 — resultado de la ruta de entrega del consolidado. Misma forma que el resultado de
+        generación (GenerarConsolidadoResult) más dos campos opcionales nuevos.
+      required: [document, regenerado]
+      properties:
+        document:
+          type: object
+          required: [attachmentId, tipo, filename, sha256]
+          properties:
+            attachmentId: { type: string, format: uuid }
+            tipo: { type: string, enum: [consolidado, consolidado_maestro] }
+            filename: { type: string }
+            sha256: { type: string }
+        regenerado:
+          type: boolean
+          description: true si el PDF se reconstruyó en esta petición.
+        incompleto: { type: boolean }
+        documentosFaltantes:
+          type: array
+          nullable: true
+          items: { type: string }
+        avisosCascada:
+          type: array
+          nullable: true
+          items: { type: string }
+        definitivoPorEstadoFinal:
+          type: boolean
+          default: false
+          description: >
+            true si el trámite está en estado final (aprobado/anulado/revocado): el PDF es la
+            documentación definitiva y no se regenera. Las rutas POST de generación lo devuelven en false.
+        modo:
+          type: string
+          nullable: true
+          enum: [vigente, regenerado, definitivo_estado_final, migrado_solo_lectura, cargado_por_usuario, solo_lectura, radicado_fijo]
+          description: >
+            Cómo se resolvió la entrega. Las rutas POST de generación lo devuelven en null, salvo el POST
+            OT de consolidado maestro cuando el maestro ya se radicó ante Quipux: ahí devuelve
+            radicado_fijo (el adjunto radicado, sin regenerar) o solo_lectura (el adjunto radicado ya no
+            existe y se sirve el maestro existente). radicado_fijo (HU #12787, aditivo): radicación vigente
+            (registrado/aprobado); un rechazo de Quipux deja de fijar el maestro.
     AttachmentDto:
       type: object
       properties:
@@ -13633,13 +13814,14 @@ components:
           nullable: true
           description: Razón social del cliente dueño.
         instance:
-          type: object
           description: >
             El mismo objeto que devuelve `GET /api/v1/tramites/instances/{id}` al propio cliente
             (id, referenceNumber, status, procedureTypeId, tenantId, createdAt, submittedAt,
             completedAt, fieldValues, statusHistory, actors, draftFinalizedAt, rejectedFrom,
-            currentStep, subsanacionActiva, subsanacionCount, prioritario, events).
-          additionalProperties: true
+            currentStep, subsanacionActiva, subsanacionCount, prioritario, events,
+            consolidadoWizard, consolidadoMaestro).
+          allOf:
+            - $ref: "#/components/schemas/ProcedureInstanceDetail"
       required: [tenantId, instance]
 
     NetworkTramitesSearchRequest:
@@ -13884,7 +14066,112 @@ components:
           description: >
             Razón social de la compañía dueña. La columna solo tiene sentido para SuperAdmin, que
             es quien puede ver filas de varias compañías en la misma respuesta.
+        consolidadoWizard:
+          description: >
+            HU #12791 — vigencia + sello del consolidado del wizard de la fila. Se deriva en la MISMA
+            consulta del listado (sin N+1). Aditivo: ausente en versiones anteriores del backend.
+          type: object
+          allOf:
+            - $ref: "#/components/schemas/ConsolidadoVigencia"
+          nullable: true
       required: [id, referenceNumber, modalidad, estado, createdAt, tenantId]
+
+    ConsolidadoVigencia:
+      type: object
+      description: >
+        HU #12791 (Épica #12760) — estado de vigencia de UN consolidado (wizard `consolidado` o maestro
+        `consolidado_maestro`). Misma forma en todas las superficies (detalle y listado del gestor,
+        vista de red, bandeja y detalle OT / SuperAdmin). Precedencia: sin adjunto del tipo ⇒
+        `inexistente`; estado final ⇒ `definitivo=true` y `estado=vigente` (el PDF definitivo no se
+        regenera); `Source=user` ⇒ `origen=user`, `modo=cargado_por_usuario`; resto ⇒ la bandera
+        `consolidado_*_vigente` decide `vigente`/`desactualizado`.
+      properties:
+        estado:
+          type: string
+          enum: [vigente, desactualizado, inexistente]
+          description: "`inexistente` = no hay adjunto del tipo (sin importar la bandera)."
+        generadoEn:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Sello UTC de la generación (columna `consolidado_*_generado_en`, HU #12790). Null si no hay
+            PDF o si el trámite es anterior a la columna («fecha no disponible»; no invalida el PDF).
+        origen:
+          type: string
+          nullable: true
+          enum: [system, user, null]
+          description: "`system` = generado por FLIT; `user` = cargado por el SuperAdmin; null sin PDF."
+        definitivo:
+          type: boolean
+          description: True en estado final (aprobado, anulado, revocado) con PDF — documentación definitiva.
+        modo:
+          type: string
+          nullable: true
+          enum: [definitivo_estado_final, migrado_solo_lectura, cargado_por_usuario, null]
+          description: >
+            Caso especial con los mismos literales de la ruta de entrega (HU #12785,
+            `GET …/consolidado/entrega`). Null en el caso normal. `migrado_solo_lectura` aplica al
+            migrado V1 en estado final (también sin PDF).
+      required: [estado, generadoEn, origen, definitivo, modo]
+
+    ProcedureInstanceDetail:
+      type: object
+      description: >
+        Detalle de `GET /api/v1/tramites/instances/{id}` (gestor y SuperAdmin) y objeto `instance` de
+        `GET /api/v1/tramites/network/instances/{id}`. Aquí se documentan solo los campos de vigencia de
+        la HU #12791; el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
+      additionalProperties: true
+      properties:
+        consolidadoWizard:
+          description: HU #12791 — vigencia + sello del consolidado del wizard. Aditivo.
+          type: object
+          allOf:
+            - $ref: "#/components/schemas/ConsolidadoVigencia"
+          nullable: true
+        consolidadoMaestro:
+          description: HU #12791 — vigencia + sello del consolidado maestro del OT. Aditivo.
+          type: object
+          allOf:
+            - $ref: "#/components/schemas/ConsolidadoVigencia"
+          nullable: true
+
+    OtClientProcedureResponse:
+      type: object
+      description: >
+        Fila de `GET /api/v1/admin/ot/client-procedures` (bandeja OT y vista SuperAdmin de trámites por
+        organismo, `data[]`) y cuerpo de `GET /api/v1/admin/ot/client-procedures/{id}`. Aquí se
+        documentan solo los campos de vigencia de la HU #12791, proyectados en la MISMA consulta de la
+        fila (sin N+1). Son null en las respuestas de aprobar/rechazar/revocar, que no los recalculan.
+      additionalProperties: true
+      properties:
+        consolidadoWizard:
+          description: HU #12791 — vigencia + sello del consolidado del wizard. Aditivo.
+          type: object
+          allOf:
+            - $ref: "#/components/schemas/ConsolidadoVigencia"
+          nullable: true
+        consolidadoMaestro:
+          description: HU #12791 — vigencia + sello del consolidado maestro del OT. Aditivo.
+          type: object
+          allOf:
+            - $ref: "#/components/schemas/ConsolidadoVigencia"
+          nullable: true
+        quipuxRadicadoEn:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            HU #12791 (para #12787 AC2) — instante UTC de la ÚLTIMA radicación exitosa del trámite ante
+            Quipux (`quipux_submissions.registered_at` con valor y estado distinto de `fallido`). Null si
+            no se ha radicado. La vista read-only del OT lo usa para rotular la «versión radicada».
+        quipuxMaestroAttachmentId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            HU #12791 — adjunto `consolidado_maestro` enviado en esa radicación
+            (`quipux_submissions.attachment_id`). Null si no se ha radicado.
 
     ProcedureInstanceSummary:
       type: object

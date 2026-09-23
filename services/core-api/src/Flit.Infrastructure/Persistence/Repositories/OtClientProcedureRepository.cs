@@ -3,10 +3,15 @@ using Flit.Admin.Domain.Common;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtQueries;
 using Flit.Admin.Domain.PlatePreassign;
+using Flit.Modules.Quipux.Domain.Envios;
 using Flit.Queries.Domain;
+using Flit.Queries.Domain.Documentos;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Domain.Documents;
@@ -27,15 +32,23 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     private readonly FlitDbContext _context;
     private readonly ITramiteTransitionPublisher _transitionPublisher;
     private readonly IPlateRangeRepository? _plateRepo;
+    private readonly IConsolidadoRegeneracionQueue? _regeneracionQueue;
+    private readonly ILogger<OtClientProcedureRepository> _logger;
 
     public OtClientProcedureRepository(
         FlitDbContext context,
         ITramiteTransitionPublisher transitionPublisher,
-        IPlateRangeRepository? plateRepo = null)
+        IPlateRangeRepository? plateRepo = null,
+        IConsolidadoRegeneracionQueue? regeneracionQueue = null,
+        ILogger<OtClientProcedureRepository>? logger = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _transitionPublisher = transitionPublisher ?? throw new ArgumentNullException(nameof(transitionPublisher));
         _plateRepo = plateRepo;
+        // HU #12796 (Épica #12760, D1) — hitos de la decisión del OT y de la asignación de placa. Null en
+        // tests que no la ejercitan: sin cola, solo el camino perezoso.
+        _regeneracionQueue = regeneracionQueue;
+        _logger = logger ?? NullLogger<OtClientProcedureRepository>.Instance;
     }
 
     public Task<PagedResult<OtClientProcedure>> ListAsync(
@@ -61,10 +74,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         }
 
                         var ordered = ApplyListSort(query, filter);
-                        var items = await ordered
+                        var rows = await ordered
                             .Skip((filter.Page - 1) * filter.PageSize)
                             .Take(filter.PageSize)
-                            .Select(p => new OtClientProcedure
+                            .Select(p => new
+                            {
+                                Row = new OtClientProcedure
                             {
                                 Id = p.Id,
                                 ClientTenantId = p.TenantId,
@@ -122,9 +137,59 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                     .OrderByDescending(r => r.AttemptNumber)
                                     .Select(r => r.Status)
                                     .FirstOrDefault(),
+                            },
+                                // HU #12791 — vigencia de los consolidados en la MISMA consulta de la fila:
+                                // columnas de la instancia + Source del adjunto más reciente de cada tipo por
+                                // subconsulta correlacionada (mismo patrón que el resto de la proyección).
+                                // Sin consultas por fila: la derivación ocurre en memoria tras materializar.
+                                Consolidado = new ConsolidadoColumnas(
+                                    p.Status,
+                                    p.IsMigrated,
+                                    p.ConsolidadoWizardVigente,
+                                    p.ConsolidadoWizardGeneradoEn,
+                                    _context.ProcedureInstanceAttachments
+                                        .Where(a => a.ProcedureInstanceId == p.Id && a.Tipo == ConsolidadoVigencia.TipoWizard)
+                                        .OrderByDescending(a => a.UploadedAt)
+                                        .Select(a => a.Source)
+                                        .FirstOrDefault(),
+                                    p.ConsolidadoMaestroVigente,
+                                    p.ConsolidadoMaestroGeneradoEn,
+                                    _context.ProcedureInstanceAttachments
+                                        .Where(a => a.ProcedureInstanceId == p.Id && a.Tipo == ConsolidadoVigencia.TipoMaestro)
+                                        .OrderByDescending(a => a.UploadedAt)
+                                        .Select(a => a.Source)
+                                        .FirstOrDefault()),
+                                // HU #12791 (ampliación #12787 AC2) — última radicación VIGENTE ante Quipux
+                                // (RegisteredAt con valor y estado registrado/aprobado; una 'fallido' nunca radicó y
+                                // una 'rechazada' ya no es la versión de la secretaría: mismo criterio que
+                                // MaestroRadicadoLookup). Subconsulta correlacionada en la misma consulta de la fila.
+                                QuipuxRadicadoEn = _context.QuipuxSubmissions
+                                        .Where(q => q.ProcedureInstanceId == p.Id
+                                            && q.RegisteredAt != null
+                                            && (q.Status == QuipuxSubmissionEstado.Registrado || q.Status == QuipuxSubmissionEstado.Aprobado))
+                                        .OrderByDescending(q => q.RegisteredAt)
+                                        .Select(q => q.RegisteredAt)
+                                        .FirstOrDefault(),
+                                QuipuxMaestroAttachmentId = _context.QuipuxSubmissions
+                                        .Where(q => q.ProcedureInstanceId == p.Id
+                                            && q.RegisteredAt != null
+                                            && (q.Status == QuipuxSubmissionEstado.Registrado || q.Status == QuipuxSubmissionEstado.Aprobado))
+                                        .OrderByDescending(q => q.RegisteredAt)
+                                        .Select(q => (Guid?)q.AttachmentId)
+                                        .FirstOrDefault(),
                             })
                             .ToListAsync(cancellationToken)
                             .ConfigureAwait(false);
+
+                        var items = rows
+                            .Select(r => r.Row with
+                            {
+                                ConsolidadoWizard = r.Consolidado.Wizard(),
+                                ConsolidadoMaestro = r.Consolidado.Maestro(),
+                                QuipuxRadicadoEn = r.QuipuxRadicadoEn,
+                                QuipuxMaestroAttachmentId = r.QuipuxRadicadoEn is null ? null : r.QuipuxMaestroAttachmentId,
+                            })
+                            .ToList();
 
                         var enriched = await EnrichDisplayNamesAsync(items, cancellationToken)
                             .ConfigureAwait(false);
@@ -291,6 +356,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
     public Task<OtBandejaCounters?> GetBandejaCountersAsync(
         Guid otTenantId,
+        OtClientProcedureFilter? filter,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default) =>
         ExecuteOtScopedAsync(
@@ -302,7 +368,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     async () =>
                     {
                         // HU #12350 AC7 — mismo universo que la bandeja: trámites ya recibidos por el organismo.
+                        // Epic #12686 (HU #12803) — y con los MISMOS filtros que la tabla (familia, búsqueda,
+                        // condiciones…), salvo el estado y la marca de revocatoria: las tarjetas dicen
+                        // cuántos hay de CADA clase; acotarlas a la elegida dejaría las demás en cero.
                         var accesibles = BuildAccessibleQuery(transitOfficeId);
+                        if (filter is not null)
+                        {
+                            accesibles = ApplyListFilters(accesibles, SinFiltroDeTarjeta(filter));
+                        }
 
                         // UNA consulta agrupada en vez de seis COUNT: la bandeja los pide juntos y
                         // seis viajes a la base para pintar una tira de cabecera no se justifican.
@@ -438,7 +511,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             return null;
         }
 
-        return await ExecuteInClientTenantScopeAsync(
+        string? fromStatus = null;
+        var decided = await ExecuteInClientTenantScopeAsync(
             accessible.ClientTenantId,
             async () =>
             {
@@ -450,7 +524,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return null;
                 }
 
-                var fromStatus = entity.Status;
+                fromStatus = entity.Status;
 
                 // N 03 (ADR-0022) + ADR-0059: la decisión OT obedece la política única sobre el estado
                 // ACTUAL; si la arista no existe para este actor/contexto, no transiciona.
@@ -577,6 +651,39 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 return await MapRowAsync(entity, cancellationToken).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
+
+        // HU #12796 (AC2/AC4) — hito de la decisión del OT, YA confirmada (la transacción del scope
+        // cliente hizo commit al volver). Un expediente ENTREGADO que el OT rechaza u observa vuelve al
+        // gestor para subsanar: se anticipan los dos consolidados. Aprobar es estado final y no anticipa
+        // nada; un rechazo desde la cola de placa (preasignacion) no llegó a tener expediente de decisión.
+        if (decided is not null
+            && targetStatus == TramiteEstado.Rechazado
+            && fromStatus == TramiteEstado.Entregado)
+        {
+            EncolarRegeneracionAnticipada(accessible.ClientTenantId, procedureInstanceId, TipoConsolidado.Wizard);
+            EncolarRegeneracionAnticipada(accessible.ClientTenantId, procedureInstanceId, TipoConsolidado.Maestro);
+        }
+
+        return decided;
+    }
+
+    /// <summary>
+    /// HU #12796 — pide la regeneración anticipada de un consolidado con el tenant CLIENTE dueño del
+    /// trámite (nunca el del OT). La cola no bloquea; un descarte (<c>false</c>) solo se registra: la
+    /// bandera de vigencia ya quedó abajo y el camino perezoso lo reconstruye. Nunca falla el hito.
+    /// </summary>
+    private void EncolarRegeneracionAnticipada(Guid clientTenantId, Guid procedureInstanceId, TipoConsolidado documento)
+    {
+        if (_regeneracionQueue is null)
+        {
+            return;
+        }
+
+        if (!_regeneracionQueue.Encolar(clientTenantId, procedureInstanceId, documento))
+        {
+            OtClientProcedureRepositoryLog.RegeneracionAnticipadaDescartada(
+                _logger, procedureInstanceId, clientTenantId, documento);
+        }
     }
 
     /// <summary>
@@ -708,7 +815,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 $"La placa {plate.Trim().ToUpperInvariant()} ya está registrada en el trámite {enUso.ReferenceNumber} ({enUso.Status}). No se puede asignar a otro trámite mientras ese siga abierto.");
         }
 
-        return await ExecuteInClientTenantScopeAsync(
+        var assigned = await ExecuteInClientTenantScopeAsync(
             accessible.ClientTenantId,
             async () =>
             {
@@ -834,6 +941,16 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 return PlateAssignmentOutcome.Ok(await MapRowAsync(entity, cancellationToken).ConfigureAwait(false));
             },
             cancellationToken).ConfigureAwait(false);
+
+        // HU #12796 (AC3) — hito de asignación de placa, YA confirmado: la placa cambia FUR, mandato y
+        // expediente, así que se anticipan los dos consolidados. Un fallo de asignación no encola nada.
+        if (assigned.Succeeded)
+        {
+            EncolarRegeneracionAnticipada(accessible.ClientTenantId, procedureInstanceId, TipoConsolidado.Wizard);
+            EncolarRegeneracionAnticipada(accessible.ClientTenantId, procedureInstanceId, TipoConsolidado.Maestro);
+        }
+
+        return assigned;
     }
 
     // HU #12167 (Feature #12156) — el OT corrige la placa dentro de la ventana de 1 hora desde
@@ -1159,6 +1276,40 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         _context.Users
                             .Where(u => u.Id == p.CreatedByUserId)
                             .Select(u => u.DisplayName)
+                            .FirstOrDefault(),
+                        // HU #12791 — vigencia de los consolidados en la misma lectura de la instancia.
+                        new ConsolidadoColumnas(
+                            p.Status,
+                            p.IsMigrated,
+                            p.ConsolidadoWizardVigente,
+                            p.ConsolidadoWizardGeneradoEn,
+                            _context.ProcedureInstanceAttachments
+                                .Where(a => a.ProcedureInstanceId == p.Id && a.Tipo == ConsolidadoVigencia.TipoWizard)
+                                .OrderByDescending(a => a.UploadedAt)
+                                .Select(a => a.Source)
+                                .FirstOrDefault(),
+                            p.ConsolidadoMaestroVigente,
+                            p.ConsolidadoMaestroGeneradoEn,
+                            _context.ProcedureInstanceAttachments
+                                .Where(a => a.ProcedureInstanceId == p.Id && a.Tipo == ConsolidadoVigencia.TipoMaestro)
+                                .OrderByDescending(a => a.UploadedAt)
+                                .Select(a => a.Source)
+                                .FirstOrDefault()),
+                        // HU #12791 (ampliación #12787 AC2) — última radicación VIGENTE ante Quipux (registrado/aprobado;
+                        // mismo criterio que MaestroRadicadoLookup: un rechazo deja de fijar el maestro).
+                        _context.QuipuxSubmissions
+                            .Where(q => q.ProcedureInstanceId == p.Id
+                                && q.RegisteredAt != null
+                                && (q.Status == QuipuxSubmissionEstado.Registrado || q.Status == QuipuxSubmissionEstado.Aprobado))
+                            .OrderByDescending(q => q.RegisteredAt)
+                            .Select(q => q.RegisteredAt)
+                            .FirstOrDefault(),
+                        _context.QuipuxSubmissions
+                            .Where(q => q.ProcedureInstanceId == p.Id
+                                && q.RegisteredAt != null
+                                && (q.Status == QuipuxSubmissionEstado.Registrado || q.Status == QuipuxSubmissionEstado.Aprobado))
+                            .OrderByDescending(q => q.RegisteredAt)
+                            .Select(q => (Guid?)q.AttachmentId)
                             .FirstOrDefault()))
                     .FirstOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
@@ -1292,6 +1443,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     RevocationDecisionAt = revocationDecided ? revocation!.DecidedAt : null,
                     RevocationRequestReason = revocationDecided ? revocation!.Reason : null,
                     RevocationDecisionReason = revocationDecided ? revocation!.DecisionReason : null,
+                    ConsolidadoWizard = mapped.Consolidado.Wizard(),
+                    ConsolidadoMaestro = mapped.Consolidado.Maestro(),
+                    QuipuxRadicadoEn = mapped.QuipuxRadicadoEn,
+                    QuipuxMaestroAttachmentId = mapped.QuipuxRadicadoEn is null ? null : mapped.QuipuxMaestroAttachmentId,
                 };
 
                 var enriched = await EnrichDisplayNamesAsync([procedure], cancellationToken)
@@ -1319,7 +1474,32 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         string? Vin,
         string? VendedorNombre,
         string? CompradorNombre,
-        string? GestorNombre);
+        string? GestorNombre,
+        ConsolidadoColumnas Consolidado,
+        DateTimeOffset? QuipuxRadicadoEn,
+        Guid? QuipuxMaestroAttachmentId);
+
+    /// <summary>
+    /// HU #12791 (Épica #12760) — insumos de la vigencia de los dos consolidados, proyectados en la
+    /// MISMA consulta de la fila (bandeja y detalle). <c>*Source</c> = <c>Source</c> del adjunto más
+    /// reciente del tipo, <c>null</c> si no existe. La regla vive en <see cref="ConsolidadoVigencia.Derivar"/>.
+    /// </summary>
+    private sealed record ConsolidadoColumnas(
+        string Status,
+        bool IsMigrated,
+        bool WizardVigente,
+        DateTimeOffset? WizardGeneradoEn,
+        string? WizardSource,
+        bool MaestroVigente,
+        DateTimeOffset? MaestroGeneradoEn,
+        string? MaestroSource)
+    {
+        public ConsolidadoVigenciaDto Wizard() =>
+            ConsolidadoVigencia.Derivar(WizardSource, WizardVigente, WizardGeneradoEn, TramiteEstado.EsFinal(Status), IsMigrated);
+
+        public ConsolidadoVigenciaDto Maestro() =>
+            ConsolidadoVigencia.Derivar(MaestroSource, MaestroVigente, MaestroGeneradoEn, TramiteEstado.EsFinal(Status), IsMigrated);
+    }
 
     /// <summary>
     /// Todos los <c>field_values</c> de la instancia en una sola lectura. La última repetición de una
@@ -1517,8 +1697,27 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         return await action().ConfigureAwait(false);
     }
 
-    private async Task<T> ExecuteInOtTenantScopeAsync<T>(
+    private Task<T> ExecuteInOtTenantScopeAsync<T>(
         Guid otTenantId,
+        Func<Task<T>> action,
+        CancellationToken cancellationToken) =>
+        ExecuteInTenantTransactionAsync(otTenantId, action, cancellationToken);
+
+    public Task<T> ExecuteInClientTenantScopeAsync<T>(
+        Guid clientTenantId,
+        Func<Task<T>> action,
+        CancellationToken cancellationToken = default) =>
+        ExecuteInTenantTransactionAsync(clientTenantId, action, cancellationToken);
+
+    /// <summary>
+    /// Transacción con el GUC de tenant (<c>app.current_tenant_id</c>, local a la transacción) alrededor
+    /// de <paramref name="action"/>. HU #12797 (F2) — es la transacción GESTIONADA de
+    /// <see cref="AccionesPostTransaccion"/>: lo que los casos de uso difieran dentro (borrado de binarios
+    /// del consolidado anterior, bitácora de fallos) se ejecuta DESPUÉS de que termine de verdad — los
+    /// borrados solo si el commit confirmó; la bitácora siempre, ya fuera de la transacción.
+    /// </summary>
+    private async Task<T> ExecuteInTenantTransactionAsync<T>(
+        Guid tenantId,
         Func<Task<T>> action,
         CancellationToken cancellationToken)
     {
@@ -1529,45 +1728,35 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             {
                 var transaction = await _context.Database
                     .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+                var transactionId = transaction.TransactionId;
+                // Re-review #12760 (N2) — una excepción ANTES del commit es un rollback seguro (compensa:
+                // borra el binario nuevo); una que sale de CommitAsync deja el resultado DESCONOCIDO: no se
+                // borra nada (ni el anterior ni el nuevo) y la bitácora diferida se escribe igual.
+                var fin = FinTransaccion.Revertida;
+                _context.AccionesPostTransaccion.Abrir(transactionId);
 
-                await using (transaction.ConfigureAwait(false))
+                try
                 {
-                    await _context.Database.ExecuteSqlInterpolatedAsync(
-                        $"SELECT set_config('app.current_tenant_id', {otTenantId.ToString()}, true)",
-                        cancellationToken).ConfigureAwait(false);
+                    await using (transaction.ConfigureAwait(false))
+                    {
+                        await _context.Database.ExecuteSqlInterpolatedAsync(
+                            $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)",
+                            cancellationToken).ConfigureAwait(false);
 
-                    var result = await action().ConfigureAwait(false);
-                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                    return result;
+                        var result = await action().ConfigureAwait(false);
+                        fin = FinTransaccion.Desconocida;
+                        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                        fin = FinTransaccion.Confirmada;
+                        return result;
+                    }
                 }
-            }).ConfigureAwait(false);
-        }
-
-        return await action().ConfigureAwait(false);
-    }
-
-    public async Task<T> ExecuteInClientTenantScopeAsync<T>(
-        Guid clientTenantId,
-        Func<Task<T>> action,
-        CancellationToken cancellationToken = default)
-    {
-        if (_context.Database.IsRelational())
-        {
-            var strategy = _context.Database.CreateExecutionStrategy();
-            return await strategy.ExecuteAsync(async () =>
-            {
-                var transaction = await _context.Database
-                    .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-                await using (transaction.ConfigureAwait(false))
+                finally
                 {
-                    await _context.Database.ExecuteSqlInterpolatedAsync(
-                        $"SELECT set_config('app.current_tenant_id', {clientTenantId.ToString()}, true)",
-                        cancellationToken).ConfigureAwait(false);
-
-                    var result = await action().ConfigureAwait(false);
-                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                    return result;
+                    // Tras el Dispose: la transacción ya confirmó, ya se revirtió o quedó en duda.
+                    var omitidas = await _context.AccionesPostTransaccion
+                        .CerrarAsync(transactionId, fin).ConfigureAwait(false);
+                    if (omitidas > 0)
+                        OtClientProcedureRepositoryLog.CommitAmbiguo(_logger, transactionId, tenantId, omitidas);
                 }
             }).ConfigureAwait(false);
         }
@@ -1590,6 +1779,24 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
         return exists ? changedBy : null;
     }
+
+    /// <summary>Copia del filtro sin lo que eligen las tarjetas (estado y solicitud de revocatoria).</summary>
+    private static OtClientProcedureFilter SinFiltroDeTarjeta(OtClientProcedureFilter f) => new()
+    {
+        ProcedureTypeId = f.ProcedureTypeId,
+        Familia = f.Familia,
+        Vin = f.Vin,
+        Placa = f.Placa,
+        Vendedor = f.Vendedor,
+        Comprador = f.Comprador,
+        Gestor = f.Gestor,
+        Busqueda = f.Busqueda,
+        Condiciones = f.Condiciones,
+        CreatedFrom = f.CreatedFrom,
+        CreatedTo = f.CreatedTo,
+        UpdatedFrom = f.UpdatedFrom,
+        UpdatedTo = f.UpdatedTo,
+    };
 
     private IQueryable<ProcedureInstance> ApplyListFilters(
         IQueryable<ProcedureInstance> query,
@@ -1621,6 +1828,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         if (filter.ProcedureTypeId is not null)
         {
             query = query.Where(p => p.ProcedureTypeId == filter.ProcedureTypeId.Value);
+        }
+
+        // Epic #12686 — pestaña de familia. La familia vive en el TIPO (ADR-0050), no en la instancia.
+        if (!string.IsNullOrWhiteSpace(filter.Familia))
+        {
+            var familia = filter.Familia.Trim().ToUpperInvariant();
+            query = query.Where(p => p.ProcedureType != null && p.ProcedureType.Family.ToUpper() == familia);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Vin))
@@ -1977,4 +2191,17 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             })
             .ToList();
     }
+}
+
+/// <summary>Logging source-generated (CA1848) del repositorio OT. Sin PII.</summary>
+internal static partial class OtClientProcedureRepositoryLog
+{
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "HU #12796 — la regeneración anticipada del consolidado {Documento} del trámite {InstanceId} (tenant {TenantId}) se descartó; lo cubre la regeneración perezosa.")]
+    public static partial void RegeneracionAnticipadaDescartada(
+        ILogger logger, Guid instanceId, Guid tenantId, TipoConsolidado documento);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Re-review #12760 (N2) — commit de resultado desconocido en la transacción {TransactionId} (tenant {TenantId}): se omitieron {Omitidas} borrado(s) de binarios del consolidado; el que sobre queda como huérfano recuperable.")]
+    public static partial void CommitAmbiguo(ILogger logger, Guid transactionId, Guid tenantId, int omitidas);
 }

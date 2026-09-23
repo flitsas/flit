@@ -5,11 +5,30 @@ import { Check, Download, Eye, RefreshCw } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
+import { AvisoDocumentoFinal } from "@/components/shared/AvisoDocumentoFinal";
+import { AvisoMaestroRadicado } from "@/components/shared/AvisoMaestroRadicado";
+import { AvisoFalloRegeneracion } from "@/components/shared/AvisoFalloRegeneracion";
 import {
+  entregarOtConsolidado,
   fetchOtAttachmentPreviewUrl,
   fetchOtDocuments,
   generarOtConsolidadoMaestro,
 } from "@/lib/api/admin-ot";
+import { esDocumentoDefinitivo } from "@/lib/tramites/consolidado-entrega";
+import {
+  esEntregaRadicadaFija,
+  mensajeEntregaOtFallida,
+  resolverFuenteMaestroOt,
+} from "@/lib/tramites/consolidado-entrega-ot";
+import {
+  detectarFalloRegeneracion,
+  vigenciaTrasApertura,
+  type FalloRegeneracionConsolidado,
+} from "@/lib/tramites/fallo-regeneracion-consolidado";
+import type {
+  ConsolidadoVigencia,
+  GenerarConsolidadoResult,
+} from "@/lib/api/types/procedure-runtime";
 import { downloadFile } from "@/lib/api/download";
 import type { OtApiScope, OtProcedureAttachment } from "@/lib/api/admin-ot";
 import { OtVacio } from "./OtDetallePrimitivos";
@@ -24,6 +43,18 @@ export interface OtDetalleDocumentosProps {
   scope?: OtApiScope;
   /** Si es true el OT no puede reconstruir el consolidado (solo ver documentos). */
   readOnly?: boolean;
+  /**
+   * HU #12787 (AC2) — ISO UTC de la radicación Quipux del trámite. Si no es null, la vista de solo
+   * lectura sirve el maestro radicado tal cual y no lo regenera.
+   */
+  quipuxRadicadoEn?: string | null;
+  /** HU #12787 (AC2) — adjunto maestro que se radicó; se abre por la ruta de documentos. */
+  quipuxMaestroAttachmentId?: string | null;
+  /**
+   * HU #12793 — vigencia del consolidado maestro del trámite (HU #12791). `null`/omitido = backend
+   * sin el campo: no se pinta indicador (salvo radicado en read-only, AC3).
+   */
+  consolidadoMaestro?: ConsolidadoVigencia | null;
 }
 
 function formatSize(bytes: number): string {
@@ -90,6 +121,9 @@ export function OtDetalleDocumentos({
   procedureId,
   scope,
   readOnly = false,
+  quipuxRadicadoEn = null,
+  quipuxMaestroAttachmentId = null,
+  consolidadoMaestro = null,
 }: OtDetalleDocumentosProps) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -101,6 +135,40 @@ export function OtDetalleDocumentos({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  /** HU #12787 (AC3) — el consolidado abierto es el definitivo del trámite (estado final). */
+  const [previewDefinitivo, setPreviewDefinitivo] = useState(false);
+  /** HU #12787 (AC2) — el consolidado abierto es el maestro radicado en Quipux (fecha ISO). */
+  const [previewRadicadoEn, setPreviewRadicadoEn] = useState<string | null>(null);
+  /**
+   * HU #12793 — vigencia refrescada en local tras abrir/reconstruir el maestro. Se ata a la prop de
+   * la que partió (`base`): si el padre trae una vigencia nueva, esa gana sin necesidad de efecto.
+   */
+  const [vigenciaLocal, setVigenciaLocal] = useState<{
+    base: ConsolidadoVigencia | null;
+    valor: ConsolidadoVigencia;
+  } | null>(null);
+  const vigenciaMaestro =
+    vigenciaLocal && vigenciaLocal.base === consolidadoMaestro
+      ? vigenciaLocal.valor
+      : consolidadoMaestro;
+  /** HU #12793 (AC3) — solo en read-only la radicación fija el maestro («maestro radicado, fijo»). */
+  const radicadoIndicador = readOnly ? quipuxRadicadoEn?.trim() || null : null;
+
+  /**
+   * HU #12799 (AC3) — fallo de la última regeneración del maestro (`regenerado: false` + aviso
+   * `consolidado_maestro: …`). Solo se conoce por la respuesta de abrir/actualizar: se limpia con la
+   * siguiente respuesta sin fallo. En el maestro radicado (read-only, fijo) no aplica.
+   */
+  const [falloMaestro, setFalloMaestro] = useState<FalloRegeneracionConsolidado | null>(null);
+
+  const refrescarVigencia = (
+    res: Pick<GenerarConsolidadoResult, "regenerado" | "modo" | "avisosCascada">,
+  ) => {
+    setFalloMaestro(detectarFalloRegeneracion(res));
+    const nueva = vigenciaTrasApertura(vigenciaMaestro, res, new Date());
+    if (nueva) setVigenciaLocal({ base: consolidadoMaestro, valor: nueva });
+  };
+  const falloVisible = radicadoIndicador ? null : falloMaestro;
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -125,8 +193,14 @@ export function OtDetalleDocumentos({
     return () => c.abort();
   }, [load]);
 
-  const handlePreview = async (item: OtProcedureAttachment) => {
+  const handlePreview = async (
+    item: OtProcedureAttachment,
+    definitivo = false,
+    radicadoEn: string | null = null,
+  ) => {
     setRevisados((prev) => new Set(prev).add(item.id));
+    setPreviewDefinitivo(definitivo);
+    setPreviewRadicadoEn(radicadoEn);
     setPreviewItem(item);
     setPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
@@ -159,6 +233,8 @@ export function OtDetalleDocumentos({
     });
     setPreviewItem(null);
     setPreviewError(null);
+    setPreviewDefinitivo(false);
+    setPreviewRadicadoEn(null);
   };
 
   const handleDownload = async (item: OtProcedureAttachment) => {
@@ -190,6 +266,7 @@ export function OtDetalleDocumentos({
         // generados del trámite, ordenados por la matriz documental.
         const res = await generarOtConsolidadoMaestro(procedureId, scope, force);
         if (res.regenerado) show("Consolidado generado.", "success");
+        refrescarVigencia(res);
         void load();
         await handlePreview({
           id: res.document.attachmentId,
@@ -203,20 +280,107 @@ export function OtDetalleDocumentos({
         });
         return;
       }
-      const consolidado =
-        attachments.find((a) => a.tipo === "consolidado_maestro") ??
-        attachments.find((a) => a.tipo === "consolidado");
-      if (!consolidado) {
-        show("El trámite aún no tiene consolidado generado.", "error");
-        return;
-      }
-      await handlePreview(consolidado);
-    } catch {
-      show("No se pudo abrir el consolidado.", "error");
+      // HU #12787 (AC1/AC3) — en modo QX read-only el maestro ya NO se toma del adjunto de
+      // `GET …/documents` (puede estar desactualizado): se pide a la ruta de entrega OT, que lo
+      // reconstruye solo si la bandera está abajo y en estado final sirve el definitivo.
+      await abrirMaestroReadOnly();
+    } catch (e: unknown) {
+      show(mensajeEntregaOtFallida(e), "error");
     } finally {
       setConsolidadoActing(false);
     }
   };
+
+  /**
+   * HU #12787 — abre por la ruta de entrega OT el consolidado pedido (maestro por defecto; el del
+   * wizard si la fila es `consolidado`). Lanza si la entrega falla: el llamador decide el aviso.
+   */
+  const abrirEntregaReadOnly = async (
+    tipo: "consolidado_maestro" | "consolidado",
+    soloLectura = false,
+    radicadoEn: string | null = null,
+  ) => {
+    const res = await entregarOtConsolidado(
+      procedureId,
+      scope,
+      soloLectura ? { tipo, soloLectura: true } : { tipo },
+    );
+    if (tipo === "consolidado_maestro") refrescarVigencia(res);
+    // `modo: "radicado_fijo"` — el backend sirvió el maestro radicado tal cual: se presenta como la
+    // versión radicada aunque la fila no traiga la fecha en `radicadoEn` (se toma la del trámite).
+    const radicadoVisor = esEntregaRadicadaFija(res)
+      ? radicadoEn ?? (quipuxRadicadoEn?.trim() || null)
+      : radicadoEn;
+    await handlePreview(
+      {
+        id: res.document.attachmentId,
+        tipo: res.document.tipo,
+        filename: res.document.filename,
+        mimetype: "application/pdf",
+        sizeBytes: 0,
+        sha256: res.document.sha256,
+        source: "system",
+        uploadedAt: "",
+      },
+      esDocumentoDefinitivo(res),
+      radicadoVisor,
+    );
+  };
+
+  /**
+   * HU #12787 (AC2, «maestro radicado, fijo») — maestro en solo lectura. Radicado con adjunto
+   * conocido ⇒ ese adjunto por la ruta de documentos, SIN llamar a la entrega (que podría
+   * regenerar). Radicado sin adjunto ⇒ entrega con `soloLectura`. No radicado ⇒ AC1.
+   */
+  const abrirMaestroReadOnly = async () => {
+    const fuente = resolverFuenteMaestroOt({ quipuxRadicadoEn, quipuxMaestroAttachmentId });
+    if (fuente.via === "adjunto_radicado") {
+      const listado = attachments.find((a) => a.id === fuente.attachmentId);
+      await handlePreview(
+        listado ?? {
+          id: fuente.attachmentId,
+          tipo: "consolidado_maestro",
+          filename: "consolidado-maestro-radicado.pdf",
+          mimetype: "application/pdf",
+          sizeBytes: 0,
+          sha256: "",
+          source: "system",
+          uploadedAt: "",
+        },
+        false,
+        fuente.radicadoEn,
+      );
+      return;
+    }
+    await abrirEntregaReadOnly(
+      "consolidado_maestro",
+      fuente.params.soloLectura === true,
+      fuente.radicadoEn,
+    );
+  };
+
+  /**
+   * HU #12787 (AC1) — en read-only, previsualizar la fila del consolidado (maestro o wizard) también
+   * pasa por la entrega: la fila de `GET …/documents` puede ser el PDF antiguo.
+   */
+  const previsualizarFila = async (att: OtProcedureAttachment) => {
+    if (readOnly && (att.tipo === "consolidado_maestro" || att.tipo === "consolidado")) {
+      try {
+        if (att.tipo === "consolidado_maestro") await abrirMaestroReadOnly();
+        else await abrirEntregaReadOnly(att.tipo);
+      } catch (e: unknown) {
+        show(mensajeEntregaOtFallida(e), "error");
+      }
+      return;
+    }
+    await handlePreview(att);
+  };
+
+  // Solo sobre el maestro abierto (no sobre otro adjunto ni el consolidado del wizard).
+  const falloEnVisor =
+    falloVisible && previewItem?.tipo === "consolidado_maestro" && !previewRadicadoEn
+      ? falloVisible
+      : null;
 
   return (
     <>
@@ -229,9 +393,36 @@ export function OtDetalleDocumentos({
         loading={previewLoading}
         error={previewError}
         onDownload={previewItem ? () => void handleDownload(previewItem) : undefined}
+        notice={
+          previewRadicadoEn || previewDefinitivo || falloEnVisor ? (
+            <div className="space-y-2">
+              {previewRadicadoEn ? <AvisoMaestroRadicado radicadoEn={previewRadicadoEn} /> : null}
+              {previewDefinitivo ? <AvisoDocumentoFinal /> : null}
+              {/* HU #12799 — el visor tapa la página: el aviso también va sobre el PDF servido. */}
+              {falloEnVisor ? (
+                <AvisoFalloRegeneracion
+                  fallo={falloEnVisor}
+                  generadoEn={vigenciaMaestro?.generadoEn ?? null}
+                />
+              ) : null}
+            </div>
+          ) : undefined
+        }
       />
 
       <div className="space-y-3" data-testid="ot-detalle-documentos">
+        {/* HU #12799 (AC3) — aviso de fallo con la fecha del maestro que sí está disponible.
+            «Reintentar» es la misma acción del contenedor: reconstruir (o, en read-only, volver a
+            pedir la entrega, que regenera si la bandera sigue abajo). El rótulo de vigencia
+            (HU #12793) se retiró por decisión de producto. */}
+        {falloVisible ? (
+          <AvisoFalloRegeneracion
+            fallo={falloVisible}
+            generadoEn={vigenciaMaestro?.generadoEn ?? null}
+            onReintentar={() => void handleConsolidado(!readOnly)}
+            reintentando={consolidadoActing}
+          />
+        ) : null}
         {/* El consolidado NO puede quedar dentro del guardián de estado: con el expediente vacío
             este pinta su mensaje en lugar de los hijos, y precisamente entonces —cuando no hay
             adjuntos— el organismo sigue necesitando poder abrir o reconstruir el consolidado. */}
@@ -285,7 +476,7 @@ export function OtDetalleDocumentos({
                   <AccionDoc
                     icon={Eye}
                     label={`Previsualizar ${att.filename}`}
-                    onClick={() => void handlePreview(att)}
+                    onClick={() => void previsualizarFila(att)}
                   />
                   <AccionDoc
                     icon={Download}

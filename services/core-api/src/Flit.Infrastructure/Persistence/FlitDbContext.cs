@@ -17,6 +17,12 @@ namespace Flit.Infrastructure.Persistence;
 public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     : DbContext(options), IDataProtectionKeyContext
 {
+    /// <summary>
+    /// HU #12797 (F2) — acciones diferidas al fin de la transacción ambiente gestionada (borrados del
+    /// reemplazo seguro del consolidado, bitácora de fallos). No es un mapeo: EF no lo toca.
+    /// </summary>
+    internal AccionesPostTransaccion AccionesPostTransaccion { get; } = new();
+
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
     // HU #12323 (ADR-0057) — interruptores globales de la jerarquía y bitácora append-only del

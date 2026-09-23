@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Consolidados;
 using Flit.Admin.Domain.Companies.SignatureVault;
 
 namespace Flit.Admin.Application.Companies.SignatureVault.CreateSignatureVault;
@@ -25,16 +26,23 @@ public sealed class CreateSignatureVaultHandler
     private readonly ISignatureVaultArtifactStorage _artifactStorage;
     private readonly ISignatureVaultRepository _repository;
     private readonly ISignatureVaultReader? _reader;
+    private readonly IConsolidadoInvalidacionMasiva? _invalidacion;
 
     /// <param name="reader">
     /// HU #11193 — necesario para resolver cuál es la firma activa que provoca el conflicto y poder
     /// revocarla. Sin él, el comportamiento es el anterior: cualquier conflicto se responde 422.
     /// </param>
+    /// <param name="invalidacion">
+    /// HU #12789 — invalida en bloque los consolidados de la compañía. Opcional para no romper a los
+    /// llamadores que no lo necesitan; en DI siempre se inyecta.
+    /// </param>
     public CreateSignatureVaultHandler(
         ISignatureVaultArtifactStorage artifactStorage,
         ISignatureVaultRepository repository,
-        ISignatureVaultReader? reader = null)
+        ISignatureVaultReader? reader = null,
+        IConsolidadoInvalidacionMasiva? invalidacion = null)
     {
+        _invalidacion = invalidacion;
         _artifactStorage = artifactStorage ?? throw new ArgumentNullException(nameof(artifactStorage));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _reader = reader;
@@ -79,8 +87,10 @@ public sealed class CreateSignatureVaultHandler
 
         try
         {
-            return CreateSignatureVaultResult.Success(
-                await _repository.CreateAsync(data, cancellationToken).ConfigureAwait(false));
+            return await ExitoAsync(
+                await _repository.CreateAsync(data, cancellationToken).ConfigureAwait(false),
+                command.TenantId,
+                cancellationToken).ConfigureAwait(false);
         }
         catch (SignatureVaultActiveConflictException)
         {
@@ -119,9 +129,28 @@ public sealed class CreateSignatureVaultHandler
                 ]);
             }
 
-            return CreateSignatureVaultResult.Success(
-                await _repository.CreateAsync(data, cancellationToken).ConfigureAwait(false));
+            return await ExitoAsync(
+                await _repository.CreateAsync(data, cancellationToken).ConfigureAwait(false),
+                command.TenantId,
+                cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// HU #12789 AC3 — una firma nueva vigente del baúl (o la que sustituye a otra) cambia lo que se
+    /// estampa en el expediente: los consolidados en curso de la compañía titular quedan invalidados.
+    /// </summary>
+    private async Task<CreateSignatureVaultResult> ExitoAsync(
+        Guid id,
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        if (_invalidacion is not null)
+        {
+            await _invalidacion.InvalidarPorFirmaBaulAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        }
+
+        return CreateSignatureVaultResult.Success(id);
     }
 
     /// <summary>

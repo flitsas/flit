@@ -8161,11 +8161,19 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("consecutivo")
                         .HasDefaultValueSql("nextval('tramites.procedure_instance_reference_seq')");
 
+                    b.Property<DateTimeOffset?>("ConsolidadoMaestroGeneradoEn")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("consolidado_maestro_generado_en");
+
                     b.Property<bool>("ConsolidadoMaestroVigente")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("consolidado_maestro_vigente");
+
+                    b.Property<DateTimeOffset?>("ConsolidadoWizardGeneradoEn")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("consolidado_wizard_generado_en");
 
                     b.Property<bool>("ConsolidadoWizardVigente")
                         .ValueGeneratedOnAdd()
@@ -10402,6 +10410,205 @@ namespace Flit.Infrastructure.Migrations
                             t.HasTrigger("tr_vehicle_soat_policies_audit");
 
                             t.HasTrigger("tr_vehicle_soat_policies_row_version");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Tramites.Domain.RevocationRequests.ProcedureRevocationRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_number");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<Guid?>("DecisionDocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decision_document_id");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("decision_reason");
+
+                    b.Property<Guid>("ProcedureInstanceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("procedure_instance_id");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("solicitada")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("SupportDocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("support_document_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_procedure_revocation_requests");
+
+                    b.HasIndex("ProcedureInstanceId", "AttemptNumber")
+                        .IsUnique()
+                        .HasDatabaseName("uq_procedure_revocation_requests_instance_attempt");
+
+                    b.HasIndex("TenantId", "ProcedureInstanceId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_procedure_revocation_requests_active_per_instance")
+                        .HasFilter("status IN ('solicitada', 'en_revision')");
+
+                    b.HasIndex("TenantId", "ProcedureInstanceId", "RequestedAt")
+                        .HasDatabaseName("ix_procedure_revocation_requests_tenant_instance");
+
+                    b.ToTable("procedure_revocation_requests", "tramites", t =>
+                        {
+                            t.ExcludeFromMigrations();
+
+                            t.HasTrigger("tr_procedure_revocation_requests_audit");
+
+                            t.HasTrigger("tr_procedure_revocation_requests_row_version");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Tramites.Domain.RevocationRequests.RevocationRequestEmailDispatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_number");
+
+                    b.Property<int>("Attempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("decision_reason");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("failure_reason");
+
+                    b.Property<string>("Milestone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("milestone");
+
+                    b.Property<Guid>("ProcedureInstanceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("procedure_instance_id");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<DateTimeOffset>("QueuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("queued_at");
+
+                    b.Property<string>("Recipient")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("recipient");
+
+                    b.Property<string>("RecipientKind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("recipient_kind");
+
+                    b.Property<string>("RecipientName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("recipient_name");
+
+                    b.Property<string>("RecipientRole")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("recipient_role");
+
+                    b.Property<Guid>("RevocationRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revocation_request_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TemplateKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("template_key");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_revocation_request_email_dispatches");
+
+                    b.ToTable("revocation_request_email_dispatches", "tramites", t =>
+                        {
+                            t.ExcludeFromMigrations();
                         });
                 });
 

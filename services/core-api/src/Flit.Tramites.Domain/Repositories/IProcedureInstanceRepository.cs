@@ -55,6 +55,16 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #12791 (Épica #12760) — <c>Source</c> del adjunto MÁS RECIENTE (por <c>UploadedAt</c>) de cada
+    /// tipo de consolidado (<c>consolidado</c>, <c>consolidado_maestro</c>) de la instancia, indexado por
+    /// tipo (sin distinguir mayúsculas). Tipo ausente del diccionario = no hay PDF de ese tipo
+    /// (estado <c>inexistente</c>). UNA consulta lean (sin blobs ni grafo): la usa el detalle del trámite,
+    /// cuyo grafo (<see cref="GetByIdWithDetailsAsync(Guid, Guid, CancellationToken)"/>) no carga adjuntos.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> GetConsolidadoSourcesAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
     /// Carga la instancia con el grafo necesario para computar el checklist condicional
     /// (RF30/31/35): <c>Attachments</c> (auto-marcado), <c>Actors</c> (NIT vs persona natural),
     /// <c>FieldValues</c> (servicio especial, tipo de documento del propietario) y
@@ -511,6 +521,23 @@ public interface IProcedureInstanceRepository
     /// <c>DbUpdateConcurrencyException</c> vive en el repositorio). <c>true</c> = commit OK.
     /// </summary>
     Task<bool> SaveChangesWithConcurrencyGuardAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12797 (Épica #12760) — ¿<paramref name="ex"/> es un conflicto de concurrencia optimista del
+    /// guardado (otro proceso cambió o borró las filas entre la carga y el commit)? La capa Application
+    /// no referencia EF: el mapeo de <c>DbUpdateConcurrencyException</c> vive en el repositorio. Por
+    /// defecto <c>false</c> (dobles de prueba y composiciones sin EF).
+    /// </summary>
+    bool IsConcurrencyConflict(Exception ex) => false;
+
+    /// <summary>
+    /// HU #12797 (Épica #12760) — difiere <paramref name="alConfirmar"/> hasta que la transacción AMBIENTE
+    /// (abierta por quien envuelve el caso de uso, p. ej. el scope de tenant de la consola OT) confirme de
+    /// verdad, y <paramref name="alRevertir"/> hasta que se revierta. Devuelve <c>false</c> si no hay una
+    /// transacción ambiente gestionada: entonces el guardado que acaba de hacer el llamador YA confirmó y
+    /// debe ejecutar la acción él mismo. Por defecto <c>false</c> (sin transacción ambiente).
+    /// </summary>
+    bool TryDeferUntilTransactionEnds(Action alConfirmar, Action? alRevertir = null) => false;
 
     /// <summary>
     /// Página del historial de transiciones de estado de la instancia (HU-2 N03, RF05), ordenada

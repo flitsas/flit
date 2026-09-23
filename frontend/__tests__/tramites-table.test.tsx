@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   fetchAttachmentPreviewUrl: vi.fn(),
   downloadAttachment: vi.fn(),
+  // HU #12786 — el consolidado se pide a la ruta de entrega (vigente), no al id del resumen.
+  entregarConsolidado: vi.fn(),
   // Frente C, etapa 1 — modal de detalle de un trámite ya radicado.
   getInstance: vi.fn(),
   // HU #12185 — el panel del trámite pide el historial paginado (que sí trae usuario y compañía),
@@ -1041,6 +1043,18 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
       url: 'https://s3.local/consolidado.pdf',
       expiresAt: '2026-07-29T00:10:00Z',
     });
+    // HU #12786 — la entrega devuelve el adjunto vigente (aquí el mismo id: `modo: "vigente"`).
+    mocks.entregarConsolidado.mockResolvedValue({
+      document: {
+        attachmentId: 'att-consolidado',
+        tipo: 'consolidado',
+        filename: 'expediente-consolidado-TR-0001.pdf',
+        sha256: 'x',
+      },
+      regenerado: false,
+      definitivoPorEstadoFinal: false,
+      modo: 'vigente',
+    });
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
@@ -1048,11 +1062,15 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Ver consolidado' }));
 
     expect(await screen.findByRole('dialog', { name: 'Consolidado' })).toBeInTheDocument();
-    // Se abre con el id que trae el resumen: no se consultan los adjuntos del trámite.
-    expect(mocks.fetchAttachmentPreviewUrl).toHaveBeenCalledWith(
-      'inst-0001',
-      'att-consolidado',
-      undefined,
+    // HU #12786 — se pide a la ruta de entrega y se abre el adjunto que ella devuelve; no se
+    // consultan los adjuntos del trámite.
+    expect(mocks.entregarConsolidado).toHaveBeenCalledWith('inst-0001', {}, undefined);
+    await waitFor(() =>
+      expect(mocks.fetchAttachmentPreviewUrl).toHaveBeenCalledWith(
+        'inst-0001',
+        'att-consolidado',
+        undefined,
+      ),
     );
     expect(mocks.getAttachments).not.toHaveBeenCalled();
     expect(routerPush).not.toHaveBeenCalled();
