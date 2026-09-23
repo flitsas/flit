@@ -2153,6 +2153,7 @@ public static class AdminOtEndpoints
         Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
         ITransitOfficeCatalog transitOfficeCatalog,
         Flit.Tramites.Application.UseCases.ProcedureInstances.ListAttachmentsHandler listHandler,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.IMaestroRadicadoLookup maestroRadicado,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
@@ -2162,15 +2163,27 @@ public static class AdminOtEndpoints
         if (accessError is not null)
             return accessError;
 
-        var (attachments, error) = await repository.ExecuteInClientTenantScopeAsync(
+        var (attachments, radicadoId, error) = await repository.ExecuteInClientTenantScopeAsync(
             access!.ClientTenantId,
-            () => listHandler.HandleAsync(id, access.ClientTenantId, cancellationToken),
+            async () =>
+            {
+                var (listado, err) = await listHandler
+                    .HandleAsync(id, access.ClientTenantId, cancellationToken).ConfigureAwait(false);
+                var radicado = listado is null
+                    ? null
+                    : await maestroRadicado
+                        .AttachmentRadicadoAsync(access.ClientTenantId, id, cancellationToken).ConfigureAwait(false);
+                return (listado, radicado, err);
+            },
             cancellationToken).ConfigureAwait(false);
 
         if (error is "not_found")
             return Results.NotFound(new { error = "Trámite no encontrado" });
 
-        var docs = attachments!.Attachments;
+        // Re-review #12760 (N5) — una fila por tipo de consolidado: la que sirve la entrega (el maestro
+        // radicado fijo si aplica; si no, el más reciente). Mismo contrato { data, consolidado, … }.
+        var docs = Flit.Tramites.Application.UseCases.ProcedureInstances.ConsolidadoListado
+            .UnoPorTipo(attachments!.Attachments, radicadoId);
         var hasConsolidado = docs.Any(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
         var hasConsolidadoMaestro = docs.Any(a => string.Equals(a.Tipo, "consolidado_maestro", StringComparison.OrdinalIgnoreCase));
 

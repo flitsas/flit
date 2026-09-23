@@ -197,7 +197,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
         var previos = ConsolidadoReemplazoSeguro.Previos(instance, tipoMaestro);
         var maestroVigenteAntes = instance.ConsolidadoMaestroVigente;
         // HU #12787 (AC2) — el maestro radicado ante Quipux nunca se retira ni se borra.
-        var protegidos = await _maestroRadicado.AttachmentsRadicadosAsync(tenantId, id, ct).ConfigureAwait(false);
+        var protegidos = await _maestroRadicado.AttachmentsProtegidosAsync(tenantId, id, ct).ConfigureAwait(false);
 
         var stored = await storage.SaveAsync(id, doc.Tipo, doc.Filename, new MemoryStream(doc.Content), ct);
         previos = ConsolidadoReemplazoSeguro.RetirarFilas(instance, repo, previos, protegidos);

@@ -587,12 +587,31 @@ public sealed class DownloadAttachmentHandler(
     }
 }
 
-/// <summary>Borra un adjunto (FS + fila). Solo en <c>draft</c>.</summary>
+/// <summary>
+/// Borra un adjunto (FS + fila). Solo en <c>draft</c> o con subsanación activa.
+/// <para>Re-review #12760 (M-N1) — los consolidados (<c>consolidado</c>, <c>consolidado_maestro</c>) son
+/// documentos del sistema y no se borran por esta vía (<see cref="AdjuntoProtegido"/>): en subsanación el
+/// gestor podía eliminar el maestro radicado ante Quipux. Defensa adicional: tampoco se borra ningún adjunto
+/// referenciado por una radicación (<see cref="IMaestroRadicadoLookup.AttachmentsProtegidosAsync"/>). El
+/// SuperAdmin no usa este handler: sus acciones Limpiar/Cargar consolidado tienen su propio flujo.</para>
+/// </summary>
 public sealed class DeleteAttachmentHandler(
     IProcedureInstanceRepository repo,
     IAttachmentStorage storage,
-    IVehicleSignatureImprintRepository? imprintAudit = null)
+    IVehicleSignatureImprintRepository? imprintAudit = null,
+    IMaestroRadicadoLookup? maestroRadicado = null)
 {
+    /// <summary>Código de error: el adjunto lo genera el sistema (o lo referencia Quipux) y no se borra.</summary>
+    public const string AdjuntoProtegido = "adjunto_protegido";
+
+    private static readonly HashSet<string> TiposDelSistema = new(StringComparer.OrdinalIgnoreCase)
+    {
+        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoWizard,
+        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoMaestro,
+    };
+
+    private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
+
     public async Task<string?> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -608,6 +627,12 @@ public sealed class DeleteAttachmentHandler(
         var attachment = instance.Attachments.FirstOrDefault(a => a.Id == attachmentId);
         if (attachment is null)
             return "attachment_not_found";
+
+        if (TiposDelSistema.Contains(attachment.Tipo))
+            return AdjuntoProtegido;
+        var protegidos = await _maestroRadicado.AttachmentsProtegidosAsync(tenantId, id, ct).ConfigureAwait(false);
+        if (protegidos.Contains(attachment.Id))
+            return AdjuntoProtegido;
 
         var tipo = attachment.Tipo;
         var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits([attachment], imprintAudit);

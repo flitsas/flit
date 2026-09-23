@@ -84,9 +84,15 @@ public sealed class RegenerarConsolidadoAnticipadoHandler(
         if (instance is null)
             return Omitir(ResultadoRegeneracionAnticipada.NoEncontrado, tenantId, procedureInstanceId, documento);
 
-        // HU #12787 (AC2) — la radicación ante Quipux (preparado → entregado, actor Quipux) encola el
-        // maestro (HU #12796); regenerarlo retiraría la fila y el binario que la submission referencia.
+        // HU #12787 (AC2) — un maestro con radicación VIGENTE (registrado/aprobado) queda fijo. Un rechazo
+        // de Quipux ya no fija nada (re-review #12760, N1): el rechazo encola el maestro (HU #12796 AC2) y
+        // aquí se regenera; la fila rechazada sigue protegida por RetirarFilas (AttachmentsProtegidosAsync).
+        // Trámite en `rechazado`: no se consulta el fijo. El handler de Quipux transiciona el trámite
+        // (commit + encolado) ANTES de marcar la submission `rechazado`; un worker rápido la leería aún
+        // `registrado` y omitiría la regeneración que el rechazo pidió. Devuelto al gestor, la versión de
+        // la secretaría deja de ser la vigente; el binario radicado se conserva igual (protegido).
         var maestroRadicado = documento == TipoConsolidado.Maestro
+            && !string.Equals(instance.Status, TramiteEstado.Rechazado, StringComparison.Ordinal)
             && await _maestroRadicado.AttachmentRadicadoAsync(tenantId, procedureInstanceId, ct).ConfigureAwait(false) is not null;
 
         var omision = MotivoDeOmision(instance, documento, maestroRadicado);
@@ -182,8 +188,9 @@ public sealed class RegenerarConsolidadoAnticipadoHandler(
             return ResultadoRegeneracionAnticipada.OmitidoMaestroRadicado;
 
         var tipoAdjunto = documento == TipoConsolidado.Wizard ? TipoAdjuntoWizard : TipoAdjuntoMaestro;
-        var vigente = instance.Attachments
-            .FirstOrDefault(a => string.Equals(a.Tipo, tipoAdjunto, StringComparison.OrdinalIgnoreCase));
+        // El más reciente, igual que la entrega: tras conservar un maestro radicado puede haber dos filas
+        // del tipo y un FirstOrDefault sin orden decidiría `Source`/vigencia al azar (re-review, N5).
+        var vigente = ConsolidadoEntregaModos.Existente(instance, tipoAdjunto);
 
         if (vigente is not null && string.Equals(vigente.Source, "user", StringComparison.OrdinalIgnoreCase))
             return ResultadoRegeneracionAnticipada.OmitidoCargadoManual;

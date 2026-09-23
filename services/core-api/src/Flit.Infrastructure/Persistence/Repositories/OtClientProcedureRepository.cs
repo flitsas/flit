@@ -159,20 +159,21 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                         .OrderByDescending(a => a.UploadedAt)
                                         .Select(a => a.Source)
                                         .FirstOrDefault()),
-                                // HU #12791 (ampliación #12787 AC2) — última radicación EXITOSA ante Quipux
-                                // (RegisteredAt con valor; una submission 'fallido' nunca radicó). Subconsulta
-                                // correlacionada en la misma consulta de la fila.
+                                // HU #12791 (ampliación #12787 AC2) — última radicación VIGENTE ante Quipux
+                                // (RegisteredAt con valor y estado registrado/aprobado; una 'fallido' nunca radicó y
+                                // una 'rechazada' ya no es la versión de la secretaría: mismo criterio que
+                                // MaestroRadicadoLookup). Subconsulta correlacionada en la misma consulta de la fila.
                                 QuipuxRadicadoEn = _context.QuipuxSubmissions
                                         .Where(q => q.ProcedureInstanceId == p.Id
                                             && q.RegisteredAt != null
-                                            && q.Status != QuipuxSubmissionEstado.Fallido)
+                                            && (q.Status == QuipuxSubmissionEstado.Registrado || q.Status == QuipuxSubmissionEstado.Aprobado))
                                         .OrderByDescending(q => q.RegisteredAt)
                                         .Select(q => q.RegisteredAt)
                                         .FirstOrDefault(),
                                 QuipuxMaestroAttachmentId = _context.QuipuxSubmissions
                                         .Where(q => q.ProcedureInstanceId == p.Id
                                             && q.RegisteredAt != null
-                                            && q.Status != QuipuxSubmissionEstado.Fallido)
+                                            && (q.Status == QuipuxSubmissionEstado.Registrado || q.Status == QuipuxSubmissionEstado.Aprobado))
                                         .OrderByDescending(q => q.RegisteredAt)
                                         .Select(q => (Guid?)q.AttachmentId)
                                         .FirstOrDefault(),
@@ -1286,18 +1287,19 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 .OrderByDescending(a => a.UploadedAt)
                                 .Select(a => a.Source)
                                 .FirstOrDefault()),
-                        // HU #12791 (ampliación #12787 AC2) — última radicación exitosa ante Quipux.
+                        // HU #12791 (ampliación #12787 AC2) — última radicación VIGENTE ante Quipux (registrado/aprobado;
+                        // mismo criterio que MaestroRadicadoLookup: un rechazo deja de fijar el maestro).
                         _context.QuipuxSubmissions
                             .Where(q => q.ProcedureInstanceId == p.Id
                                 && q.RegisteredAt != null
-                                && q.Status != QuipuxSubmissionEstado.Fallido)
+                                && (q.Status == QuipuxSubmissionEstado.Registrado || q.Status == QuipuxSubmissionEstado.Aprobado))
                             .OrderByDescending(q => q.RegisteredAt)
                             .Select(q => q.RegisteredAt)
                             .FirstOrDefault(),
                         _context.QuipuxSubmissions
                             .Where(q => q.ProcedureInstanceId == p.Id
                                 && q.RegisteredAt != null
-                                && q.Status != QuipuxSubmissionEstado.Fallido)
+                                && (q.Status == QuipuxSubmissionEstado.Registrado || q.Status == QuipuxSubmissionEstado.Aprobado))
                             .OrderByDescending(q => q.RegisteredAt)
                             .Select(q => (Guid?)q.AttachmentId)
                             .FirstOrDefault()))

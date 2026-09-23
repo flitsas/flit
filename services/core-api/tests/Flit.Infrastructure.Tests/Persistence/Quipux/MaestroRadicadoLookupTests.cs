@@ -8,9 +8,10 @@ using Xunit;
 namespace Flit.Infrastructure.Tests.Persistence.Quipux;
 
 /// <summary>
-/// HU #12787 (AC2, F1) — <see cref="MaestroRadicadoLookup"/>: criterio de «maestro radicado» = el de
-/// HU #12791 (<c>RegisteredAt</c> con valor y estado distinto de <c>fallido</c>), la ÚLTIMA radicación
-/// por <c>RegisteredAt</c>, filtrado por tenant Y trámite explícitos. EF InMemory.
+/// HU #12787 (AC2, F1) + re-review #12760 (N1/N4) — <see cref="MaestroRadicadoLookup"/>: «fijo» = la
+/// ÚLTIMA radicación VIGENTE (<c>registrado</c>/<c>aprobado</c> con <c>RegisteredAt</c>); «protegido» =
+/// toda submission no <c>fallido</c> (incluidas pendientes y rechazadas). Filtrado por tenant Y trámite
+/// explícitos. EF InMemory.
 /// <para>Uso de ejemplo: <c>await new MaestroRadicadoLookup(db).AttachmentRadicadoAsync(tenantId, instanceId, ct)</c>.</para>
 /// </summary>
 public sealed class MaestroRadicadoLookupTests
@@ -51,24 +52,83 @@ public sealed class MaestroRadicadoLookupTests
         var lookup = new MaestroRadicadoLookup(db);
 
         (await lookup.AttachmentRadicadoAsync(tenant, instance, ct)).Should().Be(nueva);
-        (await lookup.AttachmentsRadicadosAsync(tenant, instance, ct)).Should().BeEquivalentTo([vieja, nueva]);
+        (await lookup.AttachmentsProtegidosAsync(tenant, instance, ct)).Should().BeEquivalentTo([vieja, nueva]);
     }
 
     [Fact]
-    public async Task FallidaOSinRegistrar_NoCuentaComoRadicada()
+    public async Task FallidaOSinRegistrar_NoCuentaComoRadicada_PeroLaPendienteQuedaProtegida()
     {
+        // Re-review #12760 (N4/L-N1) — la pendiente (en proceso, sin RegisteredAt) no fija el maestro, pero
+        // su adjunto ya viaja hacia Quipux: se protege. La fallida nunca radicó: ni fija ni protege.
         var ct = TestContext.Current.CancellationToken;
-        await using var db = NewContext(nameof(FallidaOSinRegistrar_NoCuentaComoRadicada));
-        var (tenant, instance) = (Guid.NewGuid(), Guid.NewGuid());
+        await using var db = NewContext(nameof(FallidaOSinRegistrar_NoCuentaComoRadicada_PeroLaPendienteQuedaProtegida));
+        var (tenant, instance, fallida, pendiente) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         db.QuipuxSubmissions.AddRange(
-            Submission(tenant, instance, Guid.NewGuid(), QuipuxSubmissionEstado.Fallido, Base),
-            Submission(tenant, instance, Guid.NewGuid(), QuipuxSubmissionEstado.Pendiente, registeredAt: null));
+            Submission(tenant, instance, fallida, QuipuxSubmissionEstado.Fallido, Base),
+            Submission(tenant, instance, pendiente, QuipuxSubmissionEstado.Pendiente, registeredAt: null));
         await db.SaveChangesAsync(ct);
 
         var lookup = new MaestroRadicadoLookup(db);
 
         (await lookup.AttachmentRadicadoAsync(tenant, instance, ct)).Should().BeNull();
-        (await lookup.AttachmentsRadicadosAsync(tenant, instance, ct)).Should().BeEmpty();
+        (await lookup.AttachmentsProtegidosAsync(tenant, instance, ct)).Should().BeEquivalentTo([pendiente]);
+    }
+
+    [Fact]
+    public async Task Rechazada_NoFijaElMaestro_PeroSuAdjuntoSigueProtegido()
+    {
+        // Re-review #12760 (N1) — tras un rechazo de Quipux el worker y el POST OT regeneran; la secretaría
+        // conserva el documento rechazado, así que su fila y su binario no se retiran.
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext(nameof(Rechazada_NoFijaElMaestro_PeroSuAdjuntoSigueProtegido));
+        var (tenant, instance, rechazada) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        db.QuipuxSubmissions.Add(Submission(tenant, instance, rechazada, QuipuxSubmissionEstado.Rechazado, Base.AddHours(2)));
+        await db.SaveChangesAsync(ct);
+
+        var lookup = new MaestroRadicadoLookup(db);
+
+        (await lookup.AttachmentRadicadoAsync(tenant, instance, ct)).Should().BeNull();
+        (await lookup.AttachmentsProtegidosAsync(tenant, instance, ct)).Should().BeEquivalentTo([rechazada]);
+    }
+
+    [Theory]
+    [InlineData(QuipuxSubmissionEstado.Registrado)]
+    [InlineData(QuipuxSubmissionEstado.Aprobado)]
+    public async Task RegistradaOAprobada_FijaElMaestro(string estado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext(nameof(RegistradaOAprobada_FijaElMaestro) + estado);
+        var (tenant, instance, adjunto) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        db.QuipuxSubmissions.Add(Submission(tenant, instance, adjunto, estado, Base));
+        await db.SaveChangesAsync(ct);
+
+        var lookup = new MaestroRadicadoLookup(db);
+
+        (await lookup.AttachmentRadicadoAsync(tenant, instance, ct)).Should().Be(adjunto);
+        (await lookup.AttachmentsProtegidosAsync(tenant, instance, ct)).Should().BeEquivalentTo([adjunto]);
+    }
+
+    [Fact]
+    public async Task RechazadaPosteriorAUnaRegistrada_GanaLaRegistrada_ConRegistradoSinRegisteredAtNoFija()
+    {
+        // La última VIGENTE manda aunque haya una rechazada más reciente; una 'registrado' sin RegisteredAt
+        // (dato incoherente) no fija, solo protege.
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = NewContext(nameof(RechazadaPosteriorAUnaRegistrada_GanaLaRegistrada_ConRegistradoSinRegisteredAtNoFija));
+        var (tenant, instance, registrada, rechazada, sinFecha) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        db.QuipuxSubmissions.AddRange(
+            Submission(tenant, instance, registrada, QuipuxSubmissionEstado.Registrado, Base),
+            Submission(tenant, instance, rechazada, QuipuxSubmissionEstado.Rechazado, Base.AddHours(3)));
+        await db.SaveChangesAsync(ct);
+
+        var lookup = new MaestroRadicadoLookup(db);
+        (await lookup.AttachmentRadicadoAsync(tenant, instance, ct)).Should().Be(registrada);
+
+        var otra = Guid.NewGuid();
+        db.QuipuxSubmissions.Add(Submission(tenant, otra, sinFecha, QuipuxSubmissionEstado.Registrado, registeredAt: null));
+        await db.SaveChangesAsync(ct);
+        (await lookup.AttachmentRadicadoAsync(tenant, otra, ct)).Should().BeNull();
+        (await lookup.AttachmentsProtegidosAsync(tenant, otra, ct)).Should().BeEquivalentTo([sinFecha]);
     }
 
     [Fact]

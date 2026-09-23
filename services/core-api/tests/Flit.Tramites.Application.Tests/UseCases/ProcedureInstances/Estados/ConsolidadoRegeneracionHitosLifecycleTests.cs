@@ -217,6 +217,21 @@ public sealed class ConsolidadoRegeneracionHitosLifecycleTests
         });
     }
 
+    [Fact] // Re-review #12760 (N1) — el rechazo de Quipux (actor Quipux) encola el maestro: ya no queda fijo.
+    public async Task N1_RechazoQuipux_EntregadoRechazado_EncolaWizardYMaestro()
+    {
+        var i = Wire(TramiteEstado.Entregado);
+
+        var outcome = await Transition(Sut(_queue), i, TramiteEstado.Rechazado, TramiteActor.Quipux, "Rechazado vía Quipux");
+
+        outcome.Success.Should().BeTrue(outcome.ErrorDetail);
+        _queue.Solicitudes.Should().BeEquivalentTo(new[]
+        {
+            (i.TenantId, i.Id, TipoConsolidado.Wizard),
+            (i.TenantId, i.Id, TipoConsolidado.Maestro),
+        }, "solo la RADICACIÓN del canal Quipux deja de encolar el maestro; su rechazo debe regenerarlo");
+    }
+
     // ── AC4 — Aprobación no anticipa ────────────────────────────────────────────────
 
     [Fact] // AC4 — aprobar (estado final) invalida como siempre pero no encola nada.

@@ -39,7 +39,7 @@ public sealed class MaestroRadicadoFijoTests
 
     public MaestroRadicadoFijoTests()
     {
-        _lookup.AttachmentsRadicadosAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _lookup.AttachmentsProtegidosAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new HashSet<Guid>());
     }
 
@@ -229,7 +229,7 @@ public sealed class MaestroRadicadoFijoTests
         // uno nuevo, pero el radicado anterior no se retira ni se borra.
         var instance = Instancia(TramiteEstado.Preparado);
         var radicado = Adjuntar(instance, "consolidado_maestro", subidoHace: TimeSpan.FromHours(1));
-        _lookup.AttachmentsRadicadosAsync(instance.TenantId, instance.Id, Arg.Any<CancellationToken>())
+        _lookup.AttachmentsProtegidosAsync(instance.TenantId, instance.Id, Arg.Any<CancellationToken>())
             .Returns(new HashSet<Guid> { radicado.Id });
 
         var (result, error) = await Maestro().HandleAsync(instance.Id, instance.TenantId, null, force: true, Ct);
@@ -365,7 +365,7 @@ public sealed class MaestroRadicadoFijoTests
     {
         _lookup.AttachmentRadicadoAsync(instance.TenantId, instance.Id, Arg.Any<CancellationToken>())
             .Returns((Guid?)attachmentId);
-        _lookup.AttachmentsRadicadosAsync(instance.TenantId, instance.Id, Arg.Any<CancellationToken>())
+        _lookup.AttachmentsProtegidosAsync(instance.TenantId, instance.Id, Arg.Any<CancellationToken>())
             .Returns(new HashSet<Guid> { attachmentId });
     }
 

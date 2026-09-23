@@ -8,8 +8,9 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 ///
 /// <para>Puerto de Application: la implementación vive en Infrastructure (lee
 /// <c>tramites.quipux_submissions</c>), así el módulo Quipux no se acopla a Trámites ni al revés.
-/// Criterio = el de HU #12791 (<c>OtClientProcedureRepository</c>): submission con
-/// <c>RegisteredAt</c> con valor y estado distinto de <c>fallido</c>.</para>
+/// Dos criterios (re-review #12760, N1/N4): «radicado fijo» = radicación VIGENTE (<c>registrado</c> o
+/// <c>aprobado</c> con <c>RegisteredAt</c>); «protegido» = todo lo que la secretaría tiene o puede estar
+/// recibiendo (cualquier estado salvo <c>fallido</c>, incluidos <c>pendiente</c> y <c>rechazado</c>).</para>
 ///
 /// <para>Tenant: ambos métodos filtran por <paramref name="tenantId"/> explícito (dueño del trámite);
 /// el aislamiento no descansa en el RLS.</para>
@@ -18,16 +19,18 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public interface IMaestroRadicadoLookup
 {
     /// <summary>
-    /// Adjunto <c>consolidado_maestro</c> de la ÚLTIMA radicación exitosa (por <c>RegisteredAt</c>), o
-    /// <c>null</c> si el trámite no se ha radicado ante Quipux.
+    /// Adjunto <c>consolidado_maestro</c> de la ÚLTIMA radicación VIGENTE (<c>registrado</c> o
+    /// <c>aprobado</c>, por <c>RegisteredAt</c>), o <c>null</c> si no hay ninguna. Un rechazo de Quipux
+    /// deja de fijar el maestro: el worker y el POST OT vuelven a regenerarlo.
     /// </summary>
     Task<Guid?> AttachmentRadicadoAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default);
 
     /// <summary>
-    /// TODOS los adjuntos referenciados por alguna radicación exitosa del trámite (vacío si ninguna).
-    /// Es el conjunto que el reemplazo seguro nunca retira ni borra (defensa en profundidad).
+    /// TODOS los adjuntos referenciados por una submission no <c>fallido</c> del trámite: pendientes (aún
+    /// sin <c>RegisteredAt</c>), registradas, aprobadas y rechazadas. Vacío si ninguna. Es el conjunto que
+    /// el reemplazo seguro nunca retira ni borra y que el gestor no puede eliminar.
     /// </summary>
-    Task<IReadOnlySet<Guid>> AttachmentsRadicadosAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default);
+    Task<IReadOnlySet<Guid>> AttachmentsProtegidosAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default);
 }
 
 /// <summary>Implementación inerte: sin Quipux cableado (tests/composiciones antiguas) nada está radicado.</summary>
@@ -40,7 +43,7 @@ public sealed class NullMaestroRadicadoLookup : IMaestroRadicadoLookup
     public Task<Guid?> AttachmentRadicadoAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default) =>
         Task.FromResult<Guid?>(null);
 
-    public Task<IReadOnlySet<Guid>> AttachmentsRadicadosAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default) =>
+    public Task<IReadOnlySet<Guid>> AttachmentsProtegidosAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default) =>
         Task.FromResult(Vacio);
 }
 
@@ -84,4 +87,47 @@ public static class MaestroRadicadoFijo
             Regenerado: false,
             DefinitivoPorEstadoFinal: definitivo,
             Modo: modo);
+}
+
+/// <summary>
+/// Re-review #12760 (N5) — listado de documentos del OT: tras conservar el maestro radicado puede haber
+/// dos filas <c>consolidado_maestro</c> (la radicada y la regenerada). El listado muestra UNA por tipo de
+/// consolidado, la misma que sirve la entrega: el adjunto radicado fijo si aplica y, si no, el más
+/// reciente. El resto de adjuntos pasan sin cambios y en el mismo orden.
+/// </summary>
+/// <remarks>Uso de ejemplo: <c>var docs = ConsolidadoListado.UnoPorTipo(response.Attachments, radicadoId);</c>.</remarks>
+public static class ConsolidadoListado
+{
+    private static readonly HashSet<string> TiposConsolidado = new(StringComparer.OrdinalIgnoreCase)
+    {
+        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoWizard,
+        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoMaestro,
+    };
+
+    public static IReadOnlyList<AttachmentDto> UnoPorTipo(IReadOnlyList<AttachmentDto> docs, Guid? radicadoId)
+    {
+        ArgumentNullException.ThrowIfNull(docs);
+
+        var elegidos = docs
+            .Where(d => TiposConsolidado.Contains(d.Tipo))
+            .GroupBy(d => d.Tipo, StringComparer.OrdinalIgnoreCase)
+            .Select(g => Elegir(g.Key, g.ToList(), radicadoId).Id)
+            .ToHashSet();
+
+        return docs
+            .Where(d => !TiposConsolidado.Contains(d.Tipo) || elegidos.Contains(d.Id))
+            .ToList();
+    }
+
+    private static AttachmentDto Elegir(string tipo, List<AttachmentDto> filas, Guid? radicadoId)
+    {
+        if (radicadoId is { } id
+            && string.Equals(tipo, RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoMaestro, StringComparison.OrdinalIgnoreCase)
+            && filas.FirstOrDefault(f => f.Id == id) is { } radicado)
+        {
+            return radicado;
+        }
+
+        return filas.OrderByDescending(f => f.UploadedAt).First();
+    }
 }
