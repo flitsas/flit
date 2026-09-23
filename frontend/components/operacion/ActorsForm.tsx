@@ -1193,27 +1193,37 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     // corresponde al trámite y arrastrarlo dejaría en el expediente un papel de otra persona.
     // Solo se descarta el de los roles que cambiaron — si las dos partes eran jurídicas y solo una
     // cambió, la otra conserva el suyo.
-    const tipos = new Set(dejaronDeSerJuridicos.map((rol) => camaraComercioTipo(rol)));
+    // El descarte es asíncrono y el gestor puede volver a marcar la parte como jurídica (y cargar un
+    // certificado nuevo) antes de que termine. Por eso cada paso vuelve a mirar el formulario VIGENTE
+    // (`rolesJuridicosPrevios.current`, que el efecto actualiza en cada cambio) y solo descarta los
+    // roles que SIGUEN siendo persona natural. Sin esta guarda, la promesa en vuelo borraba el
+    // certificado recién cargado.
+    const sigueNatural = (rol: string) => !rolesJuridicosPrevios.current.has(rol);
     void tramitesClient
       .getAttachments(instanceId)
-      .then((adjuntos) =>
-        Promise.all(
+      .then((adjuntos) => {
+        const tipos = new Set(
+          dejaronDeSerJuridicos.filter(sigueNatural).map((rol) => camaraComercioTipo(rol)),
+        );
+        return Promise.all(
           adjuntos
             .filter((a) => tipos.has(a.tipo.toLowerCase()))
             .map((a) => tramitesClient.deleteAttachment(instanceId, a.id).catch(() => undefined)),
-        ),
-      )
+        );
+      })
       .then(() => {
+        const descartados = dejaronDeSerJuridicos.filter(sigueNatural);
+        if (descartados.length === 0) return;
         setCamaraSatisfecha((prev) => {
           const next = { ...prev };
-          for (const rol of dejaronDeSerJuridicos) delete next[rol];
+          for (const rol of descartados) delete next[rol];
           return next;
         });
         // Si la parte vuelve a ser jurídica, su buzón se monta de nuevo y relee el expediente ya
         // sin el certificado descartado (AC2: reaparece vacío).
         setCamaraVersion((prev) => {
           const next = { ...prev };
-          for (const rol of dejaronDeSerJuridicos) next[rol] = (next[rol] ?? 0) + 1;
+          for (const rol of descartados) next[rol] = (next[rol] ?? 0) + 1;
           return next;
         });
         recargarCamara();
