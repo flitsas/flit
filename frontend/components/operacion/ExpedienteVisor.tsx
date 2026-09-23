@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState, type ReactNode } from 'react';
-import { Eye } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { Eye, Loader2 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   openLoadingDocumentTab,
@@ -13,6 +13,15 @@ import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCapti
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { IndicadorVigenciaConsolidado } from '@/components/shared/IndicadorVigenciaConsolidado';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
+import {
+  COPY_ACTUALIZADO,
+  COPY_RECONSTRUCCION_EN_CURSO,
+  COPY_TIMEOUT_CON_ANTERIOR,
+  COPY_TIMEOUT_SIN_ANTERIOR,
+  mensajeErrorConsolidado,
+  useAperturaConsolidado,
+  type FaseApertura,
+} from '@/lib/tramites/useAperturaConsolidado';
 import { WizardCardHeader } from './wizard-atoms';
 import { WizardAccordion } from './WizardAccordion';
 import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
@@ -50,6 +59,8 @@ interface Props {
   /**
    * HU #12792 — vigencia del consolidado del wizard (`ProcedureInstanceDetail.consolidadoWizard`).
    * `null`/`undefined` (backend anterior al campo) ⇒ el indicador no se pinta.
+   * HU #12800 — la misma vigencia decide la apertura: `desactualizado`/`inexistente` → abrir muestra
+   * «reconstrucción en curso» sin bloquear la UI.
    */
   consolidadoWizard?: ConsolidadoVigencia | null;
 }
@@ -111,8 +122,10 @@ function VisorCard({
 export async function openAttachmentInNewTab(
   instanceId: string,
   attachment: Pick<ProcedureAttachment, 'id' | 'tipo' | 'filename' | 'mimetype'>,
+  /** HU #12800 — pestaña ya abierta con el clic (reconstrucción larga); si no, se abre aquí. */
+  existingWin?: Window | null,
 ) {
-  const win = openLoadingDocumentTab();
+  const win = existingWin ?? openLoadingDocumentTab();
   const mime =
     attachment.mimetype?.trim() ||
     (attachment.tipo === 'consolidado' || (attachment.filename ?? '').toLowerCase().endsWith('.pdf')
@@ -188,6 +201,7 @@ export default function ExpedienteVisor({
           attachments={attachments}
           modalidad={modalidad}
           status={status}
+          consolidadoWizard={consolidadoWizard}
           onBeforeGenerateConsolidado={onBeforeGenerateConsolidado}
           onAttachmentsChange={onAttachmentsChange}
         />
@@ -284,6 +298,7 @@ function ExpedienteConsolidadoBody({
   attachments,
   modalidad,
   status,
+  consolidadoWizard,
   onBeforeGenerateConsolidado,
   onAttachmentsChange,
 }: {
@@ -291,21 +306,14 @@ function ExpedienteConsolidadoBody({
   attachments: ProcedureAttachment[];
   modalidad: WizardModalidad;
   status: InstanceStatus;
+  consolidadoWizard?: ConsolidadoVigencia | null;
   onBeforeGenerateConsolidado?: () => Promise<void>;
   onAttachmentsChange?: () => void;
 }) {
   const consolidado = findConsolidadoAttachment(attachments);
   const [generating, setGenerating] = useState(false);
-  // Antes "downloading" (la acción descargaba el PDF); ahora abre el consolidado en pestaña nueva
-  // (punto 2, rediseño) — el nombre de la bandera sigue la acción real.
-  const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const estadoFinal = status === 'aprobado' || status === 'anulado';
-  const busy = generating || opening;
-  // HU #12788 — candado síncrono: `disabled={busy}` solo llega tras el re-render, así que un doble
-  // clic rápido lanzaría dos POST /consolidado (y, con force, dos reconstrucciones). El ref corta el
-  // segundo antes de que salga la petición: una acción del gestor = una única petición.
-  const inFlight = useRef(false);
 
   const applyAvisos = (generado: Awaited<ReturnType<typeof tramitesClient.generarConsolidado>>) => {
     const avisos: string[] = [];
@@ -335,30 +343,18 @@ function ExpedienteConsolidadoBody({
     }
   };
 
-  const consolidadoIdFromResult = (
-    generado: Awaited<ReturnType<typeof tramitesClient.generarConsolidado>>,
-  ): { id: string; filename: string } | null => {
-    const nested = generado?.document;
-    if (nested?.attachmentId) {
-      return { id: nested.attachmentId, filename: nested.filename || 'consolidado.pdf' };
-    }
-    // Compat con respuestas planas (mocks / clientes antiguos).
-    const flat = generado as { attachmentId?: string; filename?: string } | null | undefined;
-    if (flat?.attachmentId) {
-      return { id: flat.attachmentId, filename: flat.filename || 'consolidado.pdf' };
-    }
-    return null;
-  };
-
   /**
    * Acción EXPLÍCITA «Re-generar expediente consolidado»: única que envía force=true (HU #12788 AC3).
    * Invalida la vigencia y reconstruye consolidado y FUR (HU #11642) sin anidar un consolidado previo.
    */
   const handleGenerate = async () => {
-    if (!instanceId || inFlight.current) return;
-    inFlight.current = true;
+    // HU #12788 — candado síncrono: `disabled={busy}` solo llega tras el re-render, así que un doble
+    // clic rápido lanzaría dos POST /consolidado (y, con force, dos reconstrucciones). El candado (del
+    // hook, compartido con la apertura) corta el segundo antes de que salga la petición.
+    if (!instanceId || !apertura.tomarCandado()) return;
     setGenerating(true);
     setError(null);
+    apertura.limpiarError();
     try {
       await onBeforeGenerateConsolidado?.();
       // force=true: invalida caché y reconstruye sin anidar un consolidado previo (evita docs duplicados).
@@ -366,76 +362,51 @@ function ExpedienteConsolidadoBody({
       applyAvisos(generado);
       onAttachmentsChange?.();
     } catch (err) {
-      const msg = (err instanceof Error ? err.message : '').trim();
-      setError(
-        msg.includes('generacion_bloqueada_estado_final')
-          ? 'El trámite ya está aprobado o anulado: su documentación es definitiva y no se regenera.'
-          : msg ||
-              'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.',
-      );
+      setError(mensajeErrorConsolidado(err));
     } finally {
-      inFlight.current = false;
+      apertura.liberarCandado();
       setGenerating(false);
     }
   };
 
   /**
    * Genera (si hace falta) y ABRE el consolidado en pestaña nueva — punto 2 del rediseño: la
-   * captura vigente (`MatriculaInicial`) dice literal «Ver expediente consolidado (PDF)», y es lo
-   * que decía FLIT antes de que una generación anterior (`WizardTramite`) lo cambiara a descarga
-   * directa. Cada documento suelto del checklist abre igual, con «Ver PDF» (`DocRow`).
+   * captura vigente (`MatriculaInicial`) dice literal «Ver expediente consolidado (PDF)».
    *
-   * HU #12788 — abrir va SIN force: el backend respeta la bandera `consolidado_wizard_vigente`; si
-   * está vigente devuelve el PDF en caché y, si no (algún dato cambió), reconstruye una sola vez. Antes
-   * iba con force=true y regeneraba en cada apertura, destruyendo el PDF anterior. Forzar queda solo
-   * en «Re-generar expediente consolidado». El PDF no se cachea en cliente: cada apertura usa el
-   * `attachmentId` que devuelve esta petición y un object URL nuevo (`openAttachmentInNewTab`).
+   * HU #12788 — abrir va SIN force: el backend respeta la bandera `consolidado_wizard_vigente`.
+   * HU #12800 — la espera sale del componente (`useAperturaConsolidado`): si el PDF está
+   * desactualizado se muestra «reconstrucción en curso» al instante, el resto del expediente sigue
+   * operativo y, si la reconstrucción tarda más del máximo, se abre el PDF anterior con aviso.
    */
-  const handleVerExpediente = async () => {
-    if (!instanceId || inFlight.current) return;
-    inFlight.current = true;
-    setOpening(true);
-    setError(null);
-    try {
-      await onBeforeGenerateConsolidado?.();
-      const generado = await tramitesClient.generarConsolidado(instanceId);
-      applyAvisos(generado);
-      const doc = consolidadoIdFromResult(generado);
-      if (doc) {
-        await openAttachmentInNewTab(instanceId, {
-          id: doc.id,
-          tipo: 'consolidado',
-          filename: doc.filename,
-          mimetype: 'application/pdf',
-        });
-      }
+  const apertura = useAperturaConsolidado({
+    instanceId,
+    vigencia: consolidadoWizard,
+    consolidadoPrevio: consolidado ?? null,
+    abrirAdjunto: openAttachmentInNewTab,
+    onBeforeGenerate: onBeforeGenerateConsolidado,
+    onEntregado: (generado) => {
+      if (generado) applyAvisos(generado);
       onAttachmentsChange?.();
-    } catch (err) {
-      const msg = (err instanceof Error ? err.message : '').trim();
-      setError(
-        msg.includes('generacion_bloqueada_estado_final')
-          ? 'El trámite ya está aprobado o anulado: su documentación es definitiva y no se regenera.'
-          : msg ||
-              'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.',
-      );
-    } finally {
-      inFlight.current = false;
-      setOpening(false);
-    }
-  };
+    },
+  });
+  const opening = apertura.enVuelo;
+  const busy = generating || opening;
+  const errorVisible = error ?? apertura.error;
 
   return (
     <>
-      {error && (
+      {errorVisible && (
         <div
           className="mb-3 rounded-xl border p-3 text-xs"
           style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
           role="alert"
           aria-live="polite"
         >
-          {error}
+          {errorVisible}
         </div>
       )}
+
+      <ReconstruccionPanel fase={apertura.fase} sirvioAnterior={apertura.sirvioAnterior} />
 
       {estadoFinal ? (
         <p className="mb-3 text-xs font-medium" style={{ color: '#557EFF' }} role="status">
@@ -466,7 +437,10 @@ function ExpedienteConsolidadoBody({
             className="inline-flex items-center justify-center rounded-full px-6 py-2.5 text-xs font-semibold text-white transition hover:opacity-95 disabled:opacity-50"
             style={{ background: WIZARD_CTA_GRADIENT }}
             disabled={busy}
-            onClick={() => void handleVerExpediente()}
+            onClick={() => {
+              setError(null);
+              void apertura.abrir();
+            }}
             aria-label="Ver expediente consolidado (PDF)"
           >
             {opening ? 'Generando expediente…' : 'Ver expediente consolidado (PDF)'}
@@ -475,6 +449,83 @@ function ExpedienteConsolidadoBody({
       </div>
     </>
   );
+}
+
+/**
+ * HU #12800 — estado de la reconstrucción del consolidado. Región `role="status"` + `aria-live`
+ * (no modal, no overlay): el lector de pantalla la anuncia y el gestor sigue operando el expediente.
+ * Azul = proceso; ámbar = advertencia (timeout); el texto dice el estado, no solo el color.
+ */
+function ReconstruccionPanel({
+  fase,
+  sirvioAnterior,
+}: {
+  fase: FaseApertura;
+  sirvioAnterior: boolean;
+}) {
+  if (fase === 'reconstruyendo') {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        data-testid="consolidado-reconstruccion"
+        className="mb-3 flex items-start gap-2 rounded-xl border p-3 text-xs"
+        style={{ borderColor: BLUE, background: 'rgba(85,126,255,0.06)', color: INK_BLUE }}
+      >
+        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">Reconstrucción en curso</p>
+          <p className="mt-0.5">{COPY_RECONSTRUCCION_EN_CURSO}</p>
+          {/* Progreso indeterminado: el backend no expone avance; `progressbar` sin valor = en curso. */}
+          <div
+            role="progressbar"
+            aria-label="Progreso de la reconstrucción del expediente"
+            className="mt-2 h-1.5 w-full overflow-hidden rounded-full"
+            style={{ background: BORDER }}
+          >
+            <div className="h-full w-1/3 animate-pulse rounded-full" style={{ background: BLUE }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (fase === 'timeout') {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        data-testid="consolidado-timeout"
+        className="mb-3 flex items-start gap-2 rounded-xl border p-3 text-xs"
+        style={{
+          borderColor: 'rgba(249,172,0,0.55)',
+          background: 'rgba(249,172,0,0.12)',
+          color: 'var(--badge-warning-fg)',
+        }}
+      >
+        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">La actualización sigue en proceso</p>
+          <p className="mt-0.5">
+            {sirvioAnterior ? COPY_TIMEOUT_CON_ANTERIOR : COPY_TIMEOUT_SIN_ANTERIOR}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  if (fase === 'actualizado') {
+    return (
+      <p
+        role="status"
+        aria-live="polite"
+        data-testid="consolidado-actualizado"
+        className="mb-3 text-xs font-medium"
+        style={{ color: INK_BLUE }}
+      >
+        {COPY_ACTUALIZADO}
+      </p>
+    );
+  }
+  return null;
 }
 
 function DocRow({
