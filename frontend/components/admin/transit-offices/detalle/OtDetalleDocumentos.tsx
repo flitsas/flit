@@ -17,12 +17,13 @@ import {
 } from "@/lib/api/admin-ot";
 import { esDocumentoDefinitivo } from "@/lib/tramites/consolidado-entrega";
 import {
+  esEntregaRadicadaFija,
   mensajeEntregaOtFallida,
   resolverFuenteMaestroOt,
-  vigenciaMaestroTrasApertura,
 } from "@/lib/tramites/consolidado-entrega-ot";
 import {
   detectarFalloRegeneracion,
+  vigenciaTrasApertura,
   type FalloRegeneracionConsolidado,
 } from "@/lib/tramites/fallo-regeneracion-consolidado";
 import type {
@@ -168,7 +169,7 @@ export function OtDetalleDocumentos({
     res: Pick<GenerarConsolidadoResult, "regenerado" | "modo" | "avisosCascada">,
   ) => {
     setFalloMaestro(detectarFalloRegeneracion(res));
-    const nueva = vigenciaMaestroTrasApertura(vigenciaMaestro, res, new Date());
+    const nueva = vigenciaTrasApertura(vigenciaMaestro, res, new Date());
     if (nueva) setVigenciaLocal({ base: consolidadoMaestro, valor: nueva });
   };
   const falloVisible = radicadoIndicador ? null : falloMaestro;
@@ -309,6 +310,11 @@ export function OtDetalleDocumentos({
       soloLectura ? { tipo, soloLectura: true } : { tipo },
     );
     if (tipo === "consolidado_maestro") refrescarVigencia(res);
+    // `modo: "radicado_fijo"` — el backend sirvió el maestro radicado tal cual: se presenta como la
+    // versión radicada aunque la fila no traiga la fecha en `radicadoEn` (se toma la del trámite).
+    const radicadoVisor = esEntregaRadicadaFija(res)
+      ? radicadoEn ?? (quipuxRadicadoEn?.trim() || null)
+      : radicadoEn;
     await handlePreview(
       {
         id: res.document.attachmentId,
@@ -321,7 +327,7 @@ export function OtDetalleDocumentos({
         uploadedAt: "",
       },
       esDocumentoDefinitivo(res),
-      radicadoEn,
+      radicadoVisor,
     );
   };
 

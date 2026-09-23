@@ -135,10 +135,14 @@ describe('HU #12794 AC1 — estado y fecha de los dos consolidados', () => {
   });
 
   it('edge: error al leer el detalle ⇒ alerta con reintento que vuelve a consultar', async () => {
-    mocks.getInstance.mockRejectedValueOnce(new Error('Fallo de red'));
+    // Security B2 (Épica #12760): el `message` crudo del backend no se pinta; copy amigable.
+    mocks.getInstance.mockRejectedValueOnce(new Error('internal_error: NullReferenceException'));
     mocks.getInstance.mockResolvedValueOnce({ consolidadoWizard: WIZARD_VIGENTE, consolidadoMaestro: INEXISTENTE });
     const dialog = await abrirModal();
-    expect(await within(dialog).findByText('Fallo de red')).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText(/No se pudo consultar el estado de los consolidados/),
+    ).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(/internal_error|NullReferenceException/);
     await userEvent.click(
       within(dialog).getByRole('button', { name: 'Reintentar el estado de los consolidados' }),
     );
@@ -154,8 +158,8 @@ describe('HU #12794 AC1 — estado y fecha de los dos consolidados', () => {
     const dialog = await abrirModal();
     await within(dialog).findByTestId('estado-consolidado-wizard');
     expect(within(dialog).getByRole('region', { name: 'Estado actual de los consolidados' })).toBeInTheDocument();
-    expect(within(dialog).getByRole('status', { name: /^Consolidado: vigente, generado el 23\/09\/2026 10:05/ })).toBeInTheDocument();
-    expect(within(dialog).getByRole('status', { name: /^Consolidado maestro: desactualizado/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('group', { name: /^Consolidado: vigente, generado el 23\/09\/2026 10:05/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('group', { name: /^Consolidado maestro: desactualizado/ })).toBeInTheDocument();
   });
 });
 

@@ -2205,6 +2205,8 @@ export interface GenerarConsolidadoResult {
  * - `definitivo_estado_final` / `migrado_solo_lectura`: estado final, PDF definitivo sin regenerar.
  * - `cargado_por_usuario`: PDF cargado por el SuperAdmin (Source="user"), nunca se pisa.
  * - `solo_lectura`: `?soloLectura=true` o un OT que no puede generar; adjunto tal cual.
+ * - `radicado_fijo`: el maestro ya se radicó en Quipux y se sirve el radicado tal cual (HU #12787
+ *   AC2, «maestro radicado, fijo»): nunca se regenera, así que no hay fallo ni vigencia que refrescar.
  */
 export type ConsolidadoEntregaModo =
   | 'vigente'
@@ -2212,7 +2214,8 @@ export type ConsolidadoEntregaModo =
   | 'definitivo_estado_final'
   | 'migrado_solo_lectura'
   | 'cargado_por_usuario'
-  | 'solo_lectura';
+  | 'solo_lectura'
+  | 'radicado_fijo';
 
 /**
  * HU #12791 (Épica #12760) — vigencia de un consolidado (wizard o maestro) tal como la exponen el

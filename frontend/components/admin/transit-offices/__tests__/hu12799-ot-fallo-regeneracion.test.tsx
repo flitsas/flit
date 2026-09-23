@@ -305,3 +305,78 @@ describe("hu12799 AC3 — bandeja OT: el maestro servido con fallo lleva el avis
     expect(within(dialog).queryByTestId("aviso-fallo-regeneracion")).toBeNull();
   });
 });
+
+
+// Uso de ejemplo (Épica #12760, G3): entrega OT con `modo: "radicado_fijo"` ⇒ versión radicada.
+describe("modo radicado_fijo — el backend sirve el maestro radicado tal cual", () => {
+  const RADICADO_FIJO = res({
+    regenerado: false,
+    modo: "radicado_fijo",
+    avisosCascada: ["consolidado_maestro: excepcion"],
+  });
+
+  it("detalle OT read-only: sin aviso de fallo y el indicador NO pasa a vigente con la hora local", async () => {
+    vi.mocked(entregarOtConsolidado).mockResolvedValue(RADICADO_FIJO);
+    const user = userEvent.setup();
+    renderDocs({ readOnly: true });
+
+    await abrirConsolidado(user);
+
+    await waitFor(() => expect(entregarOtConsolidado).toHaveBeenCalled());
+    await waitFor(() => expect(fetchOtAttachmentPreviewUrl).toHaveBeenCalled());
+    expect(screen.queryAllByTestId("aviso-fallo-regeneracion")).toHaveLength(0);
+    expect(screen.getByTestId("vigencia-consolidado")).toHaveAttribute("data-estado", "desactualizado");
+  });
+
+  it("bandeja OT read-only: la fila radicada sin adjunto conocido muestra la versión radicada, sin aviso de fallo", async () => {
+    vi.mocked(fetchOtProfile).mockResolvedValue({
+      operationMode: "quipux",
+      quipuxReadOnly: true,
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      featureFlags: [],
+      revocationWindowBusinessDays: null,
+    });
+    vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
+    vi.mocked(searchOtClientProcedures).mockResolvedValue({
+      data: [
+        {
+          id: "proc-1",
+          clientTenantId: "client-tenant-aaaa",
+          clientTenantName: "Cliente de prueba",
+          procedureTypeId: "tipo-1",
+          procedureTypeName: "Matrícula inicial",
+          referenceNumber: "RAD-2026-002",
+          status: "entregado",
+          createdAt: "2026-09-01T09:00:00Z",
+          consolidadoMaestro: maestro(),
+          quipuxRadicadoEn: RADICADO,
+        } as OtClientProcedure,
+      ],
+      totalCount: 1,
+      page: 1,
+      pageSize: 20,
+    });
+    vi.mocked(fetchOtBandejaHealth).mockResolvedValue({
+      transitOfficeResolved: true,
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      deliveredTotal: 1,
+      deliveredWithGrant: 1,
+      deliveredWithoutGrant: 0,
+      hasDeliveredWithoutGrant: false,
+    });
+    vi.mocked(entregarOtConsolidado).mockResolvedValue(RADICADO_FIJO);
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <ClientProceduresSection />
+      </ToastProvider>,
+    );
+    await waitFor(() => expect(fetchOtProfile).toHaveBeenCalled());
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Ver consolidado/i }));
+    const dialog = await screen.findByRole("dialog", { name: /Consolidado — RAD-2026-002/ });
+
+    expect(await within(dialog).findByTestId("aviso-maestro-radicado")).toBeInTheDocument();
+    expect(within(dialog).queryByTestId("aviso-fallo-regeneracion")).toBeNull();
+  });
+});

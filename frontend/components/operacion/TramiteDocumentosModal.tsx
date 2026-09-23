@@ -22,6 +22,7 @@ import { esDocumentoDefinitivo } from '@/lib/tramites/consolidado-entrega';
 import { AvisoDocumentoFinal } from '@/components/shared/AvisoDocumentoFinal';
 import { AvisoFalloRegeneracion } from '@/components/shared/AvisoFalloRegeneracion';
 import { detectarFalloRegeneracion } from '@/lib/tramites/fallo-regeneracion-consolidado';
+import { mensajeErrorConsolidadoAmigable } from '@/lib/tramites/errores-consolidado';
 import { findConsolidadoAttachment } from './ExpedienteVisor';
 
 /**
@@ -61,11 +62,15 @@ export interface AttachmentPreviewOptions {
   consultaMode?: boolean;
 }
 
-/** HU #12786 — mensaje cuando la ruta de entrega del consolidado falla (404/409/503/red). */
+/** Respaldo cuando la entrega falla sin un código conocido. */
+export const COPY_ENTREGA_CONSOLIDADO_FALLIDA = 'No se pudo obtener el consolidado vigente.';
+
+/**
+ * HU #12786 — mensaje cuando la ruta de entrega del consolidado falla (404/409/503/red). Security B2
+ * (Épica #12760): el código o `detail` del backend NO se pinta; se traduce con el mapa compartido.
+ */
 function mensajeEntregaFallida(e: unknown): string {
-  return e instanceof Error && e.message
-    ? `No se pudo obtener el consolidado vigente (${e.message}).`
-    : 'No se pudo obtener el consolidado vigente.';
+  return mensajeErrorConsolidadoAmigable(e, COPY_ENTREGA_CONSOLIDADO_FALLIDA);
 }
 
 export function useAttachmentPreview(

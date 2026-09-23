@@ -241,9 +241,10 @@ describe('HU #12786 AC1 — descarga desde el listado de un consolidado desactua
 
     const dialog = await abrirConsolidadoDesdeListado();
 
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      'No se pudo obtener el consolidado vigente (fur_requerido).',
-    );
+    // Security B2 (Épica #12760): el código del backend se traduce; nunca se pinta crudo.
+    const alerta = await within(dialog).findByRole('alert');
+    expect(alerta).toHaveTextContent('El trámite aún no tiene el FUR generado');
+    expect(alerta.textContent).not.toMatch(/fur_requerido/);
     // Sin adjunto resuelto no se ofrece «Descargar» (no hay qué bajar).
     expect(within(dialog).queryByRole('button', { name: 'Descargar documento' })).toBeNull();
     expect(mocks.fetchAttachmentPreviewUrl).not.toHaveBeenCalled();

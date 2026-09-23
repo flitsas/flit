@@ -48,6 +48,7 @@ import { AvisoMaestroRadicado } from "@/components/shared/AvisoMaestroRadicado";
 import { esDocumentoDefinitivo } from "@/lib/tramites/consolidado-entrega";
 import {
   conservarCamposConsolidadoOt,
+  esEntregaRadicadaFija,
   mensajeEntregaOtFallida,
   resolverFuenteMaestroOt,
 } from "@/lib/tramites/consolidado-entrega-ot";
@@ -1399,8 +1400,10 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           attId = res.document.attachmentId;
           filename = res.document.filename;
           definitivo = esDocumentoDefinitivo(res);
+          // `modo: "radicado_fijo"`: el backend sirvió el maestro radicado tal cual ⇒ versión radicada.
+          if (esEntregaRadicadaFija(res)) radicadoEn = radicadoEn ?? (row.quipuxRadicadoEn?.trim() || null);
           // Maestro radicado (fijo): no se regenera, así que nunca hay aviso de fallo.
-          fallo = radicadoEn ? null : detectarFalloRegeneracion(res);
+          fallo = radicadoEn || esEntregaRadicadaFija(res) ? null : detectarFalloRegeneracion(res);
         }
       }
       const { url } = await fetchOtAttachmentPreviewUrl(row.id, attId, scope);

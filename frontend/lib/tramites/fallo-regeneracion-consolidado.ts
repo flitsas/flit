@@ -8,9 +8,11 @@ import { formatFechaHora } from '@/lib/format/date';
  * HU #12799 (Épica #12760) — lógica PURA del aviso «la regeneración del consolidado falló».
  *
  * Contrato del backend (#12798): cuando regenerar el consolidado falla y existe un PDF anterior, la
- * generación (POST del wizard / del maestro OT) y la ruta de entrega responden con ÉXITO trayendo ese
- * PDF anterior, `regenerado: false` y un aviso `"<documento>: <causa>"` en `avisosCascada`
- * (`"consolidado: adjunto_no_disponible"`, `"consolidado_maestro: excepcion"`). No hay un campo de
+ * ruta de entrega (`GET …/consolidado/entrega`, gestor y OT) y el POST de generación del wizard
+ * responden con ÉXITO trayendo ese PDF anterior, `regenerado: false` y un aviso
+ * `"<documento>: <causa>"` en `avisosCascada` (`"consolidado: adjunto_no_disponible"`,
+ * `"consolidado_maestro: excepcion"`). El POST del maestro OT (`…/consolidado-maestro`) NO tiene ese
+ * respaldo: si la reconstrucción falla responde con error, no con el PDF anterior. No hay un campo de
  * «último fallo»: el fallo se reconoce SOLO en la respuesta de la apertura o de la generación.
  *
  * `avisosCascada` ya existía (HU #11050) para los documentos de la cascada (`"impronta: …"`,
@@ -82,16 +84,21 @@ export function textoCausaFallo(causa: string | null | undefined): string {
 /**
  * Detecta el fallo de regeneración en la respuesta de la apertura o la generación: `regenerado`
  * EXACTAMENTE `false` y un aviso con prefijo `consolidado:` / `consolidado_maestro:`. Cualquier otra
- * combinación (regenerado, reutilizado sin aviso, avisos solo de otros documentos) → `null`.
+ * combinación (regenerado, reutilizado sin aviso, avisos solo de otros documentos) → `null`. La
+ * entrega `modo: "radicado_fijo"` (maestro radicado en Quipux) nunca intenta regenerar: nunca es fallo.
  *
  * Uso de ejemplo:
  *   detectarFalloRegeneracion({ regenerado: false, avisosCascada: ['consolidado: excepcion'] })
  *   // → { documento: 'consolidado', causa: 'excepcion', causaTexto: 'ocurrió un error inesperado…' }
  */
 export function detectarFalloRegeneracion(
-  res: Pick<GenerarConsolidadoResult, 'regenerado' | 'avisosCascada'> | null | undefined,
+  res:
+    | (Pick<GenerarConsolidadoResult, 'regenerado' | 'avisosCascada'> &
+        Partial<Pick<GenerarConsolidadoResult, 'modo'>>)
+    | null
+    | undefined,
 ): FalloRegeneracionConsolidado | null {
-  if (!res || res.regenerado !== false) return null;
+  if (!res || res.regenerado !== false || res.modo === 'radicado_fijo') return null;
   const aviso = (res.avisosCascada ?? []).find(esAvisoFalloConsolidado);
   if (!aviso) return null;
   const causa = aviso.split(':').slice(1).join(':').trim();
@@ -130,7 +137,8 @@ const MODOS_ENTREGA_VIGENTE: ReadonlySet<string> = new Set(['vigente', 'regenera
  * - Generación (POST, `modo` omitido) o entrega `vigente`/`regenerado`: vigente; si se reconstruyó la
  *   fecha es `ahora` (aproximación cliente del sello del backend), si se reutilizó, la previa.
  * - `null` (no tocar el indicador) sin vigencia previa o cuando la entrega sirvió el adjunto tal cual
- *   (`solo_lectura`, definitivo, migrado, cargado por usuario).
+ *   (`solo_lectura`, `radicado_fijo`, definitivo, migrado, cargado por usuario). En `radicado_fijo`
+ *   el maestro radicado NO pasa a vigente con la hora local: su fecha es la de la radicación.
  *
  * Uso de ejemplo:
  *   const nueva = vigenciaTrasApertura(vigencia, res, new Date());

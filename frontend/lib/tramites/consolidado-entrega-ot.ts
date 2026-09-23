@@ -2,11 +2,9 @@ import { ApiError } from '@/lib/api/types';
 import type { OtClientProcedure } from '@/lib/api/types-ot';
 import type {
   ConsolidadoEntregaParams,
-  ConsolidadoVigencia,
   GenerarConsolidadoResult,
 } from '@/lib/api/types/procedure-runtime';
 import { formatFechaHora } from '@/lib/format/date';
-import { vigenciaTrasApertura } from '@/lib/tramites/fallo-regeneracion-consolidado';
 
 /**
  * HU #12787 — mensaje cuando la ruta de entrega OT del consolidado falla. El 404
@@ -96,19 +94,16 @@ export function conservarCamposConsolidadoOt(
 }
 
 /**
- * HU #12793 — refresca en local la vigencia del maestro tras abrirlo o reconstruirlo, sin pedir de
- * nuevo el listado. Delegada en {@link vigenciaTrasApertura} (HU #12799): con fallo de regeneración
- * (`regenerado: false` + aviso `consolidado_maestro: …`) el maestro queda desactualizado (gris) con
- * la fecha del PDF conservado; antes, la entrega con `modo: null` lo pintaba vigente por error.
+ * HU #12787 (AC2) — `true` si la entrega OT sirvió el maestro RADICADO tal cual (`modo:
+ * "radicado_fijo"`): es la «versión radicada», no se regeneró. La UI lo trata como el adjunto
+ * radicado: sin aviso de fallo de regeneración y sin refrescar la vigencia a «vigente» con la hora
+ * local (para eso, `vigenciaTrasApertura` devuelve `null` con este modo).
  *
  * Uso de ejemplo:
- *   const nueva = vigenciaMaestroTrasApertura(row.consolidadoMaestro, res, new Date());
- *   if (nueva) setVigenciaLocal(nueva);
+ *   if (esEntregaRadicadaFija(res)) mostrarAvisoRadicado(row.quipuxRadicadoEn);
  */
-export function vigenciaMaestroTrasApertura(
-  previa: ConsolidadoVigencia | null | undefined,
-  res: Pick<GenerarConsolidadoResult, 'regenerado' | 'modo' | 'avisosCascada'>,
-  ahora: Date,
-): ConsolidadoVigencia | null {
-  return vigenciaTrasApertura(previa, res, ahora);
+export function esEntregaRadicadaFija(
+  res: Pick<GenerarConsolidadoResult, 'modo'> | null | undefined,
+): boolean {
+  return res?.modo === 'radicado_fijo';
 }

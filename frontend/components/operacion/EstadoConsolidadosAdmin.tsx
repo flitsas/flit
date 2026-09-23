@@ -16,6 +16,7 @@ import {
   esConsolidadoManual,
   type DocumentoConsolidado,
 } from '@/lib/tramites/vigencia-consolidado';
+import { mensajeErrorConsolidadoAmigable } from '@/lib/tramites/errores-consolidado';
 
 /** Rótulos visibles que distinguen los dos PDFs del trámite (AC1). */
 export const ROTULO_DOCUMENTO_ADMIN: Record<DocumentoConsolidado, string> = {
@@ -24,6 +25,9 @@ export const ROTULO_DOCUMENTO_ADMIN: Record<DocumentoConsolidado, string> = {
 };
 
 const SIN_DATO = 'Sin información de vigencia para este documento.';
+
+/** Respaldo cuando la consulta del detalle falla sin un código conocido. */
+export const COPY_ESTADO_CONSOLIDADOS_FALLIDO = 'No se pudo consultar el estado de los consolidados.';
 
 export interface EstadoConsolidadosAdminProps {
   instanceId: string;
@@ -76,11 +80,8 @@ export function EstadoConsolidadosAdmin({
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(
-          e instanceof Error && e.message
-            ? e.message
-            : 'No se pudo consultar el estado de los consolidados.',
-        );
+        // Security B2 (Épica #12760): nunca el `message` crudo del backend; copy amigable.
+        setError(mensajeErrorConsolidadoAmigable(e, COPY_ESTADO_CONSOLIDADOS_FALLIDO));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
