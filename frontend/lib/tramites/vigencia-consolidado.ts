@@ -213,3 +213,28 @@ function describirRadicado(
 function unir(partes: Array<string | null>): string {
   return partes.filter((p): p is string => !!p).join(', ');
 }
+
+/**
+ * HU #12794 (Épica #12760) — copy del ORIGEN manual de un consolidado, para la vista del SuperAdmin.
+ * Aditivo: no altera {@link COPY_VIGENCIA} ni {@link describirVigenciaConsolidado}.
+ */
+export const COPY_ORIGEN_CONSOLIDADO = {
+  manual: 'Cargado manualmente',
+  advertenciaManual:
+    'Una regeneración automática no lo sobrescribirá. Solo «Regenerar consolidado» lo reemplaza.',
+} as const;
+
+/**
+ * HU #12794, AC2 — ¿el PDF vigente lo cargó un SuperAdmin a mano? Cierto si el backend lo marca con
+ * `origen === 'user'` o `modo === 'cargado_por_usuario'`. Un consolidado `inexistente` nunca es
+ * manual (no hay PDF que proteger) aunque el backend arrastre un origen. `null`/`undefined` ⇒ `false`.
+ *
+ * Uso de ejemplo:
+ *   esConsolidadoManual({ estado: 'vigente', origen: 'user', modo: 'cargado_por_usuario', … }) // → true
+ */
+export function esConsolidadoManual(vigencia: ConsolidadoVigencia | null | undefined): boolean {
+  if (!vigencia || !ESTADOS_VALIDOS.has(vigencia.estado) || vigencia.estado === 'inexistente') {
+    return false;
+  }
+  return vigencia.origen === 'user' || vigencia.modo === 'cargado_por_usuario';
+}

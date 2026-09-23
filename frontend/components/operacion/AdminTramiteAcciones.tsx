@@ -12,6 +12,7 @@ import {
 } from '@/components/operacion/detalle/primitivos';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { ReenviarValidacionIdentidadModal } from './ReenviarValidacionIdentidadModal';
+import { EstadoConsolidadosAdmin } from './EstadoConsolidadosAdmin';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient, type GestorOption } from '@/lib/api/tramites-client';
@@ -324,6 +325,9 @@ function ConsolidadoModal({
   const [error, setError] = useState<string | null>(null);
   const busy = busyLimpiar || busyCargar;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // HU #12794, AC3 — tras limpiar/cargar el modal sigue abierto y vuelve a leer el detalle, para que
+  // el SuperAdmin vea el estado resultante (vigencia, sello, origen) sobre el que decidir.
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -339,7 +343,7 @@ function ConsolidadoModal({
     try {
       await tramitesClient.adminLimpiarConsolidado(item.id, tenantId);
       onSuccess('Consolidado regenerado.');
-      onClose();
+      setRecarga((n) => n + 1);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'No se pudo regenerar el consolidado.';
       setError(msg);
@@ -356,7 +360,8 @@ function ConsolidadoModal({
     try {
       await tramitesClient.adminCargarConsolidado(item.id, file, tenantId);
       onSuccess('Consolidado cargado.');
-      onClose();
+      setFile(null);
+      setRecarga((n) => n + 1);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'No se pudo cargar el consolidado.';
       setError(msg);
@@ -378,6 +383,11 @@ function ConsolidadoModal({
       busy={busy}
     >
       <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
+        {/* HU #12794, AC1/AC2 — estado de los dos consolidados antes de decidir limpiar o cargar. */}
+        <div className="rounded-xl border p-3" style={FIELD_BORDER}>
+          <EstadoConsolidadosAdmin instanceId={item.id} tenantId={tenantId} recarga={recarga} />
+        </div>
+
         {canLimpiar ? (
           <div className="space-y-2 rounded-xl border p-3" style={FIELD_BORDER}>
             <p className="text-xs font-semibold text-[#162744] dark:text-white">Limpiar consolidado</p>
