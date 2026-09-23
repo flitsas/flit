@@ -299,3 +299,49 @@ describe('ActorsForm — el buzón sigue al formulario, no a lo guardado (HU #12
     expect(screen.queryByLabelText('Certificado de Cámara de Comercio')).not.toBeInTheDocument();
   });
 });
+
+describe('ActorsForm — representante legal que llega al backend (hallazgos de la validación #12773)', () => {
+  /** El último borrador de actores que el paso mandó a resolver. */
+  const ultimoBorrador = () => {
+    const calls = mocks.getCamaraComercioRequirements.mock.calls;
+    return calls[calls.length - 1]?.[2] as Array<Record<string, unknown>> | undefined;
+  };
+
+  it('el representante sin tipo de documento viaja como CC, que es lo que el selector muestra', async () => {
+    const actor = actorJuridico('comprador', '900111222');
+    mocks.getActors.mockResolvedValue([
+      { ...actor, representanteLegal: { ...actor.representanteLegal, tipoDocumento: undefined } },
+    ]);
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await waitFor(() =>
+      expect(ultimoBorrador()?.[0]).toMatchObject({
+        representanteLegal: { tipoDocumento: 'CC', numeroDocumento: '79123456' },
+      }),
+    );
+  });
+
+  it('cambiar el NIT descarta el representante de la sociedad anterior', async () => {
+    const user = userEvent.setup();
+    mocks.getActors.mockResolvedValue([actorJuridico('comprador', '900111222')]);
+
+    const { container } = render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    const nit = await waitFor(() => {
+      const el = container.querySelector<HTMLInputElement>('input[id$="comprador-numeroDoc"]');
+      expect(el?.value).toBe('900111222');
+      return el!;
+    });
+    await user.clear(nit);
+    await user.type(nit, '901698038');
+
+    await waitFor(() =>
+      expect(ultimoBorrador()?.[0]).toMatchObject({ numeroDocumento: '901698038' }),
+    );
+    expect(ultimoBorrador()?.[0]?.representanteLegal).toBeUndefined();
+    const rlDoc = container.querySelector<HTMLInputElement>('input[id$="-rl-numeroDoc"]');
+    expect(rlDoc?.value ?? '').toBe('');
+  });
+});
+
