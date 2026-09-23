@@ -78,4 +78,29 @@ describe('EstadoFunnel', () => {
     await user.click(screen.getByRole('button', { name: 'Borrador: 5 trámites' }));
     expect(onSelect).toHaveBeenCalledWith('');
   });
+
+  it('Epic #12686 — con `estados` pinta solo esas tarjetas, en ese orden', () => {
+    render(
+      <EstadoFunnel counts={counts} estados={['borrador', 'entregado', 'aprobado', 'anulado']} />,
+    );
+    const nombres = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    expect(nombres).toEqual([
+      'Borrador: 5 trámites',
+      'Entregado: 3 trámites',
+      'Aprobado: 7 trámites',
+      'Anulado: 0 trámites',
+    ]);
+    expect(screen.queryByLabelText(/^Preparado:/)).not.toBeInTheDocument();
+    expect(screen.getByRole('group')).toHaveClass('xl:grid-cols-4');
+  });
+
+  it('Epic #12686 — una columna por tarjeta en pantalla ancha', () => {
+    render(
+      <EstadoFunnel
+        counts={counts}
+        estados={['borrador', 'preasignacion', 'asignado', 'entregado', 'aprobado', 'rechazado', 'revocado', 'anulado']}
+      />,
+    );
+    expect(screen.getByRole('group')).toHaveClass('xl:grid-cols-8');
+  });
 });
