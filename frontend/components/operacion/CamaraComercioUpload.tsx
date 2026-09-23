@@ -175,7 +175,7 @@ export function CamaraComercioUpload({
 
       <p className="text-xs opacity-80">
         {exencion ??
-          'Este actor es persona jurídica. Adjunta el certificado de existencia y representación legal expedido por una Cámara de Comercio para poder continuar.'}
+          'Adjunta el certificado de existencia y representación legal expedido por una Cámara de Comercio para poder continuar.'}
       </p>
 
       {/* AlertCard de vigencia: informativa, nunca bloquea. Solo aparece cuando hay documento Y el

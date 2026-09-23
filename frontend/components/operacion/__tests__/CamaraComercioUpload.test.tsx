@@ -87,6 +87,13 @@ describe('CamaraComercioUpload', () => {
     expect(input).toHaveAttribute('accept', 'application/pdf');
   });
 
+  it('el texto del buzón obligatorio no repite que el actor es persona jurídica', async () => {
+    render(<CamaraComercioUpload instanceId={INSTANCE} requirement={requirement()} />);
+
+    expect(await screen.findByText(/^Adjunta el certificado de existencia y representación legal/)).toBeInTheDocument();
+    expect(screen.queryByText(/Este actor es persona jurídica/)).not.toBeInTheDocument();
+  });
+
   // ── AC2 — obligatorio bloquea ──────────────────────────────────────────────
 
   it('AC2 — sin adjunto y obligatorio, el gate del paso queda cerrado', async () => {
