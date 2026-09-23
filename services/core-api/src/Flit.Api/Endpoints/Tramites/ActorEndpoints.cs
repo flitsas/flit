@@ -45,6 +45,24 @@ internal static class ActorEndpoints
                 : Results.Ok(result);
         }).WithName("GetCamaraComercioRequirements");
 
+        // HU #12777 AC1 / HU #12779 — misma escalera sobre los actores que el gestor tiene en pantalla
+        // sin guardar. POST y no GET porque viaja el borrador completo del paso; no persiste nada.
+        group.MapPost("/instances/{id:guid}/camara-comercio-requirements/preview", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            PutActorsRequest request,
+            GetCamaraComercioRequirementsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandlePreviewAsync(id, tenantId.Value, request?.Actors ?? [], ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
+                : Results.Ok(result);
+        }).WithName("PreviewCamaraComercioRequirements");
+
         group.MapPut("/instances/{id:guid}/actors", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
