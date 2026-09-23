@@ -17,7 +17,6 @@ import {
   textoCausaFallo,
   vigenciaTrasApertura,
 } from '@/lib/tramites/fallo-regeneracion-consolidado';
-import { vigenciaMaestroTrasApertura } from '@/lib/tramites/consolidado-entrega-ot';
 
 // 15:05 UTC = 10:05 Bogotá. Datos ficticios.
 const GENERADO = '2026-09-20T15:05:00Z';
@@ -138,7 +137,7 @@ describe('hu12799 AC1/AC2/AC3 — vigencia local tras abrir o regenerar', () => 
   });
 
   it('AC3 — entrega OT con fallo (modo null) NO pasa a vigente (antes sí)', () => {
-    const nueva = vigenciaMaestroTrasApertura(
+    const nueva = vigenciaTrasApertura(
       vigencia(),
       { regenerado: false, modo: null, avisosCascada: ['consolidado_maestro: adjunto_no_disponible'] },
       AHORA,
@@ -152,10 +151,10 @@ describe('hu12799 AC1/AC2/AC3 — vigencia local tras abrir o regenerar', () => 
 
   it('no regresión #12793 — entrega vigente conserva la fecha; solo_lectura no toca', () => {
     expect(
-      vigenciaMaestroTrasApertura(vigencia({ estado: 'vigente' }), { regenerado: false, modo: 'vigente' }, AHORA),
+      vigenciaTrasApertura(vigencia({ estado: 'vigente' }), { regenerado: false, modo: 'vigente' }, AHORA),
     ).toMatchObject({ estado: 'vigente', generadoEn: GENERADO });
     expect(
-      vigenciaMaestroTrasApertura(vigencia(), { regenerado: false, modo: 'solo_lectura' }, AHORA),
+      vigenciaTrasApertura(vigencia(), { regenerado: false, modo: 'solo_lectura' }, AHORA),
     ).toBeNull();
   });
 });

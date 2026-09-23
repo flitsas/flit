@@ -4,7 +4,7 @@
  * Uso de ejemplo:
  *   describirVigenciaConsolidado(maestro, { documento: 'maestro', radicadoEn: row.quipuxRadicadoEn })
  *   // → { estado: 'radicado', etiqueta: 'Versión radicada', textoFecha: 'Radicado el 20/09/2026 09:30' }
- *   vigenciaMaestroTrasApertura(maestro, { regenerado: true, modo: null }, new Date())
+ *   vigenciaTrasApertura(maestro, { regenerado: true, modo: null }, new Date())
  *   // → { estado: 'vigente', generadoEn: <ahora>, … }
  */
 import { describe, expect, it } from 'vitest';
@@ -16,7 +16,7 @@ import {
   TINTA_VIGENCIA_VIGENTE,
   describirVigenciaConsolidado,
 } from '@/lib/tramites/vigencia-consolidado';
-import { vigenciaMaestroTrasApertura } from '@/lib/tramites/consolidado-entrega-ot';
+import { vigenciaTrasApertura } from '@/lib/tramites/fallo-regeneracion-consolidado';
 
 // 15:05 UTC = 10:05 Bogotá; 14:30 UTC = 09:30 Bogotá.
 const GENERADO = '2026-09-23T15:05:00Z';
@@ -112,11 +112,11 @@ describe('HU #12793 AC3 — versión radicada (read-only)', () => {
   });
 });
 
-describe('HU #12793 — refresco tras abrir/reconstruir (vigenciaMaestroTrasApertura)', () => {
+describe('HU #12793 — refresco tras abrir/reconstruir (vigenciaTrasApertura)', () => {
   const AHORA = new Date('2026-09-23T20:00:00Z');
 
   it('POST que reconstruye ⇒ vigente con la fecha de ahora', () => {
-    const r = vigenciaMaestroTrasApertura(
+    const r = vigenciaTrasApertura(
       maestro({ estado: 'desactualizado' }),
       { regenerado: true },
       AHORA,
@@ -125,13 +125,13 @@ describe('HU #12793 — refresco tras abrir/reconstruir (vigenciaMaestroTrasAper
   });
 
   it('entrega que reutiliza (modo vigente) ⇒ vigente con la fecha previa', () => {
-    const r = vigenciaMaestroTrasApertura(maestro(), { regenerado: false, modo: 'vigente' }, AHORA);
+    const r = vigenciaTrasApertura(maestro(), { regenerado: false, modo: 'vigente' }, AHORA);
     expect(r).toMatchObject({ estado: 'vigente', generadoEn: GENERADO });
   });
 
   it('sin vigencia previa (backend sin el campo) ⇒ null: la UI no infiere', () => {
-    expect(vigenciaMaestroTrasApertura(null, { regenerado: true }, AHORA)).toBeNull();
-    expect(vigenciaMaestroTrasApertura(undefined, { regenerado: true }, AHORA)).toBeNull();
+    expect(vigenciaTrasApertura(null, { regenerado: true }, AHORA)).toBeNull();
+    expect(vigenciaTrasApertura(undefined, { regenerado: true }, AHORA)).toBeNull();
   });
 
   it.each([
@@ -141,7 +141,7 @@ describe('HU #12793 — refresco tras abrir/reconstruir (vigenciaMaestroTrasAper
     'cargado_por_usuario',
   ] as const)('entrega en modo %s ⇒ null (no se sabe si refleja el expediente)', (modo) => {
     expect(
-      vigenciaMaestroTrasApertura(maestro({ estado: 'desactualizado' }), { modo }, AHORA),
+      vigenciaTrasApertura(maestro({ estado: 'desactualizado' }), { modo }, AHORA),
     ).toBeNull();
   });
 });

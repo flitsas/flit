@@ -110,7 +110,7 @@ describe("HU #12793 AC1 — maestro vigente en el detalle del OT", () => {
     await asentar();
     expect(indicador()).toHaveAttribute("data-estado", "vigente");
     expect(indicador()).toHaveAttribute("data-variante", "completa");
-    const estado = screen.getByRole("status", { name: /consolidado maestro: vigente/i });
+    const estado = screen.getByRole("group", { name: /consolidado maestro: vigente/i });
     expect(within(estado).getByText("Consolidado maestro: Vigente")).toBeInTheDocument();
     expect(within(estado).getByText("Generado el 23/09/2026 10:05")).toBeInTheDocument();
     expect(within(estado).getByTestId("vigencia-consolidado-punto").style.background).toMatch(
@@ -151,7 +151,7 @@ describe("HU #12793 AC2 — maestro desactualizado", () => {
     renderDocs({ consolidadoMaestro: maestro({ estado: "desactualizado" }) });
     await asentar();
     expect(indicador()).toHaveAttribute("data-estado", "desactualizado");
-    const estado = screen.getByRole("status", {
+    const estado = screen.getByRole("group", {
       name: /desactualizado, se reconstruirá al abrirlo/i,
     });
     expect(within(estado).getByText("Consolidado maestro: Desactualizado")).toBeInTheDocument();
@@ -197,7 +197,7 @@ describe("HU #12793 AC3 — versión radicada en read-only", () => {
     renderDocs(radicado);
     await asentar();
     expect(indicador()).toHaveAttribute("data-estado", "radicado");
-    const estado = screen.getByRole("status", { name: /consolidado maestro: versión radicada/i });
+    const estado = screen.getByRole("group", { name: /consolidado maestro: versión radicada/i });
     expect(within(estado).getByText("Consolidado maestro: Versión radicada")).toBeInTheDocument();
     expect(within(estado).getByText("Radicado el 20/09/2026 09:30")).toBeInTheDocument();
     expect(estado.textContent).not.toMatch(/regener|reconstru/i);

@@ -132,7 +132,7 @@ export function describirVigenciaConsolidado(
       colorTexto: TINTA_VIGENCIA_VIGENTE,
       ariaLabel: unir([
         `${documento}: ${COPY_VIGENCIA.etiqueta.vigente.toLowerCase()}`,
-        textoFecha ? textoFecha.charAt(0).toLowerCase() + textoFecha.slice(1) : null,
+        minusculaInicial(textoFecha),
         definitivo ? COPY_VIGENCIA.definitivo.toLowerCase() : null,
       ]),
     };
@@ -156,7 +156,7 @@ export function describirVigenciaConsolidado(
       ariaLabel: unir([
         `${documento}: ${COPY_VIGENCIA.etiqueta.desactualizado.toLowerCase()}`,
         leyenda.toLowerCase(),
-        textoFecha ? textoFecha.charAt(0).toLowerCase() + textoFecha.slice(1) : null,
+        minusculaInicial(textoFecha),
       ]),
     };
   }
@@ -205,9 +205,14 @@ function describirRadicado(
     colorTexto: TINTA_VIGENCIA_VIGENTE,
     ariaLabel: unir([
       `${documento}: ${COPY_VIGENCIA.etiqueta.radicado.toLowerCase()}`,
-      textoFecha ? textoFecha.charAt(0).toLowerCase() + textoFecha.slice(1) : null,
+      minusculaInicial(textoFecha),
     ]),
   };
+}
+
+/** Texto con la primera letra en minúscula para encadenarlo en el `aria-label` («Generado el…» → «generado el…»). */
+function minusculaInicial(texto: string | null): string | null {
+  return texto ? texto.charAt(0).toLowerCase() + texto.slice(1) : null;
 }
 
 function unir(partes: Array<string | null>): string {

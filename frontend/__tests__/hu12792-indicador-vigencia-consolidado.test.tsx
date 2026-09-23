@@ -95,7 +95,8 @@ describe.each(['compacta', 'completa'] as const)('variante %s', (variante) => {
     ['inexistente', /aún no se ha generado/i],
   ] as const)('AC5 — %s: nombre accesible con el estado en texto', (estado, patron) => {
     render(<IndicadorVigenciaConsolidado vigencia={vigencia({ estado })} variante={variante} />);
-    const rol = variante === 'compacta' ? 'group' : 'status';
+    // Ambas variantes son `group` con `aria-label` (G4: `status` las anunciaba como región viva).
+    const rol = 'group';
     const region = screen.getByRole(rol, { name: patron });
     expect(region).toHaveAttribute('aria-label');
     // El punto de color es decorativo: el estado no depende solo de él.
@@ -117,7 +118,7 @@ describe.each(['compacta', 'completa'] as const)('variante %s', (variante) => {
     );
     const raiz = screen.getByTestId('vigencia-consolidado');
     expect(within(raiz).getByRole('alert')).toHaveTextContent('Falló la última regeneración');
-    const rol = variante === 'compacta' ? 'group' : 'status';
+    const rol = 'group';
     expect(within(screen.getByRole(rol)).queryByRole('alert')).toBeNull();
   });
 });

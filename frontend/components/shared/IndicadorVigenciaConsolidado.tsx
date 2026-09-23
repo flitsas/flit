@@ -180,8 +180,10 @@ function IndicadorCompleto({
       data-variante="completa"
       className={`flex flex-col gap-2 ${className ?? ''}`}
     >
+      {/* `group` (no `status`): el indicador es un rótulo estático que se lee al recorrer la vista;
+          como región viva se anunciaba en cada render. El aviso de fallo (#12799) sí es `alert`. */}
       <div
-        role="status"
+        role="group"
         aria-label={vista.ariaLabel}
         className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border bg-white px-3 py-2 dark:bg-transparent"
         style={{ borderColor: '#DFE5ED' }}
