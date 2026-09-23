@@ -42,11 +42,11 @@ public interface IProcedureDeedResolver
         CancellationToken ct = default);
 
     /// <summary>
-    /// HU #12775 — mismo emparejamiento que <see cref="ResolveForActorsAsync"/> pero SIN leer el PDF
-    /// de storage. Para quien solo necesita saber qué actores tienen escritura vigente.
-    /// <para>Comparten el emparejamiento a propósito: si la presencia y el documento se resolvieran
-    /// por caminos distintos, el paso del actor podría decirle al gestor que hay escritura mientras el
-    /// expediente se genera sin ella.</para>
+    /// HU #12775 — qué actores persona jurídica tienen una escritura activa y vigente de su compañía,
+    /// SIN leer el PDF de storage. Lo usa la obligatoriedad del certificado de Cámara de Comercio.
+    /// <para>No exige que la escritura sea del representante legal capturado, a diferencia de
+    /// <see cref="ResolveForActorsAsync"/>: para eximir del certificado basta con que la sociedad
+    /// tenga escritura vigente (decisión de negocio, Épica #12754).</para>
     /// </summary>
     Task<IReadOnlyList<ActorDeedPresence>> ResolvePresenceForActorsAsync(
         Guid tenantId,

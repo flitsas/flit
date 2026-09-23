@@ -10,8 +10,8 @@ using Xunit;
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
 /// <summary>
-/// HU #12775 — la escalera que decide si el certificado de Cámara de Comercio es obligatorio para un
-/// actor persona jurídica, y cuál de las dos condiciones lo eximió.
+/// HU #12775 — la regla que decide si el certificado de Cámara de Comercio es obligatorio para un
+/// actor persona jurídica: opcional solo con firma precargada Y escritura vigentes.
 /// </summary>
 public sealed class CamaraComercioRequirementResolverTests
 {
@@ -104,34 +104,41 @@ public sealed class CamaraComercioRequirementResolverTests
         new CamaraComercioRequirementResolver(vault ?? new FakeVault(), deeds ?? new FakeDeeds())
             .ResolveAsync(Tenant, actors, TestContext.Current.CancellationToken);
 
-    // ── AC1 — firma precargada vigente ───────────────────────────────────────
+    // ── Regla: opcional solo con firma Y escritura vigentes (Épica #12754) ──
 
     [Fact]
-    public async Task AC1_FirmaPrecargadaVigente_DejaElRequisitoOpcional()
+    public async Task AC1_FirmaYEscrituraVigentes_DejaElRequisitoOpcional()
+    {
+        var actors = new[] { Juridico("vendedor", "900111222", rlDoc: "555") };
+
+        var r = await Resolve(actors, vault: new FakeVault("555"), deeds: new FakeDeeds("vendedor"));
+
+        r.Should().ContainSingle();
+        r[0].EsObligatorio.Should().BeFalse();
+        r[0].Exencion.Should().Be(CamaraComercioExencion.FirmaYEscritura);
+        r[0].Tipo.Should().Be(CamaraComercioAttachmentTipo.Vendedor);
+    }
+
+    [Fact]
+    public async Task AC2_SoloFirmaVigente_ElRequisitoEsObligatorio()
     {
         var actors = new[] { Juridico("vendedor", "900111222", rlDoc: "555") };
 
         var r = await Resolve(actors, vault: new FakeVault("555"));
 
-        r.Should().ContainSingle();
-        r[0].EsObligatorio.Should().BeFalse();
-        r[0].Exencion.Should().Be(CamaraComercioExencion.FirmaPrecargada);
-        r[0].Tipo.Should().Be(CamaraComercioAttachmentTipo.Vendedor);
+        r[0].EsObligatorio.Should().BeTrue("la firma sola no exime: hacen falta las dos");
+        r[0].Exencion.Should().Be(CamaraComercioExencion.Ninguna);
     }
 
-    // ── AC2 — escritura vigente ──────────────────────────────────────────────
-
     [Fact]
-    public async Task AC2_EscrituraVigenteSinFirma_DejaElRequisitoOpcional()
+    public async Task AC2_SoloEscrituraVigente_ElRequisitoEsObligatorio()
     {
-        var actors = new[] { Juridico("comprador", "900333444") };
+        var actors = new[] { Juridico("comprador", "900333444", rlDoc: "555") };
 
         var r = await Resolve(actors, deeds: new FakeDeeds("comprador"));
 
-        r.Should().ContainSingle();
-        r[0].EsObligatorio.Should().BeFalse();
-        r[0].Exencion.Should().Be(CamaraComercioExencion.EscrituraVigente);
-        r[0].Tipo.Should().Be(CamaraComercioAttachmentTipo.Comprador);
+        r[0].EsObligatorio.Should().BeTrue("la escritura sola no exime: hacen falta las dos");
+        r[0].Exencion.Should().Be(CamaraComercioExencion.Ninguna);
     }
 
     /// <summary>
@@ -141,16 +148,18 @@ public sealed class CamaraComercioRequirementResolverTests
     [Fact]
     public async Task AC2_LaEscrituraDeUnRolNoEximeAlOtro()
     {
-        var actors = new[] { Juridico("vendedor", "900111222"), Juridico("comprador", "900333444") };
+        var actors = new[]
+        {
+            Juridico("vendedor", "900111222", rlDoc: "555"),
+            Juridico("comprador", "900333444", rlDoc: "555"),
+        };
 
-        var r = await Resolve(actors, deeds: new FakeDeeds("vendedor"));
+        var r = await Resolve(actors, vault: new FakeVault("555"), deeds: new FakeDeeds("vendedor"));
 
         r.Should().HaveCount(2);
         r.Single(x => x.Rol == "vendedor").EsObligatorio.Should().BeFalse();
         r.Single(x => x.Rol == "comprador").EsObligatorio.Should().BeTrue();
     }
-
-    // ── AC3 — sin nada, obligatorio ──────────────────────────────────────────
 
     [Fact]
     public async Task AC3_SinFirmaNiEscritura_ElRequisitoEsObligatorio()
@@ -164,49 +173,32 @@ public sealed class CamaraComercioRequirementResolverTests
         r[0].Exencion.Should().Be(CamaraComercioExencion.Ninguna);
     }
 
-    // ── AC4 — firma que no está vigente no exime ─────────────────────────────
-
     /// <summary>
-    /// El puerto del baúl ya filtra por activa + vigente + flag del tenant: una firma revocada o
-    /// caducada llega como ausencia, y entonces el requisito tiene que volver a ser obligatorio.
+    /// El puerto del baúl ya filtra por activa + vigente + flag del tenant: una firma revocada,
+    /// caducada o de un tenant con el baúl apagado llega como ausencia, y entonces ni con escritura
+    /// vigente el requisito deja de ser obligatorio.
     /// </summary>
     [Fact]
-    public async Task AC4_FirmaRevocadaOFueraDeVigencia_NoExime()
+    public async Task AC4_FirmaRevocadaOFueraDeVigencia_NoEximeAunqueHayaEscritura()
     {
         var actors = new[] { Juridico("vendedor", "900111222", rlDoc: "555") };
 
-        // El baúl no devuelve firma para el documento 555 (revocada o fuera de vigencia).
-        var r = await Resolve(actors, vault: new FakeVault("otro-documento"));
+        var r = await Resolve(actors, vault: new FakeVault("otro-documento"), deeds: new FakeDeeds("vendedor"));
 
         r[0].EsObligatorio.Should().BeTrue();
         r[0].Exencion.Should().Be(CamaraComercioExencion.Ninguna);
     }
 
-    // ── AC5 — firma y escritura a la vez ─────────────────────────────────────
-
+    /// <summary>Sin escritura no hace falta preguntarle al baúl: la respuesta ya es «obligatorio».</summary>
     [Fact]
-    public async Task AC5_ConFirmaYEscritura_ReportaUnaSolaCondicionYEsLaFirma()
+    public async Task SinEscritura_NoSeConsultaElBaul()
     {
-        var actors = new[] { Juridico("vendedor", "900111222", rlDoc: "555") };
+        var vault = new FakeVault("555");
 
-        var r = await Resolve(actors, vault: new FakeVault("555"), deeds: new FakeDeeds("vendedor"));
+        var r = await Resolve([Juridico("vendedor", "900111222", rlDoc: "555")], vault);
 
-        r.Should().ContainSingle();
-        r[0].EsObligatorio.Should().BeFalse();
-        r[0].Exencion.Should().Be(CamaraComercioExencion.FirmaPrecargada,
-            "la firma se nombra primero porque además cambia el modelo de firmado; el orden es fijo "
-            + "para que dos renders del mismo paso no alternen el mensaje");
-    }
-
-    [Fact]
-    public async Task AC5_ElOrdenEsDeterministaEntreLlamadas()
-    {
-        var actors = new[] { Juridico("vendedor", "900111222", rlDoc: "555") };
-
-        var primera = await Resolve(actors, new FakeVault("555"), new FakeDeeds("vendedor"));
-        var segunda = await Resolve(actors, new FakeVault("555"), new FakeDeeds("vendedor"));
-
-        segunda[0].Exencion.Should().Be(primera[0].Exencion);
+        vault.Calls.Should().Be(0);
+        r[0].EsObligatorio.Should().BeTrue();
     }
 
     // ── Alcance ──────────────────────────────────────────────────────────────
@@ -243,15 +235,16 @@ public sealed class CamaraComercioRequirementResolverTests
     }
 
     /// <summary>
-    /// Sin representante legal capturado no hay a quién buscarle firma en el baúl: se consulta solo
-    /// la escritura. Consultar el baúl con el NIT devolvería la firma de cualquier otro representante.
+    /// Sin representante legal capturado no hay a quién buscarle firma en el baúl, así que ni con
+    /// escritura vigente se exime. Consultar el baúl con el NIT devolvería la firma de cualquier otro
+    /// representante.
     /// </summary>
     [Fact]
     public async Task SinRepresentanteCapturado_NoSeConsultaElBaul()
     {
         var vault = new FakeVault();
 
-        var r = await Resolve([Juridico("vendedor", "900111222", rlDoc: null)], vault);
+        var r = await Resolve([Juridico("vendedor", "900111222", rlDoc: null)], vault, new FakeDeeds("vendedor"));
 
         vault.Calls.Should().Be(0);
         r[0].EsObligatorio.Should().BeTrue();
@@ -292,8 +285,7 @@ public sealed class CamaraComercioRequirementResolverTests
     /// </summary>
     [Theory]
     [InlineData(CamaraComercioExencion.Ninguna, "ninguna")]
-    [InlineData(CamaraComercioExencion.FirmaPrecargada, "firma_precargada")]
-    [InlineData(CamaraComercioExencion.EscrituraVigente, "escritura_vigente")]
+    [InlineData(CamaraComercioExencion.FirmaYEscritura, "firma_y_escritura")]
     public void ElContratoDeLaExencionEsTextoEstable(CamaraComercioExencion exencion, string esperado) =>
         GetCamaraComercioRequirementsHandler.ToWire(exencion).Should().Be(esperado);
 
@@ -337,7 +329,7 @@ public sealed class CamaraComercioRequirementResolverTests
             Juridico("comprador", "900333444", rlDoc: "555"));
         Adjuntar(instance, CamaraComercioAttachmentTipo.Vendedor);
 
-        var rol = await new CamaraComercioRequirementResolver(new FakeVault("555"), new FakeDeeds())
+        var rol = await new CamaraComercioRequirementResolver(new FakeVault("555"), new FakeDeeds("comprador"))
             .RolSinCertificadoAsync(Tenant, instance, TestContext.Current.CancellationToken);
 
         rol.Should().BeNull();

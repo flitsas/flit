@@ -7,8 +7,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
 /// HU #12775 — un requisito de Cámara de Comercio por actor persona jurídica del trámite.
-/// <para><c>exencion</c> viaja como texto (<c>ninguna</c> | <c>firma_precargada</c> |
-/// <c>escritura_vigente</c>) y no como número: es lo que el paso del actor usa para elegir el texto
+/// <para><c>exencion</c> viaja como texto (<c>ninguna</c> | <c>firma_y_escritura</c>) y no como
+/// número: es lo que el paso del actor usa para elegir el texto
 /// que lee el gestor, y un entero en el JSON obligaría al cliente a mantener su propia tabla de
 /// equivalencias.</para>
 /// </summary>
@@ -129,8 +129,7 @@ public sealed class GetCamaraComercioRequirementsHandler(
 
     public static string ToWire(CamaraComercioExencion exencion) => exencion switch
     {
-        CamaraComercioExencion.FirmaPrecargada => "firma_precargada",
-        CamaraComercioExencion.EscrituraVigente => "escritura_vigente",
+        CamaraComercioExencion.FirmaYEscritura => "firma_y_escritura",
         _ => "ninguna",
     };
 }
