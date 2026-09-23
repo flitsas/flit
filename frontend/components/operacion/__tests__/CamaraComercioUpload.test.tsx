@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const mocks = vi.hoisted(() => ({
   getInstance: vi.fn(),
@@ -135,7 +135,7 @@ describe('CamaraComercioUpload', () => {
     render(
       <CamaraComercioUpload
         instanceId={INSTANCE}
-        requirement={requirement({ esObligatorio: false, exencion: 'firma_precargada' })}
+        requirement={requirement({ esObligatorio: false, exencion: 'firma_y_escritura' })}
         onSatisfiedChange={onSatisfiedChange}
       />,
     );
@@ -146,28 +146,16 @@ describe('CamaraComercioUpload', () => {
     await waitFor(() => expect(onSatisfiedChange).toHaveBeenCalledWith(true));
   });
 
-  it('opcional por firma: el texto nombra la firma precargada, no la escritura', async () => {
+  it('opcional: el texto nombra firma y escritura y dice que no hace falta cargarlo', async () => {
     render(
       <CamaraComercioUpload
         instanceId={INSTANCE}
-        requirement={requirement({ esObligatorio: false, exencion: 'firma_precargada' })}
+        requirement={requirement({ esObligatorio: false, exencion: 'firma_y_escritura' })}
       />,
     );
 
-    expect(await screen.findByText(/firma precargada vigente/i)).toBeInTheDocument();
-    expect(screen.queryByText(/escritura vigente/i)).not.toBeInTheDocument();
-  });
-
-  it('opcional por escritura: el texto nombra la escritura, no la firma', async () => {
-    render(
-      <CamaraComercioUpload
-        instanceId={INSTANCE}
-        requirement={requirement({ esObligatorio: false, exencion: 'escritura_vigente' })}
-      />,
-    );
-
-    expect(await screen.findByText(/escritura vigente/i)).toBeInTheDocument();
-    expect(screen.queryByText(/firma precargada/i)).not.toBeInTheDocument();
+    const texto = await screen.findByText(/firma precargada y escritura vigentes/i);
+    expect(texto).toHaveTextContent(/no necesitas cargarlo para continuar/i);
   });
 
   // ── Alerta de vigencia ─────────────────────────────────────────────────────
@@ -216,6 +204,57 @@ describe('CamaraComercioUpload', () => {
     expect(screen.queryByText(/recomendamos actualizarlo/i)).not.toBeInTheDocument();
   });
 
+  it('al cargar el certificado persiste la fecha de expedición que leyó el OCR (HU #12776)', async () => {
+    const ocr = { es_valido: true, legibilidad: 'buena', fecha_expedicion: '2026-08-01' };
+    mocks.analyzeDocument.mockResolvedValue({ ok: true, tipo: 'camara_comercio_vendedor', data: ocr });
+    mocks.persistOcrFields.mockResolvedValue({ persistidos: 1 });
+    mocks.uploadAttachment.mockResolvedValue({ id: 'att-1' });
+
+    render(<CamaraComercioUpload instanceId={INSTANCE} requirement={requirement()} />);
+
+    const input = await screen.findByLabelText(/^Subir Certificado de Cámara de Comercio/);
+    fireEvent.change(input, {
+      target: { files: [new File(['%PDF-1.4'], 'certificado.pdf', { type: 'application/pdf' })] },
+    });
+
+    await waitFor(() =>
+      expect(mocks.persistOcrFields).toHaveBeenCalledWith(
+        INSTANCE,
+        'camara_comercio_vendedor',
+        ocr,
+        undefined,
+      ),
+    );
+  });
+
+  it('certificado rechazado por el OCR: avisa sin campos para que no quede la fecha del anterior', async () => {
+    mocks.analyzeDocument.mockResolvedValue({
+      ok: true,
+      tipo: 'camara_comercio_vendedor',
+      data: { es_valido: false, tipo_documento: 'rut', fecha_expedicion: '2026-08-01' },
+    });
+    mocks.persistOcrFields.mockResolvedValue({ persistidos: 0 });
+    mocks.uploadAttachment.mockResolvedValue({ id: 'att-1' });
+
+    render(<CamaraComercioUpload instanceId={INSTANCE} requirement={requirement()} />);
+
+    const input = await screen.findByLabelText(/^Subir Certificado de Cámara de Comercio/);
+    fireEvent.change(input, {
+      target: { files: [new File(['%PDF-1.4'], 'otro.pdf', { type: 'application/pdf' })] },
+    });
+
+    await waitFor(() =>
+      expect(mocks.persistOcrFields).toHaveBeenCalledWith(INSTANCE, 'camara_comercio_vendedor', {}, undefined),
+    );
+    // Del documento rechazado no se toma ningún dato.
+    expect(mocks.persistOcrFields).not.toHaveBeenCalledWith(
+      INSTANCE,
+      'camara_comercio_vendedor',
+      expect.objectContaining({ fecha_expedicion: '2026-08-01' }),
+      undefined,
+    );
+  });
+
   // ── El adjunto de una parte no satisface a la otra ─────────────────────────
 
   it('el certificado del vendedor no satisface al comprador', async () => {
@@ -253,8 +292,7 @@ describe('textoExencion', () => {
     expect(textoExencion('ninguna')).toBeNull();
   });
 
-  it('cada exención dice cuál de las dos condiciones aplicó', () => {
-    expect(textoExencion('firma_precargada')).toMatch(/firma precargada/i);
-    expect(textoExencion('escritura_vigente')).toMatch(/escritura vigente/i);
+  it('la única exención nombra las dos condiciones juntas', () => {
+    expect(textoExencion('firma_y_escritura')).toMatch(/firma precargada y escritura vigentes/i);
   });
 });

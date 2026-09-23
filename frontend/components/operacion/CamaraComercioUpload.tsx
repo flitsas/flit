@@ -24,11 +24,8 @@ export function camaraComercioTipo(rol: string): string {
 
 /** Texto que explica por qué el buzón quedó opcional. Null cuando es obligatorio. */
 export function textoExencion(exencion: CamaraComercioRequirement['exencion']): string | null {
-  if (exencion === 'firma_precargada') {
-    return 'Este actor cuenta con una firma precargada vigente en el baúl de firmas, que tiene prioridad. Puedes adjuntar el certificado de Cámara de Comercio si lo tienes a mano.';
-  }
-  if (exencion === 'escritura_vigente') {
-    return 'Este actor cuenta con una escritura vigente, que tiene prioridad. Puedes adjuntar el certificado de Cámara de Comercio si lo tienes a mano.';
+  if (exencion === 'firma_y_escritura') {
+    return 'Este actor cuenta con firma precargada y escritura vigentes, así que el certificado de Cámara de Comercio es opcional: no necesitas cargarlo para continuar con el trámite.';
   }
   return null;
 }
@@ -52,8 +49,7 @@ interface Props {
  * son sustitutos entre sí.</p>
  *
  * <p><b>El buzón nunca se oculta</b> mientras el actor sea persona jurídica. Lo único que cambia es
- * si bloquea: con firma precargada o escritura vigente aparece como opcional, con el texto que dice
- * cuál de las dos lo eximió.</p>
+ * si bloquea: solo con firma precargada Y escritura vigentes aparece como opcional.</p>
  */
 export function CamaraComercioUpload({
   instanceId,
