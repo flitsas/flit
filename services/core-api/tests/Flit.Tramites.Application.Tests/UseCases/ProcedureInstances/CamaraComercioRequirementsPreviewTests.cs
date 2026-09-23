@@ -60,8 +60,24 @@ public sealed class CamaraComercioRequirementsPreviewTests
                 ? null
                 : new ActorRepresentanteLegal("CC", rlDoc, "Rep Legal", "rl@flit.local", null));
 
-    private GetCamaraComercioRequirementsHandler Handler(ISignatureVaultPolicy? vault = null) =>
-        new(_repo, new CamaraComercioRequirementResolver(vault ?? new FakeVault(), NullProcedureDeedResolver.Instance));
+    /// <summary>Escrituras vigentes de prueba, por rol de actor.</summary>
+    private sealed class FakeDeeds(params string[] rolesConEscritura) : IProcedureDeedResolver
+    {
+        public Task<IReadOnlyList<ResolvedDeedDocument>> ResolveForActorsAsync(
+            Guid tenantId, IEnumerable<ProcedureInstanceActor> actors, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ResolvedDeedDocument>>([]);
+
+        public Task<IReadOnlyList<ActorDeedPresence>> ResolvePresenceForActorsAsync(
+            Guid tenantId, IEnumerable<ProcedureInstanceActor> actors, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ActorDeedPresence>>(
+                [.. rolesConEscritura.Select(r => new ActorDeedPresence($"escritura_{r}", "900123456", r, Guid.NewGuid()))]);
+    }
+
+    private GetCamaraComercioRequirementsHandler Handler(
+        ISignatureVaultPolicy? vault = null,
+        IProcedureDeedResolver? deeds = null) =>
+        new(_repo, new CamaraComercioRequirementResolver(
+            vault ?? new FakeVault(), deeds ?? NullProcedureDeedResolver.Instance));
 
     [Fact]
     public async Task ActorMarcadoNitSinGuardar_GeneraElRequisito()
@@ -105,18 +121,18 @@ public sealed class CamaraComercioRequirementsPreviewTests
     }
 
     [Fact]
-    public async Task FirmaDelRepresentanteEnPantalla_DejaElRequisitoOpcional()
+    public async Task FirmaDelRepresentanteEnPantallaYEscritura_DejaElRequisitoOpcional()
     {
         var id = Guid.NewGuid();
         var ct = TestContext.Current.CancellationToken;
         _repo.GetByIdWithDetailsAsync(id, Tenant, ct).Returns(Instance(id));
 
-        var (result, _) = await Handler(new FakeVault("555")).HandlePreviewAsync(
+        var (result, _) = await Handler(new FakeVault("555"), new FakeDeeds("vendedor")).HandlePreviewAsync(
             id, Tenant, [Input("vendedor", "NIT", "900111222", rlDoc: "555")], ct);
 
         result!.Requirements.Should().ContainSingle();
         result.Requirements[0].EsObligatorio.Should().BeFalse();
-        result.Requirements[0].Exencion.Should().Be("firma_precargada");
+        result.Requirements[0].Exencion.Should().Be("firma_y_escritura");
     }
 
     [Fact]

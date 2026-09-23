@@ -253,6 +253,74 @@ public sealed class ProcedureDeedResolverTests
         result.Should().BeEmpty();
     }
 
+    // ── HU #12775 — presencia de escritura para la Cámara de Comercio ─────────────
+
+    /// <summary>
+    /// Para eximir del certificado basta con que la COMPAÑÍA tenga escritura vigente, aunque sea de
+    /// otro representante (Épica #12754). Es justo el caso que <see cref="ProcedureDeedResolver.ResolveForActorsAsync"/>
+    /// descarta para el expediente, y por eso la presencia NO puede reusar ese emparejamiento.
+    /// </summary>
+    [Fact]
+    public async Task Presence_EscrituraDeOtroRepresentante_CuentaParaLaCompania()
+    {
+        var co = Guid.NewGuid();
+        var repRegistrado = Guid.NewGuid();
+        var deed = Deed(Guid.NewGuid(), "path/otro-rep.pdf", new DateOnly(2026, 12, 31), [co], repRegistrado);
+
+        var reps = new FakeRepReader(
+            new() { ["900555666"] = Company(co, "900555666") },
+            new() { ["111"] = Representative(repRegistrado, "CC", "111") });
+        var resolver = new ProcedureDeedResolver(
+            new FakeDeedReader([deed]), reps, new FakeStorage(new()), TimeProvider.System);
+
+        var result = await resolver.ResolvePresenceForActorsAsync(
+            Tenant, [JuridicalActor("comprador", "900555666", "CC", "79999999")], CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Rol.Should().Be("comprador");
+        result[0].DeedId.Should().Be(deed.Id);
+    }
+
+    [Fact]
+    public async Task Presence_CompaniaSinEscrituraVigente_NoAparece()
+    {
+        var coVend = Guid.NewGuid();
+        var reader = new FakeDeedReader([Deed(Guid.NewGuid(), "p.pdf", new DateOnly(2026, 12, 31), [Guid.NewGuid()])]);
+        var reps = new FakeRepReader(new() { ["900000000-1"] = Company(coVend, "900000000-1") });
+        var resolver = new ProcedureDeedResolver(reader, reps, new FakeStorage(new()), TimeProvider.System);
+
+        var result = await resolver.ResolvePresenceForActorsAsync(
+            Tenant, [JuridicalActor("vendedor", "900000000-1", "CC", "111")], CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Presence_UnaEntradaPorRol_SinLeerStorage()
+    {
+        var coVend = Guid.NewGuid();
+        var coComp = Guid.NewGuid();
+        var reader = new FakeDeedReader(
+        [
+            Deed(Guid.NewGuid(), "path/v.pdf", new DateOnly(2026, 12, 31), [coVend]),
+            Deed(Guid.NewGuid(), "path/c.pdf", new DateOnly(2026, 12, 31), [coComp]),
+        ]);
+        var reps = new FakeRepReader(new()
+        {
+            ["900000000-1"] = Company(coVend, "900000000-1"),
+            ["900000000-2"] = Company(coComp, "900000000-2"),
+        });
+        // Storage vacío: si la presencia intentara leer un PDF, no lo encontraría.
+        var resolver = new ProcedureDeedResolver(reader, reps, new FakeStorage(new()), TimeProvider.System);
+
+        var result = await resolver.ResolvePresenceForActorsAsync(
+            Tenant,
+            [Actor("vendedor", "NIT", "900000000-1"), Actor("comprador", "NIT", "900000000-2")],
+            CancellationToken.None);
+
+        result.Select(p => p.Rol).Should().BeEquivalentTo(["vendedor", "comprador"]);
+    }
+
     // ── Fakes (convención del repo: sin Moq) ──────────────────────────────────────
 
     private sealed class FakeDeedReader(IReadOnlyList<DeedItem> vigentes) : IDeedReader

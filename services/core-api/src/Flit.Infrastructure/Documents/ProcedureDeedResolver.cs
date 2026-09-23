@@ -44,9 +44,9 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
     private sealed record DeedMatch(ActorDeedPresence Presence, string StoragePath);
 
     /// <summary>
-    /// HU #12775 — el emparejamiento actor ↔ escritura vigente, sin leer storage. Es el primitivo del
-    /// que salen los dos métodos públicos, para que la presencia que ve el paso del actor y el
-    /// documento que entra al expediente nunca puedan divergir.
+    /// HU #12775 — el emparejamiento actor ↔ escritura vigente del REPRESENTANTE capturado, sin leer
+    /// storage. Decide qué PDF entra al expediente; la presencia para Cámara de Comercio usa una regla
+    /// más amplia (cualquier escritura vigente de la compañía, ver ResolvePresenceForActorsAsync).
     /// </summary>
     private async Task<IReadOnlyList<DeedMatch>> MatchForActorsAsync(
         Guid tenantId,
@@ -161,8 +161,58 @@ internal sealed class ProcedureDeedResolver : IProcedureDeedResolver
         IEnumerable<ProcedureInstanceActor> actors,
         CancellationToken ct = default)
     {
-        var matches = await MatchForActorsAsync(tenantId, actors, ct).ConfigureAwait(false);
-        return matches.Select(m => m.Presence).ToArray();
+        ArgumentNullException.ThrowIfNull(actors);
+
+        var nitActors = actors
+            .Where(a => string.Equals(a.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(a.DocumentNumber))
+            .ToList();
+        if (nitActors.Count == 0)
+        {
+            return [];
+        }
+
+        var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaTime.Offset).DateTime);
+        var deeds = await _deedReader.ListActiveVigentesAsync(tenantId, today, ct).ConfigureAwait(false);
+        if (deeds.Count == 0)
+        {
+            return [];
+        }
+
+        // Decisión de negocio (Épica #12754, 2026-09-23): para eximir del certificado de Cámara de
+        // Comercio basta con que la COMPAÑÍA tenga una escritura vigente, sea del representante que
+        // sea. Por eso aquí NO se exige que la escritura sea del representante legal capturado, a
+        // diferencia de MatchForActorsAsync, que sí lo exige porque decide qué PDF entra al
+        // expediente. Divergen a propósito: una responde «¿la sociedad tiene escritura?», la otra
+        // «¿qué escritura autoriza a ESTE representante?».
+        var result = new List<ActorDeedPresence>(nitActors.Count);
+        foreach (var actor in nitActors)
+        {
+            var company = await _representativeReader
+                .FindRepresentedCompanyByNitAsync(tenantId, actor.DocumentNumber.Trim(), ct)
+                .ConfigureAwait(false);
+            if (company is null || !company.IsActive)
+            {
+                continue;
+            }
+
+            var deed = deeds
+                .Where(d => d.RepresentedCompanyIds.Contains(company.Id))
+                .OrderByDescending(d => d.UpdatedAt ?? d.CreatedAt)
+                .ThenByDescending(d => d.Id)
+                .FirstOrDefault();
+            if (deed is null)
+            {
+                continue;
+            }
+
+            var tipo = string.Equals(actor.ActorType, "comprador", StringComparison.OrdinalIgnoreCase)
+                ? "escritura_comprador"
+                : "escritura";
+            result.Add(new ActorDeedPresence(tipo, company.DocumentNumber, actor.ActorType ?? string.Empty, deed.Id));
+        }
+
+        return result;
     }
 
     /// <inheritdoc />
