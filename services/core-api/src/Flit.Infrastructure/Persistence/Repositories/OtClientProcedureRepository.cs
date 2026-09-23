@@ -4,9 +4,12 @@ using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtQueries;
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Queries.Domain;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Domain.Documents;
@@ -27,15 +30,23 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     private readonly FlitDbContext _context;
     private readonly ITramiteTransitionPublisher _transitionPublisher;
     private readonly IPlateRangeRepository? _plateRepo;
+    private readonly IConsolidadoRegeneracionQueue? _regeneracionQueue;
+    private readonly ILogger<OtClientProcedureRepository> _logger;
 
     public OtClientProcedureRepository(
         FlitDbContext context,
         ITramiteTransitionPublisher transitionPublisher,
-        IPlateRangeRepository? plateRepo = null)
+        IPlateRangeRepository? plateRepo = null,
+        IConsolidadoRegeneracionQueue? regeneracionQueue = null,
+        ILogger<OtClientProcedureRepository>? logger = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _transitionPublisher = transitionPublisher ?? throw new ArgumentNullException(nameof(transitionPublisher));
         _plateRepo = plateRepo;
+        // HU #12796 (Épica #12760, D1) — hitos de la decisión del OT y de la asignación de placa. Null en
+        // tests que no la ejercitan: sin cola, solo el camino perezoso.
+        _regeneracionQueue = regeneracionQueue;
+        _logger = logger ?? NullLogger<OtClientProcedureRepository>.Instance;
     }
 
     public Task<PagedResult<OtClientProcedure>> ListAsync(
@@ -438,7 +449,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             return null;
         }
 
-        return await ExecuteInClientTenantScopeAsync(
+        string? fromStatus = null;
+        var decided = await ExecuteInClientTenantScopeAsync(
             accessible.ClientTenantId,
             async () =>
             {
@@ -450,7 +462,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return null;
                 }
 
-                var fromStatus = entity.Status;
+                fromStatus = entity.Status;
 
                 // N 03 (ADR-0022) + ADR-0059: la decisión OT obedece la política única sobre el estado
                 // ACTUAL; si la arista no existe para este actor/contexto, no transiciona.
@@ -577,6 +589,39 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 return await MapRowAsync(entity, cancellationToken).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
+
+        // HU #12796 (AC2/AC4) — hito de la decisión del OT, YA confirmada (la transacción del scope
+        // cliente hizo commit al volver). Un expediente ENTREGADO que el OT rechaza u observa vuelve al
+        // gestor para subsanar: se anticipan los dos consolidados. Aprobar es estado final y no anticipa
+        // nada; un rechazo desde la cola de placa (preasignacion) no llegó a tener expediente de decisión.
+        if (decided is not null
+            && targetStatus == TramiteEstado.Rechazado
+            && fromStatus == TramiteEstado.Entregado)
+        {
+            EncolarRegeneracionAnticipada(accessible.ClientTenantId, procedureInstanceId, TipoConsolidado.Wizard);
+            EncolarRegeneracionAnticipada(accessible.ClientTenantId, procedureInstanceId, TipoConsolidado.Maestro);
+        }
+
+        return decided;
+    }
+
+    /// <summary>
+    /// HU #12796 — pide la regeneración anticipada de un consolidado con el tenant CLIENTE dueño del
+    /// trámite (nunca el del OT). La cola no bloquea; un descarte (<c>false</c>) solo se registra: la
+    /// bandera de vigencia ya quedó abajo y el camino perezoso lo reconstruye. Nunca falla el hito.
+    /// </summary>
+    private void EncolarRegeneracionAnticipada(Guid clientTenantId, Guid procedureInstanceId, TipoConsolidado documento)
+    {
+        if (_regeneracionQueue is null)
+        {
+            return;
+        }
+
+        if (!_regeneracionQueue.Encolar(clientTenantId, procedureInstanceId, documento))
+        {
+            OtClientProcedureRepositoryLog.RegeneracionAnticipadaDescartada(
+                _logger, procedureInstanceId, clientTenantId, documento);
+        }
     }
 
     /// <summary>
@@ -708,7 +753,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 $"La placa {plate.Trim().ToUpperInvariant()} ya está registrada en el trámite {enUso.ReferenceNumber} ({enUso.Status}). No se puede asignar a otro trámite mientras ese siga abierto.");
         }
 
-        return await ExecuteInClientTenantScopeAsync(
+        var assigned = await ExecuteInClientTenantScopeAsync(
             accessible.ClientTenantId,
             async () =>
             {
@@ -834,6 +879,16 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 return PlateAssignmentOutcome.Ok(await MapRowAsync(entity, cancellationToken).ConfigureAwait(false));
             },
             cancellationToken).ConfigureAwait(false);
+
+        // HU #12796 (AC3) — hito de asignación de placa, YA confirmado: la placa cambia FUR, mandato y
+        // expediente, así que se anticipan los dos consolidados. Un fallo de asignación no encola nada.
+        if (assigned.Succeeded)
+        {
+            EncolarRegeneracionAnticipada(accessible.ClientTenantId, procedureInstanceId, TipoConsolidado.Wizard);
+            EncolarRegeneracionAnticipada(accessible.ClientTenantId, procedureInstanceId, TipoConsolidado.Maestro);
+        }
+
+        return assigned;
     }
 
     // HU #12167 (Feature #12156) — el OT corrige la placa dentro de la ventana de 1 hora desde
@@ -1977,4 +2032,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             })
             .ToList();
     }
+}
+
+/// <summary>Logging source-generated (CA1848) del repositorio OT. Sin PII.</summary>
+internal static partial class OtClientProcedureRepositoryLog
+{
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "HU #12796 — la regeneración anticipada del consolidado {Documento} del trámite {InstanceId} (tenant {TenantId}) se descartó; lo cubre la regeneración perezosa.")]
+    public static partial void RegeneracionAnticipadaDescartada(
+        ILogger logger, Guid instanceId, Guid tenantId, TipoConsolidado documento);
 }
