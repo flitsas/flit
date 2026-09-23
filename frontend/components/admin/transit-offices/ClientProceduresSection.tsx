@@ -68,6 +68,8 @@ import {
   type OtCounterKey,
 } from "./OtBandejaCounters";
 import { BusquedaRapidaAcordeon } from "@/components/operacion/BusquedaRapidaAcordeon";
+import { AvisoHayCambios } from "@/components/operacion/AvisoHayCambios";
+import { useSondeoDeConteos } from "@/hooks/useSondeoDeConteos";
 import { formatDocumentWithType } from "@/lib/display/document-number";
 import { ColumnSelector } from "@/components/atom/ColumnSelector";
 import { useUiPreferences } from "@/hooks/useUiPreferences";
@@ -431,6 +433,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [familia, setFamilia] = useState<"" | ProcedureFamily>("");
   /** Epic #12686 (HU #12807) — atajo de la búsqueda rápida; vacío = ninguno. */
   const [atajoOt, setAtajoOt] = useState<"" | AtajoOt>("");
+  /** Epic #12686 (HU #12808) — el sondeo vio un conteo distinto al de la tabla. */
+  const [hayCambios, setHayCambios] = useState(false);
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -777,6 +781,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         setRows(result.data);
         setTotalCount(result.totalCount);
         setPage(result.page);
+        setHayCambios(false);
         setStatus(result.data.length === 0 ? "empty" : "ready");
         // Diagnóstico (R09) y contadores de la cabecera: acompañan a la lista y NUNCA la bloquean.
         // Van en su propio `try` y no solo con `.catch`, porque un fallo SÍNCRONO —el módulo sin
@@ -811,6 +816,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     },
     [buildListQuery, page, transitOfficeId],
   );
+
+  // Epic #12686 (HU #12808) — la tira se mantiene al día sola; la tabla, no. La tarjeta que manda
+  // es la elegida o, sin elegir, la de la bandeja por defecto (Entregado).
+  useSondeoDeConteos({
+    pedir: (signal) =>
+      searchOtBandejaCounters(buildListQuery(), signal, transitOfficeId ? { transitOfficeId } : undefined),
+    alRecibir: (conteos) => {
+      setCounters(conteos);
+      const tarjeta = contadorActivo || contadorDeEstado(statusFilter);
+      if (tarjeta && conteos[tarjeta] !== totalCount) setHayCambios(true);
+    },
+  });
 
   useEffect(() => {
     const c = new AbortController();
@@ -1688,6 +1705,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         loading={status === "loading"}
         familia={familia}
       />
+
+      {hayCambios && status !== "loading" ? <AvisoHayCambios onActualizar={() => void load()} /> : null}
 
       {/* Epic #12686 (HU #12807) — atajos del organismo, sin conteo. */}
       <BusquedaRapidaAcordeon

@@ -104,6 +104,8 @@ import { EstadoFunnel } from './EstadoFunnel';
 import { panelesDeEstado } from '@/lib/tramites/panelesEstado';
 import { ATAJOS_GESTOR, atajoGestor, type AtajoGestor } from '@/lib/tramites/busquedaRapida';
 import { BusquedaRapidaAcordeon } from './BusquedaRapidaAcordeon';
+import { AvisoHayCambios } from './AvisoHayCambios';
+import { useSondeoDeConteos } from '@/hooks/useSondeoDeConteos';
 import {
   AttachmentPreview,
   TramiteDocumentosModal,
@@ -377,6 +379,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const [estado, setEstado] = useState<'' | EstadoFiltro>('');
   /** Epic #12686 (HU #12806) — atajo de la búsqueda rápida; vacío = ninguno. */
   const [atajo, setAtajo] = useState<'' | AtajoGestor>('');
+  /** Epic #12686 (HU #12808) — el sondeo vio un conteo distinto al de la tabla. */
+  const [hayCambios, setHayCambios] = useState(false);
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
   // HU #10536 — filtro "solo prioritarios".
   const [soloPrioritarios, setSoloPrioritarios] = useState(false);
@@ -777,6 +781,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       setItems(page1.items);
       setTotal(page1.total);
       setEstadoCounts(counts);
+      setHayCambios(false);
       // HU #12726 (C.4) — si el detalle está abierto, sincronizar la fila con el listado recién pedido.
       setDetalleTramite((prev) => {
         if (!prev) return null;
@@ -795,6 +800,17 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       setLoading(false);
     }
   }, [alcanceListo, buildListQuery, buscarPagina, contarEstados, page, pageSize]);
+
+  // Epic #12686 (HU #12808) — la tira se mantiene al día sola; la tabla, no. Si la tarjeta elegida
+  // cambió de cifra, se avisa en vez de mover las filas bajo el cursor.
+  useSondeoDeConteos({
+    activo: alcanceListo,
+    pedir: () => contarEstados(buildListQuery()),
+    alRecibir: (conteos) => {
+      setEstadoCounts(conteos);
+      if (estado && (conteos[estado] ?? 0) !== total) setHayCambios(true);
+    },
+  });
 
   useEffect(() => {
     // Carga/refresca al montar y al cambiar refreshKey: los setState de `load`
@@ -1412,6 +1428,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             </span>
           </button>
         </div>
+
+        {hayCambios && !loading ? <AvisoHayCambios onActualizar={() => void load()} /> : null}
 
         {/* Epic #12686 (HU #12806) — atajos sin conteo. No se desmonta mientras carga y sigue visible
             si la carga falla: un atajo que el servidor rechaza (p. ej. demasiados borradores) tiene
