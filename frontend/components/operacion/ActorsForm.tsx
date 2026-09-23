@@ -59,7 +59,7 @@ import {
   escrituraRepresentanteRlDocFieldKey,
   representanteDocIdentity,
 } from './EscrituraRepresentanteUpload';
-import { CamaraComercioUpload } from './CamaraComercioUpload';
+import { CamaraComercioUpload, camaraComercioTipo } from './CamaraComercioUpload';
 import { WizardCardHeader } from './wizard-atoms';
 import { cn } from '@/lib/utils';
 import { WizardAccordion, WizardAccordionRow } from './WizardAccordion';
@@ -1098,6 +1098,52 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   useEffect(() => {
     onCamaraComercioGateChange?.(camaraGateOk);
   }, [camaraGateOk, onCamaraComercioGateChange]);
+
+  /**
+   * HU #12779 — roles que eran persona jurídica en el render anterior. Es lo único que permite
+   * detectar el CAMBIO a persona natural: el buzón se desmonta en ese mismo render, así que el
+   * componente hijo ya no está para descartar su propio documento.
+   *
+   * <p>Arranca vacío a propósito: en el primer render nadie «dejó de ser» jurídico, así que un
+   * trámite que se abre con el actor ya jurídico no dispara ningún borrado.</p>
+   */
+  const rolesJuridicosPrevios = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const ahora = new Set<string>(actors.filter((a) => isJuridical(a)).map((a) => a.rol));
+    const dejaronDeSerJuridicos = [...rolesJuridicosPrevios.current].filter((r) => !ahora.has(r));
+    rolesJuridicosPrevios.current = ahora;
+
+    if (!instanceId || dejaronDeSerJuridicos.length === 0) return;
+
+    // El certificado acredita a una sociedad: si la parte dejó de serlo, el documento ya no
+    // corresponde al trámite y arrastrarlo dejaría en el expediente un papel de otra persona.
+    // Solo se descarta el de los roles que cambiaron — si las dos partes eran jurídicas y solo una
+    // cambió, la otra conserva el suyo.
+    const tipos = new Set(dejaronDeSerJuridicos.map((rol) => camaraComercioTipo(rol)));
+    void tramitesClient
+      .getAttachments(instanceId)
+      .then((adjuntos) =>
+        Promise.all(
+          adjuntos
+            .filter((a) => tipos.has(a.tipo.toLowerCase()))
+            .map((a) => tramitesClient.deleteAttachment(instanceId, a.id).catch(() => undefined)),
+        ),
+      )
+      .then(() => {
+        setCamaraSatisfecha((prev) => {
+          const next = { ...prev };
+          for (const rol of dejaronDeSerJuridicos) delete next[rol];
+          return next;
+        });
+        recargarCamara();
+      })
+      .catch(() => {
+        // Un fallo al descartar no puede bloquear al gestor: el requisito ya no aplica a esta parte
+        // (el buzón está desmontado) y el adjunto huérfano lo retira la limpieza del expediente.
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camaraFirma, instanceId]);
   const [rlSwitchConfirm, setRlSwitchConfirm] = useState<{ variant: 'runt' | 'preload' } | null>(
     null,
   );
