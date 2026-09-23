@@ -796,6 +796,15 @@ public static class InfrastructureExtensions
         // el de generación documental, pero recorriendo los casos de uso del wizard (consulta de
         // vehículo, creación y actores) fila a fila y en secuencia.
         services.AddHostedService<BulkTramitesBatchProcessorService>();
+        // HU #12795 (Épica #12760, D1) — regeneración ANTICIPADA de consolidados: canal acotado en
+        // memoria + worker con debounce y coalescing por (tenant, trámite, documento). Sin scheduler
+        // externo (ADR-0024). Cada trabajo corre en su propio scope con el tenant de la solicitud.
+        services.Configure<ConsolidadoRegeneracionOptions>(
+            configuration.GetSection(ConsolidadoRegeneracionOptions.SectionName));
+        services.AddSingleton<ChannelConsolidadoRegeneracionQueue>();
+        services.AddSingleton<Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoRegeneracionQueue>(
+            sp => sp.GetRequiredService<ChannelConsolidadoRegeneracionQueue>());
+        services.AddHostedService<ConsolidadoRegeneracionProcessor>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.

@@ -1,0 +1,169 @@
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Estados;
+using Microsoft.Extensions.Logging;
+
+namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
+
+/// <summary>HU #12795 — cómo terminó un trabajo de regeneración anticipada.</summary>
+public enum ResultadoRegeneracionAnticipada
+{
+    /// <summary>El PDF se reconstruyó.</summary>
+    Regenerado = 0,
+
+    /// <summary>AC3 — la bandera ya estaba en true (el camino perezoso u otro trabajo lo reconstruyó).</summary>
+    OmitidoVigente = 1,
+
+    /// <summary>AC4 — trámite en estado final: la documentación es la que el organismo tuvo a la vista.</summary>
+    OmitidoEstadoFinal = 2,
+
+    /// <summary>AC4 — trámite migrado de V1: su expediente es histórico y no se pisa.</summary>
+    OmitidoMigrado = 3,
+
+    /// <summary>AC4 — el consolidado vigente lo cargó a mano el admin (<c>Source="user"</c>).</summary>
+    OmitidoCargadoManual = 4,
+
+    /// <summary>El trámite no existe en ese tenant (o fue borrado mientras el trabajo esperaba).</summary>
+    NoEncontrado = 5,
+
+    /// <summary>El handler de generación devolvió un código de error; se conserva el PDF anterior.</summary>
+    Fallido = 6,
+}
+
+/// <summary>
+/// HU #12795 — ejecuta UN trabajo de la cola de regeneración anticipada
+/// (<see cref="IConsolidadoRegeneracionQueue"/>).
+///
+/// <para>Decide si hay que regenerar y, si sí, delega en los handlers de siempre
+/// (<see cref="GenerarConsolidadoHandler"/> sin <c>force</c> para el wizard,
+/// <see cref="GenerarConsolidadoMaestroHandler"/> sin <c>force</c> para el maestro): aquí no hay
+/// composición de PDF. Las excepciones se comprueban ANTES de invocarlos porque ninguno de los dos las
+/// cubre todas: el del wizard no mira el estado final de un trámite no migrado (lo frena el gate del
+/// gestor, que la regeneración interna no atraviesa) y el maestro no mira ni estado, ni migración, ni
+/// <c>Source</c>. Una regeneración automática no puede reemplazar documentación definitiva.</para>
+///
+/// <para>El orden de precedencia del maestro sale del propio handler (configuración del OT vía
+/// <c>IOtConfiguredDocumentOrderProvider</c>, con respaldo por modalidad); <c>matrizPrecedencia</c> va
+/// en null, igual que en el canal de radicación Quipux, porque la matriz resuelta vive en Admin.</para>
+///
+/// <para>Tenant: todas las lecturas y el handler reciben el <c>tenantId</c> del trabajo; el repositorio
+/// filtra por él explícitamente (el aislamiento no descansa en el RLS).</para>
+/// </summary>
+public sealed class RegenerarConsolidadoAnticipadoHandler(
+    IProcedureInstanceRepository repo,
+    GenerarConsolidadoHandler wizardHandler,
+    GenerarConsolidadoMaestroHandler maestroHandler,
+    ILogger<RegenerarConsolidadoAnticipadoHandler>? logger = null)
+{
+    internal const string TipoAdjuntoWizard = "consolidado";
+    internal const string TipoAdjuntoMaestro = "consolidado_maestro";
+
+    public async Task<ResultadoRegeneracionAnticipada> HandleAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        TipoConsolidado documento,
+        CancellationToken ct = default)
+    {
+        var instance = await repo
+            .GetByIdWithAttachmentsAsync(procedureInstanceId, tenantId, ct)
+            .ConfigureAwait(false);
+        if (instance is null)
+            return Omitir(ResultadoRegeneracionAnticipada.NoEncontrado, tenantId, procedureInstanceId, documento);
+
+        var omision = MotivoDeOmision(instance, documento);
+        if (omision is { } motivo)
+            return Omitir(motivo, tenantId, procedureInstanceId, documento);
+
+        var (result, error) = documento == TipoConsolidado.Wizard
+            ? await wizardHandler
+                .HandleAsync(procedureInstanceId, tenantId, userId: null, force: false, ct)
+                .ConfigureAwait(false)
+            : await maestroHandler
+                .HandleAsync(procedureInstanceId, tenantId, matrizPrecedencia: null, force: false, ct)
+                .ConfigureAwait(false);
+
+        if (error is not null || result is null)
+        {
+            if (logger is not null)
+            {
+                RegeneracionAnticipadaLog.Fallida(
+                    logger, documento, procedureInstanceId, tenantId, error ?? "sin_resultado");
+            }
+
+            return ResultadoRegeneracionAnticipada.Fallido;
+        }
+
+        // Carrera: entre la comprobación y el handler otro camino pudo subir la bandera; el handler
+        // entonces reutiliza el PDF vigente y lo informa con Regenerado=false.
+        if (!result.Regenerado)
+            return Omitir(ResultadoRegeneracionAnticipada.OmitidoVigente, tenantId, procedureInstanceId, documento);
+
+        if (logger is not null)
+            RegeneracionAnticipadaLog.Regenerado(logger, documento, procedureInstanceId, tenantId);
+
+        return ResultadoRegeneracionAnticipada.Regenerado;
+    }
+
+    /// <summary>
+    /// AC3/AC4 — motivo por el que el trabajo NO debe regenerar, o <c>null</c> si procede. Orden: la
+    /// documentación definitiva primero (estado final, migrado), luego el PDF cargado a mano y por
+    /// último la vigencia.
+    /// </summary>
+    internal static ResultadoRegeneracionAnticipada? MotivoDeOmision(
+        ProcedureInstance instance, TipoConsolidado documento)
+    {
+        if (TramiteEstado.EsFinal(instance.Status))
+            return ResultadoRegeneracionAnticipada.OmitidoEstadoFinal;
+
+        // Migrado en cualquier estado: la anticipación es opcional y el camino perezoso sigue
+        // disponible para el borrador migrado que el gestor retome en V2; lo que no puede pasar es que
+        // un trabajo en segundo plano reemplace el expediente traído de V1 sin que nadie lo pida.
+        if (instance.IsMigrated)
+            return ResultadoRegeneracionAnticipada.OmitidoMigrado;
+
+        var tipoAdjunto = documento == TipoConsolidado.Wizard ? TipoAdjuntoWizard : TipoAdjuntoMaestro;
+        var vigente = instance.Attachments
+            .FirstOrDefault(a => string.Equals(a.Tipo, tipoAdjunto, StringComparison.OrdinalIgnoreCase));
+
+        if (vigente is not null && string.Equals(vigente.Source, "user", StringComparison.OrdinalIgnoreCase))
+            return ResultadoRegeneracionAnticipada.OmitidoCargadoManual;
+
+        var bandera = documento == TipoConsolidado.Wizard
+            ? instance.ConsolidadoWizardVigente
+            : instance.ConsolidadoMaestroVigente;
+
+        // Mismo criterio que el atajo de caché de ambos handlers: bandera arriba Y adjunto presente.
+        if (bandera && vigente is not null)
+            return ResultadoRegeneracionAnticipada.OmitidoVigente;
+
+        return null;
+    }
+
+    private ResultadoRegeneracionAnticipada Omitir(
+        ResultadoRegeneracionAnticipada motivo, Guid tenantId, Guid procedureInstanceId, TipoConsolidado documento)
+    {
+        if (logger is not null)
+            RegeneracionAnticipadaLog.Omitida(logger, documento, procedureInstanceId, tenantId, motivo);
+
+        return motivo;
+    }
+}
+
+/// <summary>Logging source-generated (CA1848) de la regeneración anticipada. Solo ids, sin PII.</summary>
+internal static partial class RegeneracionAnticipadaLog
+{
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Regeneración anticipada del consolidado {Documento} omitida (instancia {InstanceId}, tenant {TenantId}): {Motivo}.")]
+    public static partial void Omitida(
+        ILogger logger, TipoConsolidado documento, Guid instanceId, Guid tenantId, ResultadoRegeneracionAnticipada motivo);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Regeneración anticipada del consolidado {Documento} fallida (instancia {InstanceId}, tenant {TenantId}): {Error}. Se conserva el PDF anterior.")]
+    public static partial void Fallida(
+        ILogger logger, TipoConsolidado documento, Guid instanceId, Guid tenantId, string error);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Consolidado {Documento} regenerado por anticipado (instancia {InstanceId}, tenant {TenantId}).")]
+    public static partial void Regenerado(
+        ILogger logger, TipoConsolidado documento, Guid instanceId, Guid tenantId);
+}

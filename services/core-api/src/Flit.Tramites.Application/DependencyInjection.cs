@@ -266,6 +266,9 @@ public static class DependencyInjection
         services.AddScoped<GenerarConsolidadoMaestroHandler>();
         // HU #12785 — ruta única de entrega de ambos consolidados (reconstruye solo si está desactualizado).
         services.AddScoped<EntregarConsolidadoHandler>();
+        // HU #12795 (Épica #12760) — un trabajo de la cola de regeneración anticipada: comprueba
+        // vigencia / estado final / migrado / Source=user y delega en los dos handlers de arriba.
+        services.AddScoped<RegenerarConsolidadoAnticipadoHandler>();
         // Perfil OT: visualizar el consolidado y adjuntar la Licencia de Tránsito (LT) sobre
         // trámites de clientes (se ejecutan en el scope RLS del tenant cliente vía AdminOtEndpoints).
         services.AddScoped<DescargarConsolidadoHandler>();
