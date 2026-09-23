@@ -266,3 +266,85 @@ describe('ActorsForm — precarga RUES + directorio RL', () => {
     expect(razon).toHaveAttribute('readonly');
   });
 });
+
+// ── Borrador reabierto: la consulta no pisa el representante que ya estaba guardado ──────────────
+describe('ActorsForm — la consulta RUES conserva el representante guardado del borrador', () => {
+  /** Comprador jurídico ya guardado, con su representante legal capturado. */
+  function compradorGuardado(rl: { numeroDocumento: string; nombreCompleto: string; email: string }) {
+    return {
+      rol: 'comprador',
+      tipoDocumento: 'NIT',
+      numeroDocumento: '900555666',
+      nombreCompleto: 'Comercializadora del Valle SAS',
+      personType: 'juridical',
+      email: 'contacto@valle.co',
+      telefono: '3001234567',
+      ciudad: 'Cali',
+      direccion: 'Calle 1',
+      representanteLegal: { tipoDocumento: 'CC', ...rl },
+    };
+  }
+
+  it('la ficha del directorio sin correo no borra el correo ya guardado del mismo representante', async () => {
+    const sinCorreo: LegalRepresentativeLookupResult = {
+      ...MATCH,
+      representante: { ...MATCH.representante!, email: null },
+      representantes: [{ ...MATCH.representantes![0], email: null }],
+    };
+    mocks.lookupLegalRepresentativeByNit.mockResolvedValue(sinCorreo);
+    mocks.getActors.mockResolvedValue([
+      compradorGuardado({ numeroDocumento: '79123456', nombreCompleto: 'Carlos Ramírez Núñez', email: 'guardado@valle.co' }),
+    ]);
+    const user = userEvent.setup();
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await user.click(await screen.findByRole('button', { name: 'Consultar RUES' }));
+
+    expect(await screen.findByText('Empresa encontrada en RUES')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('guardado@valle.co')).toBeInTheDocument();
+  });
+
+  it('con varios en el directorio, conserva al representante guardado y no precarga el primero', async () => {
+    mocks.lookupLegalRepresentativeByNit.mockResolvedValue(MATCH_MULTI);
+    mocks.getActors.mockResolvedValue([
+      compradorGuardado({ numeroDocumento: '52988777', nombreCompleto: 'Ana Gómez', email: 'ana@valle.co' }),
+    ]);
+    const user = userEvent.setup();
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await user.click(await screen.findByRole('button', { name: 'Consultar RUES' }));
+
+    expect(await screen.findByText('Empresa encontrada en RUES')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Ana Gómez')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Carlos Ramírez Núñez')).toBeNull();
+  });
+
+  it('un representante guardado que no está en el directorio se queda como estaba', async () => {
+    mocks.lookupLegalRepresentativeByNit.mockResolvedValue(MATCH);
+    mocks.getActors.mockResolvedValue([
+      compradorGuardado({ numeroDocumento: '11111111', nombreCompleto: 'Pedro Pérez', email: 'pedro@valle.co' }),
+    ]);
+    const user = userEvent.setup();
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await user.click(await screen.findByRole('button', { name: 'Consultar RUES' }));
+
+    expect(await screen.findByText('Empresa encontrada en RUES')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Pedro Pérez')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('pedro@valle.co')).toBeInTheDocument();
+  });
+
+  it('el gate de consulta dice qué parte falta por consultar', async () => {
+    mocks.getActors.mockResolvedValue([
+      compradorGuardado({ numeroDocumento: '79123456', nombreCompleto: 'Carlos Ramírez Núñez', email: 'c@valle.co' }),
+    ]);
+    const onGate = vi.fn();
+
+    render(
+      <ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" onConsultationGateChange={onGate} />,
+    );
+
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith(false, ['Comprador']));
+  });
+});
+

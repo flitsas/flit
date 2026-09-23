@@ -704,6 +704,12 @@ export function TramiteWizard(props: Props) {
    * El formulario notifica el gate; al salir del paso se resetea.
    */
   const [actorsConsultationReady, setActorsConsultationReady] = useState(false);
+  /** Partes sin consulta de identidad, por su nombre en pantalla (aviso del pie). */
+  const [consultaPendientes, setConsultaPendientes] = useState<string[]>([]);
+  const onActorsConsultationGate = useCallback((ok: boolean, partesPendientes: string[]) => {
+    setActorsConsultationReady(ok);
+    setConsultaPendientes(partesPendientes);
+  }, []);
   /**
    * Escritura del representante legal: Continuar solo si toda parte jurídica cuyo representante NO
    * está en el módulo de representantes de la compañía ya adjuntó la escritura que lo acredita.
@@ -1954,7 +1960,7 @@ export function TramiteWizard(props: Props) {
                 onRefresh={() => void refresh()}
                 stepFormRef={stepFormRef}
                 prendaFormRef={prendaFormRef}
-                onActorsConsultationGateChange={setActorsConsultationReady}
+                onActorsConsultationGateChange={onActorsConsultationGate}
                 onEscrituraRepresentanteGateChange={setEscrituraRlGateOk}
                 onCamaraComercioGateChange={onCamaraComercioGate}
                 onCamposRequeridosGateChange={setActoresCamposGateOk}
@@ -2008,6 +2014,24 @@ export function TramiteWizard(props: Props) {
             certificado de Cámara de Comercio obligatorio: se dice de quién, en el mismo sitio que el
             aviso de campos, para que el botón apagado no quede sin explicación.
           */}
+          {/*
+            Consulta de identidad pendiente (RUNT/RUES) de alguna parte: pasa al reabrir un borrador en
+            otra pestaña, porque la consulta vive en la sesión del navegador y solo el propietario se
+            vuelve a consultar solo. Sin este aviso el botón quedaba apagado con todo lleno.
+          */}
+          {isActorStep &&
+            actoresCamposGateOk &&
+            !actorsConsultationReady &&
+            consultaPendientes.length > 0 &&
+            !fullReadOnly && (
+              <InlineAlert tone="info" className="mt-6">
+                <p>
+                  Consulta los datos de {consultaPendientes.join(' y ')} con el botón «Consultar» de
+                  cada parte para continuar.
+                </p>
+              </InlineAlert>
+            )}
+
           {isActorStep &&
             actoresCamposGateOk &&
             !camaraComercioGateOk &&
@@ -4658,7 +4682,7 @@ function StepBody({
   stepFormRef: RefObject<WizardStepFormHandle | null>;
   prendaFormRef: RefObject<WizardStepFormHandle | null>;
   /** Gate Continuar en pasos de actores (consulta RUNT/RUES exitosa). */
-  onActorsConsultationGateChange?: (ready: boolean) => void;
+  onActorsConsultationGateChange?: (ready: boolean, partesPendientes: string[]) => void;
   /** Gate Continuar: escritura del representante legal fuera del directorio ya adjunta (o no aplica). */
   onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
   onCamaraComercioGateChange?: (ready: boolean, partesPendientes: string[]) => void;
