@@ -292,6 +292,18 @@ describe('validateFile — unidad', () => {
       .toMatch(/no permitido/);
   });
 
+  // HU #12777 AC4 — el mensaje nombra los formatos DEL TIPO, no los globales.
+  it('un tipo solo PDF dice que solo acepta PDF, sin ofrecer imágenes', () => {
+    const msg = validateFile(pngFile('foto.png', 1000), { allowedMimes: ['application/pdf'] });
+    expect(msg).toBe('Tipo de archivo no permitido. Este documento solo acepta formato PDF.');
+    expect(msg).not.toMatch(/JPG|PNG|WEBP/);
+  });
+
+  it('sin límites por tipo conserva el mensaje global', () => {
+    const txt = new File(['x'], 'a.txt', { type: 'text/plain' });
+    expect(validateFile(txt)).toBe('Tipo de archivo no permitido. Usa PDF, JPG, PNG o WEBP.');
+  });
+
   it('límite por tipo más estricto de tamaño rechaza por encima del máximo del tipo', () => {
     const msg = validateFile(pngFile('grande.png', 2_000_000), { maxSizeBytes: 1_000_000 });
     expect(msg).toMatch(/supera el máximo/);
