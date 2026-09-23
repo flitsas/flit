@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { formatFechaHora } from '@/lib/format/date';
-import { IndicadorVigenciaConsolidado } from '@/components/shared/IndicadorVigenciaConsolidado';
 import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
@@ -2845,9 +2844,6 @@ function TramiteRow({
             {revocationRequestListLabel(item.revocationRequestStatus)}
           </span>
         ) : null}
-        {/* HU #12792 — vigencia del consolidado del wizard (punto + texto + fecha de la última
-            generación). Sin el campo (backend anterior) el indicador no se pinta. */}
-        <IndicadorVigenciaConsolidado vigencia={item.consolidadoWizard} variante="compacta" />
       </span>
     ),
     fechaCreacion: (

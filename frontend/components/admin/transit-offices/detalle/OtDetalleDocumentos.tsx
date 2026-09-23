@@ -7,7 +7,6 @@ import { useToast } from "@/components/admin/Toast";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
 import { AvisoDocumentoFinal } from "@/components/shared/AvisoDocumentoFinal";
 import { AvisoMaestroRadicado } from "@/components/shared/AvisoMaestroRadicado";
-import { IndicadorVigenciaConsolidado } from "@/components/shared/IndicadorVigenciaConsolidado";
 import { AvisoFalloRegeneracion } from "@/components/shared/AvisoFalloRegeneracion";
 import {
   entregarOtConsolidado,
@@ -57,9 +56,6 @@ export interface OtDetalleDocumentosProps {
    */
   consolidadoMaestro?: ConsolidadoVigencia | null;
 }
-
-/** HU #12793 (AC2) — leyenda del maestro desactualizado en la consola OT. */
-export const LEYENDA_MAESTRO_DESACTUALIZADO_OT = "Se reconstruirá al abrirlo";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -415,29 +411,18 @@ export function OtDetalleDocumentos({
       />
 
       <div className="space-y-3" data-testid="ot-detalle-documentos">
-        {/* HU #12793 — vigencia del maestro. Va fuera del guardián de estado: depende del detalle del
-            trámite, no de `GET …/documents`, y debe verse también mientras la lista carga. En
-            read-only radicado muestra la versión radicada (AC3); el aviso largo de que no se
-            regenera lo da `AvisoMaestroRadicado` dentro del visor. */}
-        <IndicadorVigenciaConsolidado
-          vigencia={vigenciaMaestro}
-          documento="maestro"
-          variante="completa"
-          leyendaDesactualizado={LEYENDA_MAESTRO_DESACTUALIZADO_OT}
-          radicadoEn={radicadoIndicador}
-        >
-          {/* HU #12799 (AC3) — aviso de fallo con la fecha del maestro que sí está disponible.
-              «Reintentar» es la misma acción del contenedor: reconstruir (o, en read-only, volver a
-              pedir la entrega, que regenera si la bandera sigue abajo). */}
-          {falloVisible ? (
-            <AvisoFalloRegeneracion
-              fallo={falloVisible}
-              generadoEn={vigenciaMaestro?.generadoEn ?? null}
-              onReintentar={() => void handleConsolidado(!readOnly)}
-              reintentando={consolidadoActing}
-            />
-          ) : null}
-        </IndicadorVigenciaConsolidado>
+        {/* HU #12799 (AC3) — aviso de fallo con la fecha del maestro que sí está disponible.
+            «Reintentar» es la misma acción del contenedor: reconstruir (o, en read-only, volver a
+            pedir la entrega, que regenera si la bandera sigue abajo). El rótulo de vigencia
+            (HU #12793) se retiró por decisión de producto. */}
+        {falloVisible ? (
+          <AvisoFalloRegeneracion
+            fallo={falloVisible}
+            generadoEn={vigenciaMaestro?.generadoEn ?? null}
+            onReintentar={() => void handleConsolidado(!readOnly)}
+            reintentando={consolidadoActing}
+          />
+        ) : null}
         {/* El consolidado NO puede quedar dentro del guardián de estado: con el expediente vacío
             este pinta su mensaje en lugar de los hijos, y precisamente entonces —cuando no hay
             adjuntos— el organismo sigue necesitando poder abrir o reconstruir el consolidado. */}

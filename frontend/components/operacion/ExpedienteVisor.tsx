@@ -11,7 +11,6 @@ import {
 import { documentLabel, catalogDocumentTitle } from '@/lib/tramites/document-labels';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { StatusBadge } from '@/components/atom/StatusBadge';
-import { IndicadorVigenciaConsolidado } from '@/components/shared/IndicadorVigenciaConsolidado';
 import { AvisoFalloRegeneracion } from '@/components/shared/AvisoFalloRegeneracion';
 import { AvisoDocumentoFinal } from '@/components/shared/AvisoDocumentoFinal';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
@@ -456,18 +455,18 @@ function ExpedienteConsolidadoBody({
 
   return (
     <>
-      {/* HU #12792 — indicador de vigencia; HU #12799 — aviso de fallo junto a él (fuera de su
-          región etiquetada) con la fecha del PDF conservado y «Reintentar» = «Re-generar». */}
-      <IndicadorVigenciaConsolidado vigencia={vigencia} className="mb-3">
-        {fallo && !sinRegeneracion ? (
+      {/* HU #12799 — aviso de fallo con la fecha del PDF conservado y «Reintentar» = «Re-generar».
+          El rótulo de vigencia (HU #12792) se retiró por decisión de producto. */}
+      {fallo && !sinRegeneracion ? (
+        <div className="mb-3">
           <AvisoFalloRegeneracion
             fallo={fallo}
             generadoEn={vigencia?.generadoEn ?? null}
             onReintentar={instanceId ? () => void handleGenerate() : undefined}
             reintentando={busy}
           />
-        ) : null}
-      </IndicadorVigenciaConsolidado>
+        </div>
+      ) : null}
 
       {errorVisible && (
         <div

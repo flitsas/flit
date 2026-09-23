@@ -71,8 +71,6 @@ describe('HU #12792 AC4 — no existe flag de watermark en la cadena de entrega'
     'lib/api/tramites-client.ts',
     'components/operacion/ExpedienteVisor.tsx',
     'components/operacion/TramiteDocumentosModal.tsx',
-    'components/shared/IndicadorVigenciaConsolidado.tsx',
-    'lib/tramites/vigencia-consolidado.ts',
   ])('%s no menciona watermark', (archivo) => {
     const fuente = readFileSync(path.join(RAIZ, archivo), 'utf8');
     expect(fuente).not.toMatch(/watermark|marca_?de_?agua|marcaAgua/i);

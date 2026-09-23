@@ -20,8 +20,8 @@ export interface AvisoFalloRegeneracionProps {
 
 /**
  * HU #12799 (Épica #12760) — aviso de que la última regeneración del consolidado falló y el PDF que
- * se muestra es el anterior (con su fecha, hora Colombia). Se pinta como `children` del
- * `IndicadorVigenciaConsolidado` (fuera de su región etiquetada), que ya queda en gris.
+ * se muestra es el anterior (con su fecha, hora Colombia). Se pinta en el bloque del consolidado
+ * (gestor y consola OT) y sobre el visor del PDF.
  *
  * Diseño (`flit-design-guardian` / `flit-detalle-tramite`): banner de advertencia con los tokens
  * `--badge-warning-*` (ámbar = alerta), radio 12px, icono lucide 16px. El título va en

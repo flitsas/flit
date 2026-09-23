@@ -139,13 +139,13 @@ async function abrirConsolidado(user: ReturnType<typeof userEvent.setup>) {
   await user.click(within(fila).getAllByRole("button")[0]);
 }
 
-/** Aviso junto al indicador (fuera del visor modal). */
-function avisoJuntoAlIndicador() {
-  return within(screen.getByTestId("vigencia-consolidado")).getByTestId("aviso-fallo-regeneracion");
+/** Aviso en el bloque de documentos (fuera del visor modal). */
+function avisoEnDocumentos() {
+  return within(screen.getByTestId("ot-detalle-documentos")).getByTestId("aviso-fallo-regeneracion");
 }
 
 describe("hu12799 AC3 — detalle OT: aviso de fallo del maestro", () => {
-  it("POST con fallo: aviso con la fecha del maestro disponible; el indicador sigue gris", async () => {
+  it("POST con fallo: aviso con la fecha del maestro disponible", async () => {
     vi.mocked(generarOtConsolidadoMaestro).mockResolvedValue(FALLO_POST);
     const user = userEvent.setup();
     renderDocs();
@@ -153,19 +153,18 @@ describe("hu12799 AC3 — detalle OT: aviso de fallo del maestro", () => {
     await abrirConsolidado(user);
 
     await waitFor(() => expect(screen.getAllByTestId("aviso-fallo-regeneracion").length).toBeGreaterThan(0));
-    const aviso = avisoJuntoAlIndicador();
+    const aviso = avisoEnDocumentos();
     expect(aviso).toHaveAttribute("role", "alert");
     expect(aviso).toHaveTextContent("No se pudo regenerar el consolidado maestro.");
     expect(aviso).toHaveTextContent("es la versión generada el 20/09/2026 10:05 (hora Colombia)");
     expect(aviso.textContent).not.toMatch(/storage_unavailable/);
-    expect(screen.getByTestId("vigencia-consolidado")).toHaveAttribute("data-estado", "desactualizado");
     // Se previsualiza el PDF anterior servido, con el aviso también sobre el visor.
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByTestId("aviso-fallo-regeneracion")).toBeInTheDocument();
     expect(fetchOtAttachmentPreviewUrl).toHaveBeenCalledWith("proc-1", "att-maestro-anterior", undefined);
   });
 
-  it("un maestro vigente que falla al actualizarse pasa a gris y NO muestra «Consolidado generado»", async () => {
+  it("un maestro vigente que falla al actualizarse avisa y NO muestra «Consolidado generado»", async () => {
     vi.mocked(generarOtConsolidadoMaestro).mockResolvedValue(FALLO_POST);
     const user = userEvent.setup();
     renderDocs({ consolidadoMaestro: maestro({ estado: "vigente" }) });
@@ -173,11 +172,10 @@ describe("hu12799 AC3 — detalle OT: aviso de fallo del maestro", () => {
     await user.click(await screen.findByRole("button", { name: "Actualizar el consolidado del expediente" }));
 
     await waitFor(() => expect(screen.getAllByTestId("aviso-fallo-regeneracion").length).toBeGreaterThan(0));
-    expect(screen.getByTestId("vigencia-consolidado")).toHaveAttribute("data-estado", "desactualizado");
     expect(screen.queryByText("Consolidado generado.")).toBeNull();
   });
 
-  it("read-only no radicado: la entrega con fallo (modo null) también avisa y no pasa a vigente", async () => {
+  it("read-only no radicado: la entrega con fallo (modo null) también avisa", async () => {
     vi.mocked(entregarOtConsolidado).mockResolvedValue(FALLO_ENTREGA);
     const user = userEvent.setup();
     renderDocs({ readOnly: true });
@@ -185,11 +183,10 @@ describe("hu12799 AC3 — detalle OT: aviso de fallo del maestro", () => {
     await abrirConsolidado(user);
 
     await waitFor(() => expect(screen.getAllByTestId("aviso-fallo-regeneracion").length).toBeGreaterThan(0));
-    expect(avisoJuntoAlIndicador()).toHaveTextContent(/error inesperado/);
-    expect(screen.getByTestId("vigencia-consolidado")).toHaveAttribute("data-estado", "desactualizado");
+    expect(avisoEnDocumentos()).toHaveTextContent(/error inesperado/);
   });
 
-  it("«Reintentar» reconstruye (force) y, con éxito, el aviso desaparece y el indicador pasa a verde", async () => {
+  it("«Reintentar» reconstruye (force) y, con éxito, el aviso desaparece", async () => {
     vi.mocked(generarOtConsolidadoMaestro)
       .mockResolvedValueOnce(FALLO_POST)
       .mockResolvedValueOnce(res());
@@ -202,7 +199,7 @@ describe("hu12799 AC3 — detalle OT: aviso de fallo del maestro", () => {
     await user.click(within(await screen.findByRole("dialog")).getAllByRole("button", { name: /cerrar/i })[0]);
 
     await user.click(
-      within(avisoJuntoAlIndicador()).getByRole("button", {
+      within(avisoEnDocumentos()).getByRole("button", {
         name: "Reintentar la regeneración del consolidado maestro",
       }),
     );
@@ -210,7 +207,6 @@ describe("hu12799 AC3 — detalle OT: aviso de fallo del maestro", () => {
     await waitFor(() => expect(generarOtConsolidadoMaestro).toHaveBeenCalledTimes(2));
     expect(generarOtConsolidadoMaestro).toHaveBeenLastCalledWith("proc-1", undefined, true);
     await waitFor(() => expect(screen.queryAllByTestId("aviso-fallo-regeneracion")).toHaveLength(0));
-    expect(screen.getByTestId("vigencia-consolidado")).toHaveAttribute("data-estado", "vigente");
   });
 
   it("AC4 — sin fallo (regenerado) no hay aviso", async () => {
@@ -315,7 +311,7 @@ describe("modo radicado_fijo — el backend sirve el maestro radicado tal cual",
     avisosCascada: ["consolidado_maestro: excepcion"],
   });
 
-  it("detalle OT read-only: sin aviso de fallo y el indicador NO pasa a vigente con la hora local", async () => {
+  it("detalle OT read-only: sin aviso de fallo", async () => {
     vi.mocked(entregarOtConsolidado).mockResolvedValue(RADICADO_FIJO);
     const user = userEvent.setup();
     renderDocs({ readOnly: true });
@@ -325,7 +321,6 @@ describe("modo radicado_fijo — el backend sirve el maestro radicado tal cual",
     await waitFor(() => expect(entregarOtConsolidado).toHaveBeenCalled());
     await waitFor(() => expect(fetchOtAttachmentPreviewUrl).toHaveBeenCalled());
     expect(screen.queryAllByTestId("aviso-fallo-regeneracion")).toHaveLength(0);
-    expect(screen.getByTestId("vigencia-consolidado")).toHaveAttribute("data-estado", "desactualizado");
   });
 
   it("bandeja OT read-only: la fila radicada sin adjunto conocido muestra la versión radicada, sin aviso de fallo", async () => {
