@@ -80,6 +80,13 @@ describe('CamaraComercioUpload', () => {
     );
   });
 
+  it('AC4 — el selector de archivos solo ofrece PDF', async () => {
+    render(<CamaraComercioUpload instanceId={INSTANCE} requirement={requirement()} />);
+
+    const input = await screen.findByLabelText(/^Subir Certificado de Cámara de Comercio/);
+    expect(input).toHaveAttribute('accept', 'application/pdf');
+  });
+
   // ── AC2 — obligatorio bloquea ──────────────────────────────────────────────
 
   it('AC2 — sin adjunto y obligatorio, el gate del paso queda cerrado', async () => {
