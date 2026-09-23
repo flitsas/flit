@@ -162,7 +162,7 @@ interface Props {
   /** HU #12777 — ninguna parte jurídica se quedó sin su certificado de Cámara de Comercio
    *  OBLIGATORIO. Gate propio y separado del de la escritura: son dos documentos distintos y el
    *  gestor tiene que poder ver cuál le falta. */
-  onCamaraComercioGateChange?: (ready: boolean, partesPendientes: string[]) => void;
+  onCamaraComercioGateChange?: (ready: boolean) => void;
   /**
    * Gate del paso: ¿están completos los campos OBLIGATORIOS de todas las partes que captura este
    * paso? Lo consume la shell para deshabilitar "Continuar y guardar". Antes el botón estaba
@@ -1569,28 +1569,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     onCamposRequeridosGateChange?.(validation.valid);
   }, [validation.valid, onCamposRequeridosGateChange]);
 
-  /**
-   * HU #12777 AC2 — el gate del certificado viaja con el NOMBRE de las partes a las que les falta,
-   * para que el pie del asistente diga cuál falta en vez de solo apagar el botón. Va aquí y no junto
-   * a `camaraGateOk` porque necesita `rotuloDelActor`, que es quien sabe cómo se llama cada parte.
-   * Se publica como clave de texto para no disparar el efecto con un arreglo nuevo en cada render.
-   */
-  const camaraPendientesClave = [
-    ...new Set(
-      actors
-        .filter((a) => {
-          const req = camaraRequirementDe(a);
-          return !!req && req.esObligatorio && camaraSatisfecha[a.rol] !== true;
-        })
-        .map((a) => rotuloDelActor(a.rol)),
-    ),
-  ].join('|');
   useEffect(() => {
-    onCamaraComercioGateChange?.(
-      camaraGateOk,
-      camaraPendientesClave ? camaraPendientesClave.split('|') : [],
-    );
-  }, [camaraGateOk, camaraPendientesClave, onCamaraComercioGateChange]);
+    onCamaraComercioGateChange?.(camaraGateOk);
+  }, [camaraGateOk, onCamaraComercioGateChange]);
 
   // NO se revelan los errores en vivo. Se intentó (para justificar el botón deshabilitado) y el
   // resultado fue peor que el problema: `showErrors` es una bandera del FORMULARIO, no de cada
