@@ -2175,7 +2175,51 @@ export interface GenerarConsolidadoResult {
    * salía sin ese documento sin que el gestor supiera por qué. No bloquea: el consolidado se entrega.
    */
   avisosCascada?: string[] | null;
+  /**
+   * HU #12785/#12786 — true si el PDF se reconstruyó en esta petición. Las rutas POST de generación
+   * y la ruta GET de entrega lo devuelven; en la entrega, `false` significa que se sirvió el cacheado.
+   */
+  regenerado?: boolean;
+  /**
+   * HU #12785/#12786 (AC4) — el trámite está en estado final (aprobado/anulado/revocado): el PDF es
+   * la documentación definitiva y no se regenera. La UI lo avisa como «documento final».
+   */
+  definitivoPorEstadoFinal?: boolean;
+  /** HU #12785 — cómo se resolvió la entrega. `null` en las rutas POST de generación. */
+  modo?: ConsolidadoEntregaModo | null;
 }
+
+/**
+ * HU #12785 — modos de `GET …/consolidado/entrega` (schema `ConsolidadoEntregaResponse.modo`).
+ * - `vigente`: bandera arriba, se sirvió el adjunto cacheado sin escribir.
+ * - `regenerado`: bandera abajo (o sin PDF), se reconstruyó en esta petición.
+ * - `definitivo_estado_final` / `migrado_solo_lectura`: estado final, PDF definitivo sin regenerar.
+ * - `cargado_por_usuario`: PDF cargado por el SuperAdmin (Source="user"), nunca se pisa.
+ * - `solo_lectura`: `?soloLectura=true` o un OT que no puede generar; adjunto tal cual.
+ */
+export type ConsolidadoEntregaModo =
+  | 'vigente'
+  | 'regenerado'
+  | 'definitivo_estado_final'
+  | 'migrado_solo_lectura'
+  | 'cargado_por_usuario'
+  | 'solo_lectura';
+
+/** HU #12785 — tipo de PDF que se pide a la ruta de entrega. */
+export type ConsolidadoEntregaTipo = 'consolidado' | 'consolidado_maestro';
+
+/** HU #12785 — query de `GET …/consolidado/entrega`. Omitidos = comportamiento normal. */
+export interface ConsolidadoEntregaParams {
+  tipo?: ConsolidadoEntregaTipo;
+  force?: boolean;
+  soloLectura?: boolean;
+}
+
+/**
+ * HU #12785 — respuesta de la ruta de entrega (`ConsolidadoEntregaResponse`): mismo shape que la
+ * generación. El binario se baja por la descarga / `preview-url` de `document.attachmentId`.
+ */
+export type ConsolidadoEntregaResult = GenerarConsolidadoResult;
 
 // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───
 // Contrato FIJO acordado con backend:
