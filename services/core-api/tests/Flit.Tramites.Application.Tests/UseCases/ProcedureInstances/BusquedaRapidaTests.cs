@@ -15,7 +15,7 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// MISMAS reglas que la etiqueta del actor y el gate de radicación).
 ///
 /// <para>Uso de ejemplo:
-/// <c>var filtro = await Resolver().AplicarAsync(new(), BusquedaRapida.SinFirmas, Cargar(a, b), ct);</c>
+/// <c>var filtro = await Resolver().AplicarAsync(new(), BusquedaRapida.SinFirmas, Cargar(a, b), ct: ct);</c>
 /// ⇒ <c>filtro.IdsIncluidos</c> = los borradores sin firmar.</para>
 /// </summary>
 public sealed class BusquedaRapidaTests
@@ -52,12 +52,13 @@ public sealed class BusquedaRapidaTests
     [InlineData("sin_firmas")]
     [InlineData(" PAUSADOS ")]
     [InlineData("mas_de_10_dias")]
+    [InlineData("mis_tramites")]
     public void AtajoValidoOAusente_NoEsError(string? atajo) =>
         BusquedaRapida.Validate(atajo).Should().BeNull();
 
     [Fact] // AC7 — un atajo desconocido se rechaza nombrándolo, no se ignora.
     public void AtajoDesconocido_DevuelveMensajeQueLoNombra() =>
-        BusquedaRapida.Validate("mis_tramites").Should().Contain("mis_tramites").And.Contain("sin_firmas");
+        BusquedaRapida.Validate("todos_los_tramites").Should().Contain("todos_los_tramites").And.Contain("mis_tramites");
 
     // ── AC1 — días en Entregado ───────────────────────────────────────────────────────────
 
@@ -92,12 +93,37 @@ public sealed class BusquedaRapidaTests
 
         var filtro = await Resolver().AplicarAsync(
             new ProcedureInstanceListFilter(), BusquedaRapida.MasDe5Dias,
-            (_, _, _) => { cargado = true; return Task.FromResult<(IReadOnlyList<ProcedureInstance>, int)>(([], 0)); },
-            TestContext.Current.CancellationToken);
+            (_, _, _) => { cargado = true; return Task.FromResult<(IReadOnlyList<ProcedureInstance>, int)>(([], 0)); }, ct: TestContext.Current.CancellationToken);
 
         filtro.EntregadoAntesDe.Should().NotBeNull();
         filtro.IdsIncluidos.Should().BeNull();
         cargado.Should().BeFalse();
+    }
+
+    // ── AC8 — mis trámites (opción B: el responsable de hoy) ───────────────────────────────
+
+    [Fact]
+    public async Task MisTramites_FiltraPorElResponsableDeHoyEnSql()
+    {
+        var carlos = Guid.NewGuid();
+
+        var filtro = await Resolver().AplicarAsync(
+            new ProcedureInstanceListFilter(), BusquedaRapida.MisTramites, Cargar(),
+            usuarioActualId: carlos, ct: TestContext.Current.CancellationToken);
+
+        filtro.ResponsableId.Should().Be(carlos);
+        filtro.IdsIncluidos.Should().BeNull("se resuelve en SQL, sin cargar candidatos");
+    }
+
+    [Fact]
+    public async Task MisTramites_SinUsuarioIdentificado_NoTraeNadaNuncaTodo()
+    {
+        var filtro = await Resolver().AplicarAsync(
+            new ProcedureInstanceListFilter(), BusquedaRapida.MisTramites, Cargar(),
+            ct: TestContext.Current.CancellationToken);
+
+        filtro.ResponsableId.Should().BeNull();
+        filtro.IdsIncluidos.Should().BeEmpty();
     }
 
     // ── AC2 — sin firmas ──────────────────────────────────────────────────────────────────
@@ -112,8 +138,7 @@ public sealed class BusquedaRapidaTests
 
         var filtro = await Resolver().AplicarAsync(
             new ProcedureInstanceListFilter { Placa = "ABC123" }, BusquedaRapida.SinFirmas,
-            (f, _, _) => { pedido = f; return Task.FromResult<(IReadOnlyList<ProcedureInstance>, int)>(([sinFirmar, firmado], 2)); },
-            TestContext.Current.CancellationToken);
+            (f, _, _) => { pedido = f; return Task.FromResult<(IReadOnlyList<ProcedureInstance>, int)>(([sinFirmar, firmado], 2)); }, ct: TestContext.Current.CancellationToken);
 
         filtro.IdsIncluidos.Should().BeEquivalentTo([sinFirmar.Id]);
         pedido!.Estados.Should().Equal(TramiteEstado.Borrador);
@@ -136,7 +161,7 @@ public sealed class BusquedaRapidaTests
         var (filas, _) = await new ListProcedureInstancesFilteredHandler(_repo)
             .HandleAsync(new ProcedureInstanceListRequest(), ct);
         var filtro = await Resolver().AplicarAsync(
-            new ProcedureInstanceListFilter(), BusquedaRapida.SinFirmas, Cargar(sinFirmar, firmado), ct);
+            new ProcedureInstanceListFilter(), BusquedaRapida.SinFirmas, Cargar(sinFirmar, firmado), ct: ct);
 
         var etiquetadasSinFirmar = filas
             .Where(f => f.FirmaCompradorEstado is not null && f.FirmaCompradorEstado != FirmaParteEstados.Firmado)
@@ -153,8 +178,7 @@ public sealed class BusquedaRapidaTests
         var completo = Borrador(conFactura: true);
 
         var filtro = await Resolver().AplicarAsync(
-            new ProcedureInstanceListFilter(), BusquedaRapida.SinDocumento, Cargar(incompleto, completo),
-            TestContext.Current.CancellationToken);
+            new ProcedureInstanceListFilter(), BusquedaRapida.SinDocumento, Cargar(incompleto, completo), ct: TestContext.Current.CancellationToken);
 
         filtro.IdsIncluidos.Should().BeEquivalentTo([incompleto.Id]);
     }
@@ -170,8 +194,7 @@ public sealed class BusquedaRapidaTests
         var completo = Borrador(conFactura: true);
 
         var filtro = await Resolver().AplicarAsync(
-            new ProcedureInstanceListFilter(), BusquedaRapida.SinDocumento, Cargar(completo),
-            TestContext.Current.CancellationToken);
+            new ProcedureInstanceListFilter(), BusquedaRapida.SinDocumento, Cargar(completo), ct: TestContext.Current.CancellationToken);
 
         filtro.IdsIncluidos.Should().BeEmpty("el FUR lo genera FLIT: no se pide cargar");
     }
@@ -181,7 +204,7 @@ public sealed class BusquedaRapidaTests
     {
         await Resolver().AplicarAsync(
             new ProcedureInstanceListFilter(), BusquedaRapida.SinDocumento,
-            Cargar(Borrador(), Borrador(), Borrador()), TestContext.Current.CancellationToken);
+            Cargar(Borrador(), Borrador(), Borrador()), ct: TestContext.Current.CancellationToken);
 
         await _matriz.Received(1).GetForAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
         await _params.Received(1).GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
@@ -203,7 +226,7 @@ public sealed class BusquedaRapidaTests
 
         var filtro = await Resolver().AplicarAsync(
             new ProcedureInstanceListFilter(), BusquedaRapida.Pausados,
-            Cargar(sinFirmar, sinDocumento, pausadoListo, listo), TestContext.Current.CancellationToken);
+            Cargar(sinFirmar, sinDocumento, pausadoListo, listo), ct: TestContext.Current.CancellationToken);
 
         filtro.IdsIncluidos.Should().BeEquivalentTo([sinFirmar.Id, sinDocumento.Id, pausadoListo.Id]);
     }
@@ -215,8 +238,7 @@ public sealed class BusquedaRapidaTests
     {
         var act = () => Resolver().AplicarAsync(
             new ProcedureInstanceListFilter(), BusquedaRapida.SinFirmas,
-            (_, take, _) => Task.FromResult<(IReadOnlyList<ProcedureInstance>, int)>(([], take + 1)),
-            TestContext.Current.CancellationToken);
+            (_, take, _) => Task.FromResult<(IReadOnlyList<ProcedureInstance>, int)>(([], take + 1)), ct: TestContext.Current.CancellationToken);
 
         (await act.Should().ThrowAsync<BusquedaRapidaDemasiadoAmpliaException>())
             .Which.Message.Should().Contain("Acota la búsqueda");

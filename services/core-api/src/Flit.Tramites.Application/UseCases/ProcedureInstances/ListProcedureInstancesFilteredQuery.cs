@@ -53,6 +53,9 @@ public sealed record ProcedureInstanceListRequest
     /// <summary>Epic #12686 — atajo de la búsqueda rápida (<see cref="BusquedaRapida"/>).</summary>
     public string? BusquedaRapida { get; init; }
 
+    /// <summary>Epic #12686 — usuario autenticado, para «Mis trámites». Lo pone el endpoint desde el token.</summary>
+    public Guid? UsuarioActualId { get; init; }
+
     public string? SortBy { get; init; }
     public bool SortDescending { get; init; } = true;
 }
@@ -170,6 +173,7 @@ public sealed class ListProcedureInstancesFilteredHandler(
             request.BusquedaRapida,
             (f, take, token) => repo.ListWithSummaryGraphFilteredAsync(
                 request.TenantId, 0, take, f, ProcedureInstanceSortBy.Default, SortDirection.Descending, token),
+            request.UsuarioActualId,
             ct).ConfigureAwait(false);
     }
 

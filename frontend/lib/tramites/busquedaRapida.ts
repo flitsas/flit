@@ -9,7 +9,9 @@ import { FILTRO_RECHAZADO_PREASIGNACION, type EstadoFiltro } from './estados';
  * avanzado del usuario no se toca. Cuando el atajo es de un solo estado, ese estado queda como el
  * filtro de la tira, así su tarjeta se resalta.</p>
  *
- * <p>«Mis trámites» no está todavía: depende de una definición pendiente del PO.</p>
+ * <p>«Mis trámites» son los que el usuario tiene a su cargo HOY (opción B, 2026-09-23): si Ana crea
+ * un trámite y se lo pasan a Carlos, aparece en el de Carlos. No se ofrece al SuperAdmin, que no
+ * tiene trámites a su cargo: el atajo le saldría siempre vacío.</p>
  */
 export type AtajoGestor =
   | 'en_subsanacion'
@@ -19,7 +21,8 @@ export type AtajoGestor =
   | 'sin_firmas'
   | 'sin_documento'
   | 'pausados'
-  | 'faltantes_por_aprobar';
+  | 'faltantes_por_aprobar'
+  | 'mis_tramites';
 
 export interface AtajoDef<K extends string = string> {
   key: K;
@@ -69,6 +72,12 @@ export const ATAJOS_GESTOR: readonly AtajoDef<AtajoGestor>[] = [
     busquedaRapida: 'sin_firmas',
   },
   {
+    key: 'mis_tramites',
+    label: 'Mis trámites',
+    hint: 'Trámites que tienes a tu cargo hoy, los hayas creado o te los hayan asignado',
+    busquedaRapida: 'mis_tramites',
+  },
+  {
     key: 'faltantes_por_aprobar',
     label: 'Faltantes por aprobar',
     hint: 'Entregados a la espera de la decisión del organismo',
@@ -89,6 +98,11 @@ export const ATAJOS_GESTOR: readonly AtajoDef<AtajoGestor>[] = [
     busquedaRapida: 'pausados',
   },
 ];
+
+/** Atajos de la perspectiva: el SuperAdmin no ve «Mis trámites». */
+export function atajosDePerspectiva(esSuperAdmin: boolean): readonly AtajoDef<AtajoGestor>[] {
+  return esSuperAdmin ? ATAJOS_GESTOR.filter((a) => a.key !== 'mis_tramites') : ATAJOS_GESTOR;
+}
 
 export function atajoGestor(key: AtajoGestor | ''): AtajoDef<AtajoGestor> | undefined {
   return key ? ATAJOS_GESTOR.find((a) => a.key === key) : undefined;

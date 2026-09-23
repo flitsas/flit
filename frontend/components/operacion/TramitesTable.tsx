@@ -102,7 +102,7 @@ import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { EstadoFunnel } from './EstadoFunnel';
 import { panelesDeEstado } from '@/lib/tramites/panelesEstado';
-import { ATAJOS_GESTOR, atajoGestor, type AtajoGestor } from '@/lib/tramites/busquedaRapida';
+import { atajoGestor, atajosDePerspectiva, type AtajoGestor } from '@/lib/tramites/busquedaRapida';
 import { BusquedaRapidaAcordeon } from './BusquedaRapidaAcordeon';
 import { AvisoHayCambios } from './AvisoHayCambios';
 import { useSondeoDeConteos } from '@/hooks/useSondeoDeConteos';
@@ -1436,7 +1436,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             que poder quitarse. */}
         {alcanceListo ? (
           <BusquedaRapidaAcordeon
-            items={ATAJOS_GESTOR}
+            items={atajosDePerspectiva(esSuperAdmin)}
             selected={atajo}
             onSelect={(key) => handleAtajoChange(key as '' | AtajoGestor)}
             storageKey="tramites.busqueda-rapida"

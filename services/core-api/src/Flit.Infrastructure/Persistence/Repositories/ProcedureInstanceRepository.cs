@@ -2399,6 +2399,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             query = query.Where(x => ids.Contains(x.Id));
         }
 
+        // Epic #12686 — «Mis trámites»: el gestor efectivo, igual que `GestorEfectivoUserId` (COALESCE).
+        if (filter.ResponsableId is { } responsable)
+            query = query.Where(x => (x.AssignedToUserId ?? x.CreatedByUserId) == responsable);
+
         // Epic #12686 — «más de N días en gestión»: la ÚLTIMA entrada a Entregado, porque un trámite
         // rechazado y vuelto a radicar empieza a contar de nuevo. Sin historial, la radicación.
         if (filter.EntregadoAntesDe is { } corte)

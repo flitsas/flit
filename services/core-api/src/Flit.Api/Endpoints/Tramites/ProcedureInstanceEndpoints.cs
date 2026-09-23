@@ -303,7 +303,7 @@ internal static class ProcedureInstanceEndpoints
 
             try
             {
-                var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId), ct);
+                var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User) }, ct);
                 return Results.Ok(new { items, total });
             }
             catch (BusquedaRapidaDemasiadoAmpliaException ex)
@@ -335,7 +335,7 @@ internal static class ProcedureInstanceEndpoints
 
             try
             {
-                return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId), ct));
+                return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User) }, ct));
             }
             catch (BusquedaRapidaDemasiadoAmpliaException ex)
             {
