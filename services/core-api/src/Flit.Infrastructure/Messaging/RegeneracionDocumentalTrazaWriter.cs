@@ -46,12 +46,6 @@ internal sealed class RegeneracionDocumentalTrazaWriter(FlitDbContext db)
         string tipoEvento,
         CancellationToken cancellationToken = default)
     {
-        if (tenantId == Guid.Empty || procedureInstanceId == Guid.Empty)
-            return false;
-
-        var tipo = tipoEvento;
-        var id = Guid.CreateVersion7();
-        var now = DateTimeOffset.UtcNow;
         var payload = JsonSerializer.Serialize(new
         {
             origen,
@@ -59,6 +53,29 @@ internal sealed class RegeneracionDocumentalTrazaWriter(FlitDbContext db)
             detalle,
             tenant_id = tenantId,
         });
+
+        return await EscribirEventoAsync(tenantId, procedureInstanceId, tipoEvento, payload, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #12798 — inserción genérica (tipo + payload ya serializado). Es el único punto que toca la
+    /// tabla: los dos <c>EscribirFalloAsync</c> componen su payload histórico y delegan aquí.
+    /// </summary>
+    public async Task<bool> EscribirEventoAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string tipoEvento,
+        string payloadJson,
+        CancellationToken cancellationToken = default)
+    {
+        if (tenantId == Guid.Empty || procedureInstanceId == Guid.Empty)
+            return false;
+
+        var tipo = tipoEvento;
+        var payload = payloadJson;
+        var id = Guid.CreateVersion7();
+        var now = DateTimeOffset.UtcNow;
 
         // Proveedor no relacional (tests con InMemory): no hay SQL que ejecutar. El tracker de esos
         // tests no arrastra un intento fallido de generación, así que aquí sí es seguro usarlo.

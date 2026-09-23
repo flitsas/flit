@@ -264,6 +264,78 @@ public sealed class ConsolidadoRegeneracionProcessorTests
         _storage.Saved.Should().ContainSingle();
     }
 
+    // ── HU #12798 AC3 — un fallo en segundo plano no rompe el hito: queda solo en la bitácora ──
+
+    [Fact]
+    public async Task HU12798_AC3_RegeneracionEncoladaQueFalla_NoPropaga_QuedaEnBitacora_YConservaElAnterior()
+    {
+        var traza = new TrazaEspia();
+        var (queue, processor) = Crear(traza: traza);
+        var (tenant, id) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instancia(id, tenant);
+        Adjuntar(instance, "consolidado_maestro", "system");
+        // El binario de la factura desapareció: el generador responde adjunto_no_disponible.
+        _storage.Files.Remove($"{id:D}/factura-previo");
+        Cablear(instance);
+
+        // Hito (p. ej. asignación de placa, HU #12796): encola y sigue; la operación ya está confirmada.
+        queue.Encolar(tenant, id, TipoConsolidado.Maestro).Should().BeTrue();
+        processor.DrenarCola();
+        _clock.Advance(Ventana);
+
+        var act = () => processor.ProcesarVencidasAsync(Ct);
+
+        (await act.Should().NotThrowAsync()).Subject.Should().Be(1);
+        var evento = traza.Eventos.Should().ContainSingle().Subject;
+        evento.Tipo.Should().Be(ConsolidadoFalloBitacora.EventoFallo);
+        evento.TenantId.Should().Be(tenant);
+        evento.Payload.Should().Contain("\"origen\":\"regeneracion_anticipada\"")
+            .And.Contain("\"documento\":\"consolidado_maestro\"")
+            .And.Contain("\"error\":\"adjunto_no_disponible\"");
+        _storage.Saved.Should().BeEmpty();
+        _storage.Files.Should().ContainKey($"{id:D}/consolidado_maestro-previo", "el PDF anterior sigue disponible");
+    }
+
+    [Fact]
+    public async Task HU12798_AC3_ExcepcionEnLaGeneracion_NoTumbaAlWorker_YSeRegistra()
+    {
+        var traza = new TrazaEspia();
+        var (queue, processor) = Crear(traza: traza);
+        var (tenant, id) = (Guid.NewGuid(), Guid.NewGuid());
+        Cablear(Instancia(id, tenant));
+        _repo.GetByIdWithChecklistGraphAsync(id, tenant, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("timeout"));
+
+        queue.Encolar(tenant, id, TipoConsolidado.Wizard);
+        processor.DrenarCola();
+        _clock.Advance(Ventana);
+
+        var act = () => processor.ProcesarVencidasAsync(Ct);
+
+        (await act.Should().NotThrowAsync()).Subject.Should().Be(1);
+        traza.Eventos.Should().ContainSingle().Which.Payload.Should()
+            .Contain("\"error\":\"excepcion\"").And.Contain("\"detalle\":\"InvalidOperationException\"");
+    }
+
+    [Fact]
+    public async Task HU12798_AC5_TrabajoOmitidoPorEstadoFinal_NoEscribeEnBitacora()
+    {
+        var traza = new TrazaEspia();
+        var (queue, processor) = Crear(traza: traza);
+        var (tenant, id) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instancia(id, tenant);
+        instance.Status = TramiteEstado.Aprobado;
+        Cablear(instance);
+
+        queue.Encolar(tenant, id, TipoConsolidado.Maestro);
+        processor.DrenarCola();
+        _clock.Advance(Ventana);
+        await processor.ProcesarVencidasAsync(Ct);
+
+        traza.Eventos.Should().BeEmpty();
+        _storage.Saved.Should().BeEmpty();
+    }
+
     // ── Bucle completo (tiempo real, ventana de milisegundos) ───────────────────────────────────
 
     [Fact]
@@ -322,7 +394,8 @@ public sealed class ConsolidadoRegeneracionProcessorTests
         int capacidad = 1_024,
         TimeSpan? ventana = null,
         TimeSpan? esperaMaxima = null,
-        TimeProvider? reloj = null)
+        TimeProvider? reloj = null,
+        IRegeneracionDocumentalTrazaWriter? traza = null)
     {
         var options = Options.Create(new ConsolidadoRegeneracionOptions
         {
@@ -352,7 +425,9 @@ public sealed class ConsolidadoRegeneracionProcessorTests
         services.AddScoped(sp => new RegenerarConsolidadoAnticipadoHandler(
             sp.GetRequiredService<IProcedureInstanceRepository>(),
             sp.GetRequiredService<GenerarConsolidadoHandler>(),
-            sp.GetRequiredService<GenerarConsolidadoMaestroHandler>()));
+            sp.GetRequiredService<GenerarConsolidadoMaestroHandler>(),
+            logger: null,
+            bitacora: new ConsolidadoFalloBitacora(traza)));
         var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
         var queue = new ChannelConsolidadoRegeneracionQueue(options);
@@ -406,6 +481,29 @@ public sealed class ConsolidadoRegeneracionProcessorTests
             Source = source,
             UploadedAt = DateTimeOffset.UtcNow,
         });
+    }
+
+    /// <summary>HU #12798 — espía del puerto de bitácora (solo la inserción genérica).</summary>
+    private sealed class TrazaEspia : IRegeneracionDocumentalTrazaWriter
+    {
+        public List<(Guid TenantId, Guid InstanceId, string Tipo, string Payload)> Eventos { get; } = [];
+
+        public Task<bool> EscribirFalloAsync(
+            Guid tenantId, Guid procedureInstanceId, string origen, string codigoError, string? detalle,
+            CancellationToken cancellationToken = default) => Task.FromResult(false);
+
+        public Task<bool> EscribirFalloAsync(
+            Guid tenantId, Guid procedureInstanceId, string origen, string codigoError, string? detalle,
+            string tipoEvento, CancellationToken cancellationToken = default) => Task.FromResult(false);
+
+        public Task<bool> EscribirEventoAsync(
+            Guid tenantId, Guid procedureInstanceId, string tipoEvento, string payloadJson,
+            CancellationToken cancellationToken = default)
+        {
+            lock (Eventos)
+                Eventos.Add((tenantId, procedureInstanceId, tipoEvento, payloadJson));
+            return Task.FromResult(true);
+        }
     }
 
     /// <summary>Reloj controlable: solo <c>GetUtcNow</c>, que es lo que usa el debounce.</summary>

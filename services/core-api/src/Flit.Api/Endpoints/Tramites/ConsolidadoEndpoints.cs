@@ -27,7 +27,9 @@ internal static class ConsolidadoEndpoints
             // opcional debe dar el comportamiento normal, no un 400. Misma forma que el resto de la API.
             [FromQuery] bool? force,
             HttpContext http,
-            GenerarConsolidadoHandler handler,
+            // HU #12798 (AC4) — si la reconstrucción falla y hay consolidado anterior, se entrega ese con
+            // el aviso en avisosCascada (y el fallo queda en la bitácora) en vez de un error sin documento.
+            GenerarConsolidadoConRespaldoHandler handler,
             GeneracionDocumentalGestorGuard estadoGuard,
             CancellationToken ct) =>
         {

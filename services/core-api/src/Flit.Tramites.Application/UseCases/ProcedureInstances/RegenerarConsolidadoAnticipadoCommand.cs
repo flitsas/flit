@@ -53,10 +53,14 @@ public sealed class RegenerarConsolidadoAnticipadoHandler(
     IProcedureInstanceRepository repo,
     GenerarConsolidadoHandler wizardHandler,
     GenerarConsolidadoMaestroHandler maestroHandler,
-    ILogger<RegenerarConsolidadoAnticipadoHandler>? logger = null)
+    ILogger<RegenerarConsolidadoAnticipadoHandler>? logger = null,
+    ConsolidadoFalloBitacora? bitacora = null)
 {
     internal const string TipoAdjuntoWizard = "consolidado";
     internal const string TipoAdjuntoMaestro = "consolidado_maestro";
+
+    // HU #12798 — sin bitácora cableada (tests/composiciones antiguas) el fallo queda solo en el log.
+    private readonly ConsolidadoFalloBitacora _bitacora = bitacora ?? new ConsolidadoFalloBitacora();
 
     public async Task<ResultadoRegeneracionAnticipada> HandleAsync(
         Guid tenantId,
@@ -74,13 +78,39 @@ public sealed class RegenerarConsolidadoAnticipadoHandler(
         if (omision is { } motivo)
             return Omitir(motivo, tenantId, procedureInstanceId, documento);
 
-        var (result, error) = documento == TipoConsolidado.Wizard
-            ? await wizardHandler
-                .HandleAsync(procedureInstanceId, tenantId, userId: null, force: false, ct)
-                .ConfigureAwait(false)
-            : await maestroHandler
-                .HandleAsync(procedureInstanceId, tenantId, matrizPrecedencia: null, force: false, ct)
+        var tipoAdjunto = documento == TipoConsolidado.Wizard ? TipoAdjuntoWizard : TipoAdjuntoMaestro;
+        var hayAnterior = instance.Attachments
+            .Any(a => string.Equals(a.Tipo, tipoAdjunto, StringComparison.OrdinalIgnoreCase));
+        GenerarConsolidadoResult? result;
+        string? error;
+        try
+        {
+            (result, error) = documento == TipoConsolidado.Wizard
+                ? await wizardHandler
+                    .HandleAsync(procedureInstanceId, tenantId, userId: null, force: false, ct)
+                    .ConfigureAwait(false)
+                : await maestroHandler
+                    .HandleAsync(procedureInstanceId, tenantId, matrizPrecedencia: null, force: false, ct)
+                    .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            // HU #12798 (AC3) — el trabajo corre en segundo plano, después de que el hito (p. ej. la
+            // asignación de placa) ya confirmó: el fallo NO se propaga, queda en la bitácora del trámite
+            // y el PDF anterior sigue en pie (reemplazo seguro, HU #12797).
+            if (logger is not null)
+            {
+                RegeneracionAnticipadaLog.Fallida(
+                    logger, documento, procedureInstanceId, tenantId, ConsolidadoFalloBitacora.CausaExcepcion);
+            }
+
+            await _bitacora
+                .RegistrarAsync(
+                    tenantId, procedureInstanceId, ConsolidadoFalloBitacora.Origenes.RegeneracionAnticipada,
+                    tipoAdjunto, ConsolidadoFalloBitacora.CausaExcepcion, ex, conAnterior: hayAnterior, ct)
                 .ConfigureAwait(false);
+            return ResultadoRegeneracionAnticipada.Fallido;
+        }
 
         if (error is not null || result is null)
         {
@@ -88,6 +118,17 @@ public sealed class RegenerarConsolidadoAnticipadoHandler(
             {
                 RegeneracionAnticipadaLog.Fallida(
                     logger, documento, procedureInstanceId, tenantId, error ?? "sin_resultado");
+            }
+
+            // HU #12798 (AC1/AC5) — solo los fallos reales van a la bitácora; not_found y
+            // migrado_solo_lectura son omisiones, no fallos.
+            if (ConsolidadoFalloBitacora.EsFallo(error))
+            {
+                await _bitacora
+                    .RegistrarAsync(
+                        tenantId, procedureInstanceId, ConsolidadoFalloBitacora.Origenes.RegeneracionAnticipada,
+                        tipoAdjunto, error!, excepcion: null, conAnterior: hayAnterior, ct)
+                    .ConfigureAwait(false);
             }
 
             return ResultadoRegeneracionAnticipada.Fallido;

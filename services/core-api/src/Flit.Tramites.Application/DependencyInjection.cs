@@ -269,6 +269,10 @@ public static class DependencyInjection
         // HU #12795 (Épica #12760) — un trabajo de la cola de regeneración anticipada: comprueba
         // vigencia / estado final / migrado / Source=user y delega en los dos handlers de arriba.
         services.AddScoped<RegenerarConsolidadoAnticipadoHandler>();
+        // HU #12798 — bitácora de fallos de regeneración del consolidado (evento
+        // consolidado_regeneracion_fallida + aviso en cascada) y POST del wizard con respaldo del anterior.
+        services.AddScoped<ConsolidadoFalloBitacora>();
+        services.AddScoped<GenerarConsolidadoConRespaldoHandler>();
         // Perfil OT: visualizar el consolidado y adjuntar la Licencia de Tránsito (LT) sobre
         // trámites de clientes (se ejecutan en el scope RLS del tenant cliente vía AdminOtEndpoints).
         services.AddScoped<DescargarConsolidadoHandler>();

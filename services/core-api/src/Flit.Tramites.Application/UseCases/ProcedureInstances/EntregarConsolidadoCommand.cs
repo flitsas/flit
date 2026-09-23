@@ -82,14 +82,22 @@ public sealed record EntregarConsolidadoRequest(
 /// </list>
 /// Errores: <c>not_found</c>, <c>consolidado_no_generado</c> (final/solo lectura sin PDF),
 /// <c>migrado_solo_lectura</c> (migrado final sin PDF) y los que devuelvan los generadores.
+/// <para>HU #12798 (AC4) — si la reconstrucción falla y hay un PDF anterior, se entrega ESE PDF con el
+/// aviso en <see cref="GenerarConsolidadoResult.AvisosCascada"/> (<c>"consolidado: causa"</c>),
+/// <c>Regenerado=false</c> y <c>Modo=null</c> (el enum de <c>modo</c> del contrato no tiene un valor para
+/// este caso y no se amplía aquí); el fallo queda en la bitácora del trámite
+/// (<see cref="ConsolidadoFalloBitacora"/>). Sin anterior, el error viaja como antes.</para>
 /// </summary>
 /// <remarks>Uso de ejemplo: <c>await handler.HandleAsync(new(id, tenantId, ConsolidadoEntregaTipo.Maestro), ct)</c>.</remarks>
 public sealed class EntregarConsolidadoHandler(
     IProcedureInstanceRepository repo,
     GenerarConsolidadoHandler wizardHandler,
-    GenerarConsolidadoMaestroHandler maestroHandler)
+    GenerarConsolidadoMaestroHandler maestroHandler,
+    ConsolidadoFalloBitacora? bitacora = null)
 {
     public const string ConsolidadoNoGenerado = "consolidado_no_generado";
+
+    private readonly ConsolidadoFalloBitacora _bitacora = bitacora ?? new ConsolidadoFalloBitacora();
 
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         EntregarConsolidadoRequest request,
@@ -132,16 +140,23 @@ public sealed class EntregarConsolidadoHandler(
 
         // AC1/AC2/AC6 — el generador decide con la bandera: arriba ⇒ caché sin tocar storage; abajo o
         // sin PDF ⇒ reconstruye y la sube.
-        var (result, error) = request.Tipo == ConsolidadoEntregaTipo.Maestro
-            ? await maestroHandler
-                .HandleAsync(request.Id, request.TenantId, request.MatrizPrecedencia, request.Force, ct)
-                .ConfigureAwait(false)
-            : await wizardHandler
-                .HandleAsync(request.Id, request.TenantId, request.UserId, request.Force, ct)
-                .ConfigureAwait(false);
+        // HU #12798 — el fallo se registra en la bitácora y, con PDF anterior, se entrega ese (AC4).
+        var salida = await _bitacora
+            .GenerarConRespaldoAsync(
+                request.TenantId, request.Id, tipoAdjunto, ConsolidadoFalloBitacora.Origenes.EntregaConsolidado,
+                existente,
+                c => request.Tipo == ConsolidadoEntregaTipo.Maestro
+                    ? maestroHandler.HandleAsync(request.Id, request.TenantId, request.MatrizPrecedencia, request.Force, c)
+                    : wizardHandler.HandleAsync(request.Id, request.TenantId, request.UserId, request.Force, c),
+                ct)
+            .ConfigureAwait(false);
+        var (result, error) = (salida.Result, salida.Error);
 
         if (error is not null || result is null)
             return (null, error ?? "consolidado_sin_resultado");
+
+        if (salida.SirvioAnterior)
+            return (result with { DefinitivoPorEstadoFinal = false, Modo = null }, null);
 
         return (result with
         {
