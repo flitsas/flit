@@ -18,6 +18,7 @@ import type {
 
 const mocks = vi.hoisted(() => ({
   generarConsolidado: vi.fn(),
+  entregarConsolidado: vi.fn(),
   fetchAttachmentPreviewUrl: vi.fn(),
   downloadAttachment: vi.fn(),
   openLoadingDocumentTab: vi.fn(() => ({ closed: false, close: vi.fn() }) as unknown as Window),
@@ -28,6 +29,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     generarConsolidado: mocks.generarConsolidado,
+    entregarConsolidado: mocks.entregarConsolidado,
     fetchAttachmentPreviewUrl: mocks.fetchAttachmentPreviewUrl,
     downloadAttachment: mocks.downloadAttachment,
   },
@@ -108,7 +110,7 @@ async function abrir(user: ReturnType<typeof userEvent.setup>) {
 
 describe('hu12799 AC1 — aviso visible al abrir el expediente con fallo', () => {
   it('muestra el aviso junto al indicador gris con la fecha del PDF conservado', async () => {
-    mocks.generarConsolidado.mockResolvedValue(FALLO);
+    mocks.entregarConsolidado.mockResolvedValue(FALLO);
     const user = userEvent.setup();
     renderVisor();
 
@@ -126,7 +128,7 @@ describe('hu12799 AC1 — aviso visible al abrir el expediente con fallo', () =>
     const indicador = screen.getByTestId('vigencia-consolidado');
     expect(indicador).toContainElement(aviso);
     expect(indicador).toHaveAttribute('data-estado', 'desactualizado');
-    expect(screen.getByRole('status', { name: /consolidado: desactualizado/i })).not.toContainElement(aviso);
+    expect(screen.getByRole('group', { name: /consolidado: desactualizado/i })).not.toContainElement(aviso);
     // Se sirvió el PDF anterior (sigue siendo apertura exitosa).
     await waitFor(() => expect(mocks.openObjectUrlInWindow).toHaveBeenCalledTimes(1));
   });
@@ -167,7 +169,7 @@ describe('hu12799 AC1 — aviso visible al abrir el expediente con fallo', () =>
   });
 
   it('en la apertura con reconstrucción, un fallo no anuncia «se cargó la nueva versión»', async () => {
-    mocks.generarConsolidado.mockResolvedValue(FALLO);
+    mocks.entregarConsolidado.mockResolvedValue(FALLO);
     const user = userEvent.setup();
     renderVisor();
 
@@ -181,7 +183,8 @@ describe('hu12799 AC1 — aviso visible al abrir el expediente con fallo', () =>
 
 describe('hu12799 AC2 — reintento desde el aviso', () => {
   it('«Reintentar» lanza una nueva generación (force) y, con éxito, el aviso desaparece y el indicador pasa a verde', async () => {
-    mocks.generarConsolidado.mockResolvedValueOnce(FALLO).mockResolvedValueOnce(respuesta());
+    mocks.entregarConsolidado.mockResolvedValueOnce(FALLO);
+    mocks.generarConsolidado.mockResolvedValueOnce(respuesta());
     const user = userEvent.setup();
     renderVisor();
 
@@ -191,12 +194,13 @@ describe('hu12799 AC2 — reintento desde el aviso', () => {
     await user.click(within(aviso).getByRole('button', { name: 'Reintentar la regeneración del consolidado' }));
 
     await waitFor(() => expect(screen.queryByTestId('aviso-fallo-regeneracion')).toBeNull());
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(2);
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
     expect(mocks.generarConsolidado).toHaveBeenLastCalledWith(INSTANCE, undefined, true);
     expect(screen.getByTestId('vigencia-consolidado')).toHaveAttribute('data-estado', 'vigente');
   });
 
   it('si el reintento vuelve a fallar, el aviso sigue y el indicador sigue gris', async () => {
+    mocks.entregarConsolidado.mockResolvedValue(FALLO);
     mocks.generarConsolidado.mockResolvedValue(FALLO);
     const user = userEvent.setup();
     renderVisor();
@@ -208,15 +212,16 @@ describe('hu12799 AC2 — reintento desde el aviso', () => {
       }),
     );
 
-    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1));
     expect(await screen.findByTestId('aviso-fallo-regeneracion')).toBeInTheDocument();
     expect(screen.getByTestId('vigencia-consolidado')).toHaveAttribute('data-estado', 'desactualizado');
   });
 
   it('doble clic en «Reintentar» respeta el candado: una sola petición', async () => {
     let resolver: (r: GenerarConsolidadoResult) => void = () => undefined;
+    mocks.entregarConsolidado.mockResolvedValueOnce(FALLO);
     mocks.generarConsolidado
-      .mockResolvedValueOnce(FALLO)
+      
       .mockImplementationOnce(() => new Promise((r) => (resolver = r)));
     const user = userEvent.setup();
     renderVisor();
@@ -227,7 +232,7 @@ describe('hu12799 AC2 — reintento desde el aviso', () => {
     });
     await user.dblClick(boton);
 
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(2);
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
     expect(boton).toBeDisabled();
     resolver(respuesta());
     await waitFor(() => expect(screen.queryByTestId('aviso-fallo-regeneracion')).toBeNull());
@@ -241,7 +246,7 @@ describe('hu12799 AC4 — sin fallo no hay aviso', () => {
   });
 
   it('apertura exitosa: sin aviso y el mensaje de avisos de cascada conserva «generado»', async () => {
-    mocks.generarConsolidado.mockResolvedValue(
+    mocks.entregarConsolidado.mockResolvedValue(
       respuesta({ regenerado: true, avisosCascada: ['impronta: provider_unavailable'] }),
     );
     const user = userEvent.setup();
@@ -255,7 +260,7 @@ describe('hu12799 AC4 — sin fallo no hay aviso', () => {
   });
 
   it('vigente reutilizado (regenerado=false sin avisos) no es fallo', async () => {
-    mocks.generarConsolidado.mockResolvedValue(respuesta({ regenerado: false }));
+    mocks.entregarConsolidado.mockResolvedValue(respuesta({ regenerado: false }));
     const user = userEvent.setup();
     renderVisor(vigencia({ estado: 'vigente' }));
 
@@ -266,19 +271,22 @@ describe('hu12799 AC4 — sin fallo no hay aviso', () => {
     expect(screen.getByTestId('vigencia-consolidado')).toHaveAttribute('data-estado', 'vigente');
   });
 
-  it('fallo SIN PDF anterior (error HTTP) conserva el error de siempre y no pinta el aviso', async () => {
-    mocks.generarConsolidado.mockRejectedValue(new Error('storage_unavailable'));
+  it('fallo SIN PDF anterior (error HTTP) muestra el error traducido y no pinta el aviso', async () => {
+    mocks.entregarConsolidado.mockRejectedValue(new Error('storage_unavailable'));
     const user = userEvent.setup();
     renderVisor(vigencia({ estado: 'inexistente', generadoEn: null }));
 
     await abrir(user);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('storage_unavailable');
+    // Security B2: la causa se traduce; el código crudo del backend no se pinta.
+    const alerta = await screen.findByRole('alert');
+    expect(alerta).toHaveTextContent('el almacenamiento de documentos no respondió');
+    expect(alerta.textContent).not.toMatch(/storage_unavailable/);
     expect(screen.queryByTestId('aviso-fallo-regeneracion')).toBeNull();
   });
 
   it('backend sin vigencia: el aviso de fallo se pinta igual, sin fecha inventada', async () => {
-    mocks.generarConsolidado.mockResolvedValue(FALLO);
+    mocks.entregarConsolidado.mockResolvedValue(FALLO);
     const user = userEvent.setup();
     renderVisor(null);
 

@@ -9,6 +9,8 @@ import type {
   ProcedureAttachment,
 } from '@/lib/api/types/procedure-runtime';
 import { detectarFalloRegeneracion } from '@/lib/tramites/fallo-regeneracion-consolidado';
+import { mensajeErrorConsolidadoAmigable } from '@/lib/tramites/errores-consolidado';
+import { esDocumentoDefinitivo } from '@/lib/tramites/consolidado-entrega';
 
 /**
  * HU #12800 (Épica #12760) — apertura NO bloqueante del expediente consolidado en el visor.
@@ -24,9 +26,15 @@ import { detectarFalloRegeneracion } from '@/lib/tramites/fallo-regeneracion-con
  * - Si vence `timeoutMs`, se muestra el PDF anterior (si existe) con la advertencia de que la
  *   actualización sigue en proceso; la petición sigue en vuelo y, si termina, carga el PDF nuevo (AC4).
  *
+ * Ruta (code-review M2 de la Épica): la apertura usa la ruta ÚNICA de entrega (#12785),
+ * `GET …/consolidado/entrega?tipo=consolidado`, SIN `force`. El backend reconstruye solo si la
+ * bandera de vigencia está abajo y, en estado final, sirve el definitivo (antes el POST de
+ * generación respondía 409 `generacion_bloqueada_estado_final` en un trámite aprobado). La acción
+ * explícita «Re-generar» sigue siendo el POST `generarConsolidado(…, force=true)` del visor.
+ *
  * Cancelación: un `AbortController` por apertura. Desmontar el visor o cambiar de trámite lo aborta:
  * el resultado tardío se descarta (no abre pestañas ni toca el estado de un visor que ya no existe).
- * `tramitesClient.generarConsolidado` no acepta `signal`, así que la petición HTTP no se corta: el
+ * `tramitesClient.entregarConsolidado` no acepta `signal`, así que la petición HTTP no se corta: el
  * backend termina la reconstrucción y el PDF queda vigente para la siguiente apertura.
  *
  * El resultado de la entrega (`resultado`, `avisos`, `regenerado`) queda expuesto para la HU #12799.
@@ -84,6 +92,8 @@ export interface UseAperturaConsolidadoResult {
   error: string | null;
   /** Última respuesta de la entrega (para avisos de la HU #12799). */
   resultado: GenerarConsolidadoResult | null;
+  /** `true` si la última entrega sirvió el PDF DEFINITIVO del trámite (estado final, AC3 #12785). */
+  definitivo: boolean;
   avisos: string[];
   regenerado: boolean | null;
   /** `true` si en el timeout se abrió el PDF anterior. */
@@ -121,11 +131,16 @@ export function consolidadoDeResultado(
   return null;
 }
 
+/**
+ * Mensaje de error de la apertura / «Re-generar». Security B2 (Épica #12760): el código o `detail`
+ * del backend NUNCA se pinta crudo; se traduce con el mapa compartido y, si no hay código conocido,
+ * cae en este respaldo.
+ */
+export const COPY_ERROR_CONSOLIDADO_GENERICO =
+  'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.';
+
 export function mensajeErrorConsolidado(err: unknown): string {
-  const msg = (err instanceof Error ? err.message : '').trim();
-  return msg.includes('generacion_bloqueada_estado_final')
-    ? 'El trámite ya está aprobado o anulado: su documentación es definitiva y no se regenera.'
-    : msg || 'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.';
+  return mensajeErrorConsolidadoAmigable(err, COPY_ERROR_CONSOLIDADO_GENERICO);
 }
 
 export function useAperturaConsolidado({
@@ -248,7 +263,8 @@ export function useAperturaConsolidado({
     try {
       await onBeforeGenerate?.();
       if (signal.aborted) return;
-      const generado = await tramitesClient.generarConsolidado(instanceId);
+      // Ruta única de entrega, sin force: el backend decide si reconstruye o sirve el vigente/definitivo.
+      const generado = await tramitesClient.entregarConsolidado(instanceId, { tipo: 'consolidado' });
       if (signal.aborted) return;
       limpiarTimer();
       winPendienteRef.current = null;
@@ -311,6 +327,7 @@ export function useAperturaConsolidado({
     enVuelo,
     error,
     resultado,
+    definitivo: esDocumentoDefinitivo(resultado),
     avisos: resultado?.avisosCascada ?? [],
     regenerado: resultado?.regenerado ?? null,
     sirvioAnterior,

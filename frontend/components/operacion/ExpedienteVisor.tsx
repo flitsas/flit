@@ -13,6 +13,7 @@ import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCapti
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { IndicadorVigenciaConsolidado } from '@/components/shared/IndicadorVigenciaConsolidado';
 import { AvisoFalloRegeneracion } from '@/components/shared/AvisoFalloRegeneracion';
+import { AvisoDocumentoFinal } from '@/components/shared/AvisoDocumentoFinal';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
 import {
   avisosSinFalloConsolidado,
@@ -424,6 +425,8 @@ function ExpedienteConsolidadoBody({
    * captura vigente (`MatriculaInicial`) dice literal «Ver expediente consolidado (PDF)».
    *
    * HU #12788 — abrir va SIN force: el backend respeta la bandera `consolidado_wizard_vigente`.
+   * Code-review M2 (Épica #12760) — y por la ruta única de ENTREGA (`GET …/consolidado/entrega`,
+   * #12785), no por el POST de generación: en un trámite aprobado sirve el definitivo, sin 409.
    * HU #12800 — la espera sale del componente (`useAperturaConsolidado`): si el PDF está
    * desactualizado se muestra «reconstrucción en curso» al instante, el resto del expediente sigue
    * operativo y, si la reconstrucción tarda más del máximo, se abre el PDF anterior con aviso.
@@ -443,13 +446,20 @@ function ExpedienteConsolidadoBody({
   const opening = apertura.enVuelo;
   const busy = generating || opening;
   const errorVisible = error ?? apertura.error;
+  /**
+   * AC3 #12785 — la entrega avisa que sirvió el DEFINITIVO aunque el `status` que recibe el visor
+   * aún no sea final (detalle sin recargar): se trata igual que el estado final (sin «Re-generar»,
+   * que respondería 409, y sin aviso de fallo).
+   */
+  const definitivoPorEntrega = !estadoFinal && apertura.definitivo;
+  const sinRegeneracion = estadoFinal || definitivoPorEntrega;
 
   return (
     <>
       {/* HU #12792 — indicador de vigencia; HU #12799 — aviso de fallo junto a él (fuera de su
           región etiquetada) con la fecha del PDF conservado y «Reintentar» = «Re-generar». */}
       <IndicadorVigenciaConsolidado vigencia={vigencia} className="mb-3">
-        {fallo && !estadoFinal ? (
+        {fallo && !sinRegeneracion ? (
           <AvisoFalloRegeneracion
             fallo={fallo}
             generadoEn={vigencia?.generadoEn ?? null}
@@ -478,9 +488,10 @@ function ExpedienteConsolidadoBody({
           definitiva. Puedes consultarla y descargarla.
         </p>
       ) : null}
+      {definitivoPorEntrega ? <AvisoDocumentoFinal className="mb-3" /> : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        {!estadoFinal && consolidado ? (
+        {!sinRegeneracion && consolidado ? (
           <button
             type="button"
             onClick={() => void handleGenerate()}

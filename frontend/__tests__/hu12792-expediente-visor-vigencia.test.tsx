@@ -17,6 +17,7 @@ import type {
 
 const mocks = vi.hoisted(() => ({
   generarConsolidado: vi.fn(),
+  entregarConsolidado: vi.fn(),
   fetchAttachmentPreviewUrl: vi.fn(),
   downloadAttachment: vi.fn(),
   openLoadingDocumentTab: vi.fn(() => ({}) as Window),
@@ -27,6 +28,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     generarConsolidado: mocks.generarConsolidado,
+    entregarConsolidado: mocks.entregarConsolidado,
     fetchAttachmentPreviewUrl: mocks.fetchAttachmentPreviewUrl,
     downloadAttachment: mocks.downloadAttachment,
   },
@@ -135,7 +137,7 @@ describe('HU #12792 — indicador en el ExpedienteVisor (variante completa)', ()
     expect(ind.textContent).not.toMatch(/\d{2}\/\d{2}\/\d{4}/);
   });
 
-  it('AC5 — el estado se anuncia como status con aria-label textual', () => {
+  it('AC5 — el estado se expone como grupo (role=group) con aria-label textual', () => {
     render(
       <ExpedienteVisor
         instanceId={INSTANCE}
@@ -144,7 +146,7 @@ describe('HU #12792 — indicador en el ExpedienteVisor (variante completa)', ()
       />,
     );
     expect(
-      screen.getByRole('status', { name: /consolidado: desactualizado, pendiente de regenerar/i }),
+      screen.getByRole('group', { name: /consolidado: desactualizado, pendiente de regenerar/i }),
     ).toBeInTheDocument();
   });
 
@@ -162,7 +164,7 @@ describe('HU #12792 AC4 — sin marca de agua en estados preparado / entregado /
   it.each(['preparado', 'entregado', 'aprobado'] as InstanceStatus[])(
     '%s: abrir el consolidado no pide marca de agua (solo instanceId, sin flags)',
     async (status) => {
-      mocks.generarConsolidado.mockResolvedValue(resultado());
+      mocks.entregarConsolidado.mockResolvedValue(resultado());
       const user = userEvent.setup();
       render(
         <ExpedienteVisor
@@ -176,8 +178,10 @@ describe('HU #12792 AC4 — sin marca de agua en estados preparado / entregado /
       await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
 
       await waitFor(() => expect(mocks.openObjectUrlInWindow).toHaveBeenCalledTimes(1));
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE);
-      const args = JSON.stringify(mocks.generarConsolidado.mock.calls);
+      // Code-review M2: la apertura va por la entrega; solo `tipo=consolidado`, sin force ni flags.
+      expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, { tipo: 'consolidado' });
+      expect(mocks.generarConsolidado).not.toHaveBeenCalled();
+      const args = JSON.stringify(mocks.entregarConsolidado.mock.calls);
       expect(args).not.toMatch(/watermark|marca/i);
       // El visor no superpone ninguna marca de agua sobre la UI.
       expect(document.body.textContent ?? '').not.toMatch(/marca de agua|watermark|BORRADOR/i);

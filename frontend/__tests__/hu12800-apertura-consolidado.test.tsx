@@ -23,6 +23,7 @@ import type {
 
 const mocks = vi.hoisted(() => ({
   generarConsolidado: vi.fn(),
+  entregarConsolidado: vi.fn(),
   fetchAttachmentPreviewUrl: vi.fn(),
   downloadAttachment: vi.fn(),
   openLoadingDocumentTab: vi.fn(),
@@ -33,6 +34,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     generarConsolidado: mocks.generarConsolidado,
+    entregarConsolidado: mocks.entregarConsolidado,
     fetchAttachmentPreviewUrl: mocks.fetchAttachmentPreviewUrl,
     downloadAttachment: mocks.downloadAttachment,
   },
@@ -57,6 +59,8 @@ import {
 const INSTANCE = 'inst-12800';
 const VER = { name: 'Ver expediente consolidado (PDF)' };
 const REGENERAR = { name: 'Re-generar expediente consolidado' };
+/** Code-review M2 — la apertura va por la ruta de entrega, `tipo=consolidado`, sin force. */
+const ENTREGA = { tipo: 'consolidado' };
 
 const CONSOLIDADO_PREVIO: ProcedureAttachment = {
   id: 'att-cons-v1',
@@ -164,7 +168,7 @@ function clicVer() {
 
 describe('HU #12800 AC1 — indicador de progreso inmediato al abrir un consolidado desactualizado', () => {
   it('desactualizado: el panel «Reconstrucción en curso» aparece en el mismo clic, antes de que responda el backend', () => {
-    mocks.generarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
+    mocks.entregarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
     renderVisor();
 
     clicVer();
@@ -179,7 +183,7 @@ describe('HU #12800 AC1 — indicador de progreso inmediato al abrir un consolid
   });
 
   it('inexistente (primera generación) también muestra el panel', () => {
-    mocks.generarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
+    mocks.entregarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
     renderVisor({ attachments: [], consolidadoWizard: vigencia('inexistente') });
 
     clicVer();
@@ -188,14 +192,14 @@ describe('HU #12800 AC1 — indicador de progreso inmediato al abrir un consolid
   });
 
   it('vigente: apertura directa, sin panel de reconstrucción y sin force', async () => {
-    mocks.generarConsolidado.mockResolvedValue(resultado('att-cons-v1', { regenerado: false }));
+    mocks.entregarConsolidado.mockResolvedValue(resultado('att-cons-v1', { regenerado: false }));
     renderVisor({ consolidadoWizard: vigencia('vigente') });
 
     clicVer();
 
     expect(screen.queryByTestId('consolidado-reconstruccion')).toBeNull();
     await flush();
-    expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, ENTREGA);
     expect(mocks.openObjectUrlInWindow).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('consolidado-reconstruccion')).toBeNull();
   });
@@ -212,7 +216,7 @@ describe('HU #12800 AC1 — indicador de progreso inmediato al abrir un consolid
 
 describe('HU #12800 AC2 — la interfaz sigue utilizable durante la reconstrucción', () => {
   it('sin overlay modal: los demás documentos se pueden abrir mientras reconstruye', async () => {
-    mocks.generarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
+    mocks.entregarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
     renderVisor();
 
     clicVer();
@@ -227,11 +231,11 @@ describe('HU #12800 AC2 — la interfaz sigue utilizable durante la reconstrucci
     expect(mocks.downloadAttachment).toHaveBeenCalledWith(INSTANCE, 'att-fur', undefined, 'fur.pdf');
     // La reconstrucción sigue en curso: el panel continúa y no se disparó otra petición.
     expect(screen.getByTestId('consolidado-reconstruccion')).toBeInTheDocument();
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(1);
   });
 
   it('las acciones del propio consolidado quedan protegidas: un clic en «Re-generar» no lanza otra reconstrucción', async () => {
-    mocks.generarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
+    mocks.entregarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
     renderVisor();
 
     clicVer();
@@ -240,12 +244,14 @@ describe('HU #12800 AC2 — la interfaz sigue utilizable durante la reconstrucci
     act(() => regenerar.click());
     await flush();
 
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
-    expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, ENTREGA);
+    // El POST con force (la acción «Re-generar») no salió: el candado lo cortó.
+    expect(mocks.generarConsolidado).not.toHaveBeenCalled();
   });
 
   it('bajo StrictMode un doble clic en «Ver expediente» envía una sola petición', async () => {
-    mocks.generarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
+    mocks.entregarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
     render(
       <StrictMode>
         <ExpedienteVisor
@@ -261,7 +267,7 @@ describe('HU #12800 AC2 — la interfaz sigue utilizable durante la reconstrucci
       boton.click();
     });
     await flush();
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(1);
     expect(mocks.openLoadingDocumentTab).toHaveBeenCalledTimes(1);
   });
 });
@@ -269,7 +275,7 @@ describe('HU #12800 AC2 — la interfaz sigue utilizable durante la reconstrucci
 describe('HU #12800 AC3 — al terminar, el visor carga el PDF sin recargar la página', () => {
   it('carga el PDF nuevo en la pestaña abierta con el clic y retira el panel', async () => {
     const d = diferida<GenerarConsolidadoResult>();
-    mocks.generarConsolidado.mockReturnValue(d.promise);
+    mocks.entregarConsolidado.mockReturnValue(d.promise);
     const onAttachmentsChange = vi.fn();
     renderVisor({ onAttachmentsChange });
 
@@ -287,7 +293,7 @@ describe('HU #12800 AC3 — al terminar, el visor carga el PDF sin recargar la p
 
   it('el hook expone resultado, avisos y regenerado de la entrega (consumo HU #12799)', async () => {
     const abrirAdjunto = vi.fn(async () => undefined);
-    mocks.generarConsolidado.mockResolvedValue(
+    mocks.entregarConsolidado.mockResolvedValue(
       resultado('att-cons-v2', { avisosCascada: ['impronta: provider_unavailable'], regenerado: true }),
     );
     const { result } = renderHook(() =>
@@ -317,7 +323,7 @@ describe('HU #12800 AC3 — al terminar, el visor carga el PDF sin recargar la p
 
   it('al desmontar con la reconstrucción en vuelo, el resultado tardío se descarta y la pestaña de carga se cierra', async () => {
     const d = diferida<GenerarConsolidadoResult>();
-    mocks.generarConsolidado.mockReturnValue(d.promise);
+    mocks.entregarConsolidado.mockReturnValue(d.promise);
     const { unmount } = renderVisor();
 
     clicVer();
@@ -332,7 +338,7 @@ describe('HU #12800 AC3 — al terminar, el visor carga el PDF sin recargar la p
 
   it('si la reconstrucción falla, muestra el error accesible y cierra la pestaña de carga', async () => {
     const d = diferida<GenerarConsolidadoResult>();
-    mocks.generarConsolidado.mockReturnValue(d.promise);
+    mocks.entregarConsolidado.mockReturnValue(d.promise);
     renderVisor();
 
     clicVer();
@@ -346,7 +352,7 @@ describe('HU #12800 AC3 — al terminar, el visor carga el PDF sin recargar la p
 
   it('reacciona a la vigencia re-leída por el padre (#12792): vigente → apertura directa; desactualizado de nuevo → panel', async () => {
     const d1 = diferida<GenerarConsolidadoResult>();
-    mocks.generarConsolidado.mockReturnValueOnce(d1.promise);
+    mocks.entregarConsolidado.mockReturnValueOnce(d1.promise);
     const { rerender } = renderVisor();
 
     clicVer();
@@ -364,7 +370,7 @@ describe('HU #12800 AC3 — al terminar, el visor carga el PDF sin recargar la p
         consolidadoWizard={vigenteNueva}
       />,
     );
-    mocks.generarConsolidado.mockResolvedValueOnce(resultado('att-cons-v2', { regenerado: false }));
+    mocks.entregarConsolidado.mockResolvedValueOnce(resultado('att-cons-v2', { regenerado: false }));
     clicVer();
     expect(screen.queryByTestId('consolidado-reconstruccion')).toBeNull();
     await flush();
@@ -378,11 +384,11 @@ describe('HU #12800 AC3 — al terminar, el visor carga el PDF sin recargar la p
         consolidadoWizard={{ ...vigenteNueva, estado: 'desactualizado' }}
       />,
     );
-    mocks.generarConsolidado.mockReturnValueOnce(diferida<GenerarConsolidadoResult>().promise);
+    mocks.entregarConsolidado.mockReturnValueOnce(diferida<GenerarConsolidadoResult>().promise);
     clicVer();
     expect(screen.getByTestId('consolidado-reconstruccion')).toBeInTheDocument();
     await flush();
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(3);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(3);
   });
 
   it('contrato consolidadoDeResultado: respuesta anidada, plana y nula', () => {
@@ -398,7 +404,7 @@ describe('HU #12800 AC4 — timeout controlado', () => {
   it(`al superar ${TIMEOUT_RECONSTRUCCION_MS} ms abre el PDF anterior con advertencia y, al terminar, carga el nuevo`, async () => {
     vi.useFakeTimers();
     const d = diferida<GenerarConsolidadoResult>();
-    mocks.generarConsolidado.mockReturnValue(d.promise);
+    mocks.entregarConsolidado.mockReturnValue(d.promise);
     renderVisor();
 
     clicVer();
@@ -436,12 +442,12 @@ describe('HU #12800 AC4 — timeout controlado', () => {
     expect(mocks.openObjectUrlInWindow).toHaveBeenNthCalledWith(2, 'blob:mock-2', tab);
     expect(screen.queryByTestId('consolidado-timeout')).toBeNull();
     expect(screen.getByTestId('consolidado-actualizado')).toBeInTheDocument();
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(1);
   });
 
   it('sin PDF anterior: advierte que sigue en proceso y no abre nada', async () => {
     vi.useFakeTimers();
-    mocks.generarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
+    mocks.entregarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
     renderVisor({ attachments: [FUR], consolidadoWizard: vigencia('inexistente') });
 
     clicVer();
@@ -458,7 +464,7 @@ describe('HU #12800 AC4 — timeout controlado', () => {
   it('si la reconstrucción termina antes del máximo, el timeout no dispara ni abre el anterior', async () => {
     vi.useFakeTimers();
     const d = diferida<GenerarConsolidadoResult>();
-    mocks.generarConsolidado.mockReturnValue(d.promise);
+    mocks.entregarConsolidado.mockReturnValue(d.promise);
     renderVisor();
 
     clicVer();
@@ -478,7 +484,7 @@ describe('HU #12800 AC4 — timeout controlado', () => {
   it('el máximo de espera es configurable en el hook (timeoutMs)', async () => {
     vi.useFakeTimers();
     const abrirAdjunto = vi.fn(async () => undefined);
-    mocks.generarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
+    mocks.entregarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
     const { result } = renderHook(() =>
       useAperturaConsolidado({
         instanceId: INSTANCE,
@@ -501,5 +507,89 @@ describe('HU #12800 AC4 — timeout controlado', () => {
     expect(result.current.sirvioAnterior).toBe(true);
     expect(result.current.enVuelo).toBe(true);
     expect(abrirAdjunto).toHaveBeenCalledWith(INSTANCE, CONSOLIDADO_PREVIO, tab);
+  });
+});
+
+// Uso de ejemplo (code-review M2, Épica #12760 / AC3 #12785):
+//   <ExpedienteVisor instanceId="inst-1" status="aprobado" attachments={[consolidado]} />
+//   · «Ver expediente» → GET …/consolidado/entrega?tipo=consolidado → modo definitivo_estado_final
+describe('Code-review M2 — la apertura usa la ruta única de entrega (#12785)', () => {
+  function definitivo(attachmentId = 'att-cons-final') {
+    return resultado(attachmentId, {
+      regenerado: false,
+      definitivoPorEstadoFinal: true,
+      modo: 'definitivo_estado_final',
+    });
+  }
+
+  it('trámite aprobado → abrir sirve el definitivo por la entrega, sin 409 ni POST de generación', async () => {
+    mocks.entregarConsolidado.mockResolvedValue(definitivo());
+    // El POST de generación respondería 409 en estado final: si se llamara, el test lo delataría.
+    mocks.generarConsolidado.mockRejectedValue(new Error('generacion_bloqueada_estado_final'));
+    renderVisor({ status: 'aprobado', consolidadoWizard: vigencia('vigente', true) });
+
+    clicVer();
+    await flush();
+
+    expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, ENTREGA);
+    expect(mocks.generarConsolidado).not.toHaveBeenCalled();
+    expect(mocks.downloadAttachment).toHaveBeenCalledWith(
+      INSTANCE,
+      'att-cons-final',
+      undefined,
+      'att-cons-final.pdf',
+    );
+    expect(mocks.openObjectUrlInWindow).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).toBeNull();
+    // Estado final: sin panel de reconstrucción y sin «Re-generar».
+    expect(screen.queryByTestId('consolidado-reconstruccion')).toBeNull();
+    expect(screen.queryByRole('button', REGENERAR)).toBeNull();
+  });
+
+  it('edge: la entrega dice definitivo aunque el status del visor aún no sea final ⇒ aviso «Documento final» y sin «Re-generar»', async () => {
+    mocks.entregarConsolidado.mockResolvedValue(definitivo());
+    renderVisor({ consolidadoWizard: vigencia('vigente') });
+
+    expect(screen.getByRole('button', REGENERAR)).toBeInTheDocument();
+    clicVer();
+    await flush();
+
+    expect(screen.getByTestId('aviso-documento-final')).toBeInTheDocument();
+    expect(screen.queryByRole('button', REGENERAR)).toBeNull();
+  });
+
+  it('contrato: el hook pide la entrega sin force y expone `definitivo` de la respuesta', async () => {
+    mocks.entregarConsolidado.mockResolvedValue(definitivo('att-x'));
+    const abrirAdjunto = vi.fn(async () => undefined);
+    const { result } = renderHook(() =>
+      useAperturaConsolidado({ instanceId: INSTANCE, vigencia: vigencia('vigente'), abrirAdjunto }),
+    );
+
+    await act(async () => {
+      await result.current.abrir();
+    });
+
+    expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, ENTREGA);
+    expect(mocks.entregarConsolidado.mock.calls[0][1]).not.toHaveProperty('force');
+    expect(result.current.definitivo).toBe(true);
+    expect(result.current.resultado?.modo).toBe('definitivo_estado_final');
+  });
+
+  it('fallo de regeneración en la ENTREGA (regenerado=false + aviso consolidado:) se sigue detectando', async () => {
+    mocks.entregarConsolidado.mockResolvedValue(
+      resultado('att-cons-v1', {
+        regenerado: false,
+        modo: null,
+        avisosCascada: ['consolidado: storage_unavailable'],
+      }),
+    );
+    renderVisor();
+
+    clicVer();
+    await flush();
+
+    expect(screen.getByText(/No se pudo regenerar el consolidado/i)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/almacenamiento de documentos no respondió/);
   });
 });

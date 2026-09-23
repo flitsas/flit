@@ -3,8 +3,10 @@
  *
  * Uso de ejemplo:
  *   <ExpedienteVisor instanceId="inst-1" attachments={[consolidado]} />
- *   · «Ver expediente consolidado (PDF)»   → POST /instances/inst-1/consolidado          (sin force)
+ *   · «Ver expediente consolidado (PDF)»   → GET  /instances/inst-1/consolidado/entrega?tipo=consolidado (sin force)
  *   · «Re-generar expediente consolidado»  → POST /instances/inst-1/consolidado?force=true
+ *
+ * Code-review M2 (Épica #12760): la apertura usa la ruta ÚNICA de entrega (#12785), no el POST.
  *
  * El backend decide con `consolidado_wizard_vigente`: vigente → PDF en caché; no vigente →
  * reconstruye una vez. El cliente no cachea el PDF entre aperturas.
@@ -17,6 +19,7 @@ import type { GenerarConsolidadoResult, ProcedureAttachment } from '@/lib/api/ty
 
 const mocks = vi.hoisted(() => ({
   generarConsolidado: vi.fn(),
+  entregarConsolidado: vi.fn(),
   fetchAttachmentPreviewUrl: vi.fn(),
   downloadAttachment: vi.fn(),
   openLoadingDocumentTab: vi.fn(() => ({}) as Window),
@@ -27,6 +30,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     generarConsolidado: mocks.generarConsolidado,
+    entregarConsolidado: mocks.entregarConsolidado,
     fetchAttachmentPreviewUrl: mocks.fetchAttachmentPreviewUrl,
     downloadAttachment: mocks.downloadAttachment,
   },
@@ -43,6 +47,8 @@ import ExpedienteVisor from '@/components/operacion/ExpedienteVisor';
 const INSTANCE = 'inst-12788';
 const VER = { name: 'Ver expediente consolidado (PDF)' };
 const REGENERAR = { name: 'Re-generar expediente consolidado' };
+/** Parámetros de la apertura: el consolidado del wizard, sin force. */
+const ENTREGA = { tipo: 'consolidado' };
 
 const CONSOLIDADO_PREVIO: ProcedureAttachment = {
   id: 'att-cons-v1',
@@ -83,22 +89,23 @@ afterEach(() => {
 });
 
 describe('HU #12788 AC1 — bandera vigente: abrir el visor va sin force y muestra el PDF en caché', () => {
-  it('«Ver expediente» llama generarConsolidado(instanceId) sin force', async () => {
-    mocks.generarConsolidado.mockResolvedValue(resultado('att-cons-v1'));
+  it('«Ver expediente» pide la entrega (tipo=consolidado) sin force y nunca el POST', async () => {
+    mocks.entregarConsolidado.mockResolvedValue(resultado('att-cons-v1'));
     const user = userEvent.setup();
     render(<ExpedienteVisor instanceId={INSTANCE} attachments={[CONSOLIDADO_PREVIO]} />);
 
     await user.click(screen.getByRole('button', VER));
 
     await waitFor(() => expect(mocks.openObjectUrlInWindow).toHaveBeenCalledTimes(1));
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
-    expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE);
-    // Contrato: ningún argumento force=true viaja en la apertura.
-    expect(mocks.generarConsolidado.mock.calls[0]).not.toContain(true);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, ENTREGA);
+    // Contrato: ningún force viaja en la apertura y el POST de generación no se usa.
+    expect(mocks.entregarConsolidado.mock.calls[0][1]).not.toHaveProperty('force');
+    expect(mocks.generarConsolidado).not.toHaveBeenCalled();
   });
 
   it('abre el adjunto cacheado que devuelve el backend (mismo attachmentId previo)', async () => {
-    mocks.generarConsolidado.mockResolvedValue(resultado('att-cons-v1'));
+    mocks.entregarConsolidado.mockResolvedValue(resultado('att-cons-v1'));
     const user = userEvent.setup();
     render(<ExpedienteVisor instanceId={INSTANCE} attachments={[CONSOLIDADO_PREVIO]} />);
 
@@ -116,14 +123,14 @@ describe('HU #12788 AC1 — bandera vigente: abrir el visor va sin force y muest
   });
 
   it('sin consolidado previo (primera apertura) también va sin force', async () => {
-    mocks.generarConsolidado.mockResolvedValue(resultado('att-cons-nuevo'));
+    mocks.entregarConsolidado.mockResolvedValue(resultado('att-cons-nuevo'));
     const user = userEvent.setup();
     render(<ExpedienteVisor instanceId={INSTANCE} attachments={[]} />);
 
     expect(screen.queryByRole('button', REGENERAR)).toBeNull();
     await user.click(screen.getByRole('button', VER));
 
-    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE));
+    await waitFor(() => expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, ENTREGA));
   });
 });
 
@@ -134,12 +141,12 @@ describe('HU #12788 AC2 — bandera en false: se reconstruye una sola vez (una �
         <ExpedienteVisor instanceId={INSTANCE} attachments={[CONSOLIDADO_PREVIO]} />
       </StrictMode>,
     );
-    expect(mocks.generarConsolidado).not.toHaveBeenCalled();
+    expect(mocks.entregarConsolidado).not.toHaveBeenCalled();
   });
 
   it('un doble clic rápido en «Ver expediente» envía una sola petición', async () => {
     let resolver: (r: GenerarConsolidadoResult) => void = () => undefined;
-    mocks.generarConsolidado.mockImplementation(
+    mocks.entregarConsolidado.mockImplementation(
       () => new Promise<GenerarConsolidadoResult>((res) => (resolver = res)),
     );
     render(
@@ -156,17 +163,17 @@ describe('HU #12788 AC2 — bandera en false: se reconstruye una sola vez (una �
       boton.click();
     });
 
-    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(1));
     await act(async () => {
       resolver(resultado('att-cons-v2'));
     });
     await waitFor(() => expect(mocks.openObjectUrlInWindow).toHaveBeenCalledTimes(1));
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
-    expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, ENTREGA);
   });
 
   it('muestra el PDF reconstruido (attachmentId nuevo que devuelve el backend)', async () => {
-    mocks.generarConsolidado.mockResolvedValue(resultado('att-cons-v2'));
+    mocks.entregarConsolidado.mockResolvedValue(resultado('att-cons-v2'));
     const user = userEvent.setup();
     render(<ExpedienteVisor instanceId={INSTANCE} attachments={[CONSOLIDADO_PREVIO]} />);
 
@@ -207,6 +214,8 @@ describe('HU #12788 AC3 — la acción explícita de regenerar sigue enviando fo
     await waitFor(() => expect(onAttachmentsChange).toHaveBeenCalledTimes(1));
     expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
     expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true);
+    // «Re-generar» es la única vía con force y va por el POST: nunca por la entrega (GET).
+    expect(mocks.entregarConsolidado).not.toHaveBeenCalled();
   });
 
   it('mantiene el aviso de FUR no regenerado de la HU #11642 tras forzar', async () => {
@@ -234,7 +243,7 @@ describe('HU #12788 AC3 — la acción explícita de regenerar sigue enviando fo
 
 describe('HU #12788 AC4 — tras editar, reabrir el visor no reutiliza un PDF viejo del cliente', () => {
   it('cada apertura pide el consolidado al backend y abre un object URL nuevo', async () => {
-    mocks.generarConsolidado
+    mocks.entregarConsolidado
       .mockResolvedValueOnce(resultado('att-cons-v1'))
       // El gestor editó un campo: el backend invalidó la vigencia y devuelve un consolidado nuevo.
       .mockResolvedValueOnce(resultado('att-cons-v2'));
@@ -253,8 +262,8 @@ describe('HU #12788 AC4 — tras editar, reabrir el visor no reutiliza un PDF vi
     await user.click(screen.getByRole('button', VER));
     await waitFor(() => expect(mocks.openObjectUrlInWindow).toHaveBeenCalledTimes(2));
 
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(2);
-    expect(mocks.generarConsolidado.mock.calls).toEqual([[INSTANCE], [INSTANCE]]);
+    expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(2);
+    expect(mocks.entregarConsolidado.mock.calls).toEqual([[INSTANCE, ENTREGA], [INSTANCE, ENTREGA]]);
     expect(onBefore).toHaveBeenCalledTimes(2);
     expect(mocks.downloadAttachment.mock.calls.map((c) => c[1])).toEqual([
       'att-cons-v1',
@@ -266,7 +275,7 @@ describe('HU #12788 AC4 — tras editar, reabrir el visor no reutiliza un PDF vi
   });
 
   it('el botón tiene nombre accesible y se habilita de nuevo tras abrir', async () => {
-    mocks.generarConsolidado.mockResolvedValue(resultado('att-cons-v1'));
+    mocks.entregarConsolidado.mockResolvedValue(resultado('att-cons-v1'));
     const user = userEvent.setup();
     render(<ExpedienteVisor instanceId={INSTANCE} attachments={[CONSOLIDADO_PREVIO]} />);
     const boton = screen.getByRole('button', VER);

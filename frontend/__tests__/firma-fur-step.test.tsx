@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   generarFur: vi.fn(),
   generarImpronta: vi.fn(),
   generarConsolidado: vi.fn(),
+  entregarConsolidado: vi.fn(),
   getFurTemplateFormat: vi.fn(),
   getAttachments: vi.fn(),
   getInstance: vi.fn(),
@@ -48,6 +49,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
     generarFur: mocks.generarFur,
     generarImpronta: mocks.generarImpronta,
     generarConsolidado: mocks.generarConsolidado,
+    // Code-review M2 (Épica #12760): «Ver expediente» abre por la ruta única de entrega.
+    entregarConsolidado: mocks.entregarConsolidado,
     getFurTemplateFormat: mocks.getFurTemplateFormat,
     getAttachments: mocks.getAttachments,
     getInstance: mocks.getInstance,
@@ -201,7 +204,7 @@ beforeEach(() => {
     marcadoAt: null,
   });
   // HU #11052 — el consolidado es el único disparador de generación del paso FUR.
-  mocks.generarConsolidado.mockResolvedValue({
+  mocks.entregarConsolidado.mockResolvedValue({
     attachmentId: 'att-consolidado',
     tipo: 'consolidado',
     filename: 'consolidado.pdf',
@@ -351,7 +354,7 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
 
     await user.click(boton);
     // HU #12788 — abrir el visor ya no fuerza: el backend decide por la bandera de vigencia.
-    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE));
+    await waitFor(() => expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, { tipo: 'consolidado' }));
   });
 
   it('lista el FUR en Documentos del expediente y regenera para pintar la placa', async () => {
@@ -410,16 +413,16 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
 
     await waitFor(() => expect(mocks.patchFieldValues).toHaveBeenCalled());
     await waitFor(() =>
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE),
+      expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, { tipo: 'consolidado' }),
     );
     const ordenGuardado = mocks.patchFieldValues.mock.invocationCallOrder[0]!;
-    const ordenGenerado = mocks.generarConsolidado.mock.invocationCallOrder[0]!;
+    const ordenGenerado = mocks.entregarConsolidado.mock.invocationCallOrder[0]!;
     expect(ordenGuardado).toBeLessThan(ordenGenerado);
   });
 
-  it('traduce el rechazo por estado final del backend', async () => {
+  it('traduce el rechazo por estado final del backend (código nunca crudo)', async () => {
     mocks.getAttachments.mockResolvedValue([]);
-    mocks.generarConsolidado.mockRejectedValue(
+    mocks.entregarConsolidado.mockRejectedValue(
       new Error('409 Conflict: generacion_bloqueada_estado_final'),
     );
     const user = userEvent.setup();
@@ -435,7 +438,7 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
 
   it('avisa si el consolidado reporta un aviso (p.ej. impronta no disponible)', async () => {
     mocks.getAttachments.mockResolvedValue([]);
-    mocks.generarConsolidado.mockResolvedValue({
+    mocks.entregarConsolidado.mockResolvedValue({
       attachmentId: 'att-consolidado',
       tipo: 'consolidado',
       filename: 'consolidado.pdf',
@@ -462,7 +465,7 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     // falló fue rehacerlo, así que lo que el gestor tiene delante puede no recoger su último cambio.
     // Es el desenlace del defecto que motivó la HU (cambio de color que no llegaba al consolidado).
     mocks.getAttachments.mockResolvedValue([]);
-    mocks.generarConsolidado.mockResolvedValue({
+    mocks.entregarConsolidado.mockResolvedValue({
       attachmentId: 'att-consolidado',
       tipo: 'consolidado',
       filename: 'consolidado.pdf',
