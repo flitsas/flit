@@ -102,6 +102,8 @@ import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { EstadoFunnel } from './EstadoFunnel';
 import { panelesDeEstado } from '@/lib/tramites/panelesEstado';
+import { ATAJOS_GESTOR, atajoGestor, type AtajoGestor } from '@/lib/tramites/busquedaRapida';
+import { BusquedaRapidaAcordeon } from './BusquedaRapidaAcordeon';
 import {
   AttachmentPreview,
   TramiteDocumentosModal,
@@ -373,6 +375,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   // ADR-0059 — además de los estados reales, la tira ofrece «Rechazado preasignación», un
   // pseudo-estado que el servidor traduce a rechazado + rejectedFrom = preasignacion.
   const [estado, setEstado] = useState<'' | EstadoFiltro>('');
+  /** Epic #12686 (HU #12806) — atajo de la búsqueda rápida; vacío = ninguno. */
+  const [atajo, setAtajo] = useState<'' | AtajoGestor>('');
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
   // HU #10536 — filtro "solo prioritarios".
   const [soloPrioritarios, setSoloPrioritarios] = useState(false);
@@ -694,7 +698,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    */
   const buildListQuery = useCallback((): ListInstancesParams => {
     const query: ListInstancesParams = {};
-    if (appliedCondiciones.length > 0) query.condiciones = appliedCondiciones;
+    // Epic #12686 — el atajo suma sus condiciones a las del usuario sin entrar en «+ Filtro».
+    const atajoActivo = atajoGestor(atajo);
+    const condiciones = [...appliedCondiciones, ...(atajoActivo?.condiciones ?? [])];
+    if (condiciones.length > 0) query.condiciones = condiciones;
+    if (atajoActivo?.busquedaRapida) query.busquedaRapida = atajoActivo.busquedaRapida;
     // Estado y familia van al SERVIDOR, no al array ya traído: el listado devuelve como mucho
     // SERVER_LIST_TAKE filas, así que filtrarlos en cliente respondía "los borradores que cupieron
     // en la ventana" en vez de "los borradores del tenant". Con pocos trámites daba igual; con un
@@ -718,6 +726,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     return query;
   }, [
     appliedCondiciones,
+    atajo,
     appliedCreatedFrom,
     appliedCreatedTo,
     appliedUpdatedFrom,
@@ -953,6 +962,17 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   };
   const handleEstadoChange = (v: '' | EstadoFiltro) => {
     setEstado(v);
+    // Epic #12686 — tarjeta y atajo no se acumulan: elegir una tarjeta suelta el atajo.
+    setAtajo('');
+    setPage(1);
+  };
+  /**
+   * Epic #12686 (HU #12806) — elegir un atajo suelta la tarjeta anterior; si el atajo es de un solo
+   * estado (p. ej. «Más de 5 días» es Entregado), ese estado queda en la tira y su tarjeta se resalta.
+   */
+  const handleAtajoChange = (key: '' | AtajoGestor) => {
+    setAtajo(key);
+    setEstado(atajoGestor(key)?.estado ?? '');
     setPage(1);
   };
   const handlePrioritariosChange = (v: boolean) => {
@@ -1113,6 +1133,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     search.trim() !== '' ||
     modalidad !== '' ||
     estado !== '' ||
+    atajo !== '' ||
     soloPrioritarios ||
     hasServerFilters ||
     sortBy !== '';
@@ -1175,6 +1196,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     setSearch('');
     setModalidad('');
     setEstado('');
+    setAtajo('');
     setSoloPrioritarios(false);
     setDraftCondiciones([]);
     setRangoSobre('created');
@@ -1209,6 +1231,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const handleRefresh = () => {
     setSearch('');
     setEstado('');
+    setAtajo('');
     setPage(1);
     void load();
   };
@@ -1389,6 +1412,18 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             </span>
           </button>
         </div>
+
+        {/* Epic #12686 (HU #12806) — atajos sin conteo. No se desmonta mientras carga y sigue visible
+            si la carga falla: un atajo que el servidor rechaza (p. ej. demasiados borradores) tiene
+            que poder quitarse. */}
+        {alcanceListo ? (
+          <BusquedaRapidaAcordeon
+            items={ATAJOS_GESTOR}
+            selected={atajo}
+            onSelect={(key) => handleAtajoChange(key as '' | AtajoGestor)}
+            storageKey="tramites.busqueda-rapida"
+          />
+        ) : null}
 
         {/* Tira de chips: SOLO existe si hay periodo o alguna condición aplicada */}
         <TramitesFiltrosChips

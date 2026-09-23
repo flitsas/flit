@@ -145,7 +145,7 @@ internal static class NetworkProcedureEndpoints
             }
             catch (BusquedaRapidaDemasiadoAmpliaException ex)
             {
-                return Results.UnprocessableEntity(new { error = ex.Message });
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
             }
             PublishListOutcome(http, NetworkAccessVocabulary.Resources.InstancesSearch, body.ChildTenantId, request, items.Select(i => i.TenantId), error);
             return error is not null ? Forbidden(error) : Results.Ok(new { items, total });
@@ -179,7 +179,7 @@ internal static class NetworkProcedureEndpoints
             }
             catch (BusquedaRapidaDemasiadoAmpliaException ex)
             {
-                return Results.UnprocessableEntity(new { error = ex.Message });
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
             }
             PublishListOutcome(http, NetworkAccessVocabulary.Resources.StatsOverview, body.ChildTenantId, request, result?.ReachedTenantIds ?? [], error);
             return error is not null ? Forbidden(error) : Results.Ok(result!.Counts);

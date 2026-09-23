@@ -309,7 +309,7 @@ internal static class ProcedureInstanceEndpoints
             catch (BusquedaRapidaDemasiadoAmpliaException ex)
             {
                 // Epic #12686 — mejor pedir que acote que devolver un resultado truncado que parece completo.
-                return Results.UnprocessableEntity(new { error = ex.Message });
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
             }
         })
             .WithName("SearchProcedureInstances")
@@ -339,7 +339,7 @@ internal static class ProcedureInstanceEndpoints
             }
             catch (BusquedaRapidaDemasiadoAmpliaException ex)
             {
-                return Results.UnprocessableEntity(new { error = ex.Message });
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
             }
         })
             .WithName("SearchProcedureInstanceEstadoCounts")
