@@ -163,16 +163,9 @@ export function CamaraComercioUpload({
       }
       aria-label="Certificado de Cámara de Comercio"
     >
-      {/* El estado obligatorio/opcional NO se repite aquí: lo pinta `DocumentSlot`, que es su dueño
-          canónico («Por cargar» / «Opcional» / «Cargado»). Duplicarlo en el contenedor obligaba al
-          gestor a leer dos veces lo mismo, y con dos vocabularios distintos. */}
-      <p
-        className="text-xs font-semibold"
-        style={{ color: pendiente ? 'var(--badge-warning-fg)' : undefined }}
-      >
-        Certificado de Cámara de Comercio
-      </p>
-
+      {/* Sin título propio: la ficha de `DocumentSlot` ya se llama «Certificado de Cámara de
+          Comercio» y es la dueña del estado («Por cargar» / «Opcional» / «Cargado»). Repetir el nombre
+          arriba hacía leer dos veces lo mismo. El recuadro se sigue anunciando por su aria-label. */}
       <p className="text-xs opacity-80">
         {exencion ??
           'Adjunta el certificado de existencia y representación legal expedido por una Cámara de Comercio para poder continuar.'}
