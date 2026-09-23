@@ -58,9 +58,12 @@ internal static class ActorEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error) = await handler.HandlePreviewAsync(id, tenantId.Value, request?.Actors ?? [], ct);
-            return error is "not_found"
-                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
-                : Results.Ok(result);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "demasiados_actores" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El borrador excede el número máximo de actores de un trámite."),
+                _ => Results.Ok(result),
+            };
         }).WithName("PreviewCamaraComercioRequirements");
 
         group.MapPut("/instances/{id:guid}/actors", async (
