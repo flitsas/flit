@@ -54,8 +54,14 @@ public interface IOtClientProcedureRepository
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Contadores de la cabecera sobre el universo de la bandeja. Epic #12686 — con
+    /// <paramref name="filter"/>, sobre los mismos filtros que la tabla salvo estado y revocatoria;
+    /// <c>null</c> cuenta todo lo recibido, como antes.
+    /// </summary>
     Task<OtBandejaCounters?> GetBandejaCountersAsync(
         Guid otTenantId,
+        OtClientProcedureFilter? filter,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
