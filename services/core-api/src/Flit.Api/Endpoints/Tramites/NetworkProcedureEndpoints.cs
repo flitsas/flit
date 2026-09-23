@@ -131,10 +131,22 @@ internal static class NetworkProcedureEndpoints
         {
             if (TramitesQueryConditions.Validate(body.Condiciones) is { } problema)
                 return Results.BadRequest(new { error = problema });
+            if (BusquedaRapida.Validate(body.BusquedaRapida) is { } atajoInvalido)
+                return Results.BadRequest(new { error = atajoInvalido });
 
             var request = body.ToRequest(tenantId: null);
-            var (items, total, error) = await handler.HandleAsync(
-                RequestTenantResolver.ScopeFromItems(http), body.ChildTenantId, request, ct);
+            IReadOnlyList<InstanceSummaryDto> items;
+            int total;
+            string? error;
+            try
+            {
+                (items, total, error) = await handler.HandleAsync(
+                    RequestTenantResolver.ScopeFromItems(http), body.ChildTenantId, request, ct);
+            }
+            catch (BusquedaRapidaDemasiadoAmpliaException ex)
+            {
+                return Results.UnprocessableEntity(new { error = ex.Message });
+            }
             PublishListOutcome(http, NetworkAccessVocabulary.Resources.InstancesSearch, body.ChildTenantId, request, items.Select(i => i.TenantId), error);
             return error is not null ? Forbidden(error) : Results.Ok(new { items, total });
         })
@@ -154,10 +166,21 @@ internal static class NetworkProcedureEndpoints
         {
             if (TramitesQueryConditions.Validate(body.Condiciones) is { } problema)
                 return Results.BadRequest(new { error = problema });
+            if (BusquedaRapida.Validate(body.BusquedaRapida) is { } atajoInvalido)
+                return Results.BadRequest(new { error = atajoInvalido });
 
             var request = body.ToRequest(tenantId: null);
-            var (result, error) = await handler.HandleWithReachAsync(
-                RequestTenantResolver.ScopeFromItems(http), body.ChildTenantId, request, ct);
+            NetworkStatusCountsResult? result;
+            string? error;
+            try
+            {
+                (result, error) = await handler.HandleWithReachAsync(
+                    RequestTenantResolver.ScopeFromItems(http), body.ChildTenantId, request, ct);
+            }
+            catch (BusquedaRapidaDemasiadoAmpliaException ex)
+            {
+                return Results.UnprocessableEntity(new { error = ex.Message });
+            }
             PublishListOutcome(http, NetworkAccessVocabulary.Resources.StatsOverview, body.ChildTenantId, request, result?.ReachedTenantIds ?? [], error);
             return error is not null ? Forbidden(error) : Results.Ok(result!.Counts);
         })

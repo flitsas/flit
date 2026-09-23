@@ -13,7 +13,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// se IGNORA a propósito (el alcance nunca viene del caller). Página siempre acotada por
 /// <see cref="ListProcedureInstancesHandler.MaxItems"/>.
 /// </summary>
-public sealed class NetworkListProcedureInstancesHandler(IProcedureInstanceRepository repo)
+public sealed class NetworkListProcedureInstancesHandler(
+    IProcedureInstanceRepository repo, BusquedaRapidaResolver? busquedaRapida = null)
 {
     public async Task<(IReadOnlyList<InstanceSummaryDto> Items, int Total, string? Error)> HandleAsync(
         TenantScope? scope,
@@ -32,12 +33,33 @@ public sealed class NetworkListProcedureInstancesHandler(IProcedureInstanceRepos
         var direction = request.SortDescending ? SortDirection.Descending : SortDirection.Ascending;
         var filter = ListProcedureInstancesFilteredHandler.BuildFilter(request);
         var take = ListProcedureInstancesFilteredHandler.ClampTake(request.Take);
+        // Epic #12686 — el atajo de la búsqueda rápida se evalúa sobre el alcance de la red.
+        filter = await AplicarBusquedaRapidaEnRedAsync(repo, busquedaRapida, effective!, request, filter, ct);
 
         var (instances, total) = await repo.ListWithSummaryGraphFilteredAsync(
             effective!, Math.Max(0, request.Skip), take, filter, sortBy, direction, ct);
 
         var items = await ListProcedureInstancesFilteredHandler.ToSummariesAsync(repo, instances, ct);
         return (items, total, null);
+    }
+
+    internal static async Task<ProcedureInstanceListFilter> AplicarBusquedaRapidaEnRedAsync(
+        IProcedureInstanceRepository repo,
+        BusquedaRapidaResolver? resolver,
+        TenantScope alcance,
+        ProcedureInstanceListRequest request,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.BusquedaRapida))
+            return filter;
+        resolver ??= new BusquedaRapidaResolver(repo);
+        return await resolver.AplicarAsync(
+            filter,
+            request.BusquedaRapida,
+            (f, take, token) => repo.ListWithSummaryGraphFilteredAsync(
+                alcance, 0, take, f, ProcedureInstanceSortBy.Default, SortDirection.Descending, token),
+            ct).ConfigureAwait(false);
     }
 }
 
@@ -46,7 +68,8 @@ public sealed class NetworkListProcedureInstancesHandler(IProcedureInstanceRepos
 /// <see cref="CountProcedureInstancesByStatusHandler"/> (ignora <c>Estados</c>; devuelve las siete
 /// claves más <c>subsanacion</c>), con el alcance por <see cref="TenantScope"/>.
 /// </summary>
-public sealed class NetworkCountProcedureInstancesByStatusHandler(IProcedureInstanceRepository repo)
+public sealed class NetworkCountProcedureInstancesByStatusHandler(
+    IProcedureInstanceRepository repo, BusquedaRapidaResolver? busquedaRapida = null)
 {
     public async Task<(IReadOnlyDictionary<string, int>? Counts, string? Error)> HandleAsync(
         TenantScope? scope,
@@ -78,6 +101,8 @@ public sealed class NetworkCountProcedureInstancesByStatusHandler(IProcedureInst
             return (null, narrowError);
 
         var filter = ListProcedureInstancesFilteredHandler.BuildFilter(request) with { Estados = null };
+        filter = await NetworkListProcedureInstancesHandler.AplicarBusquedaRapidaEnRedAsync(
+            repo, busquedaRapida, effective!, request, filter, ct);
         var conteos = await repo.CountByStatusFilteredAsync(effective!, filter, ct);
         var alcanzados = await repo.ListTenantIdsWithMatchesAsync(effective!, filter, ct);
 

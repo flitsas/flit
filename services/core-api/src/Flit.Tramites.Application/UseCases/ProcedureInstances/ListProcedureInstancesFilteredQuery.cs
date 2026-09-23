@@ -50,6 +50,9 @@ public sealed record ProcedureInstanceListRequest
     /// </summary>
     public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
 
+    /// <summary>Epic #12686 — atajo de la búsqueda rápida (<see cref="BusquedaRapida"/>).</summary>
+    public string? BusquedaRapida { get; init; }
+
     public string? SortBy { get; init; }
     public bool SortDescending { get; init; } = true;
 }
@@ -126,7 +129,8 @@ public static class ProcedureInstanceSortFields
 /// (nombres de compañía/gestor en lote, identidad vigente por persona, vigencia del baúl) para que las
 /// dos rutas del listado (histórica y filtrada) muestren exactamente las mismas columnas derivadas.
 /// </summary>
-public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepository repo)
+public sealed class ListProcedureInstancesFilteredHandler(
+    IProcedureInstanceRepository repo, BusquedaRapidaResolver? busquedaRapida = null)
 {
     private static readonly IReadOnlyDictionary<Guid, string> EmptyNames = new Dictionary<Guid, string>();
     private static readonly IReadOnlyDictionary<string, bool> EmptyFirmaBaul = new Dictionary<string, bool>();
@@ -138,12 +142,35 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
         var direction = request.SortDescending ? SortDirection.Descending : SortDirection.Ascending;
         var filter = BuildFilter(request);
         var take = ClampTake(request.Take);
+        filter = await AplicarBusquedaRapidaAsync(repo, busquedaRapida, request, filter, ct);
 
         var (instances, total) = await repo.ListWithSummaryGraphFilteredAsync(
             request.TenantId, Math.Max(0, request.Skip), take, filter, sortBy, direction, ct);
 
         var items = await ToSummariesAsync(repo, instances, ct);
         return (items, total);
+    }
+
+    /// <summary>
+    /// Epic #12686 — aplica el atajo de la búsqueda rápida sobre el universo de la compañía (o todas,
+    /// para el SuperAdmin). Compartido con el conteo por estado para que la tira y la tabla coincidan.
+    /// </summary>
+    internal static async Task<ProcedureInstanceListFilter> AplicarBusquedaRapidaAsync(
+        IProcedureInstanceRepository repo,
+        BusquedaRapidaResolver? resolver,
+        ProcedureInstanceListRequest request,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.BusquedaRapida))
+            return filter;
+        resolver ??= new BusquedaRapidaResolver(repo);
+        return await resolver.AplicarAsync(
+            filter,
+            request.BusquedaRapida,
+            (f, take, token) => repo.ListWithSummaryGraphFilteredAsync(
+                request.TenantId, 0, take, f, ProcedureInstanceSortBy.Default, SortDirection.Descending, token),
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -240,7 +267,8 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
 /// vocabulario (más el pseudo-estado «rechazado desde preasignación», ADR-0059) —con cero donde no
 /// hay filas— para que la tira pinte sus tarjetas sin que el cliente tenga que rellenar huecos.
 /// </summary>
-public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRepository repo)
+public sealed class CountProcedureInstancesByStatusHandler(
+    IProcedureInstanceRepository repo, BusquedaRapidaResolver? busquedaRapida = null)
 {
     public async Task<IReadOnlyDictionary<string, int>> HandleAsync(
         ProcedureInstanceListRequest request, CancellationToken ct = default)
@@ -272,6 +300,10 @@ public sealed class CountProcedureInstancesByStatusHandler(IProcedureInstanceRep
             // los filtros. Lo único que se descarta es el estado, arriba.
             Condiciones = request.Condiciones,
         };
+
+        // Epic #12686 — el atajo de la búsqueda rápida también acota la tira.
+        filter = await ListProcedureInstancesFilteredHandler.AplicarBusquedaRapidaAsync(
+            repo, busquedaRapida, request, filter, ct);
 
         var conteos = await repo.CountByStatusFilteredAsync(request.TenantId, filter, ct);
 
