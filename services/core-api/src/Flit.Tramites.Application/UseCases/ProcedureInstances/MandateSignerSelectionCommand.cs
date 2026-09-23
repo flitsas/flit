@@ -176,14 +176,19 @@ public sealed class SetMandateSignerHandler(
         // el mandato GENERADO POR EL SISTEMA (un personalizado de la compañía o uno cargado a mano no
         // se tocan); sin él, GenerarConsolidadoHandler regenera los documentos en caliente en la
         // siguiente solicitud y el mandato sale con el firmante nuevo. No se regenera aquí.
+        var binariosRetirados = new List<string>();
         if (storage is not null)
         {
             var conAdjuntos = await repo.GetByIdWithAttachmentsAsync(instanceId, tenantId, ct).ConfigureAwait(false);
             if (conAdjuntos is not null)
-                AttachmentCleanup.RetirarGenerados(conAdjuntos, repo, storage, EsMandato);
+                AttachmentCleanup.RetirarGenerados(conAdjuntos, repo, storage, EsMandato, binariosRetirados);
         }
 
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        // HU #12797 — el binario del mandato se borra solo tras confirmar; si el guardado falla, la fila
+        // sigue apuntando a un archivo que existe.
+        foreach (var path in binariosRetirados)
+            ConsolidadoReemplazoSeguro.BorrarSinFallar(storage!, path, null, "retiro_mandato_generado");
         return null;
     }
 

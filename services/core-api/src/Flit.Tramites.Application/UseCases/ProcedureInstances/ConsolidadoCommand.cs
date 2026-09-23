@@ -340,13 +340,10 @@ public sealed class GenerarConsolidadoHandler(
         var filename = $"consolidado_{SafeRef(instance.ReferenceNumber)}.pdf";
         var doc = new GeneratedDocument("consolidado", filename, "application/pdf", merged);
 
-        foreach (var prev in instance.Attachments.Where(a =>
-                     string.Equals(a.Tipo, doc.Tipo, StringComparison.OrdinalIgnoreCase)).ToList())
-        {
-            storage.Delete(prev.StoragePath);
-            instance.Attachments.Remove(prev);
-            repo.RemoveAttachment(prev);
-        }
+        // HU #12797 — el anterior NO se borra aquí: se sube el nuevo, se guarda, y solo entonces se
+        // retira el binario previo (ConsolidadoReemplazoSeguro). Un fallo deja el anterior intacto.
+        var previos = ConsolidadoReemplazoSeguro.Previos(instance, doc.Tipo);
+        var wizardVigenteAntes = instance.ConsolidadoWizardVigente;
 
         StoredFile stored;
         try
@@ -361,6 +358,8 @@ public sealed class GenerarConsolidadoHandler(
         {
             return (null, "storage_unavailable");
         }
+
+        ConsolidadoReemplazoSeguro.RetirarFilas(instance, repo, previos);
 
         var newAttachment = new ProcedureInstanceAttachment
         {
@@ -400,7 +399,9 @@ public sealed class GenerarConsolidadoHandler(
         // HU #10860 — el consolidado recién generado refleja el expediente actual: marca vigente.
         instance.ConsolidadoWizardVigente = true;
 
-        await repo.SaveChangesAsync(ct);
+        await ConsolidadoReemplazoSeguro.ConfirmarAsync(
+            instance, repo, storage, stored, newAttachment, previos,
+            () => instance.ConsolidadoWizardVigente = wizardVigenteAntes, logger, ct).ConfigureAwait(false);
 
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
         return (new GenerarConsolidadoResult(

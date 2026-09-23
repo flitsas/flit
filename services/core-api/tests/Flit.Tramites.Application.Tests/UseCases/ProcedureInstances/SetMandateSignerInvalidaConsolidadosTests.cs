@@ -392,4 +392,41 @@ public sealed class SetMandateSignerInvalidaConsolidadosTests
         regenerador.Calls.Should().Be(0);
         result!.Regenerado.Should().BeTrue();
     }
+
+    // ── HU #12797 — el binario del mandato retirado se borra solo tras confirmar el guardado ──
+
+    [Fact]
+    public async Task HU12797_ElBinarioDelMandatoSeBorraDespuesDelGuardado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (instance, storage) = ExpedienteConFurYMandatoDeAna();
+        var mandatoViejo = instance.Attachments.Single(a => a.Tipo == "mandato");
+        var borradoAntesDeGuardar = false;
+        _repo.When(r => r.SaveChangesAsync(Arg.Any<CancellationToken>()))
+            .Do(_ => borradoAntesDeGuardar = storage.Deleted.Contains(mandatoViejo.StoragePath));
+
+        var error = await new SetMandateSignerHandler(_repo, AnaYCarlos(), storage)
+            .HandleAsync(instance.Id, Tenant, Carlos, ct);
+
+        error.Should().BeNull();
+        borradoAntesDeGuardar.Should().BeFalse("el binario no se toca antes de confirmar la escritura");
+        storage.Deleted.Should().Contain(mandatoViejo.StoragePath);
+    }
+
+    [Fact]
+    public async Task HU12797_SiElGuardadoFalla_ElBinarioDelMandatoSigueEnStorage()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (instance, storage) = ExpedienteConFurYMandatoDeAna();
+        var mandatoViejo = instance.Attachments.Single(a => a.Tipo == "mandato");
+        _repo.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("db caída")));
+
+        var act = () => new SetMandateSignerHandler(_repo, AnaYCarlos(), storage)
+            .HandleAsync(instance.Id, Tenant, Carlos, ct);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        storage.Deleted.Should().BeEmpty();
+        storage.Files.Should().ContainKey(mandatoViejo.StoragePath);
+    }
 }

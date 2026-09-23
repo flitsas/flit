@@ -156,17 +156,13 @@ public sealed class GenerarConsolidadoMaestroHandler(
         const string tipoMaestro = "consolidado_maestro";
         var doc = new GeneratedDocument(tipoMaestro, filename, "application/pdf", merged);
 
-        // Idempotencia: eliminar maestro previo antes de persistir el nuevo.
-        foreach (var prev in instance.Attachments
-            .Where(a => string.Equals(a.Tipo, tipoMaestro, StringComparison.OrdinalIgnoreCase))
-            .ToList())
-        {
-            storage.Delete(prev.StoragePath);
-            instance.Attachments.Remove(prev);
-            repo.RemoveAttachment(prev);
-        }
+        // Idempotencia: el maestro previo se sustituye (HU #12797): subir el nuevo → guardar → solo
+        // entonces borrar el binario anterior. Si la subida falla, nada se tocó.
+        var previos = ConsolidadoReemplazoSeguro.Previos(instance, tipoMaestro);
+        var maestroVigenteAntes = instance.ConsolidadoMaestroVigente;
 
         var stored = await storage.SaveAsync(id, doc.Tipo, doc.Filename, new MemoryStream(doc.Content), ct);
+        ConsolidadoReemplazoSeguro.RetirarFilas(instance, repo, previos);
         var newAttachment = new ProcedureInstanceAttachment
         {
             Id = Guid.NewGuid(),
@@ -206,7 +202,9 @@ public sealed class GenerarConsolidadoMaestroHandler(
         instance.Events.Add(evento);
         repo.Add(evento);
 
-        await repo.SaveChangesAsync(ct);
+        await ConsolidadoReemplazoSeguro.ConfirmarAsync(
+            instance, repo, storage, stored, newAttachment, previos,
+            () => instance.ConsolidadoMaestroVigente = maestroVigenteAntes, logger, ct).ConfigureAwait(false);
 
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
         return (new GenerarConsolidadoResult(dto), null);
