@@ -718,6 +718,12 @@ export function TramiteWizard(props: Props) {
    * hay nada que exigir, y `ActorsForm` lo corrige en cuanto el backend resuelve los requisitos.
    */
   const [camaraComercioGateOk, setCamaraComercioGateOk] = useState(true);
+  /** Partes a las que les falta el certificado obligatorio, por su nombre en pantalla (HU #12777 AC2). */
+  const [camaraComercioPendientes, setCamaraComercioPendientes] = useState<string[]>([]);
+  const onCamaraComercioGate = useCallback((ok: boolean, partesPendientes: string[]) => {
+    setCamaraComercioGateOk(ok);
+    setCamaraComercioPendientes(partesPendientes);
+  }, []);
   /**
    * Campos obligatorios de las partes del paso de actores. Arranca en `false`: hasta que
    * `ActorsForm` monte y diga lo contrario, lo correcto es no dejar avanzar — al revés, el botón
@@ -1950,7 +1956,7 @@ export function TramiteWizard(props: Props) {
                 prendaFormRef={prendaFormRef}
                 onActorsConsultationGateChange={setActorsConsultationReady}
                 onEscrituraRepresentanteGateChange={setEscrituraRlGateOk}
-                onCamaraComercioGateChange={setCamaraComercioGateOk}
+                onCamaraComercioGateChange={onCamaraComercioGate}
                 onCamposRequeridosGateChange={setActoresCamposGateOk}
                 rotulosActores={rotulosDeActores(steps)}
                 onIrAActores={irAPasoActor}
@@ -1996,6 +2002,25 @@ export function TramiteWizard(props: Props) {
               </p>
             </InlineAlert>
           )}
+
+          {/*
+            HU #12777 AC2 — con los campos completos, lo único que puede faltar en el paso es el
+            certificado de Cámara de Comercio obligatorio: se dice de quién, en el mismo sitio que el
+            aviso de campos, para que el botón apagado no quede sin explicación.
+          */}
+          {isActorStep &&
+            actoresCamposGateOk &&
+            !camaraComercioGateOk &&
+            camaraComercioPendientes.length > 0 &&
+            !fullReadOnly && (
+              <InlineAlert tone="info" className="mt-6">
+                <p>
+                  Falta el certificado de Cámara de Comercio de{' '}
+                  {camaraComercioPendientes.join(' y ')}. Cárgalo en el recuadro de cada parte para
+                  continuar.
+                </p>
+              </InlineAlert>
+            )}
 
           {/* Bloqueos de envío traducidos (en el paso de decisión). */}
           {isDecisionStep && blockers.length > 0 && (
@@ -4636,7 +4661,7 @@ function StepBody({
   onActorsConsultationGateChange?: (ready: boolean) => void;
   /** Gate Continuar: escritura del representante legal fuera del directorio ya adjunta (o no aplica). */
   onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
-  onCamaraComercioGateChange?: (ready: boolean) => void;
+  onCamaraComercioGateChange?: (ready: boolean, partesPendientes: string[]) => void;
   /** Gate Continuar: campos obligatorios de las partes del paso de actores ya completos. */
   onCamposRequeridosGateChange?: (ready: boolean) => void;
   /**
