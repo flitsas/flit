@@ -1,6 +1,10 @@
 import { ApiError } from '@/lib/api/types';
 import type { OtClientProcedure } from '@/lib/api/types-ot';
-import type { ConsolidadoEntregaParams } from '@/lib/api/types/procedure-runtime';
+import type {
+  ConsolidadoEntregaParams,
+  ConsolidadoVigencia,
+  GenerarConsolidadoResult,
+} from '@/lib/api/types/procedure-runtime';
 import { formatFechaHora } from '@/lib/format/date';
 
 /**
@@ -88,4 +92,39 @@ export function conservarCamposConsolidadoOt(
     }
   }
   return resultado;
+}
+
+/** Modos de la entrega que garantizan que el PDF servido refleja el expediente actual. */
+const MODOS_ENTREGA_VIGENTE: ReadonlySet<string> = new Set(['vigente', 'regenerado']);
+
+/**
+ * HU #12793 — refresca en local la vigencia del maestro tras abrirlo o reconstruirlo, sin pedir de
+ * nuevo el listado. La generación (POST) y la entrega en modo `vigente`/`regenerado` dejan el
+ * maestro vigente: si se reconstruyó, la fecha es `ahora` (aproximación cliente del sello del
+ * backend, que no viaja en la respuesta); si se reutilizó, se conserva la fecha previa.
+ *
+ * Devuelve `null` (no tocar el indicador) cuando no hay vigencia previa —backend anterior al campo,
+ * la UI no infiere—, o cuando la entrega sirvió el adjunto tal cual (`solo_lectura`, definitivo,
+ * migrado, cargado por usuario): ahí no se sabe si refleja el expediente.
+ *
+ * Uso de ejemplo:
+ *   const nueva = vigenciaMaestroTrasApertura(row.consolidadoMaestro, res, new Date());
+ *   if (nueva) setVigenciaLocal(nueva);
+ */
+export function vigenciaMaestroTrasApertura(
+  previa: ConsolidadoVigencia | null | undefined,
+  res: Pick<GenerarConsolidadoResult, 'regenerado' | 'modo'>,
+  ahora: Date,
+): ConsolidadoVigencia | null {
+  if (!previa) return null;
+  // `modo` null/omitido = ruta POST de generación: siempre deja el maestro vigente.
+  if (res.modo != null && !MODOS_ENTREGA_VIGENTE.has(res.modo)) return null;
+  const regenerado = res.regenerado === true || res.modo === 'regenerado';
+  const generadoEn = regenerado ? ahora.toISOString() : previa.generadoEn;
+  return {
+    ...previa,
+    estado: 'vigente',
+    generadoEn,
+    origen: regenerado ? 'system' : previa.origen,
+  };
 }

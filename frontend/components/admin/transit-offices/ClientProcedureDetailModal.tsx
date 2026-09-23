@@ -330,6 +330,7 @@ export function ClientProcedureDetailModal({
         readOnly={readOnly}
         quipuxRadicadoEn={row.quipuxRadicadoEn ?? null}
         quipuxMaestroAttachmentId={row.quipuxMaestroAttachmentId ?? null}
+        consolidadoMaestro={row.consolidadoMaestro ?? null}
       />
     );
   };

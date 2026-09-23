@@ -35,11 +35,15 @@ export const COPY_VIGENCIA = {
     vigente: 'Vigente',
     desactualizado: 'Desactualizado',
     inexistente: 'Sin generar',
+    /** HU #12793 (AC3) — maestro radicado en Quipux, consultado en solo lectura. */
+    radicado: 'Versión radicada',
   },
   leyendaDesactualizado: 'Pendiente de regenerar',
   leyendaInexistente: 'Aún no se ha generado',
   prefijoFecha: 'Generado el',
   prefijoUltimaGeneracion: 'Última generación',
+  /** HU #12793 (AC3) — prefijo de la fecha de radicación en Quipux. */
+  prefijoRadicado: 'Radicado el',
   definitivo: 'Definitivo',
 } as const;
 
@@ -47,11 +51,21 @@ export interface OpcionesVigencia {
   documento?: DocumentoConsolidado;
   /** Override de la leyenda del estado `desactualizado` (p. ej. OT: «se reconstruirá al abrirlo»). */
   leyendaDesactualizado?: string;
+  /**
+   * HU #12793 (AC3) — ISO UTC de la radicación en Quipux, SOLO cuando el OT consulta en modo
+   * read-only. Si llega, manda sobre la vigencia («maestro radicado, fijo», HU #12787): el indicador
+   * dice «Versión radicada» con esa fecha y nunca sugiere regenerar, aunque el maestro figure
+   * desactualizado o el backend aún no exponga la vigencia.
+   */
+  radicadoEn?: string | null;
 }
+
+/** Estado pintado: los tres del backend más `radicado` (HU #12793), que solo resuelve la UI. */
+export type EstadoVistaVigencia = ConsolidadoVigencia['estado'] | 'radicado';
 
 /** Vista ya resuelta: todo lo que el componente necesita pintar, sin lógica adicional. */
 export interface VistaVigenciaConsolidado {
-  estado: ConsolidadoVigencia['estado'];
+  estado: EstadoVistaVigencia;
   /** «Consolidado» / «Consolidado maestro». */
   documento: string;
   /** Rótulo corto del estado: «Vigente», «Desactualizado», «Sin generar». */
@@ -90,6 +104,8 @@ export function describirVigenciaConsolidado(
   vigencia: ConsolidadoVigencia | null | undefined,
   opciones: OpcionesVigencia = {},
 ): VistaVigenciaConsolidado | null {
+  const radicadoEn = opciones.radicadoEn?.trim();
+  if (radicadoEn) return describirRadicado(radicadoEn, vigencia, opciones);
   if (!vigencia || !ESTADOS_VALIDOS.has(vigencia.estado)) return null;
 
   const documento = COPY_VIGENCIA.documento[opciones.documento ?? 'wizard'];
@@ -158,6 +174,39 @@ export function describirVigenciaConsolidado(
     puntoHueco: true,
     colorTexto: TINTA_VIGENCIA_NEUTRA,
     ariaLabel: `${documento}: ${COPY_VIGENCIA.leyendaInexistente.toLowerCase()}`,
+  };
+}
+
+/**
+ * HU #12793 (AC3) — vista del maestro radicado: verde (válido y fijo), fecha de radicación, sin
+ * leyenda y sin badge «Definitivo» (el aviso del visor, `AvisoMaestroRadicado`, explica que no se
+ * regenera). Nada en esta vista menciona regenerar ni reconstruir.
+ */
+function describirRadicado(
+  radicadoEn: string,
+  vigencia: ConsolidadoVigencia | null | undefined,
+  opciones: OpcionesVigencia,
+): VistaVigenciaConsolidado {
+  const documento = COPY_VIGENCIA.documento[opciones.documento ?? 'wizard'];
+  const fechaFormateada = formatFechaHora(radicadoEn, '');
+  const fecha = fechaFormateada === '' ? null : fechaFormateada;
+  const textoFecha = fecha ? `${COPY_VIGENCIA.prefijoRadicado} ${fecha}` : null;
+  return {
+    estado: 'radicado',
+    documento,
+    etiqueta: COPY_VIGENCIA.etiqueta.radicado,
+    leyenda: null,
+    fecha,
+    textoFecha,
+    definitivo: false,
+    origen: vigencia?.origen ?? null,
+    colorPunto: COLOR_VIGENCIA_VIGENTE,
+    puntoHueco: false,
+    colorTexto: TINTA_VIGENCIA_VIGENTE,
+    ariaLabel: unir([
+      `${documento}: ${COPY_VIGENCIA.etiqueta.radicado.toLowerCase()}`,
+      textoFecha ? textoFecha.charAt(0).toLowerCase() + textoFecha.slice(1) : null,
+    ]),
   };
 }
 

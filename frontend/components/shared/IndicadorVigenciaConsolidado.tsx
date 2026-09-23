@@ -18,6 +18,11 @@ export interface IndicadorVigenciaConsolidadoProps {
   variante?: 'compacta' | 'completa';
   /** Override de la leyenda de «desactualizado» (consola OT: «se reconstruirá al abrirlo»). */
   leyendaDesactualizado?: string;
+  /**
+   * HU #12793 (AC3) — ISO de radicación Quipux cuando el OT consulta en read-only: el indicador
+   * pasa a «Versión radicada» con esa fecha. Omitido/`null` = comportamiento de la HU #12792.
+   */
+  radicadoEn?: string | null;
   /** Hueco para avisos adicionales junto al indicador (p. ej. fallo de regeneración, #12799). */
   children?: ReactNode;
   className?: string;
@@ -43,10 +48,15 @@ export function IndicadorVigenciaConsolidado({
   documento = 'wizard',
   variante = 'completa',
   leyendaDesactualizado,
+  radicadoEn,
   children,
   className,
 }: IndicadorVigenciaConsolidadoProps) {
-  const vista = describirVigenciaConsolidado(vigencia, { documento, leyendaDesactualizado });
+  const vista = describirVigenciaConsolidado(vigencia, {
+    documento,
+    leyendaDesactualizado,
+    radicadoEn,
+  });
   if (!vista) return null;
 
   return variante === 'compacta' ? (
@@ -76,13 +86,18 @@ function Punto({ vista, size }: { vista: VistaVigenciaConsolidado; size: number 
   );
 }
 
+/** Vigente y radicado (HU #12793) comparten la tinta verde de éxito. */
+function tintaExito(vista: VistaVigenciaConsolidado): boolean {
+  return vista.estado === 'vigente' || vista.estado === 'radicado';
+}
+
 /** Tinta del rótulo: la verde es variable de tema; la neutra necesita su versión oscura. */
 function claseTinta(vista: VistaVigenciaConsolidado): string {
-  return vista.estado === 'vigente' ? '' : 'text-[#59677D] dark:text-white/70';
+  return tintaExito(vista) ? '' : 'text-[#59677D] dark:text-white/70';
 }
 
 function estiloTinta(vista: VistaVigenciaConsolidado) {
-  return vista.estado === 'vigente' ? { color: vista.colorTexto } : undefined;
+  return tintaExito(vista) ? { color: vista.colorTexto } : undefined;
 }
 
 function BadgeDefinitivo() {
@@ -109,7 +124,7 @@ function IndicadorCompacto({
   // Detalle bajo el rótulo: la fecha en vigente; la leyenda («Pendiente de regenerar» / «Aún no se
   // ha generado») en los otros dos. La fecha de la última generación del desactualizado queda en el
   // `aria-label`/`title`: en la celda no cabe una tercera línea.
-  const detalle = vista.estado === 'vigente' ? vista.fecha : vista.leyenda;
+  const detalle = tintaExito(vista) ? vista.fecha : vista.leyenda;
   // Los avisos extra (`children`) quedan FUERA del grupo: tienen su propio rol/nombre y no deben
   // heredar el `aria-label` del indicador.
   return (

@@ -7,6 +7,7 @@ import { useToast } from "@/components/admin/Toast";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
 import { AvisoDocumentoFinal } from "@/components/shared/AvisoDocumentoFinal";
 import { AvisoMaestroRadicado } from "@/components/shared/AvisoMaestroRadicado";
+import { IndicadorVigenciaConsolidado } from "@/components/shared/IndicadorVigenciaConsolidado";
 import {
   entregarOtConsolidado,
   fetchOtAttachmentPreviewUrl,
@@ -17,7 +18,12 @@ import { esDocumentoDefinitivo } from "@/lib/tramites/consolidado-entrega";
 import {
   mensajeEntregaOtFallida,
   resolverFuenteMaestroOt,
+  vigenciaMaestroTrasApertura,
 } from "@/lib/tramites/consolidado-entrega-ot";
+import type {
+  ConsolidadoVigencia,
+  GenerarConsolidadoResult,
+} from "@/lib/api/types/procedure-runtime";
 import { downloadFile } from "@/lib/api/download";
 import type { OtApiScope, OtProcedureAttachment } from "@/lib/api/admin-ot";
 import { OtVacio } from "./OtDetallePrimitivos";
@@ -39,7 +45,15 @@ export interface OtDetalleDocumentosProps {
   quipuxRadicadoEn?: string | null;
   /** HU #12787 (AC2) — adjunto maestro que se radicó; se abre por la ruta de documentos. */
   quipuxMaestroAttachmentId?: string | null;
+  /**
+   * HU #12793 — vigencia del consolidado maestro del trámite (HU #12791). `null`/omitido = backend
+   * sin el campo: no se pinta indicador (salvo radicado en read-only, AC3).
+   */
+  consolidadoMaestro?: ConsolidadoVigencia | null;
 }
+
+/** HU #12793 (AC2) — leyenda del maestro desactualizado en la consola OT. */
+export const LEYENDA_MAESTRO_DESACTUALIZADO_OT = "Se reconstruirá al abrirlo";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -107,6 +121,7 @@ export function OtDetalleDocumentos({
   readOnly = false,
   quipuxRadicadoEn = null,
   quipuxMaestroAttachmentId = null,
+  consolidadoMaestro = null,
 }: OtDetalleDocumentosProps) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -122,6 +137,25 @@ export function OtDetalleDocumentos({
   const [previewDefinitivo, setPreviewDefinitivo] = useState(false);
   /** HU #12787 (AC2) — el consolidado abierto es el maestro radicado en Quipux (fecha ISO). */
   const [previewRadicadoEn, setPreviewRadicadoEn] = useState<string | null>(null);
+  /**
+   * HU #12793 — vigencia refrescada en local tras abrir/reconstruir el maestro. Se ata a la prop de
+   * la que partió (`base`): si el padre trae una vigencia nueva, esa gana sin necesidad de efecto.
+   */
+  const [vigenciaLocal, setVigenciaLocal] = useState<{
+    base: ConsolidadoVigencia | null;
+    valor: ConsolidadoVigencia;
+  } | null>(null);
+  const vigenciaMaestro =
+    vigenciaLocal && vigenciaLocal.base === consolidadoMaestro
+      ? vigenciaLocal.valor
+      : consolidadoMaestro;
+  /** HU #12793 (AC3) — solo en read-only la radicación fija el maestro («maestro radicado, fijo»). */
+  const radicadoIndicador = readOnly ? quipuxRadicadoEn?.trim() || null : null;
+
+  const refrescarVigencia = (res: Pick<GenerarConsolidadoResult, "regenerado" | "modo">) => {
+    const nueva = vigenciaMaestroTrasApertura(vigenciaMaestro, res, new Date());
+    if (nueva) setVigenciaLocal({ base: consolidadoMaestro, valor: nueva });
+  };
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -219,6 +253,7 @@ export function OtDetalleDocumentos({
         // generados del trámite, ordenados por la matriz documental.
         const res = await generarOtConsolidadoMaestro(procedureId, scope, force);
         if (res.regenerado) show("Consolidado generado.", "success");
+        refrescarVigencia(res);
         void load();
         await handlePreview({
           id: res.document.attachmentId,
@@ -257,6 +292,7 @@ export function OtDetalleDocumentos({
       scope,
       soloLectura ? { tipo, soloLectura: true } : { tipo },
     );
+    if (tipo === "consolidado_maestro") refrescarVigencia(res);
     await handlePreview(
       {
         id: res.document.attachmentId,
@@ -344,6 +380,17 @@ export function OtDetalleDocumentos({
       />
 
       <div className="space-y-3" data-testid="ot-detalle-documentos">
+        {/* HU #12793 — vigencia del maestro. Va fuera del guardián de estado: depende del detalle del
+            trámite, no de `GET …/documents`, y debe verse también mientras la lista carga. En
+            read-only radicado muestra la versión radicada (AC3); el aviso largo de que no se
+            regenera lo da `AvisoMaestroRadicado` dentro del visor. */}
+        <IndicadorVigenciaConsolidado
+          vigencia={vigenciaMaestro}
+          documento="maestro"
+          variante="completa"
+          leyendaDesactualizado={LEYENDA_MAESTRO_DESACTUALIZADO_OT}
+          radicadoEn={radicadoIndicador}
+        />
         {/* El consolidado NO puede quedar dentro del guardián de estado: con el expediente vacío
             este pinta su mensaje en lugar de los hijos, y precisamente entonces —cuando no hay
             adjuntos— el organismo sigue necesitando poder abrir o reconstruir el consolidado. */}
