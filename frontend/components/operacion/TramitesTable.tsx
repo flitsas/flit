@@ -102,6 +102,11 @@ import { ColumnSelector } from '@/components/atom/ColumnSelector';
 import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { EstadoFunnel } from './EstadoFunnel';
+import { panelesDeEstado } from '@/lib/tramites/panelesEstado';
+import { ATAJOS_GESTOR, atajoGestor, type AtajoGestor } from '@/lib/tramites/busquedaRapida';
+import { BusquedaRapidaAcordeon } from './BusquedaRapidaAcordeon';
+import { AvisoHayCambios } from './AvisoHayCambios';
+import { useSondeoDeConteos } from '@/hooks/useSondeoDeConteos';
 import {
   AttachmentPreview,
   TramiteDocumentosModal,
@@ -373,6 +378,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   // ADR-0059 — además de los estados reales, la tira ofrece «Rechazado preasignación», un
   // pseudo-estado que el servidor traduce a rechazado + rejectedFrom = preasignacion.
   const [estado, setEstado] = useState<'' | EstadoFiltro>('');
+  /** Epic #12686 (HU #12806) — atajo de la búsqueda rápida; vacío = ninguno. */
+  const [atajo, setAtajo] = useState<'' | AtajoGestor>('');
+  /** Epic #12686 (HU #12808) — el sondeo vio un conteo distinto al de la tabla. */
+  const [hayCambios, setHayCambios] = useState(false);
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
   // HU #10536 — filtro "solo prioritarios".
   const [soloPrioritarios, setSoloPrioritarios] = useState(false);
@@ -481,6 +490,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    */
   const { tenantId: tenantDelUsuario, isSuperAdmin: esSuperAdmin } = usePermissions();
   const currentTenantId = esSuperAdmin ? null : tenantDelUsuario;
+
+  // Epic #12686 (HU #12802) — tarjetas de la tira según perspectiva y familia. El administrador de
+  // una compañía y la vista de red son perspectiva de gestor: solo el SuperAdmin ve Preparado.
+  const perspectivaPaneles = esSuperAdmin ? 'superadmin' : 'gestor';
+  const panelesVisibles = useMemo(
+    () => panelesDeEstado(perspectivaPaneles, modalidad),
+    [perspectivaPaneles, modalidad],
+  );
 
   // HU #11054 / HU #11055 — consulta de documentos desde el listado, sin abrir el wizard. Se guarda
   // el trámite elegido (no solo su id) porque el panel se titula con el radicado y el SuperAdmin
@@ -686,7 +703,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    */
   const buildListQuery = useCallback((): ListInstancesParams => {
     const query: ListInstancesParams = {};
-    if (appliedCondiciones.length > 0) query.condiciones = appliedCondiciones;
+    // Epic #12686 — el atajo suma sus condiciones a las del usuario sin entrar en «+ Filtro».
+    const atajoActivo = atajoGestor(atajo);
+    const condiciones = [...appliedCondiciones, ...(atajoActivo?.condiciones ?? [])];
+    if (condiciones.length > 0) query.condiciones = condiciones;
+    if (atajoActivo?.busquedaRapida) query.busquedaRapida = atajoActivo.busquedaRapida;
     // Estado y familia van al SERVIDOR, no al array ya traído: el listado devuelve como mucho
     // SERVER_LIST_TAKE filas, así que filtrarlos en cliente respondía "los borradores que cupieron
     // en la ventana" en vez de "los borradores del tenant". Con pocos trámites daba igual; con un
@@ -710,6 +731,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     return query;
   }, [
     appliedCondiciones,
+    atajo,
     appliedCreatedFrom,
     appliedCreatedTo,
     appliedUpdatedFrom,
@@ -760,6 +782,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       setItems(page1.items);
       setTotal(page1.total);
       setEstadoCounts(counts);
+      setHayCambios(false);
       // HU #12726 (C.4) — si el detalle está abierto, sincronizar la fila con el listado recién pedido.
       setDetalleTramite((prev) => {
         if (!prev) return null;
@@ -778,6 +801,17 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       setLoading(false);
     }
   }, [alcanceListo, buildListQuery, buscarPagina, contarEstados, page, pageSize]);
+
+  // Epic #12686 (HU #12808) — la tira se mantiene al día sola; la tabla, no. Si la tarjeta elegida
+  // cambió de cifra, se avisa en vez de mover las filas bajo el cursor.
+  useSondeoDeConteos({
+    activo: alcanceListo,
+    pedir: () => contarEstados(buildListQuery()),
+    alRecibir: (conteos) => {
+      setEstadoCounts(conteos);
+      if (estado && (conteos[estado] ?? 0) !== total) setHayCambios(true);
+    },
+  });
 
   useEffect(() => {
     // Carga/refresca al montar y al cambiar refreshKey: los setState de `load`
@@ -937,10 +971,25 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   };
   const handleModalidadChange = (v: '' | ProcedureFamily) => {
     setModalidad(v);
+    // Epic #12686 — si la tarjeta elegida no existe en la nueva pestaña (p. ej. Asignado en
+    // Traspaso), el filtro de estado se quita: dejarlo aplicado filtraría por una tarjeta que ya no
+    // se ve y la tabla quedaría vacía sin explicación.
+    if (estado && !panelesDeEstado(perspectivaPaneles, v).includes(estado)) setEstado('');
     setPage(1);
   };
   const handleEstadoChange = (v: '' | EstadoFiltro) => {
     setEstado(v);
+    // Epic #12686 — tarjeta y atajo no se acumulan: elegir una tarjeta suelta el atajo.
+    setAtajo('');
+    setPage(1);
+  };
+  /**
+   * Epic #12686 (HU #12806) — elegir un atajo suelta la tarjeta anterior; si el atajo es de un solo
+   * estado (p. ej. «Más de 5 días» es Entregado), ese estado queda en la tira y su tarjeta se resalta.
+   */
+  const handleAtajoChange = (key: '' | AtajoGestor) => {
+    setAtajo(key);
+    setEstado(atajoGestor(key)?.estado ?? '');
     setPage(1);
   };
   const handlePrioritariosChange = (v: boolean) => {
@@ -1097,6 +1146,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     search.trim() !== '' ||
     modalidad !== '' ||
     estado !== '' ||
+    atajo !== '' ||
     soloPrioritarios ||
     hasServerFilters ||
     sortBy !== '';
@@ -1159,6 +1209,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     setSearch('');
     setModalidad('');
     setEstado('');
+    setAtajo('');
     setSoloPrioritarios(false);
     setDraftCondiciones([]);
     setRangoSobre('created');
@@ -1193,6 +1244,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const handleRefresh = () => {
     setSearch('');
     setEstado('');
+    setAtajo('');
     setPage(1);
     void load();
   };
@@ -1348,6 +1400,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             <div className="min-w-0 flex-1">
               <EstadoFunnel
                 counts={estadoCountsMostrados}
+                estados={panelesVisibles}
                 selected={estado}
                 onSelect={handleEstadoChange}
               />
@@ -1372,6 +1425,20 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             </span>
           </button>
         </div>
+
+        {hayCambios && !loading ? <AvisoHayCambios onActualizar={() => void load()} /> : null}
+
+        {/* Epic #12686 (HU #12806) — atajos sin conteo. No se desmonta mientras carga y sigue visible
+            si la carga falla: un atajo que el servidor rechaza (p. ej. demasiados borradores) tiene
+            que poder quitarse. */}
+        {alcanceListo ? (
+          <BusquedaRapidaAcordeon
+            items={ATAJOS_GESTOR}
+            selected={atajo}
+            onSelect={(key) => handleAtajoChange(key as '' | AtajoGestor)}
+            storageKey="tramites.busqueda-rapida"
+          />
+        ) : null}
 
         {/* Tira de chips: SOLO existe si hay periodo o alguna condición aplicada */}
         <TramitesFiltrosChips

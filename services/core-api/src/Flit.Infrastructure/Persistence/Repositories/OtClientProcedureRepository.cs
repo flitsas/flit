@@ -356,6 +356,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
     public Task<OtBandejaCounters?> GetBandejaCountersAsync(
         Guid otTenantId,
+        OtClientProcedureFilter? filter,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default) =>
         ExecuteOtScopedAsync(
@@ -367,7 +368,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     async () =>
                     {
                         // HU #12350 AC7 — mismo universo que la bandeja: trámites ya recibidos por el organismo.
+                        // Epic #12686 (HU #12803) — y con los MISMOS filtros que la tabla (familia, búsqueda,
+                        // condiciones…), salvo el estado y la marca de revocatoria: las tarjetas dicen
+                        // cuántos hay de CADA clase; acotarlas a la elegida dejaría las demás en cero.
                         var accesibles = BuildAccessibleQuery(transitOfficeId);
+                        if (filter is not null)
+                        {
+                            accesibles = ApplyListFilters(accesibles, SinFiltroDeTarjeta(filter));
+                        }
 
                         // UNA consulta agrupada en vez de seis COUNT: la bandeja los pide juntos y
                         // seis viajes a la base para pintar una tira de cabecera no se justifican.
@@ -1772,6 +1780,24 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         return exists ? changedBy : null;
     }
 
+    /// <summary>Copia del filtro sin lo que eligen las tarjetas (estado y solicitud de revocatoria).</summary>
+    private static OtClientProcedureFilter SinFiltroDeTarjeta(OtClientProcedureFilter f) => new()
+    {
+        ProcedureTypeId = f.ProcedureTypeId,
+        Familia = f.Familia,
+        Vin = f.Vin,
+        Placa = f.Placa,
+        Vendedor = f.Vendedor,
+        Comprador = f.Comprador,
+        Gestor = f.Gestor,
+        Busqueda = f.Busqueda,
+        Condiciones = f.Condiciones,
+        CreatedFrom = f.CreatedFrom,
+        CreatedTo = f.CreatedTo,
+        UpdatedFrom = f.UpdatedFrom,
+        UpdatedTo = f.UpdatedTo,
+    };
+
     private IQueryable<ProcedureInstance> ApplyListFilters(
         IQueryable<ProcedureInstance> query,
         OtClientProcedureFilter filter)
@@ -1802,6 +1828,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         if (filter.ProcedureTypeId is not null)
         {
             query = query.Where(p => p.ProcedureTypeId == filter.ProcedureTypeId.Value);
+        }
+
+        // Epic #12686 — pestaña de familia. La familia vive en el TIPO (ADR-0050), no en la instancia.
+        if (!string.IsNullOrWhiteSpace(filter.Familia))
+        {
+            var familia = filter.Familia.Trim().ToUpperInvariant();
+            query = query.Where(p => p.ProcedureType != null && p.ProcedureType.Family.ToUpper() == familia);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Vin))

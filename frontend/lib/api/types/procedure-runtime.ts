@@ -433,6 +433,11 @@ export interface ListInstancesParams {
    */
   condiciones?: QueryCondition[];
   /**
+   * Epic #12686 (HU #12805) — atajo de la búsqueda rápida que resuelve el servidor:
+   * `mas_de_5_dias`, `mas_de_10_dias`, `sin_firmas`, `sin_documento`, `pausados`.
+   */
+  busquedaRapida?: string;
+  /**
    * Whitelist backend: vin | placa | comprador | gestor | createdAt | updatedAt y, desde la
    * HU #12106, radicado | estado | tipo_tramite | fuente (los subcampos de las celdas compuestas).
    */

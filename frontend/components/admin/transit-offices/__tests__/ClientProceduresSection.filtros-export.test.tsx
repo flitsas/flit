@@ -22,7 +22,7 @@ vi.mock("@/lib/api/admin-ot", () => ({
   searchOtClientProcedures: vi.fn(),
   fetchOtBandejaFilterFields: vi.fn(),
   fetchOtBandejaHealth: vi.fn(),
-  fetchOtBandejaCounters: vi.fn(),
+  searchOtBandejaCounters: vi.fn(),
   fetchOtProfile: vi.fn(),
   approveOtClientProcedure: vi.fn(),
   rejectOtClientProcedure: vi.fn(),
@@ -58,7 +58,7 @@ vi.mock("@/lib/api/ui-preferences", () => ({
 }));
 
 import {
-  fetchOtBandejaCounters,
+  searchOtBandejaCounters,
   fetchOtBandejaFilterFields,
   fetchOtBandejaHealth,
   fetchOtProfile,
@@ -119,7 +119,7 @@ beforeEach(() => {
     deliveredWithoutGrant: 0,
     hasDeliveredWithoutGrant: false,
   });
-  vi.mocked(fetchOtBandejaCounters).mockResolvedValue({
+  vi.mocked(searchOtBandejaCounters).mockResolvedValue({
     transitOfficeResolved: true,
     preasignacion: 0,
     asignados: 0,

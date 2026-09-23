@@ -22,6 +22,13 @@ public sealed class OtClientProcedureFilter
 
     public Guid? ProcedureTypeId { get; init; }
 
+    /// <summary>
+    /// Epic #12686 (HU #12803) — familia del tipo de trámite (<c>MATRICULAS</c>, <c>TRASPASO</c>,
+    /// <c>OTROS</c>): las pestañas de la bandeja. Se compara contra la familia del TIPO (ADR-0050),
+    /// igual que el listado del gestor. El endpoint rechaza valores fuera del dominio.
+    /// </summary>
+    public string? Familia { get; init; }
+
     /// <summary>Filtro parcial por VIN (case-insensitive).</summary>
     public string? Vin { get; init; }
 

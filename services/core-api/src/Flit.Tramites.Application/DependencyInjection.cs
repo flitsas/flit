@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<GetProcedureInstanceHandler>();
         services.AddScoped<ListProcedureInstancesHandler>();
         // Filtrado/ordenamiento server-side del listado (WHERE/ORDER BY en SQL, no en memoria).
+        services.AddScoped<BusquedaRapidaResolver>();
         services.AddScoped<ListProcedureInstancesFilteredHandler>();
         services.AddScoped<CountProcedureInstancesByStatusHandler>();
         // HU #12358 (Feature #12257) - lectura consolidada de la red por TenantScope (rutas /network/**).

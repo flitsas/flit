@@ -23,6 +23,7 @@ using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Api.UseCases.RevocationRequests;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ImprintSignatures;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -192,6 +193,17 @@ public static class AdminOtEndpoints
             .WithName("AdminOtGetClientProceduresCounters")
             .WithSummary("Contadores de la cabecera de la bandeja OT (carga por clase de trabajo)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // Epic #12686 (HU #12803) — los contadores bajo los MISMOS filtros que la tabla. Gemelo POST
+        // de /client-procedures/search por la misma razón que /instances/estado-counts del gestor:
+        // las condiciones no caben en una query string, y el estado se ignora (cada tarjeta es uno).
+        group.MapPost("/client-procedures/counters", SearchClientProceduresCountersAsync)
+            .WithName("AdminOtSearchClientProceduresCounters")
+            .WithSummary("Contadores de la bandeja OT bajo los filtros de la tabla")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
@@ -1203,6 +1215,11 @@ public static class AdminOtEndpoints
             return Results.BadRequest(new { error = problema });
         }
 
+        if (body.ValidarFamilia() is { } familiaInvalida)
+        {
+            return Results.BadRequest(new { error = familiaInvalida });
+        }
+
         var result = await handler
             .HandleAsync(body.ToQuery(tenantId, scopedOfficeId), cancellationToken)
             .ConfigureAwait(false);
@@ -1341,6 +1358,51 @@ public static class AdminOtEndpoints
         {
             OtTenantId = tenantId,
             TransitOfficeId = scopedOfficeId,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> SearchClientProceduresCountersAsync(
+        HttpContext httpContext,
+        GetOtBandejaCountersHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromBody] OtBandejaSearchRequest body,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        if (OtBandejaQueryConditions.Validate(body.Condiciones) is { } problema)
+        {
+            return Results.BadRequest(new { error = problema });
+        }
+
+        if (body.ValidarFamilia() is { } familiaInvalida)
+        {
+            return Results.BadRequest(new { error = familiaInvalida });
+        }
+
+        var result = await handler.HandleAsync(new GetOtBandejaCountersQuery
+        {
+            OtTenantId = tenantId,
+            TransitOfficeId = scopedOfficeId,
+            Filtro = body.ToFiltroDeConteo(),
         }, cancellationToken).ConfigureAwait(false);
 
         return Results.Ok(result);
@@ -3246,6 +3308,10 @@ internal sealed record OtBandejaSearchRequest
     public string? Status { get; init; }
     public bool? HasActiveRevocationRequest { get; init; }
     public Guid? ProcedureTypeId { get; init; }
+
+    /// <summary>Epic #12686 — pestaña de familia (<c>MATRICULAS</c>/<c>TRASPASO</c>/<c>OTROS</c>).</summary>
+    public string? Familia { get; init; }
+
     public string? Vin { get; init; }
     public string? Placa { get; init; }
     public string? Vendedor { get; init; }
@@ -3271,6 +3337,7 @@ internal sealed record OtBandejaSearchRequest
         Status = Status,
         HasActiveRevocationRequest = HasActiveRevocationRequest,
         ProcedureTypeId = ProcedureTypeId,
+        Familia = Familia,
         Vin = Vin,
         Placa = Placa,
         Vendedor = Vendedor,
@@ -3285,6 +3352,33 @@ internal sealed record OtBandejaSearchRequest
         Page = Page,
         PageSize = PageSize,
     };
+
+    /// <summary>
+    /// Filtros de la tabla para los contadores (Epic #12686). Sin estado, revocatoria, orden ni
+    /// página: las tarjetas cuentan cada clase bajo el resto de criterios.
+    /// </summary>
+    public OtClientProcedureFilter ToFiltroDeConteo() => new()
+    {
+        ProcedureTypeId = ProcedureTypeId,
+        Familia = Familia,
+        Vin = Vin,
+        Placa = Placa,
+        Vendedor = Vendedor,
+        Comprador = Comprador,
+        Gestor = Gestor,
+        Busqueda = Busqueda,
+        Condiciones = Condiciones,
+        CreatedFrom = CreatedFrom,
+        CreatedTo = CreatedTo,
+        UpdatedFrom = UpdatedFrom,
+        UpdatedTo = UpdatedTo,
+    };
+
+    /// <summary>Mensaje de error si <see cref="Familia"/> viene y no es una familia válida.</summary>
+    public string? ValidarFamilia() =>
+        string.IsNullOrWhiteSpace(Familia) || ProcedureFamilyCodes.IsValid(Familia)
+            ? null
+            : $"Familia no válida: '{Familia}'. Valores permitidos: {string.Join(", ", ProcedureFamilyCodes.All)}.";
 }
 
 /// <summary>Logging source-generated (CA1848) de la aprobación OT. Sin PII.</summary>
