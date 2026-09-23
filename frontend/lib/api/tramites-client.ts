@@ -1193,21 +1193,32 @@ export const tramitesClient = {
    * del baúl y de las escrituras vigentes del tenant, que pueden cambiar sin que cambie ningún dato
    * del actor. Colgarlo de la respuesta de actores obligaría a recargarlos para refrescarlo.</p>
    *
-   * <p>Ante un fallo devuelve lista vacía, no lanza: sin requisitos el paso se comporta como antes
-   * de esta HU —sin buzón— en vez de dejar al gestor con el asistente roto.</p>
+   * <p>Con `actors` resuelve sobre ese borrador (lo que el gestor tiene en pantalla) en vez de sobre
+   * los actores guardados, que solo se persisten con «Continuar y guardar» (HU #12777 AC1 / #12779).
+   * No guarda nada.</p>
+   *
+   * <p>Ante un fallo devuelve `null`, no lanza: sin respuesta el paso se comporta como antes de esta
+   * HU —sin buzón— en vez de dejar al gestor con el asistente roto.</p>
    */
   getCamaraComercioRequirements: async (
     instanceId: string,
     tenantId?: string,
-  ): Promise<CamaraComercioRequirement[]> => {
+    actors?: ProcedureActor[],
+  ): Promise<CamaraComercioRequirement[] | null> => {
+    const base = `/api/v1/tramites/instances/${instanceId}/camara-comercio-requirements`;
     try {
-      const res = await request<{ requirements: CamaraComercioRequirement[] }>(
-        `/api/v1/tramites/instances/${instanceId}/camara-comercio-requirements`,
-        { headers: tenantHeader(tenantId) },
-      );
+      const res = actors
+        ? await request<{ requirements: CamaraComercioRequirement[] }>(`${base}/preview`, {
+            method: 'POST',
+            headers: tenantHeader(tenantId),
+            body: JSON.stringify({ actors }),
+          })
+        : await request<{ requirements: CamaraComercioRequirement[] }>(base, {
+            headers: tenantHeader(tenantId),
+          });
       return res?.requirements ?? [];
     } catch {
-      return [];
+      return null;
     }
   },
 

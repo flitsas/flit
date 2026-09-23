@@ -1060,41 +1060,106 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
    * Requisitos resueltos por el backend, por rol. La obligatoriedad NO se calcula aquí: depende de
    * la firma del baúl y de las escrituras vigentes del tenant, que el cliente no conoce. Lo único
    * que decide el formulario es a quién se le pregunta (las partes jurídicas).
+   *
+   * <p>Se resuelve sobre los actores EN PANTALLA, no sobre los guardados: los actores solo se
+   * persisten con «Continuar y guardar», así que preguntar por lo guardado dejaba el buzón un paso
+   * atrás — no aparecía al marcar NIT y no se iba al volver a persona natural.</p>
    */
   const [camaraRequirements, setCamaraRequirements] = useState<CamaraComercioRequirement[]>([]);
+  /** La última consulta falló: sin respuesta del backend el paso se comporta como antes de la HU. */
+  const [camaraFallo, setCamaraFallo] = useState(false);
+  /** Firma de los actores a la que corresponde la última respuesta del backend. */
+  const [camaraResuelta, setCamaraResuelta] = useState<string | null>(null);
   /** Adjunto presente por rol, reportado por cada buzón. */
   const [camaraSatisfecha, setCamaraSatisfecha] = useState<Record<string, boolean>>({});
+  /**
+   * HU #12779 — versión del buzón por rol. Sube cuando el formulario descarta el certificado, para
+   * que el buzón se vuelva a montar vacío en vez de mostrar la lista de adjuntos que cargó antes.
+   */
+  const [camaraVersion, setCamaraVersion] = useState<Record<string, number>>({});
 
   const marcarCamara = useCallback((rol: string, satisfied: boolean) => {
     setCamaraSatisfecha((prev) => (prev[rol] === satisfied ? prev : { ...prev, [rol]: satisfied }));
   }, []);
 
+  /** Roles que hoy son persona jurídica en el formulario. Gobierna el descarte (HU #12779). */
+  const camaraRoles = actors.map((a) => (isJuridical(a) ? a.rol : '-')).join('|');
+
   /**
-   * Firma de lo único que cambia la respuesta: qué roles son persona jurídica. Sin ella el efecto
-   * se dispararía en cada render — `actors` es un arreglo nuevo siempre — y con él la consulta.
+   * Firma de lo que cambia la respuesta: quién es jurídico, su documento y el de su representante
+   * legal (sujeto del baúl de firmas). Sin ella el efecto se dispararía en cada render — `actors` es
+   * un arreglo nuevo siempre — y con él la consulta.
    */
-  const camaraFirma = actors.map((a) => (isJuridical(a) ? a.rol : '-')).join('|');
+  const camaraFirma = actors
+    .map((a) =>
+      isJuridical(a)
+        ? [
+            a.rol,
+            a.numeroDocumento.trim(),
+            a.representanteLegal?.tipoDocumento ?? '',
+            a.representanteLegal?.numeroDocumento?.trim() ?? '',
+          ].join(':')
+        : '-',
+    )
+    .join('|');
+
+  const camaraActorsRef = useRef(actors);
+  const camaraFirmaRef = useRef(camaraFirma);
+  useEffect(() => {
+    camaraActorsRef.current = actors;
+    camaraFirmaRef.current = camaraFirma;
+  }, [actors, camaraFirma]);
+  /** Descarta respuestas viejas: solo la última consulta en vuelo puede escribir el estado. */
+  const camaraConsulta = useRef(0);
 
   const recargarCamara = useCallback(() => {
     if (!instanceId) return;
+    const consulta = ++camaraConsulta.current;
+    const firma = camaraFirmaRef.current;
     void tramitesClient
-      .getCamaraComercioRequirements(instanceId)
-      .then((rs) => setCamaraRequirements(rs));
+      .getCamaraComercioRequirements(instanceId, undefined, camaraActorsRef.current)
+      .then((rs) => {
+        if (consulta !== camaraConsulta.current) return;
+        setCamaraFallo(rs === null);
+        setCamaraRequirements(rs ?? []);
+        setCamaraResuelta(firma);
+      });
   }, [instanceId]);
 
   useEffect(() => {
-    recargarCamara();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instanceId, camaraFirma]);
+    // Espera corta: el NIT y el documento del representante se escriben tecla a tecla, y cada una
+    // cambia la firma. Sin ella se pagaría una consulta por dígito.
+    const t = setTimeout(recargarCamara, 300);
+    return () => clearTimeout(t);
+  }, [recargarCamara, camaraFirma]);
 
-  /** Requisito de esta parte, si el backend lo devolvió para su rol. */
-  const camaraRequirementDe = (rol: string): CamaraComercioRequirement | undefined =>
-    camaraRequirements.find((r) => r.rol === rol);
+  /**
+   * Requisito de esta parte. Solo existe mientras la parte sea persona jurídica EN PANTALLA. Mientras
+   * el backend no haya contestado por lo que hay en pantalla —o el NIT aún no tenga número, que el
+   * backend no puede evaluar— se muestra el buzón como obligatorio: es lo que resulta sin firma ni
+   * escritura, y el número pendiente ya bloquea el paso de todos modos.
+   */
+  const camaraRequirementDe = (actor: ProcedureActor): CamaraComercioRequirement | undefined => {
+    if (!isJuridical(actor)) return undefined;
+    const delBackend = camaraRequirements.find((r) => r.rol === actor.rol);
+    if (delBackend) return delBackend;
+    if (camaraFallo) return undefined;
+    if (camaraResuelta === camaraFirma && actor.numeroDocumento.trim()) return undefined;
+    return {
+      rol: actor.rol,
+      tipo: camaraComercioTipo(actor.rol),
+      esObligatorio: true,
+      exencion: 'ninguna',
+      vigencia: 'indeterminada',
+      diasDesdeExpedicion: null,
+    };
+  };
 
-  /** Gate del paso: ninguna parte con certificado OBLIGATORIO se quedó sin cargarlo. */
-  const camaraGateOk = camaraRequirements.every(
-    (r) => !r.esObligatorio || camaraSatisfecha[r.rol] === true,
-  );
+  /** Gate del paso: ninguna parte jurídica con certificado OBLIGATORIO se quedó sin cargarlo. */
+  const camaraGateOk = actors.every((a) => {
+    const req = camaraRequirementDe(a);
+    return !req || !req.esObligatorio || camaraSatisfecha[a.rol] === true;
+  });
   useEffect(() => {
     onCamaraComercioGateChange?.(camaraGateOk);
   }, [camaraGateOk, onCamaraComercioGateChange]);
@@ -1136,6 +1201,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           for (const rol of dejaronDeSerJuridicos) delete next[rol];
           return next;
         });
+        // Si la parte vuelve a ser jurídica, su buzón se monta de nuevo y relee el expediente ya
+        // sin el certificado descartado (AC2: reaparece vacío).
+        setCamaraVersion((prev) => {
+          const next = { ...prev };
+          for (const rol of dejaronDeSerJuridicos) next[rol] = (next[rol] ?? 0) + 1;
+          return next;
+        });
         recargarCamara();
       })
       .catch(() => {
@@ -1143,7 +1215,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         // (el buzón está desmontado) y el adjunto huérfano lo retira la limpieza del expediente.
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camaraFirma, instanceId]);
+  }, [camaraRoles, instanceId]);
   const [rlSwitchConfirm, setRlSwitchConfirm] = useState<{ variant: 'runt' | 'preload' } | null>(
     null,
   );
@@ -2991,10 +3063,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               porque son de la misma familia: los dos acreditan quién representa a la sociedad. El
               buzón NO se oculta cuando es opcional; solo deja de bloquear, y dice por qué. */}
           {(() => {
-            const req = camaraRequirementDe(actor.rol);
+            const req = camaraRequirementDe(actor);
             return req ? (
               <div className="lg:col-span-4">
                 <CamaraComercioUpload
+                  key={`${actor.rol}-${camaraVersion[actor.rol] ?? 0}`}
                   instanceId={instanceId}
                   requirement={req}
                   onSatisfiedChange={(satisfied) => marcarCamara(actor.rol, satisfied)}

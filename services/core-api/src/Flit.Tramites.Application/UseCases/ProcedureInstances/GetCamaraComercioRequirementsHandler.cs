@@ -1,4 +1,5 @@
 using Flit.Queries.Domain.Time;
+using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
@@ -36,10 +37,33 @@ public sealed class GetCamaraComercioRequirementsHandler(
 {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
 
-    public async Task<(CamaraComercioRequirementsResponse? Result, string? Error)> HandleAsync(
+    public Task<(CamaraComercioRequirementsResponse? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
+        CancellationToken ct = default) =>
+        ResolveAsync(id, tenantId, borrador: null, ct);
+
+    /// <summary>
+    /// HU #12777 AC1 / HU #12779 — la misma escalera, pero sobre los actores que el gestor tiene en
+    /// pantalla y todavía no guardó. Los actores solo se persisten con «Continuar y guardar», así que
+    /// resolver sobre lo guardado dejaba el buzón un paso atrás: no aparecía al marcar NIT y no se iba
+    /// al volver a persona natural. No persiste nada.
+    /// </summary>
+    public Task<(CamaraComercioRequirementsResponse? Result, string? Error)> HandlePreviewAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<ActorInput> borrador,
         CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(borrador);
+        return ResolveAsync(id, tenantId, borrador, ct);
+    }
+
+    private async Task<(CamaraComercioRequirementsResponse? Result, string? Error)> ResolveAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<ActorInput>? borrador,
+        CancellationToken ct)
     {
         // WithDetails y no WithActors: la vigencia se calcula sobre la fecha que el OCR dejó en
         // field_values al cargar el certificado.
@@ -47,8 +71,12 @@ public sealed class GetCamaraComercioRequirementsHandler(
         if (instance is null)
             return (null, "not_found");
 
+        var actors = borrador is null
+            ? instance.Actors
+            : [.. borrador.Select(a => ActorTransitorio(tenantId, instance.Id, a))];
+
         var requirements = await resolver
-            .ResolveAsync(tenantId, instance.Actors, ct)
+            .ResolveAsync(tenantId, actors, ct)
             .ConfigureAwait(false);
 
         // Día calendario de Colombia (UTC-5, sin DST — ADR-0025 §3): a las 7 p. m. de Bogotá ya es el
@@ -80,6 +108,25 @@ public sealed class GetCamaraComercioRequirementsHandler(
     /// con <c>ToString()</c>: renombrar un valor del enum es refactor interno y no puede cambiar en
     /// silencio lo que el cliente ya interpreta.
     /// </summary>
+    /// <summary>
+    /// Actor en memoria con lo único que la escalera lee: rol, documento y el representante legal de
+    /// la metadata (sujeto del baúl de firmas). Nunca se agrega a la instancia ni al contexto de EF.
+    /// </summary>
+    private static ProcedureInstanceActor ActorTransitorio(Guid tenantId, Guid instanceId, ActorInput a) =>
+        new()
+        {
+            TenantId = tenantId,
+            ProcedureInstanceId = instanceId,
+            ActorType = (a.Rol ?? string.Empty).Trim().ToLowerInvariant(),
+            DocumentType = (a.TipoDocumento ?? string.Empty).Trim().ToUpperInvariant(),
+            DocumentNumber = (a.NumeroDocumento ?? string.Empty).Trim(),
+            FullName = a.NombreCompleto ?? string.Empty,
+            PersonType = ActorPersonTypes.ResolveForDocument(a.TipoDocumento, a.PersonType),
+            EsRepresentanteLegal = a.EsRepresentanteLegal,
+            Metadata = ActorMetadataReader.Serialize(a.Ciudad, a.Direccion, a.RepresentanteLegal, a.Mandante),
+            Ordinal = a.Ordinal,
+        };
+
     public static string ToWire(CamaraComercioExencion exencion) => exencion switch
     {
         CamaraComercioExencion.FirmaPrecargada => "firma_precargada",

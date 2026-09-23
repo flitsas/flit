@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mocks = vi.hoisted(() => ({
@@ -41,6 +41,9 @@ vi.mock('@/lib/api/tramites-client', () => ({
 import { ActorsForm } from '@/components/operacion/ActorsForm';
 
 const INSTANCE = 'inst-descarte';
+
+/** Buzón de Cámara de Comercio del paso (hay uno por parte jurídica; los tests usan una sola). */
+const buzon = () => screen.findByLabelText('Certificado de Cámara de Comercio');
 
 /** Adjunto de Cámara de Comercio de un rol, tal como lo devuelve el expediente. */
 function adjunto(id: string, tipo: string) {
@@ -121,6 +124,67 @@ describe('ActorsForm — descarte del certificado al dejar de ser persona juríd
   });
 
   /**
+   * AC1 — lo que ve el gestor, no solo la llamada de borrado: el buzón se oculta aunque el actor
+   * siga guardado como jurídico. Antes el buzón dependía de lo guardado y se quedaba en pantalla
+   * mostrando el certificado.
+   */
+  it('AC1 — al cambiar a persona natural el buzón se oculta sin guardar el paso', async () => {
+    const user = userEvent.setup();
+    mocks.getActors.mockResolvedValue([actorJuridico('comprador', '900111222')]);
+    mocks.getCamaraComercioRequirements.mockImplementation(
+      async (_id: string, _t: string | undefined, actors?: Array<{ tipoDocumento: string }>) =>
+        actors?.[0]?.tipoDocumento === 'NIT' ? [requisito('comprador')] : [],
+    );
+    mocks.getAttachments.mockResolvedValue([adjunto('att-c', 'camara_comercio_comprador')]);
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    expect(await within(await buzon()).findByText('Cargado')).toBeInTheDocument();
+
+    const selects = await screen.findAllByLabelText('Tipo de documento');
+    await user.selectOptions(selects[0], 'CC');
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Certificado de Cámara de Comercio')).not.toBeInTheDocument(),
+    );
+    expect(mocks.saveActors).not.toHaveBeenCalled();
+  });
+
+  /**
+   * AC2 — al volver a persona jurídica el buzón reaparece VACÍO: se vuelve a montar y relee el
+   * expediente, que ya no tiene el certificado descartado.
+   */
+  it('AC2 — volver a persona jurídica reabre el buzón vacío', async () => {
+    const user = userEvent.setup();
+    let descartado = false;
+    mocks.getActors.mockResolvedValue([actorJuridico('comprador', '900111222')]);
+    mocks.getCamaraComercioRequirements.mockImplementation(
+      async (_id: string, _t: string | undefined, actors?: Array<{ tipoDocumento: string }>) =>
+        actors?.[0]?.tipoDocumento === 'NIT' ? [requisito('comprador')] : [],
+    );
+    mocks.getAttachments.mockImplementation(async () =>
+      descartado ? [] : [adjunto('att-c', 'camara_comercio_comprador')],
+    );
+    mocks.deleteAttachment.mockImplementation(async () => {
+      descartado = true;
+      return true;
+    });
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    expect(await within(await buzon()).findByText('Cargado')).toBeInTheDocument();
+
+    const selects = await screen.findAllByLabelText('Tipo de documento');
+    await user.selectOptions(selects[0], 'CC');
+    await waitFor(() => expect(mocks.deleteAttachment).toHaveBeenCalledWith(INSTANCE, 'att-c'));
+
+    const tipo = (await screen.findAllByLabelText('Tipo de documento'))[0];
+    await user.selectOptions(tipo, 'NIT');
+
+    expect(await within(await buzon()).findByText('Por cargar')).toBeInTheDocument();
+    expect(within(await buzon()).queryByText('Cargado')).not.toBeInTheDocument();
+  });
+
+  /**
    * AC3 — el descarte es por rol. Si las dos partes eran jurídicas y solo una cambió, la otra
    * conserva su certificado: son documentos de sociedades distintas.
    */
@@ -187,5 +251,51 @@ describe('ActorsForm — descarte del certificado al dejar de ser persona juríd
     await new Promise((r) => setTimeout(r, 50));
 
     expect(mocks.deleteAttachment).not.toHaveBeenCalled();
+  });
+});
+
+describe('ActorsForm — el buzón sigue al formulario, no a lo guardado (HU #12777 AC1)', () => {
+  it('marcar NIT muestra el buzón sin guardar el paso y consulta con los actores en pantalla', async () => {
+    const user = userEvent.setup();
+    mocks.getActors.mockResolvedValue([
+      {
+        rol: 'comprador',
+        tipoDocumento: 'CC',
+        numeroDocumento: '1020304050',
+        nombreCompleto: 'Persona Natural',
+        personType: 'natural',
+        email: 'persona@correo.co',
+        telefono: '3001234567',
+      },
+    ]);
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    const selects = await screen.findAllByLabelText('Tipo de documento');
+    expect(screen.queryByLabelText('Certificado de Cámara de Comercio')).not.toBeInTheDocument();
+
+    await user.selectOptions(selects[0], 'NIT');
+
+    // Aparece aunque el backend todavía no conozca a la parte como jurídica (lo guardado es CC).
+    expect(await screen.findByLabelText('Certificado de Cámara de Comercio')).toBeInTheDocument();
+    expect(mocks.saveActors).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mocks.getCamaraComercioRequirements).toHaveBeenLastCalledWith(
+        INSTANCE,
+        undefined,
+        expect.arrayContaining([expect.objectContaining({ rol: 'comprador', tipoDocumento: 'NIT' })]),
+      ),
+    );
+  });
+
+  it('si la consulta falla, el paso se comporta como antes: sin buzón', async () => {
+    mocks.getActors.mockResolvedValue([actorJuridico('comprador', '900111222')]);
+    mocks.getCamaraComercioRequirements.mockResolvedValue(null);
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await waitFor(() => expect(mocks.getCamaraComercioRequirements).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByLabelText('Certificado de Cámara de Comercio')).not.toBeInTheDocument();
   });
 });
