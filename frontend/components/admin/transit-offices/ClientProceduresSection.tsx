@@ -1700,7 +1700,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           Actualizar, que se mudó a la fila de controles. */}
       <OtBandejaCountersStrip
         counters={counters}
-        selected={contadorActivo}
+        // Sin tarjeta elegida a mano, se resalta la del estado vigente: la bandeja abre filtrada en
+        // Entregado y la tira tiene que decirlo (pedido en la revisión de la Epic #12686).
+        selected={contadorActivo || contadorDeEstado(statusFilter)}
         onSelect={handleContadorSelect}
         loading={status === "loading"}
         familia={familia}
