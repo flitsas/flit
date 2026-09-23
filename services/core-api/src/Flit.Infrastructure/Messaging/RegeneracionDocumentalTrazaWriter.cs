@@ -74,10 +74,11 @@ internal sealed class RegeneracionDocumentalTrazaWriter(FlitDbContext db)
 
         // HU #12797 (F2) — dentro de la transacción gestionada de la consola OT el INSERT viajaría en la
         // misma transacción del intento fallido: un rollback (o una transacción abortada) se lo llevaría
-        // en silencio. Se difiere a DESPUÉS de su fin, confirme o no; ya fuera de ella es autocommit.
+        // en silencio. Se difiere a DESPUÉS de su fin, confirme, se revierta o quede ambigua (commit sin
+        // respuesta, re-review N2); ya fuera de ella es autocommit.
         // `true` = programada (el fallo, si lo hay, ya quedó en el log del llamador).
         Func<Task> escribir = () => InsertarAsync(tenantId, procedureInstanceId, tipoEvento, payloadJson, CancellationToken.None);
-        if (db.AccionesPostTransaccion.TryDiferir(db.Database.CurrentTransaction?.TransactionId, escribir, escribir))
+        if (db.AccionesPostTransaccion.TryDiferirSiempre(db.Database.CurrentTransaction?.TransactionId, escribir))
             return true;
 
         return await InsertarAsync(tenantId, procedureInstanceId, tipoEvento, payloadJson, cancellationToken)

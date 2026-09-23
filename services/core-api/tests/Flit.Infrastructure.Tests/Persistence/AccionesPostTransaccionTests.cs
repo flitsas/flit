@@ -111,6 +111,54 @@ public sealed class AccionesPostTransaccionTests
         log.Should().BeEmpty();
     }
 
+    // ── Re-review #12760 (N2 / L-N2) — commit de resultado desconocido ─────────────────────────────
+
+    [Fact]
+    public async Task CommitDesconocido_NoBorraNada_NiElAnteriorNiElNuevo_YLaBitacoraSeEscribeIgual()
+    {
+        var acciones = new AccionesPostTransaccion();
+        var tx = Guid.NewGuid();
+        var log = new List<string>();
+        acciones.Abrir(tx);
+        acciones.TryDiferir(tx, Registrar(log, "borrar_anterior"), Registrar(log, "borrar_nuevo")).Should().BeTrue();
+        acciones.TryDiferir(tx, Registrar(log, "borrar_anterior_2"), null).Should().BeTrue();
+        acciones.TryDiferirSiempre(tx, Registrar(log, "bitacora")).Should().BeTrue();
+
+        var omitidas = await acciones.CerrarAsync(tx, FinTransaccion.Desconocida);
+
+        log.Should().Equal(["bitacora"], "sin saber qué referencia la BD, cualquier borrado podría ser el del binario vivo");
+        omitidas.Should().Be(2, "el repositorio lo registra (solo ids) para recuperar el huérfano");
+        acciones.Pendientes.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(true, "borrar_anterior")]
+    [InlineData(false, "borrar_nuevo")]
+    public async Task BitacoraSiempre_SeEscribeUnaSolaVez_EnCommitYEnRollback(bool confirmada, string borrado)
+    {
+        var acciones = new AccionesPostTransaccion();
+        var tx = Guid.NewGuid();
+        var log = new List<string>();
+        acciones.Abrir(tx);
+        acciones.TryDiferirSiempre(tx, Registrar(log, "bitacora"));
+        acciones.TryDiferir(tx, Registrar(log, "borrar_anterior"), Registrar(log, "borrar_nuevo"));
+
+        var omitidas = await acciones.CerrarAsync(tx, confirmada ? FinTransaccion.Confirmada : FinTransaccion.Revertida);
+
+        omitidas.Should().Be(0);
+        log.Should().Equal(["bitacora", borrado], "el rollback explícito conserva la compensación actual");
+    }
+
+    [Fact]
+    public void TryDiferirSiempre_SinTransaccionGestionada_NoDifiere()
+    {
+        var acciones = new AccionesPostTransaccion();
+        acciones.TryDiferirSiempre(Guid.NewGuid(), () => Task.CompletedTask).Should().BeFalse();
+        acciones.Abrir(Guid.NewGuid());
+        acciones.TryDiferirSiempre(null, () => Task.CompletedTask).Should().BeFalse();
+        acciones.Pendientes.Should().Be(0);
+    }
+
     [Fact]
     public void Repositorio_SinTransaccionAmbiente_NoDifiere_YMapeaElConflictoDeConcurrencia()
     {

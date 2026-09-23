@@ -1721,7 +1721,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 var transaction = await _context.Database
                     .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
                 var transactionId = transaction.TransactionId;
-                var confirmada = false;
+                // Re-review #12760 (N2) — una excepción ANTES del commit es un rollback seguro (compensa:
+                // borra el binario nuevo); una que sale de CommitAsync deja el resultado DESCONOCIDO: no se
+                // borra nada (ni el anterior ni el nuevo) y la bitácora diferida se escribe igual.
+                var fin = FinTransaccion.Revertida;
                 _context.AccionesPostTransaccion.Abrir(transactionId);
 
                 try
@@ -1733,16 +1736,19 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                             cancellationToken).ConfigureAwait(false);
 
                         var result = await action().ConfigureAwait(false);
+                        fin = FinTransaccion.Desconocida;
                         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                        confirmada = true;
+                        fin = FinTransaccion.Confirmada;
                         return result;
                     }
                 }
                 finally
                 {
-                    // Tras el Dispose: la transacción ya confirmó o ya se revirtió.
-                    await _context.AccionesPostTransaccion
-                        .CerrarAsync(transactionId, confirmada).ConfigureAwait(false);
+                    // Tras el Dispose: la transacción ya confirmó, ya se revirtió o quedó en duda.
+                    var omitidas = await _context.AccionesPostTransaccion
+                        .CerrarAsync(transactionId, fin).ConfigureAwait(false);
+                    if (omitidas > 0)
+                        OtClientProcedureRepositoryLog.CommitAmbiguo(_logger, transactionId, tenantId, omitidas);
                 }
             }).ConfigureAwait(false);
         }
@@ -2161,4 +2167,8 @@ internal static partial class OtClientProcedureRepositoryLog
         Message = "HU #12796 — la regeneración anticipada del consolidado {Documento} del trámite {InstanceId} (tenant {TenantId}) se descartó; lo cubre la regeneración perezosa.")]
     public static partial void RegeneracionAnticipadaDescartada(
         ILogger logger, Guid instanceId, Guid tenantId, TipoConsolidado documento);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Re-review #12760 (N2) — commit de resultado desconocido en la transacción {TransactionId} (tenant {TenantId}): se omitieron {Omitidas} borrado(s) de binarios del consolidado; el que sobre queda como huérfano recuperable.")]
+    public static partial void CommitAmbiguo(ILogger logger, Guid transactionId, Guid tenantId, int omitidas);
 }
