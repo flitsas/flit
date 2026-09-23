@@ -16,6 +16,7 @@ function fields(pairs: Record<string, string>): FieldValue[] {
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
+    getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
     getPrenda: vi.fn().mockResolvedValue([]),
     getInstance: vi.fn().mockResolvedValue({ fieldValues: [] }),
     putPrenda: vi.fn().mockResolvedValue({

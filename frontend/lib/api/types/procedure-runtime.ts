@@ -1207,6 +1207,25 @@ export interface PersistOcrFieldsResult {
 }
 
 /** Item del checklist guiado por la tipología del trámite. */
+/**
+ * HU #12775/#12776 — obligatoriedad del certificado de Cámara de Comercio de un actor jurídico.
+ *
+ * <p>`exencion` dice POR QUÉ el buzón quedó opcional. Solo hay un motivo: el actor tiene firma
+ * precargada vigente en el baúl Y escritura vigente. Cualquiera de las dos por separado no exime
+ * (Épica #12754).</p>
+ *
+ * <p>`vigencia` es `indeterminada` cuando el OCR no pudo leer la fecha de expedición. Ese caso NO
+ * pinta alerta: una fecha ilegible no es un documento vencido.</p>
+ */
+export interface CamaraComercioRequirement {
+  rol: ActorRol;
+  tipo: string;
+  esObligatorio: boolean;
+  exencion: 'ninguna' | 'firma_y_escritura';
+  vigencia: 'vigente' | 'excedida' | 'indeterminada';
+  diasDesdeExpedicion: number | null;
+}
+
 export interface ChecklistItemView {
   key: string;
   label: string;

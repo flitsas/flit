@@ -160,7 +160,7 @@ export function validateFile(file: File, limits?: FileTypeLimits): string | null
   const maxSize = limits?.maxSizeBytes && limits.maxSizeBytes > 0 ? limits.maxSizeBytes : MAX_SIZE_BYTES;
 
   if (!allowed.includes(file.type)) {
-    return `Tipo de archivo no permitido. Usa ${ALLOWED_LABEL}.`;
+    return `Tipo de archivo no permitido. ${formatosPermitidos(allowed)}`;
   }
   if (file.size > maxSize) {
     return maxSize === MAX_SIZE_BYTES
@@ -183,6 +183,17 @@ function mimeShortLabel(mime: string): string {
   if (known) return known;
   const subtype = mime.split('/')[1] ?? mime;
   return subtype.toUpperCase();
+}
+
+/**
+ * Qué formatos acepta la casilla, dicho con los límites del tipo y no con los globales: un documento
+ * que solo admite PDF no puede sugerir «Usa PDF, JPG, PNG o WEBP» (HU #12777 AC4).
+ */
+function formatosPermitidos(allowed: readonly string[]): string {
+  if (allowed === ALLOWED_MIME) return `Usa ${ALLOWED_LABEL}.`;
+  const formatos = [...new Set(allowed.map(mimeShortLabel))];
+  if (formatos.length === 1) return `Este documento solo acepta formato ${formatos[0]}.`;
+  return `Usa ${formatos.slice(0, -1).join(', ')} o ${formatos[formatos.length - 1]}.`;
 }
 
 /**
@@ -896,7 +907,7 @@ export function DocumentSlot({
             <input
               ref={inputRef}
               type="file"
-              accept={ALLOWED_MIME.join(',')}
+              accept={(item.mimeTypesAllowed?.length ? item.mimeTypesAllowed : ALLOWED_MIME).join(',')}
               onChange={handlePick}
               className="hidden"
               aria-label={`Subir ${caption}`}

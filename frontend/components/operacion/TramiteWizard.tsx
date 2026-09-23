@@ -704,6 +704,12 @@ export function TramiteWizard(props: Props) {
    * El formulario notifica el gate; al salir del paso se resetea.
    */
   const [actorsConsultationReady, setActorsConsultationReady] = useState(false);
+  /** Partes sin consulta de identidad, por su nombre en pantalla (aviso del pie). */
+  const [consultaPendientes, setConsultaPendientes] = useState<string[]>([]);
+  const onActorsConsultationGate = useCallback((ok: boolean, partesPendientes: string[]) => {
+    setActorsConsultationReady(ok);
+    setConsultaPendientes(partesPendientes);
+  }, []);
   /**
    * Escritura del representante legal: Continuar solo si toda parte jurídica cuyo representante NO
    * está en el módulo de representantes de la compañía ya adjuntó la escritura que lo acredita.
@@ -712,6 +718,12 @@ export function TramiteWizard(props: Props) {
    * nada que exigir, y `ActorsForm` lo corrige en cuanto resuelve el directorio.
    */
   const [escrituraRlGateOk, setEscrituraRlGateOk] = useState(true);
+  /**
+   * HU #12777 — certificado de Cámara de Comercio OBLIGATORIO de alguna parte jurídica sin cargar.
+   * Arranca en `true` por el mismo motivo que el de la escritura: mientras el paso no se monta no
+   * hay nada que exigir, y `ActorsForm` lo corrige en cuanto el backend resuelve los requisitos.
+   */
+  const [camaraComercioGateOk, setCamaraComercioGateOk] = useState(true);
   /**
    * Campos obligatorios de las partes del paso de actores. Arranca en `false`: hasta que
    * `ActorsForm` monte y diga lo contrario, lo correcto es no dejar avanzar — al revés, el botón
@@ -1370,6 +1382,10 @@ export function TramiteWizard(props: Props) {
     // se pasa a Requisitos. El documento se carga en el propio paso, junto a los datos del
     // representante, y `ActorsForm` es quien decide si aplica.
     (isActorStep && !escrituraRlGateOk) ||
+    // Parte jurídica sin su certificado de Cámara de Comercio cuando es obligatorio (no tiene ni
+    // firma precargada ni escritura vigente). Gate separado del de la escritura a propósito: son
+    // dos documentos distintos y el gestor tiene que poder ver cuál le falta.
+    (isActorStep && !camaraComercioGateOk) ||
     // Campos obligatorios de las partes sin completar: no Continuar. Es la misma validación que
     // aplicaba `ActorsForm.save()` tras el clic, adelantada al estado del botón.
     (isActorStep && !actoresCamposGateOk) ||
@@ -1938,8 +1954,9 @@ export function TramiteWizard(props: Props) {
                 onRefresh={() => void refresh()}
                 stepFormRef={stepFormRef}
                 prendaFormRef={prendaFormRef}
-                onActorsConsultationGateChange={setActorsConsultationReady}
+                onActorsConsultationGateChange={onActorsConsultationGate}
                 onEscrituraRepresentanteGateChange={setEscrituraRlGateOk}
+                onCamaraComercioGateChange={setCamaraComercioGateOk}
                 onCamposRequeridosGateChange={setActoresCamposGateOk}
                 rotulosActores={rotulosDeActores(steps)}
                 onIrAActores={irAPasoActor}
@@ -1985,6 +2002,24 @@ export function TramiteWizard(props: Props) {
               </p>
             </InlineAlert>
           )}
+
+          {/*
+            Consulta de identidad pendiente (RUNT/RUES) de alguna parte: pasa al reabrir un borrador en
+            otra pestaña, porque la consulta vive en la sesión del navegador y solo el propietario se
+            vuelve a consultar solo. Sin este aviso el botón quedaba apagado con todo lleno.
+          */}
+          {isActorStep &&
+            actoresCamposGateOk &&
+            !actorsConsultationReady &&
+            consultaPendientes.length > 0 &&
+            !fullReadOnly && (
+              <InlineAlert tone="info" className="mt-6">
+                <p>
+                  Consulta los datos de {consultaPendientes.join(' y ')} con el botón «Consultar» de
+                  cada parte para continuar.
+                </p>
+              </InlineAlert>
+            )}
 
           {/* Bloqueos de envío traducidos (en el paso de decisión). */}
           {isDecisionStep && blockers.length > 0 && (
@@ -4562,6 +4597,7 @@ function StepBody({
   prendaFormRef,
   onActorsConsultationGateChange,
   onEscrituraRepresentanteGateChange,
+  onCamaraComercioGateChange,
   onCamposRequeridosGateChange,
   rotulosActores,
   onIrAActores,
@@ -4621,9 +4657,10 @@ function StepBody({
   stepFormRef: RefObject<WizardStepFormHandle | null>;
   prendaFormRef: RefObject<WizardStepFormHandle | null>;
   /** Gate Continuar en pasos de actores (consulta RUNT/RUES exitosa). */
-  onActorsConsultationGateChange?: (ready: boolean) => void;
+  onActorsConsultationGateChange?: (ready: boolean, partesPendientes: string[]) => void;
   /** Gate Continuar: escritura del representante legal fuera del directorio ya adjunta (o no aplica). */
   onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
+  onCamaraComercioGateChange?: (ready: boolean) => void;
   /** Gate Continuar: campos obligatorios de las partes del paso de actores ya completos. */
   onCamposRequeridosGateChange?: (ready: boolean) => void;
   /**
@@ -5068,6 +5105,7 @@ function StepBody({
           rnmcEnabled={rnmcEnabled}
           onConsultationGateChange={onActorsConsultationGateChange}
           onEscrituraRepresentanteGateChange={onEscrituraRepresentanteGateChange}
+          onCamaraComercioGateChange={onCamaraComercioGateChange}
           onCamposRequeridosGateChange={onCamposRequeridosGateChange}
           // Quien sabe cómo se llama la parte es el CATÁLOGO: en `TRASPASO_UNILATERAL` el rol
           // persistido es `comprador` pero el paso se llama «Locatario», que es la parte real del

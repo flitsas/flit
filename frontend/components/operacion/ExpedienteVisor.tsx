@@ -260,6 +260,7 @@ function DocumentosCargadosCard({
   attachments: ProcedureAttachment[];
   checklist: ChecklistItemView[];
 }) {
+  const items = [...checklist, ...certificadosDelActor(attachments, checklist)];
   return (
     <VisorCard
       title="Documentos cargados"
@@ -273,14 +274,14 @@ function DocumentosCargadosCard({
         </span>
       }
     >
-      {checklist.length > 0 ? (
+      {items.length > 0 ? (
         // Rejilla (propuesta, «Documentos cargados»): sigue siendo una lista semántica, la rejilla es
         // solo el `className` — `<ul>`/`<li>` no cambian.
         <ul
           className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6"
           aria-label="Documentos del expediente (visor)"
         >
-          {checklist.map((item) => (
+          {items.map((item) => (
             <DocRow
               key={item.key}
               instanceId={instanceId}
@@ -295,6 +296,30 @@ function DocumentosCargadosCard({
       )}
     </VisorCard>
   );
+}
+
+/**
+ * HU #12774 AC5 — certificados de Cámara de Comercio cargados en el paso del actor. No están en el
+ * checklist a propósito (AC4: se piden junto a los datos del actor, no en Requisitos), pero sí van en
+ * el consolidado, así que el inventario del cierre tiene que mostrarlos: sin esto el gestor no los
+ * veía en ningún sitio del Resumen. El rótulo nombra el rol («Cámara de Comercio (comprador)»).
+ */
+const CAMARA_COMERCIO_TIPO = /^camara_comercio_(vendedor|comprador|locatario)$/i;
+
+export function certificadosDelActor(
+  attachments: ProcedureAttachment[],
+  checklist: ChecklistItemView[],
+): ChecklistItemView[] {
+  const enChecklist = new Set(checklist.map((i) => (i.docTipo ?? i.key).toLowerCase()));
+  const vistos = new Set<string>();
+  const items: ChecklistItemView[] = [];
+  for (const a of attachments) {
+    const tipo = (a.tipo ?? '').toLowerCase();
+    if (!CAMARA_COMERCIO_TIPO.test(tipo) || enChecklist.has(tipo) || vistos.has(tipo)) continue;
+    vistos.add(tipo);
+    items.push({ key: tipo, label: documentLabel(tipo), obligatorio: false, docTipo: tipo, satisfied: true });
+  }
+  return items;
 }
 
 /**

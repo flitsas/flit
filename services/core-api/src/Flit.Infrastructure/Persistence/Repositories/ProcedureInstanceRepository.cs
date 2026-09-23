@@ -1712,6 +1712,22 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public void RemoveAttachment(ProcedureInstanceAttachment attachment) =>
         db.Set<ProcedureInstanceAttachment>().Remove(attachment);
 
+    public async Task<int> RemoveOcrFieldValueAsync(
+        Guid instanceId, Guid tenantId, string fieldKey, CancellationToken ct)
+    {
+        // Rastreado y no ExecuteDelete: el borrado tiene que confirmarse junto con el resto del caso
+        // de uso (borrar el adjunto, escribir la fecha nueva) o no confirmarse. Si la instancia ya
+        // cargó sus field_values, el mapa de identidad devuelve esas mismas entidades.
+        var filas = await db.Set<ProcedureInstanceFieldValue>()
+            .Where(f => f.ProcedureInstanceId == instanceId
+                        && f.TenantId == tenantId
+                        && f.FieldKey == fieldKey
+                        && f.Source == "ocr")
+            .ToListAsync(ct);
+        db.Set<ProcedureInstanceFieldValue>().RemoveRange(filas);
+        return filas.Count;
+    }
+
     // HU #10431 — guarda FK para changed_by en status_history: evita violar la FK a identity.users
     // cuando el sujeto de la radicación no existe (proceso automático o claim sub inválido).
     public Task<bool> UserExistsAsync(Guid userId, CancellationToken ct) =>

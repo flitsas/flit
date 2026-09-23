@@ -15,6 +15,7 @@ import type { WizardState } from '@/lib/api/types/procedure-runtime';
  * dígito no tendría a quién guiar. Sin trámite creado todavía, la preferencia viaja con la creación.
  */
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   createInstance: vi.fn(),
   createInstanceFromConsulta: vi.fn(),
   runPreflightPreview: vi.fn(),

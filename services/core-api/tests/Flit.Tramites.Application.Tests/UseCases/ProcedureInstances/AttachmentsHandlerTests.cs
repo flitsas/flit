@@ -974,4 +974,61 @@ public sealed class AttachmentsHandlerTests
 
         instance.Attachments.Should().ContainSingle().Which.Filename.Should().Be("nuevo.pdf");
     }
+
+    // ── HU #12776 — la fecha del certificado se va con el certificado ────────────────────
+
+    [Fact]
+    public async Task Delete_CertificadoCamaraComercio_BorraSuFechaDeExpedicion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var attachmentId = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = attachmentId,
+            ProcedureInstanceId = id,
+            Tipo = CamaraComercioAttachmentTipo.Comprador,
+            StoragePath = "p/camara.pdf",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+
+        var error = await _delete.HandleAsync(id, tenant, attachmentId, ct);
+
+        error.Should().BeNull();
+        // Adjunto y fecha en la misma transacción: se marca la fecha y LUEGO un único SaveChanges.
+        Received.InOrder(() =>
+        {
+            _repo.RemoveOcrFieldValueAsync(
+                id, tenant, CamaraComercioFieldKeys.Expedicion("comprador"), Arg.Any<CancellationToken>());
+            _repo.SaveChangesAsync(Arg.Any<CancellationToken>());
+        });
+        await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Delete_OtroDocumento_NoTocaFechasDelCertificado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var attachmentId = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = attachmentId,
+            ProcedureInstanceId = id,
+            Tipo = "factura",
+            StoragePath = "p/factura.pdf",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+
+        await _delete.HandleAsync(id, tenant, attachmentId, ct);
+
+        await _repo.DidNotReceive().RemoveOcrFieldValueAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
 }

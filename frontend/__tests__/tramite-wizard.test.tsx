@@ -26,6 +26,7 @@ class FakeTramitesApiError extends Error {
 
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   createInstance: vi.fn(),
   getInstance: vi.fn(),
   getWizardState: vi.fn(),
