@@ -2010,8 +2010,10 @@ public static class AdminOtEndpoints
                 var precedencia = await ResolverPrecedenciaMatrizAsync(matrixResolver, access, cancellationToken)
                     .ConfigureAwait(false);
 
+                // HU #12787 (AC2) — radicado ante Quipux ⇒ el maestro radicado tal cual (modo
+                // radicado_fijo), ni con `force` se regenera.
                 return await handler
-                    .HandleAsync(id, access.ClientTenantId, precedencia, force ?? false, cancellationToken)
+                    .HandleRespetandoRadicacionAsync(id, access.ClientTenantId, precedencia, force ?? false, cancellationToken)
                     .ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
@@ -2019,6 +2021,8 @@ public static class AdminOtEndpoints
         return error switch
         {
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
+            Flit.Tramites.Application.UseCases.ProcedureInstances.EntregarConsolidadoHandler.ConsolidadoNoGenerado =>
+                Results.NotFound(new { error = "consolidado_no_generado" }),
             "sin_adjuntos" => Results.Conflict(new { error = "sin_adjuntos" }),
             "adjunto_no_disponible" => Results.Conflict(new { error = "adjunto_no_disponible" }),
             "mimetype_no_soportado" => Results.Conflict(new { error = "mimetype_no_soportado" }),
@@ -2076,6 +2080,17 @@ public static class AdminOtEndpoints
             return Results.BadRequest(new { error = "tipo_invalido", message = "tipo debe ser 'consolidado' o 'consolidado_maestro'." });
         }
 
+        // Épica #12760 (security M1) — un GET no fuerza escrituras: `force` queda para el POST
+        // `consolidado-maestro` («Regenerar»). Ningún cliente del frontend lo manda por esta ruta.
+        if (force == true)
+        {
+            return Results.BadRequest(new
+            {
+                error = Flit.Api.Endpoints.Tramites.ConsolidadoEndpoints.ForceNoPermitidoEnGetError,
+                message = "force no se admite en GET: para reconstruir use POST consolidado-maestro.",
+            });
+        }
+
         var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
             id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
             .ConfigureAwait(false);
@@ -2105,7 +2120,7 @@ public static class AdminOtEndpoints
                             access.ClientTenantId,
                             tipoEntrega,
                             ResolveUserId(httpContext.User),
-                            force ?? false,
+                            Force: false,
                             sinGenerar,
                             precedencia),
                         cancellationToken)

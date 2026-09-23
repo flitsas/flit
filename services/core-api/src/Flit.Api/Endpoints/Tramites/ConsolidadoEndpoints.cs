@@ -1,3 +1,4 @@
+using Flit.Api.Authorization;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -58,6 +59,10 @@ internal static class ConsolidadoEndpoints
         // SuperAdmin (Source=user) y migrado V1 se entregan tal cual. El binario se baja luego por la
         // descarga / preview-url del adjunto con `document.attachmentId`. Sin GeneracionDocumentalGestorGuard
         // a propósito: en estado final la entrega NO genera, sirve el definitivo (AC3).
+        // Épica #12760 (security M1): un GET no puede forzar escrituras ⇒ `force=true` responde 400
+        // (queda para el POST de generación). HU #12787: el maestro es del OT ⇒ solo el SuperAdmin lo pide
+        // por aquí; el gestor recibe 403. NO reutilizar este handler desde rutas /network (ver
+        // ConsolidadoEntregaArchitectureTests): regenera, y la red es de lectura.
         group.MapGet("/instances/{id:guid}/consolidado/entrega", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
@@ -74,10 +79,20 @@ internal static class ConsolidadoEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
             if (!TryParseTipo(tipo, ConsolidadoEntregaTipo.Wizard, out var tipoEntrega))
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "tipo debe ser 'consolidado' o 'consolidado_maestro'.");
+            if (force == true)
+                return ForceNoPermitidoEnGet();
+            if (tipoEntrega == ConsolidadoEntregaTipo.Maestro && !RequestTenantResolver.IsSuperAdmin(http.User))
+            {
+                return Results.Problem(
+                    statusCode: 403,
+                    title: "Forbidden",
+                    detail: "El consolidado maestro es del organismo de tránsito: se consulta por la consola OT.",
+                    extensions: new Dictionary<string, object?> { ["error"] = MaestroSoloOt });
+            }
 
             var (result, error) = await handler.HandleAsync(
                 new EntregarConsolidadoRequest(
-                    id, tenantId.Value, tipoEntrega, ResolveUserId(http.User), force ?? false, soloLectura ?? false),
+                    id, tenantId.Value, tipoEntrega, ResolveUserId(http.User), Force: false, soloLectura ?? false),
                 ct);
             return error switch
             {
@@ -90,6 +105,23 @@ internal static class ConsolidadoEndpoints
 
         return app;
     }
+
+    /// <summary>Código de error de <c>force=true</c> en las rutas GET de entrega (security M1, Épica #12760).</summary>
+    internal const string ForceNoPermitidoEnGetError = "force_no_permitido_en_get";
+
+    /// <summary>Código de error del gestor pidiendo el maestro por la ruta de trámites (HU #12787).</summary>
+    internal const string MaestroSoloOt = "maestro_solo_ot";
+
+    /// <summary>
+    /// 400 de <c>force=true</c> en un GET de entrega: un GET no fuerza escrituras en storage. La
+    /// reconstrucción forzada queda reservada a los POST de generación.
+    /// </summary>
+    internal static IResult ForceNoPermitidoEnGet() =>
+        Results.Problem(
+            statusCode: 400,
+            title: "Bad Request",
+            detail: "force no se admite en GET: para reconstruir el consolidado use el POST de generación.",
+            extensions: new Dictionary<string, object?> { ["error"] = ForceNoPermitidoEnGetError });
 
     /// <summary>Parseo del query <c>tipo</c> de la ruta de entrega (HU #12785); null/vacío ⇒ <paramref name="porDefecto"/>.</summary>
     internal static bool TryParseTipo(string? tipo, ConsolidadoEntregaTipo porDefecto, out ConsolidadoEntregaTipo resultado)

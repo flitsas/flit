@@ -27,6 +27,15 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// nuevo en cada <c>SaveAsync</c> (POST /files ⇒ id nuevo), así que dos versiones nunca comparten
 /// clave. Aun así, si un backend devolviera la misma ruta para el nuevo y el anterior, ese binario NO se
 /// borra: sería borrar el recién confirmado.</para>
+///
+/// <para><b>Transacción ambiente (HU #12797, F2).</b> Si el caso de uso corre dentro de una transacción
+/// abierta por quien lo envuelve (el scope de tenant de la consola OT), el <c>SaveChanges</c> NO confirma
+/// nada: los borrados se difieren hasta el commit real
+/// (<see cref="IProcedureInstanceRepository.TryDeferUntilTransactionEnds"/>) y, si esa transacción se
+/// revierte, se borra el binario NUEVO (huérfano) en lugar de los anteriores.</para>
+///
+/// <para><b>Maestro radicado (HU #12787 AC2, F1).</b> <see cref="RetirarFilas"/> nunca retira un adjunto
+/// de <c>protegidos</c> (los referenciados por una radicación ante Quipux): ni su fila ni su binario.</para>
 /// </summary>
 public static partial class ConsolidadoReemplazoSeguro
 {
@@ -42,21 +51,31 @@ public static partial class ConsolidadoReemplazoSeguro
     /// <summary>
     /// Retira las FILAS de <paramref name="previos"/> (colección en memoria + repositorio). El binario
     /// en storage NO se toca: lo borra <see cref="ConfirmarAsync"/> tras confirmar el guardado.
+    /// <para>HU #12787 (AC2) — los de <paramref name="protegidos"/> (adjuntos referenciados por una
+    /// radicación ante Quipux) se conservan: ni fila ni binario. Devuelve los que SÍ se retiraron, que es
+    /// la lista que debe recibir <see cref="ConfirmarAsync"/>.</para>
     /// </summary>
-    public static void RetirarFilas(
+    public static IReadOnlyList<ProcedureInstanceAttachment> RetirarFilas(
         ProcedureInstance instance,
         IProcedureInstanceRepository repo,
-        IReadOnlyList<ProcedureInstanceAttachment> previos)
+        IReadOnlyList<ProcedureInstanceAttachment> previos,
+        IReadOnlySet<Guid>? protegidos = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(repo);
         ArgumentNullException.ThrowIfNull(previos);
 
+        var retirados = new List<ProcedureInstanceAttachment>(previos.Count);
         foreach (var prev in previos)
         {
+            if (protegidos is not null && protegidos.Contains(prev.Id))
+                continue;
             instance.Attachments.Remove(prev);
             repo.RemoveAttachment(prev);
+            retirados.Add(prev);
         }
+
+        return retirados;
     }
 
     /// <summary>
@@ -110,12 +129,26 @@ public static partial class ConsolidadoReemplazoSeguro
             throw;
         }
 
-        foreach (var prev in previos)
+        var rutasPrevias = previos
+            .Select(p => p.StoragePath)
+            .Where(r => !string.Equals(r, nuevo.StoragePath, StringComparison.Ordinal))
+            .ToList();
+
+        void BorrarPrevios()
         {
-            if (string.Equals(prev.StoragePath, nuevo.StoragePath, StringComparison.Ordinal))
-                continue;
-            BorrarSinFallar(storage, prev.StoragePath, logger, "retiro_consolidado_anterior");
+            foreach (var ruta in rutasPrevias)
+                BorrarSinFallar(storage, ruta, logger, "retiro_consolidado_anterior");
         }
+
+        // HU #12797 (F2) — con transacción ambiente el guardado de arriba no confirmó nada: los borrados
+        // esperan al commit real. Si esa transacción se revierte, la BD sigue apuntando a los anteriores
+        // y el que sobra es el binario nuevo.
+        var nuevoEsPrevio = previos.Any(p => string.Equals(p.StoragePath, nuevo.StoragePath, StringComparison.Ordinal));
+        var diferido = repo.TryDeferUntilTransactionEnds(
+            BorrarPrevios,
+            nuevoEsPrevio ? null : () => BorrarSinFallar(storage, nuevo.StoragePath, logger, "compensacion_transaccion_revertida"));
+        if (!diferido)
+            BorrarPrevios();
     }
 
     internal static void BorrarSinFallar(IAttachmentStorage storage, string storagePath, ILogger? logger, string motivo)

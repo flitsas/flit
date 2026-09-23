@@ -300,6 +300,26 @@ public sealed class ConsolidadoVigenciaContratoTests
         bloque.Should().Contain("required: [estado, generadoEn, origen, definitivo, modo]");
     }
 
+    /// <summary>
+    /// HU #12787 (F1) — el valor aditivo <c>radicado_fijo</c> de la entrega está en el enum de
+    /// <c>ConsolidadoEntregaResponse.modo</c> junto a todos los modos que emite el handler.
+    /// </summary>
+    [Fact]
+    public void HU12787_OpenApi_ConsolidadoEntregaResponse_DeclaraTodosLosModos_IncluidoRadicadoFijo()
+    {
+        var bloque = Schema(Yaml(), "ConsolidadoEntregaResponse");
+        var modos = new[]
+        {
+            ConsolidadoEntregaModos.Vigente, ConsolidadoEntregaModos.Regenerado,
+            ConsolidadoEntregaModos.DefinitivoEstadoFinal, ConsolidadoEntregaModos.MigradoSoloLectura,
+            ConsolidadoEntregaModos.CargadoPorUsuario, ConsolidadoEntregaModos.SoloLectura,
+            ConsolidadoEntregaModos.RadicadoFijo,
+        };
+
+        ConsolidadoEntregaModos.RadicadoFijo.Should().Be("radicado_fijo");
+        bloque.Should().MatchRegex(@"modo:\s*\n\s*type: string\s*\n\s*nullable: true\s*\n\s*enum: \[" + string.Join(", ", modos) + @"\]");
+    }
+
     [Fact]
     public void AC5_OpenApi_LasPropiedadesDelSchemaCoincidenConElDto()
     {

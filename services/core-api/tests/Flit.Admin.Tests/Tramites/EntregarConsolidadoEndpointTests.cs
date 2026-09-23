@@ -64,7 +64,6 @@ public sealed class EntregarConsolidadoEndpointTests : IClassFixture<AdminTramit
 
     [Theory]
     [InlineData("consolidado", "consolidado")]
-    [InlineData("consolidado_maestro", "consolidado_maestro")]
     public async Task AC3_EstadoFinal_200_ConMarcadorDefinitivo_Y_SinRegenerar(string tipoQuery, string tipoAdjunto)
     {
         var ct = TestContext.Current.CancellationToken;
@@ -94,7 +93,7 @@ public sealed class EntregarConsolidadoEndpointTests : IClassFixture<AdminTramit
         _factory.Repo.GetByIdWithAttachmentsAsync(instance.Id, TenantA, Arg.Any<CancellationToken>()).Returns(instance);
 
         var response = await ClientFor(TenantA).GetAsync(
-            $"/api/v1/tramites/instances/{instance.Id}/consolidado/entrega?tipo={tipoQuery}&force=true", ct);
+            $"/api/v1/tramites/instances/{instance.Id}/consolidado/entrega?tipo={tipoQuery}", ct);
 
         var body = await response.Content.ReadAsStringAsync(ct);
         response.StatusCode.Should().Be(HttpStatusCode.OK, body);
@@ -106,6 +105,52 @@ public sealed class EntregarConsolidadoEndpointTests : IClassFixture<AdminTramit
         root.GetProperty("definitivoPorEstadoFinal").GetBoolean().Should().BeTrue();
         root.GetProperty("modo").GetString().Should().Be("definitivo_estado_final");
         await _factory.Repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Épica #12760 (security M1, F3) — un GET no fuerza escrituras: <c>force=true</c> responde 400
+    /// <c>force_no_permitido_en_get</c> ANTES de tocar el repositorio (ningún cliente del frontend lo manda).
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("&tipo=consolidado")]
+    [InlineData("&tipo=consolidado_maestro")]
+    public async Task F3_ForceTrueEnGet_400_ForceNoPermitido_SinTocarElRepositorio(string tipo)
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var response = await ClientFor(TenantA).GetAsync(
+            $"/api/v1/tramites/instances/{Guid.NewGuid()}/consolidado/entrega?force=true{tipo}", ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(ct)).Should().Contain("force_no_permitido_en_get");
+        await _factory.Repo.DidNotReceiveWithAnyArgs().GetByIdWithAttachmentsAsync(default, default, default);
+    }
+
+    [Fact]
+    public async Task F3_ForceFalseExplicito_NoEsRechazado()
+    {
+        var response = await ClientFor(TenantA).GetAsync(
+            $"/api/v1/tramites/instances/{Guid.NewGuid()}/consolidado/entrega?force=false", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound, "force=false es el comportamiento normal");
+    }
+
+    /// <summary>
+    /// HU #12787 (F1) — el maestro es del OT: un gestor/administrador de compañía que lo pide por la ruta
+    /// de trámites recibe 403 <c>maestro_solo_ot</c> y no se lee (ni se regenera) nada.
+    /// </summary>
+    [Fact]
+    public async Task F1_GestorPidiendoMaestro_403_MaestroSoloOt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var response = await ClientFor(TenantA).GetAsync(
+            $"/api/v1/tramites/instances/{Guid.NewGuid()}/consolidado/entrega?tipo=consolidado_maestro", ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync(ct)).Should().Contain("maestro_solo_ot");
+        await _factory.Repo.DidNotReceiveWithAnyArgs().GetByIdWithAttachmentsAsync(default, default, default);
     }
 
     private HttpClient ClientFor(Guid tenantId)

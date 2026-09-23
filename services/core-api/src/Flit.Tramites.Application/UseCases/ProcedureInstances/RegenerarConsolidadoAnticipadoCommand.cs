@@ -28,6 +28,12 @@ public enum ResultadoRegeneracionAnticipada
 
     /// <summary>El handler de generación devolvió un código de error; se conserva el PDF anterior.</summary>
     Fallido = 6,
+
+    /// <summary>
+    /// HU #12787 (AC2) — motivo <c>maestro_radicado</c>: el maestro ya se radicó ante Quipux y es el
+    /// documento de la secretaría; queda fijo (<see cref="MaestroRadicadoFijo"/>).
+    /// </summary>
+    OmitidoMaestroRadicado = 7,
 }
 
 /// <summary>
@@ -54,13 +60,17 @@ public sealed class RegenerarConsolidadoAnticipadoHandler(
     GenerarConsolidadoHandler wizardHandler,
     GenerarConsolidadoMaestroHandler maestroHandler,
     ILogger<RegenerarConsolidadoAnticipadoHandler>? logger = null,
-    ConsolidadoFalloBitacora? bitacora = null)
+    ConsolidadoFalloBitacora? bitacora = null,
+    IMaestroRadicadoLookup? maestroRadicado = null)
 {
     internal const string TipoAdjuntoWizard = "consolidado";
     internal const string TipoAdjuntoMaestro = "consolidado_maestro";
 
     // HU #12798 — sin bitácora cableada (tests/composiciones antiguas) el fallo queda solo en el log.
     private readonly ConsolidadoFalloBitacora _bitacora = bitacora ?? new ConsolidadoFalloBitacora();
+
+    // HU #12787 (AC2) — sin Quipux cableado nada está radicado.
+    private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
 
     public async Task<ResultadoRegeneracionAnticipada> HandleAsync(
         Guid tenantId,
@@ -74,7 +84,12 @@ public sealed class RegenerarConsolidadoAnticipadoHandler(
         if (instance is null)
             return Omitir(ResultadoRegeneracionAnticipada.NoEncontrado, tenantId, procedureInstanceId, documento);
 
-        var omision = MotivoDeOmision(instance, documento);
+        // HU #12787 (AC2) — la radicación ante Quipux (preparado → entregado, actor Quipux) encola el
+        // maestro (HU #12796); regenerarlo retiraría la fila y el binario que la submission referencia.
+        var maestroRadicado = documento == TipoConsolidado.Maestro
+            && await _maestroRadicado.AttachmentRadicadoAsync(tenantId, procedureInstanceId, ct).ConfigureAwait(false) is not null;
+
+        var omision = MotivoDeOmision(instance, documento, maestroRadicado);
         if (omision is { } motivo)
             return Omitir(motivo, tenantId, procedureInstanceId, documento);
 
@@ -147,11 +162,11 @@ public sealed class RegenerarConsolidadoAnticipadoHandler(
 
     /// <summary>
     /// AC3/AC4 — motivo por el que el trabajo NO debe regenerar, o <c>null</c> si procede. Orden: la
-    /// documentación definitiva primero (estado final, migrado), luego el PDF cargado a mano y por
-    /// último la vigencia.
+    /// documentación definitiva primero (estado final, migrado, maestro radicado ante Quipux), luego el
+    /// PDF cargado a mano y por último la vigencia.
     /// </summary>
     internal static ResultadoRegeneracionAnticipada? MotivoDeOmision(
-        ProcedureInstance instance, TipoConsolidado documento)
+        ProcedureInstance instance, TipoConsolidado documento, bool maestroRadicado = false)
     {
         if (TramiteEstado.EsFinal(instance.Status))
             return ResultadoRegeneracionAnticipada.OmitidoEstadoFinal;
@@ -161,6 +176,10 @@ public sealed class RegenerarConsolidadoAnticipadoHandler(
         // un trabajo en segundo plano reemplace el expediente traído de V1 sin que nadie lo pida.
         if (instance.IsMigrated)
             return ResultadoRegeneracionAnticipada.OmitidoMigrado;
+
+        // HU #12787 (AC2) — motivo `maestro_radicado`: el maestro radicado queda fijo.
+        if (documento == TipoConsolidado.Maestro && maestroRadicado)
+            return ResultadoRegeneracionAnticipada.OmitidoMaestroRadicado;
 
         var tipoAdjunto = documento == TipoConsolidado.Wizard ? TipoAdjuntoWizard : TipoAdjuntoMaestro;
         var vigente = instance.Attachments

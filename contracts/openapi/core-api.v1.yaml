@@ -8811,6 +8811,10 @@ paths:
         definitivoPorEstadoFinal=true (migrado V1 ⇒ modo "migrado_solo_lectura"). Un PDF cargado por el
         SuperAdmin (Source="user") nunca se pisa, ni con force. Devuelve metadatos: el binario se obtiene
         por la descarga / preview-url del adjunto con document.attachmentId.
+        Épica #12760 — un GET no fuerza escrituras: force=true responde 400 force_no_permitido_en_get (la
+        reconstrucción forzada queda en el POST de generación). HU #12787 — el consolidado maestro es del
+        OT: tipo=consolidado_maestro solo lo pide el SuperAdmin (el resto recibe 403 maestro_solo_ot); si el
+        trámite ya se radicó ante Quipux se sirve el maestro radicado tal cual (modo "radicado_fijo").
       parameters:
         - name: tipo
           in: query
@@ -8822,8 +8826,8 @@ paths:
           required: false
           schema: { type: boolean, default: false }
           description: >
-            Reconstruye saltando la caché de vigencia. Nunca aplica en estado final, sobre un PDF
-            cargado por el SuperAdmin (Source="user") ni con soloLectura=true.
+            Reservado: en esta ruta GET solo se admite false u omitido. force=true responde 400
+            force_no_permitido_en_get (Épica #12760, security M1); para reconstruir use el POST de generación.
         - name: soloLectura
           in: query
           required: false
@@ -8837,7 +8841,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ConsolidadoEntregaResponse" }
-        "400": { description: "Falta X-Tenant-Id o tipo inválido." }
+        "400": { description: "Falta X-Tenant-Id, tipo inválido o force=true (error force_no_permitido_en_get)." }
+        "403": { description: "tipo=consolidado_maestro pedido por un usuario que no es SuperAdmin (error maestro_solo_ot, HU #12787)." }
         "404": { description: "Trámite no encontrado, o estado final / soloLectura sin consolidado generado." }
         "409": { description: "Migrado V1 sin consolidado, FUR faltante, sin adjuntos, adjunto no disponible o formato no soportado." }
         "503": { description: "No se pudo guardar el consolidado reconstruido en el almacenamiento." }
@@ -9312,7 +9317,10 @@ paths:
       description: >
         HU #12785 — mismas reglas que GET /api/v1/tramites/instances/{id}/consolidado/entrega, sobre el
         maestro por defecto. Un OT en modo Quipux read-only que no puede generar el tipo pedido recibe el
-        adjunto tal cual (modo "solo_lectura") en vez de 403.
+        adjunto tal cual (modo "solo_lectura") en vez de 403. HU #12787 (AC2) — si el trámite ya se radicó
+        ante Quipux, el maestro radicado se sirve tal cual (modo "radicado_fijo") y nunca se regenera, sea
+        cual sea soloLectura; si ese adjunto ya no existe se aplica el comportamiento de solo lectura.
+        force=true responde 400 force_no_permitido_en_get (Épica #12760, security M1).
       parameters:
         - name: tipo
           in: query
@@ -9324,8 +9332,8 @@ paths:
           required: false
           schema: { type: boolean, default: false }
           description: >
-            Reconstruye saltando la caché de vigencia. Nunca aplica en estado final, sobre un PDF
-            cargado por el SuperAdmin (Source="user") ni con soloLectura=true.
+            Reservado: en esta ruta GET solo se admite false u omitido. force=true responde 400
+            force_no_permitido_en_get (Épica #12760, security M1); para reconstruir use el POST de generación.
         - name: soloLectura
           in: query
           required: false
@@ -9339,7 +9347,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ConsolidadoEntregaResponse" }
-        "400": { description: "tipo inválido." }
+        "400": { description: "tipo inválido o force=true (error force_no_permitido_en_get)." }
         "401": { description: "No autenticado." }
         "403": { description: "Sin acceso a este trámite." }
         "404": { description: "Trámite no encontrado, o estado final / soloLectura sin consolidado generado." }
@@ -9366,6 +9374,10 @@ paths:
         Fusiona todos los adjuntos activos del trámite del cliente (tabla maestra) en un PDF único,
         excluyendo consolidados previos. No requiere gate FUR a diferencia del consolidado del wizard.
         Si ya existe un consolidado_maestro previo, se reemplaza (Feature #10701 / HU #10706).
+        HU #12787 (AC2) — si el trámite ya se radicó ante Quipux, NO se regenera (ni con force): se
+        devuelve el maestro radicado tal cual (modo "radicado_fijo"); un maestro radicado nunca se retira
+        ni se borra. Si ese adjunto ya no existe, se devuelve el maestro existente (modo "solo_lectura") o
+        404 consolidado_no_generado.
       security:
         - bearerAuth: []
       responses:
@@ -9383,7 +9395,7 @@ paths:
                 required: [id, tipo, filename, sha256]
         "401": { description: "No autenticado." }
         "403": { description: "Sin acceso a este trámite o entidad en modo sólo lectura (QUIPUX_READONLY)." }
-        "404": { description: "Trámite no encontrado." }
+        "404": { description: "Trámite no encontrado, o radicado ante Quipux sin consolidado maestro disponible (consolidado_no_generado)." }
         "409": { description: "sin_adjuntos — No hay adjuntos disponibles para consolidar; o adjunto_no_disponible / mimetype_no_soportado." }
 
   # ── Admin · Baúl de Firmas (HU #10643, #11175) ──────────────────────────────
@@ -11767,8 +11779,10 @@ components:
         modo:
           type: string
           nullable: true
-          enum: [vigente, regenerado, definitivo_estado_final, migrado_solo_lectura, cargado_por_usuario, solo_lectura]
-          description: Cómo se resolvió la entrega. null en las rutas POST de generación.
+          enum: [vigente, regenerado, definitivo_estado_final, migrado_solo_lectura, cargado_por_usuario, solo_lectura, radicado_fijo]
+          description: >
+            Cómo se resolvió la entrega. null en las rutas POST de generación. radicado_fijo (HU #12787,
+            aditivo): el maestro ya se radicó ante Quipux y se sirvió el adjunto radicado sin regenerar.
     AttachmentDto:
       type: object
       properties:

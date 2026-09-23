@@ -119,6 +119,19 @@ public sealed class ConsolidadoRegeneracionHitosLifecycleTests
         _queue.Solicitudes.Should().Equal((i.TenantId, i.Id, TipoConsolidado.Maestro));
     }
 
+    [Fact] // HU #12787 (AC2, F1) — la radicación del canal Quipux NO encola el maestro: queda fijo.
+    public async Task HU12787_RadicacionQuipux_PreparadoAEntregado_NoEncolaElMaestro()
+    {
+        var i = Wire(TramiteEstado.Preparado);
+
+        var outcome = await Transition(Sut(_queue), i, TramiteEstado.Entregado, TramiteActor.Quipux);
+
+        outcome.Success.Should().BeTrue(outcome.ErrorDetail);
+        _queue.Solicitudes.Should().BeEmpty(
+            "el maestro recién radicado ante Quipux es el documento de la secretaría: el worker no lo pisa");
+        i.ConsolidadoMaestroVigente.Should().BeFalse("la invalidación del cambio de estado se conserva");
+    }
+
     [Fact] // AC1 — la Ruta Larga (sin placa → preasignacion) también es radicación hacia el OT.
     public async Task AC1_Radicacion_APreasignacion_EncolaElMaestro()
     {

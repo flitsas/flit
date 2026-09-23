@@ -1208,6 +1208,9 @@ public static class InfrastructureExtensions
         // Adaptadores de los puertos que declara Quipux.Application, para que el módulo no dependa
         // de Tramites.Application ni del DbContext.
         services.AddScoped<IQuipuxConsolidadoMaestroPort, QuipuxConsolidadoMaestroAdapter>();
+        // HU #12787 (AC2) — maestro radicado ante Quipux, fijo en el servidor (puerto de Trámites).
+        services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IMaestroRadicadoLookup,
+            MaestroRadicadoLookup>();
         services.AddScoped<IQuipuxOrganismoPort, QuipuxOrganismoAdapter>();
         services.AddScoped<IQuipuxTenantPort, QuipuxTenantAdapter>();
 

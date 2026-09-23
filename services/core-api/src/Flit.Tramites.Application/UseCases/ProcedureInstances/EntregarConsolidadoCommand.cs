@@ -39,6 +39,13 @@ public static class ConsolidadoEntregaModos
     public const string SoloLectura = "solo_lectura";
 
     /// <summary>
+    /// HU #12787 (AC2) — el maestro ya se radicó ante Quipux: se sirve EL adjunto radicado tal cual y no
+    /// se regenera nunca, ni con <c>force</c> ni con <c>soloLectura=false</c>. Valor aditivo del enum
+    /// <c>ConsolidadoEntregaResponse.modo</c>.
+    /// </summary>
+    public const string RadicadoFijo = "radicado_fijo";
+
+    /// <summary>
     /// Adjunto del tipo pedido: el más reciente por <c>UploadedAt</c> (el reemplazo borra el previo,
     /// pero una doble carga no puede decidir qué se entrega).
     /// </summary>
@@ -89,15 +96,27 @@ public sealed record EntregarConsolidadoRequest(
 /// (<see cref="ConsolidadoFalloBitacora"/>). Sin anterior, el error viaja como antes.</para>
 /// </summary>
 /// <remarks>Uso de ejemplo: <c>await handler.HandleAsync(new(id, tenantId, ConsolidadoEntregaTipo.Maestro), ct)</c>.</remarks>
+/// <remarks>
+/// <para><b>Solo rutas de gestor/SuperAdmin y OT.</b> Este handler REGENERA: no debe cablearse en rutas
+/// <c>/network</c> (cabeza de red leyendo trámites de hijas), que son de lectura. Lo vigila
+/// <c>ConsolidadoEntregaArchitectureTests</c> (Flit.Admin.Tests).</para>
+/// <para>HU #12787 (AC2) — con <c>Tipo=Maestro</c> y el trámite radicado ante Quipux
+/// (<see cref="IMaestroRadicadoLookup"/>) se sirve el adjunto radicado (<c>modo=radicado_fijo</c>) y no
+/// se regenera nunca. HU #12797 — ante un conflicto de concurrencia con la regeneración anticipada se
+/// relee el trámite y se sirve el adjunto VIGENTE, no el capturado (que el otro camino ya borró).</para>
+/// </remarks>
 public sealed class EntregarConsolidadoHandler(
     IProcedureInstanceRepository repo,
     GenerarConsolidadoHandler wizardHandler,
     GenerarConsolidadoMaestroHandler maestroHandler,
-    ConsolidadoFalloBitacora? bitacora = null)
+    ConsolidadoFalloBitacora? bitacora = null,
+    IMaestroRadicadoLookup? maestroRadicado = null)
 {
     public const string ConsolidadoNoGenerado = "consolidado_no_generado";
 
     private readonly ConsolidadoFalloBitacora _bitacora = bitacora ?? new ConsolidadoFalloBitacora();
+
+    private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
 
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         EntregarConsolidadoRequest request,
@@ -109,22 +128,37 @@ public sealed class EntregarConsolidadoHandler(
         if (instance is null)
             return (null, "not_found");
 
-        var tipoAdjunto = request.Tipo == ConsolidadoEntregaTipo.Maestro ? "consolidado_maestro" : "consolidado";
+        var esMaestro = request.Tipo == ConsolidadoEntregaTipo.Maestro;
+        var tipoAdjunto = esMaestro ? "consolidado_maestro" : "consolidado";
         var existente = ConsolidadoEntregaModos.Existente(instance, tipoAdjunto);
         var esFinal = TramiteEstado.EsFinal(instance.Status);
 
+        // HU #12787 (AC2) — el maestro radicado ante Quipux es el documento de la secretaría.
+        var radicadoId = esMaestro
+            ? await _maestroRadicado.AttachmentRadicadoAsync(request.TenantId, request.Id, ct).ConfigureAwait(false)
+            : null;
+
         // AC3/AC5 — la documentación de un trámite final es la que el organismo tuvo a la vista: se
         // entrega tal cual, con la bandera como esté. Va ANTES que todo lo demás (incluido `force`).
+        // Si hubo radicación, lo que el organismo tuvo a la vista es el maestro radicado.
         if (esFinal)
         {
             var modo = instance.IsMigrated
                 ? ConsolidadoEntregaModos.MigradoSoloLectura
                 : ConsolidadoEntregaModos.DefinitivoEstadoFinal;
-            if (existente is null)
+            var definitivo = (radicadoId is { } rid ? instance.Attachments.FirstOrDefault(a => a.Id == rid) : null)
+                ?? existente;
+            if (definitivo is null)
                 return (null, instance.IsMigrated ? ConsolidadoEntregaModos.MigradoSoloLectura : ConsolidadoNoGenerado);
 
-            return (Servir(existente, modo, definitivo: true), null);
+            return (Servir(definitivo, modo, definitivo: true), null);
         }
+
+        // HU #12787 (AC2) — radicado ⇒ fijo: ni `force` ni `soloLectura=false` lo regeneran. Si el adjunto
+        // radicado ya no existe (datos rotos), comportamiento de solo lectura; nunca se regenera.
+        var fijo = MaestroRadicadoFijo.Resolver(instance, radicadoId);
+        if (fijo.Aplica)
+            return fijo.Error is null ? (fijo.Result, null) : (null, fijo.Error);
 
         if (request.SoloLectura)
         {
@@ -148,6 +182,9 @@ public sealed class EntregarConsolidadoHandler(
                 c => request.Tipo == ConsolidadoEntregaTipo.Maestro
                     ? maestroHandler.HandleAsync(request.Id, request.TenantId, request.MatrizPrecedencia, request.Force, c)
                     : wizardHandler.HandleAsync(request.Id, request.TenantId, request.UserId, request.Force, c),
+                // HU #12797 (F4) — carrera con la regeneración anticipada: el otro camino ya sustituyó (y
+                // borró) el PDF capturado arriba. Se relee y se sirve el vigente real.
+                (ex, c) => ConsolidadoVigenteTrasConflicto.ResolverAsync(repo, ex, request.Id, request.TenantId, tipoAdjunto, c),
                 ct)
             .ConfigureAwait(false);
         var (result, error) = (salida.Result, salida.Error);

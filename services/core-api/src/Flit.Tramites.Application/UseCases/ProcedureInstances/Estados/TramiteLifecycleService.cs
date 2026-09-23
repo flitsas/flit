@@ -247,7 +247,11 @@ public sealed class TramiteLifecycleService(
         // (decisión sincronizada desde Quipux) vuelve al gestor, así que se anticipan los dos. La decisión
         // desde la consola OT no pasa por aquí: la cubre OtClientProcedureRepository. Aprobar (AC4) y el
         // resto de aristas se quedan con la invalidación de arriba y el camino perezoso.
-        if (esRadicacion)
+        // HU #12787 (AC2) — la radicación del canal Quipux (actor Quipux) NO encola el maestro: el que se
+        // acaba de radicar es el documento de la secretaría y queda fijo. El worker también lo omite
+        // (`maestro_radicado`), pero la submission se marca radicada DESPUÉS de esta transición: sin este
+        // corte, un worker rápido podría ganar esa ventana.
+        if (esRadicacion && command.Actor != TramiteActor.Quipux)
         {
             EncolarRegeneracionAnticipada(instance.TenantId, instance.Id, TipoConsolidado.Maestro);
         }
