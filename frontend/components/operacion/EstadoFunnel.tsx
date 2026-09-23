@@ -89,10 +89,17 @@ export function EstadoFunnel({
     };
   });
 
+  // Epic #12686 — «Rechazado desde preasignación» ya no tiene tarjeta propia (es un atajo): cuando
+  // filtra por él, se resalta Rechazado, que es el estado real. Pulsarla de nuevo quita el filtro.
+  const tarjetaResaltada =
+    selected === FILTRO_RECHAZADO_PREASIGNACION && !estados.includes(FILTRO_RECHAZADO_PREASIGNACION)
+      ? 'rechazado'
+      : selected;
+
   return (
     <FranjaEstados
       items={items}
-      selected={selected}
+      selected={tarjetaResaltada}
       onSelect={(key) => onSelect?.(key as EstadoFiltro | '')}
       ariaLabel="Estados de los trámites"
     />

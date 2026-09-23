@@ -103,4 +103,22 @@ describe('EstadoFunnel', () => {
     );
     expect(screen.getByRole('group')).toHaveClass('xl:grid-cols-8');
   });
+
+  it('Epic #12686 — «Rechazado desde preasignación» sin tarjeta propia resalta Rechazado', async () => {
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <EstadoFunnel
+        counts={counts}
+        estados={['borrador', 'rechazado', 'anulado']}
+        selected="rechazado_preasignacion"
+        onSelect={onSelect}
+      />,
+    );
+
+    const rechazado = screen.getByRole('button', { name: 'Rechazado: 1 trámite' });
+    expect(rechazado).toHaveAttribute('aria-pressed', 'true');
+    await user.click(rechazado);
+    expect(onSelect).toHaveBeenCalledWith('');
+  });
 });
