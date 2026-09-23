@@ -8,6 +8,7 @@ import {
   RECHAZADO_PREASIGNACION_LABEL,
   type EstadoFiltro,
 } from '@/lib/tramites/estados';
+import { FranjaEstados, type FranjaItem } from './FranjaEstados';
 /**
  * Tira de KPIs por estado de la pantalla principal de trámites: una tarjeta única
  * dividida en columnas, con icono, etiqueta y conteo. Clic en una columna filtra
@@ -36,18 +37,6 @@ const FUNNEL_ORDER: readonly EstadoFiltro[] = [
   'revocado',
   'anulado',
 ];
-
-// Columnas en pantalla ancha: una por tarjeta. Clases literales para que Tailwind las genere.
-const XL_COLS: Record<number, string> = {
-  4: 'xl:grid-cols-4',
-  5: 'xl:grid-cols-5',
-  6: 'xl:grid-cols-6',
-  7: 'xl:grid-cols-7',
-  8: 'xl:grid-cols-8',
-  9: 'xl:grid-cols-9',
-  10: 'xl:grid-cols-10',
-  11: 'xl:grid-cols-11',
-};
 
 function estiloDe(estado: EstadoFiltro) {
   return estado === FILTRO_RECHAZADO_PREASIGNACION
@@ -85,58 +74,27 @@ export function EstadoFunnel({
   onSelect,
   estados = FUNNEL_ORDER,
 }: EstadoFunnelProps) {
+  const items: FranjaItem[] = estados.map((estado) => {
+    const label = labelDe(estado);
+    const count = counts[estado] ?? 0;
+    const style = estiloDe(estado);
+    return {
+      key: estado,
+      label,
+      icon: iconoDe(estado),
+      count,
+      ariaLabel: `${label}: ${count} trámite${count === 1 ? '' : 's'}`,
+      activeBg: style.bg,
+      activeColor: style.color,
+    };
+  });
+
   return (
-    <div
-      role="group"
-      aria-label="Estados de los trámites"
-      className={`grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-6 ${XL_COLS[estados.length] ?? 'xl:grid-cols-11'} dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]`}
-    >
-      {estados.map((estado) => {
-        const style = estiloDe(estado);
-        const label = labelDe(estado);
-        const count = counts[estado] ?? 0;
-        const activo = selected === estado;
-        return (
-          <button
-            key={estado}
-            type="button"
-            aria-label={`${label}: ${count} trámite${count === 1 ? '' : 's'}`}
-            aria-pressed={activo}
-            onClick={() => onSelect?.(activo ? '' : estado)}
-            className="flex flex-col items-center gap-1 px-2 py-2 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
-            style={activo ? { background: style.bg } : undefined}
-          >
-            {/* El SVG ya trae su círculo de color: se pinta entero, sin pastilla tintada
-                alrededor ni recoloreado por CSS. Decorativo — el nombre accesible del botón ya
-                dice el estado y el conteo. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={iconoDe(estado)}
-              alt=""
-              aria-hidden="true"
-              width={28}
-              height={28}
-              className="h-7 w-7 shrink-0"
-            />
-            {/* Hasta dos líneas: «Rechazado preasignación» no cabe en una y truncarlo dejaba
-                «Rechazado pre…», que no se distingue de la tarjeta de al lado. */}
-            <span className="line-clamp-2 max-w-full text-center text-xs font-medium leading-tight opacity-70 text-[#162744] dark:text-white/70">
-              {label}
-            </span>
-            <span
-              className="text-lg font-bold leading-none tabular-nums text-[#1E293B] dark:text-white"
-              aria-hidden="true"
-            >
-              {count}
-            </span>
-            <span
-              className="h-0.5 w-6 rounded-full"
-              style={{ background: activo ? style.color : 'transparent' }}
-              aria-hidden="true"
-            />
-          </button>
-        );
-      })}
-    </div>
+    <FranjaEstados
+      items={items}
+      selected={selected}
+      onSelect={(key) => onSelect?.(key as EstadoFiltro | '')}
+      ariaLabel="Estados de los trámites"
+    />
   );
 }

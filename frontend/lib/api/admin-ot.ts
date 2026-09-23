@@ -153,6 +153,24 @@ export function fetchOtBandejaCounters(
   });
 }
 
+/**
+ * Epic #12686 (HU #12803) — los mismos contadores, bajo los filtros de la tabla (familia, búsqueda,
+ * condiciones, periodo). Por POST porque las condiciones no caben en una query string. El servidor
+ * ignora el estado, la revocatoria, el orden y la página: cada tarjeta cuenta su propia clase.
+ */
+export function searchOtBandejaCounters(
+  params: OtClientProceduresParams = {},
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtBandejaCounters> {
+  return apiFetch<OtBandejaCounters>(`${base}/client-procedures/counters`, {
+    method: "POST",
+    body: params,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
+}
+
 /** Detalle de un trámite de cliente (GET /client-procedures/{id}). */
 export function fetchOtClientProcedure(
   id: string,
