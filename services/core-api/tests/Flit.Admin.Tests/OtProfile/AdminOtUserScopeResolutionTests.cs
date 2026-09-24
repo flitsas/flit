@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Security.Claims;
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints;
@@ -14,10 +13,14 @@ using Xunit;
 namespace Flit.Admin.Tests.OtProfile;
 
 /// <summary>
-/// HU #12854 (Feature #12847, Épica #12751) — prueba directa (vía reflexión) de
+/// HU #12854 (Feature #12847, Épica #12751) — prueba directa de
 /// <c>AdminOtEndpoints.ResolveOtUserScopeAsync</c>, el helper de scoping que ahora comparten
 /// Reglas (POST/GET/PATCH), Perfil (<c>PATCH /profile</c>) y Feature Flags
 /// (<c>PATCH /feature-flags/{id}</c>) con Requisitos (HU #10546).
+///
+/// El helper es <c>internal</c> (no <c>private</c>) precisamente para que este test lo invoque
+/// DIRECTO vía <c>InternalsVisibleTo Flit.Admin.Tests</c> (Flit.Api.csproj), sin reflexión —
+/// mismo patrón documentado en <c>FlitPdfStamper.ComputeStampGeometry</c>.
 ///
 /// Se prueba el helper de forma aislada —no vía HTTP— porque HU #12855 (mismo Feature #12847)
 /// restringe ESTOS MISMOS endpoints a SuperAdmin en el mismo cambio: un intento de probar el AC3
@@ -29,14 +32,13 @@ namespace Flit.Admin.Tests.OtProfile;
 /// </summary>
 public sealed class AdminOtUserScopeResolutionTests
 {
-    private static readonly MethodInfo ResolveMethod = typeof(AdminOtEndpoints)
-        .GetMethod("ResolveOtUserScopeAsync", BindingFlags.NonPublic | BindingFlags.Static)
-        ?? throw new InvalidOperationException(
-            "ResolveOtUserScopeAsync no encontrado por reflexión (¿cambió de firma en AdminOtEndpoints?).");
-
     private readonly Guid _officeId = Guid.NewGuid();
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly Guid _superAdminTenantId = Guid.NewGuid();
+
+    // Segundo organismo/tenant, ajeno al de _tenantId — usado por el caso IDOR.
+    private readonly Guid _foreignOfficeId = Guid.NewGuid();
+    private readonly Guid _foreignTenantId = Guid.NewGuid();
 
     [Fact] // HU12854_AC1 — SuperAdmin con transitOfficeId resuelve el tenant DUEÑO del organismo.
     public async Task HU12854_AC1_ResolveOtUserScopeAsync_AsSuperAdmin_WithTransitOfficeId_ResolvesOwnerTenant()
@@ -44,7 +46,8 @@ public sealed class AdminOtUserScopeResolutionTests
         await using var db = NewSeededContext();
         var user = BuildPrincipal("SuperAdmin", _superAdminTenantId);
 
-        var (tenantId, error) = await InvokeAsync(user, _officeId, db);
+        var (tenantId, error) = await AdminOtEndpoints.ResolveOtUserScopeAsync(
+            user, _officeId, db, CancellationToken.None);
 
         error.Should().BeNull();
         tenantId.Should().Be(_tenantId, "debe resolver el tenant dueño del organismo, no el del SuperAdmin");
@@ -56,7 +59,8 @@ public sealed class AdminOtUserScopeResolutionTests
         await using var db = NewSeededContext();
         var user = BuildPrincipal("SuperAdmin", _superAdminTenantId);
 
-        var (tenantId, error) = await InvokeAsync(user, null, db);
+        var (tenantId, error) = await AdminOtEndpoints.ResolveOtUserScopeAsync(
+            user, null, db, CancellationToken.None);
 
         error.Should().NotBeNull();
         tenantId.Should().Be(Guid.Empty, "sin transitOfficeId no debe resolver el tenant del SuperAdmin ni ningún otro");
@@ -69,10 +73,29 @@ public sealed class AdminOtUserScopeResolutionTests
         await using var db = NewSeededContext();
         var user = BuildPrincipal("ot_admin", _tenantId);
 
-        var (tenantId, error) = await InvokeAsync(user, null, db);
+        var (tenantId, error) = await AdminOtEndpoints.ResolveOtUserScopeAsync(
+            user, null, db, CancellationToken.None);
 
         error.Should().BeNull();
         tenantId.Should().Be(_tenantId, "ot_admin no debe exigir transitOfficeId: usa el tenant de su propio JWT");
+    }
+
+    [Fact] // HU12854_AC3 (security) — IDOR: ot_admin manda ?transitOfficeId de OTRO organismo.
+    public async Task HU12854_AC3_ResolveOtUserScopeAsync_AsOtAdmin_WithForeignTransitOfficeId_IgnoresItAndUsesOwnTenant()
+    {
+        await using var db = NewSeededContext();
+        var user = BuildPrincipal("ot_admin", _tenantId);
+
+        // ot_admin del tenant _tenantId intenta leer/escribir el organismo ajeno _foreignOfficeId
+        // (tenant _foreignTenantId) inyectando el query param. El helper debe IGNORARLO por
+        // completo: solo SuperAdmin puede fijar el organismo objetivo por query; ot_admin
+        // SIEMPRE usa el tenant de su propio JWT.
+        var (tenantId, error) = await AdminOtEndpoints.ResolveOtUserScopeAsync(
+            user, _foreignOfficeId, db, CancellationToken.None);
+
+        error.Should().BeNull();
+        tenantId.Should().Be(_tenantId, "ot_admin no debe poder escapar de su tenant vía ?transitOfficeId=, ni siquiera al de otro organismo");
+        tenantId.Should().NotBe(_foreignTenantId);
     }
 
     [Fact] // Organismo sin tenant OT vinculado → 404 (no un 500 ni un tenant fantasma).
@@ -82,7 +105,8 @@ public sealed class AdminOtUserScopeResolutionTests
         var orphanOfficeId = Guid.NewGuid();
         var user = BuildPrincipal("SuperAdmin", _superAdminTenantId);
 
-        var (tenantId, error) = await InvokeAsync(user, orphanOfficeId, db);
+        var (tenantId, error) = await AdminOtEndpoints.ResolveOtUserScopeAsync(
+            user, orphanOfficeId, db, CancellationToken.None);
 
         error.Should().NotBeNull();
         tenantId.Should().Be(Guid.Empty);
@@ -117,22 +141,17 @@ public sealed class AdminOtUserScopeResolutionTests
             QuipuxReadOnly = false,
             CreatedAt = DateTimeOffset.UtcNow,
         });
+        ctx.TransitOfficeProfiles.Add(new TransitOfficeProfile
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _foreignTenantId,
+            TransitOfficeId = _foreignOfficeId,
+            OperationMode = "dashboard",
+            QuipuxReadOnly = false,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
         ctx.SaveChanges();
         return ctx;
-    }
-
-    private static async Task<(Guid TenantId, IResult? Error)> InvokeAsync(
-        ClaimsPrincipal user, Guid? transitOfficeId, FlitDbContext db)
-    {
-        var task = (Task)ResolveMethod.Invoke(null, [user, transitOfficeId, db, CancellationToken.None])!;
-        await task.ConfigureAwait(false);
-
-        var resultProperty = task.GetType().GetProperty("Result")!;
-        var tuple = resultProperty.GetValue(task)!;
-        var tupleType = tuple.GetType();
-        var tenantId = (Guid)tupleType.GetField("Item1")!.GetValue(tuple)!;
-        var error = (IResult?)tupleType.GetField("Item2")!.GetValue(tuple);
-        return (tenantId, error);
     }
 
     private static async Task AssertStatusCodeAsync(IResult result, int expectedStatusCode)

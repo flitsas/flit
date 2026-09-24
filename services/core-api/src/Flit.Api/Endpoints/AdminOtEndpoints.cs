@@ -3256,8 +3256,15 @@ public static class AdminOtEndpoints
     /// SuperAdmin debe indicar <paramref name="transitOfficeId"/> (oficina del catálogo)
     /// y se resuelve el tenant OT que la tiene vinculada vía
     /// <c>admin.transit_office_profiles</c>.
+    ///
+    /// <c>internal</c> (no <c>private</c>) para que
+    /// <see cref="Flit.Admin.Tests.OtProfile.AdminOtUserScopeResolutionTests"/> lo invoque
+    /// DIRECTO, sin reflexión (<c>InternalsVisibleTo Flit.Admin.Tests</c> en Flit.Api.csproj) —
+    /// mismo patrón que <c>FlitPdfStamper.ComputeStampGeometry</c>: aislar el helper de scoping
+    /// que HU #12854 puso a compartir Reglas/Perfil/Feature Flags con Requisitos, sin exponerlo
+    /// como API pública del endpoint.
     /// </summary>
-    private static async Task<(Guid TenantId, IResult? Error)> ResolveOtUserScopeAsync(
+    internal static async Task<(Guid TenantId, IResult? Error)> ResolveOtUserScopeAsync(
         ClaimsPrincipal user,
         Guid? transitOfficeId,
         FlitDbContext db,
