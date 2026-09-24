@@ -28,7 +28,7 @@ export interface OtHubTab {
  * "Webhooks" (id legacy) sigue fuera de la oferta; su ruta por URL sigue viva.
  * HU #12850 (Feature #12846) — Preasignación se retiró: la consola de rangos ya no existe en
  * backend (HU-A1) y la asignación de placa del trámite siempre reserva fuera de rango.
- * HU #12857 (Feature #12846) — la ruta legacy `[id]/tramites` (TramitesSuperSection) se retiró:
+ * HU #12857 (Feature #12847) — la ruta legacy `[id]/tramites` (TramitesSuperSection) se retiró:
  * duplicaba sin enlace de menú lo que ya cubre "Configuración" (modo Dashboard/QX, ventana de
  * revocatoria, feature flags operativos). El id `tramites` salió de `OtHubTabId`: ya no hay
  * pantalla que lo resuelva. El id vigente de la bandeja sigue siendo `client-procedures`.

@@ -21,7 +21,7 @@ type RevocationWindowParseResult =
  * al backend. Vacío es válido y significa "sin límite" (`null`), nunca 0 ni "no tocado". Cualquier
  * otro valor debe ser un entero positivo (negativos y no numéricos bloquean el guardado).
  *
- * HU #12857 (Feature #12846) — movida aquí desde `TramitesSuperSection` (retirada): esta era su
+ * HU #12857 (Feature #12847) — movida aquí desde `TramitesSuperSection` (retirada): esta era su
  * única consumidora tras la extracción de HU #12569, y la ruta legacy `[id]/tramites` ya no existe.
  */
 export function parseRevocationWindowInput(raw: string): RevocationWindowParseResult {
@@ -52,9 +52,9 @@ export function parseRevocationWindowInput(raw: string): RevocationWindowParseRe
  * pantalla, que el "Trámites" moderno del dock —`client-procedures`— ya reemplazó) para darle un
  * punto de entrada real, sin arrastrar la lista redundante.</p>
  *
- * <p>Reusa `parseRevocationWindowInput` de `TramitesSuperSection` en vez de duplicar la validación:
- * es la misma regla de negocio (HU #12569 AC1-AC3), y una segunda copia se habría desincronizado el
- * día que alguien ajustara una sin acordarse de la otra.</p>
+ * <p>`parseRevocationWindowInput` vive en este archivo (movida desde `TramitesSuperSection`,
+ * retirada en HU #12857): es la misma regla de negocio (HU #12569 AC1-AC3) y este componente es su
+ * única consumidora, así que no tiene sentido duplicarla en otro lado.</p>
  */
 export function OtConfiguracionSection({ transitOfficeId }: OtConfiguracionSectionProps) {
   const { show } = useToast();

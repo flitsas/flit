@@ -1,7 +1,7 @@
 // Pedido del usuario (2026-09-16) — "Configuración" del organismo, punto de entrada real para el
 // modo Dashboard/QX, la ventana de revocatoria (HU #12569) y los feature flags operativos, que
 // antes solo vivían en una ruta legacy sin enlace en ningún menú. `TramitesSuperSection` (y su
-// suite `.revocation-window.test.tsx`) se retiraron en HU #12857 (Feature #12846) — este archivo
+// suite `.revocation-window.test.tsx`) se retiraron en HU #12857 (Feature #12847) — este archivo
 // pasa a cubrir también `parseRevocationWindowInput`, movida aquí porque este componente es ahora
 // su única consumidora.
 import { describe, expect, it, vi, beforeEach } from "vitest";
