@@ -28,9 +28,9 @@
 | Productos | Flotas, Diagnóstico y Comparendos son productos completos y nuevos | Servicios propios; no se reutiliza trámites como base funcional |
 | Equipo | Tres personas: una para Trámites, una para Diagnóstico, una para Comparendos | Las tres construyen la plataforma antes de sus productos (§5.0) |
 | Primeros productos | Comparendos y Diagnóstico, un desarrollador cada uno | Plantilla y SDK de producto son entregables de la plataforma |
-| Adquisición | Activación por SuperAdmin | Suscripción auditada; sin facturación en línea |
+| Adquisición | Activación por SuperAdmin | Habilitación por empresa (encendido/apagado), auditada; sin facturación ni vigencias |
 | Independencia | Un cliente puede tener Flotas sin Trámites | Trámites pasa a ser un producto más |
-| Cuenta | Una cuenta entra a los productos habilitados a su empresa | Identidad única + suscripción por empresa + rol por producto |
+| Cuenta | Una cuenta entra a los productos habilitados a su empresa | Identidad única + producto habilitado para la empresa + rol por producto |
 | Roles | Por producto | `product_code` en módulos y roles |
 | Login | Interno; abierto a MFA, SAML y proveedores externos | Servidor OIDC propio |
 | Marca blanca | Implementada en `develop` (épica #12237, ADR-0060); **es la base de partida** | La suite se construye **sobre** su sello de host, su `DomainContext` y su verificación de dominios |
@@ -67,7 +67,7 @@
 | La API acepta tokens sin firma si no hay llave configurada | `Flit.Api/Authorization/ApiSecurityExtensions.cs` | Cualquiera que llegue a la API puede fabricar un token |
 | JWT de 12 h, `aud=flit-api`, sin refresh token, todos los permisos dentro | `RsaJwtTokenIssuer.cs` | No distingue productos; quitar un producto o rol exige re-login |
 | Cookie `flit_token` sin `HttpOnly`, `Secure` ni `Domain`, más copia en `localStorage` | `frontend/lib/auth/session.ts` | Token legible por JavaScript; sin sesión entre hosts |
-| **No existe producto ni suscripción.** Los booleans `tramites/comparendos/resoluciones_module_enabled` **no se aplican en ningún endpoint** | `TenantSettings.cs:135-149`; solo los lee `DashboardActiveModulesEndpoints.cs` | Hoy "habilitar un módulo" solo cambia una tarjeta del dashboard |
+| **No existe el concepto de producto.** Los booleans `tramites/comparendos/resoluciones_module_enabled` **no se aplican en ningún endpoint** | `TenantSettings.cs:135-149`; solo los lee `DashboardActiveModulesEndpoints.cs` | Hoy "habilitar un módulo" solo cambia una tarjeta del dashboard |
 | RBAC sin dimensión de producto; 1 correo = 1 empresa | `RbacConfigurations.cs`; ADR-0060 D3 | Hace falta `product_code` en módulos y roles |
 | `tenant_domains` admite **un solo dominio por red** (`uq_tenant_domains_tenant_id`) y `DomainContext` no conoce productos | DDL 116; `DomainContext.cs` | Una red con varios productos necesita un host por producto |
 | Frontend: SPA por `?m=` (14 módulos), `Shell.tsx` de 872 líneas importa componentes de productos, sin `packages/` | `app/page.tsx`, `pnpm-workspace.yaml` | No se puede servir un producto por host sin separar |
@@ -87,7 +87,7 @@
 
 En julio (commit `8de54606`, Feature #10504) se eliminó la tabla que decía qué módulos tenía cada empresa. El motivo quedó en el commit: esa habilitación solo se aplicaba en el menú y la API dejaba operar el módulo igual. Desde entonces el acceso depende solo de los roles.
 
-La suite no necesita revertirla. Necesita un concepto por encima: **producto**, que es lo que la empresa contrata. La lección de esa HU se vuelve regla: la suscripción se valida al emitir el token y en cada API, no solo en el menú (borrador ADR-0063).
+La suite no necesita revertirla. Necesita un concepto por encima: **producto**, que es lo que la empresa contrata. La lección de esa HU se vuelve regla: la habilitación del producto se valida al emitir el token y en cada API, no solo en el menú (borrador ADR-0063).
 
 ---
 
@@ -123,7 +123,7 @@ deploy/                edge (existente) y manifiestos o referencias a flit-gitop
 
 Criterios de la estructura:
 
-1. **Un `frontend-hub` propio.** La administración de plataforma (empresas, usuarios, roles, suscripciones, marca) sale de `frontend/admin` hacia el hub. Si se queda dentro de trámites, trámites seguiría siendo "la app" y los demás productos dependerían de él.
+1. **Un `frontend-hub` propio.** La administración de plataforma (empresas, usuarios, roles, productos habilitados, marca) sale de `frontend/admin` hacia el hub. Si se queda dentro de trámites, trámites seguiría siendo "la app" y los demás productos dependerían de él.
 2. **Librerías compartidas fuera de los productos**: `services/shared/` y `packages/`. Ningún producto copia código de otro.
 3. **Nombres completos**: el código del producto (`comparendos`, `diagnostico`, `tramites`) es el mismo en la carpeta, el host, el schema, la audiencia del token, los roles y la aplicación de Argo CD.
 
@@ -139,7 +139,7 @@ Complementos: `CODEOWNERS` por carpeta para que cada dev sea dueño de su produc
 
 | Capa | Responsabilidad | Dónde vive |
 |---|---|---|
-| **Plataforma** | Identidad OIDC, empresas y jerarquía, productos y suscripciones, RBAC por producto, dominios y marca (lo de ADR-0060), consultas externas compartidas, reportes consolidados, auditoría | `core-api` (módulos Security y Admin existentes + módulos nuevos), expuesta como `/api/v1/platform/**`. UI en `frontend-hub` |
+| **Plataforma** | Identidad OIDC, empresas y jerarquía, productos y su habilitación por empresa, RBAC por producto, dominios y marca (lo de ADR-0060), consultas externas compartidas, reportes consolidados, auditoría | `core-api` (módulos Security y Admin existentes + módulos nuevos), expuesta como `/api/v1/platform/**`. UI en `frontend-hub` |
 | **Trámites** | Lo que hace FLIT hoy | Se queda en `core-api` y `frontend/`; cambia a `tramites.flitsas.online` |
 | **Comparendos, Diagnóstico, luego Flotas** | Dominio propio | `services/core-*` + `frontend-*`, schema y usuario de BD propios |
 
@@ -206,28 +206,27 @@ En PDN el reparto es el mismo sobre `flitsas.online`. Las redirecciones de rutas
 - **Abierto a futuro**: MFA TOTP con política por empresa; Microsoft, Google y SAML como métodos de la pantalla de login del hub.
 - **Prerrequisito**: sacar los ambientes de `Development`, validar el JWT en el gateway y exigir firma en la API.
 
-### 4.5 Suscripciones y RBAC por producto
+### 4.5 Habilitación de productos y RBAC por producto
 
 ```
 platform.products                     (code, name, icon, status)
-platform.tenant_product_subscriptions (tenant_id, product_code, status ACTIVE|SUSPENDED|CANCELLED,
-                                       starts_at, ends_at, activated_by, notes)
+platform.tenant_products             (tenant_id, product_code, enabled, notes, updated_at, updated_by)
 security.modules  + product_code
 security.roles    + product_code      (un rol pertenece a un producto)
 security.user_role_assignments        sin cambios (usuario, rol, empresa)
 admin.tenant_domains + purpose        (ver §4.4)
 ```
 
-- La suscripción se aplica en **tres puntos**: al emitir el token, en cada API (`RequireProduct` con caché en Redis) y en el launcher (`GET /api/v1/platform/me/apps`).
-- Las hijas de una Concesión o Marca Blanca solo pueden tener productos que su cabeza tenga activos.
+- Un producto está **encendido o apagado** para una empresa; no hay estados, fechas ni cobro (contrato v1, §4). La habilitación se aplica en **tres puntos**: al emitir el token, en cada API (`RequireProduct` con caché en Redis) y en el launcher (`GET /api/v1/platform/me/apps`).
+- Las hijas de una Concesión o Marca Blanca solo pueden tener encendidos los productos que su cabeza tenga encendidos. El SuperAdmin conserva el bypass en todos (contrato §2.1).
 - Cada producto publica un **manifiesto** (módulos, permisos, roles por defecto) al arrancar.
-- Los booleans actuales se migran a suscripciones y se retiran.
+- `tramites_module_enabled` y `comparendos_module_enabled` se migran a `platform.tenant_products` y se retiran; `resoluciones_module_enabled` queda igual (Resoluciones está fuera de v1).
 
 ### 4.6 Experiencia de navegación
 
 Modelo definido por el negocio:
 
-1. **Entrada por el hub.** El usuario abre `flitsas.online`, inicia sesión y ve el inicio con las tarjetas de los productos a los que tiene acceso: suscripción activa de su empresa y al menos un rol suyo en ese producto. Los demás no aparecen.
+1. **Entrada por el hub.** El usuario abre `flitsas.online`, inicia sesión y ve el inicio con las tarjetas de los productos a los que tiene acceso: producto encendido para su empresa y al menos un rol suyo en ese producto. Los demás no aparecen.
 2. **Menú principal de productos.** Es un selector tipo rejilla, idéntico en el hub y en todos los productos y siempre en el mismo lugar de la barra superior. Lista "Inicio" (el hub) y los productos con acceso, y marca el actual. Cambiar de producto lleva al host de ese producto; el SSO evita volver a iniciar sesión. **Es la única forma de cambiar de producto.**
 3. **Cada producto tiene su propio menú.** Es su dock, definido por el producto y filtrado por los roles del usuario en ese producto. El menú de productos y el menú del producto nunca se mezclan.
 4. **Menú de cuenta** común: perfil, cambio de contraseña y cerrar sesión. Cerrar sesión cierra la sesión en toda la suite.
@@ -288,7 +287,7 @@ Modelo definido por el negocio:
 - k3s + Argo CD (`flit-gitops`): namespace por ambiente, aplicación por servicio y ambiente.
 - Ingress con `Host` preservado y `/api` hacia el gateway, como ya define `deploy/edge/`. En k3s, cert-manager reemplaza acme.sh y se conserva la señal de certificado hacia la API.
 - PostgreSQL: un clúster, un schema y un usuario por servicio. Los productos nuevos migran su propio schema (ajuste a ADR-0014; `core-ict` ya es la excepción).
-- Redis: sesiones BFF, refresh tokens, caché de suscripciones.
+- Redis: sesiones BFF, refresh tokens, caché de habilitación de productos.
 - RabbitMQ: eventos entre productos y hacia reportes consolidados.
 
 ---
@@ -304,7 +303,7 @@ Cada persona toma el frente de plataforma más cercano a su producto, para llega
 | Persona | Frente de plataforma | Por qué |
 |---|---|---|
 | Desarrollador de **Trámites** | Identidad OIDC, salida de `Development` y validación del JWT, `packages/auth`, migración de Trámites a la suite y a su host nuevo | Conoce `core-api`, Security, Marca Blanca y el frontend actual |
-| Desarrollador de **Comparendos** | Productos y suscripciones, RBAC por producto, `DomainContext` con producto, `frontend-hub`, `packages/ui` y `packages/shell` | Su producto será el primer cliente del hub, del switcher y de los roles por producto |
+| Desarrollador de **Comparendos** | Productos y su habilitación, RBAC por producto, `DomainContext` con producto, `frontend-hub`, `packages/ui` y `packages/shell` | Su producto será el primer cliente del hub, del switcher y de los roles por producto |
 | Desarrollador de **Diagnóstico** | Consultas externas compartidas con medición, SDK .NET, plantilla `flit-product`, eventos y RabbitMQ, producto de prueba | Diagnóstico será el mayor consumidor de consultas externas y de la plantilla |
 | Líder técnico / infraestructura | k3s, Argo CD, ingress, certificados, Redis, RabbitMQ, DNS, aprobación de ADRs | Ya tiene a cargo la migración a k3s |
 
@@ -325,7 +324,7 @@ El detalle de cada frente, con tareas, dependencias y criterios de terminado, es
 ### 5.2 Fase 1 — Núcleo de plataforma (≈4–6 semanas)
 
 1. Servidor OIDC con login en el host del hub y en el dominio principal de cada red, refresh en Redis, token por producto.
-2. Schema `platform`: productos y suscripciones; pantallas SuperAdmin para activar y suspender productos.
+2. Schema `platform`: productos y su habilitación por empresa; pantallas SuperAdmin para encender y apagar productos.
 3. `product_code` en módulos y roles; migración de los roles actuales a `tramites` o `plataforma`.
 4. `DomainContext` con producto; `tenant_domains` con `purpose`.
 5. `GET /api/v1/platform/me/apps` y policy `RequireProduct`.
@@ -334,7 +333,7 @@ El detalle de cada frente, con tareas, dependencias y criterios de terminado, es
 ### 5.3 Fase 2 — Hub, kits y Trámites en la suite (≈4–6 semanas)
 
 1. `packages/ui`, `packages/shell`, `packages/auth`, `packages/config`; `services/shared/*`.
-2. `frontend-hub` en `flitsas.online`: login, inicio con productos, menú de productos, cuenta, empresa, usuarios y roles por producto, suscripciones, marca.
+2. `frontend-hub` en `flitsas.online`: login, inicio con productos, menú de productos, cuenta, empresa, usuarios y roles por producto, productos habilitados, marca.
 3. Trámites entra a la suite: `<ambiente>.tramites.flitsas.online` con redirecciones 308 desde los hosts actuales, recursos de correo en `assets.`, login por OIDC y app switcher (§4.3).
 4. Plantilla `templates/flit-product` y un **producto de prueba** desplegado de punta a punta en DEV, para validar la plantilla antes de entregarla.
 5. Cliente TypeScript generado desde OpenAPI para los servicios nuevos.
@@ -348,7 +347,7 @@ Los productos arrancan cuando todo esto se cumple en QA:
 - [ ] El SuperAdmin activa y suspende un producto para una empresa, y el efecto se nota en minutos sin re-login.
 - [ ] El AdminCompany asigna roles por producto desde el hub.
 - [ ] Una red de Marca Blanca entra por su dominio con su marca, como hoy.
-- [ ] El producto de prueba, creado con la plantilla, se despliega con Argo CD en `dev.<producto>.flitsas.online` con login, shell, suscripción y schema propios.
+- [ ] El producto de prueba, creado con la plantilla, se despliega con Argo CD en `dev.<producto>.flitsas.online` con login, shell, habilitación y schema propios.
 - [ ] Un producto puede llamar a una consulta externa compartida y el consumo queda medido.
 
 ### 5.5 Fase 3 — Comparendos y Diagnóstico (en paralelo)
