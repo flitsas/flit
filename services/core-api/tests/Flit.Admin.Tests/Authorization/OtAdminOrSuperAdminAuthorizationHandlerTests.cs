@@ -78,4 +78,21 @@ public sealed class OtAdminOrSuperAdminAuthorizationHandlerTests
 
         context.HasSucceeded.Should().BeFalse();
     }
+
+    [Theory] // HU12859 — la comparación de rol es exacta: variantes de mayúsculas/espacios no cuelan.
+    [InlineData("OT_ADMIN")]
+    [InlineData("Ot_Admin")]
+    [InlineData(" ot_admin")]
+    [InlineData("ot_admin ")]
+    [InlineData("superadmin")]
+    [InlineData("SUPERADMIN")]
+    public async Task HU12859_RoleClaimVariants_DoNotSucceed(string roleClaimValue)
+    {
+        var context = BuildContext(BuildPrincipal(
+            new Claim(AdminAuthorization.RoleClaimType, roleClaimValue)));
+
+        await _handler.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeFalse();
+    }
 }
