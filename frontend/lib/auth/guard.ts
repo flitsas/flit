@@ -17,6 +17,21 @@ export const RUNT_CONFIRMATION_BASE_PATH = "/admin/plataforma/confirmacion-runt"
 
 export type UserRole = "superadmin" | "admincompany" | "ot_admin" | "user";
 
+/**
+ * HU #12856 (Feature #12847) — Reglas, Requisitos y Configuración del organismo quedan
+ * exclusivos de Super Admin también en la capa de UI: un `ot_admin` (o cualquier otro rol de un
+ * tenant OT) que entra por URL directa a una de estas 3 sub-rutas debe caer a /403, aunque el
+ * resto de `/admin/transit-offices/*` le siga permitido (HU #10218). Bloqueo en dos capas: la API
+ * ya exige la policy `SuperAdmin` (HU-B2, backend); esto cierra el hueco de UI.
+ */
+const SUPERADMIN_ONLY_OT_SUBROUTES = ["rules", "requirements", "configuracion"] as const;
+
+function isSuperAdminOnlyOtRoute(pathname: string): boolean {
+  return SUPERADMIN_ONLY_OT_SUBROUTES.some((segment) =>
+    new RegExp(`^/admin/transit-offices/[^/]+/${segment}(/|$)`).test(pathname),
+  );
+}
+
 export interface AdminAccessDecision {
   /** `true` si el token corresponde a un usuario con acceso permitido. */
   allowed: boolean;
@@ -30,8 +45,9 @@ export interface AdminAccessDecision {
  * Reglas:
  * - Sin token, token malformado o token expirado → no renderizar, redirigir a /403.
  * - SuperAdmin → permitido en todo /admin/*.
- * - Usuario de un tenant OT (ot_admin o entity_type TRANSIT_OFFICE) → permitido solo en
- *   /admin/transit-offices/* (HU #10218).
+ * - Usuario de un tenant OT (ot_admin o entity_type TRANSIT_OFFICE) → permitido en
+ *   /admin/transit-offices/* (HU #10218), salvo /rules, /requirements y /configuracion, que
+ *   quedan exclusivos de Super Admin (HU #12856, Feature #12847).
  * - AdminCompany → permitido en /admin/companies/* (HU #11228; la página redirige a su tenant).
  * - Cualquier rol con `generacion-documental.read` → permitido en /admin/generacion-documental/* (Feature #12201).
  * - Cualquier rol con `runt_confirmation.settings.manage` o `runt_confirmation.history.read` →
@@ -56,7 +72,8 @@ export function evaluateAdminAccess(
   if (
     pathname?.startsWith("/admin/transit-offices") &&
     payload &&
-    isOtUser(payload)
+    isOtUser(payload) &&
+    !isSuperAdminOnlyOtRoute(pathname)
   ) {
     return { allowed: true };
   }

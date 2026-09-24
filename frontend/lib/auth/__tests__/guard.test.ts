@@ -131,6 +131,45 @@ describe("evaluateAdminAccess (AC6)", () => {
     expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
   });
 
+  // HU12856 AC2 — Reglas, Requisitos y Configuración del organismo quedan exclusivos de
+  // Super Admin también en la capa de UI (bloqueo en dos capas: la API ya exige SuperAdminPolicy).
+  it.each([
+    ["/admin/transit-offices/abc/rules", "Reglas"],
+    ["/admin/transit-offices/abc/requirements", "Requisitos"],
+    ["/admin/transit-offices/abc/configuracion", "Configuración"],
+  ])("HU12856 AC2 — deniega a ot_admin en %s (%s)", (pathname: string) => {
+    const decision = evaluateAdminAccess(makeToken({ sub: "u1", role: "ot_admin" }), pathname);
+    expect(decision.allowed).toBe(false);
+    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+
+  it("HU12856 AC2 — deniega a cualquier rol de un tenant OT (no solo ot_admin) en /rules", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "gestor_tramites_ot", entity_type: "TRANSIT_OFFICE" }),
+      "/admin/transit-offices/abc/requirements",
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+
+  it("HU12856 AC3 — un Super Admin conserva acceso a /rules, /requirements y /configuracion", () => {
+    for (const segment of ["rules", "requirements", "configuracion"]) {
+      const decision = evaluateAdminAccess(
+        makeToken({ sub: "u1", role: "SuperAdmin" }),
+        `/admin/transit-offices/abc/${segment}`,
+      );
+      expect(decision.allowed).toBe(true);
+    }
+  });
+
+  it("HU12856 — un ot_admin conserva acceso al resto de /admin/transit-offices/* (client-procedures, documents…)", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "ot_admin" }),
+      "/admin/transit-offices/abc/documents",
+    );
+    expect(decision.allowed).toBe(true);
+  });
+
   it("permite el acceso de SuperAdmin a /admin/improntas (HU #10469 AC1)", () => {
     const decision = evaluateAdminAccess(
       makeToken({ sub: "u1", role: "SuperAdmin" }),

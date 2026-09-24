@@ -58,8 +58,20 @@ export function fetchOtProfile(
   });
 }
 
-export function updateOtProfile(body: UpdateOtProfileRequest): Promise<OtProfile> {
-  return apiFetch<OtProfile>(`${base}/profile`, { method: "PATCH", body });
+/**
+ * HU #12854 (backend) / HU #12856 — Super Admin debe pasar `scope.transitOfficeId` para no
+ * escribir por accidente en su propio tenant "fantasma" en vez del organismo que administra
+ * (mismo patrón que `fetchOtRequirements`/`updateOtRequirements`).
+ */
+export function updateOtProfile(
+  body: UpdateOtProfileRequest,
+  scope?: OtApiScope,
+): Promise<OtProfile> {
+  return apiFetch<OtProfile>(`${base}/profile`, {
+    method: "PATCH",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
 export function fetchOtRequirements(
@@ -83,11 +95,17 @@ export function updateOtRequirements(
   });
 }
 
+/** HU #12854 (backend) / HU #12856 — mismo scope de Super Admin que `updateOtProfile`. */
 export function updateOtFeatureFlag(
   id: string,
   body: UpdateOtFeatureFlagRequest,
+  scope?: OtApiScope,
 ): Promise<OtFeatureFlag> {
-  return apiFetch<OtFeatureFlag>(`${base}/feature-flags/${id}`, { method: "PATCH", body });
+  return apiFetch<OtFeatureFlag>(`${base}/feature-flags/${id}`, {
+    method: "PATCH",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
 export function fetchOtClientProcedures(
@@ -507,16 +525,36 @@ export function fetchOtApiLogs(
   return apiFetch<OtApiLogsPagedResult>(`${base}/api-logs`, { query: { ...params }, signal });
 }
 
-export function fetchOtRules(signal?: AbortSignal): Promise<OtRulesListResult> {
-  return apiFetch<OtRulesListResult>(`${base}/rules`, { signal });
+/**
+ * HU #12854 (backend) / HU #12856 — Reglas resuelve el organismo por `?transitOfficeId` cuando
+ * el caller es Super Admin (mismo patrón que Requisitos). `scope` omitido conserva el
+ * comportamiento vigente de `ot_admin` (su propio tenant).
+ */
+export function fetchOtRules(signal?: AbortSignal, scope?: OtApiScope): Promise<OtRulesListResult> {
+  return apiFetch<OtRulesListResult>(`${base}/rules`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
 }
 
-export function createOtRule(body: CreateOtRuleRequest): Promise<OtRule> {
-  return apiFetch<OtRule>(`${base}/rules`, { method: "POST", body });
+export function createOtRule(body: CreateOtRuleRequest, scope?: OtApiScope): Promise<OtRule> {
+  return apiFetch<OtRule>(`${base}/rules`, {
+    method: "POST",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
-export function updateOtRule(id: string, body: UpdateOtRuleRequest): Promise<OtRule> {
-  return apiFetch<OtRule>(`${base}/rules/${id}`, { method: "PATCH", body });
+export function updateOtRule(
+  id: string,
+  body: UpdateOtRuleRequest,
+  scope?: OtApiScope,
+): Promise<OtRule> {
+  return apiFetch<OtRule>(`${base}/rules/${id}`, {
+    method: "PATCH",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
 export function fetchOtDocumentPrecedence(

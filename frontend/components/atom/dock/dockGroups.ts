@@ -116,15 +116,16 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   // SuperAdmin — Plataforma anidada dentro de Administradores
   "admin-plataforma": "administradores",
   // Admin OT — pestañas hub en el dock
+  // HU #12856 (Feature #12847) — Reglas/Requisitos/Configuración salieron de este mapa: ya no
+  // viven en el dock de ningún usuario de tenant OT (admin u operador), solo en la barra de
+  // pestañas del hub de Super Admin (OtHubLayout, que no consulta este mapa). El grupo
+  // `administracion` sigue vivo porque Documentos, Mandatos y Validar impronta permanecen.
   [OT_ADM_DOCK.tramites]: "tramites",
-  [OT_ADM_DOCK.rules]: "administracion",
   [OT_ADM_DOCK.documents]: "administracion",
-  [OT_ADM_DOCK.requirements]: "administracion",
   [OT_ADM_DOCK.usuarios]: "usuarios",
   [OT_ADM_DOCK.reportes]: "reportes",
   [OT_ADM_DOCK.mandatos]: "administracion",
   [OT_ADM_DOCK.imprintValidation]: "administracion",
-  [OT_ADM_DOCK.configuracion]: "administracion",
   rbac: "administradores",
   auditoria: "administradores",
   "log-qx": "integraciones",
