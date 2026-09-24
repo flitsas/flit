@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
+import { getToken } from "@/lib/api/client";
 import { tramitesClient } from "@/lib/api/tramites-client";
 import {
   createOtDocumentTag,
@@ -13,6 +14,7 @@ import {
   updateOtDocumentPrecedence,
 } from "@/lib/api/admin-ot";
 import type { OtDocumentPrecedenceItem, OtDocumentTag } from "@/lib/api/types-ot";
+import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { PledgeDocumentOverrideToggle } from "@/components/admin/documents/panels/PledgeDocumentOverrideToggle";
 import { DocumentPrecedenceList } from "./DocumentPrecedenceList";
 import { OtTabBar } from "./OtTabBar";
@@ -44,6 +46,14 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
   const [tagFormOpen, setTagFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<OtDocumentTag | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // HU #12861 (Feature #12848) — el Admin OT ("solo ordena") pierde Etiquetas y el switch de
+  // prenda; solo Super Admin conserva ambas pestañas. Mismo helper que OtHubLayout.tsx.
+  const [superAdmin, setSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- lee el rol una sola vez al montar
+    setSuperAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
+  }, []);
 
   useEffect(() => {
     tramitesClient
@@ -64,7 +74,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
       }
       setPrecStatus("loading");
       try {
-        const result = await fetchOtDocumentPrecedence(procedureTypeId, signal);
+        const result = await fetchOtDocumentPrecedence(procedureTypeId, signal, { transitOfficeId });
         if (signal?.aborted) return;
         setPrecedence(result.data);
         setPrecStatus(result.data.length === 0 ? "empty" : "ready");
@@ -72,20 +82,23 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
         if (!signal?.aborted) setPrecStatus("error");
       }
     },
-    [procedureTypeId],
+    [procedureTypeId, transitOfficeId],
   );
 
-  const loadTags = useCallback(async (signal?: AbortSignal) => {
-    setTagStatus("loading");
-    try {
-      const result = await fetchOtDocumentTags(signal);
-      if (signal?.aborted) return;
-      setTags(result.data);
-      setTagStatus(result.data.length === 0 ? "empty" : "ready");
-    } catch {
-      if (!signal?.aborted) setTagStatus("error");
-    }
-  }, []);
+  const loadTags = useCallback(
+    async (signal?: AbortSignal) => {
+      setTagStatus("loading");
+      try {
+        const result = await fetchOtDocumentTags(signal, { transitOfficeId });
+        if (signal?.aborted) return;
+        setTags(result.data);
+        setTagStatus(result.data.length === 0 ? "empty" : "ready");
+      } catch {
+        if (!signal?.aborted) setTagStatus("error");
+      }
+    },
+    [transitOfficeId],
+  );
 
   useEffect(() => {
     if (tab !== "precedence") return;
@@ -105,13 +118,16 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
 
   const handleReorder = async (items: OtDocumentPrecedenceItem[]) => {
     try {
-      const result = await updateOtDocumentPrecedence({
-        procedure_type_id: procedureTypeId,
-        items: items.map((i) => ({
-          document_type_id: i.document_type_id,
-          sort_order: i.sort_order,
-        })),
-      });
+      const result = await updateOtDocumentPrecedence(
+        {
+          procedure_type_id: procedureTypeId,
+          items: items.map((i) => ({
+            document_type_id: i.document_type_id,
+            sort_order: i.sort_order,
+          })),
+        },
+        { transitOfficeId },
+      );
       setPrecedence(result.data);
       // HU #11185 AC4 — reordenar no rehace los expedientes ya emitidos (decisión D6): el
       // organismo tiene que saber desde cuándo aplica lo que acaba de guardar.
@@ -127,7 +143,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await deleteOtDocumentTag(deleteTarget.id);
+      await deleteOtDocumentTag(deleteTarget.id, { transitOfficeId });
       setTags((prev) => prev.filter((t) => t.id !== deleteTarget.id));
       setTagStatus((s) => (tags.length <= 1 ? "empty" : s));
       show("Etiqueta eliminada.", "success");
@@ -141,15 +157,19 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
 
   return (
     <div className="space-y-4">
-      <OtTabBar
-        ariaLabel="Secciones documentales"
-        tabs={[
-          { id: "precedence", label: "Prelación" },
-          { id: "tags", label: "Etiquetas" },
-        ]}
-        activeId={tab}
-        onChange={(id) => setTab(id as Tab)}
-      />
+      {/* HU #12861 AC1 (Feature #12848) — ot_admin ("solo ordena") no ve selector de pestañas:
+          Etiquetas no existe para su rol, así que ofrecerlo aquí sería un enlace muerto. */}
+      {superAdmin && (
+        <OtTabBar
+          ariaLabel="Secciones documentales"
+          tabs={[
+            { id: "precedence", label: "Prelación" },
+            { id: "tags", label: "Etiquetas" },
+          ]}
+          activeId={tab}
+          onChange={(id) => setTab(id as Tab)}
+        />
+      )}
 
       {tab === "precedence" && (
         <div role="tabpanel" className="space-y-3 pt-2">
@@ -169,12 +189,16 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
             </select>
           </label>
 
-          <section className="space-y-2 rounded-2xl border p-4">
-            <h3 className="text-xs font-semibold text-foreground">
-              Documento de prenda por compañía
-            </h3>
-            <PledgeDocumentOverrideToggle transitOfficeId={transitOfficeId} />
-          </section>
+          {/* HU #12861 AC2 — el switch de prenda queda exclusivo de Super Admin; para ot_admin
+              ni siquiera se monta (evita la llamada a la API de políticas de prenda). */}
+          {superAdmin && (
+            <section className="space-y-2 rounded-2xl border p-4">
+              <h3 className="text-xs font-semibold text-foreground">
+                Documento de prenda por compañía
+              </h3>
+              <PledgeDocumentOverrideToggle transitOfficeId={transitOfficeId} />
+            </section>
+          )}
 
           <UiStateBoundary
             status={precStatus}
@@ -194,7 +218,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
         </div>
       )}
 
-      {tab === "tags" && (
+      {superAdmin && tab === "tags" && (
         <div role="tabpanel" className="space-y-3 pt-2">
           <div className="flex justify-end">
             <button
@@ -248,19 +272,21 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
         </div>
       )}
 
-      <TagFormPanel
-        open={tagFormOpen}
-        onClose={() => setTagFormOpen(false)}
-        onCreate={createOtDocumentTag}
-        onSaved={(tag) => {
-          setTags((prev) => [...prev, tag]);
-          setTagStatus("ready");
-          setTagFormOpen(false);
-          show("Etiqueta creada.", "success");
-        }}
-      />
+      {superAdmin && (
+        <TagFormPanel
+          open={tagFormOpen}
+          onClose={() => setTagFormOpen(false)}
+          onCreate={(body) => createOtDocumentTag(body, { transitOfficeId })}
+          onSaved={(tag) => {
+            setTags((prev) => [...prev, tag]);
+            setTagStatus("ready");
+            setTagFormOpen(false);
+            show("Etiqueta creada.", "success");
+          }}
+        />
+      )}
 
-      {deleteTarget && (
+      {superAdmin && deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"

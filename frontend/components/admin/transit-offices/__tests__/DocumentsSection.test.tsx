@@ -27,8 +27,23 @@ vi.mock("@/lib/api/admin-ot-prenda-document-policies", () => ({
   setOtPrendaDocumentPolicyForOffice: vi.fn(),
 }));
 
+// HU #12861 (Feature #12848) — DocumentsSection decide el rol leyendo el JWT directamente
+// (mismo helper que OtHubLayout.tsx: getToken + decodeJwtPayload + isSuperAdmin). Se mockean
+// ambos módulos para controlar el rol por test sin depender de localStorage/cookies.
+vi.mock("@/lib/api/client", () => ({
+  getToken: vi.fn().mockReturnValue("token"),
+}));
+
+const jwtMocks = vi.hoisted(() => ({
+  decodeJwtPayload: vi.fn().mockReturnValue({}),
+  isSuperAdmin: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock("@/lib/auth/jwt", () => jwtMocks);
+
 import {
   createOtDocumentTag,
+  deleteOtDocumentTag,
   fetchOtDocumentPrecedence,
   fetchOtDocumentTags,
   updateOtDocumentPrecedence,
@@ -48,9 +63,10 @@ function renderSection() {
   );
 }
 
-describe("DocumentsSection — HU #10224", () => {
+describe("DocumentsSection — HU #10224 (Super Admin, ambas pestañas)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    jwtMocks.isSuperAdmin.mockReturnValue(true);
     vi.mocked(fetchOtDocumentPrecedence).mockResolvedValue({
       data: [
         {
@@ -120,6 +136,7 @@ describe("DocumentsSection — HU #11185 (prelación operativa)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    jwtMocks.isSuperAdmin.mockReturnValue(true);
     vi.mocked(fetchOtDocumentPrecedence).mockResolvedValue({ data: listaCompleta });
     vi.mocked(fetchOtDocumentTags).mockResolvedValue({ data: [] });
   });
@@ -151,13 +168,16 @@ describe("DocumentsSection — HU #11185 (prelación operativa)", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() =>
-      expect(updateOtDocumentPrecedence).toHaveBeenCalledWith({
-        procedure_type_id: "pt-1",
-        items: [
-          { document_type_id: "doc-soat", sort_order: 1 },
-          { document_type_id: "doc-fur", sort_order: 2 },
-        ],
-      }),
+      expect(updateOtDocumentPrecedence).toHaveBeenCalledWith(
+        {
+          procedure_type_id: "pt-1",
+          items: [
+            { document_type_id: "doc-soat", sort_order: 1 },
+            { document_type_id: "doc-fur", sort_order: 2 },
+          ],
+        },
+        { transitOfficeId: OT_ID },
+      ),
     );
     expect(
       await screen.findByText(/Orden guardado\. Aplica a partir de la próxima generación/i),
@@ -187,10 +207,11 @@ describe("DocumentsSection — HU #11185 (prelación operativa)", () => {
   });
 });
 
-// Documento de prenda opcional por compañía en el hub OT.
-describe("DocumentsSection — prenda opcional por compañía", () => {
+// Documento de prenda opcional por compañía en el hub OT — exclusivo de Super Admin (HU #12861).
+describe("DocumentsSection — prenda opcional por compañía (Super Admin)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    jwtMocks.isSuperAdmin.mockReturnValue(true);
     vi.mocked(fetchOtDocumentPrecedence).mockResolvedValue({
       data: [{ document_type_id: "doc-1", document_name: "SOAT", sort_order: 1 }],
     });
@@ -214,6 +235,133 @@ describe("DocumentsSection — prenda opcional por compañía", () => {
 
     await waitFor(() =>
       expect(setOtPrendaDocumentPolicyForOffice).toHaveBeenCalledWith(OT_ID, "t1", true),
+    );
+  });
+});
+
+// HU #12861 AC1/AC2 (Feature #12848) — el Admin OT ("solo ordena") ve exclusivamente Prelación.
+describe("DocumentsSection — HU12861 AC1/AC2 (ot_admin: solo Prelación)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    jwtMocks.isSuperAdmin.mockReturnValue(false);
+    vi.mocked(fetchOtDocumentPrecedence).mockResolvedValue({
+      data: [{ document_type_id: "doc-1", document_name: "SOAT", sort_order: 1 }],
+    });
+    vi.mocked(fetchOtDocumentTags).mockResolvedValue({ data: [] });
+  });
+
+  it("AC1 renderiza solo la pestaña Prelación, sin selector de tabs", async () => {
+    renderSection();
+
+    expect(await screen.findByText("SOAT")).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Etiquetas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Prelación" })).not.toBeInTheDocument();
+  });
+
+  it("AC2 no existe el tab Etiquetas ni el switch de documento de prenda", async () => {
+    renderSection();
+
+    await screen.findByText("SOAT");
+    expect(screen.queryByText("Documento de prenda por compañía")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Nueva etiqueta/i })).not.toBeInTheDocument();
+    // El toggle de prenda no se monta: su API ni siquiera se invoca.
+    expect(fetchOtPrendaDocumentPoliciesForOffice).not.toHaveBeenCalled();
+  });
+});
+
+// HU #12861 AC3 (Feature #12848) — Super Admin conserva ambas pestañas y el switch de prenda.
+describe("DocumentsSection — HU12861 AC3 (Super Admin: Prelación + Etiquetas + prenda)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    jwtMocks.isSuperAdmin.mockReturnValue(true);
+    vi.mocked(fetchOtDocumentPrecedence).mockResolvedValue({
+      data: [{ document_type_id: "doc-1", document_name: "SOAT", sort_order: 1 }],
+    });
+    vi.mocked(fetchOtDocumentTags).mockResolvedValue({ data: [] });
+    vi.mocked(fetchOtPrendaDocumentPoliciesForOffice).mockResolvedValue([]);
+  });
+
+  it("ve la pestaña Etiquetas y el switch de prenda sin cambios", async () => {
+    renderSection();
+
+    await screen.findByText("SOAT");
+    expect(screen.getByRole("tab", { name: "Prelación" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Etiquetas" })).toBeInTheDocument();
+    expect(await screen.findByText("Documento de prenda por compañía")).toBeInTheDocument();
+  });
+});
+
+// HU #12861 / HU-C1 (backend) — Prelación y Etiquetas envían `transitOfficeId` en el scope (mismo
+// patrón que Reglas/Requisitos), para que el backend deje de resolver el tenant "fantasma" de
+// Super Admin cuando administra el organismo.
+describe("DocumentsSection — HU12861 scope enviado", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    jwtMocks.isSuperAdmin.mockReturnValue(true);
+    vi.mocked(fetchOtDocumentPrecedence).mockResolvedValue({
+      data: [{ document_type_id: "doc-1", document_name: "SOAT", sort_order: 1 }],
+    });
+    vi.mocked(fetchOtDocumentTags).mockResolvedValue({ data: [] });
+    vi.mocked(createOtDocumentTag).mockResolvedValue({
+      id: "tag-1",
+      code: "URGENTE",
+      name: "Urgente",
+      color: "#FF0000",
+    });
+  });
+
+  it("fetchOtDocumentPrecedence recibe el scope con transitOfficeId", async () => {
+    renderSection();
+    await screen.findByText("SOAT");
+    expect(fetchOtDocumentPrecedence).toHaveBeenCalledWith(
+      "pt-1",
+      expect.anything(),
+      { transitOfficeId: OT_ID },
+    );
+  });
+
+  it("fetchOtDocumentTags recibe el scope con transitOfficeId al abrir Etiquetas", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("SOAT");
+    await user.click(screen.getByRole("tab", { name: "Etiquetas" }));
+    await waitFor(() =>
+      expect(fetchOtDocumentTags).toHaveBeenCalledWith(expect.anything(), {
+        transitOfficeId: OT_ID,
+      }),
+    );
+  });
+
+  it("createOtDocumentTag recibe el scope con transitOfficeId", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("SOAT");
+    await user.click(screen.getByRole("tab", { name: "Etiquetas" }));
+    await user.click(await screen.findByRole("button", { name: /Nueva etiqueta/i }));
+    await user.type(screen.getByLabelText("Código"), "URGENTE");
+    await user.type(screen.getByLabelText("Nombre"), "Urgente");
+    await user.click(screen.getByRole("button", { name: /^Guardar$/i }));
+    await waitFor(() =>
+      expect(createOtDocumentTag).toHaveBeenCalledWith(expect.anything(), {
+        transitOfficeId: OT_ID,
+      }),
+    );
+  });
+
+  it("deleteOtDocumentTag recibe el scope con transitOfficeId", async () => {
+    vi.mocked(fetchOtDocumentTags).mockResolvedValue({
+      data: [{ id: "tag-1", code: "URGENTE", name: "Urgente", color: "#FF0000" }],
+    });
+    vi.mocked(deleteOtDocumentTag).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("SOAT");
+    await user.click(screen.getByRole("tab", { name: "Etiquetas" }));
+    await user.click(await screen.findByRole("button", { name: "Eliminar etiqueta Urgente" }));
+    await user.click(await screen.findByRole("button", { name: "Eliminar" }));
+    await waitFor(() =>
+      expect(deleteOtDocumentTag).toHaveBeenCalledWith("tag-1", { transitOfficeId: OT_ID }),
     );
   });
 });
