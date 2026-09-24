@@ -28,9 +28,9 @@ vi.mock("@/lib/api/ot-metrics", () => ({
 }));
 
 vi.mock("@/lib/api/admin-plate-ranges", () => ({
-  listPlateDetails: vi.fn().mockResolvedValue([]),
   assignPlateToProcedure: vi.fn(),
-  revokeProcedurePlate: vi.fn(),
+  releaseProcedurePlate: vi.fn(),
+  updateProcedurePlate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/jwt", async (importOriginal) => {

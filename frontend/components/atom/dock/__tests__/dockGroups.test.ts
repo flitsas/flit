@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDockGroups,
+  DOCK_GROUP_ICON,
+  DOCK_GROUP_LABEL,
   DOCK_GROUP_ORDER,
   DOCK_GROUP_SIDE,
+  DOCK_ITEM_GROUP,
   flattenDockEntries,
   type DockEntryLike,
 } from "../dockGroups";
@@ -42,13 +45,13 @@ describe("buildDockGroups", () => {
     expect(groups.map((g) => g.label)).toEqual(["Trámites"]);
   });
 
-  it("Admin OT: Administración agrupa Reglas/Documentos/Requisitos; Preasignación es píldora", () => {
+  // HU #12850 (Feature #12846) — el grupo `preasignacion` se retiró del dock junto con la consola.
+  it("Admin OT: Administración agrupa Reglas/Documentos/Requisitos (sin Preasignación)", () => {
     const groups = buildDockGroups([
       entry(OT_ADM_DOCK.tramites, "Trámites"),
       entry(OT_ADM_DOCK.rules, "Reglas"),
       entry(OT_ADM_DOCK.documents, "Documentos"),
       entry(OT_ADM_DOCK.requirements, "Requisitos"),
-      entry(OT_ADM_DOCK.preasignacion, "Preasignación"),
       entry(OT_ADM_DOCK.usuarios, "Usuarios"),
       entry(OT_ADM_DOCK.reportes, "Reportes"),
       entry(OT_ADM_DOCK.mandatos, "Mandatos"),
@@ -56,7 +59,6 @@ describe("buildDockGroups", () => {
     ]);
     expect(groups.map((g) => g.label)).toEqual([
       "Trámites",
-      "Preasignación",
       "Reportes",
       "Usuarios",
       "Administración",
@@ -69,6 +71,18 @@ describe("buildDockGroups", () => {
       "Mandatos",
       "Validar impronta",
     ]);
+  });
+
+  // HU12850 AC3 — DOCK_GROUP_ORDER, DOCK_GROUP_SIDE, DOCK_GROUP_LABEL, DOCK_GROUP_ICON y
+  // DOCK_ITEM_GROUP quedan consistentes: `preasignacion` no aparece en ninguno de los cinco mapas
+  // (registro doble: memoria del proyecto — un mapa a medias descarta el ítem en silencio).
+  it("HU12850 AC3 — ningún mapa del dock conserva la clave 'preasignacion'", () => {
+    expect(DOCK_GROUP_ORDER).not.toContain("preasignacion");
+    expect(Object.keys(DOCK_GROUP_SIDE)).not.toContain("preasignacion");
+    expect(Object.keys(DOCK_GROUP_LABEL)).not.toContain("preasignacion");
+    expect(Object.keys(DOCK_GROUP_ICON)).not.toContain("preasignacion");
+    expect(Object.values(DOCK_ITEM_GROUP)).not.toContain("preasignacion");
+    expect(Object.keys(OT_ADM_DOCK)).not.toContain("preasignacion");
   });
 
   it("SuperAdmin: Plataforma (con Mandatos y Notificaciones) vive anidada en Administradores", () => {
@@ -118,7 +132,6 @@ describe("buildDockGroups", () => {
 
   it("HU #12723 — cada agrupador declara lado izquierdo o derecho del FAB", () => {
     expect(DOCK_GROUP_SIDE.tramites).toBe("left");
-    expect(DOCK_GROUP_SIDE.preasignacion).toBe("left");
     expect(DOCK_GROUP_SIDE.identidad).toBe("left");
     expect(DOCK_GROUP_SIDE.reportes).toBe("left");
     expect(DOCK_GROUP_SIDE.usuarios).toBe("right");

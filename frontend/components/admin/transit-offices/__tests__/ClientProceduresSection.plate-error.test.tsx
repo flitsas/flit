@@ -25,13 +25,12 @@ vi.mock("@/lib/api/admin-ot", () => ({
 }));
 
 const plateMocks = vi.hoisted(() => ({
-  listPlateDetails: vi.fn(),
   assignPlateToProcedure: vi.fn(),
 }));
 vi.mock("@/lib/api/admin-plate-ranges", () => ({
-  listPlateDetails: plateMocks.listPlateDetails,
   assignPlateToProcedure: plateMocks.assignPlateToProcedure,
   releaseProcedurePlate: vi.fn(),
+  updateProcedurePlate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/jwt", async (importOriginal) => {
@@ -73,14 +72,14 @@ function renderSection() {
   );
 }
 
-/** Abre el modal y confirma la asignación de la primera placa del rango. */
+/** Abre el modal y confirma la asignación de una placa libre (HU12852 — campo único). */
 async function intentarAsignar(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByText("RAD-2026-777");
   // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
   await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
   await user.click(await screen.findByRole("menuitem", { name: /Asignar placa/i }));
-  const select = await screen.findByLabelText(/Placa del rango/i);
-  await user.selectOptions(select, "ABC105");
+  const input = await screen.findByLabelText("Placa");
+  await user.type(input, "ABC105");
   const confirmar = await screen.findByRole("button", { name: /^Asignar$/i });
   await user.click(confirmar);
 }
@@ -110,17 +109,6 @@ describe("ClientProceduresSection — error al asignar placa", () => {
       deliveredWithoutGrant: 0,
       hasDeliveredWithoutGrant: false,
     });
-    plateMocks.listPlateDetails.mockResolvedValue([
-      {
-        id: "2",
-        plateRangeId: "r",
-        tenantId: "t",
-        transitOfficeId: "o",
-        plate: "ABC105",
-        state: "disponible" as const,
-        procedureInstanceId: null,
-      },
-    ]);
   });
 
   it("muestra el motivo que devuelve el backend cuando la placa ya está asignada", async () => {
@@ -173,25 +161,37 @@ describe("ClientProceduresSection — error al asignar placa", () => {
     expect(screen.queryByText("No se pudo asignar la placa.")).not.toBeInTheDocument();
   });
 
-  it("muestra el motivo de placa fuera de rango ya registrada", async () => {
+  it("muestra el motivo de placa ya registrada", async () => {
     const user = userEvent.setup();
     const motivo =
       "La placa QXU030 ya está registrada para este organismo de tránsito.";
     plateMocks.assignPlateToProcedure.mockRejectedValue(
       new ApiError(409, motivo, { detail: motivo, title: "Conflict" }),
     );
-    plateMocks.listPlateDetails.mockResolvedValue([]);
 
     renderSection();
     await screen.findByText("RAD-2026-777");
     // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
     await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
     await user.click(await screen.findByRole("menuitem", { name: /Asignar placa/i }));
-    const input = await screen.findByLabelText(/Placa fuera de rango/i);
+    const input = await screen.findByLabelText("Placa");
     await user.clear(input);
     await user.type(input, "QXU030");
     await user.click(screen.getByRole("button", { name: /^Asignar$/i }));
 
     expect(await screen.findByText(motivo)).toBeInTheDocument();
+  });
+
+  // HU12852 AC2 — el payload ya no incluye un modo elegido en la UI: assignPlateToProcedure se
+  // llama con (instanceId, plate) y es la función la que fija outOfRange=true de forma implícita.
+  it("HU12852 AC2 — el payload de asignación ya no depende del selector en-rango/fuera-de-rango", async () => {
+    const user = userEvent.setup();
+    plateMocks.assignPlateToProcedure.mockResolvedValue(undefined);
+
+    renderSection();
+    await intentarAsignar(user);
+
+    expect(plateMocks.assignPlateToProcedure).toHaveBeenCalledWith("proc-7", "ABC105");
+    expect(plateMocks.assignPlateToProcedure).toHaveBeenCalledTimes(1);
   });
 });

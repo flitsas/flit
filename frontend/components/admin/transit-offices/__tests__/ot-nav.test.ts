@@ -53,10 +53,15 @@ describe("ot-nav — refactor adminOT", () => {
     expect(tab?.segment).toBe("usuarios");
   });
 
-  it("incluye reportes y labels cortos de Trámites / Preasignación", () => {
+  it("incluye reportes y labels cortos de Trámites", () => {
     expect(OT_HUB_TABS.find((t) => t.id === "client-procedures")?.label).toBe("Trámites");
-    expect(OT_HUB_TABS.find((t) => t.id === "plate-ranges")?.label).toBe("Preasignación");
     expect(OT_HUB_TABS.find((t) => t.id === "reportes")?.label).toBe("Reportes");
+  });
+
+  // HU12850 AC1/AC2 — Preasignación se retiró del hub: ni la pestaña ni la key del dock existen.
+  // `id` se compara como string porque "plate-ranges" ya no es un miembro válido de OtHubTabId.
+  it("HU12850 AC1 — ya no ofrece la pestaña 'plate-ranges' (Preasignación)", () => {
+    expect(OT_HUB_TABS.some((t) => (t.id as string) === "plate-ranges")).toBe(false);
   });
 
   it("otHubModulePath arma la ruta del tab imprint-validation", () => {
@@ -114,8 +119,8 @@ describe("ot-nav — resolución de rutas dock", () => {
   });
 
   it("resolveOtHubHref (Admin OT sin id) usa el perfil", async () => {
-    const href = await resolveOtHubHref("plate-ranges", "/", "ot_admin", async () => "ot-from-profile");
-    expect(href).toBe("/admin/transit-offices/ot-from-profile/plate-ranges");
+    const href = await resolveOtHubHref("documents", "/", "ot_admin", async () => "ot-from-profile");
+    expect(href).toBe("/admin/transit-offices/ot-from-profile/documents");
   });
 });
 

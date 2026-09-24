@@ -169,9 +169,12 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // cliente — un caller podía editar el correo (PII) o gastar reenvíos de OTRA compañía. Mismo bug
         // y mismo fix que ya se aplicó a identity-validation más abajo.
         new("/api/v1/tramites/biometric-validations", RouteMatch.Prefix),
-        // Feature #10587 — placas disponibles para el wizard (Flujo A): el endpoint resuelve el tenant
-        // desde http.Items (que puebla este middleware). Sin esto devolvía 403 al radicador de la compañía
-        // aunque el JWT trae tenant_id (el middleware no lo scopeaba). Se impone el tenant desde el token.
+        // HU #12853 (Feature #12846, Épica #12751) — ambas rutas bajo este prefijo responden 410 Gone
+        // (DeprecatedPlatePreassignEndpoints) y ya NO leen el tenant de http.Items. La entrada se
+        // conserva a propósito: sigue exigiendo autenticación (401) ANTES de llegar al endpoint, mismo
+        // gate que el resto del runtime de trámites — un caller no autenticado no debe distinguir por
+        // el código de estado si la ruta existe o no. Antes (Feature #10587): placas disponibles para
+        // el wizard (Flujo A), retirado por HU #12853.
         new("/api/v1/tramites/plate-preassign", RouteMatch.Prefix),
         // Colas de dead-letter de validación de identidad (stuck/requeue): el tenant se impone desde el
         // JWT igual que el resto del runtime; sin esto el endpoint confiaba en el header crudo del cliente
