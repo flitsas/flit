@@ -64,6 +64,16 @@ public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareR
 
     private static string ResolveForbiddenMessage(AuthorizationPolicy policy)
     {
+        // HU #12859 (Feature #12848, Épica #12751) — document-precedence combina la OtModulePolicy
+        // del grupo con OtAdminOrSuperAdminPolicy propia del endpoint (mismo patrón que
+        // SuperAdminPolicy sobre Reglas/Requisitos, HU #12855). Se prioriza el mensaje de la policy
+        // más específica SOLO cuando está presente; el resto de endpoints (que nunca la agregan)
+        // no cambian de mensaje.
+        if (policy.Requirements.OfType<OtAdminOrSuperAdminRequirement>().Any())
+        {
+            return AdminAuthorization.OtAdminOrSuperAdminForbiddenMessage;
+        }
+
         if (policy.Requirements.OfType<OtModuleRequirement>().Any())
         {
             return AdminAuthorization.OtModuleForbiddenMessage;

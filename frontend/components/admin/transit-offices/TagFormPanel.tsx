@@ -6,7 +6,22 @@ import type { CreateOtDocumentTagRequest, OtDocumentTag } from "@/lib/api/types-
 import { OtSidePanel } from "./OtSidePanel";
 import { OT_INPUT_CLS } from "./ot-form-styles";
 
-const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
+/**
+ * Paleta CERRADA de colores de marca FLIT (HU #12883 AC3/AC1) — reemplaza el `<input
+ * type="color">` de libre elección: un color fuera de la paleta de marca es drift visual y,
+ * además, el hex por defecto (#FF0000) no era un token FLIT. Valores desde
+ * `flit_design_tokens.json` (`color.brand` + `color.annotation.pdf20Ago.amber`).
+ */
+export const TAG_COLOR_OPTIONS: { hex: string; name: string }[] = [
+  { hex: "#557EFF", name: "Azul" },
+  { hex: "#00DBD5", name: "Cian" },
+  { hex: "#8CC63F", name: "Verde" },
+  { hex: "#FF4E00", name: "Naranja" },
+  { hex: "#162744", name: "Navy" },
+  { hex: "#F9AC00", name: "Ámbar" },
+];
+
+const DEFAULT_TAG_COLOR = TAG_COLOR_OPTIONS[0].hex;
 
 export interface TagFormPanelProps {
   open: boolean;
@@ -15,12 +30,11 @@ export interface TagFormPanelProps {
   onSaved: (tag: OtDocumentTag) => void;
 }
 
-/** Formulario crear etiqueta documental (HU #10224 AC4). */
+/** Formulario crear etiqueta documental (HU #10224 AC4; paleta cerrada HU #12883 AC3). */
 export function TagFormPanel({ open, onClose, onCreate, onSaved }: TagFormPanelProps) {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [color, setColor] = useState("#FF0000");
-  const [colorError, setColorError] = useState<string | null>(null);
+  const [color, setColor] = useState(DEFAULT_TAG_COLOR);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -28,16 +42,10 @@ export function TagFormPanel({ open, onClose, onCreate, onSaved }: TagFormPanelP
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de formulario al abrir panel lateral
     setCode("");
     setName("");
-    setColor("#FF0000");
-    setColorError(null);
+    setColor(DEFAULT_TAG_COLOR);
   }, [open]);
 
   const submit = async () => {
-    if (!HEX_RE.test(color)) {
-      setColorError("Color inválido — use formato #RRGGBB");
-      return;
-    }
-    setColorError(null);
     setSubmitting(true);
     try {
       const created = await onCreate({
@@ -80,29 +88,36 @@ export function TagFormPanel({ open, onClose, onCreate, onSaved }: TagFormPanelP
           Nombre
           <input className={`mt-1 ${OT_INPUT_CLS}`} value={name} onChange={(e) => setName(e.target.value)} />
         </label>
-        <label className="block text-xs font-semibold text-foreground">
-          Color
-          <div className="mt-1 flex items-center gap-2">
-            <input
-              type="color"
-              aria-label="Selector de color"
-              value={color}
-              onChange={(e) => setColor(e.target.value.toUpperCase())}
-              className="h-9 w-12 cursor-pointer rounded border"
-            />
-            <input
-              className={OT_INPUT_CLS}
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              aria-invalid={colorError ? true : undefined}
-            />
+        <fieldset>
+          <legend className="text-xs font-semibold text-foreground">Color</legend>
+          <div
+            className="mt-2 flex flex-wrap gap-3"
+            role="radiogroup"
+            aria-label="Color de la etiqueta"
+          >
+            {TAG_COLOR_OPTIONS.map((opt) => (
+              <label
+                key={opt.hex}
+                className="flex cursor-pointer flex-col items-center gap-1 text-xs text-foreground"
+              >
+                <input
+                  type="radio"
+                  name="tag-color"
+                  value={opt.hex}
+                  checked={color === opt.hex}
+                  onChange={() => setColor(opt.hex)}
+                  className="peer sr-only"
+                />
+                <span
+                  aria-hidden="true"
+                  className="h-7 w-7 rounded-full border-2 border-white shadow-sm ring-offset-2 peer-checked:ring-2 peer-checked:ring-[#557EFF] peer-focus-visible:ring-2 peer-focus-visible:ring-[#557EFF] dark:border-[#162744]"
+                  style={{ background: opt.hex }}
+                />
+                {opt.name}
+              </label>
+            ))}
           </div>
-          {colorError && (
-            <p className="mt-1 text-[11px]" style={{ color: "#FF4E00" }} role="alert">
-              {colorError}
-            </p>
-          )}
-        </label>
+        </fieldset>
       </div>
     </OtSidePanel>
   );

@@ -131,6 +131,43 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     },
   );
 
+  // HU12860 AC1/AC2 (Feature #12848) — Documentos queda solo para ot_admin; el Operador OT y
+  // roles OT personalizados dejan de verla, igual que ya ocurre con "Usuarios".
+  it("HU12860 AC1 — un ot_admin sigue viendo 'Documentos' en Administración", async () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
+    );
+
+    renderShell();
+
+    await userEvent.click(screen.getByRole("button", { name: "Administración" }));
+    expect(screen.getByRole("button", { name: "Documentos" })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["gestor_tramites_ot", "Operador OT"],
+    ["otro_rol_ot", "rol OT personalizado"],
+  ])(
+    "HU12860 AC2 — un %s (%s) ya NO ve 'Documentos' en el dock",
+    async (role: string) => {
+      window.localStorage.setItem(
+        TOKEN_STORAGE_KEY,
+        makeToken({ sub: "u1", role, entity_type: "TRANSIT_OFFICE", email: "ot@transito.gov.co" }),
+      );
+
+      renderShell();
+
+      expect(screen.queryByRole("button", { name: "Documentos" })).not.toBeInTheDocument();
+
+      const adminBtn = screen.queryByRole("button", { name: "Administración" });
+      if (adminBtn) {
+        await userEvent.click(adminBtn);
+        expect(screen.queryByRole("button", { name: "Documentos" })).not.toBeInTheDocument();
+      }
+    },
+  );
+
   // HU12850 AC1 — la entrada "Preasignación" se retiró del dock: ni como píldora directa ni
   // dentro de "Administración".
   it("HU12850 AC1 — un Admin OT ya NO ve 'Preasignación' en el dock", async () => {

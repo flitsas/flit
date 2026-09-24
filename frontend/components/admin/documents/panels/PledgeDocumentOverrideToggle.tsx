@@ -93,7 +93,8 @@ export function PledgeDocumentOverrideToggle({ transitOfficeId }: PledgeDocument
       skeletonRows={3}
     >
       <div className="space-y-3" data-testid="ot-prenda-optional-by-company">
-        <p className="text-[11px] opacity-70">
+        {/* HU #12883 AC1 — piso tipográfico: 11px es desviación bloqueante del guardián de diseño. */}
+        <p className="text-xs opacity-70">
           Por defecto el documento de prenda es obligatorio. Activa el check para que deje de
           exigirse en esa compañía.
         </p>

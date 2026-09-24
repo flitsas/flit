@@ -400,42 +400,64 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
+        // HU #12858/#12859 (Feature #12848, Épica #12751): document-precedence resuelve el tenant
+        // objetivo con ResolveOtUserScopeAsync (mismo patrón que Requisitos/Reglas) y exige
+        // OtAdminOrSuperAdminPolicy — SuperAdmin u ot_admin, SIN el bypass de
+        // entity_type=TRANSIT_OFFICE de OtModulePolicy (el resto de roles OT reciben 403: el Admin
+        // OT "solo ordena", ningún otro rol OT conserva ni siquiera eso).
         group.MapGet("/document-precedence", ListDocumentPrecedenceAsync)
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithName("AdminOtListDocumentPrecedence")
-            .WithSummary("Lista prelación documental por tipo de trámite")
+            .WithSummary("Lista prelación documental por tipo de trámite (SuperAdmin u ot_admin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
         group.MapPatch("/document-precedence", UpdateDocumentPrecedenceAsync)
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithName("AdminOtUpdateDocumentPrecedence")
-            .WithSummary("Reordena prelación documental en batch atómico")
+            .WithSummary("Reordena prelación documental en batch atómico (SuperAdmin u ot_admin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
+        // HU #12858/#12859: etiquetas documentales resuelven el tenant objetivo con el mismo
+        // helper y quedan EXCLUSIVAS de SuperAdmin (ni siquiera ot_admin las conserva — a
+        // diferencia de document-precedence).
         group.MapPost("/document-tags", CreateDocumentTagAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtCreateDocumentTag")
-            .WithSummary("Crea una etiqueta documental OT")
+            .WithSummary("Crea una etiqueta documental OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
         group.MapGet("/document-tags", ListDocumentTagsAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtListDocumentTags")
-            .WithSummary("Lista etiquetas documentales del tenant")
+            .WithSummary("Lista etiquetas documentales del tenant (solo SuperAdmin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         group.MapDelete("/document-tags/{id:guid}", DeleteDocumentTagAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtDeleteDocumentTag")
-            .WithSummary("Elimina una etiqueta documental OT")
+            .WithSummary("Elimina una etiqueta documental OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
@@ -2441,14 +2463,19 @@ public static class AdminOtEndpoints
     private static async Task<IResult> ListDocumentPrecedenceAsync(
         HttpContext httpContext,
         ListOtDocumentPrecedenceHandler handler,
+        FlitDbContext db,
         Guid? procedureTypeId,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12858 (Feature #12848, Épica #12751): mismo scoping que Requisitos/Reglas —
+        // SuperAdmin exige ?transitOfficeId (400 si falta, 404 si el OT no tiene tenant); ot_admin
+        // sigue usando su propio tenant del JWT.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         if (procedureTypeId is null || procedureTypeId == Guid.Empty)
@@ -2471,13 +2498,18 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         UpdateOtDocumentPrecedenceRequest request,
         UpdateOtDocumentPrecedenceHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12858: mismo scoping que Requisitos/Reglas. El tenant resuelto es el que se pasa a
+        // UpdateOtDocumentPrecedenceHandler, así que la invalidación de consolidados (HU #12789)
+        // sigue operando sobre el organismo pedido, no sobre el tenant del JWT del SuperAdmin.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new UpdateOtDocumentPrecedenceCommand
@@ -2500,13 +2532,16 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         CreateOtDocumentTagRequest request,
         CreateOtDocumentTagHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12858: mismo scoping que Requisitos/Reglas/Prelación.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new CreateOtDocumentTagCommand
@@ -2529,13 +2564,16 @@ public static class AdminOtEndpoints
     private static async Task<IResult> ListDocumentTagsAsync(
         HttpContext httpContext,
         ListOtDocumentTagsHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12858: mismo scoping que Requisitos/Reglas/Prelación.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(
@@ -2549,13 +2587,16 @@ public static class AdminOtEndpoints
         Guid id,
         HttpContext httpContext,
         DeleteOtDocumentTagHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12858: mismo scoping que Requisitos/Reglas/Prelación.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new DeleteOtDocumentTagCommand

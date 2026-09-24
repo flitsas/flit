@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import { GripVertical } from "lucide-react";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { OtDocumentPrecedenceItem } from "@/lib/api/types-ot";
 
 export interface DocumentPrecedenceListProps {
@@ -33,6 +34,8 @@ export function DocumentPrecedenceList({
   const listId = useId();
   const [order, setOrder] = useState(items);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  // HU #12883 AC2 — fila destino resaltada mientras se arrastra con mouse (dragover).
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [keyboardIndex, setKeyboardIndex] = useState<number | null>(null);
   const [pendingKeyboard, setPendingKeyboard] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -57,6 +60,7 @@ export function DocumentPrecedenceList({
   };
 
   const onDrop = (targetIndex: number) => {
+    setDragOverIndex(null);
     if (dragIndex === null || disabled || saving) return;
     const previous = order;
     const next = reorderList(order, dragIndex, targetIndex);
@@ -109,41 +113,59 @@ export function DocumentPrecedenceList({
       aria-label="Prelación de documentos"
       aria-busy={saving}
     >
-      {order.map((item, index) => (
-        <li
-          key={item.document_type_id}
-          draggable={!disabled && !saving}
-          onDragStart={() => setDragIndex(index)}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={() => onDrop(index)}
-          className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
-          style={{
-            borderColor: keyboardIndex === index ? "#557EFF" : undefined,
-            boxShadow: keyboardIndex === index ? "0 0 0 2px #557EFF33" : undefined,
-          }}
-        >
-          <button
-            type="button"
-            className="cursor-grab rounded p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-            aria-label={`Reordenar ${item.document_name}. Usa flechas arriba o abajo y Enter para confirmar.`}
-            disabled={disabled || saving}
-            onKeyDown={(e) => onKeyDown(e, index)}
+      {order.map((item, index) => {
+        const highlighted = keyboardIndex === index || dragOverIndex === index;
+        return (
+          <li
+            key={item.document_type_id}
+            draggable={!disabled && !saving}
+            onDragStart={() => setDragIndex(index)}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (dragIndex !== null) setDragOverIndex(index);
+            }}
+            onDragLeave={() => setDragOverIndex((cur) => (cur === index ? null : cur))}
+            onDragEnd={() => {
+              setDragIndex(null);
+              setDragOverIndex(null);
+            }}
+            onDrop={() => onDrop(index)}
+            className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
+            style={{
+              borderColor: highlighted ? "#557EFF" : undefined,
+              boxShadow: highlighted ? "0 0 0 2px #557EFF33" : undefined,
+            }}
           >
-            <GripVertical className="h-4 w-4 opacity-50" aria-hidden="true" />
-          </button>
-          <span className="flex-1 text-xs font-semibold text-foreground">
-            {item.document_name}
-          </span>
-          {/* HU #11181 — el organismo necesita distinguir lo que adjunta el gestor de lo que
-              produce FLIT: ambos se reordenan, pero solo los primeros se piden en el checklist. */}
-          {item.is_system_generated && (
-            <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold opacity-70">
-              Generado
+            {/* HU #12883 AC2 — posición a la IZQUIERDA, antes del agarrador. */}
+            <span
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+              style={{ background: "var(--badge-info-bg)", color: "var(--badge-info-fg)" }}
+            >
+              <span className="sr-only">Posición </span>
+              {item.sort_order}
             </span>
-          )}
-          <span className="text-[10px] opacity-60">#{item.sort_order}</span>
-        </li>
-      ))}
+            <button
+              type="button"
+              className="cursor-grab rounded p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+              aria-label={`Reordenar ${item.document_name}. Usa flechas arriba o abajo y Enter para confirmar.`}
+              disabled={disabled || saving}
+              onKeyDown={(e) => onKeyDown(e, index)}
+            >
+              <GripVertical className="h-4 w-4 opacity-50" aria-hidden="true" />
+            </button>
+            <span className="flex-1 text-xs font-semibold text-foreground">
+              {item.document_name}
+            </span>
+            {/* HU #11181 — el organismo necesita distinguir lo que adjunta el gestor de lo que
+                produce FLIT: ambos se reordenan, pero solo los primeros se piden en el checklist.
+                HU #12883 AC2 — badge tintado en ambos casos (antes solo marcaba el generado). */}
+            <StatusBadge
+              label={item.is_system_generated ? "Generado por FLIT" : "Lo adjunta el gestor"}
+              tone={item.is_system_generated ? "info" : "neutral"}
+            />
+          </li>
+        );
+      })}
     </ul>
   );
 }

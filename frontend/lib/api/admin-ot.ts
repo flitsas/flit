@@ -557,33 +557,61 @@ export function updateOtRule(
   });
 }
 
+/**
+ * HU #12861 (Feature #12848) / HU-C1 (backend) — Prelación resuelve el organismo por
+ * `?transitOfficeId` cuando el caller es Super Admin (mismo patrón que Requisitos/Reglas).
+ * `scope` omitido conserva el comportamiento vigente de `ot_admin` (su propio tenant).
+ */
 export function fetchOtDocumentPrecedence(
   procedureTypeId: string,
   signal?: AbortSignal,
+  scope?: OtApiScope,
 ): Promise<OtDocumentPrecedenceListResult> {
   return apiFetch<OtDocumentPrecedenceListResult>(`${base}/document-precedence`, {
-    query: { procedureTypeId },
+    query: {
+      procedureTypeId,
+      ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
+    },
     signal,
   });
 }
 
 export function updateOtDocumentPrecedence(
   body: UpdateOtDocumentPrecedenceRequest,
+  scope?: OtApiScope,
 ): Promise<OtDocumentPrecedenceListResult> {
   return apiFetch<OtDocumentPrecedenceListResult>(`${base}/document-precedence`, {
     method: "PATCH",
     body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
   });
 }
 
-export function fetchOtDocumentTags(signal?: AbortSignal): Promise<OtDocumentTagsListResult> {
-  return apiFetch<OtDocumentTagsListResult>(`${base}/document-tags`, { signal });
+/** HU #12861 (Feature #12848) / HU-C1 (backend) — mismo scope de Super Admin que Prelación. */
+export function fetchOtDocumentTags(
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtDocumentTagsListResult> {
+  return apiFetch<OtDocumentTagsListResult>(`${base}/document-tags`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
 }
 
-export function createOtDocumentTag(body: CreateOtDocumentTagRequest): Promise<OtDocumentTag> {
-  return apiFetch<OtDocumentTag>(`${base}/document-tags`, { method: "POST", body });
+export function createOtDocumentTag(
+  body: CreateOtDocumentTagRequest,
+  scope?: OtApiScope,
+): Promise<OtDocumentTag> {
+  return apiFetch<OtDocumentTag>(`${base}/document-tags`, {
+    method: "POST",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
-export function deleteOtDocumentTag(id: string): Promise<void> {
-  return apiFetch<void>(`${base}/document-tags/${id}`, { method: "DELETE" });
+export function deleteOtDocumentTag(id: string, scope?: OtApiScope): Promise<void> {
+  return apiFetch<void>(`${base}/document-tags/${id}`, {
+    method: "DELETE",
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
