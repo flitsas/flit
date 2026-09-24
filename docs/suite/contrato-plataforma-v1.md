@@ -1,9 +1,8 @@
 # Contrato de plataforma v1 — FLIT Suite
 
-> **Estado: BORRADOR.** Se cierra en la reunión de arranque (semana 1) con la firma de los tres
-> frentes y del líder técnico. Después de cerrado, **cualquier cambio** entra por un PR que toca
-> este archivo y lleva la aprobación de los tres frentes (ver
-> [reglas de trabajo en paralelo](reglas-trabajo-paralelo.md), regla R3).
+> **Estado: CERRADO (v1, 2026-09-24).** Definido sin reunión de arranque. Desde ahora,
+> **cualquier cambio** entra por un PR que toca solo este archivo y lleva la aprobación de los tres
+> frentes (ver [reglas de trabajo en paralelo](reglas-trabajo-paralelo.md), regla R3).
 >
 > Para qué existe: los tres frentes construyen piezas que se consumen entre sí (token, acceso a
 > productos, eventos, paquetes de UI). Este archivo fija las formas **antes** de implementarlas,
@@ -259,4 +258,4 @@ El líder los registra en `docs/despliegue-y-puertos.md` en L-03.
 | Versión | Fecha | Cambio | Aprobado por |
 |---|---|---|---|
 | v1-borrador | 2026-09-24 | Primera propuesta | — |
-| v1-propuesta | 2026-09-24 | Resoluciones y Flotas fuera de v1; SuperAdmin con bypass en todos los productos (§2.1); ubicación de `IProductAccessResolver`; habilitación de producto encendido/apagado en lugar de suscripción (§4, §6, §7, §9, §10); `DomainContext` sin romper constructores; formato de slugs del manifiesto; `SessionUser`; puertos | Pendiente: A, B, C y líder |
+| v1 | 2026-09-24 | Resoluciones y Flotas fuera de v1; SuperAdmin con bypass en todos los productos (§2.1); ubicación de `IProductAccessResolver`; habilitación de producto encendido/apagado en lugar de suscripción (§4, §6, §7, §9, §10); `DomainContext` sin romper constructores; formato de slugs del manifiesto; `SessionUser`; puertos | Cerrado por Samuel Cardenas (en rol de líder técnico) |
