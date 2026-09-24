@@ -62,7 +62,6 @@ import {
   Network,
   Route,
   X,
-  Scale,
   FileText,
   ClipboardList,
   ListChecks,
@@ -72,7 +71,6 @@ import {
   Image as ImageIcon,
   BadgeCheck,
   Timer,
-  Settings,
 } from "lucide-react";
 
 export type ModuleId =
@@ -431,11 +429,15 @@ export function Shell({
     });
   }
 
-  // Usuario OT: pestañas del hub trasladadas al dock (Administración = Reglas/Docs/Requisitos;
+  // Usuario OT: pestañas del hub trasladadas al dock (Administración = Documentos;
   // Trámites, Usuarios y Reportes como ítems del dock). Sin Compañías/RBAC.
   // Todo rol de un tenant OT entra aquí; "Usuarios" queda solo para ot_admin porque su API
   // (UserAdminPolicy) sigue siendo de administradores.
   // HU #12850 (Feature #12846) — Preasignación se retiró: la consola de rangos dejó de existir.
+  // HU #12856 (Feature #12847) — Reglas, Requisitos y Configuración salen del dock para TODO
+  // usuario de un tenant OT (admin u operador): la API ya los restringe a Super Admin (HU-B2) y el
+  // guard de `lib/auth/guard.ts` bloquea también la URL directa. Super Admin los sigue viendo desde
+  // su barra de pestañas del hub (OtHubLayout / OT_HUB_TABS), que no pasa por este bloque.
   if (currentUser?.isOtUser) {
     entries.push(
       {
@@ -446,25 +448,11 @@ export function Shell({
         onClick: () => goOtHub("client-procedures"),
       },
       {
-        key: OT_ADM_DOCK.rules,
-        label: "Reglas",
-        icon: Scale,
-        active: isOtHubSegmentActive(pathname, "rules"),
-        onClick: () => goOtHub("rules"),
-      },
-      {
         key: OT_ADM_DOCK.documents,
         label: "Documentos",
         icon: FileText,
         active: isOtHubSegmentActive(pathname, "documents"),
         onClick: () => goOtHub("documents"),
-      },
-      {
-        key: OT_ADM_DOCK.requirements,
-        label: "Requisitos",
-        icon: ClipboardList,
-        active: isOtHubSegmentActive(pathname, "requirements"),
-        onClick: () => goOtHub("requirements"),
       },
       ...(currentUser.isOtAdmin
         ? [
@@ -497,16 +485,6 @@ export function Shell({
         icon: Fingerprint,
         active: isOtHubSegmentActive(pathname, "imprint-validation"),
         onClick: () => goOtHub("imprint-validation"),
-      },
-      {
-        // Pedido del usuario (2026-09-16) — modo Dashboard/QX, ventana de revocatoria (HU #12569) y
-        // feature flags operativos: sin esta entrada, esos ajustes solo eran alcanzables escribiendo
-        // a mano la URL de una pestaña legacy sin enlace en ningún menú.
-        key: OT_ADM_DOCK.configuracion,
-        label: "Configuración",
-        icon: Settings,
-        active: isOtHubSegmentActive(pathname, "configuracion"),
-        onClick: () => goOtHub("configuracion"),
       },
     );
   }
