@@ -152,6 +152,28 @@ describe("evaluateAdminAccess (AC6)", () => {
     expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
   });
 
+  // Security review (Low) HU12856 — isSuperAdminOnlyOtRoute debe ser insensible a mayúsculas y
+  // robusto ante segmentos percent-encoded: ninguna de estas variantes debe colarse a ot_admin.
+  it.each([
+    ["/admin/transit-offices/abc/Rules", "mayúscula simple"],
+    ["/admin/transit-offices/abc/REQUIREMENTS/", "mayúsculas + slash final"],
+    ["/admin/transit-offices/abc/configuracion", "configuracion (pathname sin query: Next.js le quita el ?x=1 antes de llegar aquí)"],
+    ["/admin/transit-offices/abc/%72ules", "segmento percent-encoded (%72 = 'r')"],
+  ])("deniega a ot_admin en %s (%s)", (pathname: string) => {
+    const decision = evaluateAdminAccess(makeToken({ sub: "u1", role: "ot_admin" }), pathname);
+    expect(decision.allowed).toBe(false);
+    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+  });
+
+  it.each([
+    "/admin/transit-offices/abc/Rules",
+    "/admin/transit-offices/abc/REQUIREMENTS/",
+    "/admin/transit-offices/abc/%72ules",
+  ])("un Super Admin conserva acceso incluso a variantes mayúsculas/percent-encoded: %s", (pathname: string) => {
+    const decision = evaluateAdminAccess(makeToken({ sub: "u1", role: "SuperAdmin" }), pathname);
+    expect(decision.allowed).toBe(true);
+  });
+
   it("HU12856 AC3 — un Super Admin conserva acceso a /rules, /requirements y /configuracion", () => {
     for (const segment of ["rules", "requirements", "configuracion"]) {
       const decision = evaluateAdminAccess(

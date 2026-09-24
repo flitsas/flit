@@ -26,9 +26,23 @@ export type UserRole = "superadmin" | "admincompany" | "ot_admin" | "user";
  */
 const SUPERADMIN_ONLY_OT_SUBROUTES = ["rules", "requirements", "configuracion"] as const;
 
+/**
+ * Decodifica los segmentos percent-encoded de un pathname (p. ej. `%72ules` → `rules`) sin
+ * lanzar ante secuencias inválidas: si `decodeURIComponent` falla, se usa el pathname original
+ * tal cual, de forma que un valor malformado nunca abre una vía de bypass del gate.
+ */
+function safeDecodePathname(pathname: string): string {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
+}
+
 function isSuperAdminOnlyOtRoute(pathname: string): boolean {
+  const normalized = safeDecodePathname(pathname).toLowerCase();
   return SUPERADMIN_ONLY_OT_SUBROUTES.some((segment) =>
-    new RegExp(`^/admin/transit-offices/[^/]+/${segment}(/|$)`).test(pathname),
+    new RegExp(`^/admin/transit-offices/[^/]+/${segment}(/|$)`).test(normalized),
   );
 }
 
