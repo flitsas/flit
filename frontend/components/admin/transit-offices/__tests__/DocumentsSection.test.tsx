@@ -146,8 +146,30 @@ describe("DocumentsSection — HU #11185 (prelación operativa)", () => {
 
     expect(await screen.findByText("Formulario Único de Registro (FUR)")).toBeInTheDocument();
     expect(screen.getByText("SOAT")).toBeInTheDocument();
-    // El FUR lo produce FLIT; el SOAT lo adjunta el gestor.
-    expect(screen.getAllByText("Generado")).toHaveLength(1);
+    // HU #12883 AC2 — badge tintado en ambos casos: el FUR lo produce FLIT, el SOAT lo adjunta
+    // el gestor (antes solo el generado por el sistema llevaba marca).
+    expect(screen.getByText("Generado por FLIT")).toBeInTheDocument();
+    expect(screen.getByText("Lo adjunta el gestor")).toBeInTheDocument();
+  });
+
+  // HU #12883 AC2 — corrección visual: el bloque título+descripción usa el ancho disponible
+  // (flex-1, sin max-w angosto) y el selector "Tipo de trámite" queda con ancho acotado
+  // (como el buscador de Mandatos), no a lo ancho completo — evita el hueco entre ambos.
+  it("AC2 el encabezado balancea título/descripción (flex-1) y selector con ancho acotado", async () => {
+    renderSection();
+
+    const heading = await screen.findByRole("heading", {
+      name: "Orden de documentos del expediente",
+    });
+    const titleBlock = heading.parentElement;
+    expect(titleBlock?.className).toMatch(/flex-1/);
+    expect(titleBlock?.className).not.toMatch(/max-w-/);
+
+    const select = screen.getByRole("combobox", { name: "Tipo de trámite" });
+    const selectLabel = select.parentElement;
+    expect(selectLabel?.className).toMatch(/sm:w-80/);
+    expect(selectLabel?.className).toMatch(/shrink-0/);
+    expect(selectLabel?.className).not.toMatch(/flex-1/);
   });
 
   it("AC3 y AC4 reordenar con teclado guarda y avisa de que aplica en la próxima generación", async () => {
