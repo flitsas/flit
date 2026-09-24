@@ -74,7 +74,9 @@ describe("ot-nav — refactor adminOT", () => {
     expect(otHubModulePath("ot-1", "usuarios")).toBe("/admin/transit-offices/ot-1/usuarios");
   });
 
-  // "Trámites" y "Webhooks" (ids legacy) salieron de la consola: la ruta sigue viva por URL.
+  // "Webhooks" (id legacy) salió de la consola: su ruta sigue viva por URL.
+  // HU12857 AC3 (Feature #12846) — "Trámites" (id legacy de TramitesSuperSection) ya ni siquiera
+  // tiene ruta: se retiró junto con la pantalla (su id salió de OtHubTabId).
   it.each(["tramites", "webhooks"])("no ofrece la pestaña legacy '%s'", (id) => {
     expect(OT_HUB_TABS.some((t) => t.id === id)).toBe(false);
   });

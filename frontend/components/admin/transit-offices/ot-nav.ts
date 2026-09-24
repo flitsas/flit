@@ -2,7 +2,6 @@ import { COPY } from "@/lib/copy/copy-catalog";
 
 /** Rutas del hub consola OT (HU #10236). */
 export type OtHubTabId =
-  | "tramites"
   | "webhooks"
   | "client-procedures"
   | "rules"
@@ -26,9 +25,13 @@ export interface OtHubTab {
  * Admin OT las consume desde el dock (sin barra de pestañas).
  *
  * Labels alineados al dock Admin OT: Trámites (ex "Trámites clientes").
- * "Trámites"/"Webhooks" (ids legacy) siguen fuera de la oferta; rutas por URL siguen vivas.
+ * "Webhooks" (id legacy) sigue fuera de la oferta; su ruta por URL sigue viva.
  * HU #12850 (Feature #12846) — Preasignación se retiró: la consola de rangos ya no existe en
  * backend (HU-A1) y la asignación de placa del trámite siempre reserva fuera de rango.
+ * HU #12857 (Feature #12846) — la ruta legacy `[id]/tramites` (TramitesSuperSection) se retiró:
+ * duplicaba sin enlace de menú lo que ya cubre "Configuración" (modo Dashboard/QX, ventana de
+ * revocatoria, feature flags operativos). El id `tramites` salió de `OtHubTabId`: ya no hay
+ * pantalla que lo resuelva. El id vigente de la bandeja sigue siendo `client-procedures`.
  */
 export const OT_HUB_TABS: OtHubTab[] = [
   { id: "client-procedures", label: COPY.B21Tramites, segment: "client-procedures" },
