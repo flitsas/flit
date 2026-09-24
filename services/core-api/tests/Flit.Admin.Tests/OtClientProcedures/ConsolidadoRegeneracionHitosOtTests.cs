@@ -94,12 +94,17 @@ public sealed class ConsolidadoRegeneracionHitosOtTests
         return (db, procedureId);
     }
 
+    // HU #12849 (Feature #12846, Épica #12751) — AssignPlateAsync ya no llama TryReservePlateAsync
+    // bajo ninguna condición: siempre reserva por ReserveOutOfRangePlateAsync. El stub configura ese
+    // método (antes stubeaba TryReservePlateAsync, que quedó sin llamador en este flujo).
     private static IPlateRangeRepository PlateRepoQueReserva(bool reserva = true)
     {
         var plates = Substitute.For<IPlateRangeRepository>();
-        plates.TryReservePlateAsync(
+        plates.ReserveOutOfRangePlateAsync(
                 Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(reserva);
+            .Returns(reserva
+                ? PlateOpResult.Ok
+                : PlateOpResult.Fail("La placa no está disponible."));
         return plates;
     }
 

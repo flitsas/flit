@@ -128,11 +128,14 @@ public interface IOtClientProcedureRepository
 
     /// <summary>
     /// HU #10654 / #10800 → ADR-0059 — el OT asigna una placa a un trámite en <c>preasignacion</c>:
-    /// reserva la placa (del rango, o FUERA DE RANGO si <paramref name="outOfRange"/> — la registra
-    /// como rango ad-hoc de 1 placa), la escribe en el trámite y lo transiciona a <c>asignado</c>
-    /// (historial + publicación). Si no se puede, el resultado trae la causa concreta en
-    /// <see cref="PlateAssignmentFailure"/> — en particular distingue la placa YA asignada, que es el
-    /// error habitual en operación y antes llegaba al usuario como un mensaje genérico.
+    /// reserva la placa y la escribe en el trámite, que transiciona a <c>asignado</c>
+    /// (historial + publicación). Desde HU #12849 (Feature #12846, Épica #12751) SIEMPRE reserva
+    /// FUERA DE RANGO (registra la placa como rango ad-hoc de 1 placa): <paramref name="outOfRange"/>
+    /// se conserva en la firma solo por compatibilidad y el método lo IGNORA — la consola de rangos se
+    /// retiró y ningún rango configurado antes decide ya la asignación. Si no se puede, el resultado
+    /// trae la causa concreta en <see cref="PlateAssignmentFailure"/> — en particular distingue la
+    /// placa YA asignada, que es el error habitual en operación y antes llegaba al usuario como un
+    /// mensaje genérico.
     /// </summary>
     Task<PlateAssignmentOutcome> AssignPlateAsync(
         Guid otTenantId,
