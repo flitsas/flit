@@ -72,3 +72,16 @@ describe("ConfiguracionEmpresaTab — HU #11686", () => {
     expect(screen.getByLabelText(/avisos al rechazar trámite/i)).toBeInTheDocument();
   });
 });
+
+// HU12851 AC2 — el switch "Preasignación de placa activa" se retiró de Configuración Empresa: ya
+// no hay consola de rangos ni visor de compañía detrás (Feature #12846).
+describe("ConfiguracionEmpresaTab — HU12851", () => {
+  it("AC2: no ofrece el switch 'Preasignación de placa activa'", async () => {
+    await abrirConfiguracionEmpresa();
+
+    expect(
+      screen.queryByRole("switch", { name: /preasignaci[oó]n de placa activa/i }),
+    ).not.toBeInTheDocument();
+    expect(document.getElementById("preasignacionPlacaActiva")).toBeNull();
+  });
+});

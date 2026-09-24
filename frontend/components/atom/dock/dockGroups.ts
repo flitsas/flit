@@ -7,7 +7,6 @@ import {
   Lock,
   Radar,
   FolderCog,
-  Tag,
 } from "lucide-react";
 import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 import { COPY } from "@/lib/copy/copy-catalog";
@@ -16,16 +15,18 @@ import { COPY } from "@/lib/copy/copy-catalog";
  * Agrupadores del dock — orden estable de las píldoras.
  * Trámites e Identidad son grupos de un solo ítem → píldora directa (no submenú).
  * Dashboard no se lista: el FAB central abre Inicio.
- * `administracion` / `preasignacion`: Admin OT (pestañas hub → dock).
+ * `administracion`: Admin OT (pestañas hub → dock).
  * SuperAdmin: Compañías/Tránsito/Documental/Improntas/Quipux/RBAC/Auditoría y el
  * submenú anidado Plataforma (Mandatos, …) viven en `administradores`.
  * `integraciones` = Log QX + ICT (que a su vez anida Log ICT y Reportes ICT).
  * AdminCompany: la píldora "Administración" también cae en `administradores` (ítem único →
  * label del ítem, no del grupo).
+ * HU #12850 (Feature #12846) — el grupo `preasignacion` se retiró: la consola de Preasignación
+ * de rango dejó de existir (backend HU-A1 la deprecia; la asignación de placa del trámite ya
+ * siempre reserva fuera de rango).
  */
 export const DOCK_GROUP_ORDER = [
   "tramites",
-  "preasignacion",
   "identidad",
   "reportes",
   "usuarios",
@@ -41,7 +42,6 @@ export type DockGroupSide = "left" | "right";
 /** Reparto izquierda/derecha del FAB — declarado, no por mitades (HU #12723). */
 export const DOCK_GROUP_SIDE: Record<DockGroupId, DockGroupSide> = {
   tramites: "left",
-  preasignacion: "left",
   identidad: "left",
   reportes: "left",
   usuarios: "right",
@@ -55,7 +55,6 @@ export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
   identidad: COPY.A17,
   reportes: COPY.B21Reportes,
   usuarios: COPY.B21Usuarios,
-  preasignacion: "Preasignación",
   administracion: "Administración",
   administradores: "Administradores",
   integraciones: "Integraciones",
@@ -88,7 +87,6 @@ export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
   identidad: ShieldCheck,
   reportes: BarChart3,
   usuarios: Users,
-  preasignacion: Tag,
   administracion: FolderCog,
   administradores: Lock,
   integraciones: Radar,
@@ -118,16 +116,16 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   // SuperAdmin — Plataforma anidada dentro de Administradores
   "admin-plataforma": "administradores",
   // Admin OT — pestañas hub en el dock
+  // HU #12856 (Feature #12847) — Reglas/Requisitos/Configuración salieron de este mapa: ya no
+  // viven en el dock de ningún usuario de tenant OT (admin u operador), solo en la barra de
+  // pestañas del hub de Super Admin (OtHubLayout, que no consulta este mapa). El grupo
+  // `administracion` sigue vivo porque Documentos, Mandatos y Validar impronta permanecen.
   [OT_ADM_DOCK.tramites]: "tramites",
-  [OT_ADM_DOCK.rules]: "administracion",
   [OT_ADM_DOCK.documents]: "administracion",
-  [OT_ADM_DOCK.requirements]: "administracion",
-  [OT_ADM_DOCK.preasignacion]: "preasignacion",
   [OT_ADM_DOCK.usuarios]: "usuarios",
   [OT_ADM_DOCK.reportes]: "reportes",
   [OT_ADM_DOCK.mandatos]: "administracion",
   [OT_ADM_DOCK.imprintValidation]: "administracion",
-  [OT_ADM_DOCK.configuracion]: "administracion",
   rbac: "administradores",
   auditoria: "administradores",
   "log-qx": "integraciones",

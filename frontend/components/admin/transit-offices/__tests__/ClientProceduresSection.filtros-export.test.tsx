@@ -38,7 +38,6 @@ vi.mock("@/lib/api/tramites-client", () => ({
 }));
 vi.mock("@/lib/api/admin-plate-ranges", () => ({
   assignPlateToProcedure: vi.fn(),
-  listPlateDetails: vi.fn().mockResolvedValue([]),
   releaseProcedurePlate: vi.fn(),
   updateProcedurePlate: vi.fn(),
 }));

@@ -42,7 +42,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         title: "2. Pestaña Trámites (políticas por familia)",
         paragraphs: ["Decide qué puede radicar tu compañía, por familia de tipo de trámite:"],
         bullets: [
-          "MATRÍCULAS (primera matrícula, cancelación y demás): «No permitir trámites de matrículas», «Preasignación de placa activa», «Solo vehículos propios», «Permitir vehículos de categorías misceláneas», «Validar SOAT ante el RUNT al procesar».",
+          "MATRÍCULAS (primera matrícula, cancelación y demás): «No permitir trámites de matrículas», «Solo vehículos propios», «Permitir vehículos de categorías misceláneas», «Validar SOAT ante el RUNT al procesar».",
           "TRASPASO: «No permitir trámites de traspaso» (activo = la compañía no puede crear traspasos).",
           "OTROS (blindaje, duplicados, prendas, cambios de color o carrocería…): «No permitir otros trámites».",
         ],

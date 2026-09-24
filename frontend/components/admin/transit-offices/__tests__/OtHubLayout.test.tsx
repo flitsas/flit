@@ -95,9 +95,19 @@ describe("OtHubLayout — HU #10236", () => {
     );
     expect(screen.getByRole("tab", { name: "Trámites" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Reglas" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Preasignación" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Reportes" })).toBeInTheDocument();
     expect(screen.getByText("Contenido módulo")).toBeInTheDocument();
+  });
+
+  // HU12850 AC1 — Preasignación se retiró de OT_HUB_TABS: la barra de pestañas de SuperAdmin ya
+  // no la ofrece.
+  it("HU12850 AC1 — ya no renderiza la pestaña 'Preasignación'", () => {
+    render(
+      <OtHubLayout transitOfficeId="ot-1" activeTab="client-procedures" moduleTitle="Test OT">
+        <p>Contenido módulo</p>
+      </OtHubLayout>,
+    );
+    expect(screen.queryByRole("tab", { name: "Preasignación" })).not.toBeInTheDocument();
   });
 
   it("Admin OT: no muestra pestañas ni volver al listado (navegación en dock)", () => {

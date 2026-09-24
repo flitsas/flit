@@ -119,18 +119,21 @@ describe("dr-flit-conversation", () => {
     expect(back.historialPlacaHref).toBeNull();
   });
 
+  // HU12851 (Feature #12846) — "preasignacion de placas" dejó de ser un artículo propio del OT (el
+  // módulo se retiró del manual); se prueba con "validar impronta", exclusivo del Organismo de
+  // Tránsito, igual que antes lo era la preasignación.
   it("HU-F — applyUserText en ayuda respeta las audiencias", () => {
     const help = applySelectHelpOption(createInitialState(), "necesito-ayuda")!;
-    const gestor = applyUserText(help, "preasignacion de placas", {
+    const gestor = applyUserText(help, "validar impronta", {
       helpAudiences: ["Todos", "Gestor"],
     });
     expect(gestor.phase).toBe("showing_help");
     expect((gestor.helpResults ?? []).some((h) => h.audience === "Organismo de Tránsito")).toBe(false);
 
-    const ot = applyUserText(help, "preasignacion de placas", {
+    const ot = applyUserText(help, "validar impronta", {
       helpAudiences: ["Todos", "Organismo de Tránsito"],
     });
-    expect((ot.helpResults ?? []).some((h) => h.slug === "2-ot/2-preasignacion")).toBe(true);
+    expect((ot.helpResults ?? []).some((h) => h.slug === "2-ot/11-validar-impronta")).toBe(true);
   });
 
   it("HU-G — applySelectHelpOption con artículo de contexto lo ofrece como primer chip", () => {

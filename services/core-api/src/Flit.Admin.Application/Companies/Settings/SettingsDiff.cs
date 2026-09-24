@@ -27,7 +27,9 @@ internal static class SettingsDiff
         AddBool(changes, "block_procedure_family_traspaso", previous.BlockProcedureFamilyTraspaso, updated.BlockProcedureFamilyTraspaso);
         AddBool(changes, "block_procedure_family_otros", previous.BlockProcedureFamilyOtros, updated.BlockProcedureFamilyOtros);
         AddBool(changes, "signature_vault_enabled", previous.SignatureVaultEnabled, updated.SignatureVaultEnabled);
-        AddBool(changes, "plate_preassign_enabled", previous.PlatePreassignEnabled, updated.PlatePreassignEnabled);
+        // HU #12853 (Feature #12846, Épica #12751) — plate_preassign_enabled dejó de auditarse: el
+        // handler ya ignora el valor entrante (previous == updated siempre), así que esta línea nunca
+        // generaría un cambio real; se retira para que quede explícito que el campo no se rastrea más.
         AddBool(changes, "validate_soat_with_runt", previous.ValidateSoatWithRunt, updated.ValidateSoatWithRunt);
         // HU #11357/#11362 (ADR-0043) — elegibilidad de documentos personalizados, campo propio.
         AddBool(changes, "personalized_documents_enabled", previous.PersonalizedDocumentsEnabled, updated.PersonalizedDocumentsEnabled);

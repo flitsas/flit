@@ -11,8 +11,13 @@ import { RowActions } from "@/components/atom/RowActions";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RuleFormPanel } from "./RuleFormPanel";
 
+export interface RulesSectionProps {
+  /** Oficina OT en scope (SuperAdmin navegando el hub). Mismo patrón que RequirementsSection. */
+  transitOfficeId?: string;
+}
+
 /** Lista y constructor de reglas OT con hot-swap (HU #10223). HU #12731 — DataTable sin columnas de detalle. */
-export function RulesSection() {
+export function RulesSection({ transitOfficeId }: RulesSectionProps = {}) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [rules, setRules] = useState<OtRule[]>([]);
@@ -20,17 +25,21 @@ export function RulesSection() {
   const [editingRule, setEditingRule] = useState<OtRule | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
+  // HU #12854 (backend) / HU #12856 — Reglas resuelve el organismo por ?transitOfficeId cuando
+  // el caller es Super Admin (mismo patrón que RequirementsSection).
+  const scope = transitOfficeId ? { transitOfficeId } : undefined;
+
   const loadRules = useCallback(async (signal?: AbortSignal) => {
     setStatus("loading");
     try {
-      const result = await fetchOtRules(signal);
+      const result = await fetchOtRules(signal, transitOfficeId ? { transitOfficeId } : undefined);
       if (signal?.aborted) return;
       setRules(result.data);
       setStatus(result.data.length === 0 ? "empty" : "ready");
     } catch {
       if (!signal?.aborted) setStatus("error");
     }
-  }, []);
+  }, [transitOfficeId]);
 
   useEffect(() => {
     const c = new AbortController();
@@ -45,7 +54,7 @@ export function RulesSection() {
       prev.map((r) => (r.id === rule.id ? { ...r, isEnabled: next } : r)),
     );
     try {
-      const updated = await updateOtRule(rule.id, { isEnabled: next });
+      const updated = await updateOtRule(rule.id, { isEnabled: next }, scope);
       setRules((prev) => prev.map((r) => (r.id === rule.id ? updated : r)));
     } catch {
       setRules((prev) =>
@@ -172,8 +181,8 @@ export function RulesSection() {
           setFormOpen(false);
           setEditingRule(null);
         }}
-        onCreate={createOtRule}
-        onUpdate={updateOtRule}
+        onCreate={(body) => createOtRule(body, scope)}
+        onUpdate={(id, body) => updateOtRule(id, body, scope)}
         onSaved={(rule) => {
           setRules((prev) => {
             const idx = prev.findIndex((r) => r.id === rule.id);

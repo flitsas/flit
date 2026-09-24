@@ -10,9 +10,14 @@ using Microsoft.Extensions.Logging;
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// Consola OT de preasignación de placa (HU #10651, Feature #10587): el OT asigna/edita rangos a
-/// las compañías con la preasignación activa (grant vigente + allow_plate_preassign), con ventana de
-/// edición de 60 min, y bloquea/revoca placas. Autorización en <c>IsAssignmentAllowedAsync</c>.
+/// HU #12849 (Feature #12846, Épica #12751) — la consola OT de preasignación de placa (HU #10651,
+/// Feature #10587) se retiró: listar/crear/editar rangos, listar placas, compañías elegibles y
+/// bloquear/desbloquear/revocar placa de rango responden 410 Gone
+/// (<see cref="DeprecatedAdminPlateRangesEndpoints"/>). Ningún rango configurado antes decide ya la
+/// asignación de placa de un trámite: <see cref="AssignPlateToProcedureAsync"/> siempre reserva fuera
+/// de rango. Se conservan sin cambios de contrato <c>assign-plate</c>, <c>release-plate</c>,
+/// <c>revoke</c> (alias) y <c>update-plate</c> del trámite: pertenecen al ciclo de vida del trámite en
+/// <c>preasignacion</c>, no a la consola retirada.
 /// </summary>
 public static class AdminPlateRangesEndpoints
 {
@@ -25,18 +30,39 @@ public static class AdminPlateRangesEndpoints
             .RequireAuthorization(AdminAuthorization.OtModulePolicy)
             .WithTags("Admin · Preasignación de placa");
 
-        group.MapGet("/", ListRangesAsync).WithName("AdminPlateListRanges");
-        group.MapGet("/plates", ListPlatesAsync).WithName("AdminPlateListPlates");
-        // HU #10797 — compañías elegibles del OT para el selector de asignación de rango.
-        group.MapGet("/eligible-companies", EligibleCompaniesAsync).WithName("AdminPlateEligibleCompanies");
-        group.MapPost("/", AssignRangeAsync).WithName("AdminPlateAssignRange");
-        group.MapPut("/{rangeId:guid}", EditRangeAsync).WithName("AdminPlateEditRange");
-        group.MapPost("/plates/{plateId:guid}/block", (Guid plateId, HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
-            => SetStateAsync(plateId, PlateState.Bloqueada, repo, ct)).WithName("AdminPlateBlock");
-        group.MapPost("/plates/{plateId:guid}/unblock", (Guid plateId, HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
-            => SetStateAsync(plateId, PlateState.Disponible, repo, ct)).WithName("AdminPlateUnblock");
-        group.MapPost("/plates/{plateId:guid}/revoke", (Guid plateId, HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
-            => SetStateAsync(plateId, PlateState.Revocada, repo, ct)).WithName("AdminPlateRevoke");
+        // HU #12849 — consola de rangos retirada: 410 Gone, nunca 200 ni 404.
+        group.MapGet("/", DeprecatedAdminPlateRangesEndpoints.Gone)
+            .WithName("AdminPlateListRanges")
+            .WithSummary("Retirado (410) — la consola de Preasignación de rango se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
+        group.MapGet("/plates", DeprecatedAdminPlateRangesEndpoints.Gone)
+            .WithName("AdminPlateListPlates")
+            .WithSummary("Retirado (410) — la consola de Preasignación de rango se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
+        group.MapGet("/eligible-companies", DeprecatedAdminPlateRangesEndpoints.Gone)
+            .WithName("AdminPlateEligibleCompanies")
+            .WithSummary("Retirado (410) — la consola de Preasignación de rango se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
+        group.MapPost("/", DeprecatedAdminPlateRangesEndpoints.Gone)
+            .WithName("AdminPlateAssignRange")
+            .WithSummary("Retirado (410) — la consola de Preasignación de rango se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
+        group.MapPut("/{rangeId:guid}", DeprecatedAdminPlateRangesEndpoints.Gone)
+            .WithName("AdminPlateEditRange")
+            .WithSummary("Retirado (410) — la consola de Preasignación de rango se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
+        group.MapPost("/plates/{plateId:guid}/block", DeprecatedAdminPlateRangesEndpoints.Gone)
+            .WithName("AdminPlateBlock")
+            .WithSummary("Retirado (410) — la consola de Preasignación de rango se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
+        group.MapPost("/plates/{plateId:guid}/unblock", DeprecatedAdminPlateRangesEndpoints.Gone)
+            .WithName("AdminPlateUnblock")
+            .WithSummary("Retirado (410) — la consola de Preasignación de rango se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
+        group.MapPost("/plates/{plateId:guid}/revoke", DeprecatedAdminPlateRangesEndpoints.Gone)
+            .WithName("AdminPlateRevoke")
+            .WithSummary("Retirado (410) — la consola de Preasignación de rango se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
 
         // HU #10654 / ADR-0059 — el OT asigna una placa a un trámite en preasignacion.
         group.MapPost("/procedures/{instanceId:guid}/assign-plate", AssignPlateToProcedureAsync)
@@ -92,8 +118,9 @@ public static class AdminPlateRangesEndpoints
             return Results.Problem(statusCode: 422, title: "Unprocessable", detail: "La placa es obligatoria.");
         }
 
-        // HU #10800 — placa fuera de rango: validar el formato antes de intentar registrarla (AC6).
-        if (request.OutOfRange && !PlateRangeRules.IsValidPlate(request.Plate.Trim().ToUpperInvariant()))
+        // HU #10800 / HU #12849 — la asignación siempre reserva fuera de rango: el formato se valida
+        // sin condicionarlo a request.OutOfRange, que el backend ya ignora (AC1 HU #12849).
+        if (!PlateRangeRules.IsValidPlate(request.Plate.Trim().ToUpperInvariant()))
         {
             return Results.Problem(statusCode: 422, title: "Unprocessable",
                 detail: "La placa debe tener el formato de matrícula (3 letras + 3 dígitos, ej. ABC123).");
@@ -102,6 +129,9 @@ public static class AdminPlateRangesEndpoints
         PlateAssignmentOutcome outcome;
         try
         {
+            // HU #12849 (AC1) — el flag OutOfRange recibido se ignora a propósito: la consola de rangos
+            // se retiró y toda asignación reserva fuera de rango. Se sigue enviando por compatibilidad
+            // de firma con AssignPlateAsync, que ya no lo usa.
             outcome = await otRepo.AssignPlateAsync(
                 otTenantId, instanceId, request.Plate, ResolveUserId(http.User), "ot_console", request.OutOfRange, ct)
                 .ConfigureAwait(false);
@@ -324,128 +354,6 @@ public static class AdminPlateRangesEndpoints
         return Results.Ok(outcome.Procedure);
     }
 
-    private static async Task<IResult> ListRangesAsync(
-        Guid companyTenantId, HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
-    {
-        if (!TryResolveOfficeAsync(http, repo, ct, out var officeTask, out var err))
-        {
-            return err!;
-        }
-
-        var officeId = await officeTask!.ConfigureAwait(false);
-        var ranges = await repo.ListRangesAsync(companyTenantId, officeId, ct).ConfigureAwait(false);
-        return Results.Ok(ranges);
-    }
-
-    private static async Task<IResult> ListPlatesAsync(
-        Guid companyTenantId, string? state, HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
-    {
-        if (state is not null && !PlateState.EsValido(state))
-        {
-            return Results.BadRequest(new { error = "Estado de placa inválido." });
-        }
-
-        if (!TryResolveOfficeAsync(http, repo, ct, out var officeTask, out var err))
-        {
-            return err!;
-        }
-
-        var officeId = await officeTask!.ConfigureAwait(false);
-        var plates = await repo.ListDetailsAsync(companyTenantId, officeId, state, ct).ConfigureAwait(false);
-        return Results.Ok(plates);
-    }
-
-    // HU #10797 — lista las compañías elegibles del OT (preasignación activa + grant vigente) para el
-    // selector de la consola, en vez de que el OT escriba el tenant id manualmente.
-    private static async Task<IResult> EligibleCompaniesAsync(
-        HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
-    {
-        var explicitOffice = http.Request.Query.TryGetValue("transitOfficeId", out var raw)
-            && Guid.TryParse(raw, out var oid) ? (Guid?)oid : null;
-
-        var officeId = await ResolveOfficeIdAsync(http, explicitOffice, repo, ct).ConfigureAwait(false);
-        if (officeId is null)
-        {
-            return Results.BadRequest(new { error = "No se pudo resolver el organismo de tránsito." });
-        }
-
-        var companies = await repo.ListEligibleCompaniesAsync(officeId.Value, ct).ConfigureAwait(false);
-        return Results.Ok(companies);
-    }
-
-    private static async Task<IResult> AssignRangeAsync(
-        AssignPlateRangeRequest request, HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
-    {
-        var officeId = await ResolveOfficeIdAsync(http, request.TransitOfficeId, repo, ct).ConfigureAwait(false);
-        if (officeId is null)
-        {
-            return Results.BadRequest(new { error = "No se pudo resolver el organismo de tránsito." });
-        }
-
-        if (!await repo.IsAssignmentAllowedAsync(request.CompanyTenantId, officeId.Value, ct).ConfigureAwait(false))
-        {
-            return Results.Problem(statusCode: 403, title: "Forbidden",
-                detail: "La preasignación no está habilitada entre la compañía y el OT (flag, grant o allow_plate_preassign).");
-        }
-
-        var result = await repo.CreateRangeAsync(
-            request.CompanyTenantId, officeId.Value, request.Prefix, request.RangeFrom, request.RangeTo,
-            ResolveUserId(http.User), ct).ConfigureAwait(false);
-
-        return result.Success
-            ? Results.Ok(new { rangeId = result.RangeId, platesCreated = result.PlatesCreated })
-            : Results.Problem(statusCode: 422, title: "Unprocessable", detail: result.Error);
-    }
-
-    private static async Task<IResult> EditRangeAsync(
-        Guid rangeId, EditPlateRangeRequest request, HttpContext http, IPlateRangeRepository repo, CancellationToken ct)
-    {
-        var result = await repo.EditRangeAsync(
-            rangeId, request.Prefix, request.RangeFrom, request.RangeTo, ResolveUserId(http.User), ct)
-            .ConfigureAwait(false);
-
-        return result.Success
-            ? Results.Ok(new { rangeId = result.RangeId, platesCreated = result.PlatesCreated })
-            : Results.Problem(statusCode: 422, title: "Unprocessable", detail: result.Error);
-    }
-
-    private static async Task<IResult> SetStateAsync(
-        Guid plateId, string targetState, IPlateRangeRepository repo, CancellationToken ct)
-    {
-        var result = await repo.SetPlateStateAsync(plateId, targetState, ct).ConfigureAwait(false);
-        return result.Success
-            ? Results.Ok()
-            : Results.Problem(statusCode: 422, title: "Unprocessable", detail: result.Error);
-    }
-
-    private static bool TryResolveOfficeAsync(
-        HttpContext http, IPlateRangeRepository repo, CancellationToken ct,
-        out Task<Guid?>? officeTask, out IResult? error)
-    {
-        officeTask = null;
-        error = null;
-
-        var superAdminOffice = http.Request.Query.TryGetValue("transitOfficeId", out var raw)
-            && Guid.TryParse(raw, out var oid) ? (Guid?)oid : null;
-
-        officeTask = ResolveOfficeIdAsync(http, superAdminOffice, repo, ct);
-        return true;
-    }
-
-    private static async Task<Guid?> ResolveOfficeIdAsync(
-        HttpContext http, Guid? explicitOfficeId, IPlateRangeRepository repo, CancellationToken ct)
-    {
-        var isSuperAdmin = http.User.IsInRole(AdminAuthorization.SuperAdminRole);
-        if (isSuperAdmin && explicitOfficeId is { } explicitId && explicitId != Guid.Empty)
-        {
-            return explicitId;
-        }
-
-        return RequestTenantResolver.TryResolveTenantId(http.User, out var otTenantId)
-            ? await repo.ResolveOfficeIdAsync(otTenantId, ct).ConfigureAwait(false)
-            : null;
-    }
-
     private static Guid? ResolveUserId(ClaimsPrincipal user)
     {
         var sub = user.FindFirstValue("sub");
@@ -453,19 +361,9 @@ public static class AdminPlateRangesEndpoints
     }
 }
 
-/// <summary>Payload para asignar un rango a una compañía (consola OT).</summary>
-public sealed record AssignPlateRangeRequest(
-    Guid CompanyTenantId,
-    string Prefix,
-    int RangeFrom,
-    int RangeTo,
-    Guid? TransitOfficeId = null);
-
-/// <summary>Payload para editar un rango (dentro de la ventana de 60 min).</summary>
-public sealed record EditPlateRangeRequest(string Prefix, int RangeFrom, int RangeTo);
-
 /// <summary>Payload para asignar una placa a un trámite en preasignado (Flujo B). <c>OutOfRange</c> (HU #10800)
-/// registra una placa que no pertenece a ningún rango como rango ad-hoc de 1 placa.</summary>
+/// se conserva en el contrato mientras existan clientes que aún lo envíen, pero el backend lo IGNORA
+/// desde HU #12849 (Feature #12846, Épica #12751): la asignación siempre reserva fuera de rango.</summary>
 public sealed record AssignPlateToProcedureRequest(string Plate, bool OutOfRange = false);
 
 /// <summary>Payload para revocar la preasignación de un trámite.</summary>

@@ -83,29 +83,41 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // HU #12854/#12855 (Feature #12847, Épica #12751): PATCH /profile resuelve el tenant
+        // objetivo con ResolveOtUserScopeAsync (SuperAdmin exige ?transitOfficeId, 400/404 igual
+        // que Requisitos) y exige SuperAdminPolicy — GET /profile (arriba) NO cambia: lo siguen
+        // usando Shell.goOtHub/OtHubLayout para resolver el organismo antes de saber el rol.
         // RNF01/RF05 (ADR-0024): audita como failure los intentos fallidos de escribir el
         // perfil OT (p. ej. campos oficiales RUNT o modo inválido) en scope independiente.
         group.MapPatch("/profile", UpdateProfileAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .AddEndpointFilter(new ConfigAuditFailureFilter("transit_office_profile", "update"))
             .WithName("AdminOtUpdateProfile")
-            .WithSummary("Actualiza el perfil OT del tenant autenticado")
+            .WithSummary("Actualiza el perfil OT del tenant autenticado (solo SuperAdmin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
+        // HU #12854/#12855: mismo scoping + SuperAdminPolicy que PATCH /profile.
         group.MapPatch("/feature-flags/{id:guid}", UpdateFeatureFlagAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .AddEndpointFilter(new ConfigAuditFailureFilter("ot_feature_flags", "update"))
             .WithName("AdminOtUpdateFeatureFlag")
-            .WithSummary("Activa o desactiva un feature flag OT")
+            .WithSummary("Activa o desactiva un feature flag OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        // HU #12855: Requisitos ya resolvía el scope (HU #10546); ahora además exige SuperAdminPolicy.
         group.MapGet("/requirements", GetRequirementsAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtGetRequirements")
-            .WithSummary("Obtiene los requisitos configurables del OT (RNMC, ruta de placa, identidad)")
+            .WithSummary("Obtiene los requisitos configurables del OT (RNMC, ruta de placa, identidad) — solo SuperAdmin")
             .Produces(StatusCodes.Status200OK)
             // SuperAdmin debe indicar transitOfficeId (400) y ese organismo debe tener tenant OT (404).
             .Produces(StatusCodes.Status400BadRequest)
@@ -114,9 +126,10 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound);
 
         group.MapPut("/requirements", UpdateRequirementsAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .AddEndpointFilter(new ConfigAuditFailureFilter("ot_requirements", "update"))
             .WithName("AdminOtUpdateRequirements")
-            .WithSummary("Configura los requisitos del OT (auditado por trigger de BD)")
+            .WithSummary("Configura los requisitos del OT (auditado por trigger de BD) — solo SuperAdmin")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -353,25 +366,35 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status409Conflict)
             .DisableAntiforgery();
 
+        // HU #12854/#12855 (Feature #12847, Épica #12751): Reglas resuelve el tenant objetivo con
+        // ResolveOtUserScopeAsync (mismo patrón que Requisitos) y exige SuperAdminPolicy.
         group.MapPost("/rules", CreateRuleAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtCreateRule")
-            .WithSummary("Crea una regla OT con condiciones AND/OR")
+            .WithSummary("Crea una regla OT con condiciones AND/OR (solo SuperAdmin)")
             .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
         group.MapGet("/rules", ListRulesAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtListRules")
-            .WithSummary("Lista reglas OT del tenant")
+            .WithSummary("Lista reglas OT del tenant (solo SuperAdmin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         group.MapPatch("/rules/{id:guid}", UpdateRuleAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtUpdateRule")
-            .WithSummary("Activa o desactiva una regla OT (hot-swap)")
+            .WithSummary("Activa o desactiva una regla OT (hot-swap, solo SuperAdmin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
@@ -625,13 +648,18 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         UpdateOtProfileRequest request,
         UpdateOtProfileHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12854 (Feature #12847, Épica #12751): mismo scoping que Requisitos —
+        // SuperAdmin exige ?transitOfficeId (400 si falta, 404 si el OT no tiene tenant);
+        // ot_admin sigue usando su propio tenant del JWT.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new UpdateOtProfileCommand
@@ -734,13 +762,16 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         UpdateOtFeatureFlagRequest request,
         UpdateOtFeatureFlagHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12854 (Feature #12847, Épica #12751): mismo scoping que Requisitos/Perfil.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new UpdateOtFeatureFlagCommand
@@ -2321,13 +2352,17 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         CreateOtRuleRequest request,
         CreateOtRuleHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12854 (Feature #12847, Épica #12751): mismo scoping que Requisitos — SuperAdmin
+        // resuelve el tenant del organismo pedido, no el de su propio JWT.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new CreateOtRuleCommand
@@ -2349,13 +2384,16 @@ public static class AdminOtEndpoints
     private static async Task<IResult> ListRulesAsync(
         HttpContext httpContext,
         ListOtRulesHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12854 (Feature #12847, Épica #12751): mismo scoping que Requisitos.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(
@@ -2370,13 +2408,16 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         UpdateOtRuleRequest request,
         UpdateOtRuleHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12854 (Feature #12847, Épica #12751): mismo scoping que Requisitos.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new UpdateOtRuleCommand
@@ -3215,8 +3256,15 @@ public static class AdminOtEndpoints
     /// SuperAdmin debe indicar <paramref name="transitOfficeId"/> (oficina del catálogo)
     /// y se resuelve el tenant OT que la tiene vinculada vía
     /// <c>admin.transit_office_profiles</c>.
+    ///
+    /// <c>internal</c> (no <c>private</c>) para que
+    /// <see cref="Flit.Admin.Tests.OtProfile.AdminOtUserScopeResolutionTests"/> lo invoque
+    /// DIRECTO, sin reflexión (<c>InternalsVisibleTo Flit.Admin.Tests</c> en Flit.Api.csproj) —
+    /// mismo patrón que <c>FlitPdfStamper.ComputeStampGeometry</c>: aislar el helper de scoping
+    /// que HU #12854 puso a compartir Reglas/Perfil/Feature Flags con Requisitos, sin exponerlo
+    /// como API pública del endpoint.
     /// </summary>
-    private static async Task<(Guid TenantId, IResult? Error)> ResolveOtUserScopeAsync(
+    internal static async Task<(Guid TenantId, IResult? Error)> ResolveOtUserScopeAsync(
         ClaimsPrincipal user,
         Guid? transitOfficeId,
         FlitDbContext db,

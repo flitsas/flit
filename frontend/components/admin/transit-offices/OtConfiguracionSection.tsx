@@ -6,11 +6,37 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { useToast } from "@/components/admin/Toast";
 import { fetchOtProfile, updateOtFeatureFlag, updateOtProfile } from "@/lib/api/admin-ot";
 import type { OtFeatureFlag, OtProfile } from "@/lib/api/types-ot";
-import { parseRevocationWindowInput } from "./TramitesSuperSection";
 import { OT_FILTER_LABEL_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 
 export interface OtConfiguracionSectionProps {
   transitOfficeId: string;
+}
+
+type RevocationWindowParseResult =
+  | { ok: true; value: number | null }
+  | { ok: false; message: string };
+
+/**
+ * HU #12569 — valida el campo "Ventana de revocatoria (días hábiles)" en cliente antes de llamar
+ * al backend. Vacío es válido y significa "sin límite" (`null`), nunca 0 ni "no tocado". Cualquier
+ * otro valor debe ser un entero positivo (negativos y no numéricos bloquean el guardado).
+ *
+ * HU #12857 (Feature #12847) — movida aquí desde `TramitesSuperSection` (retirada): esta era su
+ * única consumidora tras la extracción de HU #12569, y la ruta legacy `[id]/tramites` ya no existe.
+ */
+export function parseRevocationWindowInput(raw: string): RevocationWindowParseResult {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return { ok: true, value: null };
+  }
+  if (!/^-?\d+$/.test(trimmed)) {
+    return { ok: false, message: "Ingresa un número entero de días hábiles, o déjalo vacío." };
+  }
+  const value = Number(trimmed);
+  if (value <= 0) {
+    return { ok: false, message: "La ventana debe ser mayor a 0 días hábiles, o déjala vacía." };
+  }
+  return { ok: true, value };
 }
 
 /**
@@ -26,9 +52,9 @@ export interface OtConfiguracionSectionProps {
  * pantalla, que el "Trámites" moderno del dock —`client-procedures`— ya reemplazó) para darle un
  * punto de entrada real, sin arrastrar la lista redundante.</p>
  *
- * <p>Reusa `parseRevocationWindowInput` de `TramitesSuperSection` en vez de duplicar la validación:
- * es la misma regla de negocio (HU #12569 AC1-AC3), y una segunda copia se habría desincronizado el
- * día que alguien ajustara una sin acordarse de la otra.</p>
+ * <p>`parseRevocationWindowInput` vive en este archivo (movida desde `TramitesSuperSection`,
+ * retirada en HU #12857): es la misma regla de negocio (HU #12569 AC1-AC3) y este componente es su
+ * única consumidora, así que no tiene sentido duplicarla en otro lado.</p>
  */
 export function OtConfiguracionSection({ transitOfficeId }: OtConfiguracionSectionProps) {
   const { show } = useToast();
@@ -74,7 +100,7 @@ export function OtConfiguracionSection({ transitOfficeId }: OtConfiguracionSecti
     const nextMode = checked ? "quipux" : "dashboard";
     setSwitchingMode(true);
     try {
-      const updated = await updateOtProfile({ operationMode: nextMode });
+      const updated = await updateOtProfile({ operationMode: nextMode }, { transitOfficeId });
       setProfile(updated);
       show(
         nextMode === "quipux"
@@ -99,7 +125,10 @@ export function OtConfiguracionSection({ transitOfficeId }: OtConfiguracionSecti
     setRevocationWindowError(null);
     setSavingRevocationWindow(true);
     try {
-      const updated = await updateOtProfile({ revocationWindowBusinessDays: parsed.value });
+      const updated = await updateOtProfile(
+        { revocationWindowBusinessDays: parsed.value },
+        { transitOfficeId },
+      );
       setProfile(updated);
       setRevocationWindowInput(
         updated.revocationWindowBusinessDays != null
@@ -128,7 +157,7 @@ export function OtConfiguracionSection({ transitOfficeId }: OtConfiguracionSecti
       featureFlags: profile.featureFlags.map((f) => (f.id === flag.id ? { ...f, isEnabled: checked } : f)),
     });
     try {
-      const updated = await updateOtFeatureFlag(flag.id, { isEnabled: checked });
+      const updated = await updateOtFeatureFlag(flag.id, { isEnabled: checked }, { transitOfficeId });
       setProfile((current) =>
         current
           ? { ...current, featureFlags: current.featureFlags.map((f) => (f.id === updated.id ? updated : f)) }
