@@ -351,6 +351,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
           <div
             ref={deleteDialogRef}
             role="alertdialog"
+            aria-modal="true"
             aria-labelledby="delete-tag-title"
             aria-describedby="delete-tag-desc"
             className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border bg-card p-6 shadow-xl"

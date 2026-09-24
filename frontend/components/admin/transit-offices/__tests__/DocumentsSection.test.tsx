@@ -1,6 +1,6 @@
 // HU #10224 — Prelación documental DnD y CRUD etiquetas.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { DocumentsSection } from "../DocumentsSection";
@@ -385,5 +385,52 @@ describe("DocumentsSection — HU12861 scope enviado", () => {
     await waitFor(() =>
       expect(deleteOtDocumentTag).toHaveBeenCalledWith("tag-1", { transitOfficeId: OT_ID }),
     );
+  });
+});
+
+// HU #12883 — cierra los huecos que dejó el code review: la tabla de etiquetas y el diálogo
+// de eliminar no tenían aserción propia (el diálogo había salido sin aria-modal).
+describe("DocumentsSection — HU12883 AC1/AC3 (tabla de etiquetas y diálogo de eliminar)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    jwtMocks.isSuperAdmin.mockReturnValue(true);
+    vi.mocked(fetchOtDocumentPrecedence).mockResolvedValue({
+      data: [{ document_type_id: "doc-1", document_name: "SOAT", sort_order: 1 }],
+    });
+    vi.mocked(fetchOtDocumentTags).mockResolvedValue({
+      data: [{ id: "tag-1", code: "URGENTE", name: "Urgente", color: "#557EFF" }],
+    });
+  });
+
+  async function openTags() {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("SOAT");
+    await user.click(screen.getByRole("tab", { name: "Etiquetas" }));
+    await screen.findByText("Urgente");
+    return user;
+  }
+
+  it("HU12883 AC3 lista las etiquetas en una tabla con cabeceras Etiqueta, Color y Acción", async () => {
+    await openTags();
+    const table = screen.getByRole("table");
+    for (const header of [/Etiqueta/i, /Color/i, /Acci[oó]n/i]) {
+      expect(within(table).getByRole("columnheader", { name: header })).toBeInTheDocument();
+    }
+    expect(within(table).getByRole("cell", { name: /Urgente/ })).toBeInTheDocument();
+  });
+
+  it("HU12883 AC1 el diálogo de eliminar es modal y Escape lo cierra sin borrar y devuelve el foco", async () => {
+    const user = await openTags();
+    const trigger = screen.getByRole("button", { name: "Eliminar etiqueta Urgente" });
+    await user.click(trigger);
+
+    const dialog = await screen.findByRole("alertdialog", { name: "Eliminar etiqueta" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(deleteOtDocumentTag).not.toHaveBeenCalled();
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 });
