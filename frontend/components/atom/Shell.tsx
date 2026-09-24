@@ -431,13 +431,16 @@ export function Shell({
 
   // Usuario OT: pestañas del hub trasladadas al dock (Administración = Documentos;
   // Trámites, Usuarios y Reportes como ítems del dock). Sin Compañías/RBAC.
-  // Todo rol de un tenant OT entra aquí; "Usuarios" queda solo para ot_admin porque su API
-  // (UserAdminPolicy) sigue siendo de administradores.
+  // Todo rol de un tenant OT entra aquí; "Usuarios" y "Documentos" quedan solo para ot_admin
+  // porque su API sigue siendo de administradores (UserAdminPolicy / OtAdminOrSuperAdminPolicy).
   // HU #12850 (Feature #12846) — Preasignación se retiró: la consola de rangos dejó de existir.
   // HU #12856 (Feature #12847) — Reglas, Requisitos y Configuración salen del dock para TODO
   // usuario de un tenant OT (admin u operador): la API ya los restringe a Super Admin (HU-B2) y el
   // guard de `lib/auth/guard.ts` bloquea también la URL directa. Super Admin los sigue viendo desde
   // su barra de pestañas del hub (OtHubLayout / OT_HUB_TABS), que no pasa por este bloque.
+  // HU #12860 (Feature #12848) — Documentos se restringe a ot_admin, mismo patrón que Usuarios: el
+  // Operador OT (`gestor_tramites_ot`) y roles OT personalizados dejan de verla (la API ya exige
+  // rol SuperAdmin u ot_admin, HU-C2 backend, y el guard bloquea también la URL directa).
   if (currentUser?.isOtUser) {
     entries.push(
       {
@@ -447,15 +450,15 @@ export function Shell({
         active: isOtHubSegmentActive(pathname, "client-procedures"),
         onClick: () => goOtHub("client-procedures"),
       },
-      {
-        key: OT_ADM_DOCK.documents,
-        label: "Documentos",
-        icon: FileText,
-        active: isOtHubSegmentActive(pathname, "documents"),
-        onClick: () => goOtHub("documents"),
-      },
       ...(currentUser.isOtAdmin
         ? [
+            {
+              key: OT_ADM_DOCK.documents,
+              label: "Documentos",
+              icon: FileText,
+              active: isOtHubSegmentActive(pathname, "documents"),
+              onClick: () => goOtHub("documents"),
+            },
             {
               key: OT_ADM_DOCK.usuarios,
               label: COPY.B21Usuarios,

@@ -184,12 +184,68 @@ describe("evaluateAdminAccess (AC6)", () => {
     }
   });
 
-  it("HU12856 — un ot_admin conserva acceso al resto de /admin/transit-offices/* (client-procedures, documents…)", () => {
+  it("HU12856 — un ot_admin conserva acceso al resto de /admin/transit-offices/* (client-procedures)", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "ot_admin" }),
+      "/admin/transit-offices/abc/client-procedures",
+    );
+    expect(decision.allowed).toBe(true);
+  });
+
+  // HU12860 AC (Feature #12848) — Documentos queda exclusivo de ot_admin y Super Admin también
+  // en la capa de UI (bloqueo en dos capas: la API ya exige la policy OtAdminOrSuperAdmin).
+  it("HU12860 — un ot_admin conserva acceso a /admin/transit-offices/{id}/documents", () => {
     const decision = evaluateAdminAccess(
       makeToken({ sub: "u1", role: "ot_admin" }),
       "/admin/transit-offices/abc/documents",
     );
     expect(decision.allowed).toBe(true);
+  });
+
+  it("HU12860 — un Super Admin conserva acceso a /admin/transit-offices/{id}/documents", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "SuperAdmin" }),
+      "/admin/transit-offices/abc/documents",
+    );
+    expect(decision.allowed).toBe(true);
+  });
+
+  it.each([
+    ["gestor_tramites_ot", "Operador OT"],
+    ["otro_rol_ot", "rol OT personalizado"],
+  ])(
+    "HU12860 — deniega a %s (%s) en /admin/transit-offices/{id}/documents",
+    (role: string) => {
+      const decision = evaluateAdminAccess(
+        makeToken({ sub: "u1", role, entity_type: "TRANSIT_OFFICE" }),
+        "/admin/transit-offices/abc/documents",
+      );
+      expect(decision.allowed).toBe(false);
+      expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    },
+  );
+
+  it("HU12860 — un Operador OT conserva acceso al resto de /admin/transit-offices/* (client-procedures)", () => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "gestor_tramites_ot", entity_type: "TRANSIT_OFFICE" }),
+      "/admin/transit-offices/abc/client-procedures",
+    );
+    expect(decision.allowed).toBe(true);
+  });
+
+  // Security review (Low) HU12856 — mismo blindaje case-insensitive/percent-encoding para el
+  // segmento nuevo (HU12860): ninguna variante debe colarse a un rol OT distinto de ot_admin.
+  it.each([
+    ["/admin/transit-offices/abc/Documents", "mayúscula simple"],
+    ["/admin/transit-offices/abc/DOCUMENTS/", "mayúsculas + slash final"],
+    ["/admin/transit-offices/abc/%64ocuments", "segmento percent-encoded (%64 = 'd')"],
+  ])("HU12860 — deniega a un Operador OT en %s (%s)", (pathname: string) => {
+    const decision = evaluateAdminAccess(
+      makeToken({ sub: "u1", role: "gestor_tramites_ot", entity_type: "TRANSIT_OFFICE" }),
+      pathname,
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
   });
 
   it("permite el acceso de SuperAdmin a /admin/improntas (HU #10469 AC1)", () => {
