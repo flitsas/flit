@@ -265,8 +265,13 @@ public sealed class PlatePreassignTests
         (await repo2.SetPlateStateAsync(plateId, PlateState.Utilizada, TestContext.Current.CancellationToken)).Success.Should().BeFalse();
     }
 
+    // HU12853_AC3 (Feature #12846, Épica #12751) — IsAssignmentAllowedAsync se retiró de la interfaz
+    // (se quedó sin llamador al apagarse /plate-preassign/status): se prueba el equivalente que
+    // sobrevive, EvaluateAssignmentEligibilityAsync == Allowed, sin cambiar el AND de tres flags que
+    // valida (flag de compañía + grant vigente + allow_plate_preassign del OT). El histórico
+    // persistido (columnas plate_preassign_enabled / allow_plate_preassign) no se toca por esta HU.
     [Fact]
-    public async Task IsAssignmentAllowed_ExigeFlagGrantYAllow()
+    public async Task HU12853_AC3_EvaluateAssignmentEligibility_ExigeFlagGrantYAllow()
     {
         var db = NewDbName();
         var company = Guid.NewGuid();
@@ -292,9 +297,11 @@ public sealed class PlatePreassignTests
 
         await using var ctx = NewContext(db);
         var repo = new PlateRangeRepository(ctx);
-        (await repo.IsAssignmentAllowedAsync(company, office, TestContext.Current.CancellationToken)).Should().BeTrue();
-        // Sin flag de otra compañía → false.
-        (await repo.IsAssignmentAllowedAsync(Guid.NewGuid(), office, TestContext.Current.CancellationToken)).Should().BeFalse();
+        (await repo.EvaluateAssignmentEligibilityAsync(company, office, TestContext.Current.CancellationToken))
+            .Should().Be(PlateAssignmentEligibility.Allowed);
+        // Sin flag de otra compañía → CompanyDisabled (ruta estándar, no Allowed).
+        (await repo.EvaluateAssignmentEligibilityAsync(Guid.NewGuid(), office, TestContext.Current.CancellationToken))
+            .Should().Be(PlateAssignmentEligibility.CompanyDisabled);
     }
 
     // ---------- HU #10797: selector de compañías elegibles ----------
