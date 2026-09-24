@@ -138,6 +138,24 @@ public sealed class AdminOtDocumentTagsScopeTests
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [Fact] // HU12858_AC2 — DELETE sin ?transitOfficeId → 400, sin borrar nada en ningún tenant.
+    public async Task HU12858_AC2_DeleteDocumentTag_AsSuperAdmin_WithoutTransitOfficeId_Returns400()
+    {
+        var tagId = await SeedTagAsync();
+        Authenticate("SuperAdmin", _superAdminTenantId, _superAdminUserId);
+
+        var response = await _client.DeleteAsync(
+            $"/api/v1/admin/ot/document-tags/{tagId}",
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        await using var db = CreateDbContext();
+        var stillThere = await db.OtDocumentTags.AsNoTracking()
+            .AnyAsync(t => t.Id == tagId, TestContext.Current.CancellationToken);
+        stillThere.Should().BeTrue("sin transitOfficeId, no debe borrarse la etiqueta de ningún tenant");
+    }
+
     private void Authenticate(string role, Guid tenantId, Guid userId) =>
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", MintToken(role, tenantId, userId));
