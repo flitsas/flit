@@ -16,4 +16,4 @@
 | [ADR-0064](ADR-0064-datos-separados-eventos-y-reportes.md) | Datos separados por producto, integración por eventos y reportes consolidados |
 | [ADR-0065](ADR-0065-consultas-externas-capacidad-de-plataforma.md) | Consultas externas como capacidad compartida de plataforma, con medición de consumo |
 
-Contexto: [`docs/plan-suite-flitsas-diagnostico-y-plan.md`](../plan-suite-flitsas-diagnostico-y-plan.md).
+Contexto: [`docs/suite/plan-maestro.md`](../plan-maestro.md).

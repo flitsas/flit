@@ -12,7 +12,10 @@
 > todos los hosts sobre `flitsas.online` en esta etapa; la identidad **extiende** lo construido en
 > ADR-0060 (Marca Blanca) en vez de reemplazarlo; consultas externas como capacidad compartida;
 > recomendación de repositorio con la convención de carpetas propuesta por el equipo.
-> · Borradores de ADR 0061–0065 en [`docs/suite-adr-borradores/`](suite-adr-borradores/README.md),
+> · **Trabajo diario:** [README de la suite](README.md) (quién hace qué y cómo empezar),
+> [reglas de trabajo en paralelo](reglas-trabajo-paralelo.md), [contrato de plataforma v1](contrato-plataforma-v1.md)
+> y los planes por frente en [`frentes/`](frentes/).
+> · Borradores de ADR 0061–0065 en [`docs/suite/adr-borradores/`](adr-borradores/README.md),
 > pendientes de aprobación humana (regla FLIT 15).
 
 ---
@@ -306,6 +309,8 @@ Cada persona toma el frente de plataforma más cercano a su producto, para llega
 | Líder técnico / infraestructura | k3s, Argo CD, ingress, certificados, Redis, RabbitMQ, DNS, aprobación de ADRs | Ya tiene a cargo la migración a k3s |
 
 Revisión cruzada: cada PR de plataforma lo revisa al menos uno de los otros dos desarrolladores.
+
+El detalle de cada frente, con tareas, dependencias y criterios de terminado, está en [`frentes/`](frentes/): [A](frentes/frente-a-identidad-y-tramites.md), [B](frentes/frente-b-productos-y-hub.md), [C](frentes/frente-c-consultas-sdk-y-plantilla.md) y [líder](frentes/frente-l-lider-e-infraestructura.md).
 
 ### 5.1 Fase 0 — Fundaciones (≈2–3 semanas)
 
