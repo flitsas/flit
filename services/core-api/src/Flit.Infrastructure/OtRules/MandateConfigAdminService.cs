@@ -46,19 +46,25 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
     private readonly ITransitOfficeOperationalStatusReader _operationalStatus;
     private readonly IDocumentOcrAnalyzer _ocr;
     private readonly IMandateTemplateStorage _templateStorage;
+    private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
 
     public MandateConfigAdminService(
         FlitDbContext db,
         ITransitOfficeCatalog catalog,
         ITransitOfficeOperationalStatusReader operationalStatus,
         IDocumentOcrAnalyzer ocr,
-        IMandateTemplateStorage templateStorage)
+        IMandateTemplateStorage templateStorage,
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _operationalStatus = operationalStatus ?? throw new ArgumentNullException(nameof(operationalStatus));
         _ocr = ocr ?? throw new ArgumentNullException(nameof(ocr));
         _templateStorage = templateStorage ?? throw new ArgumentNullException(nameof(templateStorage));
+
+        // Bug #12912 — compañías por OT según la lista efectiva de red. Opcional: sin él (tests que
+        // construyen el servicio a mano) se conserva el criterio previo de grant propio.
+        _effectiveOffices = effectiveOffices;
     }
 
     public async Task<IReadOnlyList<MandateOtConfigView>> ListAsync(CancellationToken ct = default)
@@ -408,11 +414,16 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         return await ExecuteCrossTenantReadAsync(
             async () =>
             {
-                var grants = await _db.TenantTransitOfficeGrants.AsNoTracking()
-                    .Where(g => g.TransitOfficeId == officeId && g.IsEnabled)
-                    .Select(g => g.TenantId)
-                    .ToListAsync(ct)
-                    .ConfigureAwait(false);
+                // Bug #12912 — compañías que pueden radicar en el OT según la lista efectiva de red.
+                var grants = _effectiveOffices is not null
+                    ? [.. await _effectiveOffices
+                        .ListEffectiveTenantIdsForOfficeAsync(officeId, ct)
+                        .ConfigureAwait(false)]
+                    : await _db.TenantTransitOfficeGrants.AsNoTracking()
+                        .Where(g => g.TransitOfficeId == officeId && g.IsEnabled)
+                        .Select(g => g.TenantId)
+                        .ToListAsync(ct)
+                        .ConfigureAwait(false);
 
                 if (grants.Count == 0)
                     return (IReadOnlyList<CompanyOtMandateRuleView>)[];
@@ -522,14 +533,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             return (MandateConfigWriteStatus.InstitutionalRequired, null);
         }
 
-        var hasGrant = await ExecuteCrossTenantReadAsync(
-            () => _db.TenantTransitOfficeGrants.AsNoTracking()
-                .AnyAsync(
-                    g => g.TransitOfficeId == officeId
-                        && g.TenantId == companyTenantId
-                        && g.IsEnabled,
-                    ct),
-            ct).ConfigureAwait(false);
+        var hasGrant = await CompanyCanUseOfficeAsync(officeId, companyTenantId, ct).ConfigureAwait(false);
 
         if (!hasGrant)
             return (MandateConfigWriteStatus.CompanyNotFound, null);
@@ -633,14 +637,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         if (_catalog.GetById(officeId) is null)
             return (MandateConfigWriteStatus.OfficeNotFound, null);
 
-        var hasGrant = await ExecuteCrossTenantReadAsync(
-            () => _db.TenantTransitOfficeGrants.AsNoTracking()
-                .AnyAsync(
-                    g => g.TransitOfficeId == officeId
-                        && g.TenantId == companyTenantId
-                        && g.IsEnabled,
-                    ct),
-            ct).ConfigureAwait(false);
+        var hasGrant = await CompanyCanUseOfficeAsync(officeId, companyTenantId, ct).ConfigureAwait(false);
 
         if (!hasGrant)
             return (MandateConfigWriteStatus.CompanyNotFound, null);
@@ -866,6 +863,24 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
 
         return false;
     }
+
+    /// <summary>
+    /// Bug #12912 — la compañía puede radicar en el OT: el organismo está en su lista efectiva de red
+    /// (HU #12347). Sin resolver inyectado, criterio previo de grant propio habilitado.
+    /// </summary>
+    private Task<bool> CompanyCanUseOfficeAsync(Guid officeId, Guid companyTenantId, CancellationToken ct) =>
+        ExecuteCrossTenantReadAsync(
+            async () => _effectiveOffices is not null
+                ? (await _effectiveOffices.ListEffectiveOfficeIdsAsync(companyTenantId, ct).ConfigureAwait(false))
+                    .Contains(officeId)
+                : await _db.TenantTransitOfficeGrants.AsNoTracking()
+                    .AnyAsync(
+                        g => g.TransitOfficeId == officeId
+                            && g.TenantId == companyTenantId
+                            && g.IsEnabled,
+                        ct)
+                    .ConfigureAwait(false),
+            ct);
 
     private async Task<T> ExecuteCrossTenantReadAsync<T>(
         Func<Task<T>> action,

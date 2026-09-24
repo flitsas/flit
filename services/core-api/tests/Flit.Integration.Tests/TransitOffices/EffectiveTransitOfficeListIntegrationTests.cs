@@ -114,4 +114,80 @@ public sealed class EffectiveTransitOfficeListIntegrationTests(PostgresDatabaseF
         head.Should().BeEmpty("el bloqueo de Ot1 deja la red MB sin OT operables");
         child.Should().Equal(head);
     }
+
+    /// <summary>
+    /// Bug #12912 — propiedad de coherencia directo/inverso: para todo tenant del escenario y todo OT,
+    /// <c>officeId ∈ Effective(tenant) ⇔ tenant ∈ Inverse(officeId)</c>. Se recorre con y sin grants de
+    /// la cabeza Concesión y con y sin bloqueo de la cabeza Marca Blanca.
+    /// </summary>
+    [PostgresTheory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Bug12912_Inverso_es_coherente_con_la_lista_efectiva(bool concesionConGrants, bool mbBloqueaOt1)
+    {
+        await TransitNetworkSeed.SeedMarcaBlancaNetworkAsync(Fixture);
+        await using (var ctx = NewContext())
+        {
+            if (concesionConGrants)
+            {
+                await TransitNetworkSeed.SetHeadGrantsAsync(
+                    ctx, HierarchyScenario.P, HierarchyScenario.Ot1, HierarchyScenario.Ot2);
+            }
+
+            if (mbBloqueaOt1)
+            {
+                await new TenantTransitOfficeBlockRepository(ctx, NullAuditContextAccessor.Instance)
+                    .AddBlockAsync(TransitNetworkSeed.MbHead, TransitNetworkSeed.Ot1, null, null);
+            }
+        }
+
+        Guid[] tenants =
+        [
+            HierarchyScenario.P, HierarchyScenario.C1, HierarchyScenario.C2, HierarchyScenario.X,
+            HierarchyScenario.S, HierarchyScenario.O,
+            TransitNetworkSeed.MbHead, TransitNetworkSeed.MbC1, TransitNetworkSeed.MbC2,
+        ];
+        Guid[] offices = [HierarchyScenario.Ot1, HierarchyScenario.Ot2];
+
+        await using var read = NewContext();
+        var resolver = NewResolver(read);
+
+        var forward = new Dictionary<Guid, IReadOnlyList<Guid>>();
+        foreach (var tenant in tenants)
+        {
+            forward[tenant] = await resolver.ListEffectiveOfficeIdsAsync(tenant);
+        }
+
+        foreach (var office in offices)
+        {
+            var inverse = await resolver.ListEffectiveTenantIdsForOfficeAsync(office);
+            var expected = tenants.Where(t => forward[t].Contains(office)).ToList();
+
+            inverse.Should().BeEquivalentTo(
+                expected,
+                $"el inverso de {office} debe ser exactamente los tenants cuya lista efectiva lo contiene");
+        }
+    }
+
+    /// <summary>Bug #12912 — valores concretos del inverso sobre la red (complementa la propiedad).</summary>
+    [PostgresFact]
+    public async Task Bug12912_Inverso_incluye_hijas_de_Concesion_y_red_Marca_Blanca()
+    {
+        await TransitNetworkSeed.SeedMarcaBlancaNetworkAsync(Fixture);
+        await using (var ctx = NewContext())
+        {
+            await TransitNetworkSeed.SetHeadGrantsAsync(ctx, HierarchyScenario.P, HierarchyScenario.Ot1);
+        }
+
+        await using var read = NewContext();
+        var inverse = await NewResolver(read).ListEffectiveTenantIdsForOfficeAsync(HierarchyScenario.Ot1);
+
+        inverse.Should().BeEquivalentTo(
+        [
+            HierarchyScenario.P, HierarchyScenario.C1, HierarchyScenario.C2,
+            TransitNetworkSeed.MbHead, TransitNetworkSeed.MbC1, TransitNetworkSeed.MbC2,
+        ]);
+    }
 }

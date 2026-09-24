@@ -21,11 +21,13 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     private readonly FlitDbContext _context;
     private readonly ITransitOfficeOperationalStatusReader _otStatus;
     private readonly IdentityVigenciaPorDocumentoResolver _identityResolver;
+    private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
 
     public DbMandateSignerReader(
         FlitDbContext context,
         ITransitOfficeOperationalStatusReader? otStatus = null,
-        IdentityVigenciaPorDocumentoResolver? identityResolver = null)
+        IdentityVigenciaPorDocumentoResolver? identityResolver = null,
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
 
@@ -35,6 +37,11 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         _otStatus = otStatus ?? new DbTransitOfficeOperationalStatusReader(context);
         _identityResolver = identityResolver
             ?? new IdentityVigenciaPorDocumentoResolver(new ProcedureInstanceRepository(context));
+
+        // Bug #12912 — lista efectiva de OT por red (Concesión / Marca Blanca). Opcional por el mismo
+        // motivo que PlateRangeRepository: los sitios que construyen el reader a mano (tests) conservan
+        // el criterio previo de grant propio; por DI llega siempre la implementación real.
+        _effectiveOffices = effectiveOffices;
     }
 
     public Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
@@ -201,12 +208,19 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         ExecuteCrossTenantReadAsync(
             async () =>
             {
-                var officeIds = await _context.TenantTransitOfficeGrants
-                    .AsNoTracking()
-                    .Where(g => g.TenantId == companyTenantId && g.IsEnabled)
-                    .Select(g => g.TransitOfficeId)
-                    .ToListAsync(cancellationToken)
-                    .ConfigureAwait(false);
+                // Bug #12912 — la lista EFECTIVA (HU #12347): la hija de una Concesión elige entre los OT
+                // de su cabeza y la red Marca Blanca entre los operables no bloqueados. Mismo criterio que
+                // radicación, para no ofrecer (o negar) un organismo distinto al que luego se radica.
+                var officeIds = _effectiveOffices is not null
+                    ? await _effectiveOffices
+                        .ListEffectiveOfficeIdsAsync(companyTenantId, cancellationToken)
+                        .ConfigureAwait(false)
+                    : await _context.TenantTransitOfficeGrants
+                        .AsNoTracking()
+                        .Where(g => g.TenantId == companyTenantId && g.IsEnabled)
+                        .Select(g => g.TransitOfficeId)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
 
                 if (officeIds.Count == 0)
                 {
@@ -240,12 +254,33 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         ExecuteCrossTenantReadAsync(
             async () =>
             {
-                var grants = await _context.TenantTransitOfficeGrants
+                var directGrants = await _context.TenantTransitOfficeGrants
                     .AsNoTracking()
                     .Where(g => g.TransitOfficeId == transitOfficeId)
                     .Select(g => new { g.TenantId, g.IsEnabled })
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
+
+                // Bug #12912 — con el resolver, «habilitada» es pertenecer a la lista efectiva del OT
+                // (HU #12347): entran las hijas de la Concesión y la red Marca Blanca aunque no tengan
+                // fila de grant, y un grant propio que la red no respalda deja de contar. Los grants
+                // directos inhabilitados se siguen listando (con IsEnabled = false) como antes.
+                var grants = directGrants;
+                if (_effectiveOffices is not null)
+                {
+                    var effective = (await _effectiveOffices
+                        .ListEffectiveTenantIdsForOfficeAsync(transitOfficeId, cancellationToken)
+                        .ConfigureAwait(false)).ToHashSet();
+
+                    grants =
+                    [
+                        .. directGrants
+                            .Select(g => g.TenantId)
+                            .Concat(effective)
+                            .Distinct()
+                            .Select(id => new { TenantId = id, IsEnabled = effective.Contains(id) }),
+                    ];
+                }
 
                 var tenantIds = grants.Select(g => g.TenantId).Distinct().ToList();
                 var tenants = await _context.Tenants
