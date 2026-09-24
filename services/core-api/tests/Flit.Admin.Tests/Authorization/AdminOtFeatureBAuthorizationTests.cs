@@ -65,7 +65,7 @@ public sealed class AdminOtFeatureBAuthorizationTests
             NewRulePayload("Intento no autorizado"),
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await AssertOtModuleForbiddenAsync(response);
     }
 
     [Theory]
@@ -77,7 +77,7 @@ public sealed class AdminOtFeatureBAuthorizationTests
         var response = await _client.GetAsync(
             "/api/v1/admin/ot/rules", TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await AssertOtModuleForbiddenAsync(response);
     }
 
     [Theory]
@@ -91,7 +91,7 @@ public sealed class AdminOtFeatureBAuthorizationTests
             new { isEnabled = false },
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await AssertOtModuleForbiddenAsync(response);
     }
 
     // ── AC1 — ot_admin y gestor_tramites_ot reciben 403 en Requisitos ──────────────────────────
@@ -105,7 +105,7 @@ public sealed class AdminOtFeatureBAuthorizationTests
         var response = await _client.GetAsync(
             "/api/v1/admin/ot/requirements", TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await AssertOtModuleForbiddenAsync(response);
     }
 
     [Theory]
@@ -119,7 +119,7 @@ public sealed class AdminOtFeatureBAuthorizationTests
             new { requiresRnmc = true },
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await AssertOtModuleForbiddenAsync(response);
     }
 
     // ── AC1 — ot_admin y gestor_tramites_ot reciben 403 en PATCH /profile ──────────────────────
@@ -135,7 +135,7 @@ public sealed class AdminOtFeatureBAuthorizationTests
             new { operationMode = "quipux" },
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await AssertOtModuleForbiddenAsync(response);
     }
 
     // ── AC1 — ot_admin y gestor_tramites_ot reciben 403 en PATCH /feature-flags/{id} ───────────
@@ -151,7 +151,7 @@ public sealed class AdminOtFeatureBAuthorizationTests
             new { isEnabled = true },
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await AssertOtModuleForbiddenAsync(response);
     }
 
     // ── AC2 — Super Admin con ?transitOfficeId válido sigue operando (200/201) ─────────────────
@@ -211,12 +211,40 @@ public sealed class AdminOtFeatureBAuthorizationTests
             AuthenticateOtUser(role);
         }
 
+        // Sin ?transitOfficeId=, GetProfileAsync usa el tenant del JWT (AdminOtEndpoints
+        // .GetProfileAsync): ot_admin/gestor_tramites_ot leen el perfil sembrado en SeedAsync
+        // para _tenantId; SuperAdmin lee el de _superAdminTenantId, que no tiene fila y
+        // GetOtProfileHandler devuelve un perfil por defecto SIN persistir (nunca null/404).
+        // Por eso 200 es alcanzable para los tres roles sin sembrar nada adicional.
         var response = await _client.GetAsync(
             "/api/v1/admin/ot/profile", TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden, "GET /profile no exige SuperAdmin");
-        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, "GET /profile no exige SuperAdmin");
     }
+
+    /// <summary>
+    /// Asegura 403 con el mensaje de <see cref="AdminAuthorization.OtModuleForbiddenMessage"/>, NO
+    /// <see cref="AdminAuthorization.ForbiddenMessage"/> ("se requiere rol SuperAdmin"). Es el
+    /// comportamiento real y deliberado: estos endpoints combinan la <c>OtModulePolicy</c> del grupo
+    /// (<c>MapGroup("/api/v1/admin/ot").RequireAuthorization(OtModulePolicy)</c>) con la
+    /// <c>SuperAdminPolicy</c> propia del endpoint — igual que <c>suspend</c>/<c>unsuspend</c> de
+    /// usuarios, que ya reforzaban SuperAdminPolicy sobre el grupo antes de esta HU. ASP.NET Core
+    /// combina ambas policies en una sola (todos sus requirements), y
+    /// <see cref="SuperAdminForbiddenResultHandler.ResolveForbiddenMessage"/> prioriza
+    /// <c>OtModuleRequirement</c> sobre el requirement de rol al elegir el mensaje.
+    /// </summary>
+    private static async Task AssertOtModuleForbiddenAsync(HttpResponseMessage response)
+    {
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var body = await response.Content.ReadFromJsonAsync<ForbiddenBody>(
+            TestContext.Current.CancellationToken);
+
+        body.Should().NotBeNull();
+        body!.Error.Should().Be(AdminAuthorization.OtModuleForbiddenMessage);
+    }
+
+    private sealed record ForbiddenBody(string Error);
 
     private static object NewRulePayload(string name) => new
     {
