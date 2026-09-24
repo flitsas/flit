@@ -187,6 +187,11 @@ if (ictGrpcPort is { } grpcPort)
     });
 }
 
+// === FLIT Suite: servicios ===
+// Una línea por frente que llama a su propio método de extensión (regla R5 de
+// docs/suite/reglas-trabajo-paralelo.md). No se reordenan las líneas existentes.
+// === FLIT Suite: fin servicios ===
+
 var app = builder.Build();
 
 // Migraciones automáticas al arrancar: valida si hay migraciones pendientes
@@ -394,6 +399,10 @@ app.MapSuperAdminQueriesEndpoints(); // Consultas de SuperAdmin sobre todas las 
 app.MapIctQueriesEndpoints(); // Consultas propias de la empresa sobre sus pre-trámites de ICT
 app.MapIctReportsEndpoints(); // Reportes de ICT en vivo (HU #11617)
 app.MapUsageEventsEndpoints(); // Reportes2 HU-A
+
+// === FLIT Suite: endpoints ===
+// Una línea por frente: app.MapPlatformEndpoints(), app.MapIdentityEndpoints(), … (regla R5).
+// === FLIT Suite: fin endpoints ===
 
 app.Run();
 

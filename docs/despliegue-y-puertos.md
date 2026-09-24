@@ -139,6 +139,24 @@ Para arrancar todo: `pnpm dev` (front + gateway + core-api) o
   destinos YARP. Cambiar el puerto de un ambiente = cambiar un solo número en el `setup`
   del CD (o en el `.env`).
 
+### d) Puertos reservados para la FLIT Suite
+
+Asignados en L-03 según el contrato de plataforma (`docs/suite/contrato-plataforma-v1.md`, §11).
+Siguen el mismo esquema: local y DEV `40xx`, QA `50xx`, PDN `60xx`. Los números ya ocupados
+(`x001` frontend, `x002` gateway, `x003` core-api, `x012` python-ml, `x020` y `x030` migración)
+no se reutilizan.
+
+| Servicio | Local y DEV | QA | PDN |
+|----------|-------------|----|-----|
+| `frontend-hub` | `4040` | `5040` | `6040` |
+| `core-demo` / `frontend-demo` | `4050` / `4051` | — | — |
+| `core-comparendos` / `frontend-comparendos` | `4060` / `4061` | `5060` / `5061` | `6060` / `6061` |
+| `core-diagnostico` / `frontend-diagnostico` | `4070` / `4071` | `5070` / `5071` | `6070` / `6071` |
+
+- En local, cada app nueva se abre en `<código>.localhost:<puerto>` (contrato §11).
+- Las variables de ambiente y el `setup` del CD para estos servicios se agregan cuando cada
+  uno se despliegue por primera vez (L-10).
+
 ---
 
 ## 3. Comunicación entre servicios
