@@ -42,7 +42,6 @@ const CASOS: { pregunta: string; perfil: ManualProfile; slug: string }[] = [
   { pregunta: "zona horaria", perfil: "ot_admin", slug: "0-introduccion/4-fechas-y-horas" },
   { pregunta: "cómo navegar el manual", perfil: "ot_admin", slug: "0-introduccion/2-como-navegar" },
   // OT
-  { pregunta: "preasignación de placas", perfil: "ot_admin", slug: "2-ot/2-preasignacion" },
   { pregunta: "requisitos documentales", perfil: "ot_admin", slug: "2-ot/7-requisitos" },
   { pregunta: "asignar placa a un trámite", perfil: "ot_admin", slug: "2-ot/1-tramites-bandeja" },
   { pregunta: "liberar placa", perfil: "ot_admin", slug: "2-ot/1-tramites-bandeja" },

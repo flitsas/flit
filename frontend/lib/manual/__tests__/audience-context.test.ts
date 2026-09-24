@@ -24,19 +24,22 @@ describe("manual/audience (HU-F)", () => {
     expect(visibleAudiences("superadmin")).toContain("Organismo de Tránsito");
   });
 
-  it("la búsqueda filtra por audiencia: un Gestor no recibe la preasignación del OT", () => {
-    const sinFiltro = searchManualArticles("preasignacion de placas");
-    expect(sinFiltro.some((h) => h.slug === "2-ot/2-preasignacion")).toBe(true);
+  // HU #12851 (Feature #12846) — "preasignacion de placas" dejó de ser un artículo propio del OT
+  // (el módulo se retiró); la búsqueda por audiencia se prueba ahora con "validar impronta",
+  // exclusivo del Organismo de Tránsito, igual que antes lo era la preasignación.
+  it("la búsqueda filtra por audiencia: un Gestor no recibe artículos del OT", () => {
+    const sinFiltro = searchManualArticles("validar impronta");
+    expect(sinFiltro.some((h) => h.slug === "2-ot/11-validar-impronta")).toBe(true);
 
-    const gestor = searchManualArticles("preasignacion de placas", 8, {
+    const gestor = searchManualArticles("validar impronta", 8, {
       audiences: visibleAudiences("gestor"),
     });
     expect(gestor.some((h) => h.audience === "Organismo de Tránsito")).toBe(false);
 
-    const ot = searchManualArticles("preasignacion de placas", 8, {
+    const ot = searchManualArticles("validar impronta", 8, {
       audiences: visibleAudiences("ot_admin"),
     });
-    expect(ot.some((h) => h.slug === "2-ot/2-preasignacion")).toBe(true);
+    expect(ot.some((h) => h.slug === "2-ot/11-validar-impronta")).toBe(true);
     expect(ot.some((h) => h.audience === "Gestor")).toBe(false);
   });
 
@@ -81,9 +84,11 @@ describe("manual/context (HU-G)", () => {
   });
 
   it("pestaña del hub OT por segmento de URL, aunque el módulo de la SPA diga dashboard", () => {
+    // HU #12850 (Feature #12846) — la pestaña plate-ranges se retiró del hub OT junto con su
+    // artículo; configuracion sigue vigente y demuestra la misma resolución por segmento.
     expect(
-      resolveContextArticle("/admin/transit-offices/ot-1/plate-ranges|dashboard")?.slug,
-    ).toBe("2-ot/2-preasignacion");
+      resolveContextArticle("/admin/transit-offices/ot-1/configuracion|dashboard")?.slug,
+    ).toBe("2-ot/12-configuracion");
     expect(
       resolveContextArticle("/admin/transit-offices/ot-1/client-procedures|dashboard")?.slug,
     ).toBe("2-ot/1-tramites-bandeja");

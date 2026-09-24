@@ -49,7 +49,6 @@ export const MANUAL_MODULE_ARTICLES: Readonly<Record<string, string>> = {
 /** Pestañas del hub OT (`segment` de `/admin/transit-offices/{id}/{segment}`) → slug. */
 export const MANUAL_OT_TAB_ARTICLES: Readonly<Record<string, string>> = {
   "client-procedures": "2-ot/1-tramites-bandeja",
-  "plate-ranges": "2-ot/2-preasignacion",
   reportes: "2-ot/3-reportes",
   usuarios: "2-ot/4-usuarios",
   rules: "2-ot/5-reglas",

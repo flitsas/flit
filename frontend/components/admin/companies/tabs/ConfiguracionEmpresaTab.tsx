@@ -59,14 +59,10 @@ export function ConfiguracionEmpresaTab({
         />
       </fieldset>
 
-      <ToggleSwitch
-        id="preasignacionPlacaActiva"
-        label="Preasignación de placa activa"
-        description="Habilita la ruta de placa preasignada para matrícula inicial: los organismos de tránsito activos de esta compañía podrán asignarle rangos de placas, y al radicar se podrá seleccionar la placa del rango asignado."
-        checked={form.preasignacionPlacaActiva}
-        onChange={(v) => onChange({ preasignacionPlacaActiva: v })}
-      />
-
+      {/* HU #12851 (Feature #12846) — el switch "Preasignación de placa activa" se retiró: la
+          consola de rangos ya no existe (HU-A2) y la ruta de placa preasignada de la compañía se
+          apaga en backend (HU-A5). El campo preasignacionPlacaActiva se sigue enviando en el PUT
+          (se ignora del lado del backend) para no romper el contrato de TenantSettingsUpdate. */}
       <ToggleSwitch
         id="validarSoatConRunt"
         label="Validar SOAT ante el RUNT al enviar al OT"

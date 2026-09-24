@@ -67,7 +67,7 @@ function saveErrorMessage(err: unknown): string {
   return "No se pudieron guardar los requisitos.";
 }
 
-/** Pantalla de requisitos configurables del OT (HU #10547): RNMC, ruta de placa e identidad. */
+/** Pantalla de requisitos configurables del OT (HU #10547): RNMC e identidad. */
 export function RequirementsSection({ transitOfficeId }: RequirementsSectionProps) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -105,10 +105,12 @@ export function RequirementsSection({ transitOfficeId }: RequirementsSectionProp
     if (!requirements) return;
     setSaving(true);
     try {
+      // HU #12851 (Feature #12846) — allowPlatePreassign deja de enviarse: la ruta de placa
+      // preasignada de la compañía se apaga en backend (HU-A5) y este switch ya no tiene consola
+      // detrás. El campo sigue en el contrato (opcional) para no romper clientes existentes.
       const saved = await updateOtRequirements(
         {
           requiresRnmc: requirements.requiresRnmc,
-          allowPlatePreassign: requirements.allowPlatePreassign,
           identityValidationEnabled: requirements.identityValidationEnabled,
         },
         scope,
@@ -142,14 +144,6 @@ export function RequirementsSection({ transitOfficeId }: RequirementsSectionProp
             checked={requirements.requiresRnmc}
             disabled={saving}
             onChange={(v) => patch({ requiresRnmc: v })}
-          />
-          <ToggleRow
-            id="ot-req-plate"
-            label="Ruta de placa preasignada"
-            description="Habilita la ruta con placa preasignada para secretarías con backoffice de preasignación."
-            checked={requirements.allowPlatePreassign}
-            disabled={saving}
-            onChange={(v) => patch({ allowPlatePreassign: v })}
           />
           <ToggleRow
             id="ot-req-identity"

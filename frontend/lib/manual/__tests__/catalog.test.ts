@@ -18,8 +18,10 @@ describe("manual/catalog", () => {
     expect(hits.some((h) => h.slug.includes("crear-tramite"))).toBe(true);
   });
 
-  it("encuentra preasignación OT", () => {
-    const hits = searchManualArticles("preasignacion de placas");
-    expect(hits.some((h) => h.slug.includes("preasignacion"))).toBe(true);
+  // HU #12851 (Feature #12846) — la preasignación se retiró del manual; se prueba con un artículo
+  // OT que sigue vigente.
+  it("encuentra validar impronta OT", () => {
+    const hits = searchManualArticles("validar impronta");
+    expect(hits.some((h) => h.slug.includes("validar-impronta"))).toBe(true);
   });
 });
