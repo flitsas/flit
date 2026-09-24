@@ -56,10 +56,24 @@ describe("isFlitHost — AC1/AC7 #12419", () => {
     expect(isFlitHost("")).toBe(true);
   });
 
-  it("*.dominio NO matchea el dominio raíz sin subdominio (contrato)", async () => {
+  it("*.dominio matchea también el dominio raíz (paridad con ReservedHosts .NET; arreglo PDN 5ae9578f)", async () => {
+    // En PDN el frontend se sirve en la raíz flitsas.online. Tratarla como dominio de red hacía
+    // que la API se llamara en misma origen y el login fallara (commit 5ae9578f en release).
     const isFlitHost = await loadIsFlitHost("*.flitsas.online");
-    expect(isFlitHost("flitsas.online")).toBe(false);
+    expect(isFlitHost("flitsas.online")).toBe(true);
     expect(isFlitHost("dev.flitsas.online")).toBe(true);
+  });
+
+  it("*.dominio no confunde un dominio que solo termina igual (edge case)", async () => {
+    const isFlitHost = await loadIsFlitHost("*.flitsas.online");
+    expect(isFlitHost("otroflitsas.online")).toBe(false);
+    expect(isFlitHost("flitsas.online.atacante.com")).toBe(false);
+  });
+
+  it("el respaldo por defecto trata como FLIT los dominios raíz de PDN (arreglo 5ae9578f)", async () => {
+    const isFlitHost = await loadIsFlitHost(undefined);
+    expect(isFlitHost("flitsas.online")).toBe(true);
+    expect(isFlitHost("flitsas.com")).toBe(true);
   });
 });
 
@@ -70,7 +84,7 @@ describe("isFlitHost — AC1/AC7 #12419", () => {
 describe("isFlitHost — excepciones con '!' (AC6/AC8 #12761)", () => {
   // Lista tal como queda horneada en el build del frontend (cd.yml + .env.example).
   const HOSTS_CON_NEGACIONES =
-    "*.flitsas.online,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online";
+    "flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online";
 
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -92,10 +106,11 @@ describe("isFlitHost — excepciones con '!' (AC6/AC8 #12761)", () => {
     expect(isFlitHost("cualquiera.flitsas.com")).toBe(true);
   });
 
-  it("el dominio raíz flitsas.online conserva el comportamiento del comodín", async () => {
+  it("el dominio raíz flitsas.online es FLIT con la lista horneada; las negaciones no lo alteran", async () => {
     const isFlitHost = await loadIsFlitHost(HOSTS_CON_NEGACIONES);
-    // `*.flitsas.online` nunca cubrió el dominio raíz: sigue sin serlo, la negación no lo altera.
-    expect(isFlitHost("flitsas.online")).toBe(false);
+    // PDN sirve el frontend en la raíz (arreglo 5ae9578f). Las negaciones son exactas y no la tocan.
+    expect(isFlitHost("flitsas.online")).toBe(true);
+    expect(isFlitHost("flitsas.com")).toBe(true);
   });
 
   it("la negación es exacta: no cubre subdominios del host negado (edge case)", async () => {
