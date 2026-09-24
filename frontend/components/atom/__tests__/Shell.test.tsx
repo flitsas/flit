@@ -91,7 +91,6 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
 
     // Ítems directos del dock Admin OT
     expect(screen.getByRole("button", { name: "Trámites" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Preasignación" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Usuarios" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reportes" })).toBeInTheDocument();
 
@@ -101,6 +100,21 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     expect(screen.getByRole("button", { name: "Documentos" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Requisitos" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Configuración" })).toBeInTheDocument();
+  });
+
+  // HU12850 AC1 — la entrada "Preasignación" se retiró del dock: ni como píldora directa ni
+  // dentro de "Administración".
+  it("HU12850 AC1 — un Admin OT ya NO ve 'Preasignación' en el dock", async () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
+    );
+
+    renderShell();
+
+    expect(screen.queryByRole("button", { name: "Preasignación" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Administración" }));
+    expect(screen.queryByRole("button", { name: "Preasignación" })).not.toBeInTheDocument();
   });
 
   // Pedido del usuario (2026-09-16) — modo Dashboard/QX, ventana de revocatoria (HU #12569) y

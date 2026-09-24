@@ -8,7 +8,6 @@ export type OtHubTabId =
   | "rules"
   | "documents"
   | "requirements"
-  | "plate-ranges"
   | "usuarios"
   | "reportes"
   | "mandatos"
@@ -26,15 +25,16 @@ export interface OtHubTab {
  * Pestañas del hub (navegación interna). Visibles en OtTabBar solo para SuperAdmin;
  * Admin OT las consume desde el dock (sin barra de pestañas).
  *
- * Labels alineados al dock Admin OT: Trámites (ex "Trámites clientes"), Preasignación.
+ * Labels alineados al dock Admin OT: Trámites (ex "Trámites clientes").
  * "Trámites"/"Webhooks" (ids legacy) siguen fuera de la oferta; rutas por URL siguen vivas.
+ * HU #12850 (Feature #12846) — Preasignación se retiró: la consola de rangos ya no existe en
+ * backend (HU-A1) y la asignación de placa del trámite siempre reserva fuera de rango.
  */
 export const OT_HUB_TABS: OtHubTab[] = [
   { id: "client-procedures", label: COPY.B21Tramites, segment: "client-procedures" },
   { id: "rules", label: "Reglas", segment: "rules" },
   { id: "documents", label: "Documentos", segment: "documents" },
   { id: "requirements", label: "Requisitos", segment: "requirements" },
-  { id: "plate-ranges", label: "Preasignación", segment: "plate-ranges" },
   { id: "usuarios", label: COPY.B21Usuarios, segment: "usuarios" },
   { id: "reportes", label: COPY.B21Reportes, segment: "reportes" },
   { id: "mandatos", label: "Mandatos", segment: "mandatos" },
@@ -54,7 +54,6 @@ export const OT_ADM_DOCK = {
   documents: "ot-adm-documents",
   requirements: "ot-adm-requirements",
   tramites: "ot-adm-tramites",
-  preasignacion: "ot-adm-preasignacion",
   usuarios: "ot-adm-usuarios",
   reportes: "ot-adm-reportes",
   mandatos: "ot-adm-mandatos",

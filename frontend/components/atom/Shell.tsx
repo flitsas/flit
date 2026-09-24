@@ -65,7 +65,6 @@ import {
   Scale,
   FileText,
   ClipboardList,
-  Tag,
   ListChecks,
   Monitor,
   FileSignature,
@@ -433,9 +432,10 @@ export function Shell({
   }
 
   // Usuario OT: pestañas del hub trasladadas al dock (Administración = Reglas/Docs/Requisitos;
-  // Trámites, Preasignación, Usuarios y Reportes como ítems del dock). Sin Compañías/RBAC.
+  // Trámites, Usuarios y Reportes como ítems del dock). Sin Compañías/RBAC.
   // Todo rol de un tenant OT entra aquí; "Usuarios" queda solo para ot_admin porque su API
   // (UserAdminPolicy) sigue siendo de administradores.
+  // HU #12850 (Feature #12846) — Preasignación se retiró: la consola de rangos dejó de existir.
   if (currentUser?.isOtUser) {
     entries.push(
       {
@@ -465,13 +465,6 @@ export function Shell({
         icon: ClipboardList,
         active: isOtHubSegmentActive(pathname, "requirements"),
         onClick: () => goOtHub("requirements"),
-      },
-      {
-        key: OT_ADM_DOCK.preasignacion,
-        label: "Preasignación",
-        icon: Tag,
-        active: isOtHubSegmentActive(pathname, "plate-ranges"),
-        onClick: () => goOtHub("plate-ranges"),
       },
       ...(currentUser.isOtAdmin
         ? [
