@@ -28,9 +28,9 @@ vi.mock("@/lib/api/admin-ot", () => ({
 vi.mock("@/lib/api/ot-metrics", () => ({ fetchRejectionReasons: vi.fn().mockResolvedValue([]) }));
 
 vi.mock("@/lib/api/admin-plate-ranges", () => ({
-  listPlateDetails: vi.fn().mockResolvedValue([]),
   assignPlateToProcedure: vi.fn(),
   releaseProcedurePlate: vi.fn(),
+  updateProcedurePlate: vi.fn(),
 }));
 
 vi.mock("@/lib/api/admin-mandate-signers", () => ({ fetchMandateSigners: vi.fn() }));
@@ -339,7 +339,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Asignar placa" }));
     const placas = await screen.findByRole("dialog", { name: "Asignar placa" });
-    await user.type(within(placas).getByLabelText("Placa fuera de rango"), "XYZ987");
+    await user.type(within(placas).getByLabelText("Placa"), "XYZ987");
     await user.click(within(placas).getByRole("button", { name: "Asignar" }));
 
     // El diálogo se cierra y el detalle —que sigue abierto— ya muestra la placa.
@@ -365,7 +365,7 @@ describe("Detalle OT — decidir desde el modal (HU #12062)", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Asignar placa" }));
     const placas = await screen.findByRole("dialog", { name: "Asignar placa" });
-    await user.type(within(placas).getByLabelText("Placa fuera de rango"), "XYZ987");
+    await user.type(within(placas).getByLabelText("Placa"), "XYZ987");
     await user.click(within(placas).getByRole("button", { name: "Asignar" }));
 
     await waitFor(() =>
