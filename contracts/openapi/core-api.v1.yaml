@@ -1864,9 +1864,21 @@ paths:
     patch:
       tags: [Admin · OT]
       operationId: adminOtPatchProfile
-      summary: Actualizar modo Dashboard/QX y ventana de revocatoria
+      summary: Actualizar modo Dashboard/QX y ventana de revocatoria (HU #12854/#12855 — solo SuperAdmin)
+      description: >
+        Exclusivo de SuperAdmin (HU #12855, Feature #12847, Épica #12751); `ot_admin` recibe 403.
+        SuperAdmin debe indicar `transitOfficeId` (HU #12854) para resolver el tenant OT objetivo,
+        mismo patrón que `PUT /requirements`.
       security:
         - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: >
+            Obligatorio para SuperAdmin (400 si falta, 404 si el OT no tiene tenant vinculado).
+            ot_admin ignora el parámetro y usa su propio tenant del JWT.
       requestBody:
         content:
           application/json:
@@ -1889,6 +1901,16 @@ paths:
       responses:
         "200":
           description: Perfil actualizado.
+        "400":
+          description: SuperAdmin no indicó transitOfficeId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin rol SuperAdmin (ot_admin y otros roles OT reciben 403).
+        "404":
+          description: El organismo indicado no tiene tenant OT vinculado.
         "422":
           description: >
             Payload inválido — p. ej. operationMode fuera de catálogo o

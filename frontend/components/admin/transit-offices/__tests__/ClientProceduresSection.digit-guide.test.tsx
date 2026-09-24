@@ -1,8 +1,10 @@
-// HU #10805 — en el modal "Asignar placa" del OT, el dígito de preferencia es SOLO una guía:
-// las placas del rango que terminan en él se ordenan primero y se marcan con ★; el OT puede
-// asignar esa u otra cualquiera.
+// HU #10805 — en el modal "Asignar placa" del OT, el dígito de preferencia es SOLO una guía.
+// HU12852 (Feature #12846, AC1/AC3) — desde esta HU el modal ya no ofrece modo en-rango/fuera-de-
+// rango ni una lista de placas para ordenar/marcar con ★: un único campo de placa libre. El
+// dígito de preferencia se conserva como sugerencia de texto junto a ese campo (decisión: sigue
+// aplicando a la placa libre, ver notas técnicas de la HU).
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { ClientProceduresSection } from "../ClientProceduresSection";
@@ -22,11 +24,11 @@ vi.mock("@/lib/api/admin-ot", () => ({
   adjuntarOtLicenciaTransito: vi.fn(),
 }));
 
-const plateMocks = vi.hoisted(() => ({ listPlateDetails: vi.fn() }));
+const plateMocks = vi.hoisted(() => ({ assignPlateToProcedure: vi.fn() }));
 vi.mock("@/lib/api/admin-plate-ranges", () => ({
-  listPlateDetails: plateMocks.listPlateDetails,
-  assignPlateToProcedure: vi.fn(),
+  assignPlateToProcedure: plateMocks.assignPlateToProcedure,
   releaseProcedurePlate: vi.fn(),
+  updateProcedurePlate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/jwt", async (importOriginal) => {
@@ -44,16 +46,6 @@ import {
   fetchOtBandejaFilterFields,
   fetchOtProfile,
 } from "@/lib/api/admin-ot";
-
-const plate = (id: string, p: string) => ({
-  id,
-  plateRangeId: "r",
-  tenantId: "t",
-  transitOfficeId: "o",
-  plate: p,
-  state: "disponible" as const,
-  procedureInstanceId: null,
-});
 
 const preasignado: OtClientProcedure = {
   id: "proc-7",
@@ -75,7 +67,7 @@ function renderSection() {
   );
 }
 
-describe("ClientProceduresSection — guía de dígito de preferencia (HU #10805)", () => {
+describe("ClientProceduresSection — guía de dígito de preferencia (HU #10805 / HU12852)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchOtProfile).mockResolvedValue({
@@ -100,36 +92,38 @@ describe("ClientProceduresSection — guía de dígito de preferencia (HU #10805
       deliveredWithoutGrant: 0,
       hasDeliveredWithoutGrant: false,
     });
-    // ABC105 termina en 5 (el dígito de preferencia); las otras no.
-    plateMocks.listPlateDetails.mockResolvedValue([
-      plate("1", "ABC101"),
-      plate("2", "ABC105"),
-      plate("3", "ABC109"),
-    ]);
   });
 
-  // AC2 — el modal muestra la guía del dígito y ordena/marca la placa que termina en él.
-  it("muestra la guía del dígito y marca/ordena primero la placa que termina en él", async () => {
+  // AC2 (HU #10805) — el modal muestra la guía del dígito, solo como sugerencia.
+  it("muestra la guía del dígito de preferencia junto al campo de placa", async () => {
     const user = userEvent.setup();
     renderSection();
 
     await screen.findByText("RAD-2026-777");
-    // Las acciones de la fila viven en un menú: hay que abrirlo antes de pulsarlas.
     await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
     await user.click(await screen.findByRole("menuitem", { name: /Asignar placa/i }));
 
-    // Guía visible (solo guía, no obliga).
     expect(await screen.findByText(/termina en 5/i)).toBeInTheDocument();
+    // HU12852 AC1 — un único campo de placa, sin selector de modo en-rango/fuera-de-rango.
+    expect(screen.getByLabelText("Placa")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Placa del rango/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Del rango/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Fuera de rango$/i })).not.toBeInTheDocument();
+  });
 
-    // La placa que termina en 5 va primero y marcada con ★ (la primera opción real tras el placeholder).
-    const select = await screen.findByLabelText(/Placa del rango/i);
-    const options = within(select)
-      .getAllByRole("option")
-      .map((o) => o.textContent?.trim() ?? "");
-    expect(options[1]).toContain("ABC105");
-    expect(options[1]).toContain("★");
-    // Las demás placas siguen disponibles (no se filtran): el OT puede elegir cualquiera.
-    expect(options.some((t) => t.includes("ABC101"))).toBe(true);
-    expect(options.some((t) => t.includes("ABC109"))).toBe(true);
+  // HU12852 AC2 — el payload de asignación ya no depende de un modo elegido en la UI.
+  it("HU12852 AC2 — asignar la placa libre llama assignPlateToProcedure sin selector de modo", async () => {
+    const user = userEvent.setup();
+    plateMocks.assignPlateToProcedure.mockResolvedValue(undefined);
+    renderSection();
+
+    await screen.findByText("RAD-2026-777");
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Asignar placa/i }));
+
+    await user.type(screen.getByLabelText("Placa"), "ABC105");
+    await user.click(screen.getByRole("button", { name: /^Asignar$/i }));
+
+    expect(plateMocks.assignPlateToProcedure).toHaveBeenCalledWith("proc-7", "ABC105");
   });
 });

@@ -1292,8 +1292,12 @@ public sealed class OtClientProcedureHandlerTests
         result.Succeeded.Should().BeTrue();
     }
 
+    // HU12849_AC1 — la consola de rangos se retiró (Feature #12846, Épica #12751): AssignPlateAsync
+    // ignora el flag outOfRange recibido y SIEMPRE reserva fuera de rango (ReserveOutOfRangePlateAsync),
+    // sin invocar TryReservePlateAsync bajo ninguna condición. Una placa fuera de cualquier rango
+    // configurado (ZZZ999) ya no falla con PlateNotAvailable: se registra como rango ad-hoc de 1 placa.
     [Fact]
-    public async Task AssignPlate_PlacaFueraDeLosRangos_InformaNoDisponible()
+    public async Task HU12849_AC1_AssignPlate_PlacaFueraDeLosRangos_SeReservaFueraDeRango()
     {
         var db = NewDbName();
         var procedureId = Guid.NewGuid();
@@ -1310,11 +1314,48 @@ public sealed class OtClientProcedureHandlerTests
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
 
-        // ZZZ999 no pertenece a ningún rango del OT y no se pidió fuera de rango.
+        // ZZZ999 no pertenece a ningún rango del OT y outOfRange=false (valor por defecto, IGNORADO):
+        // la asignación igual reserva fuera de rango.
         var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ZZZ999", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Succeeded.Should().BeFalse();
-        result.Failure.Should().Be(PlateAssignmentFailure.PlateNotAvailable);
+        result.Succeeded.Should().BeTrue(result.Failure + " " + result.Detail);
+        result.Procedure!.Status.Should().Be(TramiteEstado.Asignado);
+
+        await using var verify = NewContext(db);
+        var detail = await verify.PlateRangeDetails.SingleAsync(d => d.Plate == "ZZZ999", TestContext.Current.CancellationToken);
+        detail.State.Should().Be("preasignada");
+        detail.ProcedureInstanceId.Should().Be(procedureId);
+        // Registrada como rango ad-hoc de 1 placa (ZZZ, 999, 999), igual que ReserveOutOfRangePlateAsync
+        // ya hacía para el flujo explícito "fuera de rango" antes de esta HU.
+        var range = await verify.PlateRanges.SingleAsync(r => r.Id == detail.PlateRangeId, TestContext.Current.CancellationToken);
+        range.Prefix.Should().Be("ZZZ");
+        range.RangeFrom.Should().Be(999);
+        range.RangeTo.Should().Be(999);
+    }
+
+    // HU12849_AC1 — outOfRange=true en la request no cambia nada: es el comportamiento por defecto.
+    [Fact]
+    public async Task HU12849_AC1_AssignPlate_OutOfRangeTrue_MismoResultadoQueDefault()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+
+        var result = await repo.AssignPlateAsync(
+            OtTenant, procedureId, "ZZZ999", Approver, OtTransitionSource.OtAdmin, outOfRange: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Succeeded.Should().BeTrue(result.Failure + " " + result.Detail);
     }
 
     [Fact]

@@ -154,7 +154,9 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.OnlyOwnVehiclesMatriculas = settings.OnlyOwnVehiclesMatriculas;
         policy.OnlyOwnVehiclesOtros = settings.OnlyOwnVehiclesOtros;
         policy.SignatureVaultEnabled = settings.SignatureVaultEnabled;
-        policy.PlatePreassignEnabled = settings.PlatePreassignEnabled;
+        // HU #12853 (Feature #12846, Épica #12751) — la columna plate_preassign_enabled deja de
+        // escribirse desde este UPSERT (el handler ya la ignora, ver UpdateTenantSettingsHandler): se
+        // conserva sin migración, con el valor histórico intacto, nunca el del request (AC3).
         policy.ValidateSoatWithRunt = settings.ValidateSoatWithRunt;
         policy.NotificationChannel = TenantSettingsCodes.ToDb(settings.NotificationChannel);
         policy.PersonalizedDocumentsEnabled = settings.PersonalizedDocumentsEnabled;

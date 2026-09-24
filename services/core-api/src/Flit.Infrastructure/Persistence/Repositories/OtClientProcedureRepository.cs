@@ -834,47 +834,23 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return PlateAssignmentOutcome.Fail(PlateAssignmentFailure.NotPreassigned);
                 }
 
-                // HU #10800 — Flujo B: el OT elige una placa del rango (TryReserve, solo placas disponibles)
-                // o registra una placa FUERA DE RANGO (ReserveOutOfRange, la crea como rango ad-hoc de 1 placa).
-                if (outOfRange)
+                // HU #12849 (Feature #12846, Épica #12751) — la consola de rangos se retiró: la
+                // asignación de placa dentro de un trámite SIEMPRE reserva fuera de rango, sin
+                // importar el valor de <paramref name="outOfRange"/> recibido (se ignora a propósito,
+                // se conserva el parámetro solo para no romper el contrato del método). La rama que
+                // reservaba del rango (TryReservePlateAsync) se elimina: ningún rango configurado
+                // antes decide ya la asignación.
+                var outResult = await _plateRepo
+                    .ReserveOutOfRangePlateAsync(accessible.ClientTenantId, officeId, plate, procedureInstanceId, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!outResult.Success)
                 {
-                    var outResult = await _plateRepo
-                        .ReserveOutOfRangePlateAsync(accessible.ClientTenantId, officeId, plate, procedureInstanceId, cancellationToken)
-                        .ConfigureAwait(false);
-                    if (!outResult.Success)
-                    {
-                        // Fuera de rango solo falla por formato o porque la placa ya está en el
-                        // inventario del OT; el repo ya redactó la causa exacta y se propaga tal cual
-                        // (no se re-consulta: la transacción puede venir abortada por el fallo).
-                        return PlateAssignmentOutcome.Fail(
-                            PlateAssignmentFailure.PlateAlreadyAssigned,
-                            outResult.Error);
-                    }
-                }
-                else
-                {
-                    var reserved = await _plateRepo
-                        .TryReservePlateAsync(accessible.ClientTenantId, officeId, plate, procedureInstanceId, cancellationToken)
-                        .ConfigureAwait(false);
-                    if (!reserved)
-                    {
-                        // La reserva falla por dos motivos muy distintos y el operador necesita
-                        // distinguirlos: que la placa ya esté tomada (hay que elegir otra) o que no
-                        // pertenezca a ningún rango del OT (hay que registrarla fuera de rango).
-                        var yaRegistrada = await _context.PlateRangeDetails
-                            .AsNoTracking()
-                            .AnyAsync(
-                                d => d.TransitOfficeId == officeId
-                                    && d.Plate == plate.Trim().ToUpperInvariant()
-                                    && d.ProcedureInstanceId != null
-                                    && d.ProcedureInstanceId != procedureInstanceId,
-                                cancellationToken)
-                            .ConfigureAwait(false);
-
-                        return PlateAssignmentOutcome.Fail(yaRegistrada
-                            ? PlateAssignmentFailure.PlateAlreadyAssigned
-                            : PlateAssignmentFailure.PlateNotAvailable);
-                    }
+                    // Fuera de rango solo falla por formato o porque la placa ya está en el
+                    // inventario del OT; el repo ya redactó la causa exacta y se propaga tal cual
+                    // (no se re-consulta: la transacción puede venir abortada por el fallo).
+                    return PlateAssignmentOutcome.Fail(
+                        PlateAssignmentFailure.PlateAlreadyAssigned,
+                        outResult.Error);
                 }
 
                 // Escribe la placa en field_values ESTANDO en preasignacion (el trigger lo permite) y

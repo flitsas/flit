@@ -43,7 +43,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "2. Cola de placa (matrícula inicial en ruta larga)",
         paragraphs: [],
         bullets: [
-          "Preasignación → «Asignar placa»: elige una placa del rango del organismo o registra una fuera de rango. El dígito de preferencia que indicó el gestor aparece como guía. Al asignar, el trámite pasa a Asignado y la compañía recibe correo.",
+          "Preasignación → «Asignar placa»: escribe la placa libre que le vas a dar al trámite. El dígito de preferencia que indicó el gestor aparece como guía, sin obligarte a nada. Al asignar, el trámite pasa a Asignado y la compañía recibe correo.",
           "Asignado → «Corregir placa»: una única corrección dentro de la hora siguiente a la asignación. Vencida la hora, la acción se deshabilita.",
           "Asignado → «Liberar placa» (con motivo): el trámite vuelve a Preasignación y la placa queda disponible. Queda en el historial.",
           "El gestor, en Asignado, gestiona SOAT e impuestos y «Envía al OT»: el trámite entra a Entregado.",
@@ -66,52 +66,6 @@ export const OT_ARTICLES: ManualArticle[] = [
             title: "Trazabilidad",
             text: "Toda decisión queda en el historial del trámite con fecha y hora, y dispara el correo correspondiente a la compañía. Si tu organismo opera en Quipux, la consola está en solo lectura: decides allí, no aquí.",
           },
-        ],
-      },
-    ],
-  },
-  {
-    slug: "2-ot/2-preasignacion",
-    title: "Preasignación de placas",
-    audience: "Organismo de Tránsito",
-    sectionId: "ot",
-    keywords: [
-      "preasignacion",
-      "placas",
-      "rangos",
-      "plate-ranges",
-      "asignar placa",
-      "matricula placa",
-      "inventario de placas",
-      "rango de placas",
-    ],
-    summary: "Administrar rangos de placas y preasignación para compañías.",
-    blocks: [
-      {
-        id: "concepto",
-        title: "1. Qué es la preasignación",
-        paragraphs: [
-          "Permite al OT definir rangos o bloques de placas que las compañías pueden consumir en trámites de matrícula (u otros flujos habilitados).",
-          "Reduce fricción operativa al evitar asignación manual caso a caso cuando hay convenio de rangos.",
-        ],
-      },
-      {
-        id: "donde",
-        title: "2. Dónde configurarlo",
-        paragraphs: [
-          "Dock → Preasignación → segmento plate-ranges del hub OT.",
-        ],
-        bullets: [
-          "Crea o edita rangos según política del organismo.",
-          "Asocia rangos a compañías o convenios cuando aplique.",
-          "Monitorea consumo para no agotar un rango sin reponer.",
-        ],
-      },
-      {
-        id: "gestor",
-        title: "3. Relación con el Gestor",
-        paragraphs: [
-          "El gestor no elige placas del inventario: radica la matrícula inicial en ruta larga con un dígito de preferencia (o sin preferencia) y el trámite llega a tu cola de Preasignación. Tú asignas la placa desde la bandeja, del rango o fuera de rango; el rango define la oferta disponible y su consumo se refleja aquí.",
         ],
       },
     ],
