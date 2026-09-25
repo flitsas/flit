@@ -33,6 +33,24 @@ internal sealed class CompanyHierarchyRepository : ICompanyHierarchyRepository
         return row;
     }
 
+    public async Task<IReadOnlyList<CompanyHierarchyInfo>> ListNetworkHierarchyInfoAsync(
+        IReadOnlyCollection<Guid> extraTenantIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(extraTenantIds);
+        var extra = extraTenantIds.Distinct().ToList();
+
+        return await _context.Tenants
+            .AsNoTracking()
+            .Where(t => t.IsGroupParent
+                || t.ParentTenantId != null
+                || extra.Contains(t.Id)
+                || _context.Tenants.Any(c => c.ParentTenantId == t.Id))
+            .Select(t => new CompanyHierarchyInfo(t.Id, t.TenantType, t.IsGroupParent, t.ParentTenantId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<CompanyChildListItem>> ListChildrenAsync(
         Guid headTenantId,
         CancellationToken cancellationToken = default)

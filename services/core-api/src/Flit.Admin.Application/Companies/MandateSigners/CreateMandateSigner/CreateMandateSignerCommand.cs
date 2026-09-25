@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Companies.TransitOffices;
 namespace Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 
 /// <summary>Alta de un mandatario en un OT. <c>DocumentNumber</c> es PII: no loguear.</summary>
@@ -45,4 +46,11 @@ public sealed class CreateMandateSignerCommand
 
     public Guid? CreatedBy { get; init; }
     public Guid? CorrelationId { get; init; }
+
+    /// <summary>
+    /// Bug #12912 (Ley 1581) — compañías que quien opera puede asignar en el OT (ver
+    /// <see cref="OtCompanyVisibility"/>). Con la vista del organismo la operación queda acotada a su
+    /// propia fila: no toca organismos ajenos ni compañías que no puede ver.
+    /// </summary>
+    public required OtCompanyVisibility CompanyVisibility { get; init; }
 }

@@ -188,7 +188,7 @@ public sealed class MandateSignerIdentityVigenciaTests
         var reader = new DbMandateSignerReader(
             ctx, ReaderConTenant(Ot, OtTenant), new IdentityVigenciaPorDocumentoResolver(identityRepo));
 
-        var items = await reader.ListByOtAsync(Ot, ct);
+        var items = await reader.ListByOtAsync(Ot, OtCompanyVisibility.WholeNetwork, ct);
 
         items.Should().HaveCount(2);
         await identityRepo.Received(1).ListLatestBiometricValidationsByPersonsAsync(
@@ -239,7 +239,7 @@ public sealed class MandateSignerIdentityVigenciaTests
         await using var ctx = await SeedAsync();
         var reader = new DbMandateSignerReader(ctx, new DbTransitOfficeOperationalStatusReader(ctx));
 
-        var act = async () => await reader.ListByOtAsync(Ot, ct);
+        var act = async () => await reader.ListByOtAsync(Ot, OtCompanyVisibility.WholeNetwork, ct);
 
         await act.Should().NotThrowAsync();
     }

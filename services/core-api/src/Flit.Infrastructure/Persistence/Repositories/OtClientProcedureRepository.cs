@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Flit.Admin.Domain.Common;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtQueries;
 using Flit.Admin.Domain.PlatePreassign;
@@ -34,13 +35,15 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     private readonly IPlateRangeRepository? _plateRepo;
     private readonly IConsolidadoRegeneracionQueue? _regeneracionQueue;
     private readonly ILogger<OtClientProcedureRepository> _logger;
+    private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
 
     public OtClientProcedureRepository(
         FlitDbContext context,
         ITramiteTransitionPublisher transitionPublisher,
         IPlateRangeRepository? plateRepo = null,
         IConsolidadoRegeneracionQueue? regeneracionQueue = null,
-        ILogger<OtClientProcedureRepository>? logger = null)
+        ILogger<OtClientProcedureRepository>? logger = null,
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _transitionPublisher = transitionPublisher ?? throw new ArgumentNullException(nameof(transitionPublisher));
@@ -49,6 +52,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         // tests que no la ejercitan: sin cola, solo el camino perezoso.
         _regeneracionQueue = regeneracionQueue;
         _logger = logger ?? NullLogger<OtClientProcedureRepository>.Instance;
+
+        // Bug #12912 — salud de la bandeja: «con grant vigente» incluye la red (Concesión / Marca
+        // Blanca). Null en tests que construyen el repo a mano: criterio previo de grant propio.
+        _effectiveOffices = effectiveOffices;
     }
 
     public Task<PagedResult<OtClientProcedure>> ListAsync(
@@ -1582,12 +1589,18 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid transitOfficeId,
         CancellationToken cancellationToken) =>
         await ExecuteCrossTenantReadAsync(
-            async () => (IReadOnlyList<Guid>)await _context.TenantTransitOfficeGrants
-                .AsNoTracking()
-                .Where(g => g.TransitOfficeId == transitOfficeId && g.IsEnabled)
-                .Select(g => g.TenantId)
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false),
+            async () => _effectiveOffices is not null
+                // Bug #12912 — «con grant vigente» = en la lista efectiva inversa del OT (HU #12347):
+                // un trámite de la hija de una Concesión o de la red Marca Blanca no es una anomalía.
+                ? await _effectiveOffices
+                    .ListEffectiveTenantIdsForOfficeAsync(transitOfficeId, cancellationToken)
+                    .ConfigureAwait(false)
+                : (IReadOnlyList<Guid>)await _context.TenantTransitOfficeGrants
+                    .AsNoTracking()
+                    .Where(g => g.TransitOfficeId == transitOfficeId && g.IsEnabled)
+                    .Select(g => g.TenantId)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false),
             cancellationToken).ConfigureAwait(false);
 
     private async Task<T> ExecuteOtScopedAsync<T>(

@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Queries.Domain.Time;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,9 +24,18 @@ internal sealed class OtTenantScope
     public static TimeZoneInfo Bogota => ColombiaTime.Zone;
 
     private readonly FlitDbContext _context;
+    private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
 
-    public OtTenantScope(FlitDbContext context) =>
+    /// <param name="context">Contexto EF.</param>
+    /// <param name="effectiveOffices">
+    /// Bug #12912 — cálculo inverso de la lista efectiva (red Concesión / Marca Blanca). Sin él (repos
+    /// construidos a mano en tests) el alcance es el criterio previo: solo grant propio habilitado.
+    /// </param>
+    public OtTenantScope(FlitDbContext context, IEffectiveTransitOfficeListResolver? effectiveOffices = null)
+    {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _effectiveOffices = effectiveOffices;
+    }
 
     /// <summary>
     /// Ejecuta <paramref name="action"/> con el organismo resuelto y sus empresas. Devuelve
@@ -52,16 +62,61 @@ internal sealed class OtTenantScope
         return await ReadCrossTenantAsync(
             async () =>
             {
-                var tenantIds = await _context.TenantTransitOfficeGrants
-                    .AsNoTracking()
-                    .Where(g => g.TransitOfficeId == transitOfficeId.Value && g.IsEnabled)
-                    .Select(g => g.TenantId)
-                    .ToListAsync(cancellationToken)
+                var tenantIds = await ListClientTenantIdsAsync(transitOfficeId.Value, cancellationToken)
                     .ConfigureAwait(false);
 
                 return await action(transitOfficeId.Value, tenantIds).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Empresas cuyos trámites ve el organismo. Bug #12912 — con el resolver es la lista efectiva
+    /// inversa (HU #12347): grant propio, hijas de una Concesión con grant y red Marca Blanca no
+    /// bloqueada. Es el mismo conjunto que puede radicar en el organismo, así que no amplía lo visible
+    /// más allá de lo que la red ya puede entregarle.
+    /// </summary>
+    private async Task<IReadOnlyList<Guid>> ListClientTenantIdsAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (_effectiveOffices is not null)
+        {
+            return await _effectiveOffices
+                .ListEffectiveTenantIdsForOfficeAsync(transitOfficeId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return await _context.TenantTransitOfficeGrants
+            .AsNoTracking()
+            .Where(g => g.TransitOfficeId == transitOfficeId && g.IsEnabled)
+            .Select(g => g.TenantId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Compañías cuyo NOMBRE puede listar el organismo (Bug #12912, criterio Ley 1581 decidido por el
+    /// humano). La regla vive en <see cref="OtVisibleCompanies"/>: grant directo respaldado por la red, y
+    /// las que entran SOLO por la red únicamente si ya le entregaron algún trámite. Los conteos y filas de trámites no pasan por aquí:
+    /// solo hay fila si hay trámite. Debe llamarse dentro de <see cref="ExecuteAsync{T}"/> (lectura
+    /// cross-tenant ya abierta). Sin resolver, <paramref name="scopeTenantIds"/> ya son los grants
+    /// directos y se devuelven tal cual.
+    /// </summary>
+    public async Task<IReadOnlyList<Guid>> ListVisibleClientTenantIdsAsync(
+        Guid transitOfficeId,
+        IReadOnlyList<Guid> scopeTenantIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(scopeTenantIds);
+        if (_effectiveOffices is null)
+        {
+            return scopeTenantIds;
+        }
+
+        return await OtVisibleCompanies
+            .FilterAsync(_context, transitOfficeId, scopeTenantIds, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<Guid?> ResolveTransitOfficeIdAsync(

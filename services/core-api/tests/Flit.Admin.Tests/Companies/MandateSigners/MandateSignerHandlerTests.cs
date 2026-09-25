@@ -11,6 +11,7 @@ using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using Flit.Admin.Domain.Companies.TransitOffices;
 
 namespace Flit.Admin.Tests.Companies.MandateSigners;
 
@@ -41,7 +42,7 @@ public sealed class MandateSignerHandlerTests
         result.MandateSignerId.Should().NotBeNull();
         result.IntegrityHash.Should().MatchRegex("^[0-9a-f]{64}$");
 
-        var signers = await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct);
+        var signers = await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office, Visibility = OtCompanyVisibility.WholeNetwork }, Ct);
         signers.Should().ContainSingle();
         signers[0].FullName.Should().Be("Samuel Cárdenas");
         signers[0].CompanyTenantIds.Should().BeEquivalentTo([CompanyA, CompanyB]);
@@ -74,7 +75,7 @@ public sealed class MandateSignerHandlerTests
         var second = await create.HandleAsync(NewCreate("Daniel", "222", [CompanyB]), Ct);
 
         second.IsValid.Should().BeTrue();
-        var signers = await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct);
+        var signers = await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office, Visibility = OtCompanyVisibility.WholeNetwork }, Ct);
         signers.Should().HaveCount(2);
     }
 
@@ -95,7 +96,7 @@ public sealed class MandateSignerHandlerTests
         outcome.Should().Be(InactivateMandateSignerOutcome.Inactivated);
 
         // Samuel SIGUE visible en el listado, pero inactivo y sin compañías (liberadas por el soft-delete).
-        var signers = await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct);
+        var signers = await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office, Visibility = OtCompanyVisibility.WholeNetwork }, Ct);
         var samuelRow = signers.Single(s => s.Id == samuel.MandateSignerId);
         samuelRow.IsActive.Should().BeFalse();
         samuelRow.CompanyTenantIds.Should().BeEmpty();
@@ -124,7 +125,7 @@ public sealed class MandateSignerHandlerTests
         outcome.Should().Be(ReactivateMandateSignerOutcome.Reactivated);
 
         // Vuelve activo pero sin compañías (se liberaron y no se restauran).
-        var row = (await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct))
+        var row = (await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office, Visibility = OtCompanyVisibility.WholeNetwork }, Ct))
             .Single(s => s.Id == samuel.MandateSignerId);
         row.IsActive.Should().BeTrue();
         row.CompanyTenantIds.Should().BeEmpty();
@@ -146,10 +147,11 @@ public sealed class MandateSignerHandlerTests
         var (create, update, _, _, list) = CrudHandlers(ctx);
 
         var created = await create.HandleAsync(NewCreate("Samuel", "123456", [CompanyA]), Ct);
-        var before = (await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct)).Single();
+        var before = (await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office, Visibility = OtCompanyVisibility.WholeNetwork }, Ct)).Single();
 
         var updateResult = await update.HandleAsync(new UpdateMandateSignerCommand
         {
+            CompanyVisibility = OtCompanyVisibility.WholeNetwork,
             TransitOfficeId = Office,
             MandateSignerId = created.MandateSignerId!.Value,
             FullName = "Samuel Alberto Cárdenas",
@@ -160,7 +162,7 @@ public sealed class MandateSignerHandlerTests
 
         updateResult.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
 
-        var after = (await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office }, Ct)).Single();
+        var after = (await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office, Visibility = OtCompanyVisibility.WholeNetwork }, Ct)).Single();
         after.IntegrityHash.Should().NotBe(before.IntegrityHash); // regenerada.
         after.RegisteredAt.Should().Be(before.RegisteredAt);      // fecha de registro intacta.
         after.CompanyTenantIds.Should().BeEquivalentTo([CompanyA, CompanyB]);
@@ -177,6 +179,7 @@ public sealed class MandateSignerHandlerTests
         // Editar manteniendo A (ya suya) + agregar B no debe chocar por exclusividad.
         var updated = await update.HandleAsync(new UpdateMandateSignerCommand
         {
+            CompanyVisibility = OtCompanyVisibility.WholeNetwork,
             TransitOfficeId = Office,
             MandateSignerId = created.MandateSignerId!.Value,
             FullName = "Samuel",
@@ -216,6 +219,7 @@ public sealed class MandateSignerHandlerTests
             DocumentNumber = documentNumber,
             CompanyTenantIds = companies,
             CreatedBy = Operator,
+            CompanyVisibility = OtCompanyVisibility.WholeNetwork,
         };
 
     private static (

@@ -78,6 +78,104 @@ internal sealed partial class EffectiveTransitOfficeListResolver : IEffectiveTra
         };
     }
 
+    /// <summary>
+    /// Bug #12912 — inverso de <see cref="ListEffectiveOfficeIdsAsync"/>, rama por rama:
+    /// <list type="bullet">
+    ///   <item>cliente suelto o cabeza Concesión: su grant propio habilitado;</item>
+    ///   <item>hijo de Concesión: el grant de su cabeza (el propio no cuenta, AC3 de #12347);</item>
+    ///   <item>cabeza Marca Blanca y sus hijos: el OT es operable y la cabeza no lo bloquea.</item>
+    /// </list>
+    /// Tres lecturas acotadas (grants del OT, jerarquía de red, bloqueos del OT) + el estado operativo
+    /// del OT solo si hay alguna red Marca Blanca. La propiedad
+    /// <c>officeId ∈ Effective(t) ⇔ t ∈ Inverse(officeId)</c> está cubierta por prueba de integración.
+    /// </summary>
+    public async Task<IReadOnlyList<Guid>> ListEffectiveTenantIdsForOfficeAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default)
+    {
+        var holders = (await _grants
+            .ListEnabledTenantIdsForOfficeAsync(transitOfficeId, cancellationToken)
+            .ConfigureAwait(false)).ToHashSet();
+
+        var infos = (await _hierarchy
+            .ListNetworkHierarchyInfoAsync(holders, cancellationToken)
+            .ConfigureAwait(false))
+            .ToDictionary(i => i.TenantId);
+
+        var result = new HashSet<Guid>();
+
+        // Cliente suelto o cabeza Concesión con grant propio.
+        foreach (var holder in holders)
+        {
+            if (!infos.TryGetValue(holder, out var info) || info.ParentTenantId is not null)
+            {
+                continue;
+            }
+
+            if (!info.IsGroupParent || KindOf(info.TenantType) == GroupKind.Concesion)
+            {
+                result.Add(holder);
+            }
+        }
+
+        // Marca Blanca: solo se consulta el estado operativo y los bloqueos si hay alguna red MB.
+        var hasMarcaBlanca = infos.Values.Any(i => KindOf(i.TenantType) == GroupKind.MarcaBlanca);
+        var mbOperable = hasMarcaBlanca
+            && await IsOperableAsync(transitOfficeId, cancellationToken).ConfigureAwait(false);
+        var blockingHeads = mbOperable
+            ? (await _blocks.ListBlockingHeadIdsAsync(transitOfficeId, cancellationToken)
+                .ConfigureAwait(false)).ToHashSet()
+            : [];
+
+        foreach (var info in infos.Values)
+        {
+            if (info.ParentTenantId is null)
+            {
+                // Cabeza Marca Blanca (rama ResolveHeadEffectiveAsync).
+                if (info.IsGroupParent
+                    && mbOperable
+                    && KindOf(info.TenantType) == GroupKind.MarcaBlanca
+                    && !blockingHeads.Contains(info.TenantId))
+                {
+                    result.Add(info.TenantId);
+                }
+
+                continue;
+            }
+
+            // Hijo: decide la clase de su cabeza, no su grant propio.
+            if (!infos.TryGetValue(info.ParentTenantId.Value, out var head))
+            {
+                continue;
+            }
+
+            var included = KindOf(head.TenantType) switch
+            {
+                GroupKind.Concesion => holders.Contains(head.TenantId),
+                GroupKind.MarcaBlanca => mbOperable && !blockingHeads.Contains(head.TenantId),
+                _ => false,
+            };
+
+            if (included)
+            {
+                result.Add(info.TenantId);
+            }
+        }
+
+        return result.OrderBy(id => id).ToList();
+    }
+
+    private static GroupKind? KindOf(string? tenantType) =>
+        GroupKindCodes.TryParse(tenantType, out var kind) ? kind : null;
+
+    /// <summary>Mismo criterio de operable que <see cref="ListMarcaBlancaEffectiveAsync"/>.</summary>
+    private async Task<bool> IsOperableAsync(Guid transitOfficeId, CancellationToken cancellationToken)
+    {
+        var office = await _operationalStatus.GetByIdAsync(transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        return office is { HasTenant: true, EstadoActivo: true };
+    }
+
     private async Task<IReadOnlyList<Guid>> ResolveHeadEffectiveAsync(
         Guid headTenantId,
         string tenantType,

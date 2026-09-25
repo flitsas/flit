@@ -147,7 +147,7 @@ public sealed class MandateSignerVariosOrganismosTests
         // la corrección en cada uno.
         foreach (var ot in new[] { OtMedellin, OtEnvigado })
         {
-            var enElOt = await reader.ListByOtAsync(ot, ct);
+            var enElOt = await reader.ListByOtAsync(ot, OtCompanyVisibility.WholeNetwork, ct);
             enElOt.Should().ContainSingle()
                 .Which.FullName.Should().Be("Ana María Restrepo");
         }
@@ -172,9 +172,9 @@ public sealed class MandateSignerVariosOrganismosTests
                 TransitOfficeIds: [OtMedellin, OtBello]),
             ct);
 
-        (await reader.ListByOtAsync(OtEnvigado, ct)).Should().BeEmpty();
-        (await reader.ListByOtAsync(OtMedellin, ct)).Should().ContainSingle();
-        (await reader.ListByOtAsync(OtBello, ct)).Should().ContainSingle();
+        (await reader.ListByOtAsync(OtEnvigado, OtCompanyVisibility.WholeNetwork, ct)).Should().BeEmpty();
+        (await reader.ListByOtAsync(OtMedellin, OtCompanyVisibility.WholeNetwork, ct)).Should().ContainSingle();
+        (await reader.ListByOtAsync(OtBello, OtCompanyVisibility.WholeNetwork, ct)).Should().ContainSingle();
     }
 
     [Fact]
@@ -249,7 +249,7 @@ public sealed class MandateSignerVariosOrganismosTests
         });
         await ctx.SaveChangesAsync(ct);
 
-        var antes = await reader.ListByOtAsync(OtMedellin, ct);
+        var antes = await reader.ListByOtAsync(OtMedellin, OtCompanyVisibility.WholeNetwork, ct);
         antes.Should().ContainSingle();
         antes[0].TransitOfficeIds.Should().BeEquivalentTo([OtMedellin]);
         antes[0].CompanyTenantIds.Should().BeEquivalentTo([Compania]);
@@ -262,7 +262,7 @@ public sealed class MandateSignerVariosOrganismosTests
                 [Compania], null, null),
             ct);
 
-        var despues = await reader.ListByOtAsync(OtMedellin, ct);
+        var despues = await reader.ListByOtAsync(OtMedellin, OtCompanyVisibility.WholeNetwork, ct);
         despues.Should().ContainSingle();
         despues[0].FullName.Should().Be("Carlos Andrés Pérez");
         despues[0].TransitOfficeIds.Should().BeEquivalentTo([OtMedellin]);
@@ -343,7 +343,7 @@ public sealed class MandateSignerVariosOrganismosTests
 
         // Un vínculo inactivo por baja de la PERSONA no es lo mismo que un organismo retirado: el
         // mandatario debe seguir a la vista para poder reactivarlo.
-        var enElOt = await reader.ListByOtAsync(OtMedellin, ct);
+        var enElOt = await reader.ListByOtAsync(OtMedellin, OtCompanyVisibility.WholeNetwork, ct);
         enElOt.Should().ContainSingle().Which.IsActive.Should().BeFalse();
     }
 
@@ -361,7 +361,7 @@ public sealed class MandateSignerVariosOrganismosTests
 
         // Sin devolverle al menos el primario quedaría activo y sin aparecer en ninguna consola: activo
         // e inalcanzable. Los demás se le vuelven a asignar desde la edición.
-        var enElOt = await reader.ListByOtAsync(OtMedellin, ct);
+        var enElOt = await reader.ListByOtAsync(OtMedellin, OtCompanyVisibility.WholeNetwork, ct);
         enElOt.Should().ContainSingle().Which.TransitOfficeIds.Should().Contain(OtMedellin);
     }
 }

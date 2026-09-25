@@ -113,6 +113,10 @@ public sealed class IdentityValidationPolicyTests
             Guid tenantId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_offices);
 
+        public Task<IReadOnlyList<Guid>> ListEnabledTenantIdsForOfficeAsync(
+            Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Guid>>([]);
+
         public Task<string?> GetGrantSourceAsync(
             Guid tenantId, Guid transitOfficeId, CancellationToken cancellationToken = default) =>
             Task.FromResult<string?>(null);

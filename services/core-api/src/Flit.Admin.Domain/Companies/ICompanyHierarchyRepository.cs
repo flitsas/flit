@@ -12,6 +12,15 @@ public interface ICompanyHierarchyRepository
         Guid tenantId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Jerarquía de los tenants que participan en alguna red (cabezas, hijos y padres de algún hijo)
+    /// más la de <paramref name="extraTenantIds"/>, en una sola lectura. Base del cálculo inverso de
+    /// la lista efectiva de OT (Bug #12912).
+    /// </summary>
+    Task<IReadOnlyList<CompanyHierarchyInfo>> ListNetworkHierarchyInfoAsync(
+        IReadOnlyCollection<Guid> extraTenantIds,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Clientes cuyo <c>parent_tenant_id</c> es <paramref name="headTenantId"/>.</summary>
     Task<IReadOnlyList<CompanyChildListItem>> ListChildrenAsync(
         Guid headTenantId,
