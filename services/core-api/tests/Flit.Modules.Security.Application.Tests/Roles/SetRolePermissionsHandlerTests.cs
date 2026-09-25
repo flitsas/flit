@@ -54,4 +54,35 @@ public sealed class SetRolePermissionsHandlerTests
         await _repo.DidNotReceiveWithAnyArgs().SetPermissionsAsync(
             Arg.Any<Guid>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>());
     }
+
+    // HU #12964 — un rol solo tiene permisos de módulos de su producto (contrato v1 §4)
+    [Fact]
+    public async Task HandleAsync_PermissionFromAnotherProduct_ThrowsMismatch_WithoutSettingPermissions()
+    {
+        _repo.GetByIdAsync(RoleId, Arg.Any<CancellationToken>())
+            .Returns(new RoleDetail(RoleId, "COMPANY", "Radicador", "Radicador", null, false, true, [], "tramites"));
+        _repo.GetPermissionProductCodesAsync(Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(["tramites", "plataforma"]);
+
+        await _handler
+            .Invoking(h => h.HandleAsync(new SetRolePermissionsCommand(RoleId, [PermissionId]), CancellationToken.None))
+            .Should().ThrowAsync<RolePermissionProductMismatchException>();
+
+        await _repo.DidNotReceiveWithAnyArgs().SetPermissionsAsync(
+            Arg.Any<Guid>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>());
+    }
+
+    // HU #12964 — SuperAdmin conserva el bypass en todos los productos (contrato v1 §2.1)
+    [Fact]
+    public async Task HandleAsync_SuperAdmin_AcceptsPermissionsFromAnyProduct()
+    {
+        var superAdmin = new RoleDetail(RoleId, "COMPANY", "SuperAdmin", "SuperAdmin", null, true, true, [], "plataforma");
+        _repo.GetByIdAsync(RoleId, Arg.Any<CancellationToken>()).Returns(superAdmin, superAdmin);
+        _repo.GetPermissionProductCodesAsync(Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(["tramites", "plataforma"]);
+
+        await _handler.HandleAsync(new SetRolePermissionsCommand(RoleId, [PermissionId]), CancellationToken.None);
+
+        await _repo.Received(1).SetPermissionsAsync(RoleId, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>());
+    }
 }

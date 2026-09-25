@@ -12,4 +12,7 @@ public sealed class ActiveNetworkDomainView
     public string Host { get; init; } = string.Empty;
 
     public Guid HeadTenantId { get; init; }
+
+    /// <summary>HU #12968: <c>HUB</c> o el código del producto del dominio.</summary>
+    public string Purpose { get; init; } = string.Empty;
 }

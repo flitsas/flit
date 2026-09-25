@@ -43,7 +43,7 @@ public sealed class GetActiveModulesHandlerTests
         }
 
         await using var ctx = NewContext(db);
-        var handler = new GetActiveModulesHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+        var handler = new GetActiveModulesHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance), new StubTenantProductFlags(tramites: false, comparendos: true));
 
         var result = await handler.HandleAsync(
             new GetActiveModulesQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
@@ -59,7 +59,7 @@ public sealed class GetActiveModulesHandlerTests
         // Sin fila en tenant_operational_policies → defaults de TenantSettings.Default,
         // NUNCA null (a diferencia de GetTenantSettingsHandler, que traduce a 404).
         await using var ctx = NewContext(NewDbName());
-        var handler = new GetActiveModulesHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+        var handler = new GetActiveModulesHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
 
         var result = await handler.HandleAsync(
             new GetActiveModulesQuery { TenantId = Guid.NewGuid() }, TestContext.Current.CancellationToken);

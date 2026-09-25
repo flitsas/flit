@@ -14,6 +14,7 @@
     <Project Path="src/Flit.Modules.Improntas.Domain/Flit.Modules.Improntas.Domain.csproj" />
     <Project Path="src/Flit.Modules.Quipux.Domain/Flit.Modules.Quipux.Domain.csproj" />
     <Project Path="src/Flit.Modules.Quipux.Application/Flit.Modules.Quipux.Application.csproj" />
+    <Project Path="src/Flit.Modules.Platform/Flit.Modules.Platform.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Flit.Infrastructure.Tests/Flit.Infrastructure.Tests.csproj" />
@@ -23,6 +24,7 @@
     <Project Path="tests/Flit.Admin.Tests/Flit.Admin.Tests.csproj" />
     <Project Path="tests/Flit.Analytics.Application.Tests/Flit.Analytics.Application.Tests.csproj" />
     <Project Path="tests/Flit.Modules.Quipux.Application.Tests/Flit.Modules.Quipux.Application.Tests.csproj" />
+    <Project Path="tests/Flit.Modules.Platform.Tests/Flit.Modules.Platform.Tests.csproj" />
     <Project Path="tests/Flit.DataMigration.Tests/Flit.DataMigration.Tests.csproj" />
     <Project Path="tests/Flit.Integration.Tests/Flit.Integration.Tests.csproj" />
   </Folder>

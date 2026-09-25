@@ -1,5 +1,6 @@
 # FLIT Suite — Diagnóstico y plan de producto central (v3.2)
 
+> v3.3 · 2026-09-25 · **un solo desarrollador** (Samuel Cardenas, acordado con el líder técnico), **un PR por Feature de ADO** y el hub según la **opción 4, provisional** (§4.6). El orden de trabajo vive en el [README](README.md#orden-de-trabajo). §5.0 queda como historia.
 > v3.2 · 2026-09-23 · **propuesta, nada implementado**
 > · v3.2: **el hub y el login viven en la raíz `flitsas.online`** (decisión del negocio); modelo de navegación con menú de productos común y menú propio por producto (§4.6).
 > · v3.1: equipo de tres personas con reparto de la plataforma (§5.0), nombres completos de
@@ -13,7 +14,7 @@
 > ADR-0060 (Marca Blanca) en vez de reemplazarlo; consultas externas como capacidad compartida;
 > recomendación de repositorio con la convención de carpetas propuesta por el equipo.
 > · **Trabajo diario:** [README de la suite](README.md) (quién hace qué y cómo empezar),
-> [reglas de trabajo en paralelo](reglas-trabajo-paralelo.md), [contrato de plataforma v1](contrato-plataforma-v1.md)
+> [reglas de trabajo](reglas-trabajo-paralelo.md), [contrato de plataforma v1](contrato-plataforma-v1.md)
 > y los planes por frente en [`frentes/`](frentes/).
 > · Borradores de ADR 0061–0065 en [`docs/suite/adr-borradores/`](adr-borradores/README.md),
 > pendientes de aprobación humana (regla FLIT 15).
@@ -226,7 +227,11 @@ admin.tenant_domains + purpose        (ver §4.4)
 
 Modelo definido por el negocio:
 
-1. **Entrada por el hub.** El usuario abre `flitsas.online`, inicia sesión y ve el inicio con las tarjetas de los productos a los que tiene acceso: producto encendido para su empresa y al menos un rol suyo en ese producto. Los demás no aparecen.
+1. **Entrada por el hub, con entrada directa** (opción 4, **provisional** desde el 2026-09-25 mientras el CTO y el líder dan una decisión definitiva; comparación de opciones en https://claude.ai/artifact/975usQzczhebY3d9nRK9n7). La raíz `flitsas.online` es el hub:
+   - **Sin sesión:** portada breve con la marca del host: logo, una frase, «Iniciar sesión» y cada producto con «Conocer más ↗» hacia `flitsas.com`. Sin contenido comercial, que sigue en `flitsas.com`. En Marca Blanca solo se ve la marca de la red.
+   - **Con sesión y dos o más productos:** inicio limpio al estilo google.com: logo, saludo, una tarjeta por producto con acceso (producto encendido para su empresa y al menos un rol suyo en él) y los accesos de administración. Los demás productos no aparecen.
+   - **Con sesión y un solo producto:** entrada directa. El hub redirige a ese producto (hoy, todos los clientes de Trámites aterrizan en `tramites.flitsas.online`). El hub queda a un clic en ▦ → Inicio.
+   - La decisión sale de `GET /api/v1/platform/me/apps`; el contrato no cambia.
 2. **Menú principal de productos.** Es un selector tipo rejilla, idéntico en el hub y en todos los productos y siempre en el mismo lugar de la barra superior. Lista "Inicio" (el hub) y los productos con acceso, y marca el actual. Cambiar de producto lleva al host de ese producto; el SSO evita volver a iniciar sesión. **Es la única forma de cambiar de producto.**
 3. **Cada producto tiene su propio menú.** Es su dock, definido por el producto y filtrado por los roles del usuario en ese producto. El menú de productos y el menú del producto nunca se mezclan.
 4. **Menú de cuenta** común: perfil, cambio de contraseña y cerrar sesión. Cerrar sesión cierra la sesión en toda la suite.
@@ -294,9 +299,11 @@ Modelo definido por el negocio:
 
 ## 5. Plan por fases: plataforma primero
 
-Duraciones relativas, sin fechas, con el equipo de tres personas. Sprints de una semana, PRs ≤ 800 líneas a `develop`.
+Duraciones relativas, sin fechas, calculadas para un equipo de tres personas; desde la v3.3 la suite la construye una sola persona, así que se alargan. Sprints de una semana y **un PR por Feature de ADO** a `develop` (sin el límite de 800 líneas, ver [reglas R1](reglas-trabajo-paralelo.md#r1-ramas-prs-y-merges)).
 
 ### 5.0 Reparto del equipo durante la plataforma
+
+> **Reemplazado en la v3.3:** todo lo hace un solo desarrollador, en el [orden de trabajo del README](README.md#orden-de-trabajo). Se conserva como historia.
 
 Cada persona toma el frente de plataforma más cercano a su producto, para llegar a la Fase 3 conociendo lo que va a usar.
 
@@ -350,7 +357,9 @@ Los productos arrancan cuando todo esto se cumple en QA:
 - [ ] El producto de prueba, creado con la plantilla, se despliega con Argo CD en `dev.<producto>.flitsas.online` con login, shell, habilitación y schema propios.
 - [ ] Un producto puede llamar a una consulta externa compartida y el consumo queda medido.
 
-### 5.5 Fase 3 — Comparendos y Diagnóstico (en paralelo)
+### 5.5 Fase 3 — Comparendos y Diagnóstico
+
+> Con un solo desarrollador (v3.3) van uno después del otro; el orden se decide al llegar a la puerta de salida.
 
 Cada desarrollador parte de la plantilla: ADR de alcance del producto, modelo de dominio, schema, API, UI con los paquetes compartidos, manifiesto de roles, eventos publicados. Primero DEV, luego QA y PDN.
 

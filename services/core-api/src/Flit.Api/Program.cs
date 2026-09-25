@@ -5,10 +5,12 @@ using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Analytics;
 using Flit.Api.Endpoints;
 using Flit.Api.Endpoints.Internal;
+using Flit.Api.Endpoints.Platform;
 using Flit.Api.Endpoints.Public;
 using Flit.Api.Endpoints.SuperAdmin;
 using Flit.Api.Endpoints.Tramites;
 using Flit.Api.OpenApi;
+using Flit.Api.Platform;
 using Flit.Api.RateLimiting;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
@@ -194,6 +196,7 @@ if (ictGrpcPort is { } grpcPort)
 // === FLIT Suite: servicios ===
 // Una línea por frente que llama a su propio método de extensión (regla R5 de
 // docs/suite/reglas-trabajo-paralelo.md). No se reordenan las líneas existentes.
+builder.Services.AddPlatformApi(builder.Configuration); // Frente B · HU #12966
 // === FLIT Suite: fin servicios ===
 
 var app = builder.Build();
@@ -269,6 +272,7 @@ app.UseMiddleware<Flit.Api.Middleware.TenantEnforcementMiddleware>();
 app.UseMiddleware<Flit.Api.Middleware.TenantWriteGuardMiddleware>();
 
 app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
+app.UseMiddleware<Flit.Api.Platform.RequireProductMiddleware>(); // FLIT Suite · HU #12966 — RequireProduct (Suite:ProductAccess:Enforce)
 
 // Liveness: el healthcheck de Docker (docker-compose.prod.yml) y el /ready del
 // Gateway sondean este endpoint. Debe existir en core-api, no solo en el Gateway.
@@ -406,6 +410,7 @@ app.MapUsageEventsEndpoints(); // Reportes2 HU-A
 
 // === FLIT Suite: endpoints ===
 // Una línea por frente: app.MapPlatformEndpoints(), app.MapIdentityEndpoints(), … (regla R5).
+app.MapPlatformEndpoints(); // Frente B · HU #12966
 // === FLIT Suite: fin endpoints ===
 
 app.Run();

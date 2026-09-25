@@ -34,6 +34,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(253)")
                         .HasColumnName("host");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("purpose");
+
                     b.ToTable((string)null);
 
                     b.ToView("v_active_network_domains", "admin");
@@ -2926,6 +2932,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("next_check_at");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("HUB")
+                        .HasColumnName("purpose");
+
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
@@ -2984,9 +2998,9 @@ namespace Flit.Infrastructure.Migrations
                         .HasDatabaseName("uq_tenant_domains_host")
                         .HasFilter("deleted_at IS NULL");
 
-                    b.HasIndex(new[] { "TenantId" }, "uq_tenant_domains_tenant_id")
+                    b.HasIndex(new[] { "TenantId", "Purpose" }, "uq_tenant_domains_tenant_purpose")
                         .IsUnique()
-                        .HasDatabaseName("uq_tenant_domains_tenant_id")
+                        .HasDatabaseName("uq_tenant_domains_tenant_purpose")
                         .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex(new[] { "VerificationToken" }, "uq_tenant_domains_verification_token")
@@ -4914,6 +4928,130 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("users", "identity");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Platform.ProductEntity", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Icon")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("icon");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("active")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("Code")
+                        .HasName("pk_products");
+
+                    b.ToTable("products", "platform", t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Platform.TenantProductEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("product_code");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tenant_products");
+
+                    b.HasIndex(new[] { "ProductCode" }, "ix_tenant_products_product_code")
+                        .HasDatabaseName("ix_tenant_products_product_code");
+
+                    b.HasIndex(new[] { "TenantId", "ProductCode" }, "uq_tenant_products_tenant_product")
+                        .IsUnique()
+                        .HasDatabaseName("uq_tenant_products_tenant_product");
+
+                    b.ToTable("tenant_products", "platform", t =>
+                        {
+                            t.ExcludeFromMigrations();
+
+                            t.HasTrigger("tr_tenant_products_audit");
+
+                            t.HasTrigger("tr_tenant_products_row_version");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Quipux.QuipuxSettingsRow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5315,6 +5453,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("tramites")
+                        .HasColumnName("product_code");
+
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
                         .HasColumnType("bigint")
@@ -5423,6 +5569,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("tramites")
+                        .HasColumnName("product_code");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()

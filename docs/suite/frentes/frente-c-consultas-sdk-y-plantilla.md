@@ -1,7 +1,7 @@
 # Frente C — Consultas compartidas, SDK, eventos y plantilla de producto
 
-> **Responsable:** desarrollador de Diagnóstico. **Producto que construye después:** Diagnóstico.
-> **Skill:** `flit-suite-c-sdk`. **Prefijo de rama:** `feature/AB-<HU>-suite-c-…`.
+> **Responsable:** Samuel Cardenas, único desarrollador de la suite desde el 2026-09-25 (antes, desarrollador de Diagnóstico). **Producto que construye después:** Diagnóstico.
+> **Skill:** `flit-suite-c-sdk`. **Rama:** una por Feature de ADO, `feature/AB-<Feature>-suite-…`, con commits `HU<id>: …` ([reglas R1](../reglas-trabajo-paralelo.md#r1-ramas-prs-y-merges)).
 >
 > Leer antes de empezar: [README de la suite](../README.md), [reglas](../reglas-trabajo-paralelo.md),
 > [contrato v1](../contrato-plataforma-v1.md) §3, §6 (consultas), §7 y §11, [plan maestro](../plan-maestro.md)
@@ -79,7 +79,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 ### C-01 · Publicador de eventos · Fase 0–1 · M
 
 - **Qué:** `IIntegrationEventPublisher` genérico en `core-api`. Escribe en un outbox y un `BackgroundService` publica a RabbitMQ con el sobre del contrato §7, un exchange por productor y reintentos. Sigue el patrón de `ProcedureStateChangeOutboxPublisher` y el estándar de jobs del ADR-0059. Reemplaza la idea del stub `RabbitMqIdentityValidationEventPublisher` sin tocar sus flujos actuales.
-- **Dónde:** archivos nuevos en `Flit.Infrastructure/Messaging/`; tabla de outbox con **turno de migración** (R6); cliente de RabbitMQ en PR propio de `Directory.Packages.props`; `contracts/asyncapi/platform-events.v1.yaml`. Pide al líder que `.github/workflows/contracts.yml` valide el archivo nuevo.
+- **Dónde:** archivos nuevos en `Flit.Infrastructure/Messaging/`; tabla de outbox con migración (R6); cliente de RabbitMQ en PR propio de `Directory.Packages.props`; `contracts/asyncapi/platform-events.v1.yaml`. Pide al líder que `.github/workflows/contracts.yml` valide el archivo nuevo.
 - **Hecho cuando:** un evento de prueba sale del outbox y llega a una cola en DEV; si RabbitMQ cae, se reintenta sin perder eventos.
 
 ### C-02 · `Flit.Platform.Contracts` · Fase 0 · S–M
@@ -110,7 +110,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 ### C-06 · Medición de consumo · Fase 1 · M
 
 - **Qué:** una fila por consulta con empresa, producto, fuente, proveedor efectivo, resultado, si vino de caché y latencia. `GET /api/v1/platform/admin/consultas/consumo` para el SuperAdmin. Deja preparado un límite por producto, sin activarlo.
-- **Dónde:** tabla nueva con **turno de migración**. Incluye las consultas que hace Trámites: el producto se toma del contexto.
+- **Dónde:** tabla nueva con su migración (R6). Incluye las consultas que hace Trámites: el producto se toma del contexto.
 - **Hecho cuando:** el SuperAdmin ve el consumo de DEV agrupado por empresa, producto y fuente.
 
 ### C-07 · Plantilla `flit-product` · Fase 2 · L

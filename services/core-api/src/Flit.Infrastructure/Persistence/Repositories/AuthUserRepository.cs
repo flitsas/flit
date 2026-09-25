@@ -36,6 +36,9 @@ public sealed class AuthUserRepository(FlitDbContext db, IUserRoleAssignmentRepo
             from a in db.UserRoleAssignments.AsNoTracking()
             join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
             where a.UserId == user.Id && a.DeletedAt == null && r.DeletedAt == null && r.IsActive
+            // HU #12964: con un rol por producto, un AdminCompany tiene también admin_tramites. El orden
+            // fijo (plataforma primero) deja estables el primer rol del token y el tenant resuelto abajo.
+            orderby r.ProductCode == "plataforma" ? 0 : 1, a.AssignedAt, r.Code
             select new { a.TenantId, a.RoleId, RoleCode = r.Code }
         ).ToListAsync(cancellationToken);
 

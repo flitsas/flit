@@ -31,6 +31,13 @@ jobs:
           else
             echo "::notice::contracts/openapi/python-ml.v1.yaml aún no existe, omitido"
           fi
+      - name: Lint platform OpenAPI (FLIT Suite, HU #12966)
+        run: |
+          if [ -f contracts/openapi/platform.v1.yaml ]; then
+            npx -y @redocly/cli@latest lint contracts/openapi/platform.v1.yaml
+          else
+            echo "::notice::contracts/openapi/platform.v1.yaml aún no existe, omitido"
+          fi
 
   validate-asyncapi:
     runs-on: ubuntu-latest

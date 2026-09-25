@@ -62,6 +62,8 @@ export interface AccessibleModule {
   name: string;
   sortOrder: number;
   actions: AccessibleAction[];
+  /** HU #12964: producto del módulo (`plataforma` | `tramites` …). */
+  productCode?: string;
 }
 
 export interface RoleDetail {
@@ -128,8 +130,10 @@ export async function assignRole(userId: string, roleId: string): Promise<void> 
 /** GET /api/v1/security/modules → módulos accesibles según permisos del caller.
  *  RBAC puro (HU #10664): los módulos son transversales; el SuperAdmin ve todos los módulos
  *  activos (constructor de roles) y el caller tenant solo los de sus slugs. */
-export async function getAccessibleModules(): Promise<AccessibleModule[]> {
-  return apiFetch<AccessibleModule[]>("/api/v1/security/modules");
+export async function getAccessibleModules(product?: string): Promise<AccessibleModule[]> {
+  // HU #12964: `product` filtra por producto; un rol solo puede tener permisos de módulos de su producto.
+  const query = product ? `?product=${encodeURIComponent(product)}` : "";
+  return apiFetch<AccessibleModule[]>(`/api/v1/security/modules${query}`);
 }
 
 /** Cuerpo del POST de suspensión/desactivación. `endsAt` nulo = desactivación indefinida

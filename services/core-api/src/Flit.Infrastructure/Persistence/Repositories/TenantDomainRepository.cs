@@ -37,7 +37,7 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
     {
         var entity = await _context.TenantDomains
             .AsNoTracking()
-            .Where(d => d.TenantId == tenantId && d.DeletedAt == null)
+            .Where(d => d.TenantId == tenantId && d.Purpose == TenantDomainPurposes.Hub && d.DeletedAt == null)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -55,7 +55,7 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
         ArgumentException.ThrowIfNullOrWhiteSpace(verificationToken);
 
         var current = await _context.TenantDomains
-            .Where(d => d.TenantId == tenantId && d.DeletedAt == null)
+            .Where(d => d.TenantId == tenantId && d.Purpose == TenantDomainPurposes.Hub && d.DeletedAt == null)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -84,7 +84,7 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
         if (current is not null)
         {
             // Retiro del dominio anterior EN LA MISMA transacción que el alta del nuevo: el índice
-            // único parcial uq_tenant_domains_tenant_id (WHERE deleted_at IS NULL) solo cuenta la fila
+            // único parcial uq_tenant_domains_tenant_purpose (WHERE deleted_at IS NULL; HU #12968) solo cuenta la fila
             // vigente, así que esto no colisiona (AC5). Solo toca deleted_at/updated_at — el disparador
             // tr_tenant_domains_marca_blanca vigila tenant_id/host, no estas columnas.
             // SUPUESTO (no garantizado por contrato de EF Core): el índice parcial solo salva la
@@ -115,7 +115,7 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
             _context.ChangeTracker.Clear();
             throw new DomainHostAlreadyRegisteredException(host);
         }
-        catch (DbUpdateException ex) when (IsConstraint(ex, "uq_tenant_domains_tenant_id"))
+        catch (DbUpdateException ex) when (IsConstraint(ex, "uq_tenant_domains_tenant_purpose"))
         {
             _context.ChangeTracker.Clear();
             throw new DomainAlreadyRegisteredForTenantException(tenantId);
@@ -133,7 +133,7 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
     public async Task<TenantDomain?> RetireAsync(Guid tenantId, Guid? changedBy, CancellationToken cancellationToken = default)
     {
         var current = await _context.TenantDomains
-            .Where(d => d.TenantId == tenantId && d.DeletedAt == null)
+            .Where(d => d.TenantId == tenantId && d.Purpose == TenantDomainPurposes.Hub && d.DeletedAt == null)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -164,6 +164,18 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
             .AsNoTracking()
             .Where(d => d.Host == host)
             .Select(d => (Guid?)d.HeadTenantId)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<string?> FindActivePurposeAsync(string host, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(host);
+
+        return await _context.ActiveNetworkDomains
+            .AsNoTracking()
+            .Where(d => d.Host == host)
+            .Select(d => d.Purpose)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
     }
@@ -284,7 +296,7 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
         CancellationToken cancellationToken = default)
     {
         var current = await _context.TenantDomains
-            .Where(d => d.TenantId == tenantId && d.DeletedAt == null)
+            .Where(d => d.TenantId == tenantId && d.Purpose == TenantDomainPurposes.Hub && d.DeletedAt == null)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 

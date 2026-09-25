@@ -20,4 +20,11 @@ public sealed class Role : Entities.Common.AuditableEntity
     public string TargetEntityType { get; set; } = "COMPANY";
 
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Producto del rol (<c>platform.products.code</c>, HU #12964 / ADR-0063). Un usuario tiene un rol
+    /// por producto en cada empresa (decisión D1): <c>AdminCompany</c> y <c>SuperAdmin</c> son de
+    /// <c>plataforma</c>; <c>admin_tramites</c> y los roles operativos, de <c>tramites</c>.
+    /// </summary>
+    public string ProductCode { get; set; } = "tramites";
 }

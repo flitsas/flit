@@ -292,6 +292,7 @@ export function CompanyConfigTabs({
             onChange={patch}
             otSlot={otSlot}
             fieldErrors={fieldErrors}
+            tenantId={settings.tenantId}
           />
         )}
         {activeTabId === "documentos" && documentosSlot}

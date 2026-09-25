@@ -13,7 +13,7 @@ Revisa el PR !456
 
 - El PR existe y está abierto con target `develop`.
 - El PR tiene vínculo a una HU en ADO.
-- El diff del PR no supera 800 líneas (si supera, el code-review-agent lo bloqueará inmediatamente).
+- El diff del PR no supera 800 líneas (si supera, el code-review-agent lo bloqueará inmediatamente). **Excepción:** los PRs de la FLIT Suite (ramas `feature/AB-<Feature>-suite-…`) van uno por Feature de ADO y sin este límite; se revisan commit por commit, cada uno con su prefijo `HU<id>:` (`docs/suite/reglas-trabajo-paralelo.md` R1).
 
 ---
 
@@ -107,6 +107,6 @@ El orquestador consolida los dos resultados y reporta al usuario:
 
 | Situación | Acción |
 |-----------|--------|
-| PR supera 800 líneas | El code-review-agent emite FAIL automático. Informar al implementador para partir el PR. |
+| PR supera 800 líneas | El code-review-agent emite FAIL automático. Informar al implementador para partir el PR. No aplica a los PRs de la FLIT Suite (un PR por Feature, `docs/suite/reglas-trabajo-paralelo.md` R1). |
 | Security detecta secretos | Bloqueo absoluto. Notificar al Líder Técnico. No continuar con ningún otro paso. |
 | PR no tiene vínculo a HU | El code-review-agent emite FAIL. Informar al implementador para agregar el vínculo. |

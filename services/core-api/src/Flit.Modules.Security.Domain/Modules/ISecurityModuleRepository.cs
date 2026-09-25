@@ -17,9 +17,11 @@ public interface ISecurityModuleRepository
     /// roles SuperAdmin) devuelve todos los módulos activos con sus acciones; en otro caso (caller
     /// tenant) devuelve solo los módulos cuyas acciones (slugs) están en <paramref name="permissionSlugs"/>.
     /// </summary>
+    /// <param name="productCode">HU #12964: si viene, solo módulos de ese producto.</param>
     Task<IReadOnlyList<AccessibleModuleDto>> ListAccessibleAsync(
         IReadOnlyList<string> permissionSlugs,
         bool includeAll,
+        string? productCode,
         CancellationToken ct);
 }
 
@@ -27,5 +29,5 @@ public sealed record SecurityModuleData(string Code, string Name, string? Descri
 public sealed record UpdateModuleData(string Name, string? Description, short SortOrder);
 public sealed record SecurityModuleDetail(Guid Id, string Code, string Name, string? Description, short SortOrder, bool IsActive, DateTimeOffset? DeletedAt);
 public sealed record SecurityModuleSummary(Guid Id, string Code, string Name, string? Description, short SortOrder, bool IsActive, int PermissionCount);
-public sealed record AccessibleModuleDto(Guid Id, string Code, string Name, short SortOrder, IReadOnlyList<AccessibleActionDto> Actions);
+public sealed record AccessibleModuleDto(Guid Id, string Code, string Name, short SortOrder, IReadOnlyList<AccessibleActionDto> Actions, string ProductCode = "tramites");
 public sealed record AccessibleActionDto(Guid Id, string Slug, string Name);

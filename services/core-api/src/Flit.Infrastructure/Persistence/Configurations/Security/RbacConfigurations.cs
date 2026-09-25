@@ -18,6 +18,8 @@ internal sealed class SecurityModuleConfiguration : IEntityTypeConfiguration<Sec
         builder.Property(x => x.IsActive).HasDefaultValue(true);
         builder.Property(x => x.CreatedAt).IsRequired();
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
+        // HU #12964: FK a platform.products y backfill en el DDL 120.
+        builder.Property(x => x.ProductCode).HasMaxLength(40).IsRequired().HasDefaultValue("tramites");
         builder.Ignore(x => x.PermissionCount);
     }
 }
@@ -34,6 +36,8 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.Property(x => x.TargetEntityType).HasMaxLength(20).IsRequired().HasDefaultValue("COMPANY");
         builder.Property(x => x.IsActive).HasDefaultValue(true);
         builder.Property(x => x.RowVersion).IsConcurrencyToken();
+        // HU #12964: FK a platform.products y backfill en el DDL 120.
+        builder.Property(x => x.ProductCode).HasMaxLength(40).IsRequired().HasDefaultValue("tramites");
     }
 }
 

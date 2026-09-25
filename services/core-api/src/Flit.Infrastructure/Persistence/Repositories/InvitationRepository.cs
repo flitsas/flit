@@ -81,7 +81,9 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
 
         var roleIds = await db.InvitationRoles
             .AsNoTracking()
-            .Where(r => r.InvitationId == entity.Id)
+            // HU #12964: sin este filtro volvían los roles que el DDL 55 cerró en soft-delete, y la
+            // activación creaba una asignación de más.
+            .Where(r => r.InvitationId == entity.Id && r.DeletedAt == null)
             .Select(r => r.RoleId)
             .ToListAsync(cancellationToken);
 
@@ -169,7 +171,9 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
 
         var roleIds = await db.InvitationRoles
             .AsNoTracking()
-            .Where(r => r.InvitationId == entity.Id)
+            // HU #12964: sin este filtro volvían los roles que el DDL 55 cerró en soft-delete, y la
+            // activación creaba una asignación de más.
+            .Where(r => r.InvitationId == entity.Id && r.DeletedAt == null)
             .Select(r => r.RoleId)
             .ToListAsync(cancellationToken);
 

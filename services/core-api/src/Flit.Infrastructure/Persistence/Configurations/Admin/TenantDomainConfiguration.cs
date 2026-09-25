@@ -28,6 +28,7 @@ internal sealed class TenantDomainConfiguration : IEntityTypeConfiguration<Tenan
 
         builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(x => x.Host).HasColumnName("host").HasMaxLength(253).IsRequired();
+        builder.Property(x => x.Purpose).HasColumnName("purpose").HasMaxLength(40).HasDefaultValue("HUB").IsRequired();
         builder.Property(x => x.Status).HasColumnName("status").HasMaxLength(20)
             .HasDefaultValue(TenantDomainStatuses.Pending).IsRequired();
         builder.Property(x => x.VerificationToken).HasColumnName("verification_token").HasMaxLength(64).IsRequired();
@@ -55,8 +56,9 @@ internal sealed class TenantDomainConfiguration : IEntityTypeConfiguration<Tenan
         // El nombre va en HasIndex(…, name) (dos índices sobre la misma propiedad —único parcial y de
         // cobertura— solo coexisten en el modelo con nombre distinto) Y en HasDatabaseName, porque el
         // convenio snake_case reescribiría el nombre de BD (ix_tenant_domains_host1).
-        builder.HasIndex(x => x.TenantId, "uq_tenant_domains_tenant_id")
-            .HasDatabaseName("uq_tenant_domains_tenant_id")
+        // HU #12968: un dominio vigente por (empresa, propósito), no por empresa.
+        builder.HasIndex(x => new { x.TenantId, x.Purpose }, "uq_tenant_domains_tenant_purpose")
+            .HasDatabaseName("uq_tenant_domains_tenant_purpose")
             .IsUnique()
             .HasFilter("deleted_at IS NULL");
         builder.HasIndex(x => x.Host, "uq_tenant_domains_host")
@@ -90,5 +92,6 @@ internal sealed class ActiveNetworkDomainViewConfiguration : IEntityTypeConfigur
 
         builder.Property(x => x.Host).HasColumnName("host").HasMaxLength(253).IsRequired();
         builder.Property(x => x.HeadTenantId).HasColumnName("head_tenant_id").IsRequired();
+        builder.Property(x => x.Purpose).HasColumnName("purpose").HasMaxLength(40).IsRequired();
     }
 }

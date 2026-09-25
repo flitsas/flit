@@ -19,6 +19,7 @@ using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Infrastructure.Platform;
 using Flit.Infrastructure.Security;
 using Flit.Infrastructure.Storage;
 using Flit.Tramites.Application.Documents;
@@ -435,6 +436,7 @@ public static class InfrastructureExtensions
         // === FLIT Suite: infraestructura ===
         // Una línea por frente que llama a Add<Modulo>Infrastructure(), definido en un archivo
         // propio (regla R5 de docs/suite/reglas-trabajo-paralelo.md).
+        services.AddPlatformInfrastructure(); // Frente B · HU #12958
         // === FLIT Suite: fin infraestructura ===
 
         return services;
