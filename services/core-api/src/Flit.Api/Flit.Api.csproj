@@ -28,6 +28,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- HU #12921 (ADR-0060 §3) — manual de DR. FLIT generado por `pnpm manual:export`. Se lee del
+         content root en runtime, así que va a la salida y al publish (en Docker el content root es
+         la carpeta publicada). -->
+    <Content Update="Content\dr-flit\manual-catalog.generated.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Grpc.AspNetCore" />
     <PackageReference Include="Swashbuckle.AspNetCore" />

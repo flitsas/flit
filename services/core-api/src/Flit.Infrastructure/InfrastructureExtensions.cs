@@ -306,7 +306,7 @@ public static class InfrastructureExtensions
         AddRues(services, configuration);
         AddRentingChannel(services, configuration);
         AddOcr(services, configuration);
-        AddDrFlit(services);
+        AddDrFlit(services, environment);
         AddQuipux(services);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
@@ -1236,11 +1236,17 @@ public static class InfrastructureExtensions
     /// Épica #12718 (ADR-0060) — DR. FLIT. El LLM del chat reutiliza el <see cref="AnthropicMessagesClient"/>
     /// y las opciones <c>Anthropic:DrFlit*</c> que registra <see cref="AddOcr"/>, así que no lee configuración propia.
     /// </summary>
-    private static void AddDrFlit(IServiceCollection services)
+    private static void AddDrFlit(IServiceCollection services, IHostEnvironment environment)
     {
         services.AddScoped<IDrFlitChatModel, AnthropicDrFlitChatModel>();
         services.AddScoped<IDrFlitUsageCounter>(sp => new DrFlitUsageCounterRepository(sp.GetRequiredService<FlitDbContext>()));
         services.AddSingleton<IDrFlitChatSettings, DrFlitChatSettings>();
+
+        // HU #12921 — manual desde Content/dr-flit/ del content root. Singleton: se lee una vez. El
+        // entorno llega por parámetro (no se resuelve de DI) porque es el mismo que recibe el resto de
+        // la infraestructura y así el grafo valida también fuera del host web.
+        services.AddSingleton<IDrFlitManualCatalogProvider>(sp => new DrFlitManualCatalogProvider(
+            environment, sp.GetRequiredService<ILogger<DrFlitManualCatalogProvider>>()));
     }
 
     private static void AddOcr(IServiceCollection services, IConfiguration configuration)
