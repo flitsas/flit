@@ -13,6 +13,7 @@ import {
   applyCancelSupportCase,
   applyChatDegraded,
   applyContinueSupportCase,
+  applyDismissPrivacyNotice,
   applyEditSupportCase,
   applyOpenSupportCase,
   applySubmitSupportCase,
@@ -263,6 +264,10 @@ export function useDrFlitChat(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase]);
 
+  const dismissPrivacyNotice = useCallback(() => {
+    setState((prev) => applyDismissPrivacyNotice(prev));
+  }, []);
+
   const submitSupportCase = useCallback(() => {
     setState((prev) => applySubmitSupportCase(prev));
   }, []);
@@ -356,8 +361,9 @@ export function useDrFlitChat(
     (text: string) => {
       // HU-F — la búsqueda del manual solo devuelve artículos del perfil de quien pregunta.
       const helpAudiences = visibleAudiences(currentContext().role);
+      // HU #12931 AC2 — escribir cuenta como haber visto el aviso: no bloquea ni se repite.
       setState((prev) =>
-        applyUserText(prev, text, { helpAudiences, chatEnabled: DR_FLIT_CHAT_ENABLED }),
+        applyUserText(applyDismissPrivacyNotice(prev), text, { helpAudiences, chatEnabled: DR_FLIT_CHAT_ENABLED }),
       );
     },
     [currentContext],
@@ -394,6 +400,7 @@ export function useDrFlitChat(
     attachSupportFile,
     submitSupportCase,
     editSupportCase,
+    dismissPrivacyNotice,
     panelId,
     closeButtonRef,
     fabRef,

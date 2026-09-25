@@ -6,11 +6,13 @@ import {
   hasActiveConversation,
   isComposerEnabled,
   remainingChatMessages,
+  shouldShowPrivacyNotice,
   shouldWarnChatUsage,
   type DrFlitChatState,
 } from "./dr-flit-conversation";
 import { DrFlitUsageNotice } from "./DrFlitUsageNotice";
 import { DrFlitSupportCaseForm } from "./DrFlitSupportCaseForm";
+import { DrFlitPrivacyNotice } from "./DrFlitPrivacyNotice";
 import { DrFlitSupportCaseConfirm } from "./DrFlitSupportCaseConfirm";
 import { DrFlitSupportCaseCreated } from "./DrFlitSupportCaseCreated";
 import { DrFlitSupportCaseError } from "./DrFlitSupportCaseError";
@@ -54,6 +56,7 @@ export function DrFlitChatPanel({
   onAttachSupportFile,
   onSubmitSupportCase,
   onEditSupportCase,
+  onDismissPrivacyNotice,
   panelRef,
   closeButtonRef,
   inputRef,
@@ -78,6 +81,8 @@ export function DrFlitChatPanel({
   onAttachSupportFile: (file: File) => Promise<string | null>;
   onSubmitSupportCase: () => void;
   onEditSupportCase: () => void;
+  /** HU #12931 — marcar como visto el aviso de tratamiento de datos. */
+  onDismissPrivacyNotice: () => void;
   /** HU #12711 — ver `DrFlitClientBranchChoices`. */
   canSearchValidaciones?: boolean;
   panelRef: RefObject<HTMLDivElement | null>;
@@ -170,6 +175,8 @@ export function DrFlitChatPanel({
           style={{ background: "var(--dr-flit-panel-bg)" }}
           aria-live="polite"
         >
+          {shouldShowPrivacyNotice(state) && <DrFlitPrivacyNotice onDismiss={onDismissPrivacyNotice} />}
+
           {state.messages.map((m) => (
             <DrFlitMessageBubble key={m.id} message={m} />
           ))}

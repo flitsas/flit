@@ -110,6 +110,12 @@ export interface DrFlitChatState {
   supportResult?: DrFlitSupportCaseCreated | null;
   /** Feature #12917 — motivo del último fallo al radicar. */
   supportError?: string | null;
+  /**
+   * HU #12931 — el usuario ya vio el aviso de tratamiento de datos en esta sesión. Vive en el estado
+   * (sessionStorage), así no se repite al reabrir el panel; «Terminar chat» empieza una conversación
+   * nueva y lo vuelve a mostrar.
+   */
+  privacyNoticeSeen?: boolean;
 }
 
 let messageSeq = 0;
@@ -1007,4 +1013,15 @@ export function applySupportCaseError(state: DrFlitChatState, message: string): 
     isTyping: false,
     supportError: message,
   };
+}
+
+// ── HU #12931 — aviso de Habeas Data ──────────────────────────────────────────────────────────
+
+/** El aviso se muestra hasta que el usuario lo reconoce o empieza a escribir. */
+export function shouldShowPrivacyNotice(state: DrFlitChatState): boolean {
+  return !state.privacyNoticeSeen;
+}
+
+export function applyDismissPrivacyNotice(state: DrFlitChatState): DrFlitChatState {
+  return state.privacyNoticeSeen ? state : { ...state, privacyNoticeSeen: true };
 }
