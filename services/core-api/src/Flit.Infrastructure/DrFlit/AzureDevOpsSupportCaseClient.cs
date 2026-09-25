@@ -117,8 +117,10 @@ internal sealed class AzureDevOpsSupportCaseClient(
         return ops;
     }
 
+    public string DestinationName => _options.Project;
+
     /// <summary>AC4 — módulo del allow-list configurado, o el default configurado.</summary>
-    internal string ResolveAffectedModule(string? requested)
+    public string ResolveAffectedModule(string? requested)
     {
         var match = _mapping.AffectedModules.FirstOrDefault(m =>
             string.Equals(m, requested?.Trim(), StringComparison.OrdinalIgnoreCase));

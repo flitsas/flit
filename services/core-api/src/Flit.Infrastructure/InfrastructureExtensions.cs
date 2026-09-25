@@ -1289,6 +1289,7 @@ public static class InfrastructureExtensions
         });
         services.AddSingleton<IDrFlitSupportCaseSettings, DrFlitSupportCaseSettings>();
         services.AddScoped<IDrFlitSupportAttachmentStore, DrFlitSupportAttachmentStore>();
+        services.AddScoped<IDrFlitSupportCaseRepository, DrFlitSupportCaseRepository>(); // HU #12925
     }
 
     private static void AddOcr(IServiceCollection services, IConfiguration configuration)

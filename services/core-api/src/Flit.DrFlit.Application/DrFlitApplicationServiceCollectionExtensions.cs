@@ -15,6 +15,7 @@ public static class DrFlitApplicationServiceCollectionExtensions
     {
         services.AddScoped<IDrFlitAssistant, DrFlitAssistant>();
         services.AddScoped<UploadSupportAttachmentHandler>();
+        services.AddScoped<CreateSupportCaseHandler>();
         services.TryAddSingleton(TimeProvider.System);
         return services;
     }

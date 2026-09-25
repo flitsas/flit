@@ -10477,6 +10477,115 @@ paths:
         "401": { description: No autenticado. }
         "403": { description: Usuario de compañía sin tenant en el token. }
 
+  /api/v1/dr-flit/support-cases:
+    post:
+      tags: [DR. FLIT]
+      operationId: drFlitCreateSupportCase
+      summary: Crea un caso de soporte (Bug en FLIT - SOPORTE) a partir del formulario confirmado
+      description: >
+        Épica #12718, HU #12925 (ADR-0060 §5.2 y §7.2). Nunca recibe nada del chat: solo el formulario
+        estructurado que el usuario confirmó. Persiste el intento en dr_flit.support_cases (pending) antes
+        de llamar a Azure DevOps y lo marca created o failed. Los campos de clasificación del Bug salen de
+        DrFlit:SupportCase:FieldMapping y el ambiente de DR_FLIT_DEPLOY_ENVIRONMENT (default DEV). El Bug se
+        crea sin asignar. Tenant: el del token para usuarios de compañía; el del header para SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, email, compania, detalle, resultadoEsperado, frecuencia, titulo, prioridad]
+              properties:
+                nombre: { type: string, maxLength: 200 }
+                email: { type: string, format: email }
+                telefono: { type: string, nullable: true, maxLength: 30 }
+                compania: { type: string, maxLength: 200 }
+                detalle: { type: string, maxLength: 4000 }
+                resultadoEsperado: { type: string, maxLength: 2000 }
+                frecuencia: { type: string, enum: [una_vez, a_veces, siempre] }
+                titulo: { type: string, maxLength: 200 }
+                prioridad: { type: string, enum: [Alta, Media, Baja] }
+                affectedModule:
+                  type: string
+                  nullable: true
+                  description: Mejor esfuerzo del cliente; el backend lo valida contra el allow-list y aplica el default configurado.
+                attachmentIds:
+                  type: array
+                  description: Ids de POST /support-cases/attachments. Deben ser del mismo usuario, estar vigentes y no superar DrFlit:SupportCase:MaxAttachments (default 5).
+                  items: { type: string, format: uuid }
+      responses:
+        "201":
+          description: Caso radicado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [caseId, attachmentsFailed]
+                properties:
+                  caseId: { type: integer, description: "Id del work item en FLIT - SOPORTE (número de caso)." }
+                  caseUrl: { type: string, nullable: true, description: Solo si el caller es SuperAdmin. }
+                  attachmentsFailed: { type: integer, description: "Adjuntos que no se pudieron subir a ADO (el caso se crea igual)." }
+        "400": { description: "Campo faltante o inválido, más adjuntos que el tope, o un adjunto ajeno o vencido." }
+        "401": { description: No autenticado. }
+        "403": { description: Usuario de compañía sin tenant en el token. }
+        "502":
+          description: Azure DevOps no respondió tras el reintento. La fila queda failed; los adjuntos siguen disponibles para reintentar.
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, enum: [support_unavailable] }
+                  detail: { type: string }
+  /api/v1/dr-flit/support-cases/attachments:
+    post:
+      tags: [DR. FLIT]
+      operationId: drFlitUploadSupportAttachment
+      summary: Sube un adjunto temporal para un caso de soporte aún no creado
+      description: >
+        Épica #12718, HU #12924 (ADR-0060 §5.3). Valida extensión, tipo declarado, firma de los primeros
+        bytes y tamaño contra DrFlit:SupportCase (defaults 20 MB; png, jpeg, webp, pdf, txt). Queda en el
+        almacenamiento de adjuntos sin caso y vence a las 24 h si no se confirma. La cantidad por caso se
+        valida al confirmar, no aquí.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Adjunto guardado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, filename, sizeBytes]
+                properties:
+                  id: { type: string, format: uuid }
+                  filename: { type: string }
+                  sizeBytes: { type: integer }
+        "400": { description: "Archivo ausente, tipo no permitido o que excede el tamaño máximo." }
+        "401": { description: No autenticado. }
+        "403": { description: Usuario de compañía sin tenant en el token. }
+
 components:
   securitySchemes:
     bearerAuth:

@@ -38,6 +38,14 @@ public static class DrFlitEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized);
 
+        group.MapPost("/support-cases", CreateSupportCaseAsync)
+            .WithName("DrFlitCreateSupportCase")
+            .WithSummary("Crea un caso de soporte (Bug en FLIT - SOPORTE) a partir del formulario confirmado")
+            .Produces<DrFlitSupportCaseCreatedResponse>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status502BadGateway);
+
         group.MapPost("/support-cases/attachments", UploadAttachmentAsync)
             .WithName("DrFlitUploadSupportAttachment")
             .WithSummary("Sube un adjunto temporal para un caso de soporte aún no creado")
@@ -79,6 +87,45 @@ public static class DrFlitEndpoints
             .ConfigureAwait(false);
 
         return Results.Ok(ToResponse(result));
+    }
+
+    /// <summary>
+    /// HU #12925 — radica el caso confirmado por el usuario. 201 con el número de caso (el enlace al work
+    /// item solo para SuperAdmin); 400 si el formulario o los adjuntos no son válidos; 502 si el sistema de
+    /// soporte no respondió tras el reintento, con <c>code = support_unavailable</c> para que el frontend
+    /// ofrezca los canales de soporte estáticos.
+    /// </summary>
+    internal static async Task<IResult> CreateSupportCaseAsync(
+        HttpContext httpContext,
+        [FromHeader(Name = "X-Tenant-Id")] Guid? tenantHeader,
+        [FromBody] DrFlitSupportCaseRequestBody? body,
+        CreateSupportCaseHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var caller = ResolveCaller(httpContext, tenantHeader);
+        if (caller.Error is not null)
+            return caller.Error;
+        if (body is null)
+            return BadRequest("Falta el formulario del caso.");
+
+        var result = await handler.HandleAsync(
+            new CreateSupportCaseCommand(
+                caller.TenantId, caller.UserId, RequestTenantResolver.IsSuperAdmin(httpContext.User),
+                body.Nombre, body.Email, body.Telefono, body.Compania, body.Detalle, body.ResultadoEsperado,
+                body.Frecuencia, body.Titulo, body.Prioridad, body.AffectedModule, body.AttachmentIds),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            CreateSupportCaseOutcome.Created => Results.Created(
+                (string?)null, new DrFlitSupportCaseCreatedResponse(result.CaseId!.Value, result.CaseUrl, result.AttachmentsFailed)),
+            CreateSupportCaseOutcome.ProviderUnavailable => Results.Problem(
+                statusCode: StatusCodes.Status502BadGateway,
+                title: "Soporte no disponible",
+                detail: result.Error,
+                extensions: new Dictionary<string, object?> { ["code"] = "support_unavailable" }),
+            _ => BadRequest(result.Error ?? "Formulario inválido."),
+        };
     }
 
     /// <summary>
@@ -214,6 +261,39 @@ public sealed record DrFlitCitationResponse(
     bool PrimarySource);
 
 public sealed record DrFlitUsageResponse(int MessagesUsedToday, int DailyLimit);
+
+/// <summary>Body de <c>POST /api/v1/dr-flit/support-cases</c> (nombres del contrato §5.2, en español).</summary>
+public sealed class DrFlitSupportCaseRequestBody
+{
+    public string? Nombre { get; set; }
+
+    public string? Email { get; set; }
+
+    public string? Telefono { get; set; }
+
+    public string? Compania { get; set; }
+
+    public string? Detalle { get; set; }
+
+    public string? ResultadoEsperado { get; set; }
+
+    /// <summary><c>una_vez</c> | <c>a_veces</c> | <c>siempre</c>.</summary>
+    public string? Frecuencia { get; set; }
+
+    public string? Titulo { get; set; }
+
+    /// <summary><c>Alta</c> | <c>Media</c> | <c>Baja</c>.</summary>
+    public string? Prioridad { get; set; }
+
+    /// <summary>Mejor esfuerzo del cliente (ruta actual); el backend lo valida contra el allow-list.</summary>
+    public string? AffectedModule { get; set; }
+
+    public IReadOnlyList<Guid>? AttachmentIds { get; set; }
+}
+
+/// <summary>Respuesta 201 de <c>POST /api/v1/dr-flit/support-cases</c>.</summary>
+/// <param name="CaseUrl">Solo si el caller es SuperAdmin; para el resto, <c>null</c>.</param>
+public sealed record DrFlitSupportCaseCreatedResponse(int CaseId, string? CaseUrl, int AttachmentsFailed);
 
 /// <summary>Respuesta 201 de <c>POST /api/v1/dr-flit/support-cases/attachments</c>.</summary>
 public sealed record DrFlitSupportAttachmentResponse(Guid Id, string Filename, long SizeBytes);

@@ -9,6 +9,12 @@ namespace Flit.DrFlit.Application.Abstractions;
 /// </summary>
 public interface IDrFlitSupportCaseGateway
 {
+    /// <summary>Destino de los casos (p. ej. el proyecto de ADO), para dejarlo registrado en el intento.</summary>
+    string DestinationName { get; }
+
+    /// <summary>Módulo afectado tal como quedará en el caso: del allow-list configurado o su default.</summary>
+    string ResolveAffectedModule(string? requested);
+
     /// <summary>
     /// Sube los adjuntos (un fallo en uno no bloquea: se excluye y se cuenta) y crea el caso con los que
     /// sí subieron. Nunca lanza por fallos del proveedor: los reporta en el resultado.
