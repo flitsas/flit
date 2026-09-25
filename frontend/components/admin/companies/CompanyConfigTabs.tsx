@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileText, Hash, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
+import { Building2, FileClock, FileText, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
@@ -20,7 +20,6 @@ type TabId =
   | "tramites"
   | "config"
   | "documentos"
-  | "placas"
   | "representantes"
   | "mandatarios"
   | "usuarios"
@@ -55,8 +54,6 @@ const TABS: TabDef[] = [
   { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
   // HU #10523 (RF31) — parámetros documentales por gestora (no forma parte del PUT de settings).
   { id: "documentos", label: "Documentos", icon: FileText, isConfig: false },
-  // HU #10653 (Feature #10587) — visualización de placas preasignadas por OT (solo si está activa).
-  { id: "placas", label: "Placas preasignadas", icon: Hash, isConfig: false },
   // HU #10904 (Feature #10852) — directorio de representantes legales de las compañías representadas.
   // Escrituras y firma/identidad se gestionan desde la ficha de cada representante (no hay baúl
   // suelto ni sección hermana de escrituras en esta pestaña).
@@ -81,8 +78,6 @@ export interface CompanyConfigTabsProps {
   otSlot?: ReactNode;
   auditSlot?: ReactNode;
   documentosSlot?: ReactNode;
-  /** HU #10653 — visor de placas preasignadas. Solo si la preasignación está activa. */
-  platesSlot?: ReactNode;
   /**
    * HU #10904 — pestaña de representantes legales (directorio). Firma e identidad
    * viven en la ficha de cada persona; las escrituras bajo cada NIT del acordeón.
@@ -117,7 +112,6 @@ export function CompanyConfigTabs({
   otSlot,
   auditSlot,
   documentosSlot,
-  platesSlot,
   legalRepresentativesSlot,
   mandatariosSlot,
   usuariosSlot,
@@ -125,7 +119,6 @@ export function CompanyConfigTabs({
   restrictedToRepresentatives = false,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>(restrictedToRepresentatives ? "representantes" : "tramites");
-  // La pestaña de placas solo aparece si la preasignación está activa.
   // Usuarios solo si el consumidor inyecta el slot (SuperAdmin en ficha compañía).
   // HU #12710 — restringido: solo Representantes y Mandatarios (una pestaña fuera de la lista, aunque
   // se fije por estado, recae en la primera visible).
@@ -134,10 +127,9 @@ export function CompanyConfigTabs({
       TABS.filter((t) =>
         restrictedToRepresentatives
           ? REPRESENTATIVE_TABS.includes(t.id) || (t.id === "usuarios" && Boolean(usuariosSlot))
-          : (t.id !== "placas" || settings.preasignacionPlacaActiva) &&
-            (t.id !== "usuarios" || Boolean(usuariosSlot)),
+          : t.id !== "usuarios" || Boolean(usuariosSlot),
       ),
-    [restrictedToRepresentatives, settings.preasignacionPlacaActiva, usuariosSlot],
+    [restrictedToRepresentatives, usuariosSlot],
   );
   const [form, setForm] = useState<SettingsForm>(() => formFromSettings(settings));
   // Línea base (última configuración guardada) para detectar cambios; se actualiza al guardar.
@@ -197,7 +189,7 @@ export function CompanyConfigTabs({
     }
   };
 
-  // Si la pestaña activa deja de existir (p. ej. se desactivaron las placas), recae en la primera.
+  // Si la pestaña activa deja de existir (p. ej. Usuarios sin slot inyectado), recae en la primera.
   const currentTab = visibleTabs.find((t) => t.id === tab) ?? visibleTabs[0];
   const activeTabId = currentTab.id;
 
@@ -303,7 +295,6 @@ export function CompanyConfigTabs({
           />
         )}
         {activeTabId === "documentos" && documentosSlot}
-        {activeTabId === "placas" && platesSlot}
         {activeTabId === "representantes" && legalRepresentativesSlot}
         {activeTabId === "mandatarios" && mandatariosSlot}
         {activeTabId === "usuarios" && usuariosSlot}

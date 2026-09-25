@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import MatriculaResumen, { ResumenCard } from './MatriculaResumen';
-import ExpedienteTimeline from './ExpedienteTimeline';
+import { ExpedienteCronologicoAccordion } from './ExpedienteTimeline';
 import ExpedienteVisor from './ExpedienteVisor';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -25,6 +25,7 @@ import type {
   BiometricParte,
   BiometricValidation,
   ChecklistItemView,
+  ConsolidadoVigencia,
   FieldValue,
   FirmaBaulActorCoberturaDto,
   InstanceStatus,
@@ -328,6 +329,11 @@ export function FirmaFurStep({
   // se podía marcar en el paso 1 o desde el listado). Vive en una columna del expediente, no en
   // `fieldValues`: se hidrata de `getInstance` y se cambia con su propio endpoint idempotente.
   const [prioritario, setPrioritario] = useState(false);
+  // HU #12792 — vigencia del consolidado del wizard para el indicador del `ExpedienteVisor`. Se
+  // refresca tras cada generación (ver `refrescarVigencia`); `undefined` = backend sin el campo.
+  const [consolidadoWizard, setConsolidadoWizard] = useState<ConsolidadoVigencia | null | undefined>(
+    undefined,
+  );
   // FEATURE 05 — resultado RNMC por actor (medidas correctivas). Se consulta al entrar a este paso
   // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
   const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
@@ -362,6 +368,7 @@ export function FirmaFurStep({
       // levantamiento a la vez.
       setPrenda(prendas);
       setPrioritario(d.prioritario ?? false);
+      setConsolidadoWizard(d.consolidadoWizard);
       // Siempre la fecha del día (no editable en el resumen).
       const fecha = todayIsoDate();
       setFechaTramite(fecha);
@@ -808,15 +815,23 @@ export function FirmaFurStep({
         modalidad={modalidad}
         status={detail?.status ?? 'borrador'}
         onBeforeGenerateConsolidado={guardarFechaTramite}
+        consolidadoWizard={consolidadoWizard}
         onAttachmentsChange={() => {
           void loadExpediente();
+          // HU #12792 — solo la vigencia: `loadDetail` además reescribe la fecha del trámite.
+          if (instanceId) {
+            void Promise.resolve()
+              .then(() => tramitesClient.getInstance(instanceId))
+              .then((d) => setConsolidadoWizard(d?.consolidadoWizard))
+              .catch(() => undefined);
+          }
           onRefresh?.();
         }}
       />
 
       {/* Borrador: la cronología vive en el resumen. Otros estados: modal de detalle / badge listado. */}
       {(detail?.status ?? 'borrador') === 'borrador' ? (
-        <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
+        <ExpedienteCronologicoAccordion statusHistory={detail?.statusHistory ?? []} />
       ) : null}
 
       {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}

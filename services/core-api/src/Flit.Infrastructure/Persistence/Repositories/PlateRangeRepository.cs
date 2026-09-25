@@ -174,13 +174,8 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
         return officeId == Guid.Empty ? null : officeId;
     }
 
-    public async Task<bool> IsAssignmentAllowedAsync(
-        Guid companyTenantId,
-        Guid transitOfficeId,
-        CancellationToken cancellationToken = default) =>
-        await EvaluateAssignmentEligibilityAsync(companyTenantId, transitOfficeId, cancellationToken)
-            .ConfigureAwait(false) == PlateAssignmentEligibility.Allowed;
-
+    // HU #12853 (Feature #12846, Épica #12751) — IsAssignmentAllowedAsync (wrapper booleano de este
+    // método) se retiró: se quedó sin llamador al apagarse /plate-preassign/status, su último consumidor.
     // HU #10806 — evalúa el AND de tres flags devolviendo el MOTIVO del corte. Lee bajo el guard
     // cross-tenant (row_security off), consistente con ListEligibleCompaniesAsync, porque toca filas
     // del OT (ot_requirements) y del grant que pertenecen a tenants distintos al de la compañía.

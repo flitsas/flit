@@ -12,6 +12,7 @@ import type { WizardState } from '@/lib/api/types/procedure-runtime';
  * para consultar el VIN, y el paso del FUR ya no la pide.
  */
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   createInstance: vi.fn(),
   createInstanceFromConsulta: vi.fn(),
   runPreflightPreview: vi.fn(),

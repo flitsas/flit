@@ -148,6 +148,17 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .IsRequired()
             .HasDefaultValue(false);
 
+        // HU #12790 (Épica #12760) — sello UTC de generación de cada consolidado. Columnas nulables
+        // agregadas por migración SQL cruda (tabla ExcludeFromMigrations); aquí solo se mapean. Null
+        // en trámites históricos («fecha no disponible»), nunca invalida el documento.
+        builder.Property(x => x.ConsolidadoWizardGeneradoEn)
+            .HasColumnName("consolidado_wizard_generado_en")
+            .HasColumnType("timestamptz");
+
+        builder.Property(x => x.ConsolidadoMaestroGeneradoEn)
+            .HasColumnName("consolidado_maestro_generado_en")
+            .HasColumnType("timestamptz");
+
         // HU #12165 (Feature #12156) — ventana de 1 hora de corrección de placa por el OT (HU
         // #12167). Columnas agregadas por migración SQL cruda (la tabla está ExcludeFromMigrations);
         // aquí solo se mapean para el modelo EF.

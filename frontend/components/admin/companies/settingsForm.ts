@@ -122,6 +122,12 @@ export interface SettingsForm {
   blockProcedureFamilyTraspaso: boolean;
   blockProcedureFamilyOtros: boolean;
   baulFirmasActivo: boolean;
+  /**
+   * HU #12851 (Feature #12846) — sin control de UI: ya no hay switch que lo edite (el backend
+   * ignora este campo, HU-A5). Se conserva en el formulario solo para echoar el valor tal cual
+   * llega de `TenantSettings` de vuelta en el PUT, sin romper el contrato de
+   * `TenantSettingsUpdate`.
+   */
   preasignacionPlacaActiva: boolean;
   validarSoatConRunt: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
@@ -329,12 +335,6 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
     module: "Configuración Empresa",
     label: "Firma precargada (baúl)",
     describe: (_i, c) => onOff(c.baulFirmasActivo),
-  },
-  {
-    key: "preasignacionPlacaActiva",
-    module: "Configuración Empresa",
-    label: "Preasignación de placa activa",
-    describe: (_i, c) => onOff(c.preasignacionPlacaActiva),
   },
   {
     key: "validarSoatConRunt",

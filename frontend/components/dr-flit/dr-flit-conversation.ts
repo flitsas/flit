@@ -1,9 +1,18 @@
-import { searchManualArticles } from "@/lib/manual/catalog";
+import {
+  getArticleBySlug,
+  NORMATIVA_RESOLUCION_SLUG,
+  searchManualArticles,
+  type ManualArticle,
+  type ManualAudience,
+  type ManualSource,
+} from "@/lib/manual/catalog";
 import {
   buildClientBranchPrompt,
+  buildContextHelpPrompt,
   buildGreeting,
   buildHelpIntro,
   buildHelpValuePrompt,
+  buildNormativaIntro,
   buildSearchError,
   buildSupportIntro,
   buildTramitesIntro,
@@ -58,6 +67,8 @@ export interface DrFlitChatState {
   tramiteResults: DrFlitTramiteResult[] | null;
   validacionResults: DrFlitValidacionResult[] | null;
   validacionesHref: string | null;
+  /** HU-C — atajo a «Historial por placa» tras una búsqueda por placa con resultados. */
+  historialPlacaHref?: string | null;
   helpResults: DrFlitHelpResult[] | null;
   manualHomeHref: string | null;
   isTyping: boolean;
@@ -106,6 +117,7 @@ function clearActionState(): Omit<
     tramiteResults: null,
     validacionResults: null,
     validacionesHref: null,
+    historialPlacaHref: null,
     helpResults: null,
     manualHomeHref: null,
     isTyping: false,
@@ -133,6 +145,7 @@ export function createInitialState(displayName?: string | null): DrFlitChatState
     tramiteResults: null,
     validacionResults: null,
     validacionesHref: null,
+    historialPlacaHref: null,
     helpResults: null,
     manualHomeHref: null,
     isTyping: false,
@@ -179,9 +192,50 @@ export function applySelectIntent(
   };
 }
 
+function withSource(
+  base: DrFlitHelpResult,
+  sources: ManualSource[] | undefined,
+  primarySource: boolean | undefined,
+): DrFlitHelpResult {
+  const pdf = sources?.find((s) => s.kind === "pdf") ?? sources?.[0];
+  return {
+    ...base,
+    ...(pdf
+      ? {
+          sourceHref: pdf.href,
+          sourceLabel: pdf.kind === "pdf" ? "Abrir la norma (PDF)" : "Abrir la fuente",
+        }
+      : {}),
+    ...(primarySource ? { primarySource: true } : {}),
+  };
+}
+
+export function toHelpResult(article: ManualArticle): DrFlitHelpResult {
+  return withSource(
+    {
+      slug: article.slug,
+      title: article.title,
+      audience: article.audience,
+      summary: article.summary,
+      href: `/manual/${article.slug}`,
+    },
+    article.sources,
+    article.primarySource,
+  );
+}
+
+export interface SelectHelpOptions {
+  /**
+   * HU-G — artículo del módulo donde está el usuario (`resolveContextArticle`). Se ofrece como
+   * primer chip antes de que escriba; si escribe, la búsqueda lo reemplaza.
+   */
+  contextArticle?: ManualArticle | null;
+}
+
 export function applySelectHelpOption(
   state: DrFlitChatState,
   optionId: DrFlitHelpOptionId,
+  options: SelectHelpOptions = {},
 ): DrFlitChatState | null {
   const option = getHelpOptionById(optionId);
   if (!option) return null;
@@ -193,10 +247,13 @@ export function applySelectHelpOption(
   };
 
   if (optionId === "necesito-ayuda") {
+    const contextArticle = options.contextArticle ?? null;
     const botMsg: DrFlitMessage = {
       id: createMessageId(),
       role: "bot",
-      text: buildHelpValuePrompt(),
+      text: contextArticle
+        ? buildContextHelpPrompt(contextArticle.title)
+        : buildHelpValuePrompt(),
     };
     return {
       ...state,
@@ -207,6 +264,30 @@ export function applySelectHelpOption(
       showSessionMenu: false,
       showSupportInfo: false,
       showBackToSearch: false,
+      helpResults: contextArticle ? [toHelpResult(contextArticle)] : null,
+    };
+  }
+
+  if (optionId === "normativa") {
+    // Fuente principal: la norma que avala la plataforma. Se ofrece el resumen por temas del manual
+    // y, dentro de la tarjeta, el PDF completo.
+    const article = getArticleBySlug(NORMATIVA_RESOLUCION_SLUG);
+    const botMsg: DrFlitMessage = {
+      id: createMessageId(),
+      role: "bot",
+      text: buildNormativaIntro(),
+    };
+    return {
+      ...state,
+      ...clearActionState(),
+      session: "ayuda",
+      messages: [...state.messages, userMsg, botMsg],
+      phase: "showing_help",
+      showSessionMenu: false,
+      showSupportInfo: false,
+      showBackToSearch: true,
+      helpResults: article ? [toHelpResult(article)] : null,
+      manualHomeHref: article ? null : DR_FLIT_MANUAL_HOME_HREF,
     };
   }
 
@@ -227,15 +308,24 @@ export function applySelectHelpOption(
   };
 }
 
-function applyHelpQuery(state: DrFlitChatState, text: string): DrFlitChatState {
-  const hits = searchManualArticles(text, 5);
-  const results: DrFlitHelpResult[] = hits.map((h) => ({
-    slug: h.slug,
-    title: h.title,
-    audience: h.audience,
-    summary: h.summary,
-    href: h.href,
-  }));
+export interface UserTextOptions {
+  /** HU-F — audiencias del manual visibles para el perfil (`visibleAudiences`). Sin ellas, todo. */
+  helpAudiences?: readonly ManualAudience[];
+}
+
+function applyHelpQuery(
+  state: DrFlitChatState,
+  text: string,
+  options: UserTextOptions,
+): DrFlitChatState {
+  const hits = searchManualArticles(text, 5, { audiences: options.helpAudiences });
+  const results: DrFlitHelpResult[] = hits.map((h) =>
+    withSource(
+      { slug: h.slug, title: h.title, audience: h.audience, summary: h.summary, href: h.href },
+      h.sources,
+      h.primarySource,
+    ),
+  );
   const botMsg: DrFlitMessage = {
     id: createMessageId(),
     role: "bot",
@@ -253,6 +343,7 @@ function applyHelpQuery(state: DrFlitChatState, text: string): DrFlitChatState {
     tramiteResults: null,
     validacionResults: null,
     validacionesHref: null,
+    historialPlacaHref: null,
     helpResults: results,
     manualHomeHref: results.length === 0 ? DR_FLIT_MANUAL_HOME_HREF : null,
     isTyping: false,
@@ -265,6 +356,7 @@ function applyHelpQuery(state: DrFlitChatState, text: string): DrFlitChatState {
 export function applyUserText(
   state: DrFlitChatState,
   rawText: string,
+  options: UserTextOptions = {},
 ): DrFlitChatState {
   const text = rawText.trim();
   if (!text) return state;
@@ -279,6 +371,7 @@ export function applyUserText(
     return applyHelpQuery(
       { ...state, messages: [...state.messages, userMsg] },
       text,
+      options,
     );
   }
 
@@ -317,6 +410,7 @@ export function applyUserText(
       tramiteResults: null,
       validacionResults: null,
       validacionesHref: null,
+      historialPlacaHref: null,
       helpResults: null,
       manualHomeHref: null,
       isTyping: false,
@@ -336,6 +430,7 @@ export function applyUserText(
     tramiteResults: null,
     validacionResults: null,
     validacionesHref: null,
+    historialPlacaHref: null,
     helpResults: null,
     manualHomeHref: null,
     isTyping: true,
@@ -371,6 +466,7 @@ export function applyClientBranch(
     tramiteResults: null,
     validacionResults: null,
     validacionesHref: null,
+    historialPlacaHref: null,
     helpResults: null,
     manualHomeHref: null,
     isTyping: true,
@@ -382,12 +478,16 @@ export function applyTramitesSuccess(
   state: DrFlitChatState,
   queryLabel: string,
   results: DrFlitTramiteResult[],
+  /** Total del universo filtrado (HU #12104); por defecto, los que llegaron. */
+  total: number = results.length,
+  /** HU-C — atajo a «Historial por placa»; solo se muestra si hubo resultados. */
+  historialPlacaHref: string | null = null,
 ): DrFlitChatState {
   const value = state.queryValue ?? "";
   const botMsg: DrFlitMessage = {
     id: createMessageId(),
     role: "bot",
-    text: buildTramitesIntro(queryLabel, value, results.length),
+    text: buildTramitesIntro(queryLabel, value, results.length, total),
   };
   return {
     ...state,
@@ -403,6 +503,7 @@ export function applyTramitesSuccess(
     tramiteResults: results,
     validacionResults: null,
     validacionesHref: null,
+    historialPlacaHref: results.length > 0 ? historialPlacaHref : null,
     helpResults: null,
     manualHomeHref: null,
     isTyping: false,
@@ -434,6 +535,7 @@ export function applyValidacionesSuccess(
     tramiteResults: null,
     validacionResults: results,
     validacionesHref: href,
+    historialPlacaHref: null,
     helpResults: null,
     manualHomeHref: null,
     isTyping: false,
@@ -463,6 +565,7 @@ export function applySearchFailure(
     tramiteResults: null,
     validacionResults: null,
     validacionesHref: null,
+    historialPlacaHref: null,
     helpResults: null,
     manualHomeHref: null,
     isTyping: false,
@@ -489,7 +592,7 @@ export function applyBackToSearch(state: DrFlitChatState): DrFlitChatState {
 export function queryLabelForIntent(intent: DrFlitIntentId | null): string {
   if (intent === "placa") return "placa";
   if (intent === "vin") return "VIN";
-  if (intent === "tramite") return "trámite";
+  if (intent === "tramite") return "radicado";
   if (intent === "cliente") return "cliente";
   return "búsqueda";
 }
@@ -516,6 +619,7 @@ export function hasActiveConversation(state: DrFlitChatState): boolean {
     state.showClientBranch ||
     state.tramiteResults != null ||
     state.validacionResults != null ||
+    state.historialPlacaHref != null ||
     state.helpResults != null ||
     state.manualHomeHref != null ||
     state.isTyping

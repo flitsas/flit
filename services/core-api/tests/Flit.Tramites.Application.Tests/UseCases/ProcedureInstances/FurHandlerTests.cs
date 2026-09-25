@@ -1857,6 +1857,16 @@ public sealed class FurHandlerTests
             Calls++;
             return Task.FromResult(ToReturn);
         }
+
+        /// <summary>
+        /// HU #12775 — la presencia se deriva de <see cref="ToReturn"/> por comodidad: estas pruebas del
+        /// FUR no ejercitan la obligatoriedad del certificado de Cámara de Comercio, que es la única que
+        /// consume la presencia.
+        /// </summary>
+        public Task<IReadOnlyList<ActorDeedPresence>> ResolvePresenceForActorsAsync(
+            Guid tenantId, IEnumerable<ProcedureInstanceActor> actors, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ActorDeedPresence>>(
+                [.. ToReturn.Select(d => new ActorDeedPresence(d.Tipo, d.Nit, d.Rol, d.DeedId))]);
     }
 
     private static ProcedureInstanceAttachment EscrituraSistema(

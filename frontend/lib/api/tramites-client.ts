@@ -6,6 +6,7 @@ import type {
   ActorContactLookupInput,
   ActorContactLookupResult,
   ActorsResponse,
+  CamaraComercioRequirement,
   AttachmentsResponse,
   BiometriaPublicView,
   BiometricParte,
@@ -34,6 +35,8 @@ import type {
   GenerarFurResult,
   FurTemplateFormatResult,
   GenerarConsolidadoResult,
+  ConsolidadoEntregaParams,
+  ConsolidadoEntregaResult,
   GenerarImprontaAttachmentResult,
   IdentityAuditResponse,
   IdentityValidationAlertsResponse,
@@ -788,6 +791,8 @@ function normalizeInstances(items: InstanceSummary[] | undefined): InstanceSumma
     firmaVendedorEstado: item.firmaVendedorEstado ?? null,
     firmaCompradorEstado: item.firmaCompradorEstado ?? null,
     consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
+    // HU #12791 — backend anterior al campo ⇒ null (la UI no infiere vigencia).
+    consolidadoWizard: item.consolidadoWizard ?? null,
   }));
 }
 
@@ -1183,6 +1188,42 @@ export const tramitesClient = {
       { headers: tenantHeader(tenantId) },
     );
     return res?.actors ?? [];
+  },
+
+  /**
+   * HU #12775/#12776 — obligatoriedad del certificado de Cámara de Comercio por actor jurídico.
+   *
+   * <p>Endpoint propio y no parte de `getActors` a propósito: lo que devuelve depende de la firma
+   * del baúl y de las escrituras vigentes del tenant, que pueden cambiar sin que cambie ningún dato
+   * del actor. Colgarlo de la respuesta de actores obligaría a recargarlos para refrescarlo.</p>
+   *
+   * <p>Con `actors` resuelve sobre ese borrador (lo que el gestor tiene en pantalla) en vez de sobre
+   * los actores guardados, que solo se persisten con «Continuar y guardar» (HU #12777 AC1 / #12779).
+   * No guarda nada.</p>
+   *
+   * <p>Ante un fallo devuelve `null`, no lanza: sin respuesta el paso se comporta como antes de esta
+   * HU —sin buzón— en vez de dejar al gestor con el asistente roto.</p>
+   */
+  getCamaraComercioRequirements: async (
+    instanceId: string,
+    tenantId?: string,
+    actors?: ProcedureActor[],
+  ): Promise<CamaraComercioRequirement[] | null> => {
+    const base = `/api/v1/tramites/instances/${instanceId}/camara-comercio-requirements`;
+    try {
+      const res = actors
+        ? await request<{ requirements: CamaraComercioRequirement[] }>(`${base}/preview`, {
+            method: 'POST',
+            headers: tenantHeader(tenantId),
+            body: JSON.stringify({ actors }),
+          })
+        : await request<{ requirements: CamaraComercioRequirement[] }>(base, {
+            headers: tenantHeader(tenantId),
+          });
+      return res?.requirements ?? [];
+    } catch {
+      return null;
+    }
   },
 
   // PUT set completo de actores (reemplaza el conjunto guardado).
@@ -2411,6 +2452,30 @@ export const tramitesClient = {
       },
     ),
 
+  /**
+   * HU #12785/#12786 — ruta ÚNICA de obtención del consolidado para el gestor y el SuperAdmin:
+   * `GET /api/v1/tramites/instances/{id}/consolidado/entrega`. Reconstruye SOLO si la bandera de
+   * vigencia está abajo (`modo: "regenerado"`); si está arriba devuelve el adjunto cacheado
+   * (`modo: "vigente"`) y en estado final el definitivo (`definitivoPorEstadoFinal: true`). Devuelve
+   * metadatos: el PDF se baja por `downloadAttachment` / `fetchAttachmentPreviewUrl` con
+   * `document.attachmentId`. Los parámetros omitidos no viajan (default del backend).
+   */
+  entregarConsolidado: (
+    instanceId: string,
+    params: ConsolidadoEntregaParams = {},
+    tenantId?: string,
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.tipo) qs.set('tipo', params.tipo);
+    if (params.force) qs.set('force', 'true');
+    if (params.soloLectura) qs.set('soloLectura', 'true');
+    const query = qs.toString();
+    return request<ConsolidadoEntregaResult>(
+      `/api/v1/tramites/instances/${instanceId}/consolidado/entrega${query ? `?${query}` : ''}`,
+      { headers: tenantHeader(tenantId) },
+    );
+  },
+
   // POST generar impronta (Kyverum RUNT) con los datos del trámite y adjuntarla. Idempotente por
   // NO-regeneración: 409 impronta_ya_existe si ya hay un adjunto tipo 'impronta' (manual o generado).
   // Otros errores: organismo_requerido | identificador_vehiculo_requerido |
@@ -2736,6 +2801,8 @@ const TRANSITION_ERROR_COPY: Record<string, string> = {
   estado_final: 'El trámite está en un estado final y no admite cambios.',
   identidad_no_aprobada: 'La validación de identidad del comprador no está aprobada.',
   documentos_incompletos: 'Faltan documentos obligatorios del trámite.',
+  // HU #12775 AC3 — parte jurídica sin firma precargada ni escritura vigente y sin certificado.
+  camara_comercio_pendiente: 'Falta el certificado de Cámara de Comercio de una parte persona jurídica.',
   motivo_requerido: 'Debes indicar el motivo para esta transición.',
   conflicto_concurrencia: 'El trámite fue modificado por otro usuario, recarga e intenta de nuevo.',
   estado_desconocido: 'El estado destino no es válido.',

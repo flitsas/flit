@@ -12,6 +12,7 @@ using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Domain.Enums;
 using Flit.Queries.Domain;
+using Flit.Queries.Domain.Documentos;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -168,6 +169,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Where(x => x.ValidationId == validationId)
             .OrderBy(x => x.OccurredAt)
             .ToListAsync(ct);
+
+    // HU #12791 — una sola lectura de los adjuntos de consolidado (solo tipo/source/fecha, sin grafo).
+    public async Task<IReadOnlyDictionary<string, string>> GetConsolidadoSourcesAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct)
+    {
+        var rows = await db.ProcedureInstanceAttachments
+            .AsNoTracking()
+            .Where(a => a.ProcedureInstanceId == procedureInstanceId
+                && a.TenantId == tenantId
+                && (a.Tipo == ConsolidadoVigencia.TipoWizard || a.Tipo == ConsolidadoVigencia.TipoMaestro))
+            .Select(a => new { a.Tipo, a.Source, a.UploadedAt })
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(r => r.Tipo, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(r => r.UploadedAt).First().Source,
+                StringComparer.OrdinalIgnoreCase);
+    }
 
     public Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
@@ -1691,6 +1712,22 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public void RemoveAttachment(ProcedureInstanceAttachment attachment) =>
         db.Set<ProcedureInstanceAttachment>().Remove(attachment);
 
+    public async Task<int> RemoveOcrFieldValueAsync(
+        Guid instanceId, Guid tenantId, string fieldKey, CancellationToken ct)
+    {
+        // Rastreado y no ExecuteDelete: el borrado tiene que confirmarse junto con el resto del caso
+        // de uso (borrar el adjunto, escribir la fecha nueva) o no confirmarse. Si la instancia ya
+        // cargó sus field_values, el mapa de identidad devuelve esas mismas entidades.
+        var filas = await db.Set<ProcedureInstanceFieldValue>()
+            .Where(f => f.ProcedureInstanceId == instanceId
+                        && f.TenantId == tenantId
+                        && f.FieldKey == fieldKey
+                        && f.Source == "ocr")
+            .ToListAsync(ct);
+        db.Set<ProcedureInstanceFieldValue>().RemoveRange(filas);
+        return filas.Count;
+    }
+
     // HU #10431 — guarda FK para changed_by en status_history: evita violar la FK a identity.users
     // cuando el sujeto de la radicación no existe (proceso automático o claim sub inválido).
     public Task<bool> UserExistsAsync(Guid userId, CancellationToken ct) =>
@@ -1720,6 +1757,29 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     /// <summary>HU #11029 — ver <see cref="IProcedureInstanceRepository.ResetTracking"/>.</summary>
     public void ResetTracking() => db.ChangeTracker.Clear();
+
+    /// <summary>HU #12797 — ver <see cref="IProcedureInstanceRepository.IsConcurrencyConflict"/>.</summary>
+    public bool IsConcurrencyConflict(Exception ex) => ex is DbUpdateConcurrencyException;
+
+    /// <summary>HU #12797 (F2) — ver <see cref="IProcedureInstanceRepository.TryDeferUntilTransactionEnds"/>.</summary>
+    public bool TryDeferUntilTransactionEnds(Action alConfirmar, Action? alRevertir = null)
+    {
+        ArgumentNullException.ThrowIfNull(alConfirmar);
+        return db.AccionesPostTransaccion.TryDiferir(
+            db.Database.CurrentTransaction?.TransactionId,
+            () =>
+            {
+                alConfirmar();
+                return Task.CompletedTask;
+            },
+            alRevertir is null
+                ? null
+                : () =>
+                {
+                    alRevertir();
+                    return Task.CompletedTask;
+                });
+    }
 
     // N 03 (RNF01) — commit con guarda de concurrencia optimista: row_version es concurrency
     // token (lo incrementa el trigger tr_procedure_instances_row_version); si otro proceso
@@ -2391,6 +2451,28 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             query = query.Where(x => x.UpdatedAt != null && x.UpdatedAt >= updatedFrom);
         if (filter.UpdatedTo is { } updatedTo)
             query = query.Where(x => x.UpdatedAt != null && x.UpdatedAt <= updatedTo);
+
+        // Epic #12686 — atajo evaluado en memoria (sin firmas / sin documento / pausados).
+        if (filter.IdsIncluidos is { } idsIncluidos)
+        {
+            var ids = idsIncluidos.ToList();
+            query = query.Where(x => ids.Contains(x.Id));
+        }
+
+        // Epic #12686 — «Mis trámites»: el gestor efectivo, igual que `GestorEfectivoUserId` (COALESCE).
+        if (filter.ResponsableId is { } responsable)
+            query = query.Where(x => (x.AssignedToUserId ?? x.CreatedByUserId) == responsable);
+
+        // Epic #12686 — «más de N días en gestión»: la ÚLTIMA entrada a Entregado, porque un trámite
+        // rechazado y vuelto a radicar empieza a contar de nuevo. Sin historial, la radicación.
+        if (filter.EntregadoAntesDe is { } corte)
+        {
+            query = query.Where(x => x.Status == TramiteEstado.Entregado
+                && (x.StatusHistory
+                        .Where(h => h.ToStatus == TramiteEstado.Entregado)
+                        .Max(h => (DateTimeOffset?)h.ChangedAt)
+                    ?? x.SubmittedAt) < corte);
+        }
 
         return query;
     }

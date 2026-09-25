@@ -8,6 +8,12 @@ public sealed class GetOtBandejaCountersQuery
     public Guid OtTenantId { get; init; }
     /// <summary>Override de organismo para SuperAdmin; null = el del perfil OT del tenant.</summary>
     public Guid? TransitOfficeId { get; init; }
+
+    /// <summary>
+    /// Epic #12686 (HU #12803) — filtros de la bandeja (familia, búsqueda, condiciones…). Su estado y
+    /// su marca de revocatoria se ignoran. <c>null</c> = todo lo recibido por el organismo.
+    /// </summary>
+    public OtClientProcedureFilter? Filtro { get; init; }
 }
 
 /// <summary>
@@ -55,6 +61,7 @@ public sealed class GetOtBandejaCountersHandler
 
         var counters = await _repository.GetBandejaCountersAsync(
             query.OtTenantId,
+            query.Filtro,
             query.TransitOfficeId,
             cancellationToken).ConfigureAwait(false);
 

@@ -139,7 +139,12 @@ public sealed class UpdateTenantSettingsHandler
             OnlyOwnVehiclesMatriculas = onlyMatriculas,
             OnlyOwnVehiclesOtros = onlyOtros,
             SignatureVaultEnabled = request.BaulFirmasActivo,
-            PlatePreassignEnabled = request.PreasignacionPlacaActiva,
+            // HU #12853 (Feature #12846, Épica #12751) — la ruta de placa preasignada de la compañía
+            // se apagó: el campo se sigue aceptando en el contrato (no rompe clientes que aún lo
+            // envían) pero el backend lo IGNORA. Se conserva el valor previo, nunca el que llegue en
+            // request.PreasignacionPlacaActiva, para que ni se persista ni aparezca en el diff de
+            // auditoría (AC2). El histórico persistido antes de esta HU no se toca (AC3).
+            PlatePreassignEnabled = previous.PlatePreassignEnabled,
             ValidateSoatWithRunt = request.ValidarSoatConRunt,
             NotificationChannel = channel,
             // HU #11357/#11362 (ADR-0043) — campo propio, ya no derivado del canal. Opcional: si el

@@ -101,12 +101,23 @@ import { ColumnSelector } from '@/components/atom/ColumnSelector';
 import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { EstadoFunnel } from './EstadoFunnel';
+import { panelesDeEstado } from '@/lib/tramites/panelesEstado';
+import { ATAJOS_GESTOR, atajoGestor, type AtajoGestor } from '@/lib/tramites/busquedaRapida';
+import { BusquedaRapidaAcordeon } from './BusquedaRapidaAcordeon';
+import { AvisoHayCambios } from './AvisoHayCambios';
+import { useSondeoDeConteos } from '@/hooks/useSondeoDeConteos';
 import {
   AttachmentPreview,
   TramiteDocumentosModal,
   useAttachmentPreview,
 } from './TramiteDocumentosModal';
-import { TramiteDetalleModal } from './TramiteDetalleModal';
+import {
+  TramiteDetalleModal,
+  type TramiteDetalleInitialPanel,
+} from './TramiteDetalleModal';
+
+/** HU #12726 (C.2) — opciones al abrir el modal de detalle desde la fila. */
+export type OpenDetalleOptions = { panel?: TramiteDetalleInitialPanel };
 import { TramiteTrackingModal } from './TramiteTrackingModal';
 import { useAdminTramiteAcciones } from './AdminTramiteAcciones';
 import type {
@@ -366,6 +377,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   // ADR-0059 — además de los estados reales, la tira ofrece «Rechazado preasignación», un
   // pseudo-estado que el servidor traduce a rechazado + rejectedFrom = preasignacion.
   const [estado, setEstado] = useState<'' | EstadoFiltro>('');
+  /** Epic #12686 (HU #12806) — atajo de la búsqueda rápida; vacío = ninguno. */
+  const [atajo, setAtajo] = useState<'' | AtajoGestor>('');
+  /** Epic #12686 (HU #12808) — el sondeo vio un conteo distinto al de la tabla. */
+  const [hayCambios, setHayCambios] = useState(false);
   // #1 — Filtro por compañía, solo relevante para el SuperAdmin (ve todas las empresas).
   // HU #10536 — filtro "solo prioritarios".
   const [soloPrioritarios, setSoloPrioritarios] = useState(false);
@@ -475,6 +490,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const { tenantId: tenantDelUsuario, isSuperAdmin: esSuperAdmin } = usePermissions();
   const currentTenantId = esSuperAdmin ? null : tenantDelUsuario;
 
+  // Epic #12686 (HU #12802) — tarjetas de la tira según perspectiva y familia. El administrador de
+  // una compañía y la vista de red son perspectiva de gestor: solo el SuperAdmin ve Preparado.
+  const perspectivaPaneles = esSuperAdmin ? 'superadmin' : 'gestor';
+  const panelesVisibles = useMemo(
+    () => panelesDeEstado(perspectivaPaneles, modalidad),
+    [perspectivaPaneles, modalidad],
+  );
+
   // HU #11054 / HU #11055 — consulta de documentos desde el listado, sin abrir el wizard. Se guarda
   // el trámite elegido (no solo su id) porque el panel se titula con el radicado y el SuperAdmin
   // necesita el tenant de la fila.
@@ -483,6 +506,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   // Frente C, etapa 1 — modal de detalle para trámites YA RADICADOS (estado ≠ 'borrador'). El
   // borrador sigue navegando al asistente; ver `TramiteRow.handleOpen`.
   const [detalleTramite, setDetalleTramite] = useState<InstanceSummary | null>(null);
+  const [detalleInitialPanel, setDetalleInitialPanel] =
+    useState<TramiteDetalleInitialPanel | null>(null);
+  const abrirDetalle = useCallback((item: InstanceSummary, opts?: OpenDetalleOptions) => {
+    setDetalleTramite(item);
+    setDetalleInitialPanel(opts?.panel ?? null);
+  }, []);
   /** HU #12362 — el detalle abierto es de un cliente hijo: solo consulta. */
   const detalleConsulta = isNetworkReadOnly(detalleTramite, currentTenantId);
   /**
@@ -673,7 +702,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    */
   const buildListQuery = useCallback((): ListInstancesParams => {
     const query: ListInstancesParams = {};
-    if (appliedCondiciones.length > 0) query.condiciones = appliedCondiciones;
+    // Epic #12686 — el atajo suma sus condiciones a las del usuario sin entrar en «+ Filtro».
+    const atajoActivo = atajoGestor(atajo);
+    const condiciones = [...appliedCondiciones, ...(atajoActivo?.condiciones ?? [])];
+    if (condiciones.length > 0) query.condiciones = condiciones;
+    if (atajoActivo?.busquedaRapida) query.busquedaRapida = atajoActivo.busquedaRapida;
     // Estado y familia van al SERVIDOR, no al array ya traído: el listado devuelve como mucho
     // SERVER_LIST_TAKE filas, así que filtrarlos en cliente respondía "los borradores que cupieron
     // en la ventana" en vez de "los borradores del tenant". Con pocos trámites daba igual; con un
@@ -697,6 +730,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     return query;
   }, [
     appliedCondiciones,
+    atajo,
     appliedCreatedFrom,
     appliedCreatedTo,
     appliedUpdatedFrom,
@@ -747,6 +781,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       setItems(page1.items);
       setTotal(page1.total);
       setEstadoCounts(counts);
+      setHayCambios(false);
+      // HU #12726 (C.4) — si el detalle está abierto, sincronizar la fila con el listado recién pedido.
+      setDetalleTramite((prev) => {
+        if (!prev) return null;
+        return page1.items.find((i) => i.id === prev.id) ?? prev;
+      });
 
       // Red de seguridad: si el universo encogió por debajo de la página en la que estaba el gestor
       // —al volver del asistente, o porque otro usuario cerró trámites— la respuesta llega vacía y
@@ -760,6 +800,17 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       setLoading(false);
     }
   }, [alcanceListo, buildListQuery, buscarPagina, contarEstados, page, pageSize]);
+
+  // Epic #12686 (HU #12808) — la tira se mantiene al día sola; la tabla, no. Si la tarjeta elegida
+  // cambió de cifra, se avisa en vez de mover las filas bajo el cursor.
+  useSondeoDeConteos({
+    activo: alcanceListo,
+    pedir: () => contarEstados(buildListQuery()),
+    alRecibir: (conteos) => {
+      setEstadoCounts(conteos);
+      if (estado && (conteos[estado] ?? 0) !== total) setHayCambios(true);
+    },
+  });
 
   useEffect(() => {
     // Carga/refresca al montar y al cambiar refreshKey: los setState de `load`
@@ -919,10 +970,25 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   };
   const handleModalidadChange = (v: '' | ProcedureFamily) => {
     setModalidad(v);
+    // Epic #12686 — si la tarjeta elegida no existe en la nueva pestaña (p. ej. Asignado en
+    // Traspaso), el filtro de estado se quita: dejarlo aplicado filtraría por una tarjeta que ya no
+    // se ve y la tabla quedaría vacía sin explicación.
+    if (estado && !panelesDeEstado(perspectivaPaneles, v).includes(estado)) setEstado('');
     setPage(1);
   };
   const handleEstadoChange = (v: '' | EstadoFiltro) => {
     setEstado(v);
+    // Epic #12686 — tarjeta y atajo no se acumulan: elegir una tarjeta suelta el atajo.
+    setAtajo('');
+    setPage(1);
+  };
+  /**
+   * Epic #12686 (HU #12806) — elegir un atajo suelta la tarjeta anterior; si el atajo es de un solo
+   * estado (p. ej. «Más de 5 días» es Entregado), ese estado queda en la tira y su tarjeta se resalta.
+   */
+  const handleAtajoChange = (key: '' | AtajoGestor) => {
+    setAtajo(key);
+    setEstado(atajoGestor(key)?.estado ?? '');
     setPage(1);
   };
   const handlePrioritariosChange = (v: boolean) => {
@@ -968,23 +1034,19 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     [isAdmin, currentTenantId],
   );
 
-  // HU #11055 — visor del consolidado. El resumen ya trae el id del adjunto, así que no hace falta
-  // consultar los adjuntos del trámite: se abre directo. El disparo va en un effect porque el hook
-  // toma el instanceId del render, y en el clic el trámite elegido todavía no está en estado.
+  // HU #11055 — visor del consolidado. El disparo va en un effect porque el hook toma el instanceId
+  // del render, y en el clic el trámite elegido todavía no está en estado.
+  // HU #12786 (AC1/AC3) — el id del resumen solo dice que HAY consolidado (gobierna si la acción se
+  // ofrece); el PDF se pide a la ruta de entrega, que lo reconstruye solo si está desactualizado.
+  // Una petición de entrega por clic: el effect depende del trámite elegido, no del resultado.
   const consolidadoPreview = useAttachmentPreview(
     consolidadoTramite?.id ?? null,
     isAdmin ? consolidadoTramite?.tenantId : undefined,
   );
-  const abrirConsolidado = consolidadoPreview.open;
+  const abrirConsolidado = consolidadoPreview.openConsolidado;
   useEffect(() => {
-    const attachmentId = consolidadoTramite?.consolidadoAttachmentId;
-    if (!consolidadoTramite || !attachmentId) return;
-    void abrirConsolidado({
-      id: attachmentId,
-      tipo: 'consolidado',
-      filename: `expediente-consolidado-${consolidadoTramite.referenceNumber}.pdf`,
-      mimetype: 'application/pdf',
-    });
+    if (!consolidadoTramite?.consolidadoAttachmentId) return;
+    void abrirConsolidado(`expediente-consolidado-${consolidadoTramite.referenceNumber}.pdf`);
   }, [consolidadoTramite, abrirConsolidado]);
 
   // ICT (paridad v1) — pausar/reanudar un trámite ICT con actualización optimista; revierte si falla.
@@ -1083,6 +1145,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     search.trim() !== '' ||
     modalidad !== '' ||
     estado !== '' ||
+    atajo !== '' ||
     soloPrioritarios ||
     hasServerFilters ||
     sortBy !== '';
@@ -1145,6 +1208,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     setSearch('');
     setModalidad('');
     setEstado('');
+    setAtajo('');
     setSoloPrioritarios(false);
     setDraftCondiciones([]);
     setRangoSobre('created');
@@ -1179,6 +1243,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const handleRefresh = () => {
     setSearch('');
     setEstado('');
+    setAtajo('');
     setPage(1);
     void load();
   };
@@ -1334,6 +1399,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             <div className="min-w-0 flex-1">
               <EstadoFunnel
                 counts={estadoCountsMostrados}
+                estados={panelesVisibles}
                 selected={estado}
                 onSelect={handleEstadoChange}
               />
@@ -1358,6 +1424,20 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             </span>
           </button>
         </div>
+
+        {hayCambios && !loading ? <AvisoHayCambios onActualizar={() => void load()} /> : null}
+
+        {/* Epic #12686 (HU #12806) — atajos sin conteo. No se desmonta mientras carga y sigue visible
+            si la carga falla: un atajo que el servidor rechaza (p. ej. demasiados borradores) tiene
+            que poder quitarse. */}
+        {alcanceListo ? (
+          <BusquedaRapidaAcordeon
+            items={ATAJOS_GESTOR}
+            selected={atajo}
+            onSelect={(key) => handleAtajoChange(key as '' | AtajoGestor)}
+            storageKey="tramites.busqueda-rapida"
+          />
+        ) : null}
 
         {/* Tira de chips: SOLO existe si hay periodo o alguna condición aplicada */}
         <TramitesFiltrosChips
@@ -1446,7 +1526,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           onOpen={abrirAsistente}
           onVerDocumentos={setDocsTramite}
           onVerConsolidado={setConsolidadoTramite}
-          onOpenDetalle={setDetalleTramite}
+          onOpenDetalle={abrirDetalle}
           onOpenTrackingTramite={setTrackingTramite}
           onOpenIdentidadTracking={setIdentidadTracking}
           puedeVerHistorialPlaca={puedeVerHistorialPlaca}
@@ -1480,10 +1560,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       {/* Frente C, etapa 1 — modal de detalle para trámites ya radicados (estado ≠ 'borrador'). */}
       <TramiteDetalleModal
         open={detalleTramite !== null}
-        onClose={() => setDetalleTramite(null)}
+        onClose={() => {
+          setDetalleTramite(null);
+          setDetalleInitialPanel(null);
+        }}
         instanceId={detalleTramite?.id ?? null}
         tenantId={isAdmin ? detalleTramite?.tenantId : undefined}
         item={detalleTramite}
+        initialPanel={detalleInitialPanel}
         // HU #12362 — trámite de un cliente hijo: solo lectura y sin gestión de documentos.
         readOnly={detalleConsulta}
         consultaMode={detalleConsulta}
@@ -1840,7 +1924,7 @@ function TableBody({
   onVerDocumentos: (item: InstanceSummary) => void;
   onVerConsolidado: (item: InstanceSummary) => void;
   /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
-  onOpenDetalle: (item: InstanceSummary) => void;
+  onOpenDetalle: (item: InstanceSummary, opts?: OpenDetalleOptions) => void;
   /** Click en badge Estado → modal de línea de tiempo del trámite. */
   onOpenTrackingTramite: (item: InstanceSummary) => void;
   onOpenIdentidadTracking: (target: {
@@ -2201,7 +2285,7 @@ function TramiteRow({
   onVerDocumentos: (item: InstanceSummary) => void;
   onVerConsolidado: (item: InstanceSummary) => void;
   /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
-  onOpenDetalle: (item: InstanceSummary) => void;
+  onOpenDetalle: (item: InstanceSummary, opts?: OpenDetalleOptions) => void;
   onOpenTrackingTramite: (item: InstanceSummary) => void;
   onOpenIdentidadTracking: (target: {
     item: InstanceSummary;
@@ -2616,10 +2700,10 @@ function TramiteRow({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onOpenTrackingTramite(item);
+              onOpenDetalle(item, { panel: 'timeline' });
             }}
-            aria-label={`Ver trazabilidad del trámite ${item.referenceNumber}`}
-            title="Ver línea de tiempo del trámite"
+            aria-label={`Ver línea de tiempo de ${item.referenceNumber}`}
+            title={`Ver línea de tiempo de ${item.referenceNumber}`}
             className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
           >
             {ayudaIdentidad ? (

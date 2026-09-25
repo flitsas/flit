@@ -10,6 +10,7 @@ import userEvent from '@testing-library/user-event';
 // Además, badge de origen "Dato reutilizado" cuando el lookup de IDENTIDAD viene de caché
 // (`mode: 'cache'`, AC1 de HU #10885 — sigue vigente para RUES; no se toca por esta HU).
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   getActors: vi.fn(),
   saveActors: vi.fn(),
   runtPersonLookup: vi.fn(),
@@ -21,6 +22,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
+    getCamaraComercioRequirements: mocks.getCamaraComercioRequirements,
     getActors: mocks.getActors,
     saveActors: mocks.saveActors,
     runtPersonLookup: mocks.runtPersonLookup,

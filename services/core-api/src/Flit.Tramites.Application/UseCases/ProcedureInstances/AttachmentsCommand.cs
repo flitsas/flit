@@ -76,6 +76,14 @@ public static class AttachmentRules
         // `source`, así que una carga manual bajo ese código no sobreviviría a la siguiente regeneración.
         "escritura_representante", "escritura_representante_vendedor",
         "escritura_representante_locatario",
+        // HU #12774 — certificado de Cámara de Comercio del actor persona jurídica. Misma familia que
+        // la escritura (ambos acreditan quién representa a la sociedad) y por eso el mismo trato: un
+        // código por rol, carga manual en el paso del actor y fuera de la matriz documental. NO se
+        // reutiliza 'camara_comercio': ese es el código del catálogo de paridad FLIT 1.0 y arrastra los
+        // datos migrados de V1, donde las tres llaves del legado colapsan en él.
+        CamaraComercioAttachmentTipo.Vendedor,
+        CamaraComercioAttachmentTipo.Comprador,
+        CamaraComercioAttachmentTipo.Locatario,
     };
 
     public static readonly IReadOnlySet<string> ValidMimetypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -587,12 +595,31 @@ public sealed class DownloadAttachmentHandler(
     }
 }
 
-/// <summary>Borra un adjunto (FS + fila). Solo en <c>draft</c>.</summary>
+/// <summary>
+/// Borra un adjunto (FS + fila). Solo en <c>draft</c> o con subsanación activa.
+/// <para>Re-review #12760 (M-N1) — los consolidados (<c>consolidado</c>, <c>consolidado_maestro</c>) son
+/// documentos del sistema y no se borran por esta vía (<see cref="AdjuntoProtegido"/>): en subsanación el
+/// gestor podía eliminar el maestro radicado ante Quipux. Defensa adicional: tampoco se borra ningún adjunto
+/// referenciado por una radicación (<see cref="IMaestroRadicadoLookup.AttachmentsProtegidosAsync"/>). El
+/// SuperAdmin no usa este handler: sus acciones Limpiar/Cargar consolidado tienen su propio flujo.</para>
+/// </summary>
 public sealed class DeleteAttachmentHandler(
     IProcedureInstanceRepository repo,
     IAttachmentStorage storage,
-    IVehicleSignatureImprintRepository? imprintAudit = null)
+    IVehicleSignatureImprintRepository? imprintAudit = null,
+    IMaestroRadicadoLookup? maestroRadicado = null)
 {
+    /// <summary>Código de error: el adjunto lo genera el sistema (o lo referencia Quipux) y no se borra.</summary>
+    public const string AdjuntoProtegido = "adjunto_protegido";
+
+    private static readonly HashSet<string> TiposDelSistema = new(StringComparer.OrdinalIgnoreCase)
+    {
+        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoWizard,
+        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoMaestro,
+    };
+
+    private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
+
     public async Task<string?> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -609,6 +636,12 @@ public sealed class DeleteAttachmentHandler(
         if (attachment is null)
             return "attachment_not_found";
 
+        if (TiposDelSistema.Contains(attachment.Tipo))
+            return AdjuntoProtegido;
+        var protegidos = await _maestroRadicado.AttachmentsProtegidosAsync(tenantId, id, ct).ConfigureAwait(false);
+        if (protegidos.Contains(attachment.Id))
+            return AdjuntoProtegido;
+
         var tipo = attachment.Tipo;
         var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits([attachment], imprintAudit);
         if (!preservePaths.Contains(attachment.StoragePath))
@@ -621,7 +654,18 @@ public sealed class DeleteAttachmentHandler(
         // dejaba el ítem "satisfecho" y el gate seguía pasando sin el documento.
         ChecklistEstadoJson.AutoUnmark(instance, tipo);
 
+        // HU #12776 — la fecha de expedición que el OCR leyó del certificado de Cámara de Comercio se
+        // va con el certificado. Si se quedara, el siguiente certificado cuyo OCR no lea la fecha
+        // heredaría la del borrado y la alerta de vigencia hablaría de un documento que ya no existe.
+        // Se marca ANTES del SaveChanges para que adjunto y fecha se borren en la misma transacción.
+        if (CamaraComercioAttachmentTipo.RoleOf(tipo) is { } rol
+            && !instance.Attachments.Any(a => string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)))
+        {
+            await repo.RemoveOcrFieldValueAsync(id, tenantId, CamaraComercioFieldKeys.Expedicion(rol), ct);
+        }
+
         await repo.SaveChangesAsync(ct);
+
         return null;
     }
 }

@@ -73,6 +73,26 @@ public sealed class PersistOcrFieldsHandler(
                 ["fecha_vencimiento"] = "rtm_vencimiento",
                 ["estado"] = "rtm_estado",
             },
+            // HU #12776 — fecha de expedición del certificado de Cámara de Comercio. Es lo único que
+            // se persiste de este prompt: el resto de lo que extrae (razón social, NIT, representante)
+            // ya lo tiene el trámite por el RUES y por la captura del actor, y escribirlo aquí sería
+            // dejar que un PDF escaneado compitiera con la fuente oficial.
+            //
+            // Una llave POR ROL, como los códigos de adjunto: con una sola, en un traspaso entre dos
+            // sociedades la fecha del comprador pisaría la del vendedor y la alerta de vigencia se
+            // calcularía sobre el documento equivocado.
+            [CamaraComercioAttachmentTipo.Vendedor] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fecha_expedicion"] = CamaraComercioFieldKeys.Expedicion("vendedor"),
+            },
+            [CamaraComercioAttachmentTipo.Comprador] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fecha_expedicion"] = CamaraComercioFieldKeys.Expedicion("comprador"),
+            },
+            [CamaraComercioAttachmentTipo.Locatario] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fecha_expedicion"] = CamaraComercioFieldKeys.Expedicion("locatario"),
+            },
         };
 
     /// <summary>¿El tipo de documento tiene campos persistibles por OCR?</summary>
@@ -106,6 +126,10 @@ public sealed class PersistOcrFieldsHandler(
         var persistidos = 0;
         var omitidos = new List<string>();
         var ignorados = new List<string>();
+        // HU #12776 — llave de la fecha del certificado de Cámara de Comercio, si este OCR es de uno.
+        var rolCamara = CamaraComercioAttachmentTipo.RoleOf(request.Tipo);
+        var llaveFechaCamara = rolCamara is null ? null : CamaraComercioFieldKeys.Expedicion(rolCamara);
+        var fechaCamaraLeida = false;
 
         foreach (var (ocrKey, rawValue) in request.Fields)
         {
@@ -120,6 +144,9 @@ public sealed class PersistOcrFieldsHandler(
             var value = Normalizar(fieldKey, rawValue);
             if (string.IsNullOrWhiteSpace(value))
                 continue; // valor ausente ⇒ NO se escribe la llave ⇒ celda en blanco (regla HU #10856).
+
+            if (string.Equals(fieldKey, llaveFechaCamara, StringComparison.OrdinalIgnoreCase))
+                fechaCamaraLeida = true;
 
             var existing = instance.FieldValues.FirstOrDefault(f =>
                 string.Equals(f.FieldKey, fieldKey, StringComparison.OrdinalIgnoreCase));
@@ -161,7 +188,15 @@ public sealed class PersistOcrFieldsHandler(
             persistidos++;
         }
 
-        if (persistidos > 0)
+        // HU #12776 — un certificado nuevo SIN fecha legible no puede heredar la fecha del anterior:
+        // la alerta de vigencia hablaría de otro documento. Aquí la «celda en blanco» de la regla
+        // HU #10856 no basta, porque la llave ya existe; hay que retirarla. Solo la de origen OCR.
+        var retirados = llaveFechaCamara is not null && !fechaCamaraLeida
+            ? await repo.RemoveOcrFieldValueAsync(instance.Id, tenantId, llaveFechaCamara, ct)
+            : 0;
+
+        // Un solo SaveChanges: lo escrito y lo retirado se confirman juntos o no se confirman.
+        if (persistidos > 0 || retirados > 0)
             await repo.SaveChangesAsync(ct);
 
         // HU #11304 — lo que el OCR extrajo también entra al almacén canónico, con procedencia `ocr`.

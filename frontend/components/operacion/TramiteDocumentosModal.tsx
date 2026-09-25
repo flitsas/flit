@@ -14,7 +14,15 @@ import {
   isScopeRejection,
 } from '@/lib/tramites/network-scope';
 import { formatFechaHora } from '@/lib/format/date';
-import type { ProcedureAttachment } from '@/lib/api/types/procedure-runtime';
+import type {
+  ConsolidadoEntregaResult,
+  ProcedureAttachment,
+} from '@/lib/api/types/procedure-runtime';
+import { esDocumentoDefinitivo } from '@/lib/tramites/consolidado-entrega';
+import { AvisoDocumentoFinal } from '@/components/shared/AvisoDocumentoFinal';
+import { AvisoFalloRegeneracion } from '@/components/shared/AvisoFalloRegeneracion';
+import { detectarFalloRegeneracion } from '@/lib/tramites/fallo-regeneracion-consolidado';
+import { mensajeErrorConsolidadoAmigable } from '@/lib/tramites/errores-consolidado';
 import { findConsolidadoAttachment } from './ExpedienteVisor';
 
 /**
@@ -54,6 +62,17 @@ export interface AttachmentPreviewOptions {
   consultaMode?: boolean;
 }
 
+/** Respaldo cuando la entrega falla sin un código conocido. */
+export const COPY_ENTREGA_CONSOLIDADO_FALLIDA = 'No se pudo obtener el consolidado vigente.';
+
+/**
+ * HU #12786 — mensaje cuando la ruta de entrega del consolidado falla (404/409/503/red). Security B2
+ * (Épica #12760): el código o `detail` del backend NO se pinta; se traduce con el mapa compartido.
+ */
+function mensajeEntregaFallida(e: unknown): string {
+  return mensajeErrorConsolidadoAmigable(e, COPY_ENTREGA_CONSOLIDADO_FALLIDA);
+}
+
 export function useAttachmentPreview(
   instanceId: string | null,
   tenantId?: string,
@@ -72,6 +91,11 @@ export function useAttachmentPreview(
     kind: 'open' | 'download';
     target: PreviewTarget;
   } | null>(null);
+  /**
+   * HU #12786 — última respuesta de la ruta de entrega del consolidado. Dice si el PDF servido es el
+   * definitivo (AC4) y con qué `modo` se resolvió. `null` fuera del flujo del consolidado.
+   */
+  const [entrega, setEntrega] = useState<ConsolidadoEntregaResult | null>(null);
 
   /** Libera el objectURL anterior: son blobs en memoria del navegador. */
   const revoke = useCallback(() => {
@@ -87,6 +111,7 @@ export function useAttachmentPreview(
     setError(null);
     setLoading(false);
     setPendienteAuditoria(null);
+    setEntrega(null);
   }, [revoke]);
 
   const open = useCallback(
@@ -192,6 +217,69 @@ export function useAttachmentPreview(
   );
 
   /**
+   * HU #12786 — pide el consolidado VIGENTE a `GET …/consolidado/entrega` (una sola petición) y
+   * devuelve el adjunto que hay que servir. El backend reconstruye solo si la bandera de vigencia
+   * está abajo; si está arriba responde `modo: "vigente"` con el cacheado. El `attachmentId` del
+   * resumen o de la lista de adjuntos NO se usa: puede ser el PDF antiguo.
+   */
+  const resolverConsolidado = useCallback(async (): Promise<PreviewTarget | null> => {
+    if (!instanceId) return null;
+    const res = await tramitesClient.entregarConsolidado(instanceId, {}, tenantId);
+    setEntrega(res);
+    return {
+      id: res.document.attachmentId,
+      tipo: res.document.tipo || 'consolidado',
+      filename: res.document.filename,
+      mimetype: 'application/pdf',
+    };
+  }, [instanceId, tenantId]);
+
+  /**
+   * HU #12786 (AC1/AC2/AC3) — abre el visor con el consolidado vigente. Mientras se resuelve la
+   * entrega el visor ya está abierto en «cargando» con un marcador sin id; si la entrega falla, el
+   * visor muestra el error (sin botón de descarga: no hay adjunto que bajar).
+   */
+  const openConsolidado = useCallback(
+    async (filename = 'expediente-consolidado.pdf') => {
+      if (!instanceId) return;
+      revoke();
+      setEntrega(null);
+      setError(null);
+      setPendienteAuditoria(null);
+      setDoc({ id: '', tipo: 'consolidado', filename, mimetype: 'application/pdf' });
+      setLoading(true);
+      let target: PreviewTarget | null;
+      try {
+        target = await resolverConsolidado();
+      } catch (e: unknown) {
+        setError(mensajeEntregaFallida(e));
+        setLoading(false);
+        return;
+      }
+      if (target) await open(target);
+    },
+    [instanceId, revoke, resolverConsolidado, open],
+  );
+
+  /**
+   * HU #12786 (AC1/AC3) — descarga directa del consolidado vigente: una petición a la entrega y una
+   * a la descarga del adjunto que devolvió. No abre el visor.
+   */
+  const downloadConsolidado = useCallback(async () => {
+    if (!instanceId) return;
+    setError(null);
+    setEntrega(null);
+    let target: PreviewTarget | null;
+    try {
+      target = await resolverConsolidado();
+    } catch (e: unknown) {
+      setError(mensajeEntregaFallida(e));
+      return;
+    }
+    if (target) await download(target);
+  }, [instanceId, resolverConsolidado, download]);
+
+  /**
    * HU #12411 — repite la acción rechazada por `audit_unavailable`. `null` cuando no hay nada que
    * reintentar (el 403/404 de alcance NO es reintentable: repetirlo no cambiaría nada).
    */
@@ -203,7 +291,26 @@ export function useAttachmentPreview(
       }
     : null;
 
-  return { doc, url, loading, error, open, close, download, reintentar };
+  return {
+    doc,
+    url,
+    loading,
+    error,
+    open,
+    close,
+    download,
+    reintentar,
+    entrega,
+    /** HU #12786 (AC4) — el consolidado servido es el documento final del trámite. */
+    definitivo: esDocumentoDefinitivo(entrega),
+    /**
+     * HU #12799 — la entrega sirvió el consolidado ANTERIOR porque regenerarlo falló. Esta vía no
+     * conoce la vigencia del trámite, así que el aviso va sin fecha (no se inventa).
+     */
+    fallo: detectarFalloRegeneracion(entrega),
+    openConsolidado,
+    downloadConsolidado,
+  };
 }
 
 /**
@@ -254,7 +361,16 @@ export function AttachmentPreview({
       url={preview.url}
       loading={preview.loading}
       error={preview.error}
-      onDownload={() => void preview.download()}
+      // HU #12786 — el marcador del consolidado (sin id) aún no tiene adjunto que descargar.
+      onDownload={preview.doc?.id ? () => void preview.download() : undefined}
+      notice={
+        preview.definitivo || preview.fallo ? (
+          <div className="space-y-2">
+            {preview.definitivo ? <AvisoDocumentoFinal /> : null}
+            {preview.fallo ? <AvisoFalloRegeneracion fallo={preview.fallo} /> : null}
+          </div>
+        ) : undefined
+      }
     />
   );
 }
@@ -267,6 +383,11 @@ export interface TramiteDocumentosModalProps {
   referenceNumber: string;
   /** Tenant de la fila: el SuperAdmin consulta trámites de otras compañías. */
   tenantId?: string;
+}
+
+/** HU #12786 — el consolidado del trámite (no el maestro del OT) va por la ruta de entrega. */
+function esConsolidado(d: Pick<ProcedureAttachment, 'tipo'>): boolean {
+  return (d.tipo ?? '').toLowerCase() === 'consolidado';
 }
 
 /** Panel de documentos del expediente de un trámite, abierto desde la fila del listado. */
@@ -364,7 +485,11 @@ export function TramiteDocumentosModal({
                       previsualizar en azul de marca, flecha para descargar en color de texto. */}
                   <button
                     type="button"
-                    onClick={() => void preview.open(d)}
+                    // HU #12786 (AC2) — el consolidado se pide a la ruta de entrega (vigente), no
+                    // al adjunto persistido de la lista, que puede ser el antiguo.
+                    onClick={() =>
+                      void (esConsolidado(d) ? preview.openConsolidado(d.filename) : preview.open(d))
+                    }
                     className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-[#557EFF] transition hover:bg-[#557EFF]/10`}
                     aria-label={`Previsualizar ${documentLabel(d.tipo)}`}
                     title="Previsualizar"
@@ -373,7 +498,9 @@ export function TramiteDocumentosModal({
                   </button>
                   <button
                     type="button"
-                    onClick={() => void preview.download(d)}
+                    onClick={() =>
+                      void (esConsolidado(d) ? preview.downloadConsolidado() : preview.download(d))
+                    }
                     className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-foreground transition hover:bg-[#557EFF]/10`}
                     aria-label={`Descargar ${documentLabel(d.tipo)}`}
                     title="Descargar"
@@ -394,7 +521,7 @@ export function TramiteDocumentosModal({
                     background: 'linear-gradient(135deg,#557EFF 0%,#00DBD5 100%)',
                     boxShadow: '0 10px 24px -6px rgba(85,126,255,0.45)',
                   }}
-                  onClick={() => void preview.download(consolidado)}
+                  onClick={() => void preview.downloadConsolidado()}
                   aria-label="Descargar todo · Expediente consolidado (PDF)"
                 >
                   <Download className="h-3.5 w-3.5" aria-hidden="true" />
@@ -404,6 +531,9 @@ export function TramiteDocumentosModal({
             })()}
           </>
         )}
+
+        {/* HU #12786 (AC4) — descarga directa del definitivo: sin visor, el aviso va en el panel. */}
+        {preview.doc === null && preview.definitivo && <AvisoDocumentoFinal className="mt-3" />}
 
         {/* Fallo de una descarga directa: el visor no está abierto, así que el aviso va aquí. */}
         {preview.doc === null && preview.error && (

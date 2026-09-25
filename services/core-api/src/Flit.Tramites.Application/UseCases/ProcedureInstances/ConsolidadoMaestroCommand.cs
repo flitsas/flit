@@ -27,8 +27,12 @@ public sealed class GenerarConsolidadoMaestroHandler(
     IImprontaManualStamper? improntaManualStamper = null,
     Domain.Integration.ISignatureVaultPolicy? signatureVaultPolicy = null,
     IVehicleSignatureImprintRepository? vehicleSignatureImprintRepository = null,
-    Microsoft.Extensions.Logging.ILogger<GenerarConsolidadoMaestroHandler>? logger = null)
+    Microsoft.Extensions.Logging.ILogger<GenerarConsolidadoMaestroHandler>? logger = null,
+    IMaestroRadicadoLookup? maestroRadicado = null)
 {
+    // HU #12787 (AC2) — sin Quipux cableado nada está radicado: comportamiento previo.
+    private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
+
     // Bug #11612 — nombre de la compañía radicadora para la portada, resuelto desde el tenant dueño
     // del trámite. Default inerte (NUNCA resuelve) en tests/composiciones que no lo cablean ⇒ la
     // portada queda como estaba.
@@ -43,6 +47,37 @@ public sealed class GenerarConsolidadoMaestroHandler(
         "consolidado",
         "consolidado_maestro",
     };
+
+    /// <summary>
+    /// HU #12787 (AC2) — variante para las rutas que ATIENDEN a un usuario (POST OT
+    /// <c>consolidado-maestro</c>): si el trámite ya se radicó ante Quipux, devuelve el maestro radicado
+    /// tal cual (<c>modo=radicado_fijo</c>) y no regenera nunca, ni con <paramref name="force"/>. Si el
+    /// adjunto radicado ya no existe (datos rotos), solo lectura: el maestro existente o
+    /// <c>consolidado_no_generado</c>.
+    /// <para>El canal de radicación (<c>QuipuxConsolidadoMaestroAdapter</c>) usa <see cref="HandleAsync"/> a
+    /// propósito: tras un rechazo de Quipux la nueva radicación necesita un maestro nuevo (el anterior se
+    /// conserva igualmente: <see cref="ConsolidadoReemplazoSeguro.RetirarFilas"/> lo protege).</para>
+    /// </summary>
+    public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleRespetandoRadicacionAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<string>? matrizPrecedencia = null,
+        bool force = false,
+        CancellationToken ct = default)
+    {
+        var radicadoId = await _maestroRadicado.AttachmentRadicadoAsync(tenantId, id, ct).ConfigureAwait(false);
+        if (radicadoId is not null)
+        {
+            var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).ConfigureAwait(false);
+            if (instance is null)
+                return (null, "not_found");
+
+            var fijo = MaestroRadicadoFijo.Resolver(instance, radicadoId);
+            return fijo.Error is null ? (fijo.Result, null) : (null, fijo.Error);
+        }
+
+        return await HandleAsync(id, tenantId, matrizPrecedencia, force, ct).ConfigureAwait(false);
+    }
 
     /// <param name="matrizPrecedencia">
     /// Orden resuelto de la matriz documental del tenant/OT (<c>ResolvedDocumentMatrixResolver</c> /
@@ -72,8 +107,9 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // vigente y el adjunto sigue existiendo, se REUTILIZA sin regenerar (el PDF ya refleja el
         // estado actual del expediente). La marca la baja a false cualquier cambio importante
         // (transición de estado o adjuntar la LT), forzando la regeneración en la próxima petición.
-        var vigente = instance.Attachments
-            .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado_maestro", StringComparison.OrdinalIgnoreCase));
+        // El más reciente: un maestro radicado ante Quipux se conserva al regenerar (HU #12787), así que
+        // puede haber más de una fila de este tipo.
+        var vigente = ConsolidadoEntregaModos.Existente(instance, "consolidado_maestro");
 
         // Bug #11612 — el atajo de caché queda EXACTAMENTE como estaba: la compañía radicadora ya no
         // deja marcador persistido (ver CompaniaRadicadoraResolver) y condicionar el atajo a "falta la
@@ -156,17 +192,15 @@ public sealed class GenerarConsolidadoMaestroHandler(
         const string tipoMaestro = "consolidado_maestro";
         var doc = new GeneratedDocument(tipoMaestro, filename, "application/pdf", merged);
 
-        // Idempotencia: eliminar maestro previo antes de persistir el nuevo.
-        foreach (var prev in instance.Attachments
-            .Where(a => string.Equals(a.Tipo, tipoMaestro, StringComparison.OrdinalIgnoreCase))
-            .ToList())
-        {
-            storage.Delete(prev.StoragePath);
-            instance.Attachments.Remove(prev);
-            repo.RemoveAttachment(prev);
-        }
+        // Idempotencia: el maestro previo se sustituye (HU #12797): subir el nuevo → guardar → solo
+        // entonces borrar el binario anterior. Si la subida falla, nada se tocó.
+        var previos = ConsolidadoReemplazoSeguro.Previos(instance, tipoMaestro);
+        var maestroVigenteAntes = instance.ConsolidadoMaestroVigente;
+        // HU #12787 (AC2) — el maestro radicado ante Quipux nunca se retira ni se borra.
+        var protegidos = await _maestroRadicado.AttachmentsProtegidosAsync(tenantId, id, ct).ConfigureAwait(false);
 
         var stored = await storage.SaveAsync(id, doc.Tipo, doc.Filename, new MemoryStream(doc.Content), ct);
+        previos = ConsolidadoReemplazoSeguro.RetirarFilas(instance, repo, previos, protegidos);
         var newAttachment = new ProcedureInstanceAttachment
         {
             Id = Guid.NewGuid(),
@@ -187,6 +221,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // Marca de vigencia (Feature #10701): el consolidado recién generado refleja el estado
         // actual del expediente. La bajarán a false las transiciones de estado y el adjuntar LT.
         instance.ConsolidadoMaestroVigente = true;
+        instance.ConsolidadoMaestroGeneradoEn = now; // HU #12790 — sello UTC de generacion (misma marca que UploadedAt).
 
         var evento = new ProcedureInstanceEvent
         {
@@ -206,7 +241,9 @@ public sealed class GenerarConsolidadoMaestroHandler(
         instance.Events.Add(evento);
         repo.Add(evento);
 
-        await repo.SaveChangesAsync(ct);
+        await ConsolidadoReemplazoSeguro.ConfirmarAsync(
+            instance, repo, storage, stored, newAttachment, previos,
+            () => instance.ConsolidadoMaestroVigente = maestroVigenteAntes, logger, ct).ConfigureAwait(false);
 
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
         return (new GenerarConsolidadoResult(dto), null);

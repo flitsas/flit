@@ -19,6 +19,7 @@ import type { WizardCapabilities, WizardState } from '@/lib/api/types/procedure-
  * modo las seguiría viendo hasta cerrarse.</p>
  */
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   createInstance: vi.fn(),
   getInstance: vi.fn(),
   getWizardState: vi.fn(),

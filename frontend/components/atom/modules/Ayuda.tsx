@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { LifeBuoy, MessageCircle, BookOpen, Mail } from "lucide-react";
+import { LifeBuoy, MessageCircle, BookOpen, Mail, Scale } from "lucide-react";
+import { DR_FLIT_SUPPORT_EMAIL } from "@/components/dr-flit/dr-flit-intents";
+import { NORMATIVA_RESOLUCION_SLUG } from "@/lib/manual/articles/normativa";
 import { ModuleTitle } from "./ModuleTitle";
 import { COPY } from "@/lib/copy/copy-catalog";
 
@@ -18,7 +20,7 @@ export const AYUDA_FAQ = [
   },
   {
     q: "¿El manual es para administradores?",
-    a: `No. Documenta ${COPY.A06} y ${COPY.A05}. Las consolas de SuperAdmin/AdminCompany quedan fuera.`,
+    a: `Cubre ${COPY.A06}, ${COPY.A05} y las consolas de administración según tu perfil. DR. FLIT solo te sugiere artículos que aplican a tu rol.`,
   },
 ];
 
@@ -29,16 +31,22 @@ export function Ayuda() {
         title="Centro de Ayuda"
         subtitle="Documentación operativa, chat DR. FLIT y canales de soporte."
       />
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 shrink-0">
         {[
           {
             l: "Manual FLIT",
-            d: "Docs Gestor y OT",
+            d: "Docs por perfil",
             i: BookOpen,
             href: "/manual",
           },
           { l: "Chat DR. FLIT", d: "«Necesito ayuda»", i: MessageCircle },
-          { l: "Email soporte", d: "soporte@flitsas.com", i: Mail },
+          {
+            l: "Normativa",
+            d: "Res. 20233040017145/2023",
+            i: Scale,
+            href: `/manual/${NORMATIVA_RESOLUCION_SLUG}`,
+          },
+          { l: "Email soporte", d: DR_FLIT_SUPPORT_EMAIL, i: Mail },
           { l: "Soporte prioritario", d: "Plan Enterprise", i: LifeBuoy },
         ].map((k) => {
           const Icon = k.i;

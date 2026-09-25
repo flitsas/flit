@@ -62,10 +62,8 @@ import {
   Network,
   Route,
   X,
-  Scale,
   FileText,
   ClipboardList,
-  Tag,
   ListChecks,
   Monitor,
   FileSignature,
@@ -73,7 +71,6 @@ import {
   Image as ImageIcon,
   BadgeCheck,
   Timer,
-  Settings,
 } from "lucide-react";
 
 export type ModuleId =
@@ -103,7 +100,6 @@ const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   // id distinto del slug del permiso dejaría la entrada invisible para todos.
   { id: "historial-placa", label: SPA_DOCK_ITEM_LABEL["historial-placa"], icon: History },
   { id: "usuarios", label: SPA_DOCK_ITEM_LABEL.usuarios, icon: Users },
-  { id: "ayuda", label: SPA_DOCK_ITEM_LABEL.ayuda, icon: HelpCircle },
 ];
 
 // Entrada normalizada del dock: módulos de la SPA y accesos admin/empresa comparten
@@ -229,13 +225,12 @@ export function Shell({
   }, [dockOpen]);
 
   // Filtra los módulos del dock según permisos RBAC del JWT cuando visibleModuleCodes
-  // está disponible. "Ayuda" es soporte universal (no es un módulo con permiso RBAC),
-  // por lo que se muestra siempre, en todas las pantallas del dock.
+  // está disponible. "Ayuda" vive en el menú de usuario (⋮) → /manual (HU #12723).
   // Admin OT: las pestañas del hub viven en el dock (Trámites / Usuarios / Reportes / …);
   // se omiten los módulos SPA homónimos para no duplicar píldoras (OT_ADMIN_SPA_OMIT
   // compartido con resolveNavigableModuleIds — invariante dock ≡ URL).
   const visibleDock = (visibleModuleCodes
-    ? DOCK.filter((it) => it.id === "ayuda" || visibleModuleCodes.includes(it.id))
+    ? DOCK.filter((it) => visibleModuleCodes.includes(it.id))
     : DOCK
   ).filter((it) => !(currentUser?.isOtUser && OT_ADMIN_SPA_OMIT.has(it.id)));
 
@@ -434,10 +429,18 @@ export function Shell({
     });
   }
 
-  // Usuario OT: pestañas del hub trasladadas al dock (Administración = Reglas/Docs/Requisitos;
-  // Trámites, Preasignación, Usuarios y Reportes como ítems del dock). Sin Compañías/RBAC.
-  // Todo rol de un tenant OT entra aquí; "Usuarios" queda solo para ot_admin porque su API
-  // (UserAdminPolicy) sigue siendo de administradores.
+  // Usuario OT: pestañas del hub trasladadas al dock (Administración = Documentos;
+  // Trámites, Usuarios y Reportes como ítems del dock). Sin Compañías/RBAC.
+  // Todo rol de un tenant OT entra aquí; "Usuarios" y "Documentos" quedan solo para ot_admin
+  // porque su API sigue siendo de administradores (UserAdminPolicy / OtAdminOrSuperAdminPolicy).
+  // HU #12850 (Feature #12846) — Preasignación se retiró: la consola de rangos dejó de existir.
+  // HU #12856 (Feature #12847) — Reglas, Requisitos y Configuración salen del dock para TODO
+  // usuario de un tenant OT (admin u operador): la API ya los restringe a Super Admin (HU-B2) y el
+  // guard de `lib/auth/guard.ts` bloquea también la URL directa. Super Admin los sigue viendo desde
+  // su barra de pestañas del hub (OtHubLayout / OT_HUB_TABS), que no pasa por este bloque.
+  // HU #12860 (Feature #12848) — Documentos se restringe a ot_admin, mismo patrón que Usuarios: el
+  // Operador OT (`gestor_tramites_ot`) y roles OT personalizados dejan de verla (la API ya exige
+  // rol SuperAdmin u ot_admin, HU-C2 backend, y el guard bloquea también la URL directa).
   if (currentUser?.isOtUser) {
     entries.push(
       {
@@ -447,36 +450,15 @@ export function Shell({
         active: isOtHubSegmentActive(pathname, "client-procedures"),
         onClick: () => goOtHub("client-procedures"),
       },
-      {
-        key: OT_ADM_DOCK.rules,
-        label: "Reglas",
-        icon: Scale,
-        active: isOtHubSegmentActive(pathname, "rules"),
-        onClick: () => goOtHub("rules"),
-      },
-      {
-        key: OT_ADM_DOCK.documents,
-        label: "Documentos",
-        icon: FileText,
-        active: isOtHubSegmentActive(pathname, "documents"),
-        onClick: () => goOtHub("documents"),
-      },
-      {
-        key: OT_ADM_DOCK.requirements,
-        label: "Requisitos",
-        icon: ClipboardList,
-        active: isOtHubSegmentActive(pathname, "requirements"),
-        onClick: () => goOtHub("requirements"),
-      },
-      {
-        key: OT_ADM_DOCK.preasignacion,
-        label: "Preasignación",
-        icon: Tag,
-        active: isOtHubSegmentActive(pathname, "plate-ranges"),
-        onClick: () => goOtHub("plate-ranges"),
-      },
       ...(currentUser.isOtAdmin
         ? [
+            {
+              key: OT_ADM_DOCK.documents,
+              label: "Documentos",
+              icon: FileText,
+              active: isOtHubSegmentActive(pathname, "documents"),
+              onClick: () => goOtHub("documents"),
+            },
             {
               key: OT_ADM_DOCK.usuarios,
               label: COPY.B21Usuarios,
@@ -506,16 +488,6 @@ export function Shell({
         icon: Fingerprint,
         active: isOtHubSegmentActive(pathname, "imprint-validation"),
         onClick: () => goOtHub("imprint-validation"),
-      },
-      {
-        // Pedido del usuario (2026-09-16) — modo Dashboard/QX, ventana de revocatoria (HU #12569) y
-        // feature flags operativos: sin esta entrada, esos ajustes solo eran alcanzables escribiendo
-        // a mano la URL de una pestaña legacy sin enlace en ningún menú.
-        key: OT_ADM_DOCK.configuracion,
-        label: "Configuración",
-        icon: Settings,
-        active: isOtHubSegmentActive(pathname, "configuracion"),
-        onClick: () => goOtHub("configuracion"),
       },
     );
   }
@@ -678,6 +650,14 @@ export function Shell({
                 }}
               >
                 <MenuItem
+                  icon={HelpCircle}
+                  label={COPY.B21Ayuda}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    router.push("/manual");
+                  }}
+                />
+                <MenuItem
                   icon={KeyRound}
                   label="Cambio de contraseña"
                   onClick={() => {
@@ -721,10 +701,14 @@ export function Shell({
           homeActive={!onAdminRoute && active === "dashboard"}
         />
 
-        {/* DR. FLIT — asistente conversacional (UI-only; sin APIs). */}
+        {/* DR. FLIT — asistente conversacional sobre APIs existentes (búsqueda por rol/alcance). */}
         <DrFlitAssistant
           displayName={currentUser?.displayName ?? currentUser?.email ?? null}
           routeScope={`${pathname}|${active}`}
+          // Mismo criterio que el dock: sin filtro RBAC se ve todo; con filtro, solo si el módulo viene.
+          historialPlacaEnabled={
+            visibleModuleCodes ? visibleModuleCodes.includes("historial-placa") : true
+          }
           canSearchValidaciones={visibleDock.some((it) => it.id === "validaciones")}
         />
 

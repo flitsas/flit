@@ -1,33 +1,45 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pencil } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { createOtRule, fetchOtRules, updateOtRule } from "@/lib/api/admin-ot";
 import type { OtRule } from "@/lib/api/types-ot";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { RowActions } from "@/components/atom/RowActions";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RuleFormPanel } from "./RuleFormPanel";
-import { formatOtRuleAction } from "./ot-utils";
 
-/** Lista y constructor de reglas OT con hot-swap (HU #10223). */
-export function RulesSection() {
+export interface RulesSectionProps {
+  /** Oficina OT en scope (SuperAdmin navegando el hub). Mismo patrón que RequirementsSection. */
+  transitOfficeId?: string;
+}
+
+/** Lista y constructor de reglas OT con hot-swap (HU #10223). HU #12731 — DataTable sin columnas de detalle. */
+export function RulesSection({ transitOfficeId }: RulesSectionProps = {}) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [rules, setRules] = useState<OtRule[]>([]);
   const [formOpen, setFormOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<OtRule | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  // HU #12854 (backend) / HU #12856 — Reglas resuelve el organismo por ?transitOfficeId cuando
+  // el caller es Super Admin (mismo patrón que RequirementsSection).
+  const scope = transitOfficeId ? { transitOfficeId } : undefined;
 
   const loadRules = useCallback(async (signal?: AbortSignal) => {
     setStatus("loading");
     try {
-      const result = await fetchOtRules(signal);
+      const result = await fetchOtRules(signal, transitOfficeId ? { transitOfficeId } : undefined);
       if (signal?.aborted) return;
       setRules(result.data);
       setStatus(result.data.length === 0 ? "empty" : "ready");
     } catch {
       if (!signal?.aborted) setStatus("error");
     }
-  }, []);
+  }, [transitOfficeId]);
 
   useEffect(() => {
     const c = new AbortController();
@@ -42,7 +54,7 @@ export function RulesSection() {
       prev.map((r) => (r.id === rule.id ? { ...r, isEnabled: next } : r)),
     );
     try {
-      const updated = await updateOtRule(rule.id, { isEnabled: next });
+      const updated = await updateOtRule(rule.id, { isEnabled: next }, scope);
       setRules((prev) => prev.map((r) => (r.id === rule.id ? updated : r)));
     } catch {
       setRules((prev) =>
@@ -54,12 +66,76 @@ export function RulesSection() {
     }
   };
 
+  const columns: DataTableColumn<OtRule>[] = useMemo(
+    () => [
+      {
+        key: "name",
+        header: "Nombre",
+        cellClassName: "font-semibold",
+        render: (row) => row.name,
+      },
+      {
+        key: "state",
+        header: "Estado",
+        render: (row) => (
+          <StatusBadge
+            label={row.isEnabled ? "Activa" : "Inactiva"}
+            tone={row.isEnabled ? "success" : "neutral"}
+          />
+        ),
+      },
+      {
+        key: "toggle",
+        header: "Toggle",
+        align: "right",
+        render: (row) => (
+          <label className="inline-flex cursor-pointer items-center gap-2">
+            <span className="sr-only">Activa / Inactiva — {row.name}</span>
+            <input
+              type="checkbox"
+              role="switch"
+              checked={row.isEnabled}
+              disabled={togglingId === row.id}
+              aria-checked={row.isEnabled}
+              className="h-4 w-8 cursor-pointer accent-[#557EFF]"
+              onChange={(e) => void handleToggle(row, e.target.checked)}
+            />
+          </label>
+        ),
+      },
+      {
+        key: "actions",
+        header: "Acción",
+        align: "right",
+        render: (row) => (
+          <RowActions
+            actions={[
+              {
+                icon: Pencil,
+                label: `Editar regla ${row.name}`,
+                tone: "primary",
+                onClick: () => {
+                  setEditingRule(row);
+                  setFormOpen(true);
+                },
+              },
+            ]}
+          />
+        ),
+      },
+    ],
+    [togglingId],
+  );
+
   const emptyCta = (
     <button
       type="button"
       className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
       style={{ background: "#557EFF" }}
-      onClick={() => setFormOpen(true)}
+      onClick={() => {
+        setEditingRule(null);
+        setFormOpen(true);
+      }}
     >
       Crear primera regla
     </button>
@@ -72,7 +148,10 @@ export function RulesSection() {
           type="button"
           className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
           style={{ background: "#557EFF" }}
-          onClick={() => setFormOpen(true)}
+          onClick={() => {
+            setEditingRule(null);
+            setFormOpen(true);
+          }}
         >
           Nueva regla
         </button>
@@ -86,78 +165,38 @@ export function RulesSection() {
         onRetry={() => void loadRules()}
         skeletonRows={4}
       >
-        <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-separate border-spacing-y-2 text-xs">
-          <thead>
-            <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
-              <th className="rounded-l-xl px-4 py-2.5 bg-muted">
-                Nombre
-              </th>
-              <th className="px-4 py-2.5 bg-muted">
-                Lógica
-              </th>
-              <th className="px-4 py-2.5 bg-muted">
-                Acción
-              </th>
-              <th className="px-4 py-2.5 bg-muted">
-                Estado
-              </th>
-              <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
-                Toggle
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rules.map((rule) => (
-              <tr key={rule.id} className="bg-card">
-                <td className="rounded-l-xl border-y border-l px-4 py-3">
-                  {rule.name}
-                </td>
-                <td className="border-y px-4 py-3">
-                  {rule.logic}
-                </td>
-                <td className="border-y px-4 py-3">
-                  {formatOtRuleAction(rule.action.type)}
-                  {rule.action.queue_name ? ` (${rule.action.queue_name})` : ""}
-                </td>
-                <td className="border-y px-4 py-3">
-                  <StatusBadge
-                    label={rule.isEnabled ? "Activa" : "Inactiva"}
-                    tone={rule.isEnabled ? "success" : "neutral"}
-                  />
-                </td>
-                <td
-                  className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                >
-                  <label className="inline-flex cursor-pointer items-center gap-2">
-                    <span className="sr-only">Activa / Inactiva — {rule.name}</span>
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      checked={rule.isEnabled}
-                      disabled={togglingId === rule.id}
-                      aria-checked={rule.isEnabled}
-                      className="h-4 w-8 cursor-pointer accent-[#557EFF]"
-                      onChange={(e) => void handleToggle(rule, e.target.checked)}
-                    />
-                  </label>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
+        <DataTable
+          columns={columns}
+          rows={rules}
+          getRowKey={(row) => row.id}
+          ariaLabel="Reglas del motor de reglas OT"
+          minWidth={640}
+        />
       </UiStateBoundary>
 
       <RuleFormPanel
         open={formOpen}
-        onClose={() => setFormOpen(false)}
-        onCreate={createOtRule}
+        rule={editingRule}
+        onClose={() => {
+          setFormOpen(false);
+          setEditingRule(null);
+        }}
+        onCreate={(body) => createOtRule(body, scope)}
+        onUpdate={(id, body) => updateOtRule(id, body, scope)}
         onSaved={(rule) => {
-          setRules((prev) => [rule, ...prev]);
+          setRules((prev) => {
+            const idx = prev.findIndex((r) => r.id === rule.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = rule;
+              return next;
+            }
+            return [rule, ...prev];
+          });
           setStatus("ready");
           setFormOpen(false);
-          show("Regla creada.", "success");
+          setEditingRule(null);
+          show(editingRule ? "Regla actualizada." : "Regla creada.", "success");
         }}
       />
     </div>

@@ -10,13 +10,15 @@ import { formatOtProcedureStatus } from "@/components/admin/transit-offices/ot-u
 import { OT_BANDEJA_TARJETAS } from "@/components/admin/transit-offices/OtBandejaCounters";
 
 describe("HU #12698 homologación KPI y chips (A14–A16 N/A)", () => {
-  it("AC1: A14–A16 son N/A; KPI OT conserva cola y chip sigue el catálogo B", () => {
+  // Epic #12686 (decisión 6) — las tarjetas del OT pasan a llamarse como el estado, igual que en el
+  // listado del gestor: «Por decidir» → «Entregado», «Asignados» → «Asignado». La clave no cambia.
+  it("AC1: A14–A16 son N/A; la tarjeta KPI del OT lleva el nombre del estado", () => {
     expect(isNaCopyKey("A14")).toBe(true);
     expect(isNaCopyKey("A15")).toBe(true);
     expect(isNaCopyKey("A16")).toBe(true);
 
-    expect(OT_BANDEJA_TARJETAS.find((t) => t.key === "porDecidir")?.label).toBe("Por decidir");
-    expect(OT_BANDEJA_TARJETAS.find((t) => t.key === "asignados")?.label).toBe("Asignados");
+    expect(OT_BANDEJA_TARJETAS.find((t) => t.key === "porDecidir")?.label).toBe("Entregado");
+    expect(OT_BANDEJA_TARJETAS.find((t) => t.key === "asignados")?.label).toBe("Asignado");
     expect(OT_BANDEJA_TARJETAS.find((t) => t.key === "porDecidir")?.status).toBe("entregado");
 
     expect(estadoLabel("entregado")).toBe("Entregado");
@@ -30,10 +32,10 @@ describe("HU #12698 homologación KPI y chips (A14–A16 N/A)", () => {
     expect(estadoLabelConOrigen("rechazado", "preasignacion")).toBe(RECHAZADO_PREASIGNACION_LABEL);
   });
 
-  it("AC3: el chip de entregado dice Entregado aunque la tarjeta KPI se llame Por decidir", () => {
+  it("AC3: el chip de entregado y la tarjeta KPI dicen lo mismo (Epic #12686)", () => {
     expect(formatOtProcedureStatus("entregado")).toBe("Entregado");
     expect(formatOtProcedureStatus("entregado")).toBe(estadoLabel("entregado"));
-    expect(OT_BANDEJA_TARJETAS.find((t) => t.status === "entregado")?.label).not.toBe(
+    expect(OT_BANDEJA_TARJETAS.find((t) => t.status === "entregado")?.label).toBe(
       formatOtProcedureStatus("entregado"),
     );
   });

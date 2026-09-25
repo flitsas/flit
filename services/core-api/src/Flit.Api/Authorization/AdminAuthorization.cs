@@ -80,4 +80,17 @@ public static class AdminAuthorization
     /// <summary>Mensaje 403 cuando el caller no es cabeza de grupo (HU #12345 AC5).</summary>
     public const string GroupHeadForbiddenMessage =
         "Acceso restringido: se requiere ser administrador de una cabeza de grupo.";
+
+    /// <summary>
+    /// HU #12859 (Feature #12848, Épica #12751) — exige rol SuperAdmin u <c>ot_admin</c>
+    /// exclusivamente, SIN el bypass de <c>entity_type=TRANSIT_OFFICE</c> que sí concede
+    /// <see cref="OtModulePolicy"/> (<see cref="OtModuleRequirement"/>). Exclusiva de Prelación
+    /// documental (<c>document-precedence</c>): el Admin OT "solo ordena" — cualquier otro rol de
+    /// un tenant OT (p. ej. <c>gestor_tramites_ot</c>) recibe 403 incluso ahí.
+    /// </summary>
+    public const string OtAdminOrSuperAdminPolicy = "OtAdminOrSuperAdmin";
+
+    /// <summary>Mensaje de error 403 para <see cref="OtAdminOrSuperAdminPolicy"/> (HU #12859).</summary>
+    public const string OtAdminOrSuperAdminForbiddenMessage =
+        "Acceso restringido: se requiere rol SuperAdmin u ot_admin";
 }

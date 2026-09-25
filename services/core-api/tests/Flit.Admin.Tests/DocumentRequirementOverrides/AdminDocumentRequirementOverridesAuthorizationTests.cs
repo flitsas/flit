@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Flit.Admin.Tests.Companies;
+using Flit.Api.Authorization;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
@@ -14,12 +15,13 @@ using Xunit;
 namespace Flit.Admin.Tests.DocumentRequirementOverrides;
 
 /// <summary>
-/// Seguridad de los endpoints de obligatoriedad por OT (HU #10198; HU #10881): sin token → 401;
-/// rol fuera del módulo OT → 403. Desde HU #10881 el grupo admite SuperAdmin u ot_admin, pero un
-/// ot_admin queda acotado a SU propia OT: si el <c>transitOfficeId</c> de la petición no
-/// coincide con el <c>transit_office_id</c> resuelto desde su claim <c>tenant_id</c>, el guard
-/// responde 403 <c>TRANSIT_OFFICE_FORBIDDEN</c> antes de tocar la base de datos (mismo mecanismo
-/// que la cola Quipux, HU #10774). El SuperAdmin sigue siendo cross-tenant (cualquier OT).
+/// Seguridad de los endpoints de obligatoriedad por OT (HU #10198; HU #10881; HU #12859): sin
+/// token → 401; rol fuera del módulo OT → 403. Entre HU #10881 y HU #12859 el grupo admitía
+/// SuperAdmin u ot_admin (acotado a SU propia OT vía <see cref="EnforceTransitOfficeScopeAsync"/>,
+/// mismo mecanismo que la cola Quipux, HU #10774). HU #12859 (Feature #12848, Épica #12751) cerró
+/// el acceso a SuperAdmin EXCLUSIVO: un ot_admin ahora recibe 403 por autorización, incluso en SU
+/// propia OT — el guard de scope queda sin alcanzar en runtime para ese rol, pero se conserva como
+/// defensa en profundidad. El SuperAdmin sigue siendo cross-tenant (cualquier OT).
 /// </summary>
 public sealed class AdminDocumentRequirementOverridesAuthorizationTests
     : IClassFixture<WebApplicationFactory<Program>>
@@ -95,10 +97,10 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
     }
 
     [Fact]
-    public async Task List_WithOtAdminForeignTransitOffice_Returns403WithCode()
+    public async Task HU12859_AC1_List_AsOtAdmin_ForeignTransitOffice_Returns403()
     {
-        // ot_admin cuyo tenant no resuelve a la OT consultada: pasa OtModulePolicy pero el guard
-        // de scope lo corta (perfil inexistente o con otro transit_office_id) — caso IDOR.
+        // HU #12859: SuperAdminPolicy corta ANTES del guard de scope — ot_admin recibe 403 por
+        // autorización, ya no 403 TRANSIT_OFFICE_FORBIDDEN del guard (que queda sin alcanzar).
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", TestTokenFactory.CreateOtAdminToken(Guid.NewGuid()));
@@ -108,15 +110,13 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
             TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        var body = await response.Content.ReadFromJsonAsync<CodeBody>(TestContext.Current.CancellationToken);
-        body!.Code.Should().Be("TRANSIT_OFFICE_FORBIDDEN");
+        var body = await response.Content.ReadFromJsonAsync<ForbiddenBody>(TestContext.Current.CancellationToken);
+        body!.Error.Should().Be(AdminAuthorization.OtModuleForbiddenMessage);
     }
 
     [Fact]
-    public async Task Set_WithOtAdminForeignTransitOffice_Returns403WithCode()
+    public async Task HU12859_AC1_Set_AsOtAdmin_ForeignTransitOffice_Returns403()
     {
-        // Mismo guard aplica al PUT: un ot_admin no configura el override de otra OT — caso IDOR
-        // (el más importante de esta HU).
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", TestTokenFactory.CreateOtAdminToken(Guid.NewGuid()));
@@ -133,17 +133,15 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
             TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        var body = await response.Content.ReadFromJsonAsync<CodeBody>(TestContext.Current.CancellationToken);
-        body!.Code.Should().Be("TRANSIT_OFFICE_FORBIDDEN");
     }
 
     [Fact]
-    public async Task List_WithOtAdminOwnTransitOffice_PassesScope()
+    public async Task HU12859_AC1_List_AsOtAdmin_OwnTransitOffice_Returns403()
     {
-        // ot_admin de SU propia OT: su perfil (por tenant_id) apunta al transit_office_id de la
-        // petición, así que el guard lo deja pasar. Se siembra el par tenant→office con Guids
-        // frescos para no depender de datos externos. El desenlace exacto depende de la BD
-        // (200/400 según exista el trámite), pero NUNCA debe ser 401/403.
+        // HU #12859 invierte esta aserción: ANTES de esta HU, un ot_admin de SU PROPIA OT pasaba
+        // el guard de scope (ver historial de este archivo). Ahora SuperAdminPolicy lo bloquea
+        // igual, sea su propia OT o una ajena — "overrides de exigencias documentales" es de las
+        // 3 superficies que HU #12859 deja exclusivas de SuperAdmin (junto con Etiquetas y prenda).
         var ownTenantId = Guid.NewGuid();
         var ownOfficeId = Guid.NewGuid();
         await SeedProfileAsync(ownTenantId, ownOfficeId);
@@ -158,8 +156,7 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
                 $"{Url}?procedureTypeId={Guid.NewGuid()}&transitOfficeId={ownOfficeId}",
                 TestContext.Current.CancellationToken);
 
-            response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
-            response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         }
         finally
         {
@@ -168,13 +165,8 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
     }
 
     [Fact]
-    public async Task Set_WithOtAdminOwnTransitOffice_PersistsOverrideLikeBefore()
+    public async Task HU12859_AC1_Set_AsOtAdmin_OwnTransitOffice_Returns403()
     {
-        // ot_admin de SU propia OT configurando el override: el guard lo deja pasar y el
-        // comportamiento funcional (upsert/limpieza) sigue igual que antes de HU #10881 —
-        // se prueba con datos inexistentes: pasa el guard de scope y llega al handler, que
-        // responde 404 (trámite/documento inexistentes) igual que le respondería a un
-        // SuperAdmin con la misma petición, NUNCA 401/403.
         var ownTenantId = Guid.NewGuid();
         var ownOfficeId = Guid.NewGuid();
         await SeedProfileAsync(ownTenantId, ownOfficeId);
@@ -196,14 +188,36 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
                 },
                 TestContext.Current.CancellationToken);
 
-            response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
-            response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
-            response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         }
         finally
         {
             await RemoveProfileAsync(ownTenantId);
         }
+    }
+
+    [Fact]
+    public async Task HU12859_AC3_Set_AsSuperAdmin_PassesScope()
+    {
+        // SuperAdmin sigue operando esta ruta (AC3): el desenlace exacto depende de datos
+        // (404 si trámite/documento no existen), pero NUNCA debe ser 401/403.
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("SuperAdmin"));
+
+        var response = await client.PutAsJsonAsync(
+            Url,
+            new
+            {
+                procedureTypeId = Guid.NewGuid(),
+                documentTypeId = Guid.NewGuid(),
+                transitOfficeId = Guid.NewGuid(),
+                estado = "REQUIRED",
+            },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
 
     // Siembra un perfil OT (tenant_id → transit_office_id) directo en la BD real que usa la app.
@@ -268,5 +282,5 @@ public sealed class AdminDocumentRequirementOverridesAuthorizationTests
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private sealed record CodeBody(string Code);
+    private sealed record ForbiddenBody(string Error);
 }
