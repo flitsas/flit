@@ -121,12 +121,13 @@ describe("HU #12926 — chat con LLM", () => {
     expect(next.messages.at(-1)?.text).toBe("Elige una opción de Gestión o Ayuda.");
   });
 
-  it("los flujos guiados no pasan por el LLM: Ayuda sigue buscando en el manual local", () => {
+  it("«Necesito ayuda» con el chat activo: la pregunta va al LLM; con el chat apagado, al buscador local", () => {
+    // Cambio de usabilidad (HU #12931): un solo camino para preguntar. Antes «Necesito ayuda» usaba
+    // siempre el buscador local y el usuario no veía la diferencia con escribir en la caja.
     const state: DrFlitChatState = { ...createInitialState("Ana"), phase: "awaiting_help_query", showSessionMenu: false };
 
-    const next = applyUserText(state, "cómo creo un trámite", { chatEnabled: true });
-
-    expect(next.phase).toBe("showing_help");
+    expect(applyUserText(state, "cómo creo un trámite", { chatEnabled: true }).phase).toBe("chat_loading");
+    expect(applyUserText(state, "cómo creo un trámite", { chatEnabled: false }).phase).toBe("showing_help");
   });
 
   // ── AC2 — LLM caído ────────────────────────────────────────────────────────────────
