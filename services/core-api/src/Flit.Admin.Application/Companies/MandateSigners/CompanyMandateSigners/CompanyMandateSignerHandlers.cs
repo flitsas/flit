@@ -3,6 +3,7 @@ using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Queries.Domain.Time;
+using Flit.Admin.Domain.Companies.TransitOffices;
 
 namespace Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 
@@ -108,6 +109,8 @@ public sealed class CreateCompanyMandateSignerHandler
                 SignatureVaultId = request.SignatureVaultId,
                 OfficeCompanies = request.OfficeCompanies,
                 CreatedBy = createdBy,
+                // La compañía configura sus propios mandatarios: ve toda la red (Bug #12912).
+                CompanyVisibility = OtCompanyVisibility.WholeNetwork,
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -287,6 +290,8 @@ public sealed class UpdateCompanyMandateSignerHandler
                 // El configurador de la compañía SÍ gestiona la firma: su null significa "quítala".
                 ActualizaFirma = true,
                 UpdatedBy = updatedBy,
+                // La compañía configura sus propios mandatarios: ve toda la red (Bug #12912).
+                CompanyVisibility = OtCompanyVisibility.WholeNetwork,
             },
             cancellationToken).ConfigureAwait(false);
     }

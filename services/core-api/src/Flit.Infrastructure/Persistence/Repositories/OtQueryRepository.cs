@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.OtQueries;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Queries.Domain;
@@ -44,10 +45,10 @@ internal sealed class OtQueryRepository : IOtQueryRepository
     private readonly FlitDbContext _context;
     private readonly OtTenantScope _scope;
 
-    public OtQueryRepository(FlitDbContext context)
+    public OtQueryRepository(FlitDbContext context, IEffectiveTransitOfficeListResolver? effectiveOffices = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-        _scope = new OtTenantScope(_context);
+        _scope = new OtTenantScope(_context, effectiveOffices);
     }
 
     // ── Ejecución ─────────────────────────────────────────────────────────────────────────────
@@ -483,9 +484,13 @@ internal sealed class OtQueryRepository : IOtQueryRepository
             transitOfficeIdOverride,
             async (transitOfficeId, tenantIds) =>
             {
+                // Bug #12912 — Ley 1581: la red solo aparece como opción si ya entregó un trámite.
+                var visibles = await _scope
+                    .ListVisibleClientTenantIdsAsync(transitOfficeId, tenantIds, cancellationToken)
+                    .ConfigureAwait(false);
                 var empresas = await _context.Tenants
                     .AsNoTracking()
-                    .Where(t => tenantIds.Contains(t.Id))
+                    .Where(t => visibles.Contains(t.Id))
                     .Select(t => new { t.Id, t.LegalName })
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);

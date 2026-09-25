@@ -1,3 +1,5 @@
+using Flit.Admin.Domain.Companies.TransitOffices;
+
 namespace Flit.Admin.Domain.Companies.MandateSigners;
 
 /// <summary>
@@ -13,9 +15,13 @@ public interface IMandateSignerReader
     /// Mandatarios del OT (activos e inactivos) con sus compañías <b>activas</b> asignadas,
     /// ordenados primero los activos y luego por nombre. Los inactivados (baja lógica) siguen
     /// visibles para poder reactivarlos, pero sus compañías ya quedaron liberadas.
+    /// Bug #12912 (Habeas Data) — con <see cref="OtCompanyVisibility.DirectOrWithReceivedProcedures"/> se
+    /// omiten los mandatarios cuyas compañías en este organismo no son visibles para él, y a los demás se
+    /// les recortan compañías y organismos a lo que el organismo puede ver.
     /// </summary>
     Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
         Guid transitOfficeId,
+        OtCompanyVisibility visibility,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -29,9 +35,12 @@ public interface IMandateSignerReader
     /// <summary>
     /// Compañías gestoras con grant en el OT (candidatas a mandatario), con su estado activo
     /// y si el grant está habilitado. Insumo del multiselect y de la regla de uso RF33.
+    /// Bug #12912 — <paramref name="visibility"/> acota la lista a lo que el organismo puede ver por
+    /// nombre (Ley 1581).
     /// </summary>
     Task<IReadOnlyList<OtCompanyOption>> ListOtCompaniesAsync(
         Guid transitOfficeId,
+        OtCompanyVisibility visibility,
         CancellationToken cancellationToken = default);
 
     /// <summary>

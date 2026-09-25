@@ -92,7 +92,7 @@ Se elige la **Opción 2**. Se acepta construir pantallas de identidad propias a 
 ### Lo que se gana
 
 - SSO entre productos; tokens fuera del navegador.
-- Cambios de rol o suscripción efectivos en minutos.
+- Cambios de rol o de habilitación de un producto efectivos en minutos.
 - Ligadura `dom` con respaldo criptográfico real una vez validada la firma.
 
 ### Lo que se pierde
@@ -109,12 +109,12 @@ Se elige la **Opción 2**. Se acepta construir pantallas de identidad propias a 
 
 - `ADR-0060-marca-blanca-identidad-dominio-y-tema-de-correo` — extendido.
 - ADR-0061 — estructura de la suite.
-- ADR-0063 — la emisión del token aplica la suscripción.
+- ADR-0063 — la emisión del token aplica la habilitación del producto.
 
 ## Notas para agentes
 
 - **Backend Agent**: validar `iss` contra los hosts de identidad registrados y `aud` contra el producto propio. Nunca desactivar la validación de firma. `DomainContext` sigue construyéndose solo desde el sello.
 - **Frontend Agent**: usar `packages/auth`; prohibido guardar tokens en `localStorage` o cookies legibles.
-- **QA Agent**: SSO entre productos; usuario sin suscripción; usuario de red entrando por FLIT; refresh y expiración; suite #12429 intacta.
+- **QA Agent**: SSO entre productos; empresa con el producto apagado; usuario de red entrando por FLIT; refresh y expiración; suite #12429 intacta.
 - **Security Agent**: PKCE obligatorio, rotación de refresh, revocación al suspender usuario o empresa.
 - **Infra Agent**: `ASPNETCORE_ENVIRONMENT` correcto por ambiente; en el host del hub, `/connect/*` y `/.well-known/*` hacia `core-api`.

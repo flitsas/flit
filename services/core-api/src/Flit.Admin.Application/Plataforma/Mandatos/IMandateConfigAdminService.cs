@@ -1,3 +1,5 @@
+using Flit.Admin.Domain.Companies.TransitOffices;
+
 namespace Flit.Admin.Application.Plataforma.Mandatos;
 
 /// <summary>Vista efectiva de config de mandato por OT (fila o default implícito generico).</summary>
@@ -166,8 +168,13 @@ public interface IMandateConfigAdminService
     /// <summary>Bytes del PDF propio (si kind=pdf); null si no aplica.</summary>
     Task<byte[]?> OpenCustomPdfAsync(Guid officeId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Compañías del OT con su regla. Bug #12912 — <paramref name="visibility"/>: el hub del organismo
+    /// (no SuperAdmin) solo ve la red que ya le entregó trámites (Ley 1581).
+    /// </summary>
     Task<IReadOnlyList<CompanyOtMandateRuleView>> ListCompanyRulesAsync(
         Guid officeId,
+        OtCompanyVisibility visibility,
         CancellationToken ct = default);
 
     Task<(MandateConfigWriteStatus Status, CompanyOtMandateRuleView? View)> UpsertCompanyRuleAsync(
@@ -186,10 +193,16 @@ public interface IMandateConfigAdminService
         Guid companyTenantId,
         SetCompanyDefaultSignerRequest request,
         Guid? userId,
+        OtCompanyVisibility visibility,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Bug #12912 — con <see cref="OtCompanyVisibility.DirectOrWithReceivedProcedures"/>, una compañía
+    /// que el organismo no puede ver devuelve <see cref="MandateConfigWriteStatus.CompanyNotFound"/>.
+    /// </summary>
     Task<MandateConfigWriteStatus> DeleteCompanyRuleAsync(
         Guid officeId,
         Guid companyTenantId,
+        OtCompanyVisibility visibility,
         CancellationToken ct = default);
 }

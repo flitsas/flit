@@ -10,6 +10,7 @@ using Xunit;
 namespace Flit.Admin.Tests.Companies.MandateSigners;
 
 using Scenario = MandateSignerHandlerTests;
+using Flit.Admin.Domain.Companies.TransitOffices;
 
 /// <summary>
 /// Tests de la regla de uso RF33 (compañía activa y no bloqueada en el OT) y de la vista
@@ -51,7 +52,7 @@ public sealed class MandateSignerUsageAndViewTests
         await create.HandleAsync(Scenario.NewCreate("Samuel Cárdenas", "111", [Scenario.CompanyA]), Scenario.Ct);
 
         var view = await companies.HandleAsync(
-            new ListOtCompaniesQuery { TransitOfficeId = Scenario.Office }, Scenario.Ct);
+            new ListOtCompaniesQuery { TransitOfficeId = Scenario.Office, Visibility = OtCompanyVisibility.WholeNetwork }, Scenario.Ct);
 
         view.Single(c => c.CompanyTenantId == Scenario.CompanyA).AssignedSigners
             .Should().ContainSingle(s => s.FullName == "Samuel Cárdenas");
@@ -70,7 +71,7 @@ public sealed class MandateSignerUsageAndViewTests
         await ctx.SaveChangesAsync(Scenario.Ct);
 
         var view = await companies.HandleAsync(
-            new ListOtCompaniesQuery { TransitOfficeId = Scenario.Office }, Scenario.Ct);
+            new ListOtCompaniesQuery { TransitOfficeId = Scenario.Office, Visibility = OtCompanyVisibility.WholeNetwork }, Scenario.Ct);
 
         view.Single(c => c.CompanyTenantId == Scenario.CompanyA).AssignedSigners
             .Should().HaveCount(2)
@@ -87,7 +88,7 @@ public sealed class MandateSignerUsageAndViewTests
         await create.HandleAsync(Scenario.NewCreate("Samuel", "111", [Scenario.CompanyA]), Scenario.Ct);
 
         var view = await companies.HandleAsync(
-            new ListOtCompaniesQuery { TransitOfficeId = Scenario.Office }, Scenario.Ct);
+            new ListOtCompaniesQuery { TransitOfficeId = Scenario.Office, Visibility = OtCompanyVisibility.WholeNetwork }, Scenario.Ct);
 
         // B y C no tienen mandatario (RF26: se advertirá al generar su mandato).
         view.Single(c => c.CompanyTenantId == Scenario.CompanyB).AssignedSigners.Should().BeEmpty();

@@ -689,5 +689,11 @@ public sealed class PlatePreassignTests
             Guid tenantId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(map.TryGetValue(tenantId, out var ids) ? ids : (IReadOnlyList<Guid>)Array.Empty<Guid>());
+
+        public Task<IReadOnlyList<Guid>> ListEffectiveTenantIdsForOfficeAsync(
+            Guid transitOfficeId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Guid>>(
+                [.. map.Where(kv => kv.Value.Contains(transitOfficeId)).Select(kv => kv.Key)]);
     }
 }

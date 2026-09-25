@@ -21,11 +21,13 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     private readonly FlitDbContext _context;
     private readonly ITransitOfficeOperationalStatusReader _otStatus;
     private readonly IdentityVigenciaPorDocumentoResolver _identityResolver;
+    private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
 
     public DbMandateSignerReader(
         FlitDbContext context,
         ITransitOfficeOperationalStatusReader? otStatus = null,
-        IdentityVigenciaPorDocumentoResolver? identityResolver = null)
+        IdentityVigenciaPorDocumentoResolver? identityResolver = null,
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
 
@@ -35,10 +37,16 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         _otStatus = otStatus ?? new DbTransitOfficeOperationalStatusReader(context);
         _identityResolver = identityResolver
             ?? new IdentityVigenciaPorDocumentoResolver(new ProcedureInstanceRepository(context));
+
+        // Bug #12912 — lista efectiva de OT por red (Concesión / Marca Blanca). Opcional por el mismo
+        // motivo que PlateRangeRepository: los sitios que construyen el reader a mano (tests) conservan
+        // el criterio previo de grant propio; por DI llega siempre la implementación real.
+        _effectiveOffices = effectiveOffices;
     }
 
     public Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
         Guid transitOfficeId,
+        OtCompanyVisibility visibility,
         CancellationToken cancellationToken = default) =>
         ExecuteCrossTenantReadAsync(
             async () =>
@@ -81,9 +89,61 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     .. signers.Select(s =>
                         Project(s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner)),
                 ];
-                return items;
+
+                if (visibility != OtCompanyVisibility.DirectOrWithReceivedProcedures)
+                {
+                    return items;
+                }
+
+                // Bug #12912 (Habeas Data) — vista del organismo: fuera los mandatarios cuyas compañías en
+                // ESTE organismo no le son visibles (los que aplican a todas, sin compañías, se quedan), y a
+                // los demás se les recortan compañías y organismos a lo que le compete.
+                var visibles = (await ListOtCompaniesAsync(transitOfficeId, visibility, cancellationToken)
+                        .ConfigureAwait(false))
+                    .Select(c => c.CompanyTenantId)
+                    .ToHashSet();
+
+                IReadOnlyList<MandateSignerItem> recortados =
+                [
+                    .. items
+                        .Where(s => s.CompanyTenantIds.Count == 0 || s.CompanyTenantIds.Any(visibles.Contains))
+                        .Select(s => RecortarAlOrganismo(s, transitOfficeId, visibles)),
+                ];
+                return recortados;
             },
             cancellationToken);
+
+    /// <summary>Copia del mandatario con compañías y organismos acotados a lo que ve el organismo.</summary>
+    private static MandateSignerItem RecortarAlOrganismo(
+        MandateSignerItem s,
+        Guid transitOfficeId,
+        HashSet<Guid> visibles) =>
+        new()
+        {
+            Id = s.Id,
+            TransitOfficeId = s.TransitOfficeId,
+            FullName = s.FullName,
+            DocumentType = s.DocumentType,
+            DocumentNumber = s.DocumentNumber,
+            IntegrityHash = s.IntegrityHash,
+            Email = s.Email,
+            SignatureVaultId = s.SignatureVaultId,
+            IdentityValidationRef = s.IdentityValidationRef,
+            IdentityStatus = s.IdentityStatus,
+            IdentityValidUntil = s.IdentityValidUntil,
+            UserId = s.UserId,
+            RegisteredAt = s.RegisteredAt,
+            IsActive = s.IsActive,
+            CompanyTenantIds = [.. s.CompanyTenantIds.Where(visibles.Contains)],
+            TransitOfficeIds = [.. s.TransitOfficeIds.Where(id => id == transitOfficeId)],
+            PhysicalSignatureOfficeIds = [.. s.PhysicalSignatureOfficeIds.Where(id => id == transitOfficeId)],
+            OfficeCompanies =
+            [
+                .. s.OfficeCompanies
+                    .Where(o => o.TransitOfficeId == transitOfficeId)
+                    .Select(o => o with { RepresentedCompanyIds = [.. o.RepresentedCompanyIds.Where(visibles.Contains)] }),
+            ],
+        };
 
     public Task<MandateSignerItem?> GetByIdAsync(
         Guid mandateSignerId,
@@ -201,12 +261,19 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         ExecuteCrossTenantReadAsync(
             async () =>
             {
-                var officeIds = await _context.TenantTransitOfficeGrants
-                    .AsNoTracking()
-                    .Where(g => g.TenantId == companyTenantId && g.IsEnabled)
-                    .Select(g => g.TransitOfficeId)
-                    .ToListAsync(cancellationToken)
-                    .ConfigureAwait(false);
+                // Bug #12912 — la lista EFECTIVA (HU #12347): la hija de una Concesión elige entre los OT
+                // de su cabeza y la red Marca Blanca entre los operables no bloqueados. Mismo criterio que
+                // radicación, para no ofrecer (o negar) un organismo distinto al que luego se radica.
+                var officeIds = _effectiveOffices is not null
+                    ? await _effectiveOffices
+                        .ListEffectiveOfficeIdsAsync(companyTenantId, cancellationToken)
+                        .ConfigureAwait(false)
+                    : await _context.TenantTransitOfficeGrants
+                        .AsNoTracking()
+                        .Where(g => g.TenantId == companyTenantId && g.IsEnabled)
+                        .Select(g => g.TransitOfficeId)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
 
                 if (officeIds.Count == 0)
                 {
@@ -236,16 +303,68 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
     public Task<IReadOnlyList<OtCompanyOption>> ListOtCompaniesAsync(
         Guid transitOfficeId,
+        OtCompanyVisibility visibility,
         CancellationToken cancellationToken = default) =>
         ExecuteCrossTenantReadAsync(
             async () =>
             {
-                var grants = await _context.TenantTransitOfficeGrants
+                var directGrants = await _context.TenantTransitOfficeGrants
                     .AsNoTracking()
                     .Where(g => g.TransitOfficeId == transitOfficeId)
                     .Select(g => new { g.TenantId, g.IsEnabled })
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
+
+                // Bug #12912 — con el resolver, «habilitada» es pertenecer a la lista efectiva del OT
+                // (HU #12347): entran las hijas de la Concesión y la red Marca Blanca aunque no tengan
+                // fila de grant, y un grant propio que la red no respalda deja de contar. Los grants
+                // directos inhabilitados se siguen listando (con IsEnabled = false) como antes.
+                var grants = directGrants;
+                if (_effectiveOffices is not null)
+                {
+                    var effective = (await _effectiveOffices
+                        .ListEffectiveTenantIdsForOfficeAsync(transitOfficeId, cancellationToken)
+                        .ConfigureAwait(false)).ToHashSet();
+
+                    grants =
+                    [
+                        .. directGrants
+                            .Select(g => g.TenantId)
+                            .Concat(effective)
+                            .Distinct()
+                            .Select(id => new { TenantId = id, IsEnabled = effective.Contains(id) }),
+                    ];
+                }
+
+                // Bug #12912 (Ley 1581) — vista del organismo: solo las compañías que puede ver por nombre
+                // (OtVisibleCompanies) y los grants directos inhabilitados que ya listaba para mostrar su
+                // estado. SuperAdmin y la propia compañía usan toda la red.
+                if (visibility == OtCompanyVisibility.DirectOrWithReceivedProcedures)
+                {
+                    var visible = (await OtVisibleCompanies
+                        .FilterAsync(
+                            _context,
+                            transitOfficeId,
+                            [.. grants.Where(g => g.IsEnabled).Select(g => g.TenantId)],
+                            cancellationToken)
+                        .ConfigureAwait(false)).ToHashSet();
+                    var efectivas = grants.Where(g => g.IsEnabled).Select(g => g.TenantId).ToHashSet();
+
+                    // Un grant directo inhabilitado solo se lista (como no habilitado) si la compañía NO
+                    // puede radicar por otra vía: si está en la lista efectiva, decide la regla única
+                    // (review PR #442, obs. 4a), igual que company-rules y CompanyCanUseOfficeAsync.
+                    var directosInhabilitados = directGrants
+                        .Where(g => !g.IsEnabled && !efectivas.Contains(g.TenantId))
+                        .Select(g => g.TenantId)
+                        .ToHashSet();
+
+                    grants =
+                    [
+                        .. grants
+                            .Where(g => visible.Contains(g.TenantId) || directosInhabilitados.Contains(g.TenantId))
+                            .Select(g => new { g.TenantId, IsEnabled = visible.Contains(g.TenantId) }),
+                    ];
+                }
 
                 var tenantIds = grants.Select(g => g.TenantId).Distinct().ToList();
                 var tenants = await _context.Tenants

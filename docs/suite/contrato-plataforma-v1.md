@@ -89,7 +89,7 @@ Regla de negocio: el SuperAdmin de FLIT entra a cualquier producto, de cualquier
 
 ## 4. Acceso a productos
 
-Interfaz en `services/core-api/src/Flit.Modules.Security.Application/ProductAccess/IProductAccessResolver.cs` (carpeta del frente B). La implementación real vive en `Flit.Modules.Platform` (B-03 y B-05), que referencia a `Security.Application`; nunca al revés. La consume A al emitir el token. B crea el archivo de la interfaz, solo con la interfaz y los records, en un PR propio justo después de cerrar este contrato, para que A pueda escribir su stub desde la semana 2:
+Interfaz en `services/core-api/src/Flit.Modules.Security.Application/Products/IProductAccessResolver.cs` (carpeta del frente B; no se llama `ProductAccess/` porque el namespace chocaría con el record `ProductAccess` y daría CS0118). La implementación real vive en `Flit.Modules.Platform` (B-03 y B-05), que referencia a `Security.Application`; nunca al revés. La consume A al emitir el token. B crea el archivo de la interfaz, solo con la interfaz y los records, en un PR propio justo después de cerrar este contrato, para que A pueda escribir su stub desde la semana 2:
 
 ```csharp
 public interface IProductAccessResolver
@@ -259,3 +259,4 @@ El líder los registra en `docs/despliegue-y-puertos.md` en L-03.
 |---|---|---|---|
 | v1-borrador | 2026-09-24 | Primera propuesta | — |
 | v1 | 2026-09-24 | Resoluciones y Flotas fuera de v1; SuperAdmin con bypass en todos los productos (§2.1); ubicación de `IProductAccessResolver`; habilitación de producto encendido/apagado en lugar de suscripción (§4, §6, §7, §9, §10); `DomainContext` sin romper constructores; formato de slugs del manifiesto; `SessionUser`; puertos | Cerrado por Samuel Cardenas (en rol de líder técnico) |
+| v1.1 | 2026-09-24 | §4: la carpeta de la interfaz pasa de `ProductAccess/` a `Products/` (evita CS0118) | Samuel Cardenas (frente B) |

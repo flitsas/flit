@@ -19,17 +19,17 @@ Convertimos FLIT en una suite de productos al estilo de Google: un **hub en `fli
 
 | Frente | Responsable | Construye en la plataforma | Entrega a los demás | Después |
 |---|---|---|---|---|
-| **A · Identidad y Trámites** | Desarrollador de Trámites | Salida de `Development` y validación real del token; servidor OIDC con login en el hub; token por producto y refresh; `@flit/auth`; Trámites en `tramites.flitsas.online` | Token y emisores (B, C); `@flit/auth` (B, C) | Roadmap de Trámites |
-| **B · Productos y hub** | Desarrollador de Comparendos | Productos y suscripciones; roles por producto; `RequireProduct`; `DomainContext` con producto; `@flit/ui` y `@flit/shell`; el hub con inicio, menú de productos y administración de plataforma | Acceso a productos (A); `@flit/ui` y `@flit/shell` (A, C); manifiesto y `me/apps` (C) | Comparendos |
-| **C · Consultas, SDK y plantilla** | Desarrollador de Diagnóstico | Eventos con outbox y RabbitMQ; SDK .NET; consultas externas compartidas con medición; plantilla de producto; producto de prueba `demo` | Publicador de eventos (A, B); plantilla (B y C en la Fase 3) | Diagnóstico |
-| **L · Líder** | Líder técnico | PR inicial, workspace, `CODEOWNERS`, ADO, k3s, Redis, RabbitMQ, DNS, certificados, CD, aprobaciones y rituales | Todo lo que desbloquea a A, B y C | Coordinación |
+| **A · Identidad y Trámites** | Willyn Londoño (Trámites) | Salida de `Development` y validación real del token; servidor OIDC con login en el hub; token por producto y refresh; `@flit/auth`; Trámites en `tramites.flitsas.online` | Token y emisores (B, C); `@flit/auth` (B, C) | Roadmap de Trámites |
+| **B · Productos y hub** | Samuel Cardenas (Comparendos) | Productos y su habilitación por empresa; roles por producto; `RequireProduct`; `DomainContext` con producto; `@flit/ui` y `@flit/shell`; el hub con inicio, menú de productos y administración de plataforma | Acceso a productos (A); `@flit/ui` y `@flit/shell` (A, C); manifiesto y `me/apps` (C) | Comparendos |
+| **C · Consultas, SDK y plantilla** | Juan Felipe Montoya (Diagnóstico) | Eventos con outbox y RabbitMQ; SDK .NET; consultas externas compartidas con medición; plantilla de producto; producto de prueba `demo` | Publicador de eventos (A, B); plantilla (B y C en la Fase 3) | Diagnóstico |
+| **L · Líder** | Jorman Copete (líder técnico) | PR inicial, workspace, `CODEOWNERS`, ADO, k3s, Redis, RabbitMQ, DNS, certificados, CD, aprobaciones y rituales | Todo lo que desbloquea a A, B y C | Coordinación |
 
 ## Fases y tareas por frente
 
 | Fase | Frente A | Frente B | Frente C | Líder |
 |---|---|---|---|---|
 | **0 · Fundaciones** (≈2–3 semanas) | A-00 contrato · A-01 inventario de ambientes · A-02 DEV sin `Development` · A-03 token validado · A-04 espiga OpenIddict | B-00 contrato · B-01 inventario plataforma contra Trámites · B-02 `@flit/ui` v0 | C-00 contrato · C-01 publicador de eventos · C-02 contratos .NET | L-01 PR inicial · L-02 arranque · L-03 workspace · L-04 ADO · L-05 línea base · L-06 ADRs · L-07 Redis y RabbitMQ · L-11 SMTP |
-| **1 · Núcleo** (≈4–6 semanas) | A-05 servidor OIDC · A-06 login en el hub · A-07 token por producto · A-08 Marca Blanca sobre OIDC | B-03 schema `platform` · B-04 roles por producto · B-05 acceso a productos · B-06 endpoints y `RequireProduct` · B-07 booleans a suscripciones · B-08 `DomainContext` · B-09 esqueleto del hub | C-03 SDK · C-04 mover consultas · C-05 API de consultas · C-06 medición | L-08 k3s · L-09 DNS y certificados · L-10 CD por app |
+| **1 · Núcleo** (≈4–6 semanas) | A-05 servidor OIDC · A-06 login en el hub · A-07 token por producto · A-08 Marca Blanca sobre OIDC | B-03 schema `platform` · B-04 roles por producto · B-05 acceso a productos · B-06 endpoints y `RequireProduct` · B-07 booleans a habilitación · B-08 `DomainContext` · B-09 esqueleto del hub | C-03 SDK · C-04 mover consultas · C-05 API de consultas · C-06 medición | L-08 k3s · L-09 DNS y certificados · L-10 CD por app |
 | **2 · Hub y Trámites en la suite** (≈4–6 semanas) | A-09 `@flit/auth` · A-10 Trámites con sesión nueva · A-11 Trámites en su host · A-12 URLs de correo · A-13 cierre global · A-14 retirar sesión vieja | B-10 `@flit/shell` · B-11 inicio y menú de productos · B-12 administración en el hub · B-13 Trámites con el shell | C-07 plantilla · C-08 producto `demo` · C-09 OpenAPI y cliente · C-10 guía | L-12 QA y PDN · L-13 rituales · L-14 puerta de salida |
 | **3 · Productos** | Roadmap de Trámites | Comparendos desde la plantilla | Diagnóstico desde la plantilla | Coordinación |
 
@@ -39,9 +39,10 @@ El líder lo actualiza en la revisión semanal. Estado: ⏳ pendiente · 🟡 en
 
 | Entrega | Dueño | La esperan | Estado |
 |---|---|---|---|
-| PR `feature/nueva-suite-flit` en `develop` (plan + arreglo PDN) | L | Todos | ⏳ |
-| Contrato v1 cerrado | L + A + B + C | Todos | ⏳ |
-| Workspace con `packages/*` y `frontend-*` | L | B, C | ⏳ |
+| PR `feature/nueva-suite-flit` en `develop` (plan + arreglo PDN) | L | Todos | ✅ PR #429 |
+| Contrato v1 cerrado | L + A + B + C | Todos | ✅ PR #433, sin reunión |
+| Interfaz `IProductAccessResolver` y `ProductCodes` (contrato §4) | B | A | 🟡 PR #436 |
+| Workspace con `packages/*` y `frontend-*`, `CODEOWNERS` y bloques compartidos | L | B, C | 🟡 PR #437 |
 | Token validado en gateway y API (DEV) | A | Todos | ⏳ |
 | `@flit/ui` v0 | B | C | ⏳ |
 | `Flit.Platform.Contracts` | C | Todos | ⏳ |
@@ -57,6 +58,19 @@ El líder lo actualiza en la revisión semanal. Estado: ⏳ pendiente · 🟡 en
 | `@flit/shell` v1 | B | A, C | ⏳ |
 | Plantilla `flit-product` | C | B, C (Fase 3) | ⏳ |
 | Producto `demo` en DEV | C | Puerta de salida | ⏳ |
+
+## Orden de migraciones de la Fase 1
+
+Acordado al cerrar el contrato v1 (HU #12904). `core-api` tiene un solo snapshot de EF, así que las
+migraciones van en turno (regla R6). El orden sigue a quién espera a quién:
+
+1. **C-01** tabla de outbox del publicador de eventos (al final de la Fase 0).
+2. **B-03** schema `platform`: `products` y `tenant_products`.
+3. **A-05** tablas de OpenIddict. Si la espiga A-04 decide un DbContext propio en el schema `identity`, sale del turno.
+4. **B-04** `product_code` en `security.modules` y `security.roles`.
+5. **B-08** `purpose` en `admin.tenant_domains`. B-04 y B-08 van antes de la mitad de la Fase 1: el frente A los espera.
+6. **C-06** tabla de medición de consumo.
+7. **B-07** retiro de los booleans `tramites_module_enabled` y `comparendos_module_enabled`, en la Fase 2 (un sprint después de migrarlos).
 
 ## Cómo empieza cada uno
 

@@ -115,7 +115,10 @@ public static class AdminOtMandatosEndpoints
         if (await service.GetAsync(officeId, ct).ConfigureAwait(false) is null)
             return Results.NotFound();
 
-        var items = await service.ListCompanyRulesAsync(officeId, ct).ConfigureAwait(false);
+        // Bug #12912 (Ley 1581) — el organismo solo ve por nombre la red que ya le entregó trámites.
+        var items = await service
+            .ListCompanyRulesAsync(officeId, OtCompanyVisibilityPolicy.For(user), ct)
+            .ConfigureAwait(false);
         return Results.Ok(new { items });
     }
 
@@ -134,7 +137,8 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var (status, view) = await service
-            .SetCompanyDefaultSignerAsync(officeId, companyTenantId, request, ResolveUserId(user), ct)
+            .SetCompanyDefaultSignerAsync(
+                officeId, companyTenantId, request, ResolveUserId(user), OtCompanyVisibilityPolicy.For(user), ct)
             .ConfigureAwait(false);
         return status switch
         {
@@ -160,7 +164,9 @@ public static class AdminOtMandatosEndpoints
         if (forbidden is not null)
             return forbidden;
 
-        var status = await service.DeleteCompanyRuleAsync(officeId, companyTenantId, ct).ConfigureAwait(false);
+        var status = await service
+            .DeleteCompanyRuleAsync(officeId, companyTenantId, OtCompanyVisibilityPolicy.For(user), ct)
+            .ConfigureAwait(false);
         return status == MandateConfigWriteStatus.Ok ? Results.NoContent() : Results.NotFound();
     }
 

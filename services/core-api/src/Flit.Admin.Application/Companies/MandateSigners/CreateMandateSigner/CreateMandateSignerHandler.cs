@@ -54,6 +54,7 @@ public sealed class CreateMandateSignerHandler
                     command.TransitOfficeIds,
                     command.OfficeCompanies,
                     currentSignerId: null,
+                    command.CompanyVisibility,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -106,6 +107,7 @@ public sealed class CreateMandateSignerHandler
         IReadOnlyList<Guid>? transitOfficeIds,
         IReadOnlyList<MandateSignerOfficeCompanies>? officeCompanies,
         Guid? currentSignerId,
+        OtCompanyVisibility companyVisibility,
         CancellationToken cancellationToken)
     {
         var offices = new HashSet<Guid> { primaryOfficeId };
@@ -118,7 +120,7 @@ public sealed class CreateMandateSignerHandler
         foreach (var officeId in offices)
         {
             var otCompanies = await reader
-                .ListOtCompaniesAsync(officeId, cancellationToken).ConfigureAwait(false);
+                .ListOtCompaniesAsync(officeId, companyVisibility, cancellationToken).ConfigureAwait(false);
             var resolutions = await reader
                 .ListActiveCompanyResolutionsAsync(officeId, cancellationToken)
                 .ConfigureAwait(false);

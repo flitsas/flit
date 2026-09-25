@@ -19,7 +19,7 @@ public sealed class ListMandateSignersHandler
         ArgumentNullException.ThrowIfNull(query);
 
         var signers = await _reader
-            .ListByOtAsync(query.TransitOfficeId, cancellationToken).ConfigureAwait(false);
+            .ListByOtAsync(query.TransitOfficeId, query.Visibility, cancellationToken).ConfigureAwait(false);
 
         return
         [

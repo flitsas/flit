@@ -25,6 +25,8 @@ public static class AdminMandateSignersEndpoints
         var group = app
             .MapGroup("/api/v1/admin/transit-offices/{transitOfficeId:guid}/mandate-signers")
             .RequireAuthorization(AdminAuthorization.OtModulePolicy)
+            // Bug #12912 (IDOR) — solo el organismo del perfil del usuario; SuperAdmin libre.
+            .AddEndpointFilter<TransitOfficeScopeFilter>()
             .WithTags("Admin · Mandatarios");
 
         // GET — mandatarios activos del OT con sus compañías (RF27).
@@ -93,12 +95,17 @@ public static class AdminMandateSignersEndpoints
 
     private static async Task<IResult> ListAsync(
         Guid transitOfficeId,
+        HttpContext httpContext,
         [FromServices] ListMandateSignersHandler handler,
         CancellationToken cancellationToken)
     {
-        var result = await handler
-            .HandleAsync(new ListMandateSignersQuery { TransitOfficeId = transitOfficeId }, cancellationToken)
-            .ConfigureAwait(false);
+        // Bug #12912 (Habeas Data) — el organismo solo ve los mandatarios y compañías que le competen.
+        var query = new ListMandateSignersQuery
+        {
+            TransitOfficeId = transitOfficeId,
+            Visibility = OtCompanyVisibilityPolicy.For(httpContext.User),
+        };
+        var result = await handler.HandleAsync(query, cancellationToken).ConfigureAwait(false);
 
         // HU #11764 (ADR-0050) — se retira `mockIdentityEnabled`: el botón "Simular validación" ya no
         // existe (su ruta responde 410 Gone) y el flag no tenía otro consumidor.
@@ -107,12 +114,17 @@ public static class AdminMandateSignersEndpoints
 
     private static async Task<IResult> ListCompaniesAsync(
         Guid transitOfficeId,
+        HttpContext httpContext,
         [FromServices] ListOtCompaniesHandler handler,
         CancellationToken cancellationToken)
     {
-        var result = await handler
-            .HandleAsync(new ListOtCompaniesQuery { TransitOfficeId = transitOfficeId }, cancellationToken)
-            .ConfigureAwait(false);
+        // Bug #12912 (Ley 1581) — el organismo solo ve por nombre la red que ya le entregó trámites.
+        var query = new ListOtCompaniesQuery
+        {
+            TransitOfficeId = transitOfficeId,
+            Visibility = OtCompanyVisibilityPolicy.For(httpContext.User),
+        };
+        var result = await handler.HandleAsync(query, cancellationToken).ConfigureAwait(false);
 
         return Results.Ok(new { data = result });
     }
@@ -124,6 +136,11 @@ public static class AdminMandateSignersEndpoints
         [FromServices] CreateMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
+        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(httpContext.User, transitOfficeId, request.TransitOfficeIds))
+        {
+            return TransitOfficeScopeFilter.Forbidden();
+        }
+
         var command = new CreateMandateSignerCommand
         {
             TransitOfficeId = transitOfficeId,
@@ -136,6 +153,7 @@ public static class AdminMandateSignersEndpoints
             // HU #11201 — la misma persona puede firmar en varios organismos.
             TransitOfficeIds = request.TransitOfficeIds,
             CreatedBy = ResolveUserId(httpContext.User),
+            CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),
         };
 
         var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
@@ -162,6 +180,11 @@ public static class AdminMandateSignersEndpoints
         [FromServices] UpdateMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
+        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(httpContext.User, transitOfficeId, request.TransitOfficeIds))
+        {
+            return TransitOfficeScopeFilter.Forbidden();
+        }
+
         var command = new UpdateMandateSignerCommand
         {
             TransitOfficeId = transitOfficeId,
@@ -174,6 +197,7 @@ public static class AdminMandateSignersEndpoints
             UserId = request.UserId,
             TransitOfficeIds = request.TransitOfficeIds,
             UpdatedBy = ResolveUserId(httpContext.User),
+            CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),
         };
 
         var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);

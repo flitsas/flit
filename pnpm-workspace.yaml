@@ -1,5 +1,8 @@
 packages:
   - 'frontend'
+  # FLIT Suite (L-03): paquetes compartidos (@flit/ui, @flit/shell, @flit/auth) y apps por producto.
+  - 'packages/*'
+  - 'frontend-*'
 
 allowBuilds:
   sharp: true

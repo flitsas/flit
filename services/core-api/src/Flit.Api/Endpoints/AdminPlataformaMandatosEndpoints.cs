@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Plataforma.Mandatos;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Api.Authorization;
 using Flit.Infrastructure.Documents;
 using Flit.Tramites.Application.Documents;
@@ -416,7 +417,10 @@ public static class AdminPlataformaMandatosEndpoints
         if (await service.GetAsync(officeId, ct).ConfigureAwait(false) is null)
             return Results.NotFound();
 
-        var items = await service.ListCompanyRulesAsync(officeId, ct).ConfigureAwait(false);
+        // Bug #12912 — Plataforma › Mandatos es solo SuperAdmin: configura toda la red.
+        var items = await service
+            .ListCompanyRulesAsync(officeId, OtCompanyVisibility.WholeNetwork, ct)
+            .ConfigureAwait(false);
         return Results.Ok(new { items });
     }
 
@@ -458,7 +462,8 @@ public static class AdminPlataformaMandatosEndpoints
         CancellationToken ct)
     {
         var (status, view) = await service
-            .SetCompanyDefaultSignerAsync(officeId, companyTenantId, request, ResolveUserId(user), ct)
+            .SetCompanyDefaultSignerAsync(
+                officeId, companyTenantId, request, ResolveUserId(user), OtCompanyVisibility.WholeNetwork, ct)
             .ConfigureAwait(false);
 
         return status switch
@@ -478,7 +483,8 @@ public static class AdminPlataformaMandatosEndpoints
         [FromServices] IMandateConfigAdminService service,
         CancellationToken ct)
     {
-        var status = await service.DeleteCompanyRuleAsync(officeId, companyTenantId, ct).ConfigureAwait(false);
+        var status = await service.DeleteCompanyRuleAsync(
+            officeId, companyTenantId, OtCompanyVisibility.WholeNetwork, ct).ConfigureAwait(false);
         return status == MandateConfigWriteStatus.Ok
             ? Results.NoContent()
             : Results.NotFound();

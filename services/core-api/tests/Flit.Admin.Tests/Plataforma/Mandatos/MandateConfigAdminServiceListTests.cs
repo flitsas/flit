@@ -99,7 +99,7 @@ public sealed class MandateConfigAdminServiceListTests
             Substitute.For<IDocumentOcrAnalyzer>(),
             Substitute.For<IMandateTemplateStorage>());
 
-        var items = await service.ListCompanyRulesAsync(ActiveId, Ct);
+        var items = await service.ListCompanyRulesAsync(ActiveId, OtCompanyVisibility.WholeNetwork, Ct);
 
         items.Should().ContainSingle();
         items[0].CompanyTenantId.Should().Be(CompanyId);
@@ -167,7 +167,7 @@ public sealed class MandateConfigAdminServiceListTests
             Substitute.For<IDocumentOcrAnalyzer>(),
             Substitute.For<IMandateTemplateStorage>());
 
-        var items = await service.ListCompanyRulesAsync(ActiveId, Ct);
+        var items = await service.ListCompanyRulesAsync(ActiveId, OtCompanyVisibility.WholeNetwork, Ct);
 
         items.Should().ContainSingle();
         items[0].DefaultMandateSignerId.Should().Be(signerId);

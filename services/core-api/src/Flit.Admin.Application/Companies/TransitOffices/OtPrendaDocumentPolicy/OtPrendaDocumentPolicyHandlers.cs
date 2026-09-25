@@ -43,16 +43,16 @@ public sealed class SetOtPrendaDocumentPolicyHandler
         "Este organismo no está habilitado para la compañía. Habilítelo primero antes de configurar la prenda.";
 
     private readonly ITransitOfficeCatalog _catalog;
-    private readonly ITransitGrantRepository _grants;
+    private readonly IEffectiveTransitOfficeListResolver _effectiveOffices;
     private readonly IOtPrendaDocumentPolicyRepository _repository;
 
     public SetOtPrendaDocumentPolicyHandler(
         ITransitOfficeCatalog catalog,
-        ITransitGrantRepository grants,
+        IEffectiveTransitOfficeListResolver effectiveOffices,
         IOtPrendaDocumentPolicyRepository repository)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
-        _grants = grants ?? throw new ArgumentNullException(nameof(grants));
+        _effectiveOffices = effectiveOffices ?? throw new ArgumentNullException(nameof(effectiveOffices));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     }
 
@@ -73,8 +73,11 @@ public sealed class SetOtPrendaDocumentPolicyHandler
             ]);
         }
 
-        var enabledOffices = await _grants
-            .ListEnabledOfficeIdsAsync(command.TenantId, cancellationToken)
+        // Bug #12912 — la compañía configura la prenda en los OT de su lista efectiva de red (HU #12347):
+        // hija de Concesión con los de su cabeza, red Marca Blanca con los operables no bloqueados. La
+        // política que se guarda es PROPIA de la compañía (sin herencia entre cabeza e hijas).
+        var enabledOffices = await _effectiveOffices
+            .ListEffectiveOfficeIdsAsync(command.TenantId, cancellationToken)
             .ConfigureAwait(false);
 
         if (!enabledOffices.Contains(command.TransitOfficeId))

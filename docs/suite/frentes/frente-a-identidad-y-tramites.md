@@ -118,7 +118,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 ### A-07 · Token por producto y refresh · Fase 1 · M
 
-- **Qué:** emisión según el contrato §2. `aud` y `product` iguales al cliente; roles y permisos del producto desde `IProductAccessResolver` (stub hasta que B entregue); rechazo `PRODUCT_NOT_SUBSCRIBED` o `PRODUCT_ROLE_REQUIRED`. Vida de 15 minutos; refresh rotado y revocable en Redis.
+- **Qué:** emisión según el contrato §2. `aud` y `product` iguales al cliente; roles y permisos del producto desde `IProductAccessResolver` (`Flit.Modules.Security.Application.Products`; stub hasta que B entregue; el SuperAdmin no pasa por él, contrato §2.1); rechazo `PRODUCT_NOT_ENABLED` o `PRODUCT_ROLE_REQUIRED`. Vida de 15 minutos; refresh rotado y revocable en Redis.
 - **Hecho cuando:** un usuario sin rol en un producto no obtiene token para él; un refresh usado dos veces revoca la cadena.
 
 ### A-08 · Marca Blanca sobre OIDC · Fase 1 · M

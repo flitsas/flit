@@ -26,7 +26,7 @@ Hechos del código:
 
 ## Decisión
 
-1. Separar **plataforma** (identidad, empresas y jerarquía, productos y suscripciones, RBAC por producto, dominios y marca, consultas externas compartidas, reportes consolidados) de **productos**.
+1. Separar **plataforma** (identidad, empresas y jerarquía, productos y su habilitación por empresa, RBAC por producto, dominios y marca, consultas externas compartidas, reportes consolidados) de **productos**.
 2. La plataforma y Trámites **se quedan en `core-api`**. La plataforma se expone como `/api/v1/platform/**` con contrato estable; su UI vive en un `frontend-hub` nuevo.
 3. Cada producto nuevo es un **servicio propio** creado desde `templates/flit-product`: solución .NET en `services/core-<producto>`, app Next.js en `frontend-<producto>`, schema y usuario de BD propios, migraciones propias, imagen y aplicación Argo CD propias. Se usa el **nombre completo** del producto en todas partes: `core-comparendos`, `core-diagnostico`, `frontend-comparendos`, `frontend-diagnostico`, schema, audiencia del token y host.
 4. **Monorepo.** Librerías compartidas en `services/shared/` (.NET) y `packages/` (frontend), por referencia de proyecto y workspace pnpm. `CODEOWNERS` por carpeta y CI filtrado por ruta.
