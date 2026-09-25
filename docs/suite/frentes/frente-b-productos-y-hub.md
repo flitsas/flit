@@ -60,10 +60,10 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 - [ ] B-02 Paquete `@flit/ui` v0
 - [x] B-03 Módulo de plataforma y schema `platform`
 - [x] B-04 `product_code` en módulos y roles
-- [ ] B-05 `IProductAccessResolver` con herencia de jerarquía
-- [ ] B-06 Endpoints de plataforma y `RequireProduct`
-- [ ] B-07 Migrar los booleans de módulos a la habilitación de productos
-- [ ] B-08 `DomainContext` con producto y `tenant_domains.purpose`
+- [x] B-05 `IProductAccessResolver` con herencia de jerarquía
+- [x] B-06 Endpoints de plataforma y `RequireProduct`
+- [x] B-07 Migrar los booleans de módulos a la habilitación de productos
+- [x] B-08 `DomainContext` con producto y `tenant_domains.purpose`
 - [ ] B-09 Esqueleto de `frontend-hub`
 - [ ] B-10 Paquete `@flit/shell`
 - [ ] B-11 Inicio del hub y menú de productos
@@ -175,3 +175,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 |---|---|---|---|
 | 2026-09-25 | B-03 (HU #12958) | #446 | Schema `platform`. `plataforma` no lleva filas por empresa; un disparador transitorio enciende `tramites` a cada empresa nueva hasta B-12. |
 | 2026-09-25 | B-04 (HU #12964) | Feature #12888 | `product_code` en módulos, roles y asignaciones; `admin_tramites` con los permisos de Trámites de AdminCompany. Índice de rol único por (usuario, empresa, producto). Espejo transitorio hasta B-12: asignar AdminCompany crea `admin_tramites` y quitarlo lo cierra (disparador `tr_ura_mirror_admin_tramites`), así las pantallas de un solo rol siguen igual; `admin_tramites` no se ofrece en `GET /security/roles`. SuperAdmin exento de la regla de un producto por rol. No se siembra `security.users.reset_password.all`: sería asignable a un rol de empresa por error. Verificado en un clon de DEV: permisos efectivos idénticos antes y después, y en la reversa. |
+| 2026-09-25 | B-05 (HU #12965) | Feature #12888 | `ProductAccessResolver` real: plataforma siempre encendida; otro producto solo si lo está para la empresa y cada ancestro (fail-closed). Sin caché hasta Redis (L-07) y outbox (C-01). No había stub que retirar. |
+| 2026-09-25 | B-06 (HU #12966) | Feature #12888 | `me/apps`, manifiesto (scope `platform.manifest`), `GET/PUT /admin/tenants/{id}/products` (una hija no enciende lo que su cabeza tiene apagado) y `RequireProductMiddleware` detrás de `Suite:ProductAccess:Enforce` (apagada: solo registra; caché de 30 s). Middleware y no policy por grupo: las rutas de Trámites están repartidas en decenas de `Map*Endpoints`. Contrato en `contracts/openapi/platform.v1.yaml`. |
+| 2026-09-25 | B-07 (HU #12967) | Feature #12888 | Trámites y Comparendos se leen de `platform.tenant_products` (`ITenantProductFlags`); la configuración de empresa ya no los escribe y solo el SuperAdmin los cambia, al instante, desde la misma pantalla. Columnas marcadas obsoletas; se retiran un sprint después. |
+| 2026-09-25 | B-08 (HU #12968) | Feature #12888 | `DomainContext.ProductCode` (hosts FLIT por `Suite:Hosts`; redes por `admin.tenant_domains.purpose`, HUB por defecto). Unicidad por (red, propósito); las operaciones de dominio existentes siguen sobre el HUB. MarcaBlanca 25/25 sin cambios. |

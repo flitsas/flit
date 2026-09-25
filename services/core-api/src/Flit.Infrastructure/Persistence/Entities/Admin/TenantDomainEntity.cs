@@ -2,7 +2,7 @@ namespace Flit.Infrastructure.Persistence.Entities.Admin;
 
 /// <summary>
 /// Dominio propio de una red MARCA_BLANCA — <c>admin.tenant_domains</c> (HU #12416, Feature #12368,
-/// ADR-0060 D1). Un dominio vigente por cabeza (<c>uq_tenant_domains_tenant_id</c>) y un
+/// ADR-0060 D1). Un dominio vigente por cabeza y propósito (<c>uq_tenant_domains_tenant_purpose</c>, HU #12968) y un
 /// <see cref="Host"/> único en la plataforma (<c>uq_tenant_domains_host</c>), ambos parciales
 /// <c>WHERE deleted_at IS NULL</c>: retirar conserva la fila y permite re-registrar. El motor exige
 /// <c>tenant_type = MARCA_BLANCA</c> al insertar o cambiar <c>tenant_id</c>/<c>host</c>
@@ -19,6 +19,12 @@ public sealed class TenantDomainEntity
 
     /// <summary>Nombre de host ya normalizado por la aplicación: minúsculas, punycode, sin esquema/puerto/ruta.</summary>
     public string Host { get; set; } = string.Empty;
+
+    /// <summary>
+    /// HU #12968: <c>HUB</c> (hub y login de la red) o el código del producto que sirve este host. Uno vigente
+    /// por (empresa, propósito). Las operaciones actuales de registro, verificación y retiro son del <c>HUB</c>.
+    /// </summary>
+    public string Purpose { get; set; } = Flit.Admin.Domain.Companies.Domains.TenantDomainPurposes.Hub;
 
     /// <summary><c>pending</c> → <c>verified</c> → <c>active</c>; cualquiera → <c>failed</c>. Ver <see cref="TenantDomainStatuses"/>.</summary>
     public string Status { get; set; } = TenantDomainStatuses.Pending;

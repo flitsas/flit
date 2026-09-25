@@ -1,6 +1,8 @@
 using Flit.Admin.Application.Companies.Domains;
 using Flit.Admin.Domain.Companies.Domains;
 using Flit.Api.Authorization;
+using Flit.Modules.Platform.Application.Hosts;
+using Flit.Modules.Security.Application.Products;
 
 namespace Flit.Api.Middleware;
 
@@ -21,7 +23,7 @@ public sealed class DomainContextMiddleware(RequestDelegate next)
 
     private readonly RequestDelegate _next = next ?? throw new ArgumentNullException(nameof(next));
 
-    public async Task InvokeAsync(HttpContext context, ITenantDomainResolver resolver, DomainOptions options)
+    public async Task InvokeAsync(HttpContext context, ITenantDomainResolver resolver, DomainOptions options, IProductHosts productHosts)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -29,7 +31,7 @@ public sealed class DomainContextMiddleware(RequestDelegate next)
             ? values.ToString()
             : null;
 
-        context.Items[ItemKey] = await ResolveAsync(rawHost, resolver, options, context.RequestAborted)
+        context.Items[ItemKey] = await ResolveAsync(rawHost, resolver, options, context.RequestAborted, productHosts)
             .ConfigureAwait(false);
 
         await _next(context).ConfigureAwait(false);
@@ -38,11 +40,16 @@ public sealed class DomainContextMiddleware(RequestDelegate next)
     /// <summary>
     /// Expuesto para pruebas directas (HU #12417) sin levantar el pipeline HTTP completo.
     /// </summary>
+    /// <param name="productHosts">
+    /// HU #12968 (contrato v1 §5): deduce el producto de un host FLIT (<c>&lt;ambiente&gt;.&lt;producto&gt;.&lt;raíz&gt;</c>).
+    /// Sin él, o con un host desconocido, el producto es <c>plataforma</c>.
+    /// </param>
     public static async Task<DomainContext> ResolveAsync(
         string? rawHost,
         ITenantDomainResolver resolver,
         DomainOptions options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IProductHosts? productHosts = null)
     {
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(options);
@@ -54,14 +61,15 @@ public sealed class DomainContextMiddleware(RequestDelegate next)
 
         var host = rawHost.Trim().ToLowerInvariant();
 
+        var flitProduct = productHosts?.ProductForHost(host) is { Length: > 0 } product ? product : ProductCodes.Plataforma;
         if (ReservedHosts.IsReserved(host, options.Reserved, options.Allowed))
         {
-            return DomainContext.Flit(host);
+            return DomainContext.Flit(host, flitProduct);
         }
 
         var resolution = await resolver.ResolveAsync(host, cancellationToken).ConfigureAwait(false);
         return resolution.IsNetwork && resolution.HeadTenantId is { } headTenantId
-            ? DomainContext.Network(host, headTenantId)
-            : DomainContext.Flit(host);
+            ? DomainContext.Network(host, headTenantId, resolution.ProductCode)
+            : DomainContext.Flit(host, flitProduct);
     }
 }

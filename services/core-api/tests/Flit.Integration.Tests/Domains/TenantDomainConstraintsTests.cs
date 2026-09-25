@@ -67,7 +67,7 @@ public sealed class TenantDomainConstraintsTests(PostgresDatabaseFixture fixture
             "SELECT string_agg(tgname, ',' ORDER BY tgname) FROM pg_trigger WHERE tgrelid = 'admin.tenant_domains'::regclass AND NOT tgisinternal AND tgenabled = 'O'",
             connection))
         {
-            (await cmd.ExecuteScalarAsync()).Should().Be("tr_tenant_domains_audit,tr_tenant_domains_marca_blanca,tr_tenant_domains_row_version");
+            (await cmd.ExecuteScalarAsync()).Should().Be("tr_tenant_domains_audit,tr_tenant_domains_marca_blanca,tr_tenant_domains_purpose_product,tr_tenant_domains_row_version" /* HU #12968 */);
         }
 
         await using (var cmd = new NpgsqlCommand(
@@ -75,7 +75,7 @@ public sealed class TenantDomainConstraintsTests(PostgresDatabaseFixture fixture
             connection))
         {
             (await cmd.ExecuteScalarAsync()).Should().Be(
-                "ix_tenant_domains_host_active,ix_tenant_domains_next_check,uq_tenant_domains_host,uq_tenant_domains_tenant_id",
+                "ix_tenant_domains_host_active,ix_tenant_domains_next_check,uq_tenant_domains_host,uq_tenant_domains_tenant_purpose",
                 "los únicos de host y de red son parciales (WHERE deleted_at IS NULL) para permitir el re-registro tras retiro");
         }
 
@@ -177,7 +177,8 @@ public sealed class TenantDomainConstraintsTests(PostgresDatabaseFixture fixture
         var pg = await ExpectPostgresErrorAsync(() => AddDomainAsync(MarcaBlancaHeadId, "otra.example.com", "tok-0000000000000002"));
 
         pg.SqlState.Should().Be(UniqueViolation);
-        pg.ConstraintName.Should().Be("uq_tenant_domains_tenant_id");
+        // HU #12968: un dominio vigente por red y propósito; el segundo HUB de la red choca con el mismo índice.
+        pg.ConstraintName.Should().Be("uq_tenant_domains_tenant_purpose");
     }
 
     [PostgresFact]

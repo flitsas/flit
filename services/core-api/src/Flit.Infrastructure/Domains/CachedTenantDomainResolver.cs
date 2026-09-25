@@ -52,7 +52,16 @@ internal sealed class CachedTenantDomainResolver(
         try
         {
             var headTenantId = await _repository.FindActiveHeadTenantIdAsync(normalizedHost, cancellationToken).ConfigureAwait(false);
-            resolution = headTenantId is { } id ? NetworkResolution.Head(id) : NetworkResolution.None;
+            if (headTenantId is { } id)
+            {
+                // HU #12968: HUB (o sin dato) es la plataforma de la red; si no, el producto del dominio.
+                var purpose = await _repository.FindActivePurposeAsync(normalizedHost, cancellationToken).ConfigureAwait(false);
+                resolution = NetworkResolution.Head(id, purpose is null or TenantDomainPurposes.Hub ? "plataforma" : purpose);
+            }
+            else
+            {
+                resolution = NetworkResolution.None;
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
