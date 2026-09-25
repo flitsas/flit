@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "brand:inventory": "node scripts/brand-color-inventory.mjs",
+    "manual:export": "node scripts/generate-dr-flit-manual-catalog.mjs",
     "format:check": "echo 'format:check: sin formateador configurado en el repo (deuda: adoptar Prettier/Biome en ADR aparte)' && exit 0"
   },
   "dependencies": {
