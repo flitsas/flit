@@ -95,12 +95,17 @@ public static class AdminMandateSignersEndpoints
 
     private static async Task<IResult> ListAsync(
         Guid transitOfficeId,
+        HttpContext httpContext,
         [FromServices] ListMandateSignersHandler handler,
         CancellationToken cancellationToken)
     {
-        var result = await handler
-            .HandleAsync(new ListMandateSignersQuery { TransitOfficeId = transitOfficeId }, cancellationToken)
-            .ConfigureAwait(false);
+        // Bug #12912 (Habeas Data) — el organismo solo ve los mandatarios y compañías que le competen.
+        var query = new ListMandateSignersQuery
+        {
+            TransitOfficeId = transitOfficeId,
+            Visibility = OtCompanyVisibilityPolicy.For(httpContext.User),
+        };
+        var result = await handler.HandleAsync(query, cancellationToken).ConfigureAwait(false);
 
         // HU #11764 (ADR-0050) — se retira `mockIdentityEnabled`: el botón "Simular validación" ya no
         // existe (su ruta responde 410 Gone) y el flag no tenía otro consumidor.
@@ -131,6 +136,11 @@ public static class AdminMandateSignersEndpoints
         [FromServices] CreateMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
+        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(httpContext.User, transitOfficeId, request.TransitOfficeIds))
+        {
+            return TransitOfficeScopeFilter.Forbidden();
+        }
+
         var command = new CreateMandateSignerCommand
         {
             TransitOfficeId = transitOfficeId,
@@ -170,6 +180,11 @@ public static class AdminMandateSignersEndpoints
         [FromServices] UpdateMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
+        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(httpContext.User, transitOfficeId, request.TransitOfficeIds))
+        {
+            return TransitOfficeScopeFilter.Forbidden();
+        }
+
         var command = new UpdateMandateSignerCommand
         {
             TransitOfficeId = transitOfficeId,

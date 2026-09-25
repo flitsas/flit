@@ -2,6 +2,8 @@ using Flit.Admin.Application.Auditing;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Plataforma.Mandatos;
+using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.Persistence;
@@ -158,7 +160,7 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
         await SeedRedAsync();
         await using var ctx = NewContext();
 
-        var rules = await NewConfigService(ctx).ListCompanyRulesAsync(HierarchyScenario.Ot1);
+        var rules = await NewConfigService(ctx).ListCompanyRulesAsync(HierarchyScenario.Ot1, OtCompanyVisibility.WholeNetwork);
 
         rules.Select(r => r.CompanyTenantId).Should().BeEquivalentTo(
         [
@@ -190,7 +192,8 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
                 HierarchyScenario.Ot1,
                 TransitNetworkSeed.MbC2,
                 new SetCompanyDefaultSignerRequest(null),
-                null);
+                null,
+                OtCompanyVisibility.WholeNetwork);
             status.Should().Be(MandateConfigWriteStatus.Ok);
         }
 
@@ -200,7 +203,8 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
             HierarchyScenario.Ot1,
             HierarchyScenario.X,
             new SetCompanyDefaultSignerRequest(null),
-            null);
+            null,
+            OtCompanyVisibility.WholeNetwork);
         outsiderStatus.Should().Be(MandateConfigWriteStatus.CompanyNotFound);
     }
 
@@ -211,7 +215,7 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
         await SeedRedAsync();
         await using var ctx = NewContext();
 
-        var companies = await NewReader(ctx).ListOtCompaniesAsync(HierarchyScenario.Ot1);
+        var companies = await NewReader(ctx).ListOtCompaniesAsync(HierarchyScenario.Ot1, OtCompanyVisibility.WholeNetwork);
 
         companies.Where(c => c.IsEnabled).Select(c => c.CompanyTenantId).Should().BeEquivalentTo(
         [
@@ -231,7 +235,7 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
         await SeedRedAsync();
         await using var ctx = NewContext();
 
-        var rules = await NewConfigService(ctx).ListCompanyRulesAsync(HierarchyScenario.Ot1, visibility: VistaOt);
+        var rules = await NewConfigService(ctx).ListCompanyRulesAsync(HierarchyScenario.Ot1, VistaOt);
 
         // P (grant directo) y C1/C2 (entregaron a Ot1) sí; la red Marca Blanca no ha radicado.
         rules.Select(r => r.CompanyTenantId).Should().BeEquivalentTo(
@@ -244,7 +248,7 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
         await SeedRedAsync();
         await using var ctx = NewContext();
 
-        var companies = await NewReader(ctx).ListOtCompaniesAsync(HierarchyScenario.Ot1, visibility: VistaOt);
+        var companies = await NewReader(ctx).ListOtCompaniesAsync(HierarchyScenario.Ot1, VistaOt);
 
         companies.Select(c => c.CompanyTenantId).Should().BeEquivalentTo(
             [HierarchyScenario.P, HierarchyScenario.C1, HierarchyScenario.C2]);
@@ -260,14 +264,14 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
         {
             var (status, _) = await NewConfigService(ctx).SetCompanyDefaultSignerAsync(
                 HierarchyScenario.Ot1, TransitNetworkSeed.MbC1, new SetCompanyDefaultSignerRequest(null), null,
-                visibility: VistaOt);
+                VistaOt);
             status.Should().Be(MandateConfigWriteStatus.CompanyNotFound);
         }
 
         await using (var ctx = NewContext())
         {
             var status = await NewConfigService(ctx).DeleteCompanyRuleAsync(
-                HierarchyScenario.Ot1, TransitNetworkSeed.MbC1, visibility: VistaOt);
+                HierarchyScenario.Ot1, TransitNetworkSeed.MbC1, VistaOt);
             status.Should().Be(MandateConfigWriteStatus.CompanyNotFound);
         }
 
@@ -276,14 +280,15 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
         {
             var (status, _) = await NewConfigService(ctx).SetCompanyDefaultSignerAsync(
                 HierarchyScenario.Ot1, HierarchyScenario.C2, new SetCompanyDefaultSignerRequest(null), null,
-                visibility: VistaOt);
+                VistaOt);
             status.Should().Be(MandateConfigWriteStatus.Ok);
         }
 
         // SuperAdmin (toda la red) sí puede escribir para la compañía MB.
         await using var superAdmin = NewContext();
         var (superStatus, _) = await NewConfigService(superAdmin).SetCompanyDefaultSignerAsync(
-            HierarchyScenario.Ot1, TransitNetworkSeed.MbC1, new SetCompanyDefaultSignerRequest(null), null);
+            HierarchyScenario.Ot1, TransitNetworkSeed.MbC1, new SetCompanyDefaultSignerRequest(null), null,
+            OtCompanyVisibility.WholeNetwork);
         superStatus.Should().Be(MandateConfigWriteStatus.Ok);
     }
 
@@ -317,4 +322,146 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
         Email = "ana@flit.test",
         CompanyVisibility = VistaOt,
     };
+
+    // Bug #12912 (2ª vuelta review PR #442) - edición conservadora y recorte de PII en la vista OT.
+
+    /// <summary>
+    /// Alta con toda la red (como la haría Plataforma) con primario Ot1, y el mandatario además
+    /// vinculado a Ot2 con firma a mano (fila del puente sembrada: las compañías de la semilla no están
+    /// habilitadas en Ot2, así que RF33 no dejaría darla de alta por el handler).
+    /// </summary>
+    private async Task<Guid> AltaRedAsync(string documento, params Guid[] companies)
+    {
+        Guid signerId;
+        await using (var ctx = NewContext())
+        {
+            var result = await NewOtCreateHandler(ctx).HandleAsync(new CreateMandateSignerCommand
+            {
+                TransitOfficeId = HierarchyScenario.Ot1,
+                FullName = "Mandatario " + documento,
+                DocumentNumber = documento,
+                CompanyTenantIds = companies,
+                Email = "mandatario@flit.test",
+                CompanyVisibility = OtCompanyVisibility.WholeNetwork,
+            });
+            result.Errors.Should().BeEmpty();
+            signerId = result.MandateSignerId!.Value;
+        }
+
+        await using var seed = NewContext();
+        seed.MandateSignerTransitOffices.Add(new Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerTransitOffice
+        {
+            Id = Guid.NewGuid(),
+            MandateSignerId = signerId,
+            TransitOfficeId = HierarchyScenario.Ot2,
+            IsActive = true,
+            SignsPhysically = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await seed.SaveChangesAsync();
+        return signerId;
+    }
+
+    private async Task<UpdateMandateSignerResult> EdicionOtAsync(Guid signerId, string email, params Guid[] companies)
+    {
+        await using var ctx = NewContext();
+        var handler = new UpdateMandateSignerHandler(
+            new DbTransitOfficeOperationalStatusReader(ctx), NewReader(ctx), new MandateSignerRepository(ctx));
+        return await handler.HandleAsync(new UpdateMandateSignerCommand
+        {
+            TransitOfficeId = HierarchyScenario.Ot1,
+            MandateSignerId = signerId,
+            FullName = "Mandatario editado",
+            DocumentNumber = "2000000002",
+            CompanyTenantIds = companies,
+            Email = email,
+            // El frontend del OT solo conoce su propio organismo (la lista le llega recortada).
+            TransitOfficeIds = [HierarchyScenario.Ot1],
+            CompanyVisibility = VistaOt,
+        });
+    }
+
+    private async Task<MandateSignerItem> LeerAsync(Guid signerId)
+    {
+        await using var ctx = NewContext();
+        return (await NewReader(ctx).GetByIdAsync(signerId))!;
+    }
+
+    [PostgresFact]
+    public async Task HabeasData_ListByOt_vista_OT_omite_mandatarios_ajenos_y_recorta_companias_y_organismos()
+    {
+        await SeedRedAsync();
+        var soloRed = await AltaRedAsync("2000000001", TransitNetworkSeed.MbC1);
+        var mixto = await AltaRedAsync("2000000002", HierarchyScenario.C2, TransitNetworkSeed.MbC2);
+
+        await using var ctx = NewContext();
+        var vistaOt = await NewReader(ctx).ListByOtAsync(HierarchyScenario.Ot1, VistaOt);
+
+        vistaOt.Select(s => s.Id).Should().Equal([mixto], "el mandatario solo de la red MB no le compete al organismo");
+        var visible = vistaOt.Single();
+        visible.CompanyTenantIds.Should().Equal([HierarchyScenario.C2]);
+        visible.TransitOfficeIds.Should().Equal([HierarchyScenario.Ot1]);
+        visible.PhysicalSignatureOfficeIds.Should().BeEmpty();
+
+        var plataforma = await NewReader(ctx).ListByOtAsync(HierarchyScenario.Ot1, OtCompanyVisibility.WholeNetwork);
+        plataforma.Select(s => s.Id).Should().BeEquivalentTo([soloRed, mixto]);
+        var completo = plataforma.Single(s => s.Id == mixto);
+        completo.CompanyTenantIds.Distinct().Should().BeEquivalentTo([HierarchyScenario.C2, TransitNetworkSeed.MbC2]);
+        completo.TransitOfficeIds.Should().BeEquivalentTo([HierarchyScenario.Ot1, HierarchyScenario.Ot2]);
+        completo.PhysicalSignatureOfficeIds.Should().Equal([HierarchyScenario.Ot2]);
+    }
+
+    [PostgresFact]
+    public async Task Edicion_desde_el_OT_conserva_companias_no_visibles_y_organismos_ajenos()
+    {
+        await SeedRedAsync();
+        var signer = await AltaRedAsync("2000000002", HierarchyScenario.C2, TransitNetworkSeed.MbC2);
+
+        // El OT reenvía la lista que recibió (recortada a C2) y cambia el correo.
+        var recortada = await EdicionOtAsync(signer, "nuevo@flit.test", HierarchyScenario.C2);
+        recortada.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
+
+        var tras = await LeerAsync(signer);
+        tras.Email.Should().Be("nuevo@flit.test");
+        tras.CompanyTenantIds.Distinct().Should().BeEquivalentTo([HierarchyScenario.C2, TransitNetworkSeed.MbC2]);
+        tras.TransitOfficeIds.Should().BeEquivalentTo([HierarchyScenario.Ot1, HierarchyScenario.Ot2]);
+        tras.PhysicalSignatureOfficeIds.Should().Equal([HierarchyScenario.Ot2]);
+
+        // Reenviar la lista completa (incluida la no visible, ya asignada) tampoco es 422.
+        var completa = await EdicionOtAsync(signer, "otro@flit.test", HierarchyScenario.C2, TransitNetworkSeed.MbC2);
+        completa.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
+
+        // Lo que el OT AGREGA sí se valida: una compañía de la red que no le es visible es 422.
+        var agrega = await EdicionOtAsync(signer, "otro@flit.test", HierarchyScenario.C2, TransitNetworkSeed.MbC1);
+        agrega.Outcome.Should().NotBe(UpdateMandateSignerOutcome.Updated);
+        agrega.Errors.Should().Contain(e =>
+            e.Field == "companyTenantIds" && e.Value == TransitNetworkSeed.MbC1.ToString());
+    }
+
+    [PostgresFact]
+    public async Task Ley1581_ListOtCompanies_vista_OT_no_habilita_grant_directo_inhabilitado_de_la_red()
+    {
+        await SeedRedAsync();
+        await using (var seed = NewContext())
+        {
+            // MbC1 puede radicar en Ot1 por la red MB, no ha entregado trámites y tiene un grant
+            // directo INHABILITADO a Ot1: no es visible y no debe salir como habilitada.
+            seed.TenantTransitOfficeGrants.Add(new Flit.Infrastructure.Persistence.Entities.Admin.TenantTransitOfficeGrant
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TransitNetworkSeed.MbC1,
+                TransitOfficeId = HierarchyScenario.Ot1,
+                IsEnabled = false,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var companies = await NewReader(ctx).ListOtCompaniesAsync(HierarchyScenario.Ot1, VistaOt);
+
+        companies.Should().NotContain(c => c.CompanyTenantId == TransitNetworkSeed.MbC1);
+        (await NewConfigService(ctx).ListCompanyRulesAsync(HierarchyScenario.Ot1, VistaOt))
+            .Should().NotContain(r => r.CompanyTenantId == TransitNetworkSeed.MbC1);
+    }
 }

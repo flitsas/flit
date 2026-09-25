@@ -298,7 +298,7 @@ public sealed class MandateSimulatorServiceTests
             Task.FromResult<byte[]?>(null);
 
         public Task<IReadOnlyList<CompanyOtMandateRuleView>> ListCompanyRulesAsync(
-            Guid officeId, OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
+            Guid officeId, OtCompanyVisibility visibility,
             CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<CompanyOtMandateRuleView>>([]);
 
@@ -309,12 +309,12 @@ public sealed class MandateSimulatorServiceTests
 
         public Task<(MandateConfigWriteStatus Status, CompanyOtMandateRuleView? View)> SetCompanyDefaultSignerAsync(
             Guid officeId, Guid companyTenantId, SetCompanyDefaultSignerRequest request,
-            Guid? userId, OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
+            Guid? userId, OtCompanyVisibility visibility,
             CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public Task<MandateConfigWriteStatus> DeleteCompanyRuleAsync(
-            Guid officeId, Guid companyTenantId, OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
+            Guid officeId, Guid companyTenantId, OtCompanyVisibility visibility,
             CancellationToken ct = default) =>
             throw new NotSupportedException();
     }

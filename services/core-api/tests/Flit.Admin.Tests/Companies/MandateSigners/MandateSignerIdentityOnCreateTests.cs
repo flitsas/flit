@@ -1,4 +1,5 @@
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
@@ -64,6 +65,7 @@ public sealed class MandateSignerIdentityOnCreateTests
         new()
         {
             TransitOfficeId = MandateSignerHandlerTests.Office,
+            CompanyVisibility = OtCompanyVisibility.WholeNetwork,
             FullName = fullName,
             DocumentNumber = documentNumber,
             DocumentType = "CC",

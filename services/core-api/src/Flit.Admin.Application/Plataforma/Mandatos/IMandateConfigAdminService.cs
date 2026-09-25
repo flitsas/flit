@@ -174,7 +174,7 @@ public interface IMandateConfigAdminService
     /// </summary>
     Task<IReadOnlyList<CompanyOtMandateRuleView>> ListCompanyRulesAsync(
         Guid officeId,
-        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
+        OtCompanyVisibility visibility,
         CancellationToken ct = default);
 
     Task<(MandateConfigWriteStatus Status, CompanyOtMandateRuleView? View)> UpsertCompanyRuleAsync(
@@ -193,7 +193,7 @@ public interface IMandateConfigAdminService
         Guid companyTenantId,
         SetCompanyDefaultSignerRequest request,
         Guid? userId,
-        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
+        OtCompanyVisibility visibility,
         CancellationToken ct = default);
 
     /// <summary>
@@ -203,6 +203,6 @@ public interface IMandateConfigAdminService
     Task<MandateConfigWriteStatus> DeleteCompanyRuleAsync(
         Guid officeId,
         Guid companyTenantId,
-        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
+        OtCompanyVisibility visibility,
         CancellationToken ct = default);
 }

@@ -46,6 +46,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
     public Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
         Guid transitOfficeId,
+        OtCompanyVisibility visibility,
         CancellationToken cancellationToken = default) =>
         ExecuteCrossTenantReadAsync(
             async () =>
@@ -88,9 +89,61 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     .. signers.Select(s =>
                         Project(s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner)),
                 ];
-                return items;
+
+                if (visibility != OtCompanyVisibility.DirectOrWithReceivedProcedures)
+                {
+                    return items;
+                }
+
+                // Bug #12912 (Habeas Data) — vista del organismo: fuera los mandatarios cuyas compañías en
+                // ESTE organismo no le son visibles (los que aplican a todas, sin compañías, se quedan), y a
+                // los demás se les recortan compañías y organismos a lo que le compete.
+                var visibles = (await ListOtCompaniesAsync(transitOfficeId, visibility, cancellationToken)
+                        .ConfigureAwait(false))
+                    .Select(c => c.CompanyTenantId)
+                    .ToHashSet();
+
+                IReadOnlyList<MandateSignerItem> recortados =
+                [
+                    .. items
+                        .Where(s => s.CompanyTenantIds.Count == 0 || s.CompanyTenantIds.Any(visibles.Contains))
+                        .Select(s => RecortarAlOrganismo(s, transitOfficeId, visibles)),
+                ];
+                return recortados;
             },
             cancellationToken);
+
+    /// <summary>Copia del mandatario con compañías y organismos acotados a lo que ve el organismo.</summary>
+    private static MandateSignerItem RecortarAlOrganismo(
+        MandateSignerItem s,
+        Guid transitOfficeId,
+        HashSet<Guid> visibles) =>
+        new()
+        {
+            Id = s.Id,
+            TransitOfficeId = s.TransitOfficeId,
+            FullName = s.FullName,
+            DocumentType = s.DocumentType,
+            DocumentNumber = s.DocumentNumber,
+            IntegrityHash = s.IntegrityHash,
+            Email = s.Email,
+            SignatureVaultId = s.SignatureVaultId,
+            IdentityValidationRef = s.IdentityValidationRef,
+            IdentityStatus = s.IdentityStatus,
+            IdentityValidUntil = s.IdentityValidUntil,
+            UserId = s.UserId,
+            RegisteredAt = s.RegisteredAt,
+            IsActive = s.IsActive,
+            CompanyTenantIds = [.. s.CompanyTenantIds.Where(visibles.Contains)],
+            TransitOfficeIds = [.. s.TransitOfficeIds.Where(id => id == transitOfficeId)],
+            PhysicalSignatureOfficeIds = [.. s.PhysicalSignatureOfficeIds.Where(id => id == transitOfficeId)],
+            OfficeCompanies =
+            [
+                .. s.OfficeCompanies
+                    .Where(o => o.TransitOfficeId == transitOfficeId)
+                    .Select(o => o with { RepresentedCompanyIds = [.. o.RepresentedCompanyIds.Where(visibles.Contains)] }),
+            ],
+        };
 
     public Task<MandateSignerItem?> GetByIdAsync(
         Guid mandateSignerId,
@@ -250,7 +303,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
     public Task<IReadOnlyList<OtCompanyOption>> ListOtCompaniesAsync(
         Guid transitOfficeId,
-        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
+        OtCompanyVisibility visibility,
         CancellationToken cancellationToken = default) =>
         ExecuteCrossTenantReadAsync(
             async () =>
@@ -295,14 +348,21 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                             [.. grants.Where(g => g.IsEnabled).Select(g => g.TenantId)],
                             cancellationToken)
                         .ConfigureAwait(false)).ToHashSet();
+                    var efectivas = grants.Where(g => g.IsEnabled).Select(g => g.TenantId).ToHashSet();
+
+                    // Un grant directo inhabilitado solo se lista (como no habilitado) si la compañía NO
+                    // puede radicar por otra vía: si está en la lista efectiva, decide la regla única
+                    // (review PR #442, obs. 4a), igual que company-rules y CompanyCanUseOfficeAsync.
                     var directosInhabilitados = directGrants
-                        .Where(g => !g.IsEnabled)
+                        .Where(g => !g.IsEnabled && !efectivas.Contains(g.TenantId))
                         .Select(g => g.TenantId)
                         .ToHashSet();
 
                     grants =
                     [
-                        .. grants.Where(g => visible.Contains(g.TenantId) || directosInhabilitados.Contains(g.TenantId)),
+                        .. grants
+                            .Where(g => visible.Contains(g.TenantId) || directosInhabilitados.Contains(g.TenantId))
+                            .Select(g => new { g.TenantId, IsEnabled = visible.Contains(g.TenantId) }),
                     ];
                 }
 

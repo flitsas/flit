@@ -48,9 +48,9 @@ public sealed class CreateMandateSignerCommand
     public Guid? CorrelationId { get; init; }
 
     /// <summary>
-    /// Bug #12912 (Ley 1581) — compañías que quien opera puede asignar en el OT. El alta/edición desde
-    /// la compañía y desde Plataforma usa toda la red; el hub del organismo (no SuperAdmin), solo la
-    /// red que ya le entregó trámites.
+    /// Bug #12912 (Ley 1581) — compañías que quien opera puede asignar en el OT (ver
+    /// <see cref="OtCompanyVisibility"/>). Con la vista del organismo la operación queda acotada a su
+    /// propia fila: no toca organismos ajenos ni compañías que no puede ver.
     /// </summary>
-    public OtCompanyVisibility CompanyVisibility { get; init; } = OtCompanyVisibility.WholeNetwork;
+    public required OtCompanyVisibility CompanyVisibility { get; init; }
 }

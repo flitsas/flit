@@ -11,5 +11,5 @@ public sealed class ListOtCompaniesQuery
     public required Guid TransitOfficeId { get; init; }
 
     /// <summary>Bug #12912 (Ley 1581) — ver <see cref="OtCompanyVisibility"/>.</summary>
-    public OtCompanyVisibility Visibility { get; init; } = OtCompanyVisibility.WholeNetwork;
+    public required OtCompanyVisibility Visibility { get; init; }
 }

@@ -407,7 +407,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
 
     public async Task<IReadOnlyList<CompanyOtMandateRuleView>> ListCompanyRulesAsync(
         Guid officeId,
-        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
+        OtCompanyVisibility visibility,
         CancellationToken ct = default)
     {
         if (_catalog.GetById(officeId) is null)
@@ -626,7 +626,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         Guid companyTenantId,
         SetCompanyDefaultSignerRequest request,
         Guid? userId,
-        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
+        OtCompanyVisibility visibility,
         CancellationToken ct = default)
     {
         if (_catalog.GetById(officeId) is null)
@@ -819,7 +819,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
     public async Task<MandateConfigWriteStatus> DeleteCompanyRuleAsync(
         Guid officeId,
         Guid companyTenantId,
-        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
+        OtCompanyVisibility visibility,
         CancellationToken ct = default)
     {
         if (_catalog.GetById(officeId) is null)

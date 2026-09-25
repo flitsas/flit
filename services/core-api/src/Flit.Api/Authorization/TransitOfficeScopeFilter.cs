@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Flit.Admin.Domain.OtProfile;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,8 +44,27 @@ public sealed class TransitOfficeScopeFilter : IEndpointFilter
             }
         }
 
-        return Results.Json(
+        return Forbidden();
+    }
+
+    /// <summary>
+    /// Bug #12912 (IDOR por body) — <c>true</c> si quien llama no es SuperAdmin y el cuerpo nombra algún
+    /// organismo distinto al de la ruta: el organismo solo gestiona su propia fila.
+    /// </summary>
+    public static bool BodyOfficesOutOfScope(
+        ClaimsPrincipal user,
+        Guid routeTransitOfficeId,
+        IReadOnlyList<Guid>? bodyTransitOfficeIds)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return !user.IsInRole(AdminAuthorization.SuperAdminRole)
+            && bodyTransitOfficeIds is not null
+            && bodyTransitOfficeIds.Any(id => id != routeTransitOfficeId);
+    }
+
+    /// <summary>403 con el mismo cuerpo que el resto de guardas de alcance de OT.</summary>
+    public static IResult Forbidden() =>
+        Results.Json(
             new { code = "TRANSIT_OFFICE_FORBIDDEN", message = AdminAuthorization.OtModuleForbiddenMessage },
             statusCode: StatusCodes.Status403Forbidden);
-    }
 }

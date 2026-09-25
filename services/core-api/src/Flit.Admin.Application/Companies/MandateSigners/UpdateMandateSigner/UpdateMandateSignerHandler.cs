@@ -50,7 +50,30 @@ public sealed class UpdateMandateSignerHandler
             return UpdateMandateSignerResult.NotFound();
         }
 
-        var companyIds = command.CompanyTenantIds ?? [];
+        IReadOnlyList<Guid> companyIds = command.CompanyTenantIds ?? [];
+        var companiesToValidate = companyIds;
+        var transitOfficeIds = command.TransitOfficeIds;
+        var physicalSignatureOfficeIds = command.PhysicalSignatureOfficeIds;
+
+        // Bug #12912 (2ª vuelta review PR #442) — la edición desde el organismo solo gestiona SU fila,
+        // leyendo el estado persistido (no el cuerpo, que al OT le llega recortado):
+        //  - las compañías que ya tenía y el organismo no puede ver se conservan (ni se quitan ni se
+        //    exponen), y RF33 solo se valida sobre las que el organismo AGREGA;
+        //  - los organismos no se tocan: los ajenos y su firma a mano se conservan tal cual.
+        if (command.CompanyVisibility == OtCompanyVisibility.DirectOrWithReceivedProcedures)
+        {
+            var persistidas = signer.CompanyTenantIds.ToHashSet();
+            var visibles = (await _reader
+                    .ListOtCompaniesAsync(command.TransitOfficeId, command.CompanyVisibility, cancellationToken)
+                    .ConfigureAwait(false))
+                .Select(c => c.CompanyTenantId)
+                .ToHashSet();
+
+            companiesToValidate = [.. companyIds.Where(id => !persistidas.Contains(id)).Distinct()];
+            companyIds = [.. companyIds.Union(persistidas.Where(id => !visibles.Contains(id)))];
+            transitOfficeIds = null;
+            physicalSignatureOfficeIds = null;
+        }
 
         var otStatus = await _otStatus
             .GetByIdAsync(command.TransitOfficeId, cancellationToken).ConfigureAwait(false);
@@ -58,14 +81,14 @@ public sealed class UpdateMandateSignerHandler
         var (otTenantId, errors) = MandateSignerValidation.ValidateBase(
             otStatus, command.FullName, command.DocumentNumber, companyIds);
 
-        if (otTenantId is not null && companyIds.Count > 0)
+        if (otTenantId is not null && companiesToValidate.Count > 0)
         {
             await CreateMandateSignerHandler.AddExclusiveSlotErrorsAsync(
                     _reader,
                     errors,
                     command.TransitOfficeId,
-                    companyIds,
-                    command.TransitOfficeIds,
+                    companiesToValidate,
+                    transitOfficeIds,
                     command.OfficeCompanies,
                     command.MandateSignerId,
                     command.CompanyVisibility,
@@ -98,8 +121,8 @@ public sealed class UpdateMandateSignerHandler
                 documentType,
                 email,
                 command.UserId,
-                command.TransitOfficeIds,
-                command.PhysicalSignatureOfficeIds,
+                transitOfficeIds,
+                physicalSignatureOfficeIds,
                 command.SignatureVaultId,
                 command.OfficeCompanies,
                 command.ActualizaFirma,

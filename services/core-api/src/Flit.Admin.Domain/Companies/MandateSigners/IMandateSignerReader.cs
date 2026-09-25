@@ -15,9 +15,13 @@ public interface IMandateSignerReader
     /// Mandatarios del OT (activos e inactivos) con sus compañías <b>activas</b> asignadas,
     /// ordenados primero los activos y luego por nombre. Los inactivados (baja lógica) siguen
     /// visibles para poder reactivarlos, pero sus compañías ya quedaron liberadas.
+    /// Bug #12912 (Habeas Data) — con <see cref="OtCompanyVisibility.DirectOrWithReceivedProcedures"/> se
+    /// omiten los mandatarios cuyas compañías en este organismo no son visibles para él, y a los demás se
+    /// les recortan compañías y organismos a lo que el organismo puede ver.
     /// </summary>
     Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
         Guid transitOfficeId,
+        OtCompanyVisibility visibility,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -36,7 +40,7 @@ public interface IMandateSignerReader
     /// </summary>
     Task<IReadOnlyList<OtCompanyOption>> ListOtCompaniesAsync(
         Guid transitOfficeId,
-        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
+        OtCompanyVisibility visibility,
         CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -7,14 +7,14 @@ namespace Flit.Admin.Domain.Companies.TransitOffices;
 public enum OtCompanyVisibility
 {
     /// <summary>
-    /// Toda compañía que puede radicar en el OT según la lista efectiva de red (HU #12347). Es la vista
-    /// de configuración de plataforma (SuperAdmin) y de la propia compañía.
+    /// Toda compañía que puede radicar en el OT según la lista efectiva de red (HU #12347): vista de
+    /// configuración de la plataforma y de la propia compañía.
     /// </summary>
     WholeNetwork = 0,
 
     /// <summary>
-    /// Vista del organismo (usuario no SuperAdmin): compañías con grant directo habilitado respaldado
-    /// por la lista efectiva, más las que entran solo por la red y ya le entregaron algún trámite.
+    /// Vista del propio organismo: compañías con grant directo habilitado respaldado por la lista
+    /// efectiva, más las que entran solo por la red y ya le entregaron algún trámite.
     /// </summary>
     DirectOrWithReceivedProcedures = 1,
 }

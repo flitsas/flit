@@ -324,4 +324,64 @@ public sealed class AdminOtMandatesNetworkScopeTests
         db.TransitOffices.RemoveRange(db.TransitOffices.Where(o => o.Id == _officeA || o.Id == _officeB));
         db.SaveChanges();
     }
+
+    // Bug #12912 (2ª vuelta review PR #442) - IDOR por body: TransitOfficeIds con un organismo ajeno.
+
+    /// <summary>Cuerpo inválido a propósito (sin nombre): si la guarda deja pasar, el handler responde 422 sin escribir.</summary>
+    private static object CuerpoConOrganismos(params Guid[] offices) => new
+    {
+        fullName = string.Empty,
+        documentNumber = "1020304050",
+        companyTenantIds = Array.Empty<Guid>(),
+        transitOfficeIds = offices,
+        email = "ana@flit.test",
+    };
+
+    [Fact]
+    public async Task MandateSigners_alta_con_organismo_ajeno_en_el_body_es_403_para_ot_admin()
+    {
+        AuthenticateOtUser();
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1/admin/transit-offices/{_officeA}/mandate-signers", CuerpoConOrganismos(_officeA, _officeB), Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        body.GetProperty("code").GetString().Should().Be("TRANSIT_OFFICE_FORBIDDEN");
+    }
+
+    [Fact]
+    public async Task MandateSigners_edicion_con_organismo_ajeno_en_el_body_es_403_para_ot_admin()
+    {
+        AuthenticateOtUser();
+
+        var response = await _client.PutAsJsonAsync(
+            $"/api/v1/admin/transit-offices/{_officeA}/mandate-signers/{Guid.NewGuid()}",
+            CuerpoConOrganismos(_officeB),
+            Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task MandateSigners_alta_solo_con_el_propio_organismo_pasa_la_guarda()
+    {
+        AuthenticateOtUser();
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1/admin/transit-offices/{_officeA}/mandate-signers", CuerpoConOrganismos(_officeA), Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, "la guarda pasa y el handler valida el cuerpo");
+    }
+
+    [Fact]
+    public async Task MandateSigners_alta_multi_organismo_sigue_permitida_para_SuperAdmin()
+    {
+        AuthenticateSuperAdmin();
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1/admin/transit-offices/{_officeA}/mandate-signers", CuerpoConOrganismos(_officeA, _officeB), Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, "SuperAdmin no tiene la restricción de organismo");
+    }
 }
