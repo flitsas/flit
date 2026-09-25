@@ -54,7 +54,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 ## Estado
 
 - [ ] A-00 Cerrar §2, §3 y §8 (`@flit/auth`) del contrato con B y C
-- [ ] A-01 Inventario de lo que depende de `Development` y nombres de ambiente
+- [x] A-01 Inventario de lo que depende de `Development` y nombres de ambiente
 - [ ] A-02 Salir de `Development` en DEV
 - [ ] A-03 Gateway y API validan firma, emisor y audiencia
 - [x] A-04 Espiga técnica de OpenIddict
@@ -174,4 +174,5 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 | Fecha | Tarea | PR | Nota |
 |---|---|---|---|
+| 2026-09-25 | A-01 (HU #12894) | Feature #12886 | `a-inventario-ambientes.md`: 21 puntos, 15 preguntas para quien tiene acceso a la VPS y cambios compatibles para A-02/A-03. Hallazgo: según el repo, API y gateway no validan firma del JWT en ningún ambiente (sin llave pública); a confirmar con `docker inspect`. |
 | 2026-09-25 | A-04 (HU #12897) | Feature #12886 | Espiga en rama local `spike/AB-12897-openiddict` (no se fusiona). Respuestas y decisión en `a-espiga-openiddict.md`: OpenIddict 7.x, tablas `identity.oidc_*`, emisor por host sellado, `CredentialVerifier` y llave persistente. Exige subir EF/Extensions a 10.0.11 e IdentityModel a 8.19.2. |
