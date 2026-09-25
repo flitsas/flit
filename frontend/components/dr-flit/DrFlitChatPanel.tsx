@@ -17,6 +17,8 @@ import { DrFlitSupportCaseCreated } from "./DrFlitSupportCaseCreated";
 import { DrFlitSupportCaseError } from "./DrFlitSupportCaseError";
 import type { DrFlitSupportCaseDraft } from "./dr-flit-chat-types";
 import {
+  DR_FLIT_CHAT_ENABLED,
+  DR_FLIT_COMPOSER_EXAMPLE,
   DR_FLIT_MANUAL_HOME_HREF,
   type DrFlitClientBranch,
   type DrFlitHelpOptionId,
@@ -356,6 +358,11 @@ export function DrFlitChatPanel({
         onSend={onSend}
         inputRef={inputRef}
         disabled={state.isTyping || !composerEnabled}
+        placeholder={
+          DR_FLIT_CHAT_ENABLED && state.phase !== "awaiting_value"
+            ? DR_FLIT_COMPOSER_EXAMPLE
+            : undefined
+        }
       />
     </div>
   );

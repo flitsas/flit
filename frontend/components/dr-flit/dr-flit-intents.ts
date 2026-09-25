@@ -207,6 +207,15 @@ export const DR_FLIT_FREE_TEXT_HINT =
 
 export const DR_FLIT_BACK_LABEL = "Volver al menú";
 
+/** Placeholder del compositor cuando se puede preguntar libremente: un ejemplo dice qué preguntar. */
+export const DR_FLIT_COMPOSER_EXAMPLE = "Ej.: ¿cómo creo un traspaso?";
+
+/** Texto corto del chip de Gestión: «Buscar por placa» → «Placa». */
+export function gestionChipLabel(intent: DrFlitIntent): string {
+  const short = intent.label.replace(/^Buscar por\s+/i, "");
+  return short.charAt(0).toUpperCase() + short.slice(1);
+}
+
 export const DR_FLIT_MANUAL_HOME_HREF = "/manual";
 
 /**

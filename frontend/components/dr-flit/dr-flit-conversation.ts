@@ -434,7 +434,9 @@ export function applyUserText(
     text,
   };
 
-  if (state.phase === "awaiting_help_query") {
+  // Con el chat con IA, la pregunta tras «Necesito ayuda» va a la IA (un solo camino para preguntar);
+  // el buscador local del manual queda para cuando el chat está apagado.
+  if (state.phase === "awaiting_help_query" && !options.chatEnabled) {
     return applyHelpQuery(
       { ...state, messages: [...state.messages, userMsg] },
       text,
