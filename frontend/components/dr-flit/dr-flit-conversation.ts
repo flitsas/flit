@@ -743,6 +743,47 @@ export function applyChatSuccess(
 }
 
 /**
+ * HU #12928 — margen de UI para avisar que quedan pocos mensajes con el asistente hoy. Es solo
+ * presentación (ajustable aquí): el tope real lo decide y lo cuenta el backend (`usage`).
+ */
+export const DR_FLIT_USAGE_WARNING_MARGIN = 5;
+
+/** Mensajes que quedan hoy según el último `usage`, o `null` si no hay dato. */
+export function remainingChatMessages(state: DrFlitChatState): number | null {
+  const usage = state.chatUsage;
+  if (!usage || usage.dailyLimit <= 0) return null;
+  return Math.max(0, usage.dailyLimit - usage.messagesUsedToday);
+}
+
+/** HU #12928 AC1 — hay que avisar: quedan pocos pero todavía alguno. */
+export function shouldWarnChatUsage(state: DrFlitChatState): boolean {
+  const remaining = remainingChatMessages(state);
+  return remaining !== null && remaining > 0 && remaining <= DR_FLIT_USAGE_WARNING_MARGIN;
+}
+
+/**
+ * HU #12928 AC2 — tope diario alcanzado: el mensaje amigable del backend y de vuelta al menú, que
+ * funciona completo sin LLM. No se bloquea el compositor: al día siguiente (hora Colombia) el backend
+ * vuelve a aceptar mensajes sin que el usuario haga nada (AC3).
+ */
+export function applyChatRateLimited(
+  state: DrFlitChatState,
+  response: DrFlitChatResponse,
+): DrFlitChatState {
+  const botMsg: DrFlitMessage = { id: createMessageId(), role: "bot", text: response.reply };
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "idle",
+    session: "gestion",
+    showBackToSearch: false,
+    ...idleMenuFlags(),
+    chatUsage: response.usage,
+  };
+}
+
+/**
  * HU #12927 AC1/AC2 — intención de búsqueda. Reutiliza la sesión Gestión existente sin fase nueva: con
  * `suggestGestionIntent` pide directamente el valor (mismo estado que deja `applySelectIntent`); sin
  * sugerencia, deja el menú para que el usuario elija el tipo de búsqueda.

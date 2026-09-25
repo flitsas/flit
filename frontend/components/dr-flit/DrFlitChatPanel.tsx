@@ -5,8 +5,11 @@ import { useEffect, useRef, type RefObject } from "react";
 import {
   hasActiveConversation,
   isComposerEnabled,
+  remainingChatMessages,
+  shouldWarnChatUsage,
   type DrFlitChatState,
 } from "./dr-flit-conversation";
+import { DrFlitUsageNotice } from "./DrFlitUsageNotice";
 import {
   DR_FLIT_MANUAL_HOME_HREF,
   type DrFlitClientBranch,
@@ -236,6 +239,14 @@ export function DrFlitChatPanel({
                 </span>
               </span>
             </button>
+          )}
+
+          {shouldWarnChatUsage(state) && state.chatUsage && !state.isTyping && (
+            <DrFlitUsageNotice
+              remaining={remainingChatMessages(state) ?? 0}
+              used={state.chatUsage.messagesUsedToday}
+              limit={state.chatUsage.dailyLimit}
+            />
           )}
 
           {state.showSupportInfo && !state.isTyping && (

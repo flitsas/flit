@@ -9,6 +9,7 @@ import { buildHistorialPlacaHref, DR_FLIT_CHAT_ENABLED } from "./dr-flit-intents
 import {
   applyBackToSearch,
   applyChatDegraded,
+  applyChatRateLimited,
   applyChatSuccess,
   buildChatHistory,
   applyClientBranch,
@@ -199,11 +200,11 @@ export function useDrFlitChat(
       try {
         const response = await postDrFlitChat({ message, history, routeScope: routeScope ?? null });
         if (gen !== searchGen.current) return;
-        setState((prev) =>
-          response.status === "ok"
-            ? applyChatSuccess(prev, response)
-            : applyChatDegraded(prev, { helpAudiences }, response.usage),
-        );
+        setState((prev) => {
+          if (response.status === "ok") return applyChatSuccess(prev, response);
+          if (response.status === "rate_limited") return applyChatRateLimited(prev, response);
+          return applyChatDegraded(prev, { helpAudiences }, response.usage);
+        });
       } catch {
         if (gen !== searchGen.current) return;
         setState((prev) => applyChatDegraded(prev, { helpAudiences }));
