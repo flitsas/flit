@@ -1239,6 +1239,8 @@ public static class InfrastructureExtensions
     private static void AddDrFlit(IServiceCollection services)
     {
         services.AddScoped<IDrFlitChatModel, AnthropicDrFlitChatModel>();
+        services.AddScoped<IDrFlitUsageCounter>(sp => new DrFlitUsageCounterRepository(sp.GetRequiredService<FlitDbContext>()));
+        services.AddSingleton<IDrFlitChatSettings, DrFlitChatSettings>();
     }
 
     private static void AddOcr(IServiceCollection services, IConfiguration configuration)
