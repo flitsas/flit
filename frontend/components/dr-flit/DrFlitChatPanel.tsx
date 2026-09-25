@@ -90,12 +90,15 @@ export function DrFlitChatPanel({
   inputRef: RefObject<HTMLInputElement | null>;
 }) {
   const threadRef = useRef<HTMLDivElement>(null);
+  const privacyNoticePending = shouldShowPrivacyNotice(state);
 
   useEffect(() => {
     if (!open) return;
     const el = threadRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    // HU #12931 — mientras el aviso de datos no se haya visto, el hilo arranca arriba para que se lea;
+    // luego, como siempre, se sigue la conversación desde el último mensaje.
+    el.scrollTop = privacyNoticePending ? 0 : el.scrollHeight;
   }, [
     open,
     state.messages,
@@ -111,6 +114,7 @@ export function DrFlitChatPanel({
     state.showBackToSearch,
     state.isTyping,
     state.phase,
+    privacyNoticePending,
   ]);
 
   if (!open) return null;
@@ -125,7 +129,9 @@ export function DrFlitChatPanel({
       role="dialog"
       aria-modal="false"
       aria-labelledby={`${panelId}-title`}
-      className="dr-flit dr-flit-panel-enter fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col overflow-hidden"
+      // overflow-clip y no overflow-hidden: recorta igual, pero un focus() de un campo del formulario del
+      // caso no puede desplazar el panel fijo (con hidden lo desplazaba y el panel quedaba en blanco).
+      className="dr-flit dr-flit-panel-enter fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col overflow-clip"
       style={{
         background: "var(--dr-flit-panel-bg)",
         borderTopLeftRadius: "var(--dr-flit-radius-widget)",
