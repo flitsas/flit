@@ -204,6 +204,49 @@ El flujo es el mismo en los tres escenarios; solo cambian los hostnames/puertos.
   todas sus llamadas a la API fallan por CORS.
 - El origen permitido debe ser la URL desde la que sirve el **frontend**.
 
+### Marca blanca: el vhost debe enrutar `/api/v1`, `/hubs` y `/ml` al Gateway (HU #12421)
+
+En un **dominio de red** (marca blanca) el navegador **no** usa la base cross-origin
+horneada en el build: `resolveApiBase()` devuelve `""` cuando `isFlitHost()` es `false`
+(`frontend/lib/api/base-url.ts`), así que llama a **su propio origen**. Y los
+`marcablanca{dev,qa,pdn}.flitsas.online` están negados a propósito en `NEXT_PUBLIC_FLIT_HOSTS`
+(HU #12761), o sea que cuentan como dominio de red.
+
+Por eso su vhost necesita, **además** del `location /` al frontend:
+
+| location | Destino | Nota |
+|---|---|---|
+| `/api/v1/` | gateway (`4002`/`5002`/`6002`) | **`/api/v1/` exacto, nunca `/api/`**: el BFF propio de Next vive en `/api/migracion` (sin `/v1/`) y debe seguir cayendo en `location /` |
+| `/hubs/` | gateway | SignalR: exige `Upgrade`/`Connection` y `proxy_read_timeout 3600s` |
+| `/ml/` | gateway | OCR/ML detrás de YARP |
+
+nginx elige por **prefijo más largo**, no por orden, así que `/api/v1/...` siempre gana
+sobre `/`. Además hay que fijar `client_max_body_size` igual que en el vhost de la API de
+ese ambiente (sin él rige el default de 1 MB y los adjuntos fallan con 413), y en QA
+replicar el `location /api/v1/tramites/ocr/` con 600 s.
+
+`X-Flit-Domain` **no se fija** en nginx: lo sella en exclusiva `DomainSealTransform` del
+gateway con el host real de la conexión (HU #12417). Pero sí conviene **borrar** el que
+mande el cliente (`proxy_set_header X-Flit-Domain "";` y lo mismo con `X-Internal-Key`):
+detrás de nginx las conexiones llegan al gateway con la IP del bridge, que cae dentro de
+`DomainSeal__InternalAllowedNetworks`, así que ese CIDR no discrimina y la única defensa
+quedaría en la clave compartida. El SSR no se ve afectado: llama al gateway por la red
+Docker, sin pasar por nginx.
+
+> **Síntoma cuando falta este enrutado:** el front carga y el SSR hasta aplica la marca
+> (título y colores correctos, porque eso va por la red interna), pero el **logo aparece
+> roto** —`logoUrl` es relativo— y toda llamada a la API responde **500**, porque la pide
+> al contenedor de Next en vez de al Gateway.
+>
+> Aplicado a mano en los tres vhosts de la 177 el **2026-09-24**. Recordar que **las
+> configuraciones de nginx de ese host no están en git**: si se recrea un vhost, hay que
+> volver a añadir estos tres `location`.
+
+El enrutado es condición necesaria pero no suficiente: el dominio tiene que estar
+**registrado y activo** en `admin.tenant_domains` de ese ambiente. Con el enrutado puesto
+pero sin registro, `/api/v1/public/branding` responde 200 con la marca de **FLIT**
+(comportamiento correcto de respaldo, AC5), no con la del cliente.
+
 ### Health checks (para verificar conectividad)
 
 | Servicio | Endpoint |
