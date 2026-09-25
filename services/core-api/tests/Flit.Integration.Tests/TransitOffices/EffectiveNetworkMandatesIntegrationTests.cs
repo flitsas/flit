@@ -220,4 +220,101 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
         ]);
         companies.Should().NotContain(c => c.CompanyTenantId == HierarchyScenario.X);
     }
+
+    // Bug #12912 (review PR #442) - Ley 1581 en la vista del organismo.
+
+    private const OtCompanyVisibility VistaOt = OtCompanyVisibility.DirectOrWithReceivedProcedures;
+
+    [PostgresFact]
+    public async Task Ley1581_ListCompanyRules_vista_OT_solo_red_con_tramites_recibidos()
+    {
+        await SeedRedAsync();
+        await using var ctx = NewContext();
+
+        var rules = await NewConfigService(ctx).ListCompanyRulesAsync(HierarchyScenario.Ot1, visibility: VistaOt);
+
+        // P (grant directo) y C1/C2 (entregaron a Ot1) sí; la red Marca Blanca no ha radicado.
+        rules.Select(r => r.CompanyTenantId).Should().BeEquivalentTo(
+            [HierarchyScenario.P, HierarchyScenario.C1, HierarchyScenario.C2]);
+    }
+
+    [PostgresFact]
+    public async Task Ley1581_ListOtCompanies_vista_OT_solo_red_con_tramites_recibidos()
+    {
+        await SeedRedAsync();
+        await using var ctx = NewContext();
+
+        var companies = await NewReader(ctx).ListOtCompaniesAsync(HierarchyScenario.Ot1, visibility: VistaOt);
+
+        companies.Select(c => c.CompanyTenantId).Should().BeEquivalentTo(
+            [HierarchyScenario.P, HierarchyScenario.C1, HierarchyScenario.C2]);
+        companies.Should().OnlyContain(c => c.IsEnabled);
+    }
+
+    [PostgresFact]
+    public async Task Ley1581_escrituras_vista_OT_sobre_compania_no_visible_son_CompanyNotFound()
+    {
+        await SeedRedAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var (status, _) = await NewConfigService(ctx).SetCompanyDefaultSignerAsync(
+                HierarchyScenario.Ot1, TransitNetworkSeed.MbC1, new SetCompanyDefaultSignerRequest(null), null,
+                visibility: VistaOt);
+            status.Should().Be(MandateConfigWriteStatus.CompanyNotFound);
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var status = await NewConfigService(ctx).DeleteCompanyRuleAsync(
+                HierarchyScenario.Ot1, TransitNetworkSeed.MbC1, visibility: VistaOt);
+            status.Should().Be(MandateConfigWriteStatus.CompanyNotFound);
+        }
+
+        // Visible (entró por la red y entregó trámites) => se puede escribir.
+        await using (var ctx = NewContext())
+        {
+            var (status, _) = await NewConfigService(ctx).SetCompanyDefaultSignerAsync(
+                HierarchyScenario.Ot1, HierarchyScenario.C2, new SetCompanyDefaultSignerRequest(null), null,
+                visibility: VistaOt);
+            status.Should().Be(MandateConfigWriteStatus.Ok);
+        }
+
+        // SuperAdmin (toda la red) sí puede escribir para la compañía MB.
+        await using var superAdmin = NewContext();
+        var (superStatus, _) = await NewConfigService(superAdmin).SetCompanyDefaultSignerAsync(
+            HierarchyScenario.Ot1, TransitNetworkSeed.MbC1, new SetCompanyDefaultSignerRequest(null), null);
+        superStatus.Should().Be(MandateConfigWriteStatus.Ok);
+    }
+
+    [PostgresFact]
+    public async Task Ley1581_alta_de_mandatario_desde_el_OT_rechaza_compania_no_visible()
+    {
+        await SeedRedAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var invisible = await NewOtCreateHandler(ctx).HandleAsync(OtAlta("1020304060", TransitNetworkSeed.MbC1));
+            invisible.IsValid.Should().BeFalse();
+            invisible.Errors.Should().Contain(e =>
+                e.Field == "companyTenantIds" && e.Value == TransitNetworkSeed.MbC1.ToString());
+        }
+
+        await using var visibleCtx = NewContext();
+        var visible = await NewOtCreateHandler(visibleCtx).HandleAsync(OtAlta("1020304061", HierarchyScenario.C2));
+        visible.Errors.Should().BeEmpty();
+    }
+
+    private static CreateMandateSignerHandler NewOtCreateHandler(FlitDbContext ctx) =>
+        new(new DbTransitOfficeOperationalStatusReader(ctx), NewReader(ctx), new MandateSignerRepository(ctx));
+
+    private static CreateMandateSignerCommand OtAlta(string documento, Guid company) => new()
+    {
+        TransitOfficeId = HierarchyScenario.Ot1,
+        FullName = "Ana Restrepo",
+        DocumentNumber = documento,
+        CompanyTenantIds = [company],
+        Email = "ana@flit.test",
+        CompanyVisibility = VistaOt,
+    };
 }

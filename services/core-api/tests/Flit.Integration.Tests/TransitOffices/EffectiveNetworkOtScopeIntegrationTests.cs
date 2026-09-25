@@ -185,4 +185,30 @@ public sealed class EffectiveNetworkOtScopeIntegrationTests(PostgresDatabaseFixt
         health.DeliveredWithGrant.Should().Be(RedConcesion.Length);
         health.DeliveredWithoutGrant.Should().Be(2, "solo X y S entregaron sin pertenecer a la red de Ot1");
     }
+
+    /// <summary>
+    /// Bug #12912 (review PR #442, obs. 3) - una hija con grant directo propio que su cabeza NO respalda
+    /// no puede radicar en el OT, así que tampoco aparece por nombre en la vista del organismo.
+    /// </summary>
+    [PostgresFact]
+    public async Task Empresas_cliente_del_OT_no_incluyen_hija_con_grant_propio_no_respaldado()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        await using (var seed = NewContext())
+        {
+            // C1 conserva su grant propio a Ot1, pero la cabeza P solo tiene Ot2.
+            await TransitNetworkSeed.SetHeadGrantsAsync(seed, HierarchyScenario.P, HierarchyScenario.Ot2);
+        }
+
+        await using var ctx = NewContext();
+        var companies = await new OtMetricsReadRepository(ctx, NewResolver(ctx))
+            .ListClientCompaniesAsync(HierarchyScenario.O);
+
+        companies.Should().NotBeNull();
+        companies!.Should().NotContain(c => c.TenantId == HierarchyScenario.C1);
+
+        var fields = await new OtQueryRepository(ctx, NewResolver(ctx)).GetFieldsAsync(HierarchyScenario.O);
+        fields!.Single(f => f.Id == OtQueryFieldCatalog.Empresa).Options
+            .Should().NotContain(o => o.Value == HierarchyScenario.C1.ToString());
+    }
 }

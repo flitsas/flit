@@ -4,6 +4,7 @@ using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Integration.Tests.Postgres;
 using Flit.Integration.Tests.Tenancy;
+using Flit.Queries.Domain.Tenancy;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -189,5 +190,75 @@ public sealed class EffectiveTransitOfficeListIntegrationTests(PostgresDatabaseF
             HierarchyScenario.P, HierarchyScenario.C1, HierarchyScenario.C2,
             TransitNetworkSeed.MbHead, TransitNetworkSeed.MbC1, TransitNetworkSeed.MbC2,
         ]);
+    }
+
+    // Bug #12912 (review PR #442, obs. 4) - redes hermanas no se contaminan.
+
+    private static readonly Guid ConcesionB = new("d1000000-0000-4000-8000-00000000b001");
+    private static readonly Guid ConcesionB1 = new("d2000000-0000-4000-8000-00000000b011");
+    private static readonly Guid MarcaBlancaB = new("d3000000-0000-4000-8000-00000000b002");
+    private static readonly Guid MarcaBlancaB1 = new("d4000000-0000-4000-8000-00000000b021");
+
+    /// <summary>Segunda Concesión (grant solo a Ot2) y segunda Marca Blanca, además de las de la semilla.</summary>
+    private async Task SeedRedesHermanasAsync()
+    {
+        await TransitNetworkSeed.SeedMarcaBlancaNetworkAsync(Fixture);
+        await using var ctx = NewContext();
+        ctx.Tenants.Add(TenantSeed.New(ConcesionB, "IT-CB", isGroupParent: true, parentId: null));
+        ctx.Tenants.Add(TenantSeed.New(
+            MarcaBlancaB, "IT-MBB", isGroupParent: true, parentId: null, GroupKindCodes.MarcaBlanca));
+        await ctx.SaveChangesAsync();
+        ctx.Tenants.Add(TenantSeed.New(ConcesionB1, "IT-CB1", isGroupParent: false, parentId: ConcesionB));
+        ctx.Tenants.Add(TenantSeed.New(MarcaBlancaB1, "IT-MBB1", isGroupParent: false, parentId: MarcaBlancaB));
+        await ctx.SaveChangesAsync();
+
+        await TransitNetworkSeed.SetHeadGrantsAsync(ctx, HierarchyScenario.P, HierarchyScenario.Ot1);
+        await TransitNetworkSeed.SetHeadGrantsAsync(ctx, ConcesionB, HierarchyScenario.Ot2);
+    }
+
+    [PostgresFact]
+    public async Task Bug12912_Concesiones_hermanas_no_comparten_OT()
+    {
+        await SeedRedesHermanasAsync();
+        await using var read = NewContext();
+        var resolver = NewResolver(read);
+
+        (await resolver.ListEffectiveOfficeIdsAsync(ConcesionB1)).Should().Equal([HierarchyScenario.Ot2]);
+        (await resolver.ListEffectiveOfficeIdsAsync(HierarchyScenario.C2)).Should().Equal([HierarchyScenario.Ot1]);
+
+        var ot1 = await resolver.ListEffectiveTenantIdsForOfficeAsync(HierarchyScenario.Ot1);
+        ot1.Should().Contain([HierarchyScenario.P, HierarchyScenario.C1, HierarchyScenario.C2]);
+        ot1.Should().NotContain([ConcesionB, ConcesionB1]);
+
+        var ot2 = await resolver.ListEffectiveTenantIdsForOfficeAsync(HierarchyScenario.Ot2);
+        ot2.Should().Contain([ConcesionB, ConcesionB1]);
+        ot2.Should().NotContain([HierarchyScenario.P, HierarchyScenario.C1, HierarchyScenario.C2]);
+    }
+
+    [PostgresTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Bug12912_bloqueo_de_una_Marca_Blanca_no_afecta_a_su_hermana(bool bloqueaLaSemilla)
+    {
+        await SeedRedesHermanasAsync();
+        var (bloqueada, hijaBloqueada, libre, hijaLibre) = bloqueaLaSemilla
+            ? (TransitNetworkSeed.MbHead, TransitNetworkSeed.MbC1, MarcaBlancaB, MarcaBlancaB1)
+            : (MarcaBlancaB, MarcaBlancaB1, TransitNetworkSeed.MbHead, TransitNetworkSeed.MbC1);
+
+        await using (var ctx = NewContext())
+        {
+            await new TenantTransitOfficeBlockRepository(ctx, NullAuditContextAccessor.Instance)
+                .AddBlockAsync(bloqueada, HierarchyScenario.Ot1, null, null);
+        }
+
+        await using var read = NewContext();
+        var resolver = NewResolver(read);
+
+        (await resolver.ListEffectiveOfficeIdsAsync(hijaBloqueada)).Should().BeEmpty();
+        (await resolver.ListEffectiveOfficeIdsAsync(hijaLibre)).Should().Equal([HierarchyScenario.Ot1]);
+
+        var ot1 = await resolver.ListEffectiveTenantIdsForOfficeAsync(HierarchyScenario.Ot1);
+        ot1.Should().Contain([libre, hijaLibre]);
+        ot1.Should().NotContain([bloqueada, hijaBloqueada]);
     }
 }

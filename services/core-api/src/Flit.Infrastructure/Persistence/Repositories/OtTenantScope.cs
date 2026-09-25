@@ -1,6 +1,5 @@
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Queries.Domain.Time;
-using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -98,9 +97,8 @@ internal sealed class OtTenantScope
 
     /// <summary>
     /// Compañías cuyo NOMBRE puede listar el organismo (Bug #12912, criterio Ley 1581 decidido por el
-    /// humano): las de grant directo habilitado siempre, y las que entran SOLO por la red (Concesión /
-    /// Marca Blanca) únicamente si ya le entregaron algún trámite (mismo universo que la bandeja:
-    /// <c>RecibidosPorOrganismo</c>, sin borrados). Los conteos y filas de trámites no pasan por aquí:
+    /// humano). La regla vive en <see cref="OtVisibleCompanies"/>: grant directo respaldado por la red, y
+    /// las que entran SOLO por la red únicamente si ya le entregaron algún trámite. Los conteos y filas de trámites no pasan por aquí:
     /// solo hay fila si hay trámite. Debe llamarse dentro de <see cref="ExecuteAsync{T}"/> (lectura
     /// cross-tenant ya abierta). Sin resolver, <paramref name="scopeTenantIds"/> ya son los grants
     /// directos y se devuelven tal cual.
@@ -116,29 +114,9 @@ internal sealed class OtTenantScope
             return scopeTenantIds;
         }
 
-        var directos = await _context.TenantTransitOfficeGrants
-            .AsNoTracking()
-            .Where(g => g.TransitOfficeId == transitOfficeId && g.IsEnabled)
-            .Select(g => g.TenantId)
-            .Distinct()
-            .ToListAsync(cancellationToken)
+        return await OtVisibleCompanies
+            .FilterAsync(_context, transitOfficeId, scopeTenantIds, cancellationToken)
             .ConfigureAwait(false);
-
-        var soloRed = scopeTenantIds.Except(directos).ToList();
-        var redConTramites = soloRed.Count == 0
-            ? []
-            : await _context.ProcedureInstances
-                .AsNoTracking()
-                .Where(p => p.DeletedAt == null
-                    && p.TransitOfficeId == transitOfficeId
-                    && TramiteEstado.RecibidosPorOrganismo.Contains(p.Status)
-                    && soloRed.Contains(p.TenantId))
-                .Select(p => p.TenantId)
-                .Distinct()
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-        return [.. directos.Union(redConTramites)];
     }
 
     public async Task<Guid?> ResolveTransitOfficeIdAsync(

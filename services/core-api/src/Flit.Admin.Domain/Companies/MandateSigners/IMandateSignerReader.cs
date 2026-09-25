@@ -1,3 +1,5 @@
+using Flit.Admin.Domain.Companies.TransitOffices;
+
 namespace Flit.Admin.Domain.Companies.MandateSigners;
 
 /// <summary>
@@ -29,9 +31,12 @@ public interface IMandateSignerReader
     /// <summary>
     /// Compañías gestoras con grant en el OT (candidatas a mandatario), con su estado activo
     /// y si el grant está habilitado. Insumo del multiselect y de la regla de uso RF33.
+    /// Bug #12912 — <paramref name="visibility"/> acota la lista a lo que el organismo puede ver por
+    /// nombre (Ley 1581).
     /// </summary>
     Task<IReadOnlyList<OtCompanyOption>> ListOtCompaniesAsync(
         Guid transitOfficeId,
+        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
         CancellationToken cancellationToken = default);
 
     /// <summary>

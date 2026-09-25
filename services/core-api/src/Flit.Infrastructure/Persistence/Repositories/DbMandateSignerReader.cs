@@ -250,6 +250,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
     public Task<IReadOnlyList<OtCompanyOption>> ListOtCompaniesAsync(
         Guid transitOfficeId,
+        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
         CancellationToken cancellationToken = default) =>
         ExecuteCrossTenantReadAsync(
             async () =>
@@ -279,6 +280,29 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                             .Concat(effective)
                             .Distinct()
                             .Select(id => new { TenantId = id, IsEnabled = effective.Contains(id) }),
+                    ];
+                }
+
+                // Bug #12912 (Ley 1581) — vista del organismo: solo las compañías que puede ver por nombre
+                // (OtVisibleCompanies) y los grants directos inhabilitados que ya listaba para mostrar su
+                // estado. SuperAdmin y la propia compañía usan toda la red.
+                if (visibility == OtCompanyVisibility.DirectOrWithReceivedProcedures)
+                {
+                    var visible = (await OtVisibleCompanies
+                        .FilterAsync(
+                            _context,
+                            transitOfficeId,
+                            [.. grants.Where(g => g.IsEnabled).Select(g => g.TenantId)],
+                            cancellationToken)
+                        .ConfigureAwait(false)).ToHashSet();
+                    var directosInhabilitados = directGrants
+                        .Where(g => !g.IsEnabled)
+                        .Select(g => g.TenantId)
+                        .ToHashSet();
+
+                    grants =
+                    [
+                        .. grants.Where(g => visible.Contains(g.TenantId) || directosInhabilitados.Contains(g.TenantId)),
                     ];
                 }
 

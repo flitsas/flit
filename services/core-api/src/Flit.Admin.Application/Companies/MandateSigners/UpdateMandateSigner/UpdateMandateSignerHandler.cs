@@ -68,6 +68,7 @@ public sealed class UpdateMandateSignerHandler
                     command.TransitOfficeIds,
                     command.OfficeCompanies,
                     command.MandateSignerId,
+                    command.CompanyVisibility,
                     cancellationToken)
                 .ConfigureAwait(false);
         }

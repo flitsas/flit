@@ -2,6 +2,7 @@ using Flit.Admin.Application.Plataforma.Mandatos;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Tramites.Application.Ocr;
 using Flit.Tramites.Domain.Documents;
 using Microsoft.EntityFrameworkCore;
@@ -406,6 +407,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
 
     public async Task<IReadOnlyList<CompanyOtMandateRuleView>> ListCompanyRulesAsync(
         Guid officeId,
+        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
         CancellationToken ct = default)
     {
         if (_catalog.GetById(officeId) is null)
@@ -414,16 +416,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         return await ExecuteCrossTenantReadAsync(
             async () =>
             {
-                // Bug #12912 — compañías que pueden radicar en el OT según la lista efectiva de red.
-                var grants = _effectiveOffices is not null
-                    ? [.. await _effectiveOffices
-                        .ListEffectiveTenantIdsForOfficeAsync(officeId, ct)
-                        .ConfigureAwait(false)]
-                    : await _db.TenantTransitOfficeGrants.AsNoTracking()
-                        .Where(g => g.TransitOfficeId == officeId && g.IsEnabled)
-                        .Select(g => g.TenantId)
-                        .ToListAsync(ct)
-                        .ConfigureAwait(false);
+                var grants = await ListOfficeCompaniesAsync(officeId, visibility, ct).ConfigureAwait(false);
 
                 if (grants.Count == 0)
                     return (IReadOnlyList<CompanyOtMandateRuleView>)[];
@@ -533,7 +526,8 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             return (MandateConfigWriteStatus.InstitutionalRequired, null);
         }
 
-        var hasGrant = await CompanyCanUseOfficeAsync(officeId, companyTenantId, ct).ConfigureAwait(false);
+        var hasGrant = await CompanyCanUseOfficeAsync(
+            officeId, companyTenantId, OtCompanyVisibility.WholeNetwork, ct).ConfigureAwait(false);
 
         if (!hasGrant)
             return (MandateConfigWriteStatus.CompanyNotFound, null);
@@ -632,12 +626,14 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         Guid companyTenantId,
         SetCompanyDefaultSignerRequest request,
         Guid? userId,
+        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
         CancellationToken ct = default)
     {
         if (_catalog.GetById(officeId) is null)
             return (MandateConfigWriteStatus.OfficeNotFound, null);
 
-        var hasGrant = await CompanyCanUseOfficeAsync(officeId, companyTenantId, ct).ConfigureAwait(false);
+        var hasGrant = await CompanyCanUseOfficeAsync(officeId, companyTenantId, visibility, ct)
+            .ConfigureAwait(false);
 
         if (!hasGrant)
             return (MandateConfigWriteStatus.CompanyNotFound, null);
@@ -823,10 +819,18 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
     public async Task<MandateConfigWriteStatus> DeleteCompanyRuleAsync(
         Guid officeId,
         Guid companyTenantId,
+        OtCompanyVisibility visibility = OtCompanyVisibility.WholeNetwork,
         CancellationToken ct = default)
     {
         if (_catalog.GetById(officeId) is null)
             return MandateConfigWriteStatus.OfficeNotFound;
+
+        // Bug #12912 (Ley 1581) — el organismo no borra reglas de compañías que no puede ver.
+        if (visibility == OtCompanyVisibility.DirectOrWithReceivedProcedures
+            && !await CompanyCanUseOfficeAsync(officeId, companyTenantId, visibility, ct).ConfigureAwait(false))
+        {
+            return MandateConfigWriteStatus.CompanyNotFound;
+        }
 
         var entity = await _db.CompanyOtMandateRules
             .FirstOrDefaultAsync(
@@ -866,21 +870,52 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
 
     /// <summary>
     /// Bug #12912 — la compañía puede radicar en el OT: el organismo está en su lista efectiva de red
-    /// (HU #12347). Sin resolver inyectado, criterio previo de grant propio habilitado.
+    /// (HU #12347). Sin resolver inyectado, criterio previo de grant propio habilitado. Con la vista del
+    /// organismo (Ley 1581), además tiene que ser una compañía que el organismo puede ver por nombre.
     /// </summary>
-    private Task<bool> CompanyCanUseOfficeAsync(Guid officeId, Guid companyTenantId, CancellationToken ct) =>
+    private Task<bool> CompanyCanUseOfficeAsync(
+        Guid officeId,
+        Guid companyTenantId,
+        OtCompanyVisibility visibility,
+        CancellationToken ct) =>
         ExecuteCrossTenantReadAsync(
-            async () => _effectiveOffices is not null
-                ? (await _effectiveOffices.ListEffectiveOfficeIdsAsync(companyTenantId, ct).ConfigureAwait(false))
-                    .Contains(officeId)
-                : await _db.TenantTransitOfficeGrants.AsNoTracking()
-                    .AnyAsync(
-                        g => g.TransitOfficeId == officeId
-                            && g.TenantId == companyTenantId
-                            && g.IsEnabled,
-                        ct)
-                    .ConfigureAwait(false),
+            async () => visibility == OtCompanyVisibility.DirectOrWithReceivedProcedures
+                ? (await ListOfficeCompaniesAsync(officeId, visibility, ct).ConfigureAwait(false))
+                    .Contains(companyTenantId)
+                : _effectiveOffices is not null
+                    ? (await _effectiveOffices.ListEffectiveOfficeIdsAsync(companyTenantId, ct).ConfigureAwait(false))
+                        .Contains(officeId)
+                    : await _db.TenantTransitOfficeGrants.AsNoTracking()
+                        .AnyAsync(
+                            g => g.TransitOfficeId == officeId
+                                && g.TenantId == companyTenantId
+                                && g.IsEnabled,
+                            ct)
+                        .ConfigureAwait(false),
             ct);
+
+    /// <summary>
+    /// Compañías del OT según la lista efectiva de red (Bug #12912); con la vista del organismo,
+    /// acotadas por la regla única de Ley 1581 (<see cref="OtVisibleCompanies"/>). Se llama dentro de
+    /// una lectura cross-tenant.
+    /// </summary>
+    private async Task<List<Guid>> ListOfficeCompaniesAsync(
+        Guid officeId,
+        OtCompanyVisibility visibility,
+        CancellationToken ct)
+    {
+        var effective = _effectiveOffices is not null
+            ? [.. await _effectiveOffices.ListEffectiveTenantIdsForOfficeAsync(officeId, ct).ConfigureAwait(false)]
+            : await _db.TenantTransitOfficeGrants.AsNoTracking()
+                .Where(g => g.TransitOfficeId == officeId && g.IsEnabled)
+                .Select(g => g.TenantId)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+        return visibility == OtCompanyVisibility.DirectOrWithReceivedProcedures
+            ? [.. await OtVisibleCompanies.FilterAsync(_db, officeId, effective, ct).ConfigureAwait(false)]
+            : effective;
+    }
 
     private async Task<T> ExecuteCrossTenantReadAsync<T>(
         Func<Task<T>> action,

@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Companies.TransitOffices;
 namespace Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 
 /// <summary>
@@ -75,4 +76,11 @@ public sealed class UpdateMandateSignerCommand
 
     public Guid? UpdatedBy { get; init; }
     public Guid? CorrelationId { get; init; }
+
+    /// <summary>
+    /// Bug #12912 (Ley 1581) — compañías que quien opera puede asignar en el OT. El alta/edición desde
+    /// la compañía y desde Plataforma usa toda la red; el hub del organismo (no SuperAdmin), solo la
+    /// red que ya le entregó trámites.
+    /// </summary>
+    public OtCompanyVisibility CompanyVisibility { get; init; } = OtCompanyVisibility.WholeNetwork;
 }
