@@ -1,7 +1,7 @@
 # Frente A — Identidad, sesión y Trámites en la suite
 
-> **Responsable:** desarrollador de Trámites. **Producto que retoma después:** Trámites.
-> **Skill:** `flit-suite-a-identidad`. **Prefijo de rama:** `feature/AB-<HU>-suite-a-…`.
+> **Responsable:** Samuel Cardenas, único desarrollador de la suite desde el 2026-09-25 (antes, desarrollador de Trámites). **Producto que retoma después:** Trámites.
+> **Skill:** `flit-suite-a-identidad`. **Rama:** una por Feature de ADO, `feature/AB-<Feature>-suite-…`, con commits `HU<id>: …` ([reglas R1](../reglas-trabajo-paralelo.md#r1-ramas-prs-y-merges)).
 >
 > Leer antes de empezar: [README de la suite](../README.md), [reglas](../reglas-trabajo-paralelo.md),
 > [contrato v1](../contrato-plataforma-v1.md) §2, §3, §8 y §9, [plan maestro](../plan-maestro.md) §4.3
@@ -106,7 +106,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 ### A-05 · Servidor OIDC en `core-api` · Fase 1 · M–L
 
 - **Qué:** módulo nuevo `Flit.Modules.Identity` con OpenIddict. Endpoints `/connect/authorize`, `/connect/token`, `/connect/logout`, `/.well-known/openid-configuration` y JWKS. Clientes `plataforma`, `tramites`, `demo`, `svc-demo`. `GET /api/v1/platform/issuers`.
-- **Dónde:** `services/core-api/src/Flit.Modules.Identity/**`; registro con **una línea** en `Program.cs` y en `InfrastructureExtensions.cs` (R5); tablas de OpenIddict con **turno de migración** (R6); paquete OpenIddict en PR propio de `Directory.Packages.props`.
+- **Dónde:** `services/core-api/src/Flit.Modules.Identity/**`; registro con **una línea** en `Program.cs` y en `InfrastructureExtensions.cs` (R5); tablas de OpenIddict con migración (R6); paquete OpenIddict en PR propio de `Directory.Packages.props`.
 - **Hecho cuando:** en DEV, detrás de `Suite:Oidc:Enabled`, un cliente de prueba obtiene un token por authorization code + PKCE y otro por client credentials.
 - **Pruebas:** integración del flujo completo contra PostgreSQL real.
 
