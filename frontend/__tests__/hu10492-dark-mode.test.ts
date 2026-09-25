@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { readDesignCss } from "./helpers/read-design-css";
 
 /**
  * HU #10492 — Modo oscuro: uniformar bordes y completar tema en pantallas incompletas.
@@ -79,7 +80,7 @@ describe("HU #10492 — AC2: pantalla RBAC con tema oscuro completo", () => {
 });
 
 describe("HU #10492 — AC3: token de borde = gris de marca en claro, white/10 en oscuro", () => {
-  const css = readFileSync(path.join(FE_ROOT, "app/globals.css"), "utf8");
+  const css = readDesignCss();
 
   it("happy path: :root define --border como el oklch de #DFE5ED", () => {
     expect(css).toMatch(/--border:\s*oklch\(0\.9197 0\.0127 255\.51\)/);
