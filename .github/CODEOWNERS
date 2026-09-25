@@ -1,5 +1,5 @@
 # CODEOWNERS de la FLIT Suite (tarea L-03). Fuente: docs/suite/reglas-trabajo-paralelo.md, regla R4.
-# Frente A · Identidad y Trámites en la suite → @WillynLondono
+# Frente A · Identidad y Trámites en la suite → @juan-montoya-flit
 # Frente B · Productos, habilitación y hub   → @scardenas-flit
 # Frente C · Consultas, SDK y plantilla       → @juan-montoya-flit
 # Líder · Infraestructura y coordinación      → @jormancopeteflit
@@ -19,18 +19,18 @@
 /docs/suite/                                                          @jormancopeteflit
 
 # --- Frente A ---
-/services/core-api/src/Flit.Gateway/                                  @WillynLondono
-/services/core-api/src/Flit.Modules.Identity/                         @WillynLondono
-/services/core-api/src/Flit.Modules.Security.Application/Auth/        @WillynLondono
-/services/core-api/src/Flit.Infrastructure/Security/                  @WillynLondono
-/services/core-api/src/Flit.Api/Authorization/                        @WillynLondono
-/services/core-api/src/Flit.Api/Middleware/Domain*                    @WillynLondono
-/packages/auth/                                                       @WillynLondono
-/frontend/lib/auth/                                                   @WillynLondono
-/frontend/lib/api/client.ts                                           @WillynLondono
-/frontend/lib/api/base-url.ts                                         @WillynLondono
-/frontend/middleware.ts                                               @WillynLondono
-/docs/suite/frentes/frente-a-*                                        @WillynLondono
+/services/core-api/src/Flit.Gateway/                                  @juan-montoya-flit
+/services/core-api/src/Flit.Modules.Identity/                         @juan-montoya-flit
+/services/core-api/src/Flit.Modules.Security.Application/Auth/        @juan-montoya-flit
+/services/core-api/src/Flit.Infrastructure/Security/                  @juan-montoya-flit
+/services/core-api/src/Flit.Api/Authorization/                        @juan-montoya-flit
+/services/core-api/src/Flit.Api/Middleware/Domain*                    @juan-montoya-flit
+/packages/auth/                                                       @juan-montoya-flit
+/frontend/lib/auth/                                                   @juan-montoya-flit
+/frontend/lib/api/client.ts                                           @juan-montoya-flit
+/frontend/lib/api/base-url.ts                                         @juan-montoya-flit
+/frontend/middleware.ts                                               @juan-montoya-flit
+/docs/suite/frentes/frente-a-*                                        @juan-montoya-flit
 
 # --- Frente B ---
 /services/core-api/src/Flit.Modules.Platform/                         @scardenas-flit
@@ -63,6 +63,6 @@
 
 # --- Excepciones más específicas (van al final) ---
 # El login del hub vive dentro de frontend-hub, pero es del frente A.
-/frontend-hub/app/(auth)/                                             @WillynLondono
+/frontend-hub/app/(auth)/                                             @juan-montoya-flit
 # docs/suite/frentes/a-* (inventarios y espigas del frente A).
-/docs/suite/frentes/a-*                                               @WillynLondono
+/docs/suite/frentes/a-*                                               @juan-montoya-flit
