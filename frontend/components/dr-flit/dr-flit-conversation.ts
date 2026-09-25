@@ -692,12 +692,40 @@ export function citationToHelpResult(citation: DrFlitCitation): DrFlitHelpResult
   };
 }
 
-/** HU #12926 AC1 — respuesta del LLM con `status: ok`. */
+/**
+ * Respuesta del LLM con `status: ok`, bifurcada por intención (ADR-0060 §11):
+ * <ul>
+ *   <li>`duda` (HU #12926) — reply + tarjetas de cita;</li>
+ *   <li>`gestion` (HU #12927) — a la sesión Gestión de siempre: con sugerencia, directo a pedir el
+ *   valor de ese tipo de búsqueda; sin ella, el menú para que el usuario elija;</li>
+ *   <li>`no_claro` (HU #12927) — la pregunta de seguimiento del modelo, y se sigue escribiendo;</li>
+ *   <li>`soporte` — canales de soporte (el formulario de caso llega con la Feature #12917).</li>
+ * </ul>
+ */
 export function applyChatSuccess(
   state: DrFlitChatState,
   response: DrFlitChatResponse,
 ): DrFlitChatState {
   const botMsg: DrFlitMessage = { id: createMessageId(), role: "bot", text: response.reply };
+
+  if (response.intent === "gestion") {
+    return applyChatGestion({ ...state, messages: [...state.messages, botMsg], chatUsage: response.usage }, response);
+  }
+
+  if (response.intent === "soporte") {
+    return {
+      ...state,
+      ...clearActionState(),
+      messages: [...state.messages, botMsg],
+      phase: "showing_support",
+      session: "ayuda",
+      showSessionMenu: false,
+      showSupportInfo: true,
+      showBackToSearch: true,
+      chatUsage: response.usage,
+    };
+  }
+
   const helpResults = response.intent === "duda" ? response.citations.map(citationToHelpResult) : [];
   return {
     ...state,
@@ -711,6 +739,37 @@ export function applyChatSuccess(
     showBackToSearch: true,
     helpResults: helpResults.length > 0 ? helpResults : null,
     chatUsage: response.usage,
+  };
+}
+
+/**
+ * HU #12927 AC1/AC2 — intención de búsqueda. Reutiliza la sesión Gestión existente sin fase nueva: con
+ * `suggestGestionIntent` pide directamente el valor (mismo estado que deja `applySelectIntent`); sin
+ * sugerencia, deja el menú para que el usuario elija el tipo de búsqueda.
+ */
+function applyChatGestion(state: DrFlitChatState, response: DrFlitChatResponse): DrFlitChatState {
+  const suggestion = response.suggestGestionIntent;
+  const selected = suggestion ? applySelectIntent(state, suggestion) : null;
+  if (selected) {
+    // applySelectIntent simula el clic del usuario en el menú («Buscar por placa»); aquí el usuario no
+    // hizo clic, así que se conserva solo la pregunta del bot por el valor.
+    const [, prompt] = selected.next.messages.slice(-2);
+    return {
+      ...selected.next,
+      messages: [...state.messages, ...(prompt ? [prompt] : [])],
+      showBackToSearch: true,
+      chatUsage: state.chatUsage,
+    };
+  }
+
+  return {
+    ...state,
+    ...clearActionState(),
+    phase: "idle",
+    session: "gestion",
+    showSessionMenu: true,
+    showSupportInfo: false,
+    showBackToSearch: false,
   };
 }
 

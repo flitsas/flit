@@ -188,6 +188,20 @@ public sealed class DrFlitAssistantTests
     }
 
     [Fact]
+    public async Task HU12927_GestionConTarget_LlegaAlResultado()
+    {
+        CounterAllows(2);
+        _model.CompleteAsync(default!, default!, TestContext.Current.CancellationToken)
+            .ReturnsForAnyArgs(new DrFlitModelCallResult(
+                DrFlitModelCallStatus.Ok, """{"intent":"gestion","reply":"Te llevo a buscar por placa.","gestionTarget":"placa"}"""));
+
+        var result = await Assistant().AskAsync(Ask(), TestContext.Current.CancellationToken);
+
+        result.Intent.Should().Be(DrFlitIntent.Gestion);
+        result.GestionTarget.Should().Be("placa");
+    }
+
+    [Fact]
     public void StatusWire_CoincideConElContrato()
     {
         DrFlitChatStatus.Ok.ToWire().Should().Be("ok");

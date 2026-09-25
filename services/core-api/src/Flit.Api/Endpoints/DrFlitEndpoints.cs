@@ -212,7 +212,7 @@ public static class DrFlitEndpoints
         Reply: result.Reply,
         Citations: [.. result.Citations.Select(a => new DrFlitCitationResponse(
             a.Slug, a.Title, a.Href, a.SourceHref, a.PrimarySource))],
-        SuggestGestionIntent: null,
+        SuggestGestionIntent: result.GestionTarget,
         Usage: new DrFlitUsageResponse(result.MessagesUsedToday, result.DailyLimit));
 
     private static IResult BadRequest(string detail) =>

@@ -297,6 +297,17 @@ public sealed class DrFlitEndpointsTests
     }
 
     [Fact]
+    public async Task HU12927_Gestion_DevuelveSuggestGestionIntent()
+    {
+        ModelReturns(DrFlitModelCallStatus.Ok, """{"intent":"gestion","reply":"Te llevo a buscar por VIN.","gestionTarget":"vin"}""");
+
+        var (_, body) = await Post(Ask("busca el vin 9BWZZZ377VT004251"));
+
+        body.GetProperty("intent").GetString().Should().Be("gestion");
+        body.GetProperty("suggestGestionIntent").GetString().Should().Be("vin");
+    }
+
+    [Fact]
     public async Task SinSub_401()
     {
         var ctx = new DefaultHttpContext

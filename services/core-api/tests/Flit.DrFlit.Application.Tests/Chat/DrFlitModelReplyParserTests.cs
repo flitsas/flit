@@ -131,4 +131,40 @@ public sealed class DrFlitModelReplyParserTests
 
         DrFlitModelReplyParser.Parse(raw, Catalog).Should().BeNull();
     }
+
+    // ── HU #12927 — búsqueda sugerida para la intención gestión ────────────────────────
+
+    [Theory]
+    [InlineData("placa")]
+    [InlineData("vin")]
+    [InlineData("tramite")]
+    [InlineData("cliente")]
+    public void Parse_GestionConTargetValido_LoConserva(string target)
+    {
+        var raw = $$"""{"intent":"gestion","reply":"Te llevo a la búsqueda.","gestionTarget":"{{target}}"}""";
+
+        DrFlitModelReplyParser.Parse(raw, Catalog)!.GestionTarget.Should().Be(target);
+    }
+
+    [Theory]
+    [InlineData("""{"intent":"gestion","reply":"Te llevo.","gestionTarget":null}""")]
+    [InlineData("""{"intent":"gestion","reply":"Te llevo."}""")]
+    [InlineData("""{"intent":"gestion","reply":"Te llevo.","gestionTarget":"PLACA"}""")]
+    [InlineData("""{"intent":"gestion","reply":"Te llevo.","gestionTarget":"borrar-todo"}""")]
+    [InlineData("""{"intent":"gestion","reply":"Te llevo.","gestionTarget":7}""")]
+    public void Parse_GestionSinTargetValido_NoDegradaYQuedaNull(string raw)
+    {
+        var reply = DrFlitModelReplyParser.Parse(raw, Catalog);
+
+        reply!.Intent.Should().Be(DrFlitIntent.Gestion);
+        reply.GestionTarget.Should().BeNull();
+    }
+
+    [Fact]
+    public void Parse_TargetEnOtraIntencion_SeIgnora()
+    {
+        const string raw = """{"intent":"soporte","reply":"Te ayudo.","gestionTarget":"placa"}""";
+
+        DrFlitModelReplyParser.Parse(raw, Catalog)!.GestionTarget.Should().BeNull();
+    }
 }

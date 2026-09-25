@@ -79,7 +79,7 @@ public sealed class DrFlitAssistant(
             usage?.CacheReadInputTokens ?? 0, usage?.CacheCreationInputTokens ?? 0);
 
         return new DrFlitChatResult(
-            DrFlitChatStatus.Ok, reply.Intent, reply.Reply, reply.Citations, consumption.UsedToday, limit);
+            DrFlitChatStatus.Ok, reply.Intent, reply.Reply, reply.Citations, consumption.UsedToday, limit, reply.GestionTarget);
     }
 
     private static DrFlitChatResult Degraded(int usedToday, int limit) =>

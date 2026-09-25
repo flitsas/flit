@@ -8,10 +8,15 @@ namespace Flit.DrFlit.Application.Chat;
 /// Artículos citados que SÍ existen en el catálogo, sin duplicados y en el orden en que los citó el
 /// modelo. Solo se rellena para <see cref="DrFlitIntent.Duda"/>.
 /// </param>
+/// <param name="GestionTarget">
+/// HU #12927 — tipo de búsqueda que sugiere el modelo para <see cref="DrFlitIntent.Gestion"/>
+/// (<c>placa</c>, <c>vin</c>, <c>tramite</c> o <c>cliente</c>); <c>null</c> si no aplica o no es válido.
+/// </param>
 public sealed record DrFlitModelReply(
     DrFlitIntent Intent,
     string Reply,
-    IReadOnlyList<DrFlitManualArticle> Citations);
+    IReadOnlyList<DrFlitManualArticle> Citations,
+    string? GestionTarget = null);
 
 /// <summary>
 /// Valida server-side la salida cruda del modelo (HU #12918, ADR-0060 §8.2.5). No confía en nada de lo
@@ -66,6 +71,9 @@ public static class DrFlitModelReplyParser
             if (cited is null)
                 return null;
 
+            if (intent == DrFlitIntent.Gestion)
+                return new DrFlitModelReply(intent, reply, [], ReadGestionTarget(root));
+
             if (intent != DrFlitIntent.Duda)
                 return new DrFlitModelReply(intent, reply, []);
 
@@ -89,6 +97,20 @@ public static class DrFlitModelReplyParser
             return null;
         }
     }
+
+    /// <summary>Valores aceptados de <c>gestionTarget</c>: los mismos intents de la sesión Gestión del frontend.</summary>
+    private static readonly HashSet<string> GestionTargets = new(StringComparer.Ordinal) { "placa", "vin", "tramite", "cliente" };
+
+    /// <summary>
+    /// <c>gestionTarget</c> es una sugerencia, no parte del contrato duro: ausente, null o fuera de la
+    /// lista se ignora (el frontend deja elegir el tipo de búsqueda) sin degradar la respuesta.
+    /// </summary>
+    private static string? ReadGestionTarget(JsonElement root) =>
+        root.TryGetProperty("gestionTarget", out var prop)
+        && prop.ValueKind == JsonValueKind.String
+        && GestionTargets.Contains(prop.GetString()!)
+            ? prop.GetString()
+            : null;
 
     /// <summary>
     /// <c>citedSlugs</c> es opcional (ausente o null ⇒ vacío). Si viene, tiene que ser un arreglo de

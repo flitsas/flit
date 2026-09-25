@@ -41,13 +41,15 @@ public sealed record DrFlitChatRequest(
 /// <summary>Respuesta del chat lista para serializar.</summary>
 /// <param name="Intent">Intención clasificada; <c>null</c> cuando no hubo respuesta válida del LLM.</param>
 /// <param name="Citations">Artículos citados y verificados contra el catálogo.</param>
+/// <param name="GestionTarget">HU #12927 — búsqueda sugerida para la intención gestión, o <c>null</c>.</param>
 public sealed record DrFlitChatResult(
     DrFlitChatStatus Status,
     DrFlitIntent? Intent,
     string Reply,
     IReadOnlyList<DrFlitManualArticle> Citations,
     int MessagesUsedToday,
-    int DailyLimit);
+    int DailyLimit,
+    string? GestionTarget = null);
 
 /// <summary>
 /// Ensamblador del chat de DR. FLIT (HU #12919): tope diario + manual + LLM + validación + degradación.

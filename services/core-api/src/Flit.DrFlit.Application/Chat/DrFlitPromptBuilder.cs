@@ -42,13 +42,15 @@ public static class DrFlitPromptBuilder
         - "soporte": el usuario reporta un error, algo no funciona, o pide ayuda humana, hablar con
           alguien o radicar un caso.
         - "gestion": el usuario quiere buscar o consultar un trámite, placa, VIN o cliente específico (no
-          es una pregunta de "cómo se hace algo").
+          es una pregunta de "cómo se hace algo"). Indica en "gestionTarget" por qué dato quiere buscar:
+          "placa", "vin", "tramite" (número de radicado) o "cliente" (documento o nombre). Si no es
+          claro, usa null. En "reply" dile brevemente que lo llevas a la búsqueda.
         - "no_claro": no puedes determinar la intención con confianza suficiente. Responde con UNA
           pregunta breve de seguimiento para aclarar.
 
         Responde SIEMPRE con un único objeto JSON, sin ningún texto antes ni después y sin bloques de
         código:
-        {"intent": "duda" | "soporte" | "gestion" | "no_claro", "reply": "tu respuesta en español, tono cercano, máximo unas 120 palabras", "citedSlugs": ["slug-1"]}
+        {"intent": "duda" | "soporte" | "gestion" | "no_claro", "reply": "tu respuesta en español, tono cercano, máximo unas 120 palabras", "citedSlugs": ["slug-1"], "gestionTarget": "placa" | "vin" | "tramite" | "cliente" | null}
 
         Si no encuentras respaldo en el MANUAL para una pregunta de tipo "duda", dilo en "reply" (por
         ejemplo "no encuentro eso en la documentación, ¿quieres que te conecte con soporte?") y deja
