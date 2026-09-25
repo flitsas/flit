@@ -10395,6 +10395,88 @@ paths:
         "403": { description: Sin permiso (requiere SuperAdmin). }
         "404": { description: Plantilla inexistente. Sin cuerpo. }
 
+  /api/v1/dr-flit/chat:
+    post:
+      tags: [DR. FLIT]
+      operationId: drFlitChat
+      summary: Clasifica la intención del mensaje libre y responde dudas citando el manual
+      description: >
+        Épica #12718, HU #12922 (ADR-0060 §5.1). Cualquier usuario autenticado. El tope diario
+        (`Anthropic:DrFlitDailyMessageLimit`) se cuenta por tenant y usuario; para un usuario de
+        compañía el tenant sale del token (el header se exige pero no cambia el cupo), para
+        SuperAdmin sale del header. LLM caído, salida fuera de contrato o manual no disponible
+        responden 200 con `status: degraded`, `intent: no_claro` y `reply` vacío; el tope
+        alcanzado responde 200 con `status: rate_limited`, sin llamar al LLM. Nunca 5xx por esas
+        causas. El texto del mensaje y de la respuesta no se loguea.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, minLength: 1, maxLength: 2000 }
+                history:
+                  type: array
+                  maxItems: 12
+                  description: Últimos turnos de la conversación (sessionStorage del cliente), del más viejo al más nuevo.
+                  items:
+                    type: object
+                    required: [role, text]
+                    properties:
+                      role: { type: string, enum: [user, assistant] }
+                      text: { type: string, minLength: 1, maxLength: 2000 }
+                routeScope:
+                  type: string
+                  nullable: true
+                  description: Módulo o ruta actual. Aceptado por contrato; hoy no se usa.
+      responses:
+        "200":
+          description: Respuesta del chat (ok, degraded o rate_limited).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, intent, reply, citations, usage]
+                properties:
+                  status: { type: string, enum: [ok, degraded, rate_limited] }
+                  intent: { type: string, enum: [duda, soporte, gestion, no_claro] }
+                  reply: { type: string }
+                  citations:
+                    type: array
+                    description: Solo con intent duda. Cada slug fue verificado contra el catálogo del manual.
+                    items:
+                      type: object
+                      required: [slug, title, href, primarySource]
+                      properties:
+                        slug: { type: string }
+                        title: { type: string }
+                        href: { type: string, example: /manual/1-gestor/2-crear-tramite }
+                        sourceHref: { type: string, nullable: true }
+                        primarySource: { type: boolean }
+                  suggestGestionIntent:
+                    type: string
+                    nullable: true
+                    enum: [placa, vin, tramite, cliente, null]
+                  usage:
+                    type: object
+                    required: [messagesUsedToday, dailyLimit]
+                    properties:
+                      messagesUsedToday: { type: integer }
+                      dailyLimit: { type: integer }
+        "400":
+          description: Falta X-Tenant-Id, mensaje vacío o > 2000, historial > 12 turnos o turno inválido. No consume tope ni llama al LLM.
+        "401": { description: No autenticado. }
+        "403": { description: Usuario de compañía sin tenant en el token. }
+
 components:
   securitySchemes:
     bearerAuth:

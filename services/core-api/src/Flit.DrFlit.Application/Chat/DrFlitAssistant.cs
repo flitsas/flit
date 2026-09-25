@@ -26,9 +26,11 @@ public sealed class DrFlitAssistant(
         "Llegaste al límite de mensajes con DR. FLIT por hoy. Mañana puedes volver a escribirme; mientras tanto, " +
         "puedes buscar trámites, consultar el manual o generar un caso de soporte desde el menú.";
 
-    /// <summary>Respuesta degradada. El frontend la acompaña con los resultados de su buscador local.</summary>
-    public const string DegradedReply =
-        "En este momento no puedo responderte con el asistente. Te muestro lo que encontré en el manual.";
+    /// <summary>
+    /// Respuesta degradada: vacía a propósito (contrato de la HU #12922). El texto lo pone el frontend
+    /// junto con los resultados de su buscador local, que es quien sí tiene algo que mostrar.
+    /// </summary>
+    public const string DegradedReply = "";
 
     public async Task<DrFlitChatResult> AskAsync(DrFlitChatRequest request, CancellationToken ct)
     {

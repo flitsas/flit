@@ -12,6 +12,7 @@
     <ProjectReference Include="..\Flit.Admin.Application\Flit.Admin.Application.csproj" />
     <ProjectReference Include="..\Flit.Admin.Domain\Flit.Admin.Domain.csproj" />
     <ProjectReference Include="..\Flit.Analytics.Application\Flit.Analytics.Application.csproj" />
+    <ProjectReference Include="..\Flit.DrFlit.Application\Flit.DrFlit.Application.csproj" />
     <ProjectReference Include="..\Flit.Infrastructure\Flit.Infrastructure.csproj" />
     <ProjectReference Include="..\Flit.Tramites.Application\Flit.Tramites.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
@@ -25,6 +26,8 @@
          AdminGeneracionDocumentalEndpoints para verificar el contrato de respuesta
          ({ id, status } en application/json, nunca application/pdf). -->
     <InternalsVisibleTo Include="Flit.Admin.Tests" />
+    <!-- HU #12922 — DrFlitEndpointsTests invoca el delegate interno del chat. -->
+    <InternalsVisibleTo Include="Flit.Infrastructure.Tests" />
   </ItemGroup>
 
   <ItemGroup>
