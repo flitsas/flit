@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { DR_FLIT_GESTION_INTENTS, type DrFlitIntentId } from "./dr-flit-intents";
 
 export function DrFlitSuggestions({
@@ -40,7 +40,7 @@ export function DrFlitSuggestions({
               }}
             >
               <span>{intent.label}</span>
-              <ArrowUpRight
+              <ChevronRight
                 className="h-4 w-4 shrink-0"
                 style={{ color: "var(--dr-flit-brand-blue)" }}
                 aria-hidden="true"
