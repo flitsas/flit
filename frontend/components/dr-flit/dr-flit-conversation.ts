@@ -13,6 +13,7 @@ import {
   buildHelpIntro,
   buildHelpValuePrompt,
   buildNormativaIntro,
+  buildQuickManualIntro,
   buildSearchError,
   buildSupportIntro,
   buildTramitesIntro,
@@ -33,6 +34,12 @@ import type {
   DrFlitTramiteResult,
   DrFlitValidacionResult,
 } from "./dr-flit-types";
+import type {
+  DrFlitChatResponse,
+  DrFlitChatTurn,
+  DrFlitChatUsage,
+  DrFlitCitation,
+} from "./dr-flit-chat-types";
 
 export type DrFlitMessageRole = "bot" | "user";
 
@@ -52,7 +59,12 @@ export type DrFlitPhase =
   | "showing_validaciones"
   | "showing_help"
   | "showing_support"
-  | "error";
+  | "error"
+  // ── Épica #12718 (ADR-0060 §11) — chat con LLM ──
+  /** Esperando la respuesta de POST /dr-flit/chat. */
+  | "chat_loading"
+  /** Respuesta del LLM (status ok), con o sin citas del manual. */
+  | "showing_chat_reply";
 
 export interface DrFlitChatState {
   messages: DrFlitMessage[];
@@ -73,6 +85,11 @@ export interface DrFlitChatState {
   manualHomeHref: string | null;
   isTyping: boolean;
   pendingClientBranch: DrFlitClientBranch | null;
+  /**
+   * HU #12926/#12928 — uso del tope diario que devolvió la última respuesta del chat. Opcional: las
+   * conversaciones guardadas en sessionStorage antes de la épica no lo traen.
+   */
+  chatUsage?: DrFlitChatUsage | null;
 }
 
 let messageSeq = 0;
@@ -311,6 +328,12 @@ export function applySelectHelpOption(
 export interface UserTextOptions {
   /** HU-F — audiencias del manual visibles para el perfil (`visibleAudiences`). Sin ellas, todo. */
   helpAudiences?: readonly ManualAudience[];
+  /**
+   * HU #12926 — el texto libre fuera de un flujo guiado va al chat con LLM. Apagado (flag
+   * `NEXT_PUBLIC_DR_FLIT_CHAT_ENABLED=false`), se conserva el comportamiento previo: pedir que elija
+   * una opción del menú.
+   */
+  chatEnabled?: boolean;
 }
 
 function applyHelpQuery(
@@ -373,6 +396,10 @@ export function applyUserText(
       text,
       options,
     );
+  }
+
+  if ((state.phase !== "awaiting_value" || !state.pendingIntent) && options.chatEnabled) {
+    return applyChatSend({ ...state, messages: [...state.messages, userMsg] }, text);
   }
 
   if (state.phase !== "awaiting_value" || !state.pendingIntent) {
@@ -601,8 +628,113 @@ export function isComposerEnabled(state: DrFlitChatState): boolean {
   return (
     state.phase === "idle" ||
     state.phase === "awaiting_value" ||
-    state.phase === "awaiting_help_query"
+    state.phase === "awaiting_help_query" ||
+    state.phase === "showing_chat_reply"
   );
+}
+
+// ── Épica #12718 (ADR-0060 §11) — chat con LLM ─────────────────────────────────────────────────
+
+/** Máximo de turnos previos que acepta el backend (`history.maxItems`). */
+export const DR_FLIT_CHAT_HISTORY_LIMIT = 12;
+
+/** Máximo de caracteres por turno (`maxLength` del contrato). */
+export const DR_FLIT_CHAT_TURN_MAX_LENGTH = 2000;
+
+/**
+ * HU #12926 — el texto libre entra a `chat_loading`; el efecto de `useDrFlitChat` llama al backend.
+ * `state` ya trae el mensaje del usuario al final.
+ */
+export function applyChatSend(state: DrFlitChatState, text: string): DrFlitChatState {
+  return {
+    ...state,
+    ...clearActionState(),
+    phase: "chat_loading",
+    queryValue: text,
+    showSessionMenu: false,
+    showSupportInfo: false,
+    showBackToSearch: false,
+    isTyping: true,
+  };
+}
+
+/**
+ * HU #12926 AC3 — turnos previos al mensaje en curso, acotados a los últimos
+ * {@link DR_FLIT_CHAT_HISTORY_LIMIT}: el payload no crece con la conversación. El último mensaje del
+ * usuario (el que se está enviando) no va aquí: viaja como `message`.
+ */
+export function buildChatHistory(state: DrFlitChatState): DrFlitChatTurn[] {
+  const previous = state.messages.slice(0, -1);
+  return previous
+    .filter((m) => m.text.trim().length > 0)
+    .slice(-DR_FLIT_CHAT_HISTORY_LIMIT)
+    .map((m) => ({
+      role: m.role === "user" ? "user" : "assistant",
+      text: m.text.slice(0, DR_FLIT_CHAT_TURN_MAX_LENGTH),
+    }));
+}
+
+/**
+ * Tarjeta del manual a partir de una cita del LLM. El backend ya validó que el slug existe; del
+ * catálogo local salen la audiencia y el resumen que la tarjeta muestra.
+ */
+export function citationToHelpResult(citation: DrFlitCitation): DrFlitHelpResult {
+  const article = getArticleBySlug(citation.slug);
+  if (article) return toHelpResult(article);
+  return {
+    slug: citation.slug,
+    title: citation.title,
+    audience: "Todos",
+    summary: "",
+    href: citation.href,
+    ...(citation.sourceHref ? { sourceHref: citation.sourceHref, sourceLabel: "Abrir la fuente" } : {}),
+    ...(citation.primarySource ? { primarySource: true } : {}),
+  };
+}
+
+/** HU #12926 AC1 — respuesta del LLM con `status: ok`. */
+export function applyChatSuccess(
+  state: DrFlitChatState,
+  response: DrFlitChatResponse,
+): DrFlitChatState {
+  const botMsg: DrFlitMessage = { id: createMessageId(), role: "bot", text: response.reply };
+  const helpResults = response.intent === "duda" ? response.citations.map(citationToHelpResult) : [];
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "showing_chat_reply",
+    session: "ayuda",
+    queryValue: state.queryValue,
+    showSessionMenu: false,
+    showSupportInfo: false,
+    showBackToSearch: true,
+    helpResults: helpResults.length > 0 ? helpResults : null,
+    chatUsage: response.usage,
+  };
+}
+
+/**
+ * HU #12926 AC2 — el LLM no respondió (degradado, error HTTP o de red): responde el buscador local
+ * del manual, el mismo de siempre, con una nota de que es una respuesta rápida. El menú sigue ahí.
+ */
+export function applyChatDegraded(
+  state: DrFlitChatState,
+  options: UserTextOptions = {},
+  usage: DrFlitChatUsage | null = state.chatUsage ?? null,
+): DrFlitChatState {
+  const text = state.queryValue ?? "";
+  const next = applyHelpQuery(state, text, options);
+  const count = next.helpResults?.length ?? 0;
+  const intro = next.messages.at(-1);
+  return {
+    ...next,
+    messages: [
+      ...next.messages.slice(0, -1),
+      { id: intro?.id ?? createMessageId(), role: "bot", text: buildQuickManualIntro(text, count) },
+    ],
+    chatUsage: usage,
+  };
 }
 
 /** True si hay una interacción en curso (no el menú principal Gestión/Ayuda). */

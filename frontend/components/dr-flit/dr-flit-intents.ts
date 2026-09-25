@@ -89,6 +89,13 @@ export const DR_FLIT_SUPPORT_PHONE: string | null = envOrNull(
 export const DR_FLIT_SUPPORT_CASE_URL =
   envOrNull(process.env.NEXT_PUBLIC_DR_FLIT_SUPPORT_CASE_URL) ?? "https://flitsas.com.co/SOPORTE/";
 
+/**
+ * Épica #12718 — interruptor de apagado rápido del chat con LLM (`NEXT_PUBLIC_DR_FLIT_CHAT_ENABLED`,
+ * se hornea en build). Encendido por defecto; con `false` el texto libre vuelve a pedir que se elija
+ * una opción del menú, como antes de la épica.
+ */
+export const DR_FLIT_CHAT_ENABLED = process.env.NEXT_PUBLIC_DR_FLIT_CHAT_ENABLED?.trim() !== "false";
+
 export function getIntentById(id: DrFlitIntentId): DrFlitIntent | undefined {
   return DR_FLIT_GESTION_INTENTS.find((i) => i.id === id);
 }
@@ -167,6 +174,18 @@ export function buildHelpIntro(query: string, count: number): string {
   }
   const n = count === 1 ? "1 artículo" : `${count} artículos`;
   return `Encontré **${n}** en la documentación relacionados con tu consulta. Elige uno para abrirlo:`;
+}
+
+/**
+ * HU #12926 AC2 — el asistente con IA no respondió: se contesta con el buscador del manual y se dice
+ * que es una respuesta rápida, para no hacerla pasar por una respuesta del asistente.
+ */
+export function buildQuickManualIntro(query: string, count: number): string {
+  if (count === 0) {
+    return `Ahora mismo no puedo responderte con el asistente y no encontré un artículo del manual para «${query.trim()}». Prueba con otras palabras, abre el Centro de Ayuda o usa el menú.`;
+  }
+  const n = count === 1 ? "1 artículo" : `${count} artículos`;
+  return `Ahora mismo no puedo responderte con el asistente. Respuesta rápida del manual: encontré **${n}** relacionados con tu consulta.`;
 }
 
 export function buildSearchError(message: string): string {

@@ -3,10 +3,14 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
 import { resolveContextArticle, visibleAudiences } from "@/lib/manual/catalog";
+import { postDrFlitChat } from "@/lib/api/dr-flit-client";
 import { readJwtPayload, resolveDrFlitContext } from "./dr-flit-context";
-import { buildHistorialPlacaHref } from "./dr-flit-intents";
+import { buildHistorialPlacaHref, DR_FLIT_CHAT_ENABLED } from "./dr-flit-intents";
 import {
   applyBackToSearch,
+  applyChatDegraded,
+  applyChatSuccess,
+  buildChatHistory,
   applyClientBranch,
   applySearchFailure,
   applySelectHelpOption,
@@ -180,6 +184,35 @@ export function useDrFlitChat(
     state.pendingClientBranch,
   ]);
 
+  /**
+   * HU #12926 — texto libre al chat con LLM. Cualquier respuesta que no sea `ok` (o un error HTTP o de
+   * red) cae al buscador local del manual: el chat nunca se queda sin responder.
+   */
+  useEffect(() => {
+    if (state.phase !== "chat_loading") return;
+    const gen = ++searchGen.current;
+    const message = state.queryValue ?? "";
+    const history = buildChatHistory(state);
+    const helpAudiences = visibleAudiences(currentContext().role);
+
+    void (async () => {
+      try {
+        const response = await postDrFlitChat({ message, history, routeScope: routeScope ?? null });
+        if (gen !== searchGen.current) return;
+        setState((prev) =>
+          response.status === "ok"
+            ? applyChatSuccess(prev, response)
+            : applyChatDegraded(prev, { helpAudiences }, response.usage),
+        );
+      } catch {
+        if (gen !== searchGen.current) return;
+        setState((prev) => applyChatDegraded(prev, { helpAudiences }));
+      }
+    })();
+    // Solo la entrada a chat_loading dispara la llamada; el resto del estado se lee en ese momento.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase, state.queryValue]);
+
   /** Contexto de rol/red vigente; se resuelve al momento (el JWT o el alcance pueden cambiar). */
   const currentContext = useCallback(
     () => resolveDrFlitContext(readJwtPayload(), { networkActive, scope: networkScope }),
@@ -221,7 +254,9 @@ export function useDrFlitChat(
     (text: string) => {
       // HU-F — la búsqueda del manual solo devuelve artículos del perfil de quien pregunta.
       const helpAudiences = visibleAudiences(currentContext().role);
-      setState((prev) => applyUserText(prev, text, { helpAudiences }));
+      setState((prev) =>
+        applyUserText(prev, text, { helpAudiences, chatEnabled: DR_FLIT_CHAT_ENABLED }),
+      );
     },
     [currentContext],
   );
