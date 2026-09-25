@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buildDockGroups, flattenDockEntries, type DockEntryLike } from "../dockGroups";
+import {
+  buildDockGroups,
+  DOCK_GROUP_ICON,
+  DOCK_GROUP_LABEL,
+  DOCK_GROUP_ORDER,
+  DOCK_GROUP_SIDE,
+  DOCK_ITEM_GROUP,
+  flattenDockEntries,
+  type DockEntryLike,
+} from "../dockGroups";
 import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 import { LayoutGrid } from "lucide-react";
 
@@ -20,9 +29,8 @@ describe("buildDockGroups", () => {
       entry("tramites", "Trámites"),
       entry("validaciones", "Identidad"),
       entry("reportes", "Reportes"),
-      entry("ayuda", "Ayuda"),
     ]);
-    expect(groups.map((g) => g.label)).toEqual(["Trámites", "Identidad", "Reportes", "Ayuda"]);
+    expect(groups.map((g) => g.label)).toEqual(["Trámites", "Identidad", "Reportes"]);
     expect(groups[0].items).toHaveLength(1);
     expect(groups[1].items).toHaveLength(1);
     expect(groups[0].items[0].label).toBe("Trámites");
@@ -37,13 +45,14 @@ describe("buildDockGroups", () => {
     expect(groups.map((g) => g.label)).toEqual(["Trámites"]);
   });
 
-  it("Admin OT: Administración agrupa Reglas/Documentos/Requisitos; Preasignación es píldora", () => {
+  // HU #12850 (Feature #12846) — el grupo `preasignacion` se retiró del dock junto con la consola.
+  // HU12856 AC1 (Feature #12847) — Reglas y Requisitos ya no viven en el dock de ningún usuario de
+  // tenant OT: Shell.tsx dejó de empujarlos al bloque isOtUser. El grupo `administracion` sigue
+  // vivo porque Documentos, Mandatos y Validar impronta permanecen.
+  it("Admin OT: Administración agrupa Documentos/Mandatos/Validar impronta (sin Reglas/Requisitos/Configuración)", () => {
     const groups = buildDockGroups([
       entry(OT_ADM_DOCK.tramites, "Trámites"),
-      entry(OT_ADM_DOCK.rules, "Reglas"),
       entry(OT_ADM_DOCK.documents, "Documentos"),
-      entry(OT_ADM_DOCK.requirements, "Requisitos"),
-      entry(OT_ADM_DOCK.preasignacion, "Preasignación"),
       entry(OT_ADM_DOCK.usuarios, "Usuarios"),
       entry(OT_ADM_DOCK.reportes, "Reportes"),
       entry(OT_ADM_DOCK.mandatos, "Mandatos"),
@@ -51,19 +60,48 @@ describe("buildDockGroups", () => {
     ]);
     expect(groups.map((g) => g.label)).toEqual([
       "Trámites",
-      "Preasignación",
       "Reportes",
       "Usuarios",
       "Administración",
     ]);
     const admin = groups.find((g) => g.id === "administracion");
     expect(admin?.items.map((i) => i.label)).toEqual([
-      "Reglas",
       "Documentos",
-      "Requisitos",
       "Mandatos",
       "Validar impronta",
     ]);
+  });
+
+  // HU12856 AC1 — ningún mapa del dock conserva las claves retiradas de Reglas/Requisitos/
+  // Configuración (mismo patrón que la comprobación de `preasignacion`, HU12850 AC3): un mapa a
+  // medias descarta el ítem en silencio, no lo elimina visiblemente.
+  it("HU12856 AC1 — DOCK_ITEM_GROUP no conserva las claves de Reglas/Requisitos/Configuración", () => {
+    expect(Object.keys(DOCK_ITEM_GROUP)).not.toContain(OT_ADM_DOCK.rules);
+    expect(Object.keys(DOCK_ITEM_GROUP)).not.toContain(OT_ADM_DOCK.requirements);
+    expect(Object.keys(DOCK_ITEM_GROUP)).not.toContain(OT_ADM_DOCK.configuracion);
+  });
+
+  it("HU12856 AC1 — entries de Reglas/Requisitos/Configuración quedan sin agrupador (buildDockGroups las omite)", () => {
+    const groups = buildDockGroups([
+      entry(OT_ADM_DOCK.rules, "Reglas"),
+      entry(OT_ADM_DOCK.requirements, "Requisitos"),
+      entry(OT_ADM_DOCK.configuracion, "Configuración"),
+      entry(OT_ADM_DOCK.documents, "Documentos"),
+    ]);
+    // Sin grupo mapeado, la entrada no aparece en ningún bucket: solo sobrevive Documentos.
+    expect(groups.flatMap((g) => g.items.map((i) => i.label))).toEqual(["Documentos"]);
+  });
+
+  // HU12850 AC3 — DOCK_GROUP_ORDER, DOCK_GROUP_SIDE, DOCK_GROUP_LABEL, DOCK_GROUP_ICON y
+  // DOCK_ITEM_GROUP quedan consistentes: `preasignacion` no aparece en ninguno de los cinco mapas
+  // (registro doble: memoria del proyecto — un mapa a medias descarta el ítem en silencio).
+  it("HU12850 AC3 — ningún mapa del dock conserva la clave 'preasignacion'", () => {
+    expect(DOCK_GROUP_ORDER).not.toContain("preasignacion");
+    expect(Object.keys(DOCK_GROUP_SIDE)).not.toContain("preasignacion");
+    expect(Object.keys(DOCK_GROUP_LABEL)).not.toContain("preasignacion");
+    expect(Object.keys(DOCK_GROUP_ICON)).not.toContain("preasignacion");
+    expect(Object.values(DOCK_ITEM_GROUP)).not.toContain("preasignacion");
+    expect(Object.keys(OT_ADM_DOCK)).not.toContain("preasignacion");
   });
 
   it("SuperAdmin: Plataforma (con Mandatos y Notificaciones) vive anidada en Administradores", () => {
@@ -109,6 +147,21 @@ describe("buildDockGroups", () => {
       ]),
     ]);
     expect(flat.map((i) => i.label)).toEqual(["Compañías", "Mandatos", "FUR", "Notificaciones"]);
+  });
+
+  it("HU #12723 — cada agrupador declara lado izquierdo o derecho del FAB", () => {
+    expect(DOCK_GROUP_SIDE.tramites).toBe("left");
+    expect(DOCK_GROUP_SIDE.identidad).toBe("left");
+    expect(DOCK_GROUP_SIDE.reportes).toBe("left");
+    expect(DOCK_GROUP_SIDE.usuarios).toBe("right");
+    expect(DOCK_GROUP_SIDE.administracion).toBe("right");
+    expect(DOCK_GROUP_SIDE.administradores).toBe("right");
+    expect(DOCK_GROUP_SIDE.integraciones).toBe("right");
+  });
+
+  it("HU #12723 — Ayuda no está en DOCK_GROUP_ORDER (sale del dock)", () => {
+    expect(DOCK_GROUP_ORDER).not.toContain("ayuda");
+    expect(Object.keys(DOCK_GROUP_SIDE)).not.toContain("ayuda");
   });
 
   it("Integraciones agrupa Log QX e ICT, con Log ICT y Reportes ICT anidados bajo ICT", () => {

@@ -126,6 +126,11 @@ public static class ApiSecurityExtensions
             .AddPolicy(AdminAuthorization.OtModulePolicy, policy => policy
                 .RequireAuthenticatedUser()
                 .AddRequirements(new OtModuleRequirement()))
+            // HU #12859 (Feature #12848, Épica #12751) — SuperAdmin u ot_admin exclusivamente,
+            // sin el bypass de entity_type=TRANSIT_OFFICE de OtModulePolicy (solo Prelación).
+            .AddPolicy(AdminAuthorization.OtAdminOrSuperAdminPolicy, policy => policy
+                .RequireAuthenticatedUser()
+                .AddRequirements(new OtAdminOrSuperAdminRequirement()))
             // gRPC ICT: exige el service-token (esquema IctService) + scope ict.orchestration.
             .AddPolicy(IctServicePolicy, policy => policy
                 .AddAuthenticationSchemes(IctServiceScheme)

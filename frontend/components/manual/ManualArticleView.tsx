@@ -71,6 +71,42 @@ export function ManualArticleView({ article }: { article: ManualArticle }) {
         ))}
       </div>
 
+      {article.sources && article.sources.length > 0 && (
+        <section
+          className="mt-10 rounded-2xl border p-5"
+          style={{ borderColor: "var(--manual-border)", background: "var(--manual-bg)" }}
+          aria-label="Fuentes"
+        >
+          <h2
+            className="text-xs font-bold uppercase tracking-[0.14em]"
+            style={{ color: "var(--manual-text-soft)" }}
+          >
+            Fuentes
+          </h2>
+          <ul className="mt-3 space-y-2 list-none m-0 p-0">
+            {article.sources.map((src) => (
+              <li key={src.href}>
+                <a
+                  href={src.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[15px] font-semibold underline-offset-2 hover:underline"
+                  style={{ color: "var(--manual-tech)" }}
+                >
+                  {src.kind === "pdf" ? "📄 " : "🔗 "}
+                  {src.title}
+                </a>
+                {src.ref && (
+                  <span className="ml-2 text-xs" style={{ color: "var(--manual-text-soft)" }}>
+                    {src.ref}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <nav
         className="mt-12 grid gap-3 border-t pt-8 sm:grid-cols-2"
         style={{ borderColor: "var(--manual-border)" }}

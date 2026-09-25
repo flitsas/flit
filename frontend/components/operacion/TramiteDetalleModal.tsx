@@ -1,8 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AlertTriangle,
   Coins,
   Download,
   Eye,
@@ -78,6 +77,8 @@ const MODALIDAD_TITLE: Record<ProcedureFamily, string> = {
 
 type SeccionId = 'vehiculo' | 'actores' | 'documentos' | 'comercial' | 'expediente';
 type PanelTracking = 'identidad' | 'timeline' | null;
+
+export type TramiteDetalleInitialPanel = Exclude<PanelTracking, null>;
 
 const PASOS_POR_MODALIDAD: Record<
   ProcedureFamily,
@@ -176,6 +177,8 @@ export interface TramiteDetalleModalProps {
    * AC3 en vez de un error técnico con reintento.
    */
   consultaMode?: boolean;
+  /** HU #12726 (C.2) — panel de trazabilidad abierto al montar (p. ej. clic en chip de estado). */
+  initialPanel?: TramiteDetalleInitialPanel | null;
 }
 
 export function TramiteDetalleModal({
@@ -187,12 +190,15 @@ export function TramiteDetalleModal({
   onAbrirAsistente,
   readOnly: readOnlyProp = false,
   consultaMode = false,
+  initialPanel = null,
 }: TramiteDetalleModalProps) {
   const readOnly = readOnlyProp || consultaMode;
   const [detail, setDetail] = useState<ProcedureInstanceDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailReloadKey, setDetailReloadKey] = useState(0);
+  /** Instancia cuyo `detail` está en pantalla; sirve para no vaciarlo en refetch (HU #12726 C.4). */
+  const detailInstanceRef = useRef<string | null>(null);
 
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [attLoading, setAttLoading] = useState(false);
@@ -201,7 +207,14 @@ export function TramiteDetalleModal({
   const [attFueraDeAlcance, setAttFueraDeAlcance] = useState(false);
   const [attReloadKey, setAttReloadKey] = useState(0);
 
-  const [panelTracking, setPanelTracking] = useState<PanelTracking>(null);
+  const [panelTracking, setPanelTracking] = useState<PanelTracking>(
+    open && initialPanel ? initialPanel : null,
+  );
+  const [panelEpoch, setPanelEpoch] = useState({ open, initialPanel });
+  if (panelEpoch.open !== open || panelEpoch.initialPanel !== initialPanel) {
+    setPanelEpoch({ open, initialPanel });
+    if (open && initialPanel) setPanelTracking(initialPanel);
+  }
 
   // Activación/retoma de la subsanación (POST /subsanar + salto al asistente).
   const [abriendoSubsanacion, setAbriendoSubsanacion] = useState(false);
@@ -218,7 +231,7 @@ export function TramiteDetalleModal({
   if (instanceId !== seccionDe) {
     setSeccionDe(instanceId);
     setSeccion('expediente');
-    setPanelTracking(null);
+    setPanelTracking(initialPanel ?? null);
     // El modal se reutiliza entre trámites: sin esto un error de subsanación (o el "Abriendo…"
     // que quedó al navegar) reaparecería sobre el siguiente trámite que se abra.
     setAbriendoSubsanacion(false);
@@ -229,23 +242,33 @@ export function TramiteDetalleModal({
   const preview = useAttachmentPreview(instanceId, tenantId, { consultaMode });
 
   useEffect(() => {
-    if (!open || !instanceId) return;
+    if (!open || !instanceId) {
+      if (!open) detailInstanceRef.current = null;
+      return;
+    }
     let cancelled = false;
+    const instanceChanged = detailInstanceRef.current !== instanceId;
     const load = async () => {
       setLoading(true);
       setError(null);
+      // HU #12726 (C.4) — al cambiar de trámite no reutilizar el detalle anterior; en refetch
+      // del mismo id conservar datos en pantalla (skeleton/labels estables) y refrescar al terminar.
+      if (instanceChanged) setDetail(null);
       try {
         // HU #12362 — el trámite de un hijo solo existe para la cabeza en la ruta consolidada.
         const data = consultaMode
           ? await tramitesClient.getNetworkInstance(instanceId)
           : await tramitesClient.getInstance(instanceId, tenantId);
-        if (!cancelled) setDetail(data ?? null);
+        if (!cancelled) {
+          setDetail(data ?? null);
+          detailInstanceRef.current = instanceId;
+        }
       } catch (e: unknown) {
         if (!cancelled) {
           setError(
             describirErrorDeSeccion(e, consultaMode, 'No se pudo cargar el trámite.').mensaje,
           );
-          setDetail(null);
+          if (instanceChanged) setDetail(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -327,6 +350,8 @@ export function TramiteDetalleModal({
   }, [open, instanceId, tenantId, panelTracking, identidadReloadKey, consultaMode]);
 
   const reintentarDetalle = useCallback(() => setDetailReloadKey((k) => k + 1), []);
+  /** Carga inicial sin datos previos — en refetch se conserva el detalle en pantalla (C.4). */
+  const detailInitialLoad = loading && !detail;
 
   const title = item ? resolveTitle(item) : 'Detalle del trámite';
   /** HU #12362 — razón social del hijo dueño del trámite, si viaja en la fila o en el detalle. */
@@ -342,7 +367,12 @@ export function TramiteDetalleModal({
   );
   const pasoActivo = pasos[pasoActivoIndex];
   const StepIcon = pasoActivo?.Icon ?? FileText;
-  const estadoHdr = item ? detalleEstadoHeader(item.estado, item.rejectedFrom) : null;
+  const estadoVigente = detail?.status ?? item?.estado;
+  const rejectedFromVigente = detail?.rejectedFrom ?? item?.rejectedFrom;
+  const estadoHdr =
+    item && estadoVigente
+      ? detalleEstadoHeader(estadoVigente, rejectedFromVigente)
+      : null;
   const systemAttachments = attachments.filter((a) => a.source === 'system');
 
   // Subsanación: `rechazado` es el único estado con vuelta a la edición (el backend responde 409
@@ -428,13 +458,18 @@ export function TramiteDetalleModal({
                 {title}
               </h2>
               {estadoHdr ? (
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold text-white"
+                <button
+                  type="button"
+                  onClick={() => toggleTracking('timeline')}
+                  aria-pressed={panelTracking === 'timeline'}
+                  aria-label={`Estado: ${estadoHdr.label}. Ver línea de tiempo del trámite`}
+                  title="Ver línea de tiempo del trámite"
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
                   style={{ background: estadoHdr.color }}
                 >
                   <estadoHdr.Icon className="h-3.5 w-3.5" aria-hidden="true" />
                   {estadoHdr.label}
-                </span>
+                </button>
               ) : null}
               {/* HU #12575 (Feature #12565, AC1) — badge SECUNDARIO de sub-estado de revocatoria:
                   ortogonal al chip principal de arriba (que sigue "Aprobado", ADR-0022). Reutiliza
@@ -514,7 +549,7 @@ export function TramiteDetalleModal({
       // HU #12362 — en consulta las secciones leen del detalle consolidado (actores, campos) en
       // vez de pedir por rutas propias que el servidor rechaza para un trámite de un hijo.
       detalle={detail}
-      detalleLoading={loading}
+      detalleLoading={detailInitialLoad}
       detalleError={error}
       reintentarDetalle={reintentarDetalle}
     >
@@ -657,29 +692,9 @@ export function TramiteDetalleModal({
             !ofreceActivar &&
             !item.subsanacionActiva &&
             !item.isPaused ? (
-              <div
-                className="mt-2 flex items-center gap-2 rounded-xl px-4 py-2.5"
-                style={
-                  estadoHdr.pendiente
-                    ? { background: '#FEF9E7', border: '1px solid #F7E3A1' }
-                    : {
-                        background: `${estadoHdr.color}1F`,
-                        border: `1px solid ${estadoHdr.color}55`,
-                      }
-                }
-              >
-                <AlertTriangle
-                  className="h-4 w-4 shrink-0"
-                  style={{ color: estadoHdr.pendiente ? '#B7791F' : estadoHdr.color }}
-                  aria-hidden="true"
-                />
-                <p
-                  className="text-xs font-medium"
-                  style={{ color: estadoHdr.pendiente ? '#8A5E12' : estadoHdr.color }}
-                >
-                  {estadoHdr.alert}
-                </p>
-              </div>
+              <InlineAlert tone={estadoHdr.pendiente ? 'pending' : 'warning'}>
+                {estadoHdr.alert}
+              </InlineAlert>
             ) : null}
 
             <DetalleStepper
@@ -691,9 +706,9 @@ export function TramiteDetalleModal({
             <div className="mt-3 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-12">
               {panelTracking === 'timeline' ? (
                 <div className="lg:col-span-12">
-                  {loading ? (
+                  {detailInitialLoad ? (
                     <SeccionCargando etiqueta="Cargando línea de tiempo" filas={3} />
-                  ) : error ? (
+                  ) : error && !detail ? (
                     <SeccionError
                       mensaje={error}
                       contexto="la línea de tiempo"
@@ -887,9 +902,9 @@ export function TramiteDetalleModal({
                           </div>
 
                           <div className="h-full min-h-0">
-                            {loading ? (
+                            {detailInitialLoad ? (
                               <SeccionCargando etiqueta="Cargando historial" filas={3} />
-                            ) : error ? (
+                            ) : error && !detail ? (
                               <SeccionError
                                 mensaje={error}
                                 contexto="el historial de auditoría"

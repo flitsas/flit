@@ -23,6 +23,16 @@ public sealed record ConsolidadoDocumentDto(Guid AttachmentId, string Tipo, stri
 /// consolidado salía sin ese documento y el gestor no tenía forma de saber por qué. No bloquea: el
 /// consolidado se entrega igual (misma decisión que la HU #11017 con los documentos obligatorios).
 /// </param>
+/// <param name="DefinitivoPorEstadoFinal">
+/// HU #12785 (AC3/AC5) — <c>true</c> cuando el trámite está en estado final (aprobado, anulado,
+/// revocado): el PDF devuelto es la documentación definitiva que el organismo tuvo a la vista y NO se
+/// regenera aunque la bandera de vigencia esté abajo. Campo nuevo y opcional: las rutas de generación
+/// existentes lo dejan en <c>false</c>.
+/// </param>
+/// <param name="Modo">
+/// HU #12785 — cómo resolvió la ruta de entrega el documento (<see cref="ConsolidadoEntregaModos"/>).
+/// <c>null</c> en las rutas de generación existentes (POST), que no pasan por la entrega.
+/// </param>
 public sealed record GenerarConsolidadoResult(
     ConsolidadoDocumentDto Document,
     bool Regenerado = true,
@@ -31,7 +41,9 @@ public sealed record GenerarConsolidadoResult(
     // negarle el documento sin explicacion.
     bool Incompleto = false,
     IReadOnlyList<string>? DocumentosFaltantes = null,
-    IReadOnlyList<string>? AvisosCascada = null);
+    IReadOnlyList<string>? AvisosCascada = null,
+    bool DefinitivoPorEstadoFinal = false,
+    string? Modo = null);
 
 /// <summary>
 /// Regenera los documentos "en caliente" del expediente del wizard (FUR + certificados generados)
@@ -57,7 +69,8 @@ public interface IImprontaAutoGenerator
 /// Genera el expediente consolidado: fusiona el FUR, el certificado de identidad y los demás adjuntos
 /// del trámite en un único PDF (tipo <c>consolidado</c>). Idempotente: re-generar reemplaza el previo.
 /// <para>Feature #11066 — no regenera el paquete documental en caliente (certificados, mandato, etc.):
-/// esos se generan al Preparar. Solo produce el FUR aquí si aún no existe. Los documentos obligatorios
+/// esos se generan al Preparar. Solo produce el FUR aquí si aún no existe (o, HU #12784, si falta el
+/// mandato que retiró un cambio de firmante — ver <c>MandatoPendienteDeRegenerar</c>). Los documentos obligatorios
 /// faltantes no impiden el consolidado: se genera marcado como incompleto.</para>
 /// </summary>
 public sealed class GenerarConsolidadoHandler(
@@ -224,7 +237,7 @@ public sealed class GenerarConsolidadoHandler(
         // entradas de `ExpedienteVisor` no. Arreglarlo en el llamador habría dejado el mismo defecto
         // latente para cualquier consumidor futuro; arreglarlo aquí cierra la clase, no la instancia.
         var faltaFur = !TieneFur(instance);
-        if (force || faltaFur)
+        if (force || faltaFur || MandatoPendienteDeRegenerar(instance))
         {
             // Sin regenerador inyectado solo se puede fallar si además NO hay FUR: con el FUR en pie
             // se sigue adelante y se fusiona lo que hay, que es el comportamiento de siempre. (Cortar
@@ -327,13 +340,10 @@ public sealed class GenerarConsolidadoHandler(
         var filename = $"consolidado_{SafeRef(instance.ReferenceNumber)}.pdf";
         var doc = new GeneratedDocument("consolidado", filename, "application/pdf", merged);
 
-        foreach (var prev in instance.Attachments.Where(a =>
-                     string.Equals(a.Tipo, doc.Tipo, StringComparison.OrdinalIgnoreCase)).ToList())
-        {
-            storage.Delete(prev.StoragePath);
-            instance.Attachments.Remove(prev);
-            repo.RemoveAttachment(prev);
-        }
+        // HU #12797 — el anterior NO se borra aquí: se sube el nuevo, se guarda, y solo entonces se
+        // retira el binario previo (ConsolidadoReemplazoSeguro). Un fallo deja el anterior intacto.
+        var previos = ConsolidadoReemplazoSeguro.Previos(instance, doc.Tipo);
+        var wizardVigenteAntes = instance.ConsolidadoWizardVigente;
 
         StoredFile stored;
         try
@@ -348,6 +358,8 @@ public sealed class GenerarConsolidadoHandler(
         {
             return (null, "storage_unavailable");
         }
+
+        ConsolidadoReemplazoSeguro.RetirarFilas(instance, repo, previos);
 
         var newAttachment = new ProcedureInstanceAttachment
         {
@@ -386,8 +398,11 @@ public sealed class GenerarConsolidadoHandler(
 
         // HU #10860 — el consolidado recién generado refleja el expediente actual: marca vigente.
         instance.ConsolidadoWizardVigente = true;
+        instance.ConsolidadoWizardGeneradoEn = now; // HU #12790 — sello UTC de generacion (misma marca que UploadedAt).
 
-        await repo.SaveChangesAsync(ct);
+        await ConsolidadoReemplazoSeguro.ConfirmarAsync(
+            instance, repo, storage, stored, newAttachment, previos,
+            () => instance.ConsolidadoWizardVigente = wizardVigenteAntes, logger, ct).ConfigureAwait(false);
 
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
         return (new GenerarConsolidadoResult(
@@ -504,6 +519,18 @@ public sealed class GenerarConsolidadoHandler(
 
     private static bool TieneFur(ProcedureInstance instance) =>
         instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// HU #12784 — hay un mandatario elegido pero ningún adjunto <c>mandato</c>: es lo que deja
+    /// <see cref="SetMandateSignerHandler"/> al cambiar el firmante (retira el mandato generado con el
+    /// anterior). Sin esta condición, con el FUR ya persistido el consolidado solo re-fusionaría y
+    /// saldría SIN mandato. Solo en estados editables: sobre un trámite radicado o final nunca se
+    /// dispara la cascada por esta vía (la documentación definitiva no se altera).
+    /// </summary>
+    internal static bool MandatoPendienteDeRegenerar(ProcedureInstance instance) =>
+        instance.MandateSignerId is not null
+        && TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva)
+        && !instance.Attachments.Any(a => string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase));
 
     private static bool TieneImpronta(ProcedureInstance instance) =>
         instance.Attachments.Any(a => a.Tipo.StartsWith("impronta", StringComparison.OrdinalIgnoreCase));

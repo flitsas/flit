@@ -24,6 +24,7 @@ import {
 } from "@/lib/api/admin-companies";
 import { isHeadTenantType, type CompanyListItem, type CompanyPagedResult } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ADMIN_BACK_LINK_CLS, ADMIN_CONTENT_SURFACE_CLS } from "@/components/admin/admin-ui-styles";
 
 const PAGE_SIZE = 20;
 
@@ -152,22 +153,15 @@ function CompaniesList() {
 
   return (
     <div className="flex min-h-screen flex-col gap-4 px-4 md:px-6 pt-6 pb-10">
-      <button
-        type="button"
-        onClick={() => router.push("/")}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
-      >
-        <ArrowLeft className="h-3.5 w-3.5" /> Volver al inicio
+      <button type="button" onClick={() => router.push("/")} className={ADMIN_BACK_LINK_CLS}>
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Volver al inicio
       </button>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <ModuleTitle
-          title="Administración de compañías"
-          subtitle="Parametriza políticas operativas y supervisa la auditoría de cada compañía B2B."
-        />
-        <CreateButton label="Crear compañía" icon={Building2} onClick={() => setCreateOpen(true)} />
-      </div>
+      <ModuleTitle
+        title="Administración de compañías"
+        subtitle="Parametriza políticas operativas y supervisa la auditoría de cada compañía B2B."
+        action={<CreateButton label="Crear compañía" icon={Building2} onClick={() => setCreateOpen(true)} />}
+      />
 
       {isSuperAdmin && (
         <ToggleSwitch
@@ -184,7 +178,7 @@ function CompaniesList() {
 
       <CompanyFiltersPanel onApply={handleApplyFilters} initialValue={filters} />
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+      <div className={ADMIN_CONTENT_SURFACE_CLS}>
         <UiStateBoundary
           status={status}
           onRetry={() => void load()}

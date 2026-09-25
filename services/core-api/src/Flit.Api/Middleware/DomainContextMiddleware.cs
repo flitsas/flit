@@ -54,7 +54,7 @@ public sealed class DomainContextMiddleware(RequestDelegate next)
 
         var host = rawHost.Trim().ToLowerInvariant();
 
-        if (ReservedHosts.IsReserved(host, options.Reserved))
+        if (ReservedHosts.IsReserved(host, options.Reserved, options.Allowed))
         {
             return DomainContext.Flit(host);
         }

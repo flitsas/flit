@@ -10,17 +10,20 @@ import {
   approveOtRevocationRequest,
   fetchActiveOtRevocationRequestDetail,
   fetchOtAttachmentPreviewUrl,
-  fetchOtBandejaCounters,
   fetchOtBandejaFilterFields,
   fetchOtBandejaHealth,
   fetchOtClientProcedure,
-  fetchOtDocuments,
   fetchOtProfile,
   generarOtConsolidadoMaestro,
+  entregarOtConsolidado,
   rejectOtClientProcedure,
   rejectOtRevocationRequest,
+  searchOtBandejaCounters,
   searchOtClientProcedures,
 } from "@/lib/api/admin-ot";
+import type { ProcedureFamily } from "@/lib/api/types/procedure-parametrization";
+import { familiaUsaEstado } from "@/lib/tramites/panelesEstado";
+import { FamiliaTabs } from "@/components/operacion/FamiliaTabs";
 import type {
   OtActiveRevocationRequestDetail,
   OtBandejaCounters,
@@ -38,6 +41,20 @@ import { COPY } from "@/lib/copy/copy-catalog";
 import { downloadFile } from "@/lib/api/download";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
+import { AvisoDocumentoFinal } from "@/components/shared/AvisoDocumentoFinal";
+import { AvisoFalloRegeneracion } from "@/components/shared/AvisoFalloRegeneracion";
+import {
+  detectarFalloRegeneracion,
+  type FalloRegeneracionConsolidado,
+} from "@/lib/tramites/fallo-regeneracion-consolidado";
+import { AvisoMaestroRadicado } from "@/components/shared/AvisoMaestroRadicado";
+import { esDocumentoDefinitivo } from "@/lib/tramites/consolidado-entrega";
+import {
+  conservarCamposConsolidadoOt,
+  esEntregaRadicadaFija,
+  mensajeEntregaOtFallida,
+  resolverFuenteMaestroOt,
+} from "@/lib/tramites/consolidado-entrega-ot";
 import { Download, RefreshCw } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
 import {
@@ -46,10 +63,8 @@ import {
 } from "./ClientProcedureDetailModal";
 import {
   assignPlateToProcedure,
-  listPlateDetails,
   releaseProcedurePlate,
   updateProcedurePlate,
-  type PlateDetail,
 } from "@/lib/api/admin-plate-ranges";
 import { OT_INPUT_CLS } from "./ot-form-styles";
 import { plateUpdateRemainingLabel } from "./ot-utils";
@@ -58,8 +73,15 @@ import {
   contadorDeEstado,
   estadoDeContador,
   revocatoriaActivaDeContador,
+  tarjetasDeFamilia,
+  ATAJOS_OT,
+  contadorDeAtajoOt,
+  type AtajoOt,
   type OtCounterKey,
 } from "./OtBandejaCounters";
+import { BusquedaRapidaAcordeon } from "@/components/operacion/BusquedaRapidaAcordeon";
+import { AvisoHayCambios } from "@/components/operacion/AvisoHayCambios";
+import { useSondeoDeConteos } from "@/hooks/useSondeoDeConteos";
 import { formatDocumentWithType } from "@/lib/display/document-number";
 import { ColumnSelector } from "@/components/atom/ColumnSelector";
 import { useUiPreferences } from "@/hooks/useUiPreferences";
@@ -419,6 +441,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [hasActiveRevocationRequestFilter, setHasActiveRevocationRequestFilter] = useState(false);
   const [counters, setCounters] = useState<OtBandejaCounters | null>(null);
   const [contadorActivo, setContadorActivo] = useState<OtCounterKey | "">("");
+  /** Epic #12686 (HU #12804) — pestaña de familia; vacío = Todos. */
+  const [familia, setFamilia] = useState<"" | ProcedureFamily>("");
+  /** Epic #12686 (HU #12807) — atajo de la búsqueda rápida; vacío = ninguno. */
+  const [atajoOt, setAtajoOt] = useState<"" | AtajoOt>("");
+  /** Epic #12686 (HU #12808) — el sondeo vio un conteo distinto al de la tabla. */
+  const [hayCambios, setHayCambios] = useState(false);
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -475,11 +503,10 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [mandatarioOptions, setMandatarioOptions] = useState<MandateSigner[]>([]);
   const [mandatarioChoice, setMandatarioChoice] = useState("");
   // Feature #10587 — asignar placa (preasignado) / revocar preasignación.
+  // HU #12852 (Feature #12846) — el modal ya no ofrece modo en-rango/fuera-de-rango: un único
+  // campo de placa libre; el payload siempre equivale a outOfRange=true (lo fija admin-plate-ranges.ts).
   const [assignTarget, setAssignTarget] = useState<OtClientProcedure | null>(null);
   const [plateInput, setPlateInput] = useState("");
-  // HU #10800 — placas disponibles del rango de la compañía (para el select) y modo de asignación.
-  const [availablePlates, setAvailablePlates] = useState<PlateDetail[]>([]);
-  const [assignMode, setAssignMode] = useState<"range" | "out">("range");
   const [revokeTarget, setRevokeTarget] = useState<OtClientProcedure | null>(null);
   const [revokePlateReason, setRevokePlateReason] = useState("");
   // HU #12577 (Feature #12565) — decidir (aprobar/rechazar) la solicitud de revocatoria ACTIVA del
@@ -561,6 +588,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     loading: boolean;
     error: string | null;
     download: { procId: string; attId: string; filename: string } | null;
+    /** HU #12787 (AC3) — el consolidado abierto es el definitivo del trámite (estado final). */
+    definitivo?: boolean;
+    /** HU #12787 (AC2) — el consolidado abierto es el maestro radicado en Quipux (fecha ISO). */
+    radicadoEn?: string | null;
+    /**
+     * HU #12799 (AC3) — la regeneración del maestro falló y se sirvió el anterior; `generadoEn` es
+     * la fecha de ese PDF conservado (vigencia de la fila).
+     */
+    fallo?: { detalle: FalloRegeneracionConsolidado; generadoEn: string | null } | null;
   }>({ open: false, title: "Consolidado", mimetype: null, url: null, loading: false, error: null, download: null });
   // Diagnóstico de bandeja (R09): entregados hacia el OT que no aparecen por falta de grant.
   const [health, setHealth] = useState<OtBandejaHealth | null>(null);
@@ -673,6 +709,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
    */
   const buildListQuery = useCallback(
     (): OtClientProceduresParams => ({
+      familia: familia || undefined,
       status: statusFilter || undefined,
       hasActiveRevocationRequest: hasActiveRevocationRequestFilter || undefined,
       condiciones: appliedCondiciones.length > 0 ? appliedCondiciones : undefined,
@@ -685,6 +722,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       sortDir,
     }),
     [
+      familia,
       statusFilter,
       hasActiveRevocationRequestFilter,
       appliedCondiciones,
@@ -708,7 +746,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     // Mismo blindaje que en `load`: la tira es orientativa y ni un fallo de red ni uno SÍNCRONO
     // (el módulo sin esa función en una prueba) pueden interrumpir la decisión que acaba de cuajar.
     try {
-      fetchOtBandejaCounters(undefined, transitOfficeId ? { transitOfficeId } : undefined)
+      // Epic #12686 — bajo los mismos filtros que la tabla, o la tarjeta prometería otras filas.
+      searchOtBandejaCounters(
+        buildListQuery(),
+        undefined,
+        transitOfficeId ? { transitOfficeId } : undefined,
+      )
         .then(setCounters)
         .catch(() => {
           /* conserva el último valor conocido */
@@ -716,7 +759,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     } catch {
       /* idem */
     }
-  }, [transitOfficeId]);
+  }, [buildListQuery, transitOfficeId]);
 
   /**
    * Fila tras una decisión del OT. Si la bandeja está filtrada por estado y el trámite acaba de
@@ -758,6 +801,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         setRows(result.data);
         setTotalCount(result.totalCount);
         setPage(result.page);
+        setHayCambios(false);
         setStatus(result.data.length === 0 ? "empty" : "ready");
         // Diagnóstico (R09) y contadores de la cabecera: acompañan a la lista y NUNCA la bloquean.
         // Van en su propio `try` y no solo con `.catch`, porque un fallo SÍNCRONO —el módulo sin
@@ -771,7 +815,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             .catch(() => {
               /* el diagnóstico es informativo: su fallo no afecta la bandeja */
             });
-          fetchOtBandejaCounters(signal, transitOfficeId ? { transitOfficeId } : undefined)
+          // Epic #12686 — mismos filtros que la tabla: la tarjeta elegida dice cuántas filas trae.
+          searchOtBandejaCounters(
+            buildListQuery(),
+            signal,
+            transitOfficeId ? { transitOfficeId } : undefined,
+          )
             .then((c) => {
               if (!signal?.aborted) setCounters(c);
             })
@@ -787,6 +836,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     },
     [buildListQuery, page, transitOfficeId],
   );
+
+  // Epic #12686 (HU #12808) — la tira se mantiene al día sola; la tabla, no. La tarjeta que manda
+  // es la elegida o, sin elegir, la de la bandeja por defecto (Entregado).
+  useSondeoDeConteos({
+    pedir: (signal) =>
+      searchOtBandejaCounters(buildListQuery(), signal, transitOfficeId ? { transitOfficeId } : undefined),
+    alRecibir: (conteos) => {
+      setCounters(conteos);
+      const tarjeta = contadorActivo || contadorDeEstado(statusFilter);
+      if (tarjeta && conteos[tarjeta] !== totalCount) setHayCambios(true);
+    },
+  });
 
   useEffect(() => {
     const c = new AbortController();
@@ -831,6 +892,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   }, [draftCondiciones, search, periodo, rangoPropioDesde, rangoPropioHasta, rangoSobre]);
 
   const hasActiveFilters =
+    familia !== "" ||
     appliedCondiciones.length > 0 ||
     busquedaAplicada.trim() !== "" ||
     periodo !== "Sin periodo" ||
@@ -859,14 +921,49 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
    * no se toca: son dos formas de acotar que conviven, y la tarjeta manda sobre el estado porque es
    * la que el operador acaba de pulsar. ADR-0059: tarjeta = estado real.
    */
-  const handleContadorSelect = (key: OtCounterKey | "") => {
+  const aplicarContador = (key: OtCounterKey | "") => {
     setContadorActivo(key);
     setStatusFilter(key === "" ? ESTADO_POR_DEFECTO : estadoDeContador(key));
     setHasActiveRevocationRequestFilter(revocatoriaActivaDeContador(key) ?? false);
     setPage(1);
   };
 
+  const handleContadorSelect = (key: OtCounterKey | "") => {
+    // Epic #12686 — tarjeta y atajo no se acumulan: elegir una tarjeta suelta el atajo.
+    setAtajoOt("");
+    aplicarContador(key);
+  };
+
+  /** Epic #12686 (HU #12807) — el atajo aplica su tarjeta; quitarlo vuelve a la bandeja por defecto. */
+  const handleAtajoOtSelect = (key: "" | AtajoOt) => {
+    setAtajoOt(key);
+    aplicarContador(contadorDeAtajoOt(key));
+  };
+
+  /**
+   * Epic #12686 — cambiar de familia. Si la tarjeta elegida (o el estado de la URL) no existe en la
+   * nueva pestaña —Preasignación o Asignado en Traspaso/Otros—, se vuelve a la bandeja por defecto:
+   * dejar ese filtro aplicado mostraría una tabla vacía sin tarjeta que lo explique.
+   */
+  const handleFamiliaChange = (v: "" | ProcedureFamily) => {
+    setFamilia(v);
+    const tarjetaSigue =
+      contadorActivo === "" || tarjetasDeFamilia(v).some((t) => t.key === contadorActivo);
+    const estadoSigue = statusFilter
+      .split(",")
+      .every((e) => e.trim() === "" || familiaUsaEstado(v, e.trim()));
+    if (!tarjetaSigue || !estadoSigue) {
+      setAtajoOt("");
+      setContadorActivo("");
+      setHasActiveRevocationRequestFilter(false);
+      setStatusFilter(ESTADO_POR_DEFECTO);
+    }
+    setPage(1);
+  };
+
   const clearFilters = useCallback(() => {
+    setFamilia("");
+    setAtajoOt("");
     setContadorActivo("");
     setHasActiveRevocationRequestFilter(false);
     setStatusFilter(ESTADO_POR_DEFECTO);
@@ -986,7 +1083,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       // en 'asignado', así que adjuntar antes fallaba con estado_invalido; tras aprobar queda
       // 'aprobado' (válido para la LT). El consolidado se genera on-demand y toma la LT vigente.
       const updated = await approveOtClientProcedure(target.id, mandateSignerId);
-      reconciliarFila(updated.id, () => updated);
+      // HU #12787 — la respuesta trae en null la vigencia y la radicación: no pisan las locales.
+      reconciliarFila(updated.id, (r) => conservarCamposConsolidadoOt(r, updated));
       refreshCounters();
 
       if (ltFile) {
@@ -1073,28 +1171,20 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     if (mandatarioTarget && mandatarioChoice) void runApprove(mandatarioTarget, mandatarioChoice);
   };
 
-  // HU #10800 — abre el modal de asignar placa y carga las placas disponibles del rango de la compañía;
-  // si no hay, arranca en modo "fuera de rango".
+  // HU #12852 (Feature #12846) — abre el modal de asignar placa. Ya no consulta el rango de la
+  // compañía: un único campo de placa libre (el backend siempre reserva fuera de rango).
   const openAssignPlate = (row: OtClientProcedure) => {
     setPlateInput("");
-    setAssignMode("range");
-    setAvailablePlates([]);
     setAssignTarget(row);
-    listPlateDetails(row.clientTenantId, { state: "disponible", scope: { transitOfficeId } })
-      .then((plates) => {
-        setAvailablePlates(plates);
-        setAssignMode(plates.length > 0 ? "range" : "out");
-      })
-      .catch(() => setAssignMode("out"));
   };
 
   const confirmAssignPlate = async () => {
     if (!assignTarget || !plateInput.trim()) return;
     setActing(true);
     try {
-      // HU #10800 — del rango (outOfRange=false) o fuera de rango (outOfRange=true).
+      // HU #12852 — sin selector de modo: assignPlateToProcedure fija outOfRange=true implícito.
       const placaAsignada = plateInput.trim().toUpperCase();
-      await assignPlateToProcedure(assignTarget.id, placaAsignada, assignMode === "out");
+      await assignPlateToProcedure(assignTarget.id, placaAsignada);
       // ADR-0059 — preasignacion → asignado es una transición real. La placa se refleja YA: es el
       // dato que el operador acaba de escribir y el que viene a ver.
       const conPlaca = (r: OtClientProcedure): OtClientProcedure => ({
@@ -1304,7 +1394,16 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const closePreview = () => {
     setPreview((p) => {
       if (p.url) URL.revokeObjectURL(p.url);
-      return { ...p, open: false, url: null, error: null, download: null };
+      return {
+        ...p,
+        open: false,
+        url: null,
+        error: null,
+        download: null,
+        definitivo: false,
+        radicadoEn: null,
+        fallo: null,
+      };
     });
   };
 
@@ -1326,33 +1425,52 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         loading: true,
         error: null,
         download: null,
+        definitivo: false,
+        radicadoEn: null,
+        fallo: null,
       };
     });
     try {
       let attId: string;
       let filename: string;
-      let mimetype = "application/pdf";
+      const mimetype = "application/pdf";
+      let definitivo = false;
+      let radicadoEn: string | null = null;
+      let fallo: FalloRegeneracionConsolidado | null = null;
       if (!isReadOnly) {
         const res = await generarOtConsolidadoMaestro(row.id, scope, force);
         attId = res.document.attachmentId;
         filename = res.document.filename;
         if (res.regenerado) show("Consolidado generado.", "success");
+        fallo = detectarFalloRegeneracion(res);
       } else {
-        const docs = await fetchOtDocuments(row.id, scope);
-        const consol =
-          docs.data.find((a) => a.tipo === "consolidado_maestro") ??
-          docs.data.find((a) => a.tipo === "consolidado");
-        if (!consol) {
-          setPreview((p) => ({
-            ...p,
-            loading: false,
-            error: "El trámite aún no tiene consolidado generado.",
-          }));
-          return;
+        // HU #12787 (AC2, «maestro radicado, fijo») — si el trámite ya se radicó en Quipux y se
+        // conoce el adjunto, se sirve ESE maestro por la ruta de documentos, sin pasar por la
+        // entrega (que podría regenerarlo). Radicado sin adjunto ⇒ entrega con `soloLectura`.
+        const fuente = resolverFuenteMaestroOt(row);
+        radicadoEn = fuente.radicadoEn;
+        if (fuente.via === "adjunto_radicado") {
+          attId = fuente.attachmentId;
+          filename = `consolidado-maestro-${row.referenceNumber}.pdf`;
+        } else {
+          // HU #12787 (AC1/AC3) — en modo QX read-only el maestro se pide a la ruta de entrega OT (no
+          // al adjunto de `GET …/documents`, que puede estar desactualizado). La entrega reconstruye
+          // solo si la bandera está abajo y en estado final sirve el definitivo sin regenerar.
+          let res;
+          try {
+            res = await entregarOtConsolidado(row.id, scope, fuente.params);
+          } catch (e: unknown) {
+            setPreview((p) => ({ ...p, loading: false, error: mensajeEntregaOtFallida(e) }));
+            return;
+          }
+          attId = res.document.attachmentId;
+          filename = res.document.filename;
+          definitivo = esDocumentoDefinitivo(res);
+          // `modo: "radicado_fijo"`: el backend sirvió el maestro radicado tal cual ⇒ versión radicada.
+          if (esEntregaRadicadaFija(res)) radicadoEn = radicadoEn ?? (row.quipuxRadicadoEn?.trim() || null);
+          // Maestro radicado (fijo): no se regenera, así que nunca hay aviso de fallo.
+          fallo = radicadoEn || esEntregaRadicadaFija(res) ? null : detectarFalloRegeneracion(res);
         }
-        attId = consol.id;
-        filename = consol.filename;
-        mimetype = consol.mimetype || "application/pdf";
       }
       const { url } = await fetchOtAttachmentPreviewUrl(row.id, attId, scope);
       // El file-manager sirve el objeto como binary/octet-stream: re-empaquetamos como Blob con el
@@ -1368,6 +1486,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         url: objectUrl,
         mimetype,
         download: { procId: row.id, attId, filename },
+        definitivo,
+        radicadoEn,
+        fallo: fallo
+          ? { detalle: fallo, generadoEn: row.consolidadoMaestro?.generadoEn ?? null }
+          : null,
       }));
     } catch {
       setPreview((p) => ({
@@ -1435,7 +1558,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         reason: rejectReason.trim(),
         rejectionReasonIds: rejectReasonIds.length > 0 ? rejectReasonIds : undefined,
       });
-      reconciliarFila(updated.id, () => updated);
+      // HU #12787 — la respuesta trae en null la vigencia y la radicación: no pisan las locales.
+      reconciliarFila(updated.id, (r) => conservarCamposConsolidadoOt(r, updated));
       refreshCounters();
       setRejectTarget(null);
       setDetailProcedure(null);
@@ -1449,15 +1573,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
   };
 
-  // HU #10805 — dígito de preferencia del trámite en asignación (solo guía). Las placas del rango que
-  // terminan en ese dígito se ordenan primero y se marcan; el OT puede elegir esa u otra cualquiera.
+  // HU #10805 — dígito de preferencia del trámite en asignación (solo guía).
+  // HU #12852 (Feature #12846) — ya no hay lista de placas del rango que ordenar ni marcar: el
+  // dígito sigue teniendo sentido como guía de qué placa libre conviene escribir, así que se
+  // conserva como texto de ayuda junto al único campo de placa.
   const preferredDigit = assignTarget?.platePreferredLastDigit?.trim() ?? "";
-  const orderedPlates = preferredDigit
-    ? [...availablePlates].sort(
-        (a, b) =>
-          Number(b.plate.endsWith(preferredDigit)) - Number(a.plate.endsWith(preferredDigit)),
-      )
-    : availablePlates;
 
   return (
     <div className="space-y-4">
@@ -1503,89 +1623,93 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         producto ya usa al otro lado del trámite.
       */}
       <div className="flex min-w-0 flex-col">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <TramitesFiltrosBar
-            rangoSobre={rangoSobre}
-            onRangoSobreChange={setRangoSobre}
-            periodo={periodo}
-            onPeriodoChange={setPeriodo}
-            rangoPropioDesde={rangoPropioDesde}
-            rangoPropioHasta={rangoPropioHasta}
-            onRangoPropioDesdeChange={setRangoPropioDesde}
-            onRangoPropioHastaChange={setRangoPropioHasta}
-            queryFields={queryFields}
-            draftCondiciones={draftCondiciones}
-            onDraftCondicionesChange={setDraftCondiciones}
-            condicionesCount={appliedCondiciones.length}
-            filtrosTestIdPrefix="ot-bandeja-filtros"
-            fieldsError={
-              fieldsError ? (
-                <div className="p-1 text-xs">
-                  <p className="mb-2 text-[#C2410C]">
-                    No se pudieron cargar los filtros disponibles.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setFieldsKey((k) => k + 1)}
-                    className="rounded-lg border border-[#DFE5ED] px-2.5 py-1.5 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10"
-                  >
-                    Reintentar
-                  </button>
-                </div>
-              ) : undefined
-            }
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Buscar radicado (FT1-0000012), placa, VIN..."
-            searchAriaLabel="Buscar en la bandeja de trámites"
-            onAplicar={applyFilters}
-            onEmpezarDeCero={clearFilters}
-            empezarDeCeroDisabled={!hasActiveFilters && draftCondiciones.length === 0}
-            columnSelector={
-              <ColumnSelector
-                columns={OT_PROCEDURES_COLUMNS.map((c) => ({ key: c.key, label: c.label }))}
-                visible={visibleColumns}
-                onChange={setVisibleColumns}
-                label="Columnas"
-                disabled={savingColumns}
-                buttonClassName={controlCls(columnasPersonalizadas)}
-              />
-            }
-            exportAction={
-              <button
-                type="button"
-                onClick={() => void handleExportExcel()}
-                disabled={exporting || status === "loading" || totalCount === 0}
-                aria-label="Exportar la bandeja de trámites a Excel"
-                title={COPY.A13}
-                className={controlCls(false)}
-                data-testid="ot-bandeja-export-xlsx"
-              >
-                <Download
-                  className={`h-3.5 w-3.5 ${exporting ? "animate-pulse" : ""}`}
-                  aria-hidden="true"
+        {/* Epic #12686 — pestañas de familia a la izquierda, como en el listado del gestor. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
+          <FamiliaTabs value={familia} onChange={handleFamiliaChange} />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <TramitesFiltrosBar
+              rangoSobre={rangoSobre}
+              onRangoSobreChange={setRangoSobre}
+              periodo={periodo}
+              onPeriodoChange={setPeriodo}
+              rangoPropioDesde={rangoPropioDesde}
+              rangoPropioHasta={rangoPropioHasta}
+              onRangoPropioDesdeChange={setRangoPropioDesde}
+              onRangoPropioHastaChange={setRangoPropioHasta}
+              queryFields={queryFields}
+              draftCondiciones={draftCondiciones}
+              onDraftCondicionesChange={setDraftCondiciones}
+              condicionesCount={appliedCondiciones.length}
+              filtrosTestIdPrefix="ot-bandeja-filtros"
+              fieldsError={
+                fieldsError ? (
+                  <div className="p-1 text-xs">
+                    <p className="mb-2 text-[#C2410C]">
+                      No se pudieron cargar los filtros disponibles.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setFieldsKey((k) => k + 1)}
+                      className="rounded-lg border border-[#DFE5ED] px-2.5 py-1.5 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : undefined
+              }
+              search={search}
+              onSearchChange={setSearch}
+              searchPlaceholder="Buscar radicado (FT1-0000012), placa, VIN..."
+              searchAriaLabel="Buscar en la bandeja de trámites"
+              onAplicar={applyFilters}
+              onEmpezarDeCero={clearFilters}
+              empezarDeCeroDisabled={!hasActiveFilters && draftCondiciones.length === 0}
+              columnSelector={
+                <ColumnSelector
+                  columns={OT_PROCEDURES_COLUMNS.map((c) => ({ key: c.key, label: c.label }))}
+                  visible={visibleColumns}
+                  onChange={setVisibleColumns}
+                  label="Columnas"
+                  disabled={savingColumns}
+                  buttonClassName={controlCls(columnasPersonalizadas)}
                 />
-                {exporting ? "Exportando…" : COPY.A13}
-              </button>
-            }
-          />
-          {/* Actualizar cierra la fila, como en el listado del gestor: la bandeja cambia por lo que
-              hacen los gestores al otro lado, y recargar la página entera para enterarse costaba
-              perder los filtros puestos. */}
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={status === "loading"}
-            aria-label="Actualizar la bandeja de trámites"
-            title="Actualizar"
-            className={controlCls(false)}
-          >
-            <RefreshCw
-              className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`}
-              aria-hidden="true"
+              }
+              exportAction={
+                <button
+                  type="button"
+                  onClick={() => void handleExportExcel()}
+                  disabled={exporting || status === "loading" || totalCount === 0}
+                  aria-label="Exportar la bandeja de trámites a Excel"
+                  title={COPY.A13}
+                  className={controlCls(false)}
+                  data-testid="ot-bandeja-export-xlsx"
+                >
+                  <Download
+                    className={`h-3.5 w-3.5 ${exporting ? "animate-pulse" : ""}`}
+                    aria-hidden="true"
+                  />
+                  {exporting ? "Exportando…" : COPY.A13}
+                </button>
+              }
             />
-            Actualizar
-          </button>
+            {/* Actualizar cierra la fila, como en el listado del gestor: la bandeja cambia por lo que
+                hacen los gestores al otro lado, y recargar la página entera para enterarse costaba
+                perder los filtros puestos. */}
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={status === "loading"}
+              aria-label="Actualizar la bandeja de trámites"
+              title="Actualizar"
+              className={controlCls(false)}
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+              Actualizar
+            </button>
+          </div>
         </div>
 
         <TramitesFiltrosChips
@@ -1619,14 +1743,33 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           Actualizar, que se mudó a la fila de controles. */}
       <OtBandejaCountersStrip
         counters={counters}
-        selected={contadorActivo}
+        // Sin tarjeta elegida a mano, se resalta la del estado vigente: la bandeja abre filtrada en
+        // Entregado y la tira tiene que decirlo (pedido en la revisión de la Epic #12686).
+        selected={contadorActivo || contadorDeEstado(statusFilter)}
         onSelect={handleContadorSelect}
         loading={status === "loading"}
+        familia={familia}
+      />
+
+      {hayCambios && status !== "loading" ? <AvisoHayCambios onActualizar={() => void load()} /> : null}
+
+      {/* Epic #12686 (HU #12807) — atajos del organismo, sin conteo. */}
+      <BusquedaRapidaAcordeon
+        items={ATAJOS_OT}
+        selected={atajoOt}
+        onSelect={(key) => handleAtajoOtSelect(key as "" | AtajoOt)}
+        storageKey="ot-bandeja.busqueda-rapida"
+        darkBgClassName="dark:bg-[#0B0F14]"
       />
 
       <UiStateBoundary
         status={status}
-        emptyMessage="No hay trámites pendientes de tus clientes."
+        emptyMessage={
+          // Epic #12686 — «Por preasignar» en una familia sin ruta de placa: vacío explicado, no un error.
+          atajoOt === "por_preasignar" && !familiaUsaEstado(familia, "preasignacion")
+            ? "Esta familia de trámites no pasa por preasignación de placa."
+            : "No hay trámites pendientes de tus clientes."
+        }
         errorMessage="Error al cargar trámites de clientes."
         onRetry={() => void load()}
         skeletonRows={5}
@@ -1819,73 +1962,35 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
             <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Asignar placa al trámite</h2>
             <p className="mt-2 text-sm opacity-80">{assignTarget.referenceNumber}</p>
-            {/* HU #10805 — dígito de preferencia del gestor: SOLO guía. El OT puede asignar una placa
-                que termine en ese dígito o cualquier otra. */}
+            {/* HU #10805 — dígito de preferencia del gestor: SOLO guía. El OT puede escribir una placa
+                que termine en ese dígito o cualquier otra.
+                HU #12852 (Feature #12846) — ya no hay lista de placas del rango que marcar con ★: la
+                guía queda como sugerencia sobre la placa libre que se va a escribir abajo. */}
             {preferredDigit && (
               <div
                 className="mt-3 rounded-lg px-3 py-2 text-xs"
                 style={{ background: "#EEF3FF", color: "#1E3A8A", border: "1px solid #C7D7FE" }}
               >
-                Dígito de preferencia: <b>termina en {preferredDigit}</b> — solo guía. Las placas ★ del
-                rango terminan en ese dígito; puedes asignar esa u otra cualquiera.
+                Dígito de preferencia: <b>termina en {preferredDigit}</b> — solo guía para elegir la
+                placa; puedes asignar esa u otra cualquiera.
               </div>
             )}
-            {/* HU #10800 — elegir del rango (select) o registrar una placa fuera de rango (input). */}
-            <div className="mt-4 flex gap-2 text-xs font-semibold">
-              <button
-                type="button"
-                disabled={availablePlates.length === 0}
-                onClick={() => { setAssignMode("range"); setPlateInput(""); }}
-                className={`rounded-lg border px-3 py-1.5 disabled:opacity-40 ${assignMode === "range" ? "text-white" : ""}`}
-                style={assignMode === "range" ? { background: "#557EFF", borderColor: "#557EFF" } : undefined}
-              >
-                Del rango{availablePlates.length > 0 ? ` (${availablePlates.length})` : ""}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAssignMode("out"); setPlateInput(""); }}
-                className={`rounded-lg border px-3 py-1.5 ${assignMode === "out" ? "text-white" : ""}`}
-                style={assignMode === "out" ? { background: "#557EFF", borderColor: "#557EFF" } : undefined}
-              >
-                Fuera de rango
-              </button>
-            </div>
-            {assignMode === "range" ? (
-              <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
-                Placa del rango
-                <select
-                  value={plateInput}
-                  onChange={(e) => setPlateInput(e.target.value)}
-                  aria-label="Placa del rango"
-                  className={`mt-1 ${OT_INPUT_CLS}`}
-                >
-                  <option value="">
-                    {availablePlates.length === 0 ? "No hay placas disponibles" : "Selecciona una placa"}
-                  </option>
-                  {orderedPlates.map((p) => (
-                    <option key={p.id} value={p.plate}>
-                      {p.plate}
-                      {preferredDigit && p.plate.endsWith(preferredDigit) ? " ★" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
-                Placa (fuera de rango)
-                <input
-                  type="text"
-                  value={plateInput}
-                  onChange={(e) => setPlateInput(e.target.value)}
-                  placeholder="ABC123"
-                  aria-label="Placa fuera de rango"
-                  className={`mt-1 uppercase ${OT_INPUT_CLS}`}
-                />
-                <span className="mt-1 block text-[11px] font-normal opacity-70">
-                  Formato ABC123. Se validará que no esté registrada y quedará en el inventario de la compañía.
-                </span>
-              </label>
-            )}
+            {/* HU #12852 (Feature #12846) — único campo de placa: el backend siempre reserva fuera de
+                rango (HU-A1), así que ya no hay selector de modo en-rango/fuera-de-rango. */}
+            <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
+              Placa
+              <input
+                type="text"
+                value={plateInput}
+                onChange={(e) => setPlateInput(e.target.value)}
+                placeholder="ABC123"
+                aria-label="Placa"
+                className={`mt-1 uppercase ${OT_INPUT_CLS}`}
+              />
+              <span className="mt-1 block text-[11px] font-normal opacity-70">
+                Formato ABC123. Se validará que no esté registrada y quedará en el inventario de la compañía.
+              </span>
+            </label>
             <div className="mt-5 flex gap-3">
               <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setAssignTarget(null)} disabled={acting}>Cancelar</button>
               <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#557EFF" }} disabled={acting || !plateInput.trim()} onClick={() => void confirmAssignPlate()}>{acting ? "Procesando…" : "Asignar"}</button>
@@ -2287,6 +2392,21 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         loading={preview.loading}
         error={preview.error}
         onDownload={preview.download ? () => void handlePreviewDownload() : undefined}
+        notice={
+          preview.radicadoEn || preview.definitivo || preview.fallo ? (
+            <div className="space-y-2">
+              {preview.radicadoEn ? <AvisoMaestroRadicado radicadoEn={preview.radicadoEn} /> : null}
+              {preview.definitivo ? <AvisoDocumentoFinal /> : null}
+              {/* HU #12799 (AC3) — el maestro servido es el anterior: fallo + fecha disponible. */}
+              {preview.fallo ? (
+                <AvisoFalloRegeneracion
+                  fallo={preview.fallo.detalle}
+                  generadoEn={preview.fallo.generadoEn}
+                />
+              ) : null}
+            </div>
+          ) : undefined
+        }
       />
     </div>
   );

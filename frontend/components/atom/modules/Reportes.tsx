@@ -32,6 +32,7 @@ import { ProductividadTab } from "./_reportes/tabs/ProductividadTab";
 import { ResumenTab } from "./_reportes/tabs/ResumenTab";
 import { UsoTab } from "./_reportes/tabs/UsoTab";
 import { ConsultasTab } from "./_reportes/tabs/ConsultasTab";
+import { ADMIN_BRAND_OUTLINE_BTN_CLS } from "@/components/admin/admin-ui-styles";
 
 type TabId = "resumen" | "operacion" | "ot" | "uso" | "productividad" | "consultas";
 
@@ -246,7 +247,7 @@ export function Reportes() {
           <button
             type="button"
             onClick={() => setSchedulingOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[#F4F7FC] dark:hover:bg-white/5"
+            className={ADMIN_BRAND_OUTLINE_BTN_CLS}
             data-testid="reportes-abrir-programacion"
           >
             <CalendarClock className="h-4 w-4" aria-hidden="true" />
@@ -305,7 +306,7 @@ export function Reportes() {
           className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
           data-testid="reportes-tab-no-disponible-red"
         >
-          <Network className="h-8 w-8 text-[#557EFF]" aria-hidden="true" />
+          <Network className="h-8 w-8 text-[color:var(--color-flit-brand)]" aria-hidden="true" />
           <p className="text-sm font-medium">{COPY_SOLO_COMPANIA_PROPIA}</p>
           <p className="text-xs opacity-70">{COPY_CAMBIA_A_COMPANIA_PROPIA}</p>
         </div>

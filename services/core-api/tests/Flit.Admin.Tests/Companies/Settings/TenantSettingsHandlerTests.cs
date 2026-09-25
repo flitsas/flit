@@ -153,10 +153,16 @@ public sealed class TenantSettingsHandlerTests
         (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().BeGreaterThan(0);
     }
 
-    // ---------- Feature #10587: flag de preasignación de placa por compañía ----------
+    // ---------- Feature #10587 / HU12853 (Feature #12846, Épica #12751): flag de preasignación de
+    // placa por compañía — la ruta se apagó y el backend ahora IGNORA el campo ----------
 
+    // HU12853_AC2/AC3 — PreasignacionPlacaActiva=true en el request ya NO se persiste ni se audita
+    // (reemplaza Feature10587_PersistsPlatePreassignFlag_AndAudits, que probaba el comportamiento
+    // contrario, retirado por esta HU): el flag se queda en su valor previo (false, sin fila
+    // sembrada) y el resto de la configuración se guarda igual (200), sin registrar la línea de
+    // auditoría del campo apagado.
     [Fact]
-    public async Task Feature10587_PersistsPlatePreassignFlag_AndAudits()
+    public async Task HU12853_AC2_PreasignacionPlacaActiva_SeIgnora_NoPersisteNiAudita()
     {
         var db = NewDbName();
         var tenantId = Guid.NewGuid();
@@ -171,7 +177,8 @@ public sealed class TenantSettingsHandlerTests
         await using (var act = NewContext(db))
         {
             var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
-            // Resto idéntico a lo sembrado: solo cambia el flag de preasignación de placa.
+            // Resto idéntico a lo sembrado: solo pide cambiar el flag de preasignación de placa
+            // (ignorado) para aislar su efecto del resto de la configuración.
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -186,16 +193,16 @@ public sealed class TenantSettingsHandlerTests
             }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeTrue();
-            result.Settings!.PreasignacionPlacaActiva.Should().BeTrue();
+            result.Settings!.PreasignacionPlacaActiva.Should().BeFalse(
+                "HU12853 (Épica #12751) — el campo se ignora, se conserva el valor previo (sin fila sembrada, false)");
         }
 
         await using var verify = NewContext(db);
         var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
-        policy.PlatePreassignEnabled.Should().BeTrue();
+        policy.PlatePreassignEnabled.Should().BeFalse();
 
         var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
-        audits.Should().ContainSingle()
-            .Which.FieldName.Should().Be("plate_preassign_enabled");
+        audits.Should().BeEmpty("el resto del payload es idéntico a lo sembrado y plate_preassign_enabled ya no se audita");
     }
 
     [Fact]

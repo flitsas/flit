@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<GetProcedureInstanceHandler>();
         services.AddScoped<ListProcedureInstancesHandler>();
         // Filtrado/ordenamiento server-side del listado (WHERE/ORDER BY en SQL, no en memoria).
+        services.AddScoped<BusquedaRapidaResolver>();
         services.AddScoped<ListProcedureInstancesFilteredHandler>();
         services.AddScoped<CountProcedureInstancesByStatusHandler>();
         // HU #12358 (Feature #12257) - lectura consolidada de la red por TenantScope (rutas /network/**).
@@ -92,6 +93,10 @@ public static class DependencyInjection
         services.AddScoped<StartSubsanacionHandler>();
         services.AddScoped<CancelSubsanacionHandler>();
         services.AddScoped<GetActorsHandler>();
+        // HU #12775 — escalera de obligatoriedad del certificado de Cámara de Comercio. El resolutor
+        // es scoped porque depende de los puertos del baúl y de las escrituras, que ya lo son.
+        services.AddScoped<CamaraComercioRequirementResolver>();
+        services.AddScoped<GetCamaraComercioRequirementsHandler>();
         services.AddScoped<PutActorsHandler>();
         // HU #10955 (AC2/AC3/AC4/AC5) — lookup de datos de contacto ya conocidos (ciudad/email/
         // dirección/teléfono) de una persona, sin gate de consentimiento.
@@ -264,6 +269,15 @@ public static class DependencyInjection
         // Feature #10701 — presigned view URL inline (HU #10702) y consolidado maestro (HU #10706).
         services.AddScoped<GetAttachmentPreviewUrlHandler>();
         services.AddScoped<GenerarConsolidadoMaestroHandler>();
+        // HU #12785 — ruta única de entrega de ambos consolidados (reconstruye solo si está desactualizado).
+        services.AddScoped<EntregarConsolidadoHandler>();
+        // HU #12795 (Épica #12760) — un trabajo de la cola de regeneración anticipada: comprueba
+        // vigencia / estado final / migrado / Source=user y delega en los dos handlers de arriba.
+        services.AddScoped<RegenerarConsolidadoAnticipadoHandler>();
+        // HU #12798 — bitácora de fallos de regeneración del consolidado (evento
+        // consolidado_regeneracion_fallida + aviso en cascada) y POST del wizard con respaldo del anterior.
+        services.AddScoped<ConsolidadoFalloBitacora>();
+        services.AddScoped<GenerarConsolidadoConRespaldoHandler>();
         // Perfil OT: visualizar el consolidado y adjuntar la Licencia de Tránsito (LT) sobre
         // trámites de clientes (se ejecutan en el scope RLS del tenant cliente vía AdminOtEndpoints).
         services.AddScoped<DescargarConsolidadoHandler>();

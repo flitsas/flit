@@ -23,6 +23,7 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
  */
 
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   listInstances: vi.fn(),
   searchInstances: vi.fn(),
   searchEstadoCounts: vi.fn(),

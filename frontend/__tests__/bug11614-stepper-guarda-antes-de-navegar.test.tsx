@@ -26,6 +26,7 @@ import type {
  * AC6 — sin cambios pendientes, la navegación no dispara guardados innecesarios.
  */
 const mocks = vi.hoisted(() => ({
+  getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
   createInstance: vi.fn(),
   getInstance: vi.fn(),
   getWizardState: vi.fn(),

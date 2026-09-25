@@ -327,7 +327,6 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
     otSlot: <div>panel-organismos</div>,
     auditSlot: <div>panel-historial</div>,
     documentosSlot: <div>panel-documentos</div>,
-    platesSlot: <div>panel-placas</div>,
     legalRepresentativesSlot: <div>panel-representantes</div>,
     mandatariosSlot: <div>panel-mandatarios</div>,
   };
@@ -335,7 +334,7 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
   it("AC1 — muestra solo Representantes legales y Mandatarios y abre en Representantes", () => {
     render(
       <CompanyConfigTabs
-        settings={{ ...settings, preasignacionPlacaActiva: true }}
+        settings={settings}
         onSaveSettings={vi.fn()}
         restrictedToRepresentatives
         {...slots}
@@ -347,7 +346,7 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
     expect(screen.getByRole("tab", { name: /representantes legales/i })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("panel-representantes")).toBeInTheDocument();
     // Ninguna sección reservada llega a montarse, ni el «Guardar todo» de la configuración.
-    for (const reservado of ["panel-lista-blanca", "panel-organismos", "panel-historial", "panel-documentos", "panel-placas"]) {
+    for (const reservado of ["panel-lista-blanca", "panel-organismos", "panel-historial", "panel-documentos"]) {
       expect(screen.queryByText(reservado)).not.toBeInTheDocument();
     }
     expect(screen.queryByRole("button", { name: /guardar todo/i })).not.toBeInTheDocument();
@@ -365,7 +364,7 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
   it("AC6 — la cabeza administrando una hija conserva además Usuarios (Panel de red), nada de configuración", () => {
     render(
       <CompanyConfigTabs
-        settings={{ ...settings, preasignacionPlacaActiva: true }}
+        settings={settings}
         onSaveSettings={vi.fn()}
         restrictedToRepresentatives
         usuariosSlot={<div>panel-usuarios</div>}
@@ -380,7 +379,7 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
   it("AC7 — sin restricción (SuperAdmin) conserva todas las pestañas", () => {
     render(
       <CompanyConfigTabs
-        settings={{ ...settings, preasignacionPlacaActiva: true }}
+        settings={settings}
         onSaveSettings={vi.fn()}
         {...slots}
       />,
@@ -391,10 +390,22 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
       "Trámites",
       "Configuración Empresa",
       "Documentos",
-      "Placas preasignadas",
       "Representantes legales",
       "Mandatarios",
       "Historial de Cambios",
     ]);
+  });
+
+  // HU12851 AC1 — la pestaña "Placas preasignadas" (PlatePreassignViewer) se retiró del todo.
+  it("HU12851 AC1 — ya no existe la pestaña 'Placas preasignadas' aunque preasignacionPlacaActiva sea true", () => {
+    render(
+      <CompanyConfigTabs
+        settings={{ ...settings, preasignacionPlacaActiva: true }}
+        onSaveSettings={vi.fn()}
+        {...slots}
+      />,
+    );
+
+    expect(screen.queryByRole("tab", { name: /placas preasignadas/i })).not.toBeInTheDocument();
   });
 });

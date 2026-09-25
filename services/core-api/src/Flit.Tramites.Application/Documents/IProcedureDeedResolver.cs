@@ -12,6 +12,17 @@ namespace Flit.Tramites.Application.Documents;
 public sealed record ResolvedDeedDocument(string Tipo, string Filename, byte[] Content, string Nit, string Rol, Guid DeedId);
 
 /// <summary>
+/// HU #12775 — la MISMA escritura resuelta, pero <b>sin los bytes</b>. Es el emparejamiento actor ↔
+/// escritura vigente y nada más.
+/// <para>Existe porque hay quien solo necesita saber <i>si</i> el actor tiene escritura vigente, no
+/// leerla: la obligatoriedad del certificado de Cámara de Comercio se recalcula en cada render del
+/// paso del actor, y bajarse un PDF de storage para contestar un booleano sería pagar una descarga
+/// por pulsación de tecla.</para>
+/// <para><c>Nit</c> es PII (Ley 1581): no loguear.</para>
+/// </summary>
+public sealed record ActorDeedPresence(string Tipo, string Nit, string Rol, Guid DeedId);
+
+/// <summary>
 /// Resuelve las escrituras ACTIVAS y VIGENTES de las compañías (NIT) de los actores de un trámite
 /// (directorio del tenant, #10899), con sus BYTES, para inyectarlas como adjunto del sistema y que se
 /// fusionen en el PDF consolidado. Puerto en Trámites; la implementación (Infrastructure) cruza el
@@ -26,6 +37,18 @@ public interface IProcedureDeedResolver
     /// si no hay actores NIT o ninguna escritura vigente.
     /// </summary>
     Task<IReadOnlyList<ResolvedDeedDocument>> ResolveForActorsAsync(
+        Guid tenantId,
+        IEnumerable<ProcedureInstanceActor> actors,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12775 — qué actores persona jurídica tienen una escritura activa y vigente de su compañía,
+    /// SIN leer el PDF de storage. Lo usa la obligatoriedad del certificado de Cámara de Comercio.
+    /// <para>No exige que la escritura sea del representante legal capturado, a diferencia de
+    /// <see cref="ResolveForActorsAsync"/>: para eximir del certificado basta con que la sociedad
+    /// tenga escritura vigente (decisión de negocio, Épica #12754).</para>
+    /// </summary>
+    Task<IReadOnlyList<ActorDeedPresence>> ResolvePresenceForActorsAsync(
         Guid tenantId,
         IEnumerable<ProcedureInstanceActor> actors,
         CancellationToken ct = default);
@@ -46,4 +69,10 @@ public sealed class NullProcedureDeedResolver : IProcedureDeedResolver
         IEnumerable<ProcedureInstanceActor> actors,
         CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<ResolvedDeedDocument>>([]);
+
+    public Task<IReadOnlyList<ActorDeedPresence>> ResolvePresenceForActorsAsync(
+        Guid tenantId,
+        IEnumerable<ProcedureInstanceActor> actors,
+        CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ActorDeedPresence>>([]);
 }

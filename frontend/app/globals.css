@@ -13,6 +13,7 @@
    * tech/alert/bg/gray son decorativos/semánticos de FLIT y no varían por red. */
   --color-flit-primary: var(--brand-primary, #162744);
   --color-flit-brand: var(--brand-secondary, #557eff);
+  --color-flit-brand-ink: var(--flit-brand-ink);
   --color-flit-tech: #00dbd5;
   --color-flit-alert: #ff4e00;
   --color-flit-bg: #eef5ff;
@@ -119,6 +120,11 @@
   --badge-danger-bg: rgba(255, 78, 0, 0.12);
   --badge-danger-fg: #c2410c;
   --badge-danger-border: rgba(255, 78, 0, 0.32);
+  /* HU #12726 (C.3) — alertas «pendiente por acción» en detalle de trámite. Basado en
+     --color-flit-alert (#FF4E00); texto #BF3B00 ≈ 5.2:1 sobre el fondo tintado (AA). */
+  --badge-pending-bg: rgba(255, 78, 0, 0.12);
+  --badge-pending-fg: #bf3b00;
+  --badge-pending-border: rgba(255, 78, 0, 0.32);
   --badge-info-bg: rgba(85, 126, 255, 0.14);
   --badge-info-fg: #3b4fd6;
   --badge-info-border: rgba(85, 126, 255, 0.35);
@@ -134,6 +140,11 @@
      da 5.09:1 sobre blanco y cumple AA. Se llegó a él después de usar un #4A7019 propio —más
      apagado y sin razón para existiendo este—. */
   --flit-success-ink: #4f7a12;
+
+  /* Tinta legible del azul de marca (#557eff) cuando se usa como TEXTO pequeño: sobre blanco da
+     3,61:1 (no AA). El azul de marca sigue en iconos, bordes y rellenos; esta variable es solo
+     para labels y copy. HU #12723 — #476BD9 sobre #FFFFFF = 4,80:1 (WCAG 2.1 AA). */
+  --flit-brand-ink: #476bd9;
 
   /* Tabla card-list (HU #10844) — tokens de superficie para que el DataTable se lea como
      tarjeta en CUALQUIER fondo (página tintada app-bg o panel blanco). La cabecera usa el
@@ -156,7 +167,8 @@
   --nav-texto-fuerte: #162744;
   --nav-texto-tenue: #667085;
   --nav-focus: #4f74c9;
-  --nav-activo: linear-gradient(90deg, #4fd4cc 0%, #4f74c9 100%);
+  /* Mismo degradado horizontal del isotipo central (favicon.svg: #557EFF → #00DBD5). */
+  --nav-activo: linear-gradient(90deg, #557eff 0%, #00dbd5 100%);
   --nav-radio-pill: 999px;
   --nav-radio-panel: 18px;
   --nav-sombra-dock: 0 8px 24px rgba(22, 39, 68, 0.08);
@@ -165,6 +177,11 @@
   --nav-duracion: 180ms;
   --nav-ease: cubic-bezier(0.2, 0, 0, 1);
   --alto-navegacion: 0px;
+
+  /* Dashboard hero (HU #12725 B.1) — alto compartido entre banner y columna derecha
+   * (fila filtros + KPIs 2×2). Filtros: label 14px + gap 4px + campo 40px = 58px;
+   * gap columna 12px; KPIs: 2× ~88px + gap 12px ≈ 188px → 260px redondeado. */
+  --dashboard-hero-h: 260px;
 }
 
 .dark {
@@ -212,6 +229,9 @@
   --badge-danger-bg: rgba(255, 78, 0, 0.2);
   --badge-danger-fg: #fca574;
   --badge-danger-border: rgba(255, 78, 0, 0.4);
+  --badge-pending-bg: rgba(255, 78, 0, 0.2);
+  --badge-pending-fg: #fca574;
+  --badge-pending-border: rgba(255, 78, 0, 0.4);
   --badge-info-bg: rgba(85, 126, 255, 0.22);
   --badge-info-fg: #a5b8ff;
   --badge-info-border: rgba(85, 126, 255, 0.4);
@@ -222,6 +242,9 @@
   /* Verde de marca como texto: sobre el fondo oscuro el mismo tono ya es legible (no necesita el
      oscurecimiento que sí requiere sobre blanco). */
   --flit-success-ink: #8cc63f;
+
+  /* Azul de marca como texto sobre fondo dock oscuro (#162744): #6FA5FF = 6,04:1 (HU #12723). */
+  --flit-brand-ink: #6fa5ff;
 
   /* Tabla card-list — variantes para modo oscuro (HU #10844). */
   --table-header-bg: rgba(255, 255, 255, 0.06);
@@ -402,13 +425,37 @@
     color: var(--nav-texto-fuerte);
   }
 
-  .dock-pill[aria-current="page"] {
+  .dock-pill[aria-current="page"],
+  .dock-pill[data-ancestor-active="true"] {
     background: var(--nav-activo);
     box-shadow: var(--nav-sombra-activo);
     color: #ffffff;
+    font-weight: 600;
   }
 
-  .dock-pill[aria-current="page"]:hover {
+  .dock-pill[aria-current="page"] svg,
+  .dock-pill[data-ancestor-active="true"] svg {
+    color: #ffffff;
+  }
+
+  .dock-pill[aria-current="page"]:hover,
+  .dock-pill[data-ancestor-active="true"]:hover {
+    background: var(--nav-activo);
+    color: #ffffff;
+  }
+
+  .dock-panel-item[aria-current="page"] {
+    background: var(--nav-activo);
+    box-shadow: var(--nav-sombra-activo);
+    color: #ffffff;
+    font-weight: 600;
+  }
+
+  .dock-panel-item[aria-current="page"] > svg:first-of-type {
+    color: #ffffff;
+  }
+
+  .dock-panel-item[aria-current="page"]:hover {
     background: var(--nav-activo);
     color: #ffffff;
   }
@@ -445,4 +492,20 @@
       animation: none;
     }
   }
+}
+
+/* HU #12724 — DateRangePicker (react-day-picker) con tokens FLIT */
+.flit-date-range-picker .rdp-root {
+  --rdp-accent-color: var(--color-flit-brand, #557eff);
+  --rdp-accent-background-color: rgba(85, 126, 255, 0.14);
+  --rdp-day-height: 36px;
+  --rdp-day-width: 36px;
+  --rdp-day_button-height: 34px;
+  --rdp-day_button-width: 34px;
+}
+
+.dark .flit-date-range-picker .rdp-root {
+  --rdp-accent-color: #8fa8ff;
+  --rdp-accent-background-color: rgba(143, 168, 255, 0.18);
+  color: #fff;
 }

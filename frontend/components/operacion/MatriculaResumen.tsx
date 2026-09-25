@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Clock, Copy, Download, FileSignature, FileText, Star } from 'lucide-react';
 import type {
   BiometricParte,
@@ -1129,78 +1129,96 @@ export default function MatriculaResumen({
       {/* Mandatario retirado del resumen (decisión del usuario). El backend lo resuelve solo cuando
           no se elige a mano, que es lo que decía el propio subtítulo de la sección. */}
 
-      {/* Última fila del resumen, en tres columnas: transformaciones, prenda y —vía `extrasSlot`—
-          el organismo de tránsito y la placa preasignada, que los monta `FirmaFurStep` porque es
-          quien tiene esos datos. Antes iban apiladas a ancho completo y la prenda además usaba un
-          acordeón, así que se leía como una pieza distinta de las tarjetas de al lado. */}
+      {/* HU #12730 (D.4) — segunda fila alineada con Vehículo/partes: `lg:grid-cols-2`. Si queda un
+          número impar de tarjetas, la última ocupa el ancho completo para no dejar hueco. */}
       {hasExtras || extrasSlot ? (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          {transformaciones.length > 0 ? (
-            <ResumenCard title="Transformaciones">
-              <div
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-                aria-label="Transformaciones declaradas"
-              >
-                {transformaciones.map((t) => {
-                  const sep = t.indexOf(':');
-                  const label = sep >= 0 ? t.slice(0, sep).trim() : 'Cambio';
-                  const value = sep >= 0 ? t.slice(sep + 1).trim() : t;
-                  return (
-                    <div
-                      key={t}
-                      className="rounded-xl border px-3 py-2.5"
-                      style={{ borderColor: BORDER, background: 'rgba(85,126,255,0.04)' }}
-                    >
-                      <p
-                        className="text-xs font-semibold uppercase tracking-[0.2em]"
-                        style={{ color: BLUE }}
+        (() => {
+          const cells: ReactNode[] = [];
+          if (transformaciones.length > 0) {
+            cells.push(
+              <ResumenCard key="transformaciones" title="Transformaciones">
+                <div
+                  className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                  aria-label="Transformaciones declaradas"
+                >
+                  {transformaciones.map((t) => {
+                    const sep = t.indexOf(':');
+                    const label = sep >= 0 ? t.slice(0, sep).trim() : 'Cambio';
+                    const value = sep >= 0 ? t.slice(sep + 1).trim() : t;
+                    return (
+                      <div
+                        key={t}
+                        className="rounded-xl border px-3 py-2.5"
+                        style={{ borderColor: BORDER, background: 'rgba(85,126,255,0.04)' }}
                       >
-                        {label}
-                      </p>
-                      <p className="mt-1 text-sm font-semibold tracking-wide" style={{ color: '#162744' }}>
-                        {value || '—'}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </ResumenCard>
-          ) : null}
-          {/* AC4 (HU #12130) — una tarjeta por decisión vigente: con la acción complementaria
-              activada (ADR-0055) llegan dos (constitución + levantamiento), cada una con su
-              propio acreedor/documento; con 0-1 elementos el markup es idéntico al histórico. */}
-          {prendas.map((p, idx) => (
-            <ResumenCard
-              key={`${p.decisionLabel}-${idx}`}
-              title={prendas.length > 1 ? `Prenda / gravamen (${idx + 1} de ${prendas.length})` : 'Prenda / gravamen'}
-            >
-              <div
-                className="grid grid-cols-1 gap-3"
-                aria-label="Prenda o gravamen"
+                        <p
+                          className="text-xs font-semibold uppercase tracking-[0.2em]"
+                          style={{ color: BLUE }}
+                        >
+                          {label}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold tracking-wide" style={{ color: '#162744' }}>
+                          {value || '—'}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ResumenCard>,
+            );
+          }
+          prendas.forEach((p, idx) => {
+            cells.push(
+              <ResumenCard
+                key={`${p.decisionLabel}-${idx}`}
+                title={
+                  prendas.length > 1
+                    ? `Prenda / gravamen (${idx + 1} de ${prendas.length})`
+                    : 'Prenda / gravamen'
+                }
               >
-                <Field label="Decisión" value={p.decisionLabel} />
-                {p.acreedorNombre || p.acreedorDocumento ? (
-                  <>
-                    <Field label="Acreedor (beneficiario)" value={p.acreedorNombre} />
-                    <Field label="NIT / documento del acreedor" value={p.acreedorDocumento} />
-                  </>
-                ) : null}
-                {p.documentoLabel ? (
-                  p.documento && instanceId ? (
-                    <PrendaDocumentoVerButton
-                      instanceId={instanceId}
-                      documento={p.documento}
-                      label={p.documentoLabel}
-                    />
-                  ) : (
-                    <Field label={p.documentoLabel} value="Sin documento cargado" />
-                  )
-                ) : null}
-              </div>
-            </ResumenCard>
-          ))}
-          {extrasSlot}
-        </div>
+                <div className="grid grid-cols-1 gap-3" aria-label="Prenda o gravamen">
+                  <Field label="Decisión" value={p.decisionLabel} />
+                  {p.acreedorNombre || p.acreedorDocumento ? (
+                    <>
+                      <Field label="Acreedor (beneficiario)" value={p.acreedorNombre} />
+                      <Field label="NIT / documento del acreedor" value={p.acreedorDocumento} />
+                    </>
+                  ) : null}
+                  {p.documentoLabel ? (
+                    p.documento && instanceId ? (
+                      <PrendaDocumentoVerButton
+                        instanceId={instanceId}
+                        documento={p.documento}
+                        label={p.documentoLabel}
+                      />
+                    ) : (
+                      <Field label={p.documentoLabel} value="Sin documento cargado" />
+                    )
+                  ) : null}
+                </div>
+              </ResumenCard>,
+            );
+          });
+          if (extrasSlot) {
+            Children.forEach(extrasSlot, (child) => {
+              if (child) cells.push(child);
+            });
+          }
+          const total = cells.length;
+          return (
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 items-stretch">
+              {cells.map((cell, idx) => (
+                <div
+                  key={idx}
+                  className={idx === total - 1 && total % 2 === 1 ? 'lg:col-span-2' : undefined}
+                >
+                  {cell}
+                </div>
+              ))}
+            </div>
+          );
+        })()
       ) : null}
     </section>
   );

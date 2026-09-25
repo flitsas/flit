@@ -1,4 +1,4 @@
-// Dock del Shell: FAB centrado, Ayuda universal, agrupadores menú/submenú.
+// Dock del Shell: FAB centrado, reparto por lado declarado, agrupadores menú/submenú.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -26,19 +26,40 @@ function renderShell(visibleModuleCodes?: string[]) {
 }
 
 describe("Shell — dock", () => {
-  it("muestra 'Ayuda' aunque RBAC no la incluya en los módulos visibles", () => {
+  it("no muestra 'Ayuda' en el dock; la entrada vive en el menú de usuario", async () => {
     renderShell(["dashboard", "reportes"]);
-    expect(screen.getByRole("button", { name: "Ayuda" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ayuda" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
+    expect(screen.getByText("Ayuda")).toBeInTheDocument();
   });
 
-  it("mantiene el FAB de inicio centrado: mismo nº de elementos a cada lado", () => {
-    renderShell(["dashboard", "reportes", "validaciones"]);
+  it("reparte el dock por lado declarado: Trámites a la izquierda del FAB, Usuarios a la derecha", () => {
+    renderShell(["tramites", "usuarios", "reportes", "validaciones"]);
     const fab = screen.getByRole("button", { name: "Inicio FLIT" });
     const dock = fab.parentElement;
     expect(dock).not.toBeNull();
     const children = Array.from(dock!.children);
     const fabIndex = children.indexOf(fab);
-    expect(fabIndex).toBe(children.length - fabIndex - 1);
+    const labelsBeforeFab = children
+      .slice(0, fabIndex)
+      .map((el) => el.getAttribute("aria-label"));
+    const labelsAfterFab = children
+      .slice(fabIndex + 1)
+      .map((el) => el.getAttribute("aria-label"));
+    expect(labelsBeforeFab).toContain("Trámites");
+    expect(labelsAfterFab).toContain("Usuarios");
+  });
+
+  it("ítem activo del dock (aria-current) no lleva fondo degradado inline", () => {
+    render(
+      <Shell active="reportes" onNav={vi.fn()} visibleModuleCodes={["reportes", "tramites"]}>
+        <div>contenido</div>
+      </Shell>,
+    );
+    const active = screen.getByRole("button", { name: "Reportes" });
+    expect(active).toHaveAttribute("aria-current", "page");
+    expect(active.style.background).toBe("");
+    expect(active.style.backgroundImage).toBe("");
   });
 
   it("usa favicon.svg en el FAB central", () => {
@@ -70,22 +91,102 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
 
     // Ítems directos del dock Admin OT
     expect(screen.getByRole("button", { name: "Trámites" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Preasignación" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Usuarios" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reportes" })).toBeInTheDocument();
 
-    // Administración = submenú Reglas / Documentos / Requisitos / Configuración
+    // HU12856 AC1 (Feature #12847) — Administración = submenú Documentos (Reglas/Requisitos/
+    // Configuración se retiraron: pasaron a exclusivos de Super Admin, ver tests debajo).
     await userEvent.click(screen.getByRole("button", { name: "Administración" }));
-    expect(screen.getByRole("button", { name: "Reglas" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Documentos" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Requisitos" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Configuración" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reglas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Requisitos" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Configuración" })).not.toBeInTheDocument();
   });
 
-  // Pedido del usuario (2026-09-16) — modo Dashboard/QX, ventana de revocatoria (HU #12569) y
-  // feature flags operativos solo vivían en una ruta legacy sin enlace en ningún menú (solo por
-  // URL). "Configuración" es su punto de entrada real dentro de "Administración".
-  it("un Admin OT ve 'Configuración' dentro de Administración", async () => {
+  // HU12856 AC1 — ni como píldora directa ni dentro de "Administración", para admin u operador.
+  it.each([
+    ["ot_admin", "Admin OT"],
+    ["gestor_tramites_ot", "Operador OT"],
+  ])(
+    "HU12856 AC1 — un %s (%s) ya NO ve 'Reglas', 'Requisitos' ni 'Configuración' en el dock",
+    async (role: string) => {
+      window.localStorage.setItem(
+        TOKEN_STORAGE_KEY,
+        makeToken({ sub: "u1", role, entity_type: "TRANSIT_OFFICE", email: "ot@transito.gov.co" }),
+      );
+
+      renderShell();
+
+      expect(screen.queryByRole("button", { name: "Reglas" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Requisitos" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Configuración" })).not.toBeInTheDocument();
+
+      const adminBtn = screen.queryByRole("button", { name: "Administración" });
+      if (adminBtn) {
+        await userEvent.click(adminBtn);
+        expect(screen.queryByRole("button", { name: "Reglas" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Requisitos" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Configuración" })).not.toBeInTheDocument();
+      }
+    },
+  );
+
+  // HU12860 AC1/AC2 (Feature #12848) — Documentos queda solo para ot_admin; el Operador OT y
+  // roles OT personalizados dejan de verla, igual que ya ocurre con "Usuarios".
+  it("HU12860 AC1 — un ot_admin sigue viendo 'Documentos' en Administración", async () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
+    );
+
+    renderShell();
+
+    await userEvent.click(screen.getByRole("button", { name: "Administración" }));
+    expect(screen.getByRole("button", { name: "Documentos" })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["gestor_tramites_ot", "Operador OT"],
+    ["otro_rol_ot", "rol OT personalizado"],
+  ])(
+    "HU12860 AC2 — un %s (%s) ya NO ve 'Documentos' en el dock",
+    async (role: string) => {
+      window.localStorage.setItem(
+        TOKEN_STORAGE_KEY,
+        makeToken({ sub: "u1", role, entity_type: "TRANSIT_OFFICE", email: "ot@transito.gov.co" }),
+      );
+
+      renderShell();
+
+      expect(screen.queryByRole("button", { name: "Documentos" })).not.toBeInTheDocument();
+
+      const adminBtn = screen.queryByRole("button", { name: "Administración" });
+      if (adminBtn) {
+        await userEvent.click(adminBtn);
+        expect(screen.queryByRole("button", { name: "Documentos" })).not.toBeInTheDocument();
+      }
+    },
+  );
+
+  // HU12850 AC1 — la entrada "Preasignación" se retiró del dock: ni como píldora directa ni
+  // dentro de "Administración".
+  it("HU12850 AC1 — un Admin OT ya NO ve 'Preasignación' en el dock", async () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
+    );
+
+    renderShell();
+
+    expect(screen.queryByRole("button", { name: "Preasignación" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Administración" }));
+    expect(screen.queryByRole("button", { name: "Preasignación" })).not.toBeInTheDocument();
+  });
+
+  // HU12856 AC1 (Feature #12847) — "Configuración" pasa a ser exclusiva de Super Admin: el
+  // Admin OT deja de verla dentro de "Administración" (antes de esta HU era su punto de entrada
+  // real al modo Dashboard/QX, la ventana de revocatoria y los feature flags operativos).
+  it("HU12856 AC1 — un Admin OT ya NO ve 'Configuración' dentro de Administración", async () => {
     window.localStorage.setItem(
       TOKEN_STORAGE_KEY,
       makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
@@ -95,7 +196,7 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
 
     expect(screen.queryByRole("button", { name: "Configuración" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Administración" }));
-    expect(screen.getByRole("button", { name: "Configuración" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Configuración" })).not.toBeInTheDocument();
   });
 
   // Pedido del usuario (2026-09-16): se retiró la entrada de dock "Revocatorias" del Admin OT —
@@ -250,6 +351,12 @@ describe("Shell — topbar (campana y menú de usuario)", () => {
     renderShell();
     await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
     expect(screen.queryByText("Actualización de la información")).not.toBeInTheDocument();
+  });
+
+  it("al abrir el menú de usuario SÍ aparece 'Ayuda' (manual /manual)", async () => {
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
+    expect(screen.getByText("Ayuda")).toBeInTheDocument();
   });
 
   it("al abrir el menú de usuario SÍ aparece 'Cambio de contraseña'", async () => {

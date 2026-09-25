@@ -2,7 +2,6 @@ using System.Security.Claims;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Domain.Companies.TransitOffices;
-using Flit.Admin.Domain.PlatePreassign;
 using Flit.Api.Authorization;
 using Flit.Api.Middleware;
 using Flit.Queries.Domain;
@@ -298,9 +297,19 @@ internal static class ProcedureInstanceEndpoints
             // parece correcto.
             if (TramitesQueryConditions.Validate(body.Condiciones) is { } problema)
                 return Results.BadRequest(new { error = problema });
+            if (BusquedaRapida.Validate(body.BusquedaRapida) is { } atajoInvalido)
+                return Results.BadRequest(new { error = atajoInvalido });
 
-            var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId), ct);
-            return Results.Ok(new { items, total });
+            try
+            {
+                var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User) }, ct);
+                return Results.Ok(new { items, total });
+            }
+            catch (BusquedaRapidaDemasiadoAmpliaException ex)
+            {
+                // Epic #12686 — mejor pedir que acote que devolver un resultado truncado que parece completo.
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+            }
         })
             .WithName("SearchProcedureInstances")
             .WithSummary("Listado de trámites filtrado con la gramática de consultas")
@@ -320,8 +329,17 @@ internal static class ProcedureInstanceEndpoints
 
             if (TramitesQueryConditions.Validate(body.Condiciones) is { } problema)
                 return Results.BadRequest(new { error = problema });
+            if (BusquedaRapida.Validate(body.BusquedaRapida) is { } atajoInvalido)
+                return Results.BadRequest(new { error = atajoInvalido });
 
-            return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId), ct));
+            try
+            {
+                return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User) }, ct));
+            }
+            catch (BusquedaRapidaDemasiadoAmpliaException ex)
+            {
+                return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+            }
         })
             .WithName("SearchProcedureInstanceEstadoCounts")
             .WithSummary("Conteo por estado del universo que cumple las condiciones")
@@ -909,51 +927,19 @@ internal static class ProcedureInstanceEndpoints
             };
         }).WithName("TransitionProcedureInstance");
 
-        // Feature #10587 (P-10) — placas DISPONIBLES para la compañía en el OT elegido, para el
-        // selector del wizard de matrícula inicial. Company-facing: el tenant sale del JWT/header.
-        group.MapGet("/plate-preassign/available", async (
-            [FromQuery] Guid transitOfficeId,
-            HttpContext http,
-            IPlateRangeRepository plateRepo,
-            CancellationToken ct) =>
-        {
-            var (resolvedTenant, _) = ResolveTenantContext(http);
-            if (resolvedTenant is not { } tenantId || tenantId == Guid.Empty)
-                return Results.Problem(statusCode: 403, title: "Forbidden",
-                    detail: "El usuario autenticado no tiene una compañía asignada.");
+        // HU #12853 (Feature #12846, Épica #12751) — la ruta de placa preasignada de la compañía se
+        // apaga: el wizard ya no ofrece un selector de placas de rango (Feature #10587 P-10, HU #10806
+        // AC3 retiradas). Responde 410 Gone, nunca 200: el módulo de Preasignación de rango dejó de
+        // decidir la asignación de placa de cualquier trámite.
+        group.MapGet("/plate-preassign/available", DeprecatedPlatePreassignEndpoints.Gone)
+            .WithName("ListAvailablePreassignPlates")
+            .WithSummary("Retirado (410) — la ruta de placa preasignada se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
 
-            if (transitOfficeId == Guid.Empty)
-                return Results.BadRequest(new { error = "transitOfficeId es obligatorio." });
-
-            var plates = await plateRepo
-                .ListDetailsAsync(tenantId, transitOfficeId, PlateState.Disponible, ct)
-                .ConfigureAwait(false);
-            return Results.Ok(plates);
-        }).WithName("ListAvailablePreassignPlates");
-
-        // HU #10806 (AC3) — ¿la ruta de preasignación de placa está ACTIVA para la compañía del
-        // radicador en el OT elegido? El wizard lo consulta para no mostrar el selector como si
-        // preasignara cuando en realidad el trámite se entregará de forma estándar. Reutiliza el
-        // mismo AND de tres flags que el submit (IsAssignmentAllowedAsync).
-        group.MapGet("/plate-preassign/status", async (
-            [FromQuery] Guid transitOfficeId,
-            HttpContext http,
-            IPlateRangeRepository plateRepo,
-            CancellationToken ct) =>
-        {
-            var (resolvedTenant, _) = ResolveTenantContext(http);
-            if (resolvedTenant is not { } tenantId || tenantId == Guid.Empty)
-                return Results.Problem(statusCode: 403, title: "Forbidden",
-                    detail: "El usuario autenticado no tiene una compañía asignada.");
-
-            if (transitOfficeId == Guid.Empty)
-                return Results.BadRequest(new { error = "transitOfficeId es obligatorio." });
-
-            var enabled = await plateRepo
-                .IsAssignmentAllowedAsync(tenantId, transitOfficeId, ct)
-                .ConfigureAwait(false);
-            return Results.Ok(new { enabled });
-        }).WithName("PlatePreassignStatus");
+        group.MapGet("/plate-preassign/status", DeprecatedPlatePreassignEndpoints.Gone)
+            .WithName("PlatePreassignStatus")
+            .WithSummary("Retirado (410) — la ruta de placa preasignada se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
 
         // CF-02 (HU #10879 AC3 / #10883 AC3) — consulta del vehículo del PASO 1 SIN crear el trámite.
         // Devuelve el mismo semáforo y los mismos bloqueos (409 duplicidad / 422 estado registral) que
@@ -1415,6 +1401,9 @@ internal record TramitesSearchRequest
     public DateTimeOffset? UpdatedFrom { get; init; }
     public DateTimeOffset? UpdatedTo { get; init; }
 
+    /// <summary>Epic #12686 — atajo de la búsqueda rápida (<see cref="BusquedaRapida"/>).</summary>
+    public string? BusquedaRapida { get; init; }
+
     public string? SortBy { get; init; }
     public string? SortDir { get; init; }
     public int? Skip { get; init; }
@@ -1422,6 +1411,7 @@ internal record TramitesSearchRequest
 
     public ProcedureInstanceListRequest ToRequest(Guid? tenantId) => new()
     {
+        BusquedaRapida = BusquedaRapida,
         TenantId = tenantId,
         Skip = Skip ?? 0,
         Take = Take ?? ListProcedureInstancesHandler.MaxItems,

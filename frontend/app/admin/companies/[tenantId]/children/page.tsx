@@ -12,6 +12,7 @@ import { fetchCompany } from "@/lib/api/admin-companies";
 import { isHeadTenantType } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ADMIN_BACK_LINK_CLS, ADMIN_CONTENT_SURFACE_CLS } from "@/components/admin/admin-ui-styles";
 
 /** HU #12356 — panel de red (solo cabeza de grupo). */
 export default function NetworkChildrenPage() {
@@ -55,16 +56,15 @@ export default function NetworkChildrenPage() {
       <button
         type="button"
         onClick={() => router.push(`/admin/companies/${headTenantId}`)}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
+        className={ADMIN_BACK_LINK_CLS}
       >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
         Volver a configuración
       </button>
 
       <ModuleTitle title="Panel de red" subtitle="Clientes hijos de tu cabeza de grupo." />
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+      <div className={ADMIN_CONTENT_SURFACE_CLS}>
         <UiStateBoundary
           status={status}
           onRetry={() => window.location.reload()}

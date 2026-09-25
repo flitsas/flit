@@ -78,4 +78,47 @@ describe('EstadoFunnel', () => {
     await user.click(screen.getByRole('button', { name: 'Borrador: 5 trámites' }));
     expect(onSelect).toHaveBeenCalledWith('');
   });
+
+  it('Epic #12686 — con `estados` pinta solo esas tarjetas, en ese orden', () => {
+    render(
+      <EstadoFunnel counts={counts} estados={['borrador', 'entregado', 'aprobado', 'anulado']} />,
+    );
+    const nombres = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    expect(nombres).toEqual([
+      'Borrador: 5 trámites',
+      'Entregado: 3 trámites',
+      'Aprobado: 7 trámites',
+      'Anulado: 0 trámites',
+    ]);
+    expect(screen.queryByLabelText(/^Preparado:/)).not.toBeInTheDocument();
+    expect(screen.getByRole('group')).toHaveClass('xl:grid-cols-4');
+  });
+
+  it('Epic #12686 — una columna por tarjeta en pantalla ancha', () => {
+    render(
+      <EstadoFunnel
+        counts={counts}
+        estados={['borrador', 'preasignacion', 'asignado', 'entregado', 'aprobado', 'rechazado', 'revocado', 'anulado']}
+      />,
+    );
+    expect(screen.getByRole('group')).toHaveClass('xl:grid-cols-8');
+  });
+
+  it('Epic #12686 — «Rechazado desde preasignación» sin tarjeta propia resalta Rechazado', async () => {
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <EstadoFunnel
+        counts={counts}
+        estados={['borrador', 'rechazado', 'anulado']}
+        selected="rechazado_preasignacion"
+        onSelect={onSelect}
+      />,
+    );
+
+    const rechazado = screen.getByRole('button', { name: 'Rechazado: 1 trámite' });
+    expect(rechazado).toHaveAttribute('aria-pressed', 'true');
+    await user.click(rechazado);
+    expect(onSelect).toHaveBeenCalledWith('');
+  });
 });

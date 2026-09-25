@@ -19,6 +19,7 @@ import { DrFlitClientBranchChoices } from "./DrFlitClientBranch";
 import { DrFlitComposer } from "./DrFlitComposer";
 import { DrFlitEndChatButton } from "./DrFlitEndChatButton";
 import { DrFlitHelpResults } from "./DrFlitHelpResults";
+import { DrFlitHistorialPlacaLink } from "./DrFlitHistorialPlacaLink";
 import { DrFlitMessageBubble } from "./DrFlitMessageBubble";
 import { DrFlitSessionMenu } from "./DrFlitSessionMenu";
 import { DrFlitSupportPanel } from "./DrFlitSupportPanel";
@@ -168,6 +169,13 @@ export function DrFlitChatPanel({
           {state.tramiteResults && !state.isTyping && (
             <DrFlitTramiteResults
               results={state.tramiteResults}
+              onOpen={onNavigate}
+            />
+          )}
+
+          {state.historialPlacaHref && !state.isTyping && (
+            <DrFlitHistorialPlacaLink
+              href={state.historialPlacaHref}
               onOpen={onNavigate}
             />
           )}

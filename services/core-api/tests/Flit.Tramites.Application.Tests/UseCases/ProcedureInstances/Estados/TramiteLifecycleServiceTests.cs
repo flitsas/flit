@@ -1138,4 +1138,70 @@ public sealed class TramiteLifecycleServiceTests
         await _repo.DidNotReceive().FindVigenteApprovedByDocumentAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
+
+    // ── HU #12775 AC3 — no se radica sin el certificado de Cámara de Comercio obligatorio ────────
+
+    /// <summary>Servicio con el resolutor de Cámara de Comercio cableado (sin baúl ni escrituras).</summary>
+    private TramiteLifecycleService ConCamaraComercio() =>
+        new(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.Registrar),
+            camaraComercioResolver: new CamaraComercioRequirementResolver());
+
+    private static void ConCompradorJuridico(ProcedureInstance i) =>
+        i.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            TenantId = i.TenantId,
+            ProcedureInstanceId = i.Id,
+            ActorType = "comprador",
+            DocumentType = "NIT",
+            DocumentNumber = "900111222",
+            FullName = "SOCIEDAD SAS",
+            PersonType = ActorPersonTypes.Juridical,
+            // El sujeto de identidad de la PJ es su representante: el mismo documento de la validación
+            // aprobada que siembra Wire(conGates: true), para que el gate llegue hasta la Cámara.
+            Metadata = ActorMetadataReader.Serialize(
+                null, null, new ActorRepresentanteLegal("CC", "1", "Rep Legal", "x@y.com", null)),
+        });
+
+    [Fact]
+    public async Task Radicar_CompradorJuridicoSinCertificado_Bloquea()
+    {
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        ConCompradorJuridico(i);
+
+        var outcome = await ConCamaraComercio().TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.CamaraComercioPendiente);
+        outcome.ErrorDetail.Should().Contain("Cámara de Comercio").And.Contain("comprador");
+        i.Status.Should().Be(TramiteEstado.Borrador);
+        _recorder.Records.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Radicar_CompradorJuridicoConCertificado_Permite()
+    {
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        ConCompradorJuridico(i);
+        i.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = i.TenantId,
+            ProcedureInstanceId = i.Id,
+            Tipo = CamaraComercioAttachmentTipo.Comprador,
+            StoragePath = "p/camara",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+
+        var outcome = await ConCamaraComercio().TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.ErrorCode.Should().NotBe(TramiteEstadoErrores.CamaraComercioPendiente);
+    }
 }

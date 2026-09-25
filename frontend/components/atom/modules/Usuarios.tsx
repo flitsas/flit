@@ -351,12 +351,18 @@ export function Usuarios() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className="relative flex items-center gap-2 px-4 py-2.5 text-xs font-semibold transition"
-              style={{ color: active ? "#557EFF" : undefined, opacity: active ? 1 : 0.65 }}
+              className={`relative flex items-center gap-2 px-4 py-2.5 text-xs font-semibold transition ${
+                active ? "text-[color:var(--flit-brand-ink)] opacity-100" : "opacity-65"
+              }`}
             >
-              <Icon className="h-3.5 w-3.5" />
+              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
               {t.label}
-              {active && <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: "#557EFF" }} />}
+              {active && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[color:var(--color-flit-brand)]"
+                  aria-hidden="true"
+                />
+              )}
             </button>
           );
         })}

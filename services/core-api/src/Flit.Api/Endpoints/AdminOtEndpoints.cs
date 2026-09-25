@@ -23,6 +23,7 @@ using Flit.Admin.Application.OtProfile.GetOtProfile;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Api.UseCases.RevocationRequests;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ImprintSignatures;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -82,29 +83,41 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // HU #12854/#12855 (Feature #12847, Épica #12751): PATCH /profile resuelve el tenant
+        // objetivo con ResolveOtUserScopeAsync (SuperAdmin exige ?transitOfficeId, 400/404 igual
+        // que Requisitos) y exige SuperAdminPolicy — GET /profile (arriba) NO cambia: lo siguen
+        // usando Shell.goOtHub/OtHubLayout para resolver el organismo antes de saber el rol.
         // RNF01/RF05 (ADR-0024): audita como failure los intentos fallidos de escribir el
         // perfil OT (p. ej. campos oficiales RUNT o modo inválido) en scope independiente.
         group.MapPatch("/profile", UpdateProfileAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .AddEndpointFilter(new ConfigAuditFailureFilter("transit_office_profile", "update"))
             .WithName("AdminOtUpdateProfile")
-            .WithSummary("Actualiza el perfil OT del tenant autenticado")
+            .WithSummary("Actualiza el perfil OT del tenant autenticado (solo SuperAdmin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
+        // HU #12854/#12855: mismo scoping + SuperAdminPolicy que PATCH /profile.
         group.MapPatch("/feature-flags/{id:guid}", UpdateFeatureFlagAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .AddEndpointFilter(new ConfigAuditFailureFilter("ot_feature_flags", "update"))
             .WithName("AdminOtUpdateFeatureFlag")
-            .WithSummary("Activa o desactiva un feature flag OT")
+            .WithSummary("Activa o desactiva un feature flag OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        // HU #12855: Requisitos ya resolvía el scope (HU #10546); ahora además exige SuperAdminPolicy.
         group.MapGet("/requirements", GetRequirementsAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtGetRequirements")
-            .WithSummary("Obtiene los requisitos configurables del OT (RNMC, ruta de placa, identidad)")
+            .WithSummary("Obtiene los requisitos configurables del OT (RNMC, ruta de placa, identidad) — solo SuperAdmin")
             .Produces(StatusCodes.Status200OK)
             // SuperAdmin debe indicar transitOfficeId (400) y ese organismo debe tener tenant OT (404).
             .Produces(StatusCodes.Status400BadRequest)
@@ -113,9 +126,10 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound);
 
         group.MapPut("/requirements", UpdateRequirementsAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .AddEndpointFilter(new ConfigAuditFailureFilter("ot_requirements", "update"))
             .WithName("AdminOtUpdateRequirements")
-            .WithSummary("Configura los requisitos del OT (auditado por trigger de BD)")
+            .WithSummary("Configura los requisitos del OT (auditado por trigger de BD) — solo SuperAdmin")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -192,6 +206,17 @@ public static class AdminOtEndpoints
             .WithName("AdminOtGetClientProceduresCounters")
             .WithSummary("Contadores de la cabecera de la bandeja OT (carga por clase de trabajo)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // Epic #12686 (HU #12803) — los contadores bajo los MISMOS filtros que la tabla. Gemelo POST
+        // de /client-procedures/search por la misma razón que /instances/estado-counts del gestor:
+        // las condiciones no caben en una query string, y el estado se ignora (cada tarjeta es uno).
+        group.MapPost("/client-procedures/counters", SearchClientProceduresCountersAsync)
+            .WithName("AdminOtSearchClientProceduresCounters")
+            .WithSummary("Contadores de la bandeja OT bajo los filtros de la tabla")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
@@ -291,6 +316,21 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
+        // HU #12785 — ruta ÚNICA de entrega del consolidado (maestro por defecto; ?tipo=consolidado para el
+        // del wizard): reconstruye SOLO si la bandera de vigencia está abajo; estado final, Source=user y
+        // migrado V1 se sirven tal cual. ?soloLectura=true devuelve el adjunto sin mirar la bandera (vista
+        // read-only del OT tras radicar ante Quipux, HU #12787 AC2). Devuelve metadatos: el binario se baja
+        // por /documents/{attachmentId}/download o /preview-url.
+        group.MapGet("/client-procedures/{id:guid}/consolidado/entrega", DeliverClientProcedureConsolidadoAsync)
+            .WithName("AdminOtDeliverClientProcedureConsolidado")
+            .WithSummary("Entrega el consolidado vigente (maestro o wizard) de un trámite de cliente OT; reconstruye solo si está desactualizado")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         group.MapGet("/client-procedures/{id:guid}/documents", ListClientProcedureDocumentsAsync)
             .WithName("AdminOtListClientProcedureDocuments")
             .WithSummary("Lista los adjuntos del trámite de un cliente OT (sin binarios, con flags de consolidado)")
@@ -326,66 +366,98 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status409Conflict)
             .DisableAntiforgery();
 
+        // HU #12854/#12855 (Feature #12847, Épica #12751): Reglas resuelve el tenant objetivo con
+        // ResolveOtUserScopeAsync (mismo patrón que Requisitos) y exige SuperAdminPolicy.
         group.MapPost("/rules", CreateRuleAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtCreateRule")
-            .WithSummary("Crea una regla OT con condiciones AND/OR")
+            .WithSummary("Crea una regla OT con condiciones AND/OR (solo SuperAdmin)")
             .Produces(StatusCodes.Status201Created)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden)
-            .Produces(StatusCodes.Status422UnprocessableEntity);
-
-        group.MapGet("/rules", ListRulesAsync)
-            .WithName("AdminOtListRules")
-            .WithSummary("Lista reglas OT del tenant")
-            .Produces(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
-
-        group.MapPatch("/rules/{id:guid}", UpdateRuleAsync)
-            .WithName("AdminOtUpdateRule")
-            .WithSummary("Activa o desactiva una regla OT (hot-swap)")
-            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
-        group.MapGet("/document-precedence", ListDocumentPrecedenceAsync)
-            .WithName("AdminOtListDocumentPrecedence")
-            .WithSummary("Lista prelación documental por tipo de trámite")
+        group.MapGet("/rules", ListRulesAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithName("AdminOtListRules")
+            .WithSummary("Lista reglas OT del tenant (solo SuperAdmin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPatch("/rules/{id:guid}", UpdateRuleAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithName("AdminOtUpdateRule")
+            .WithSummary("Activa o desactiva una regla OT (hot-swap, solo SuperAdmin)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // HU #12858/#12859 (Feature #12848, Épica #12751): document-precedence resuelve el tenant
+        // objetivo con ResolveOtUserScopeAsync (mismo patrón que Requisitos/Reglas) y exige
+        // OtAdminOrSuperAdminPolicy — SuperAdmin u ot_admin, SIN el bypass de
+        // entity_type=TRANSIT_OFFICE de OtModulePolicy (el resto de roles OT reciben 403: el Admin
+        // OT "solo ordena", ningún otro rol OT conserva ni siquiera eso).
+        group.MapGet("/document-precedence", ListDocumentPrecedenceAsync)
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
+            .WithName("AdminOtListDocumentPrecedence")
+            .WithSummary("Lista prelación documental por tipo de trámite (SuperAdmin u ot_admin)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
         group.MapPatch("/document-precedence", UpdateDocumentPrecedenceAsync)
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithName("AdminOtUpdateDocumentPrecedence")
-            .WithSummary("Reordena prelación documental en batch atómico")
+            .WithSummary("Reordena prelación documental en batch atómico (SuperAdmin u ot_admin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
+        // HU #12858/#12859: etiquetas documentales resuelven el tenant objetivo con el mismo
+        // helper y quedan EXCLUSIVAS de SuperAdmin (ni siquiera ot_admin las conserva — a
+        // diferencia de document-precedence).
         group.MapPost("/document-tags", CreateDocumentTagAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtCreateDocumentTag")
-            .WithSummary("Crea una etiqueta documental OT")
+            .WithSummary("Crea una etiqueta documental OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status201Created)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
         group.MapGet("/document-tags", ListDocumentTagsAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtListDocumentTags")
-            .WithSummary("Lista etiquetas documentales del tenant")
+            .WithSummary("Lista etiquetas documentales del tenant (solo SuperAdmin)")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         group.MapDelete("/document-tags/{id:guid}", DeleteDocumentTagAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtDeleteDocumentTag")
-            .WithSummary("Elimina una etiqueta documental OT")
+            .WithSummary("Elimina una etiqueta documental OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
@@ -598,13 +670,18 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         UpdateOtProfileRequest request,
         UpdateOtProfileHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12854 (Feature #12847, Épica #12751): mismo scoping que Requisitos —
+        // SuperAdmin exige ?transitOfficeId (400 si falta, 404 si el OT no tiene tenant);
+        // ot_admin sigue usando su propio tenant del JWT.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new UpdateOtProfileCommand
@@ -707,13 +784,16 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         UpdateOtFeatureFlagRequest request,
         UpdateOtFeatureFlagHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12854 (Feature #12847, Épica #12751): mismo scoping que Requisitos/Perfil.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new UpdateOtFeatureFlagCommand
@@ -1188,6 +1268,11 @@ public static class AdminOtEndpoints
             return Results.BadRequest(new { error = problema });
         }
 
+        if (body.ValidarFamilia() is { } familiaInvalida)
+        {
+            return Results.BadRequest(new { error = familiaInvalida });
+        }
+
         var result = await handler
             .HandleAsync(body.ToQuery(tenantId, scopedOfficeId), cancellationToken)
             .ConfigureAwait(false);
@@ -1326,6 +1411,51 @@ public static class AdminOtEndpoints
         {
             OtTenantId = tenantId,
             TransitOfficeId = scopedOfficeId,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> SearchClientProceduresCountersAsync(
+        HttpContext httpContext,
+        GetOtBandejaCountersHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromBody] OtBandejaSearchRequest body,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        {
+            return Results.Json(
+                new { error = "Token inválido: falta claim tenant_id" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        if (OtBandejaQueryConditions.Validate(body.Condiciones) is { } problema)
+        {
+            return Results.BadRequest(new { error = problema });
+        }
+
+        if (body.ValidarFamilia() is { } familiaInvalida)
+        {
+            return Results.BadRequest(new { error = familiaInvalida });
+        }
+
+        var result = await handler.HandleAsync(new GetOtBandejaCountersQuery
+        {
+            OtTenantId = tenantId,
+            TransitOfficeId = scopedOfficeId,
+            Filtro = body.ToFiltroDeConteo(),
         }, cancellationToken).ConfigureAwait(false);
 
         return Results.Ok(result);
@@ -1992,25 +2122,13 @@ public static class AdminOtEndpoints
             access!.ClientTenantId,
             async () =>
             {
-                // HU #10706 AC1 — orden por la matriz documental resuelta del trámite con la
-                // precedencia del OT. Se resuelve DENTRO del scope RLS del tenant cliente (los
-                // requisitos base viven en tramites del cliente). Si el resolver falla o no hay
-                // matriz configurada, la lista vacía hace que el handler caiga al orden por modalidad.
-                IReadOnlyList<string> precedencia;
-                try
-                {
-                    var matriz = await matrixResolver
-                        .ResolveAsync(access.ProcedureTypeId, access.TransitOfficeId, cancellationToken)
-                        .ConfigureAwait(false);
-                    precedencia = matriz.Select(m => m.Codigo).ToList();
-                }
-                catch
-                {
-                    precedencia = [];
-                }
+                var precedencia = await ResolverPrecedenciaMatrizAsync(matrixResolver, access, cancellationToken)
+                    .ConfigureAwait(false);
 
+                // HU #12787 (AC2) — radicado ante Quipux ⇒ el maestro radicado tal cual (modo
+                // radicado_fijo), ni con `force` se regenera.
                 return await handler
-                    .HandleAsync(id, access.ClientTenantId, precedencia, force ?? false, cancellationToken)
+                    .HandleRespetandoRadicacionAsync(id, access.ClientTenantId, precedencia, force ?? false, cancellationToken)
                     .ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
@@ -2018,10 +2136,127 @@ public static class AdminOtEndpoints
         return error switch
         {
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
+            Flit.Tramites.Application.UseCases.ProcedureInstances.EntregarConsolidadoHandler.ConsolidadoNoGenerado =>
+                Results.NotFound(new { error = "consolidado_no_generado" }),
             "sin_adjuntos" => Results.Conflict(new { error = "sin_adjuntos" }),
             "adjunto_no_disponible" => Results.Conflict(new { error = "adjunto_no_disponible" }),
             "mimetype_no_soportado" => Results.Conflict(new { error = "mimetype_no_soportado" }),
             _ => Results.Ok(result),
+        };
+    }
+
+    /// <summary>
+    /// Orden de la matriz documental resuelta del trámite con la precedencia del OT (HU #10706 AC1). Se
+    /// llama DENTRO del scope RLS del tenant cliente (los requisitos base viven en tramites del
+    /// cliente). Si el resolver falla o no hay matriz configurada, la lista vacía hace que el handler
+    /// caiga al orden por modalidad.
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> ResolverPrecedenciaMatrizAsync(
+        Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
+        Flit.Admin.Domain.OtClientProcedures.OtClientProcedure access,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var matriz = await matrixResolver
+                .ResolveAsync(access.ProcedureTypeId, access.TransitOfficeId, cancellationToken)
+                .ConfigureAwait(false);
+            return matriz.Select(m => m.Codigo).ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    // ── Entrega del consolidado vigente (HU #12785, épica #12760) ────────────────────────────────
+
+    private static async Task<IResult> DeliverClientProcedureConsolidadoAsync(
+        Guid id,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        Flit.Admin.Domain.OtProfile.IQuipuxReadOnlyGuard quipuxReadOnlyGuard,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.EntregarConsolidadoHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        // `consolidado_maestro` (default) | `consolidado`.
+        [FromQuery] string? tipo,
+        // Nullable a propósito (Bug #11139): omitirlos = comportamiento normal.
+        [FromQuery] bool? force,
+        [FromQuery] bool? soloLectura,
+        CancellationToken cancellationToken)
+    {
+        if (!Flit.Api.Endpoints.Tramites.ConsolidadoEndpoints.TryParseTipo(
+                tipo,
+                Flit.Tramites.Application.UseCases.ProcedureInstances.ConsolidadoEntregaTipo.Maestro,
+                out var tipoEntrega))
+        {
+            return Results.BadRequest(new { error = "tipo_invalido", message = "tipo debe ser 'consolidado' o 'consolidado_maestro'." });
+        }
+
+        // Épica #12760 (security M1) — un GET no fuerza escrituras: `force` queda para el POST
+        // `consolidado-maestro` («Regenerar»). Ningún cliente del frontend lo manda por esta ruta.
+        if (force == true)
+        {
+            return Results.BadRequest(new
+            {
+                error = Flit.Api.Endpoints.Tramites.ConsolidadoEndpoints.ForceNoPermitidoEnGetError,
+                message = "force no se admite en GET: para reconstruir use POST consolidado-maestro.",
+            });
+        }
+
+        var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        // Un OT en modo Quipux read-only no puede generar (HU #10215 AC4): en vez de 403, la entrega le
+        // sirve el adjunto tal cual — ver no es generar.
+        var esMaestro = tipoEntrega == Flit.Tramites.Application.UseCases.ProcedureInstances.ConsolidadoEntregaTipo.Maestro;
+        var guardResult = await quipuxReadOnlyGuard
+            .ValidateActionAsync(tenantId, esMaestro ? "generar_consolidado_maestro" : "generar_consolidado", cancellationToken)
+            .ConfigureAwait(false);
+        var sinGenerar = (soloLectura ?? false) || !guardResult.IsAllowed;
+
+        var (result, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            async () =>
+            {
+                IReadOnlyList<string>? precedencia = esMaestro && !sinGenerar
+                    ? await ResolverPrecedenciaMatrizAsync(matrixResolver, access, cancellationToken).ConfigureAwait(false)
+                    : null;
+
+                return await handler
+                    .HandleAsync(
+                        new Flit.Tramites.Application.UseCases.ProcedureInstances.EntregarConsolidadoRequest(
+                            id,
+                            access.ClientTenantId,
+                            tipoEntrega,
+                            ResolveUserId(httpContext.User),
+                            Force: false,
+                            sinGenerar,
+                            precedencia),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            null => Results.Ok(result),
+            "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
+            Flit.Tramites.Application.UseCases.ProcedureInstances.EntregarConsolidadoHandler.ConsolidadoNoGenerado =>
+                Results.NotFound(new { error = "consolidado_no_generado" }),
+            Flit.Tramites.Application.UseCases.ProcedureInstances.SubmitGate.FurRequerido =>
+                Results.Conflict(new { error = "fur_requerido" }),
+            "storage_unavailable" => Results.Json(
+                new { error = "storage_unavailable" },
+                statusCode: StatusCodes.Status503ServiceUnavailable),
+            // migrado_solo_lectura, sin_adjuntos, adjunto_no_disponible, mimetype_no_soportado,
+            // organismo_requerido: mismo formato { error } que el resto de la consola OT.
+            _ => Results.Conflict(new { error }),
         };
     }
 
@@ -2033,6 +2268,7 @@ public static class AdminOtEndpoints
         Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
         ITransitOfficeCatalog transitOfficeCatalog,
         Flit.Tramites.Application.UseCases.ProcedureInstances.ListAttachmentsHandler listHandler,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.IMaestroRadicadoLookup maestroRadicado,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
@@ -2042,15 +2278,27 @@ public static class AdminOtEndpoints
         if (accessError is not null)
             return accessError;
 
-        var (attachments, error) = await repository.ExecuteInClientTenantScopeAsync(
+        var (attachments, radicadoId, error) = await repository.ExecuteInClientTenantScopeAsync(
             access!.ClientTenantId,
-            () => listHandler.HandleAsync(id, access.ClientTenantId, cancellationToken),
+            async () =>
+            {
+                var (listado, err) = await listHandler
+                    .HandleAsync(id, access.ClientTenantId, cancellationToken).ConfigureAwait(false);
+                var radicado = listado is null
+                    ? null
+                    : await maestroRadicado
+                        .AttachmentRadicadoAsync(access.ClientTenantId, id, cancellationToken).ConfigureAwait(false);
+                return (listado, radicado, err);
+            },
             cancellationToken).ConfigureAwait(false);
 
         if (error is "not_found")
             return Results.NotFound(new { error = "Trámite no encontrado" });
 
-        var docs = attachments!.Attachments;
+        // Re-review #12760 (N5) — una fila por tipo de consolidado: la que sirve la entrega (el maestro
+        // radicado fijo si aplica; si no, el más reciente). Mismo contrato { data, consolidado, … }.
+        var docs = Flit.Tramites.Application.UseCases.ProcedureInstances.ConsolidadoListado
+            .UnoPorTipo(attachments!.Attachments, radicadoId);
         var hasConsolidado = docs.Any(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
         var hasConsolidadoMaestro = docs.Any(a => string.Equals(a.Tipo, "consolidado_maestro", StringComparison.OrdinalIgnoreCase));
 
@@ -2126,13 +2374,17 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         CreateOtRuleRequest request,
         CreateOtRuleHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12854 (Feature #12847, Épica #12751): mismo scoping que Requisitos — SuperAdmin
+        // resuelve el tenant del organismo pedido, no el de su propio JWT.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new CreateOtRuleCommand
@@ -2154,13 +2406,16 @@ public static class AdminOtEndpoints
     private static async Task<IResult> ListRulesAsync(
         HttpContext httpContext,
         ListOtRulesHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12854 (Feature #12847, Épica #12751): mismo scoping que Requisitos.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(
@@ -2175,13 +2430,16 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         UpdateOtRuleRequest request,
         UpdateOtRuleHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12854 (Feature #12847, Épica #12751): mismo scoping que Requisitos.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new UpdateOtRuleCommand
@@ -2205,14 +2463,19 @@ public static class AdminOtEndpoints
     private static async Task<IResult> ListDocumentPrecedenceAsync(
         HttpContext httpContext,
         ListOtDocumentPrecedenceHandler handler,
+        FlitDbContext db,
         Guid? procedureTypeId,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12858 (Feature #12848, Épica #12751): mismo scoping que Requisitos/Reglas —
+        // SuperAdmin exige ?transitOfficeId (400 si falta, 404 si el OT no tiene tenant); ot_admin
+        // sigue usando su propio tenant del JWT.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         if (procedureTypeId is null || procedureTypeId == Guid.Empty)
@@ -2235,13 +2498,18 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         UpdateOtDocumentPrecedenceRequest request,
         UpdateOtDocumentPrecedenceHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12858: mismo scoping que Requisitos/Reglas. El tenant resuelto es el que se pasa a
+        // UpdateOtDocumentPrecedenceHandler, así que la invalidación de consolidados (HU #12789)
+        // sigue operando sobre el organismo pedido, no sobre el tenant del JWT del SuperAdmin.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new UpdateOtDocumentPrecedenceCommand
@@ -2264,13 +2532,16 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         CreateOtDocumentTagRequest request,
         CreateOtDocumentTagHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12858: mismo scoping que Requisitos/Reglas/Prelación.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new CreateOtDocumentTagCommand
@@ -2293,13 +2564,16 @@ public static class AdminOtEndpoints
     private static async Task<IResult> ListDocumentTagsAsync(
         HttpContext httpContext,
         ListOtDocumentTagsHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12858: mismo scoping que Requisitos/Reglas/Prelación.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(
@@ -2313,13 +2587,16 @@ public static class AdminOtEndpoints
         Guid id,
         HttpContext httpContext,
         DeleteOtDocumentTagHandler handler,
+        FlitDbContext db,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
-        if (!RequestTenantResolver.TryResolveTenantId(httpContext.User, out var tenantId))
+        // HU #12858: mismo scoping que Requisitos/Reglas/Prelación.
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
         {
-            return Results.Json(
-                new { error = "Token inválido: falta claim tenant_id" },
-                statusCode: StatusCodes.Status401Unauthorized);
+            return scopeError;
         }
 
         var result = await handler.HandleAsync(new DeleteOtDocumentTagCommand
@@ -3020,8 +3297,15 @@ public static class AdminOtEndpoints
     /// SuperAdmin debe indicar <paramref name="transitOfficeId"/> (oficina del catálogo)
     /// y se resuelve el tenant OT que la tiene vinculada vía
     /// <c>admin.transit_office_profiles</c>.
+    ///
+    /// <c>internal</c> (no <c>private</c>) para que
+    /// <see cref="Flit.Admin.Tests.OtProfile.AdminOtUserScopeResolutionTests"/> lo invoque
+    /// DIRECTO, sin reflexión (<c>InternalsVisibleTo Flit.Admin.Tests</c> en Flit.Api.csproj) —
+    /// mismo patrón que <c>FlitPdfStamper.ComputeStampGeometry</c>: aislar el helper de scoping
+    /// que HU #12854 puso a compartir Reglas/Perfil/Feature Flags con Requisitos, sin exponerlo
+    /// como API pública del endpoint.
     /// </summary>
-    private static async Task<(Guid TenantId, IResult? Error)> ResolveOtUserScopeAsync(
+    internal static async Task<(Guid TenantId, IResult? Error)> ResolveOtUserScopeAsync(
         ClaimsPrincipal user,
         Guid? transitOfficeId,
         FlitDbContext db,
@@ -3113,6 +3397,10 @@ internal sealed record OtBandejaSearchRequest
     public string? Status { get; init; }
     public bool? HasActiveRevocationRequest { get; init; }
     public Guid? ProcedureTypeId { get; init; }
+
+    /// <summary>Epic #12686 — pestaña de familia (<c>MATRICULAS</c>/<c>TRASPASO</c>/<c>OTROS</c>).</summary>
+    public string? Familia { get; init; }
+
     public string? Vin { get; init; }
     public string? Placa { get; init; }
     public string? Vendedor { get; init; }
@@ -3138,6 +3426,7 @@ internal sealed record OtBandejaSearchRequest
         Status = Status,
         HasActiveRevocationRequest = HasActiveRevocationRequest,
         ProcedureTypeId = ProcedureTypeId,
+        Familia = Familia,
         Vin = Vin,
         Placa = Placa,
         Vendedor = Vendedor,
@@ -3152,6 +3441,33 @@ internal sealed record OtBandejaSearchRequest
         Page = Page,
         PageSize = PageSize,
     };
+
+    /// <summary>
+    /// Filtros de la tabla para los contadores (Epic #12686). Sin estado, revocatoria, orden ni
+    /// página: las tarjetas cuentan cada clase bajo el resto de criterios.
+    /// </summary>
+    public OtClientProcedureFilter ToFiltroDeConteo() => new()
+    {
+        ProcedureTypeId = ProcedureTypeId,
+        Familia = Familia,
+        Vin = Vin,
+        Placa = Placa,
+        Vendedor = Vendedor,
+        Comprador = Comprador,
+        Gestor = Gestor,
+        Busqueda = Busqueda,
+        Condiciones = Condiciones,
+        CreatedFrom = CreatedFrom,
+        CreatedTo = CreatedTo,
+        UpdatedFrom = UpdatedFrom,
+        UpdatedTo = UpdatedTo,
+    };
+
+    /// <summary>Mensaje de error si <see cref="Familia"/> viene y no es una familia válida.</summary>
+    public string? ValidarFamilia() =>
+        string.IsNullOrWhiteSpace(Familia) || ProcedureFamilyCodes.IsValid(Familia)
+            ? null
+            : $"Familia no válida: '{Familia}'. Valores permitidos: {string.Join(", ", ProcedureFamilyCodes.All)}.";
 }
 
 /// <summary>Logging source-generated (CA1848) de la aprobación OT. Sin PII.</summary>

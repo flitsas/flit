@@ -2,6 +2,9 @@
 
 import { ESTADO_ICONO } from "@/lib/tramites/estados";
 import type { OtBandejaCounters as Counters } from "@/lib/api/types-ot";
+import type { ProcedureFamily } from "@/lib/api/types/procedure-parametrization";
+import { familiaUsaEstado } from "@/lib/tramites/panelesEstado";
+import { FranjaEstados, type FranjaItem } from "@/components/operacion/FranjaEstados";
 
 /** Clave de la tarjeta pulsada; el contenedor la traduce al filtro de estado del listado. */
 export type OtCounterKey =
@@ -40,8 +43,11 @@ interface TarjetaDef {
  * ADR-0059 — cada tarjeta ES un estado real (preasignacion, asignado, entregado, aprobado,
  * rechazado, revocado): pulsarla equivale a filtrar por ese estado, y las seis son excluyentes.
  * El icono (y con él el color) es el MISMO del catálogo del gestor (`ESTADO_ICONO`): un estado se
- * ve igual en las dos pantallas. «Por decidir» conserva el suyo porque no nombra el estado sino
- * la cola de trabajo del organismo.
+ * ve igual en las dos pantallas.
+ *
+ * Epic #12686 — las tarjetas se llaman como el estado en todas las perspectivas («Por decidir»
+ * pasa a «Entregado», «Asignados» a «Asignado»…); la clave de cada una no cambia porque es la del
+ * contrato de `/client-procedures/counters`.
  */
 const TARJETAS: TarjetaDef[] = [
   {
@@ -53,21 +59,21 @@ const TARJETAS: TarjetaDef[] = [
   },
   {
     key: "asignados",
-    label: "Asignados",
+    label: "Asignado",
     icon: ESTADO_ICONO.asignado,
     hint: "Con placa asignada; el gestor gestiona SOAT e impuestos y envía al OT",
     status: "asignado",
   },
   {
     key: "porDecidir",
-    label: "Por decidir",
-    icon: "/assets/ot-estados/sin-gestion.svg",
+    label: "Entregado",
+    icon: ESTADO_ICONO.entregado,
     hint: "Entregados a la espera de la decisión del organismo",
     status: "entregado",
   },
   {
     key: "aprobados",
-    label: "Aprobados",
+    label: "Aprobado",
     icon: ESTADO_ICONO.aprobado,
     hint: "Trámites que el organismo aprobó",
     status: "aprobado",
@@ -78,7 +84,7 @@ const TARJETAS: TarjetaDef[] = [
     // "Aprobados" (de donde sale) y antes de "Rechazados": es una decisión pendiente, no un
     // desenlace ya cerrado como "Revocados".
     key: "solicitudesRevocatoria",
-    label: "Solicitudes de revocatoria",
+    label: "Solicitud de revocatoria",
     icon: "/assets/ot-estados/solicitud-revocatoria.svg",
     hint: "Aprobados con una solicitud de revocatoria esperando decisión",
     status: "",
@@ -86,14 +92,14 @@ const TARJETAS: TarjetaDef[] = [
   },
   {
     key: "rechazados",
-    label: "Rechazados",
+    label: "Rechazado",
     icon: ESTADO_ICONO.rechazado,
     hint: "Trámites que el organismo rechazó (desde entregado o desde preasignación)",
     status: "rechazado",
   },
   {
     key: "revocados",
-    label: "Revocados",
+    label: "Revocado",
     icon: ESTADO_ICONO.revocado,
     hint: "Trámites Aprobados que el organismo revocó (HU #12166)",
     status: "revocado",
@@ -102,72 +108,95 @@ const TARJETAS: TarjetaDef[] = [
 
 export const OT_BANDEJA_TARJETAS: readonly TarjetaDef[] = TARJETAS;
 
+/**
+ * Epic #12686 — tarjetas de la tira para la pestaña de familia: Traspaso y Otros trámites no pasan
+ * por la ruta de placa, así que no muestran Preasignación ni Asignado. Nunca aparecen Borrador,
+ * Preparado ni Anulado: no son estados que el organismo reciba.
+ */
+export function tarjetasDeFamilia(familia: "" | ProcedureFamily): readonly TarjetaDef[] {
+  return TARJETAS.filter((t) => familiaUsaEstado(familia, t.status));
+}
+
 export interface OtBandejaCountersStripProps {
   counters: Counters | null;
   /** Tarjeta activa; vacío = ninguna. */
   selected: OtCounterKey | "";
   onSelect: (key: OtCounterKey | "") => void;
   loading?: boolean;
+  /** Epic #12686 — pestaña de familia activa; vacío = Todos. */
+  familia?: "" | ProcedureFamily;
 }
 
 /**
- * Tira de contadores de la bandeja del OT: una tarjeta única dividida en columnas, con icono,
- * etiqueta y cifra. Pulsar una filtra el listado; pulsarla de nuevo quita el filtro.
+ * Tira de contadores de la bandeja del OT. Pulsar una tarjeta filtra el listado; pulsarla de
+ * nuevo quita el filtro. Se pinta con la misma `FranjaEstados` que el listado del gestor.
  *
  * Las cifras vienen del backend (`/client-procedures/counters`), NO de las filas cargadas: la
  * bandeja está paginada, así que contar lo que hay en pantalla diría "cuántos de estos veinte" en
- * vez de "cuántos hay", que es la pregunta que el operador se hace al entrar.
+ * vez de "cuántos hay". Desde la Epic #12686 cuentan bajo los mismos filtros que la tabla.
  */
 export function OtBandejaCountersStrip({
   counters,
   selected,
   onSelect,
   loading = false,
+  familia = "",
 }: OtBandejaCountersStripProps) {
+  const items: FranjaItem[] = tarjetasDeFamilia(familia).map((t) => {
+    const valor = counters ? counters[t.key] : null;
+    return {
+      key: t.key,
+      label: t.label,
+      icon: t.icon,
+      count: valor,
+      ariaLabel: `${t.label}: ${valor ?? "sin dato"}. ${t.hint}`,
+      title: t.hint,
+      activeBg: "rgba(85,126,255,0.08)",
+      activeColor: "#557EFF",
+    };
+  });
+
   return (
-    <div
-      role="group"
-      aria-label="Carga de trabajo del organismo"
-      className="grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#0B0F14]"
-    >
-      {TARJETAS.map((t) => {
-        const valor = counters ? counters[t.key] : null;
-        const activo = selected === t.key;
-        return (
-          <button
-            key={t.key}
-            type="button"
-            aria-pressed={activo}
-            aria-label={`${t.label}: ${valor ?? "sin dato"}. ${t.hint}`}
-            title={t.hint}
-            disabled={loading}
-            onClick={() => onSelect(activo ? "" : t.key)}
-            className="flex flex-col items-center gap-1 px-2 py-2 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-60"
-            style={activo ? { background: "rgba(85,126,255,0.08)" } : undefined}
-          >
-            {/* El SVG trae su propio círculo de color: se pinta entero, sin pastilla detrás. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={t.icon} alt="" aria-hidden="true" width={28} height={28} className="h-7 w-7" />
-            <span className="max-w-full truncate text-[10px] font-medium opacity-70">
-              {t.label}
-            </span>
-            <span
-              className="text-lg font-bold leading-none tabular-nums text-[#1E293B] dark:text-white"
-              aria-hidden="true"
-            >
-              {/* Guion mientras no hay cifra: un 0 afirmaría que no hay trabajo, que es distinto. */}
-              {valor ?? "—"}
-            </span>
-            <span
-              className="h-0.5 w-6 rounded-full"
-              style={{ background: activo ? "#557EFF" : "transparent" }}
-              aria-hidden="true"
-            />
-          </button>
-        );
-      })}
-    </div>
+    <FranjaEstados
+      items={items}
+      selected={selected}
+      onSelect={(key) => onSelect(key as OtCounterKey | "")}
+      ariaLabel="Carga de trabajo del organismo"
+      disabled={loading}
+      darkBgClassName="dark:bg-[#0B0F14]"
+    />
   );
+}
+
+/**
+ * Epic #12686 (HU #12807) — atajos de la «Búsqueda rápida» del OT. Los tres son colas que ya tienen
+ * tarjeta, así que cada atajo aplica su tarjeta (y la resalta) en vez de inventar otro filtro.
+ */
+export type AtajoOt = "por_aprobar" | "por_preasignar" | "revocatorias";
+
+export const ATAJOS_OT: readonly { key: AtajoOt; label: string; hint: string; contador: OtCounterKey }[] = [
+  {
+    key: "por_aprobar",
+    label: "Por aprobar",
+    hint: "Entregados a la espera de tu decisión",
+    contador: "porDecidir",
+  },
+  {
+    key: "por_preasignar",
+    label: "Por preasignar",
+    hint: "Trámites en Preasignación: todavía sin placa asignada",
+    contador: "preasignacion",
+  },
+  {
+    key: "revocatorias",
+    label: "Revocatorias",
+    hint: "Aprobados con una solicitud de revocatoria activa",
+    contador: "solicitudesRevocatoria",
+  },
+];
+
+export function contadorDeAtajoOt(key: AtajoOt | ""): OtCounterKey | "" {
+  return ATAJOS_OT.find((a) => a.key === key)?.contador ?? "";
 }
 
 /**

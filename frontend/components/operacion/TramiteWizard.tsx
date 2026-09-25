@@ -704,6 +704,12 @@ export function TramiteWizard(props: Props) {
    * El formulario notifica el gate; al salir del paso se resetea.
    */
   const [actorsConsultationReady, setActorsConsultationReady] = useState(false);
+  /** Partes sin consulta de identidad, por su nombre en pantalla (aviso del pie). */
+  const [consultaPendientes, setConsultaPendientes] = useState<string[]>([]);
+  const onActorsConsultationGate = useCallback((ok: boolean, partesPendientes: string[]) => {
+    setActorsConsultationReady(ok);
+    setConsultaPendientes(partesPendientes);
+  }, []);
   /**
    * Escritura del representante legal: Continuar solo si toda parte jurídica cuyo representante NO
    * está en el módulo de representantes de la compañía ya adjuntó la escritura que lo acredita.
@@ -712,6 +718,12 @@ export function TramiteWizard(props: Props) {
    * nada que exigir, y `ActorsForm` lo corrige en cuanto resuelve el directorio.
    */
   const [escrituraRlGateOk, setEscrituraRlGateOk] = useState(true);
+  /**
+   * HU #12777 — certificado de Cámara de Comercio OBLIGATORIO de alguna parte jurídica sin cargar.
+   * Arranca en `true` por el mismo motivo que el de la escritura: mientras el paso no se monta no
+   * hay nada que exigir, y `ActorsForm` lo corrige en cuanto el backend resuelve los requisitos.
+   */
+  const [camaraComercioGateOk, setCamaraComercioGateOk] = useState(true);
   /**
    * Campos obligatorios de las partes del paso de actores. Arranca en `false`: hasta que
    * `ActorsForm` monte y diga lo contrario, lo correcto es no dejar avanzar — al revés, el botón
@@ -1370,6 +1382,10 @@ export function TramiteWizard(props: Props) {
     // se pasa a Requisitos. El documento se carga en el propio paso, junto a los datos del
     // representante, y `ActorsForm` es quien decide si aplica.
     (isActorStep && !escrituraRlGateOk) ||
+    // Parte jurídica sin su certificado de Cámara de Comercio cuando es obligatorio (no tiene ni
+    // firma precargada ni escritura vigente). Gate separado del de la escritura a propósito: son
+    // dos documentos distintos y el gestor tiene que poder ver cuál le falta.
+    (isActorStep && !camaraComercioGateOk) ||
     // Campos obligatorios de las partes sin completar: no Continuar. Es la misma validación que
     // aplicaba `ActorsForm.save()` tras el clic, adelantada al estado del botón.
     (isActorStep && !actoresCamposGateOk) ||
@@ -1938,8 +1954,9 @@ export function TramiteWizard(props: Props) {
                 onRefresh={() => void refresh()}
                 stepFormRef={stepFormRef}
                 prendaFormRef={prendaFormRef}
-                onActorsConsultationGateChange={setActorsConsultationReady}
+                onActorsConsultationGateChange={onActorsConsultationGate}
                 onEscrituraRepresentanteGateChange={setEscrituraRlGateOk}
+                onCamaraComercioGateChange={setCamaraComercioGateOk}
                 onCamposRequeridosGateChange={setActoresCamposGateOk}
                 rotulosActores={rotulosDeActores(steps)}
                 onIrAActores={irAPasoActor}
@@ -1985,6 +2002,24 @@ export function TramiteWizard(props: Props) {
               </p>
             </InlineAlert>
           )}
+
+          {/*
+            Consulta de identidad pendiente (RUNT/RUES) de alguna parte: pasa al reabrir un borrador en
+            otra pestaña, porque la consulta vive en la sesión del navegador y solo el propietario se
+            vuelve a consultar solo. Sin este aviso el botón quedaba apagado con todo lleno.
+          */}
+          {isActorStep &&
+            actoresCamposGateOk &&
+            !actorsConsultationReady &&
+            consultaPendientes.length > 0 &&
+            !fullReadOnly && (
+              <InlineAlert tone="info" className="mt-6">
+                <p>
+                  Consulta los datos de {consultaPendientes.join(' y ')} con el botón «Consultar» de
+                  cada parte para continuar.
+                </p>
+              </InlineAlert>
+            )}
 
           {/* Bloqueos de envío traducidos (en el paso de decisión). */}
           {isDecisionStep && blockers.length > 0 && (
@@ -2856,7 +2891,7 @@ function TramiteObservacionesField({
         </p>
       )}
       {(preview.manual || preview.auto.length > 0) && (
-        <div className="rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
+        <div className="min-w-0 rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
           <p className="text-xs font-bold uppercase opacity-55">Así quedarán en el FUR</p>
           <div className="mt-1 space-y-0.5 text-xs leading-relaxed">
             {preview.manual && (
@@ -2864,7 +2899,7 @@ function TramiteObservacionesField({
             )}
             {/* Atenuadas: son las que el gestor no escribió y no puede editar aquí. */}
             {preview.auto.map((segment) => (
-              <p key={segment} className="opacity-70">
+              <p key={segment} className="break-words whitespace-pre-line opacity-70">
                 {segment}
               </p>
             ))}
@@ -4562,6 +4597,7 @@ function StepBody({
   prendaFormRef,
   onActorsConsultationGateChange,
   onEscrituraRepresentanteGateChange,
+  onCamaraComercioGateChange,
   onCamposRequeridosGateChange,
   rotulosActores,
   onIrAActores,
@@ -4621,9 +4657,10 @@ function StepBody({
   stepFormRef: RefObject<WizardStepFormHandle | null>;
   prendaFormRef: RefObject<WizardStepFormHandle | null>;
   /** Gate Continuar en pasos de actores (consulta RUNT/RUES exitosa). */
-  onActorsConsultationGateChange?: (ready: boolean) => void;
+  onActorsConsultationGateChange?: (ready: boolean, partesPendientes: string[]) => void;
   /** Gate Continuar: escritura del representante legal fuera del directorio ya adjunta (o no aplica). */
   onEscrituraRepresentanteGateChange?: (ready: boolean) => void;
+  onCamaraComercioGateChange?: (ready: boolean) => void;
   /** Gate Continuar: campos obligatorios de las partes del paso de actores ya completos. */
   onCamposRequeridosGateChange?: (ready: boolean) => void;
   /**
@@ -4716,7 +4753,23 @@ function StepBody({
     // puede llegar desde un borrador abierto antes del cambio, y encuentra sus datos donde ahora
     // viven en vez de toparse con un paso que ya no existe.
     case 'prenda':
-    case 'documentos':
+    case 'documentos': {
+      // HU #12727 (D.1) — Observaciones comparte fila con Prenda cuando esta sección existe.
+      const muestraSeccionPrenda =
+        caps.pideValorComercial ||
+        ((caps.permitePrendaComplementaria || esTipoDePrenda(tipoCodigo)) &&
+          !esCancelacionDeMatricula(tipoCodigo));
+      const observacionesAccordion = (
+        <WizardAccordion
+          title="Observaciones del trámite"
+          defaultOpen
+          level="h3"
+          className="h-full min-w-0"
+        >
+          <TramiteObservacionesField instanceId={instanceId} hideCardWrapper />
+        </WizardAccordion>
+      );
+
       return (
         <div className="space-y-3">
           {caps.pideValorComercial ? (
@@ -4743,10 +4796,11 @@ function StepBody({
                 const esPuerta = caps.prendaEsPuerta;
                 return (
                   <WizardAccordionRow defaultOpen>
-                    <div className="grid grid-cols-1 gap-3 items-stretch">
+                    <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
                       <WizardAccordion
                         title="Asignación de Prenda / Limitación a la Propiedad"
                         level="h3"
+                        className="h-full min-w-0"
                       >
                         <PrendaForm
                           ref={prendaFormRef}
@@ -4762,6 +4816,7 @@ function StepBody({
                           hideHeader
                         />
                       </WizardAccordion>
+                      {observacionesAccordion}
                     </div>
                   </WizardAccordionRow>
                 );
@@ -4819,38 +4874,44 @@ function StepBody({
                   const documentoObligatorio =
                     prendaDocumentRequired || esPrendaDeAccionUnica(tipoCodigo);
                   return (
-                    <WizardAccordion
-                      title="Asignación de Prenda / Limitación a la Propiedad"
-                      defaultOpen
-                      level="h3"
-                    >
-                      <PrendaForm
-                        ref={prendaFormRef}
-                        instanceId={instanceId}
-                        onSaved={onRefresh}
-                        embeddedInWizard
-                        modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
-                        decisions={
-                          decisionesDelTipo ??
-                          (esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined)
-                        }
-                        documentRequired={documentoObligatorio}
-                        exigeEntidadLevantamiento={esPrendaDeAccionUnica(tipoCodigo)}
-                        // ADR-0055/HU #12130 (AC1/AC2) — solo PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA
-                        // admiten declarar la acción complementaria en la misma radicación.
-                        permiteAccionComplementaria={permiteAccionComplementaria(tipoCodigo)}
-                        onDocumentGateChange={onPrendaDocumentGateChange}
-                        runtHasGravamen={gravamen?.status === 'warn'}
-                        runtGravamenMessage={gravamen?.message}
-                        // HU #12131 (AC1/AC2) — el check ya corrió (existe en la respuesta) y no
-                        // encontró gravamen: `runtAvisoGravamenVariant` solo devuelve variante para
-                        // los tipos de UNA sola decisión de prenda (Inscribir/Levantar), que es
-                        // justo el alcance de esta HU.
-                        runtGravamenChecked={gravamen !== undefined}
-                        runtAvisoVariant={runtAvisoGravamenVariant(tipoCodigo)}
-                        hideHeader
-                      />
-                    </WizardAccordion>
+                    <WizardAccordionRow defaultOpen>
+                      <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
+                        <WizardAccordion
+                          title="Asignación de Prenda / Limitación a la Propiedad"
+                          defaultOpen
+                          level="h3"
+                          className="h-full min-w-0"
+                        >
+                          <PrendaForm
+                            ref={prendaFormRef}
+                            instanceId={instanceId}
+                            onSaved={onRefresh}
+                            embeddedInWizard
+                            modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
+                            decisions={
+                              decisionesDelTipo ??
+                              (esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined)
+                            }
+                            documentRequired={documentoObligatorio}
+                            exigeEntidadLevantamiento={esPrendaDeAccionUnica(tipoCodigo)}
+                            // ADR-0055/HU #12130 (AC1/AC2) — solo PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA
+                            // admiten declarar la acción complementaria en la misma radicación.
+                            permiteAccionComplementaria={permiteAccionComplementaria(tipoCodigo)}
+                            onDocumentGateChange={onPrendaDocumentGateChange}
+                            runtHasGravamen={gravamen?.status === 'warn'}
+                            runtGravamenMessage={gravamen?.message}
+                            // HU #12131 (AC1/AC2) — el check ya corrió (existe en la respuesta) y no
+                            // encontró gravamen: `runtAvisoGravamenVariant` solo devuelve variante para
+                            // los tipos de UNA sola decisión de prenda (Inscribir/Levantar), que es
+                            // justo el alcance de esta HU.
+                            runtGravamenChecked={gravamen !== undefined}
+                            runtAvisoVariant={runtAvisoGravamenVariant(tipoCodigo)}
+                            hideHeader
+                          />
+                        </WizardAccordion>
+                        {observacionesAccordion}
+                      </div>
+                    </WizardAccordionRow>
                   );
                 })()}
             </>
@@ -4953,11 +5014,10 @@ function StepBody({
             })()
           )}
 
-          <WizardAccordion title="Observaciones del trámite" level="h3">
-            <TramiteObservacionesField instanceId={instanceId} hideCardWrapper />
-          </WizardAccordion>
+          {!muestraSeccionPrenda && observacionesAccordion}
         </div>
       );
+    }
 
     // ADR-0050 — las partes las declara el TIPO. Con dos partes se unifican en un solo formulario
     // (2 tarjetas) y la key estable `actores` evita remontar al pasar del índice server
@@ -5045,6 +5105,7 @@ function StepBody({
           rnmcEnabled={rnmcEnabled}
           onConsultationGateChange={onActorsConsultationGateChange}
           onEscrituraRepresentanteGateChange={onEscrituraRepresentanteGateChange}
+          onCamaraComercioGateChange={onCamaraComercioGateChange}
           onCamposRequeridosGateChange={onCamposRequeridosGateChange}
           // Quien sabe cómo se llama la parte es el CATÁLOGO: en `TRASPASO_UNILATERAL` el rol
           // persistido es `comprador` pero el paso se llama «Locatario», que es la parte real del

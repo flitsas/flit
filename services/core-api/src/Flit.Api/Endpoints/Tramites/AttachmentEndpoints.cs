@@ -40,7 +40,7 @@ internal static class AttachmentEndpoints
             {
                 "missing_file" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el archivo (file)."),
                 "invalid_tipo" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "tipo inválido."),
-                "invalid_mime" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo MIME no permitido (use pdf/jpeg/png/webp)."),
+                "invalid_mime" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo de archivo no permitido para este documento."),
                 "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el tamaño máximo permitido para este documento."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en borrador o con subsanación activa."),
@@ -75,7 +75,7 @@ internal static class AttachmentEndpoints
             {
                 "missing_file" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El tamaño del archivo debe ser mayor a 0."),
                 "invalid_tipo" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "tipo inválido."),
-                "invalid_mime" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo MIME no permitido (use pdf/jpeg/png/webp)."),
+                "invalid_mime" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo de archivo no permitido para este documento."),
                 "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el tamaño máximo permitido para este documento."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en borrador o con subsanación activa."),
@@ -109,7 +109,7 @@ internal static class AttachmentEndpoints
             {
                 "missing_file" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El tamaño del archivo debe ser mayor a 0."),
                 "invalid_tipo" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "tipo inválido."),
-                "invalid_mime" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo MIME no permitido (use pdf/jpeg/png/webp)."),
+                "invalid_mime" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo de archivo no permitido para este documento."),
                 "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el tamaño máximo permitido para este documento."),
                 "missing_storage_path" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta storagePath (id de almacenamiento)."),
                 "missing_sha256" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta sha256."),
@@ -193,6 +193,12 @@ internal static class AttachmentEndpoints
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "attachment_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Attachment not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden borrar documentos en borrador o con subsanación activa."),
+                // Re-review #12760 (M-N1) — consolidados y maestro radicado: documentos del sistema.
+                DeleteAttachmentHandler.AdjuntoProtegido => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "Este documento lo genera el sistema y no se puede eliminar.",
+                    extensions: new Dictionary<string, object?> { ["error"] = DeleteAttachmentHandler.AdjuntoProtegido }),
                 _ => Results.NoContent(),
             };
         }).WithName("DeleteProcedureInstanceAttachment");

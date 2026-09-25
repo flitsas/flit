@@ -6,6 +6,7 @@ import {
   canReadGeneracionDocumental,
   decodeJwtPayload,
   isAdminCompany,
+  isOtAdmin,
   isOtUser,
   isSuperAdmin,
 } from "./jwt";
@@ -16,6 +17,50 @@ export const FORBIDDEN_PATH = "/403";
 export const RUNT_CONFIRMATION_BASE_PATH = "/admin/plataforma/confirmacion-runt";
 
 export type UserRole = "superadmin" | "admincompany" | "ot_admin" | "user";
+
+/**
+ * HU #12856 (Feature #12847) — Reglas, Requisitos y Configuración del organismo quedan
+ * exclusivos de Super Admin también en la capa de UI: un `ot_admin` (o cualquier otro rol de un
+ * tenant OT) que entra por URL directa a una de estas 3 sub-rutas debe caer a /403, aunque el
+ * resto de `/admin/transit-offices/*` le siga permitido (HU #10218). Bloqueo en dos capas: la API
+ * ya exige la policy `SuperAdmin` (HU-B2, backend); esto cierra el hueco de UI.
+ */
+const SUPERADMIN_ONLY_OT_SUBROUTES = ["rules", "requirements", "configuracion"] as const;
+
+/**
+ * HU #12860 (Feature #12848) — Documentos queda exclusivo de `ot_admin` y Super Admin en la
+ * capa de UI (bloqueo en dos capas: la API ya exige la policy `OtAdminOrSuperAdmin`, HU-C2
+ * backend): un Operador OT (`gestor_tramites_ot`) u otro rol OT personalizado que entra por URL
+ * directa cae a /403, aunque el resto de `/admin/transit-offices/*` le siga permitido.
+ */
+const OT_ADMIN_ONLY_OT_SUBROUTES = ["documents"] as const;
+
+/**
+ * Decodifica los segmentos percent-encoded de un pathname (p. ej. `%72ules` → `rules`) sin
+ * lanzar ante secuencias inválidas: si `decodeURIComponent` falla, se usa el pathname original
+ * tal cual, de forma que un valor malformado nunca abre una vía de bypass del gate.
+ */
+function safeDecodePathname(pathname: string): string {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
+}
+
+function isSuperAdminOnlyOtRoute(pathname: string): boolean {
+  const normalized = safeDecodePathname(pathname).toLowerCase();
+  return SUPERADMIN_ONLY_OT_SUBROUTES.some((segment) =>
+    new RegExp(`^/admin/transit-offices/[^/]+/${segment}(/|$)`).test(normalized),
+  );
+}
+
+function isOtAdminOnlyOtRoute(pathname: string): boolean {
+  const normalized = safeDecodePathname(pathname).toLowerCase();
+  return OT_ADMIN_ONLY_OT_SUBROUTES.some((segment) =>
+    new RegExp(`^/admin/transit-offices/[^/]+/${segment}(/|$)`).test(normalized),
+  );
+}
 
 export interface AdminAccessDecision {
   /** `true` si el token corresponde a un usuario con acceso permitido. */
@@ -30,8 +75,11 @@ export interface AdminAccessDecision {
  * Reglas:
  * - Sin token, token malformado o token expirado → no renderizar, redirigir a /403.
  * - SuperAdmin → permitido en todo /admin/*.
- * - Usuario de un tenant OT (ot_admin o entity_type TRANSIT_OFFICE) → permitido solo en
- *   /admin/transit-offices/* (HU #10218).
+ * - Usuario de un tenant OT (ot_admin o entity_type TRANSIT_OFFICE) → permitido en
+ *   /admin/transit-offices/* (HU #10218), salvo /rules, /requirements y /configuracion, que
+ *   quedan exclusivos de Super Admin (HU #12856, Feature #12847), y salvo /documents, que
+ *   además exige ser `ot_admin` (Operador OT y roles OT personalizados caen a /403 — HU #12860,
+ *   Feature #12848).
  * - AdminCompany → permitido en /admin/companies/* (HU #11228; la página redirige a su tenant).
  * - Cualquier rol con `generacion-documental.read` → permitido en /admin/generacion-documental/* (Feature #12201).
  * - Cualquier rol con `runt_confirmation.settings.manage` o `runt_confirmation.history.read` →
@@ -56,7 +104,9 @@ export function evaluateAdminAccess(
   if (
     pathname?.startsWith("/admin/transit-offices") &&
     payload &&
-    isOtUser(payload)
+    isOtUser(payload) &&
+    !isSuperAdminOnlyOtRoute(pathname) &&
+    (!isOtAdminOnlyOtRoute(pathname) || isOtAdmin(payload))
   ) {
     return { allowed: true };
   }

@@ -324,7 +324,14 @@ export function ClientProcedureDetailModal({
       return <OtDetalleActores procedure={row} />;
     }
     return (
-      <OtDetalleDocumentos procedureId={row.id} scope={scope} readOnly={readOnly} />
+      <OtDetalleDocumentos
+        procedureId={row.id}
+        scope={scope}
+        readOnly={readOnly}
+        quipuxRadicadoEn={row.quipuxRadicadoEn ?? null}
+        quipuxMaestroAttachmentId={row.quipuxMaestroAttachmentId ?? null}
+        consolidadoMaestro={row.consolidadoMaestro ?? null}
+      />
     );
   };
 

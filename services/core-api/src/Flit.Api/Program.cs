@@ -117,6 +117,10 @@ builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHa
 // Handler para la policy OtModule (SuperAdmin, ot_admin o tenant organismo de tránsito).
 builder.Services.AddSingleton<IAuthorizationHandler, OtModuleAuthorizationHandler>();
 
+// HU #12859 (Feature #12848, Épica #12751) — policy exclusiva de Prelación documental:
+// SuperAdmin u ot_admin, sin el bypass de entity_type=TRANSIT_OFFICE de OtModulePolicy.
+builder.Services.AddSingleton<IAuthorizationHandler, OtAdminOrSuperAdminAuthorizationHandler>();
+
 // HU #12345 — cabeza de grupo (AdminCompany + is_group_parent en BD).
 builder.Services.AddScoped<IAuthorizationHandler, GroupHeadCompanyAuthorizationHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, MarcaBlancaHeadCompanyAuthorizationHandler>();
