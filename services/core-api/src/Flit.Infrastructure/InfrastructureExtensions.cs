@@ -306,7 +306,7 @@ public static class InfrastructureExtensions
         AddRues(services, configuration);
         AddRentingChannel(services, configuration);
         AddOcr(services, configuration);
-        AddDrFlit(services, environment);
+        AddDrFlit(services, configuration, environment);
         AddQuipux(services);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
@@ -1234,9 +1234,10 @@ public static class InfrastructureExtensions
 
     /// <summary>
     /// Épica #12718 (ADR-0060) — DR. FLIT. El LLM del chat reutiliza el <see cref="AnthropicMessagesClient"/>
-    /// y las opciones <c>Anthropic:DrFlit*</c> que registra <see cref="AddOcr"/>, así que no lee configuración propia.
+    /// y las opciones <c>Anthropic:DrFlit*</c> que registra <see cref="AddOcr"/>. Los casos de soporte (Feature #12915)
+    /// leen <c>DrFlit:AzureDevOps</c> y <c>DrFlit:SupportCase:*</c> con fallback a env <c>DR_FLIT_*</c>.
     /// </summary>
-    private static void AddDrFlit(IServiceCollection services, IHostEnvironment environment)
+    private static void AddDrFlit(IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         services.AddScoped<IDrFlitChatModel, AnthropicDrFlitChatModel>();
         services.AddScoped<IDrFlitUsageCounter>(sp => new DrFlitUsageCounterRepository(sp.GetRequiredService<FlitDbContext>()));
@@ -1247,6 +1248,34 @@ public static class InfrastructureExtensions
         // la infraestructura y así el grafo valida también fuera del host web.
         services.AddSingleton<IDrFlitManualCatalogProvider>(sp => new DrFlitManualCatalogProvider(
             environment, sp.GetRequiredService<ILogger<DrFlitManualCatalogProvider>>()));
+        // HU #12923 — Bug en Azure DevOps (FLIT - SOPORTE). Env cruda primero (12-factor), como AddOcr.
+        // El PAT es de la cuenta de servicio "Dr. FLIT"; nunca se loguea.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        services.Configure<AzureDevOpsOptions>(o =>
+        {
+            o.OrganizationUrl = Cfg("DrFlit:AzureDevOps:OrganizationUrl", "DR_FLIT_ADO_ORG_URL") ?? o.OrganizationUrl;
+            o.Project = Cfg("DrFlit:AzureDevOps:Project", "DR_FLIT_ADO_PROJECT") ?? o.Project;
+            o.Pat = Cfg("DrFlit:AzureDevOps:Pat", "DR_FLIT_ADO_PAT") ?? string.Empty;
+            o.TimeoutSeconds = int.TryParse(Cfg("DrFlit:AzureDevOps:TimeoutSeconds", "DR_FLIT_ADO_TIMEOUT_SECONDS"), out var ts) ? ts : o.TimeoutSeconds;
+            o.TitlePrefix = configuration["DrFlit:AzureDevOps:TitlePrefix"] ?? o.TitlePrefix;
+        });
+        services.Configure<DrFlitFieldMappingOptions>(o =>
+        {
+            var section = configuration.GetSection(DrFlitFieldMappingOptions.SectionName);
+            // Una lista configurada REEMPLAZA el allow-list por defecto: el binder de .NET agregaría al
+            // final en vez de sustituir, y así sería imposible quitar un módulo retirado del picklist.
+            var modules = section.GetSection(nameof(DrFlitFieldMappingOptions.AffectedModules)).Get<List<string>>();
+            section.Bind(o);
+            if (modules is { Count: > 0 })
+                o.AffectedModules = modules;
+        });
+        services.AddHttpClient<IDrFlitSupportCaseGateway, AzureDevOpsSupportCaseClient>(c =>
+            c.Timeout = TimeSpan.FromSeconds(60)); // cada llamada impone su propio deadline (TimeoutSeconds)
     }
 
     private static void AddOcr(IServiceCollection services, IConfiguration configuration)
