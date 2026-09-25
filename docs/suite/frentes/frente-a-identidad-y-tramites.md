@@ -1,6 +1,6 @@
 # Frente A — Identidad, sesión y Trámites en la suite
 
-> **Responsable:** desarrollador de Trámites. **Producto que retoma después:** Trámites.
+> **Responsable:** Samuel Cardenas, único desarrollador de la suite desde el 2026-09-25 (antes, desarrollador de Trámites). **Producto que retoma después:** Trámites.
 > **Skill:** `flit-suite-a-identidad`. **Prefijo de rama:** `feature/AB-<HU>-suite-a-…`.
 >
 > Leer antes de empezar: [README de la suite](../README.md), [reglas](../reglas-trabajo-paralelo.md),

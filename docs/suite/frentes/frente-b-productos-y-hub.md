@@ -1,6 +1,6 @@
 # Frente B — Productos, habilitación por empresa, roles por producto y hub
 
-> **Responsable:** desarrollador de Comparendos. **Producto que construye después:** Comparendos.
+> **Responsable:** Samuel Cardenas, único desarrollador de la suite desde el 2026-09-25 (antes, desarrollador de Comparendos). **Producto que construye después:** Comparendos.
 > **Skill:** `flit-suite-b-hub`. **Prefijo de rama:** `feature/AB-<HU>-suite-b-…`.
 >
 > Leer antes de empezar: [README de la suite](../README.md), [reglas](../reglas-trabajo-paralelo.md),
