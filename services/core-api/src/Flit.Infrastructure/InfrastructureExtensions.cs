@@ -432,6 +432,11 @@ public static class InfrastructureExtensions
 
         services.AddSecurityApplication();
 
+        // === FLIT Suite: infraestructura ===
+        // Una línea por frente que llama a Add<Modulo>Infrastructure(), definido en un archivo
+        // propio (regla R5 de docs/suite/reglas-trabajo-paralelo.md).
+        // === FLIT Suite: fin infraestructura ===
+
         return services;
     }
 
