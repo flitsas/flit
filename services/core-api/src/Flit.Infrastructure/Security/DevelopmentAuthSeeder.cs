@@ -1994,7 +1994,11 @@ public sealed class JwtKeyMaterial
 
 public static class JwtKeyMaterialLoader
 {
-    public static JwtKeyMaterial Load(JwtSettings settings, IHostEnvironment environment)
+    /// <param name="persistentKey">
+    /// HU #12896 (A-03): fuente de la llave persistente (<c>security.jwt_signing_keys</c>). Se usa si no hay llave
+    /// configurada y <see cref="JwtSettings.PersistSigningKey"/> está encendida. Una llave configurada gana siempre.
+    /// </param>
+    public static JwtKeyMaterial Load(JwtSettings settings, IHostEnvironment environment, Func<RSA>? persistentKey = null)
     {
         var pem = settings.PrivateKeyPem;
         if (string.IsNullOrWhiteSpace(pem) && !string.IsNullOrWhiteSpace(settings.PrivateKeyPath)
@@ -2002,7 +2006,11 @@ public static class JwtKeyMaterialLoader
             pem = File.ReadAllText(settings.PrivateKeyPath);
 
         RSA rsa;
-        if (string.IsNullOrWhiteSpace(pem))
+        if (string.IsNullOrWhiteSpace(pem) && settings.PersistSigningKey && persistentKey is not null)
+        {
+            rsa = persistentKey();
+        }
+        else if (string.IsNullOrWhiteSpace(pem))
         {
             if (!environment.IsDevelopment())
                 throw new InvalidOperationException("JWT private key is required outside Development.");

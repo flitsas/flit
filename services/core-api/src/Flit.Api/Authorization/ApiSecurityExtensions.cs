@@ -13,7 +13,8 @@ namespace Flit.Api.Authorization;
 /// La validación SuperAdmin vive en Flit.Api (no en el Gateway, que relaja JWT en
 /// Development). Si no hay llave pública configurada (<c>Jwt:PublicKeyPem</c> o
 /// <c>Jwt:PublicKeyPath</c>) se autentica el token sin validar la firma — modo
-/// transitorio coherente con el Gateway mientras el login no es obligatorio.
+/// transitorio coherente con el Gateway mientras el login no es obligatorio — salvo que
+/// <c>Jwt:ValidateIssuedTokens</c> esté encendida (HU #12896): entonces valida con la llave de firma propia.
 /// </summary>
 public static class ApiSecurityExtensions
 {
@@ -73,6 +74,28 @@ public static class ApiSecurityExtensions
                     SignatureValidator = static (token, _) => new JsonWebToken(token),
                 };
             });
+
+        // HU #12896 (A-03): sin llave pública configurada, la API puede validar sus PROPIOS tokens con la parte
+        // pública de la llave con que firma (JwtKeyMaterial, persistente con Jwt:PersistSigningKey). Cierra el
+        // modo permisivo de arriba sin poner llaves en el .env. Fail-closed: si la llave no se puede cargar, las
+        // peticiones autenticadas fallan en vez de aceptarse.
+        if (signingKey is null && jwtSection.GetValue<bool>("ValidateIssuedTokens"))
+        {
+            services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+                .PostConfigure<Flit.Infrastructure.Security.JwtKeyMaterial>((options, keyMaterial) =>
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidIssuer = keyMaterial.Issuer,
+                        ValidateAudience = true,
+                        ValidAudience = keyMaterial.Audience,
+                        ValidateLifetime = true,
+                        ValidateIssuerSigningKey = true,
+                        IssuerSigningKey = new RsaSecurityKey(keyMaterial.SigningKey.Rsa.ExportParameters(includePrivateParameters: false)),
+                        RoleClaimType = AdminAuthorization.RoleClaimType,
+                        ClockSkew = TimeSpan.FromSeconds(30),
+                    });
+        }
 
         // Service-token gRPC este-oeste (ICT): esquema JwtBearer APARTE con secreto compartido (HMAC),
         // aislado del token de plataforma. Solo lo consume la policy IctServicePolicy en los gRPC services

@@ -312,7 +312,10 @@ public static class InfrastructureExtensions
         services.AddSingleton(sp =>
         {
             var settings = sp.GetRequiredService<IOptions<JwtSettings>>().Value;
-            return JwtKeyMaterialLoader.Load(settings, environment);
+            return JwtKeyMaterialLoader.Load(
+                settings,
+                environment,
+                () => PersistentJwtSigningKeyStore.LoadOrCreate(sp, settings.SigningKeyId));
         });
 
         services.AddScoped<IAuthUserRepository, AuthUserRepository>();

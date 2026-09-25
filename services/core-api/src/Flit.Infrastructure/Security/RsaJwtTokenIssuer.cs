@@ -20,6 +20,21 @@ public sealed class JwtSettings
     public string PrivateKeyPath { get; init; } = string.Empty;
 
     public int TokenLifetimeHours { get; init; } = 12;
+
+    /// <summary>
+    /// HU #12896 (A-03): sin llave privada configurada, crea una llave persistente en
+    /// <c>security.jwt_signing_keys</c> (cifrada) en vez de una efímera. Apagada por defecto; la enciende el compose.
+    /// </summary>
+    public bool PersistSigningKey { get; init; }
+
+    /// <summary>Identificador de la llave persistente. Rotar = cambiar este valor.</summary>
+    public string SigningKeyId { get; init; } = "flit-api-v1";
+
+    /// <summary>
+    /// HU #12896 (A-03): la API valida firma, emisor, audiencia y vencimiento de sus propios tokens con la llave
+    /// pública de la llave con que firma, aunque no haya <c>Jwt:PublicKeyPem</c>. Apagada por defecto.
+    /// </summary>
+    public bool ValidateIssuedTokens { get; init; }
 }
 
 public sealed class RsaJwtTokenIssuer(JwtKeyMaterial keyMaterial, IOptions<JwtSettings> options) : IJwtTokenIssuer

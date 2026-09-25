@@ -152,6 +152,13 @@ services:
       # Login deshabilitado temporalmente: DevGenerate evita exigir llaves JWT
       # montadas. Para reactivar login, montar jwt-private/public.pem y quitar esto.
       Jwt__DevGenerate: "true"
+      # HU #12896 (FLIT Suite A-03) — la API firma con una llave PERSISTENTE (security.jwt_signing_keys,
+      # cifrada con Data Protection) en vez de una efímera que cambiaba en cada despliegue, y VALIDA firma,
+      # emisor, audiencia y vencimiento de sus tokens. Antes aceptaba cualquier token (a-inventario-ambientes.md,
+      # punto 4). No requiere llaves en el .env. Si algo fallara, poner JWT_VALIDATE_ISSUED_TOKENS=false en el .env
+      # vuelve al comportamiento anterior sin redesplegar código.
+      Jwt__PersistSigningKey: ${JWT_PERSIST_SIGNING_KEY:-true}
+      Jwt__ValidateIssuedTokens: ${JWT_VALIDATE_ISSUED_TOKENS:-true}
       # Verifik se configura por env vars CRUDAS (no por convención .NET `Verifik__`):
       # InfrastructureExtensions lee Environment.GetEnvironmentVariable("VERIFIK_*").
       # Pasar las claves `Verifik__*` NO funciona (el código no las lee) → token vacío → 401.

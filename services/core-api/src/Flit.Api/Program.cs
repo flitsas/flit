@@ -56,24 +56,16 @@ builder.Services.PostConfigure<JwtBearerOptions>(
     JwtBearerDefaults.AuthenticationScheme,
     options => options.Events = new JwtBearerEvents
     {
-        OnAuthenticationFailed = context =>
-        {
-            if (context.Exception is SecurityTokenExpiredException)
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                context.Response.ContentType = "application/json";
-                return context.Response.WriteAsync(JsonSerializer.Serialize(new
-                {
-                    code = "SESSION_EXPIRED",
-                    message = "Session expired. Please sign in again.",
-                }));
-            }
-
-            return Task.CompletedTask;
-        },
+        // HU #12896: la respuesta SESSION_EXPIRED la escribe SOLO OnChallenge. Antes también la escribía
+        // OnAuthenticationFailed y el segundo intento reventaba («the response has already started»); nunca
+        // se había visto porque sin validar el vencimiento ningún token llegaba aquí como vencido.
         OnChallenge = context =>
         {
-            if (context.AuthenticateFailure is SecurityTokenExpiredException)
+            // HU #12896: cualquier token PRESENTE pero inválido (vencido, mal firmado, de otro emisor o audiencia)
+            // responde SESSION_EXPIRED, que el frontend ya maneja (borra el token y lleva al login). Sin esto, el
+            // día que la API empieza a validar la firma, las sesiones abiertas con la llave efímera anterior
+            // quedarían en un 401 sin código y el usuario no volvería al login.
+            if (context.AuthenticateFailure is SecurityTokenException)
             {
                 context.HandleResponse();
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
