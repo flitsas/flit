@@ -1,6 +1,8 @@
 # FLIT Suite — Construcción de la plataforma
 
-Convertimos FLIT en una suite de productos al estilo de Google: un **hub en `flitsas.online`**, donde el usuario inicia sesión, ve los productos que su empresa contrató y cambia entre ellos, y **productos en su propio subdominio** (`tramites.`, `comparendos.`, `diagnostico.`), cada uno con su menú. **Primero construimos la plataforma, entre los tres; después arrancan Comparendos y Diagnóstico.**
+Convertimos FLIT en una suite de productos al estilo de Google: un **hub en `flitsas.online`**, donde el usuario inicia sesión, ve los productos que su empresa contrató y cambia entre ellos, y **productos en su propio subdominio** (`tramites.`, `comparendos.`, `diagnostico.`), cada uno con su menú. **Primero construimos la plataforma; después arrancan Comparendos y Diagnóstico.**
+
+> **Cambio de equipo (2026-09-25, acordado con el líder técnico):** toda la construcción de la suite —las tareas de los frentes A, B y C— la hace **un solo desarrollador, Samuel Cardenas**. Tres desarrolladores en paralelo generaban más dependencias entre sí que avance. Los frentes se conservan como **áreas de trabajo** para ordenar las tareas, no como personas, y las reglas de coordinación entre frentes (propiedad de carpetas, turno de migraciones) dejan de aplicar. El orden de trabajo y la forma de trabajar se ajustan en un PR siguiente.
 
 ## Documentos
 
@@ -9,9 +11,9 @@ Convertimos FLIT en una suite de productos al estilo de Google: un **hub en `fli
 | [Plan maestro](plan-maestro.md) | Diagnóstico, arquitectura objetivo y fases. El porqué de todo |
 | [Reglas de trabajo en paralelo](reglas-trabajo-paralelo.md) | Cómo no pisarnos: ramas, carpetas, migraciones, banderas, rituales |
 | [Contrato de plataforma v1](contrato-plataforma-v1.md) | Formas compartidas: token, endpoints, eventos, paquetes. Se cierra en la semana 1 |
-| [Frente A — Identidad y Trámites](frentes/frente-a-identidad-y-tramites.md) | Plan del desarrollador de Trámites |
-| [Frente B — Productos y hub](frentes/frente-b-productos-y-hub.md) | Plan del desarrollador de Comparendos |
-| [Frente C — Consultas, SDK y plantilla](frentes/frente-c-consultas-sdk-y-plantilla.md) | Plan del desarrollador de Diagnóstico |
+| [Frente A — Identidad y Trámites](frentes/frente-a-identidad-y-tramites.md) | Identidad, sesión y Trámites en la suite |
+| [Frente B — Productos y hub](frentes/frente-b-productos-y-hub.md) | Productos, roles por producto y hub |
+| [Frente C — Consultas, SDK y plantilla](frentes/frente-c-consultas-sdk-y-plantilla.md) | Eventos, consultas compartidas, SDK y plantilla |
 | [Frente L — Líder e infraestructura](frentes/frente-l-lider-e-infraestructura.md) | Plan del líder técnico |
 | [Borradores de ADR 0061–0065](adr-borradores/README.md) | Decisiones pendientes de aprobación |
 
@@ -19,9 +21,9 @@ Convertimos FLIT en una suite de productos al estilo de Google: un **hub en `fli
 
 | Frente | Responsable | Construye en la plataforma | Entrega a los demás | Después |
 |---|---|---|---|---|
-| **A · Identidad y Trámites** | Willyn Londoño (Trámites) | Salida de `Development` y validación real del token; servidor OIDC con login en el hub; token por producto y refresh; `@flit/auth`; Trámites en `tramites.flitsas.online` | Token y emisores (B, C); `@flit/auth` (B, C) | Roadmap de Trámites |
-| **B · Productos y hub** | Samuel Cardenas (Comparendos) | Productos y su habilitación por empresa; roles por producto; `RequireProduct`; `DomainContext` con producto; `@flit/ui` y `@flit/shell`; el hub con inicio, menú de productos y administración de plataforma | Acceso a productos (A); `@flit/ui` y `@flit/shell` (A, C); manifiesto y `me/apps` (C) | Comparendos |
-| **C · Consultas, SDK y plantilla** | Juan Felipe Montoya (Diagnóstico) | Eventos con outbox y RabbitMQ; SDK .NET; consultas externas compartidas con medición; plantilla de producto; producto de prueba `demo` | Publicador de eventos (A, B); plantilla (B y C en la Fase 3) | Diagnóstico |
+| **A · Identidad y Trámites** | Samuel Cardenas | Salida de `Development` y validación real del token; servidor OIDC con login en el hub; token por producto y refresh; `@flit/auth`; Trámites en `tramites.flitsas.online` | Token y emisores (B, C); `@flit/auth` (B, C) | Roadmap de Trámites |
+| **B · Productos y hub** | Samuel Cardenas | Productos y su habilitación por empresa; roles por producto; `RequireProduct`; `DomainContext` con producto; `@flit/ui` y `@flit/shell`; el hub con inicio, menú de productos y administración de plataforma | Acceso a productos (A); `@flit/ui` y `@flit/shell` (A, C); manifiesto y `me/apps` (C) | Comparendos |
+| **C · Consultas, SDK y plantilla** | Samuel Cardenas | Eventos con outbox y RabbitMQ; SDK .NET; consultas externas compartidas con medición; plantilla de producto; producto de prueba `demo` | Publicador de eventos (A, B); plantilla (B y C en la Fase 3) | Diagnóstico |
 | **L · Líder** | Jorman Copete (líder técnico) | PR inicial, workspace, `CODEOWNERS`, ADO, k3s, Redis, RabbitMQ, DNS, certificados, CD, aprobaciones y rituales | Todo lo que desbloquea a A, B y C | Coordinación |
 
 ## Fases y tareas por frente
@@ -41,10 +43,12 @@ El líder lo actualiza en la revisión semanal. Estado: ⏳ pendiente · 🟡 en
 |---|---|---|---|
 | PR `feature/nueva-suite-flit` en `develop` (plan + arreglo PDN) | L | Todos | ✅ PR #429 |
 | Contrato v1 cerrado | L + A + B + C | Todos | ✅ PR #433, sin reunión |
-| Interfaz `IProductAccessResolver` y `ProductCodes` (contrato §4) | B | A | 🟡 PR #436 |
-| Workspace con `packages/*` y `frontend-*`, `CODEOWNERS` y bloques compartidos | L | B, C | 🟡 PR #437 |
+| Interfaz `IProductAccessResolver` y `ProductCodes` (contrato §4) | B | A | ✅ PR #436 |
+| Workspace con `packages/*` y `frontend-*`, `CODEOWNERS` y bloques compartidos | L | B, C | ✅ PR #437 (`CODEOWNERS` retirado al pasar a un solo desarrollador) |
+| Inventario plataforma contra Trámites y decisión D1 | B | A | 🟡 PR #444 |
+| Schema `platform`: productos y su habilitación por empresa | B | A | 🟡 PR #446 |
 | Token validado en gateway y API (DEV) | A | Todos | ⏳ |
-| `@flit/ui` v0 | B | C | ⏳ |
+| `@flit/ui` v0 | B | C | 🟡 PR #445 |
 | `Flit.Platform.Contracts` | C | Todos | ⏳ |
 | Redis y RabbitMQ en DEV | L | A, B, C | ⏳ |
 | Esqueleto de `frontend-hub` | B | A | ⏳ |
@@ -59,18 +63,11 @@ El líder lo actualiza en la revisión semanal. Estado: ⏳ pendiente · 🟡 en
 | Plantilla `flit-product` | C | B, C (Fase 3) | ⏳ |
 | Producto `demo` en DEV | C | Puerta de salida | ⏳ |
 
-## Orden de migraciones de la Fase 1
+## Migraciones de `core-api`
 
-Acordado al cerrar el contrato v1 (HU #12904). `core-api` tiene un solo snapshot de EF, así que las
-migraciones van en turno (regla R6). El orden sigue a quién espera a quién:
-
-1. **C-01** tabla de outbox del publicador de eventos (al final de la Fase 0).
-2. **B-03** schema `platform`: `products` y `tenant_products`.
-3. **A-05** tablas de OpenIddict. Si la espiga A-04 decide un DbContext propio en el schema `identity`, sale del turno.
-4. **B-04** `product_code` en `security.modules` y `security.roles`.
-5. **B-08** `purpose` en `admin.tenant_domains`. B-04 y B-08 van antes de la mitad de la Fase 1: el frente A los espera.
-6. **C-06** tabla de medición de consumo.
-7. **B-07** retiro de los booleans `tramites_module_enabled` y `comparendos_module_enabled`, en la Fase 2 (un sprint después de migrarlos).
+Con un solo desarrollador ya no hay turno (la regla R6 queda sin efecto). Las migraciones entran en el
+orden en que se fusionan: si al rebasar una rama sobre `develop` aparece una migración más nueva que la
+propia, la propia se regenera para quedar después y el snapshot se actualiza sobre `develop`.
 
 ## Cómo empieza cada uno
 

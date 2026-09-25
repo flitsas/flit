@@ -1,5 +1,9 @@
 # Reglas para trabajar en paralelo sin pisarnos — FLIT Suite
 
+> **Desde el 2026-09-25 la suite la construye un solo desarrollador** (ver el [README](README.md)).
+> Dejan de aplicar **R4** (propiedad de carpetas, `CODEOWNERS` retirado), **R6** (turno de migraciones)
+> y las partes de **R5** y **R10** que coordinan entre frentes. El resto se revisa en un PR siguiente.
+
 > Aplica a los tres frentes y al líder durante la construcción de la plataforma (Fases 0 a 2) y
 > después a los productos. Complementa, sin reemplazar, las reglas de
 > `.cursor/rules/00-flit-conventions.mdc` y el flujo `.cursor/workflows/implement-story.md`.

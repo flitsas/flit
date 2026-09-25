@@ -1,6 +1,6 @@
 # Frente C — Consultas compartidas, SDK, eventos y plantilla de producto
 
-> **Responsable:** desarrollador de Diagnóstico. **Producto que construye después:** Diagnóstico.
+> **Responsable:** Samuel Cardenas, único desarrollador de la suite desde el 2026-09-25 (antes, desarrollador de Diagnóstico). **Producto que construye después:** Diagnóstico.
 > **Skill:** `flit-suite-c-sdk`. **Prefijo de rama:** `feature/AB-<HU>-suite-c-…`.
 >
 > Leer antes de empezar: [README de la suite](../README.md), [reglas](../reglas-trabajo-paralelo.md),
