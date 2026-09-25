@@ -51,6 +51,8 @@ export interface RbacRole {
   isActive: boolean;
   permissionCount: number;
   createdAt: string;
+  /** HU #12964: producto del rol (`plataforma` | `tramites` …). */
+  productCode?: string;
 }
 
 /** Detalle completo de un rol (respuesta de PUT .../permissions) — incluye permisos otorgados. */

@@ -15,6 +15,12 @@ public sealed class SecurityModule : AuditableEntity
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// Producto al que pertenece el módulo (<c>platform.products.code</c>, HU #12964 / ADR-0063):
+    /// <c>plataforma</c> o <c>tramites</c>. Un rol solo puede tener permisos de módulos de su producto.
+    /// </summary>
+    public string ProductCode { get; set; } = "tramites";
+
     [NotMapped]
     public int PermissionCount { get; set; }
 }

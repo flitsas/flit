@@ -5,6 +5,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Sql;
+using Flit.Modules.Security.Application.Products;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
@@ -202,7 +203,9 @@ public static class DevelopmentAuthSeeder
     }
 
     /// <summary>
-    /// Deja al usuario con EXACTAMENTE una asignación activa, la del rol indicado.
+    /// Deja al usuario con EXACTAMENTE una asignación activa en el producto del rol indicado.
+    /// HU #12964 (decisión D1): el rol único es por producto, así que las asignaciones de otro producto
+    /// (el admin_tramites que acompaña a AdminCompany) no se tocan.
     ///
     /// <para>Reusa la fila que ya exista en vez de crear otra, y cierra cualquier asignación
     /// activa sobrante: la tabla guarda histórico en soft-delete, así que un usuario puede
@@ -212,10 +215,13 @@ public static class DevelopmentAuthSeeder
     private static async Task EnsureSingleRoleAssignmentAsync(
         FlitDbContext db, Guid userId, Guid tenantId, Guid roleId, CancellationToken cancellationToken)
     {
-        var assignments = await db.UserRoleAssignments
-            .Where(a => a.UserId == userId && a.TenantId == tenantId)
-            .OrderByDescending(a => a.AssignedAt)
-            .ToListAsync(cancellationToken);
+        var product = await db.Roles.Where(r => r.Id == roleId).Select(r => r.ProductCode).FirstAsync(cancellationToken);
+        var assignments = await (
+            from a in db.UserRoleAssignments
+            join r in db.Roles on a.RoleId equals r.Id
+            where a.UserId == userId && a.TenantId == tenantId && r.ProductCode == product
+            orderby a.AssignedAt descending
+            select a).ToListAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
 
@@ -307,6 +313,7 @@ public static class DevelopmentAuthSeeder
             Id = moduleId,
             Code = "auth",
             Name = "Autenticación",
+            ProductCode = "plataforma",
             SortOrder = 0,
             IsActive = true,
         });
@@ -891,8 +898,8 @@ public static class DevelopmentAuthSeeder
             new() { Id = Guid.CreateVersion7(), Code = "tramites",     Name = "Trámites",                 SortOrder = 2, IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), Code = "reportes",     Name = "Reportes",                 SortOrder = 3, IsActive = true, CreatedAt = now },
             new() { Id = Guid.CreateVersion7(), Code = "validaciones", Name = "Validaciones",             SortOrder = 4, IsActive = true, CreatedAt = now },
-            new() { Id = Guid.CreateVersion7(), Code = "usuarios",     Name = "Usuarios y Permisos",      SortOrder = 5, IsActive = true, CreatedAt = now },
-            new() { Id = Guid.CreateVersion7(), Code = "rbac",         Name = "RBAC Admin",               SortOrder = 6, IsActive = true, CreatedAt = now },
+            new() { Id = Guid.CreateVersion7(), Code = "usuarios",     Name = "Usuarios y Permisos",      SortOrder = 5, IsActive = true, CreatedAt = now, ProductCode = "plataforma" },
+            new() { Id = Guid.CreateVersion7(), Code = "rbac",         Name = "RBAC Admin",               SortOrder = 6, IsActive = true, CreatedAt = now, ProductCode = "plataforma" },
             new() { Id = Guid.CreateVersion7(), Code = "improntas",    Name = "Improntas",                SortOrder = 7, IsActive = true, CreatedAt = now },
         };
 
@@ -938,21 +945,27 @@ public static class DevelopmentAuthSeeder
                 }));
         }
 
-        // AdminCompany: todo excepto rbac.manage
-        var adminCompanyRole = await db.Roles.FirstOrDefaultAsync(r => r.Code == "AdminCompany", cancellationToken);
-        if (adminCompanyRole is not null)
+        // AdminCompany + admin_tramites: todo excepto rbac.manage, repartido por producto (HU #12964,
+        // decisión D1): los módulos de plataforma van a AdminCompany y los de Trámites a admin_tramites.
+        // tr_role_permissions_same_product rechaza cualquier otra combinación.
+        var productByModule = modules.ToDictionary(m => m.Id, m => m.ProductCode);
+        foreach (var (roleCode, product) in new[] { (ProductRoleCodes.AdminCompany, "plataforma"), (ProductRoleCodes.AdminTramites, "tramites") })
         {
-            var existingAC = await db.RoleGrants
-                .Where(g => g.RoleId == adminCompanyRole.Id)
+            var adminRole = await db.Roles.FirstOrDefaultAsync(r => r.Code == roleCode && r.DeletedAt == null, cancellationToken);
+            if (adminRole is null)
+                continue;
+
+            var existing = await db.RoleGrants
+                .Where(g => g.RoleId == adminRole.Id)
                 .Select(g => g.PermissionId)
                 .ToListAsync(cancellationToken);
 
             db.RoleGrants.AddRange(actions
-                .Where(a => a.Slug != "rbac.manage" && !existingAC.Contains(a.Id))
+                .Where(a => a.Slug != "rbac.manage" && productByModule[a.ModuleId] == product && !existing.Contains(a.Id))
                 .Select(a => new RoleGrant
                 {
                     Id = Guid.CreateVersion7(),
-                    RoleId = adminCompanyRole.Id,
+                    RoleId = adminRole.Id,
                     PermissionId = a.Id,
                     CreatedAt = now,
                 }));
@@ -1013,8 +1026,9 @@ public static class DevelopmentAuthSeeder
         db.RbacActions.AddRange(newActions);
         await db.SaveChangesAsync(ct);
 
-        // Grants: SuperAdmin y AdminCompany reciben todos los permisos nuevos de reportes.
-        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        // Grants: SuperAdmin y admin_tramites reciben todos los permisos nuevos de reportes (HU #12964: los
+        // permisos de Trámites ya no van a AdminCompany, que es de plataforma).
+        foreach (var roleCode in new[] { "SuperAdmin", ProductRoleCodes.AdminTramites })
         {
             var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
             foreach (var role in roles)
@@ -1096,7 +1110,7 @@ public static class DevelopmentAuthSeeder
         db.RbacActions.AddRange(newActions);
         await db.SaveChangesAsync(ct);
 
-        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        foreach (var roleCode in new[] { "SuperAdmin", ProductRoleCodes.AdminTramites })
         {
             var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
             foreach (var role in roles)
@@ -1403,9 +1417,10 @@ public static class DevelopmentAuthSeeder
             await db.SaveChangesAsync(ct);
         }
 
-        // Grant a los tres roles de D4 (idempotente): solo si aún no lo tienen. Se excluyen los roles
+        // Grant a los tres roles de D4 (idempotente): solo si aún no lo tienen. HU #12964: el de AdminCompany
+        // pasa a admin_tramites, porque historial-placa es un módulo de Trámites. Se excluyen los roles
         // borrados lógicamente — conceder permisos a un rol eliminado no sirve a nadie.
-        string[] targetRoleCodes = ["SuperAdmin", "AdminCompany", "Radicador"];
+        string[] targetRoleCodes = ["SuperAdmin", ProductRoleCodes.AdminTramites, "Radicador"];
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);
@@ -1688,7 +1703,7 @@ public static class DevelopmentAuthSeeder
                 await db.SaveChangesAsync(ct);
             }
 
-            foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+            foreach (var roleCode in new[] { "SuperAdmin", ProductRoleCodes.AdminTramites })
             {
                 var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
                 foreach (var role in roles)
@@ -1733,6 +1748,7 @@ public static class DevelopmentAuthSeeder
                 Id = Guid.CreateVersion7(),
                 Code = moduleCode,
                 Name = "Banners promocionales",
+                ProductCode = "plataforma",
                 SortOrder = 11,
                 IsActive = true,
                 CreatedAt = now,

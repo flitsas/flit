@@ -25,6 +25,7 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             Code = data.Code,
             Name = data.Name,
             Description = data.Description,
+            ProductCode = data.ProductCode,
             IsSystem = false,
             IsActive = true,
             RowVersion = 0,
@@ -61,7 +62,8 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
             role.Description,
             role.IsSystem,
             role.IsActive && role.DeletedAt == null,
-            permissions);
+            permissions,
+            role.ProductCode);
     }
 
     public async Task<bool> HasActiveUsersAsync(Guid id, CancellationToken ct)
@@ -95,10 +97,21 @@ public sealed class RoleRepository(FlitDbContext db) : IRoleRepository
                 r.IsSystem,
                 r.IsActive,
                 permCount,
-                r.CreatedAt)
+                r.CreatedAt,
+                r.ProductCode)
         ).ToListAsync(ct);
 
         return rows;
+    }
+
+    public async Task<IReadOnlyList<string>> GetPermissionProductCodesAsync(IReadOnlyList<Guid> permissionIds, CancellationToken ct)
+    {
+        return await (
+            from p in db.RbacActions.AsNoTracking()
+            join m in db.SecurityModules.AsNoTracking() on p.ModuleId equals m.Id
+            where permissionIds.Contains(p.Id)
+            select m.ProductCode
+        ).Distinct().ToListAsync(ct);
     }
 
     public async Task SetPermissionsAsync(

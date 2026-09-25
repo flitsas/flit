@@ -10,6 +10,7 @@ using Flit.Infrastructure.Persistence;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
+using Flit.Modules.Security.Application.Products;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
 using Microsoft.AspNetCore.Mvc;
@@ -232,7 +233,14 @@ public static class AdminCompanyChildrenInvitationsEndpoints
                 status = u.Status,
             }).ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        return Results.Ok(new { items = users });
+        // HU #12964 (decisión D1): un AdminCompany tiene además admin_tramites. Una fila por usuario,
+        // con el rol que no es espejo.
+        var items = users
+            .GroupBy(x => x.userId)
+            .Select(g => g.OrderBy(x => x.roleCode == ProductRoleCodes.AdminTramites ? 1 : 0).First())
+            .ToList();
+
+        return Results.Ok(new { items });
     }
 
     private static async Task<IResult> DeactivateUserAsync(

@@ -567,19 +567,20 @@ function ModulePermissionsChecklist({
 }
 
 /** HU #10664 — RBAC puro: los módulos son transversales (no dependen del tipo de entidad).
- * El catálogo se carga una sola vez y es el mismo para cualquier rol. */
-function useModulesCatalog() {
+ * HU #12964: un rol solo puede tener permisos de módulos de su producto, así que el catálogo se
+ * filtra por el producto del rol. Un rol nuevo es de Trámites. */
+function useModulesCatalog(product: string) {
   const [modules, setModules] = useState<AccessibleModule[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    getAccessibleModules()
+    getAccessibleModules(product)
       .then((m) => { if (active) setModules(m); })
       .catch(() => {})
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [product]);
 
   return { modules, loading };
 }
@@ -594,7 +595,7 @@ function CreateRoleModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [targetEntityType, setTargetEntityType] = useState<RoleTargetEntityType>("COMPANY");
-  const { modules, loading: modulesLoading } = useModulesCatalog();
+  const { modules, loading: modulesLoading } = useModulesCatalog("tramites");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -699,8 +700,8 @@ function EditRolePermissionsModal({
   onClose: () => void;
   onSaved: (permissions: RbacRoleDetail["permissions"]) => void;
 }) {
-  // HU #10664 — RBAC puro: el checklist muestra todos los módulos (transversal).
-  const { modules, loading: modulesLoading } = useModulesCatalog();
+  // HU #10664 — RBAC puro. HU #12964: solo los módulos del producto del rol.
+  const { modules, loading: modulesLoading } = useModulesCatalog(role.productCode ?? "tramites");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loadingCurrent, setLoadingCurrent] = useState(true);
   const [busy, setBusy] = useState(false);

@@ -96,6 +96,9 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         "audit.audit_logs",
         // HU #12958: tramites encendido para las compañías mock (backfill y disparador del DDL 119).
         "platform.tenant_products",
+        // HU #12964: la migración de la B-04 crea el rol admin_tramites. Se trunca como el resto de roles
+        // que siembran las pruebas; la que lo necesite lo crea (PlatformRbacTests).
+        "security.roles",
     };
 
     private const string MigrationsHistoryTable = "__EFMigrationsHistory";
