@@ -12,7 +12,7 @@
 |---|---|
 | [ADR-0061](ADR-0061-suite-productos-plataforma-y-monorepo.md) | Suite: plataforma compartida, productos como servicios propios, monorepo y hosts en `flitsas.online` |
 | [ADR-0062](ADR-0062-identidad-oidc-sobre-dominio-sellado.md) | Identidad OIDC que extiende el dominio sellado de ADR-0060; sesión por host (BFF); token por producto |
-| [ADR-0063](ADR-0063-suscripciones-producto-y-rbac-por-producto.md) | Suscripción de productos por empresa y RBAC por producto, sin revertir HU #10664 |
+| [ADR-0063](ADR-0063-habilitacion-producto-y-rbac-por-producto.md) | Habilitación de productos por empresa y RBAC por producto, sin revertir HU #10664 |
 | [ADR-0064](ADR-0064-datos-separados-eventos-y-reportes.md) | Datos separados por producto, integración por eventos y reportes consolidados |
 | [ADR-0065](ADR-0065-consultas-externas-capacidad-de-plataforma.md) | Consultas externas como capacidad compartida de plataforma, con medición de consumo |
 

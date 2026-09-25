@@ -1,9 +1,9 @@
 ---
 name: flit-suite-b-hub
-description: "Ejecuta el plan del Frente B de la FLIT Suite (desarrollador de Comparendos). Carga el plan del frente, las reglas de trabajo en paralelo y el contrato de plataforma; elige o confirma la tarea; respeta el gate de ADO, la propiedad de carpetas, el turno de migraciones y las banderas; actualiza la casilla y la bitácora del plan. Triggers: productos, suscripciones, RequireProduct, roles por producto, product_code, me/apps, manifiesto, DomainContext con producto, tenant_domains purpose, hub, frontend-hub, menú de productos, @flit/shell, @flit/ui, frente B."
+description: "Ejecuta el plan del Frente B de la FLIT Suite (desarrollador de Comparendos). Carga el plan del frente, las reglas de trabajo en paralelo y el contrato de plataforma; elige o confirma la tarea; respeta el gate de ADO, la propiedad de carpetas, el turno de migraciones y las banderas; actualiza la casilla y la bitácora del plan. Triggers: productos, habilitación de productos, RequireProduct, roles por producto, product_code, me/apps, manifiesto, DomainContext con producto, tenant_domains purpose, hub, frontend-hub, menú de productos, @flit/shell, @flit/ui, frente B."
 ---
 
-# Frente B — Productos, suscripciones, roles por producto y hub
+# Frente B — Productos, habilitación por empresa, roles por producto y hub
 
 Skill del **desarrollador de Comparendos**. Plan: [`docs/suite/frentes/frente-b-productos-y-hub.md`](../../../docs/suite/frentes/frente-b-productos-y-hub.md).
 
@@ -42,7 +42,7 @@ Skill del **desarrollador de Comparendos**. Plan: [`docs/suite/frentes/frente-b-
 - **Banderas:** todo cambio visible o de autenticación va detrás de su bandera del contrato §9, apagada por defecto.
 - **Tamaño:** si el diff pasa de 800 líneas, propone cómo dividirlo antes de seguir.
 - Los cambios de `DomainContext` y `tenant_domains` deben pasar `services/core-api/tests/Flit.Integration.Tests/MarcaBlanca` sin cambios de comportamiento.
-- `RequireProduct` se entrega en modo "solo registra" (`Suite:Subscriptions:Enforce` apagada). Nunca propongas encenderla en QA o PDN.
+- `RequireProduct` se entrega en modo "solo registra" (`Suite:ProductAccess:Enforce` apagada). Nunca propongas encenderla en QA o PDN.
 - Al mover pantallas al hub, un PR por sección, con su redirección desde la ruta vieja.
 
 ## 3. Pruebas

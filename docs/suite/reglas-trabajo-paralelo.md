@@ -64,7 +64,7 @@
 | `services/core-api/src/Flit.Api/Authorization/**` y `Flit.Api/Middleware/Domain*` | A. El cambio de `DomainContext` a producto lo hace B con revisión de A |
 | `packages/auth/**`, `frontend/lib/auth/**`, `frontend/lib/api/client.ts`, `frontend/lib/api/base-url.ts`, `frontend/middleware.ts` | A |
 | `frontend-hub/app/(auth)/**`: login, recuperación, activación | A |
-| `services/core-api/src/Flit.Modules.Platform/**` (nuevo: productos, suscripciones, me/apps, manifiesto) | B |
+| `services/core-api/src/Flit.Modules.Platform/**` (nuevo: productos, habilitación por empresa, me/apps, manifiesto) | B |
 | RBAC: `Flit.Infrastructure/Persistence/Configurations/Security/**`, `Persistence/Entities/Security/**`, `SecurityModuleRepository.cs` | B |
 | `Flit.Admin.Domain/Companies/Domains/**`, `Flit.Infrastructure/Domains/**` | B |
 | `packages/ui/**`, `packages/shell/**` | B |

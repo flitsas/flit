@@ -133,7 +133,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 ### C-10 · Guía para crear un producto · Fase 2 · S
 
-- **Qué:** `docs/suite/guia-crear-producto.md`: generar desde la plantilla, registrar el producto y su cliente OIDC, pedir hosts y certificados, crear el usuario de BD, registrar el manifiesto, activar la suscripción en DEV y desplegar con Argo CD.
+- **Qué:** `docs/suite/guia-crear-producto.md`: generar desde la plantilla, registrar el producto y su cliente OIDC, pedir hosts y certificados, crear el usuario de BD, registrar el manifiesto, encender el producto para una empresa de prueba en DEV y desplegar con Argo CD.
 - **Hecho cuando:** el desarrollador de Comparendos crea un producto vacío siguiendo solo la guía, sin ayuda.
 
 ---
