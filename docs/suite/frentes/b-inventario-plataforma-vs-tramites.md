@@ -256,11 +256,39 @@ Inventario completo agrupado por archivo en el anexo A. A nivel de grupo:
 
 | # | Decisión | Opciones | Propuesta | Decide |
 |---|---|---|---|---|
-| D1 | `AdminCompany` en Trámites (hallazgo 2) | (a) `AdminCompany` viaja también en los tokens de Trámites, como excepción igual que SuperAdmin; (b) se crea un rol `admin_tramites` (producto `tramites`) con los permisos de Trámites que hoy tiene `AdminCompany`, y la migración de B-04 se lo asigna a todos los usuarios que tienen `AdminCompany`; el código de Trámites deja de preguntar por `AdminCompany` | **(b)**: respeta el contrato (un rol, un producto) y no depende de una excepción más en el token. Cambia A-07 (emisión) y exige tocar los puntos de Trámites que preguntan por `AdminCompany` (al menos 5 encontrados: revocatorias y los 4 `Network*Endpoints`) | Samuel (B) y Juan Felipe (A); cambia el contrato §2 si se elige (a) |
+| D1 | `AdminCompany` en Trámites (hallazgo 2) | (a) `AdminCompany` viaja también en los tokens de Trámites; (b) un rol por usuario **en cada producto**, con un rol `admin_tramites` propio de Trámites | **DECIDIDO 2026-09-25: opción (b).** Ver [Decisión D1](#decisión-d1-un-rol-por-producto) | Samuel Cardenas (B) |
 | D2 | Inicio del hub y `dashboard` | El FAB abre hoy el dashboard de trámites | El hub tiene su propio inicio (B-11) y `dashboard` se queda en Trámites | Samuel |
 | D3 | Representantes legales, escrituras, baúl de firmas, vigencia de identidad | Plataforma (datos maestros de la empresa) o Trámites | **Trámites** en v1: hoy solo los usan Trámites y Mandatos. Se reabre si otro producto los necesita (Comparendos podría necesitar el representante legal de la empresa) | Samuel |
 | D4 | Usuarios del organismo (`/admin/transit-offices/[id]/usuarios`, `/admin/ot/users`) | Hub o Trámites | **Trámites** en v1; se unifica con Usuarios del hub en una HU aparte | Samuel |
 | D5 | Catálogo RBAC fuera de `Development` (hallazgo 1) | Migración, seeder para todos los ambientes, o nada | Lo decide el frente A en A-01 | Juan Felipe (A) |
+
+### Decisión D1: un rol por producto
+
+**Decidido el 2026-09-25 por Samuel Cardenas (frente B), opción (b).**
+
+- **La regla de rol único evoluciona a «un rol por usuario en cada producto».** Se conserva el
+  principio funcional del 2026-08-04 («un usuario tiene un rol; lo que varía son los permisos»), pero
+  aplicado dentro de cada producto. El índice único de `security.user_role_assignments`, hoy por
+  (usuario, empresa), pasa a (usuario, empresa, producto del rol).
+- **`AdminCompany` queda en `plataforma`** y solo conserva permisos de plataforma: administrar la
+  empresa en el hub (usuarios, roles, marca, configuración).
+- **Trámites tiene su propio rol de administración, `admin_tramites`** (producto `tramites`,
+  `target_entity_type` COMPANY), con los permisos de Trámites que hoy tiene `AdminCompany`: reportes,
+  reportes detallados, historial de placa y generación documental, más los permisos nuevos que
+  reemplacen las comprobaciones por rol (revocatorias del gestor y red de clientes).
+- **Nadie nota el cambio:** la migración de B-04 asigna `admin_tramites` a cada usuario que hoy tiene
+  `AdminCompany`.
+- **Qué cambia en Trámites** (lo hace el frente A en A-07/A-10, o una HU propia del producto): las
+  comprobaciones por rol pasan a preguntar por `admin_tramites` o por su permiso:
+  `app/tramites/revocatorias/page.tsx`, `components/operacion/RevocationRequestButton.tsx`,
+  `components/operacion/TramitesFiltrosBar.tsx` y `Endpoints/Tramites/Network{Procedure,Reports,Children,Attachment}Endpoints.cs`
+  (hoy responden 403 `network_role_required` sin `AdminCompany`).
+- **El contrato no cambia:** `AdminCompany` sigue viajando solo en tokens con `aud=plataforma` (§2) y
+  cada rol tiene permisos de un solo producto (§4).
+- **Para los productos nuevos:** cada uno define su propio rol de administración (Comparendos lo
+  decide en su diseño).
+- **Pendiente:** informar a Andrés (PO) del cambio de la regla de rol único, porque fue una decisión
+  funcional.
 
 ## Qué hace cada tarea con este inventario
 
@@ -323,3 +351,4 @@ un endpoint sin `RequireAuthorization` es anónimo.
 | Fecha | Cambio |
 |---|---|
 | 2026-09-25 | Primera versión (B-01) sobre `develop@da3074ac` |
+| 2026-09-25 | D1 decidida: un rol por producto y `admin_tramites` (opción b) |
