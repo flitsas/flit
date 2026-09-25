@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Flit.Api.Authorization;
 using Flit.DrFlit.Application.Chat;
+using Flit.DrFlit.Application.SupportCases;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
@@ -37,6 +38,15 @@ public static class DrFlitEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized);
 
+        group.MapPost("/support-cases/attachments", UploadAttachmentAsync)
+            .WithName("DrFlitUploadSupportAttachment")
+            .WithSummary("Sube un adjunto temporal para un caso de soporte aún no creado")
+            .DisableAntiforgery() // API con JWT en header, sin cookies: el antiforgery no aplica (igual que banners/branding)
+            .Accepts<IFormFile>("multipart/form-data")
+            .Produces<DrFlitSupportAttachmentResponse>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized);
+
         return app;
     }
 
@@ -47,24 +57,10 @@ public static class DrFlitEndpoints
         IDrFlitAssistant assistant,
         CancellationToken cancellationToken)
     {
-        if (tenantHeader is null || tenantHeader == Guid.Empty)
-            return BadRequest("Falta header X-Tenant-Id");
-
-        var userId = ResolveUserId(httpContext.User);
-        if (userId is null)
-            return Results.Unauthorized();
-
-        Guid tenantId;
-        if (RequestTenantResolver.IsSuperAdmin(httpContext.User))
-        {
-            tenantId = tenantHeader.Value;
-        }
-        else if (!RequestTenantResolver.TryResolveNonEmptyTenantId(httpContext.User, out tenantId))
-        {
-            return Results.Problem(
-                statusCode: StatusCodes.Status403Forbidden, title: "Forbidden",
-                detail: "El usuario autenticado no tiene una compañía asignada.");
-        }
+        var caller = ResolveCaller(httpContext, tenantHeader);
+        if (caller.Error is not null)
+            return caller.Error;
+        var (tenantId, userId) = (caller.TenantId, caller.UserId);
 
         var validation = Validate(body);
         if (validation is not null)
@@ -79,10 +75,61 @@ public static class DrFlitEndpoints
             .ToList();
 
         var result = await assistant
-            .AskAsync(new DrFlitChatRequest(tenantId, userId.Value, body.Message!.Trim(), history), cancellationToken)
+            .AskAsync(new DrFlitChatRequest(tenantId, userId, body.Message!.Trim(), history), cancellationToken)
             .ConfigureAwait(false);
 
         return Results.Ok(ToResponse(result));
+    }
+
+    /// <summary>
+    /// HU #12924 — adjunto de un caso aún no confirmado. 201 con el id que el formulario manda luego en
+    /// <c>attachmentIds</c>; 400 si falta, no es de un tipo permitido o supera el tamaño configurado.
+    /// </summary>
+    internal static async Task<IResult> UploadAttachmentAsync(
+        HttpContext httpContext,
+        [FromHeader(Name = "X-Tenant-Id")] Guid? tenantHeader,
+        IFormFile? file,
+        UploadSupportAttachmentHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var caller = ResolveCaller(httpContext, tenantHeader);
+        if (caller.Error is not null)
+            return caller.Error;
+
+        await using var content = file?.OpenReadStream();
+        var result = await handler.HandleAsync(
+            new UploadSupportAttachmentCommand(
+                caller.TenantId, caller.UserId, file?.FileName, file?.ContentType, file?.Length ?? 0, content),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.Outcome == UploadSupportAttachmentOutcome.Uploaded
+            ? Results.Created(
+                (string?)null,
+                new DrFlitSupportAttachmentResponse(result.Attachment!.Id, result.Attachment.FileName, result.Attachment.SizeBytes))
+            : BadRequest(result.Error ?? "Adjunto inválido.");
+    }
+
+    /// <summary>
+    /// Tenant y usuario de la petición. El tenant del cupo y de los adjuntos sale del token para un usuario
+    /// de compañía (el header se exige pero no manda); el SuperAdmin usa el del header.
+    /// </summary>
+    private static (Guid TenantId, Guid UserId, IResult? Error) ResolveCaller(HttpContext httpContext, Guid? tenantHeader)
+    {
+        if (tenantHeader is null || tenantHeader == Guid.Empty)
+            return (default, default, BadRequest("Falta header X-Tenant-Id"));
+
+        var userId = ResolveUserId(httpContext.User);
+        if (userId is null)
+            return (default, default, Results.Unauthorized());
+
+        if (RequestTenantResolver.IsSuperAdmin(httpContext.User))
+            return (tenantHeader.Value, userId.Value, null);
+
+        return RequestTenantResolver.TryResolveNonEmptyTenantId(httpContext.User, out var tenantId)
+            ? (tenantId, userId.Value, null)
+            : (default, default, Results.Problem(
+                statusCode: StatusCodes.Status403Forbidden, title: "Forbidden",
+                detail: "El usuario autenticado no tiene una compañía asignada."));
     }
 
     /// <summary>Validación de entrada (AC3). Devuelve el motivo o <c>null</c> si es válida.</summary>
@@ -167,3 +214,6 @@ public sealed record DrFlitCitationResponse(
     bool PrimarySource);
 
 public sealed record DrFlitUsageResponse(int MessagesUsedToday, int DailyLimit);
+
+/// <summary>Respuesta 201 de <c>POST /api/v1/dr-flit/support-cases/attachments</c>.</summary>
+public sealed record DrFlitSupportAttachmentResponse(Guid Id, string Filename, long SizeBytes);

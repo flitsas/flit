@@ -1,5 +1,7 @@
 using Flit.DrFlit.Application.Chat;
+using Flit.DrFlit.Application.SupportCases;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.DrFlit.Application;
 
@@ -12,6 +14,8 @@ public static class DrFlitApplicationServiceCollectionExtensions
     public static IServiceCollection AddDrFlitApplication(this IServiceCollection services)
     {
         services.AddScoped<IDrFlitAssistant, DrFlitAssistant>();
+        services.AddScoped<UploadSupportAttachmentHandler>();
+        services.TryAddSingleton(TimeProvider.System);
         return services;
     }
 }

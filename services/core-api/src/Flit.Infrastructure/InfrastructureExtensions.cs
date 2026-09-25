@@ -1276,6 +1276,19 @@ public static class InfrastructureExtensions
         });
         services.AddHttpClient<IDrFlitSupportCaseGateway, AzureDevOpsSupportCaseClient>(c =>
             c.Timeout = TimeSpan.FromSeconds(60)); // cada llamada impone su propio deadline (TimeoutSeconds)
+
+        // HU #12924 — límites de los adjuntos previos y ambiente que se reporta en el caso.
+        services.Configure<DrFlitSupportCaseOptions>(o =>
+        {
+            var section = configuration.GetSection(DrFlitSupportCaseOptions.SectionName);
+            var mimes = section.GetSection(nameof(DrFlitSupportCaseOptions.AllowedMimeTypes)).Get<List<string>>();
+            section.Bind(o);
+            if (mimes is { Count: > 0 })
+                o.AllowedMimeTypes = mimes; // reemplaza, no agrega (mismo motivo que AffectedModules)
+            o.DeployEnvironment = Cfg("DrFlit:DeployEnvironment", "DR_FLIT_DEPLOY_ENVIRONMENT");
+        });
+        services.AddSingleton<IDrFlitSupportCaseSettings, DrFlitSupportCaseSettings>();
+        services.AddScoped<IDrFlitSupportAttachmentStore, DrFlitSupportAttachmentStore>();
     }
 
     private static void AddOcr(IServiceCollection services, IConfiguration configuration)
