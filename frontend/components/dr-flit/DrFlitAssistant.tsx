@@ -54,6 +54,8 @@ export function DrFlitAssistant({
         onContinueSupportCase={chat.continueSupportCase}
         onCancelSupportCase={chat.cancelSupportCase}
         onAttachSupportFile={chat.attachSupportFile}
+        onSubmitSupportCase={chat.submitSupportCase}
+        onEditSupportCase={chat.editSupportCase}
         canSearchValidaciones={canSearchValidaciones}
         panelRef={chat.panelRef}
         closeButtonRef={chat.closeButtonRef}

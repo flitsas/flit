@@ -960,3 +960,51 @@ export function applyCancelSupportCase(state: DrFlitChatState): DrFlitChatState 
     supportError: null,
   };
 }
+
+/**
+ * HU #12930 AC1 — clic explícito en «Confirmar y radicar caso» (o «Reintentar» tras un error). Es la
+ * única transición que lleva a `submitting_support_case`, y solo el efecto de esa fase llama a
+ * POST /support-cases: ninguna respuesta del LLM puede disparar la radicación (ADR-0060 §8.2.3).
+ */
+export function applySubmitSupportCase(state: DrFlitChatState): DrFlitChatState {
+  if (!state.supportDraft) return state;
+  if (state.phase !== "confirming_support_case" && state.phase !== "support_case_error") return state;
+  return { ...state, phase: "submitting_support_case", supportError: null, isTyping: true };
+}
+
+/** HU #12930 AC1/AC2/AC4 — caso radicado: número de caso (y enlace solo si el backend lo mandó). */
+export function applySupportCaseCreated(
+  state: DrFlitChatState,
+  result: DrFlitSupportCaseCreated,
+): DrFlitChatState {
+  const botMsg: DrFlitMessage = {
+    id: createMessageId(),
+    role: "bot",
+    text: `Tu caso **#${result.caseId}** quedó radicado. El equipo de soporte lo revisará y te contactará por los datos que dejaste.`,
+  };
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "support_case_created",
+    showSessionMenu: false,
+    showSupportInfo: false,
+    showBackToSearch: true,
+    supportDraft: null,
+    supportResult: result,
+    supportError: null,
+  };
+}
+
+/**
+ * HU #12930 AC3 — no se pudo radicar: se ofrecen los canales de soporte como salida y se conserva el
+ * formulario para reintentar sin volver a escribir.
+ */
+export function applySupportCaseError(state: DrFlitChatState, message: string): DrFlitChatState {
+  return {
+    ...state,
+    phase: "support_case_error",
+    isTyping: false,
+    supportError: message,
+  };
+}

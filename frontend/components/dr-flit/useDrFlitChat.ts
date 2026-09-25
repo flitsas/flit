@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
 import { resolveContextArticle, visibleAudiences } from "@/lib/manual/catalog";
-import { postDrFlitChat, uploadSupportAttachment } from "@/lib/api/dr-flit-client";
+import { createSupportCase, postDrFlitChat, uploadSupportAttachment } from "@/lib/api/dr-flit-client";
 import type { DrFlitSupportCaseDraft } from "./dr-flit-chat-types";
-import { createSupportDraft, resolveAffectedModule } from "./dr-flit-support-case";
+import { createSupportDraft, resolveAffectedModule, toSupportCaseRequest } from "./dr-flit-support-case";
 import { readJwtPayload, resolveDrFlitContext } from "./dr-flit-context";
 import { buildHistorialPlacaHref, DR_FLIT_CHAT_ENABLED } from "./dr-flit-intents";
 import {
@@ -13,7 +13,11 @@ import {
   applyCancelSupportCase,
   applyChatDegraded,
   applyContinueSupportCase,
+  applyEditSupportCase,
   applyOpenSupportCase,
+  applySubmitSupportCase,
+  applySupportCaseCreated,
+  applySupportCaseError,
   applyUpdateSupportDraft,
   applyChatRateLimited,
   applyChatSuccess,
@@ -73,9 +77,16 @@ export function useDrFlitChat(
   // Tras remount (p. ej. layout de otro módulo) el panel arranca cerrado;
   // la conversación sí se restaura hasta “Terminar chat”.
   const [open, setOpen] = useState(false);
-  const [state, setState] = useState<DrFlitChatState>(() =>
-    hydrated.current?.state ?? createInitialState(displayName),
-  );
+  const [state, setState] = useState<DrFlitChatState>(() => {
+    const restored = hydrated.current?.state;
+    if (!restored) return createInitialState(displayName);
+    // HU #12930 — una radicación interrumpida (recarga a mitad) no se relanza sola: vuelve al resumen
+    // para que el usuario confirme de nuevo. Radicar exige siempre un clic.
+    if (restored.phase === "submitting_support_case") {
+      return { ...restored, phase: "confirming_support_case", isTyping: false };
+    }
+    return restored;
+  });
   const panelId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const fabRef = useRef<HTMLButtonElement>(null);
@@ -228,6 +239,38 @@ export function useDrFlitChat(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.queryValue]);
 
+  /**
+   * HU #12930 — la radicación ocurre SOLO al entrar en `submitting_support_case`, a la que se llega
+   * únicamente por el clic en «Confirmar y radicar caso» o «Reintentar».
+   */
+  useEffect(() => {
+    if (state.phase !== "submitting_support_case" || !state.supportDraft) return;
+    const request = toSupportCaseRequest(state.supportDraft);
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const created = await createSupportCase(request);
+        if (!cancelled) setState((prev) => applySupportCaseCreated(prev, created));
+      } catch (err) {
+        if (!cancelled) setState((prev) => applySupportCaseError(prev, errorMessage(err)));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Solo la entrada a la fase dispara la llamada; el borrador se lee en ese momento.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase]);
+
+  const submitSupportCase = useCallback(() => {
+    setState((prev) => applySubmitSupportCase(prev));
+  }, []);
+
+  const editSupportCase = useCallback(() => {
+    setState((prev) => applyEditSupportCase(prev));
+  }, []);
+
   /** HU #12929 — borrador del caso prellenado con lo que la plataforma ya sabe del usuario. */
   const newSupportDraft = useCallback(
     () =>
@@ -349,6 +392,8 @@ export function useDrFlitChat(
     continueSupportCase,
     cancelSupportCase,
     attachSupportFile,
+    submitSupportCase,
+    editSupportCase,
     panelId,
     closeButtonRef,
     fabRef,

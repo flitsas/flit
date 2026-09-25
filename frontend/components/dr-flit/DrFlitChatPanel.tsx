@@ -11,6 +11,9 @@ import {
 } from "./dr-flit-conversation";
 import { DrFlitUsageNotice } from "./DrFlitUsageNotice";
 import { DrFlitSupportCaseForm } from "./DrFlitSupportCaseForm";
+import { DrFlitSupportCaseConfirm } from "./DrFlitSupportCaseConfirm";
+import { DrFlitSupportCaseCreated } from "./DrFlitSupportCaseCreated";
+import { DrFlitSupportCaseError } from "./DrFlitSupportCaseError";
 import type { DrFlitSupportCaseDraft } from "./dr-flit-chat-types";
 import {
   DR_FLIT_MANUAL_HOME_HREF,
@@ -49,6 +52,8 @@ export function DrFlitChatPanel({
   onContinueSupportCase,
   onCancelSupportCase,
   onAttachSupportFile,
+  onSubmitSupportCase,
+  onEditSupportCase,
   panelRef,
   closeButtonRef,
   inputRef,
@@ -71,6 +76,8 @@ export function DrFlitChatPanel({
   onContinueSupportCase: () => void;
   onCancelSupportCase: () => void;
   onAttachSupportFile: (file: File) => Promise<string | null>;
+  onSubmitSupportCase: () => void;
+  onEditSupportCase: () => void;
   /** HU #12711 — ver `DrFlitClientBranchChoices`. */
   canSearchValidaciones?: boolean;
   panelRef: RefObject<HTMLDivElement | null>;
@@ -274,6 +281,29 @@ export function DrFlitChatPanel({
               onContinue={onContinueSupportCase}
               onCancel={onCancelSupportCase}
               onAttach={onAttachSupportFile}
+            />
+          )}
+
+          {(state.phase === "confirming_support_case" || state.phase === "submitting_support_case") &&
+            state.supportDraft && (
+              <DrFlitSupportCaseConfirm
+                draft={state.supportDraft}
+                submitting={state.phase === "submitting_support_case"}
+                onConfirm={onSubmitSupportCase}
+                onEdit={onEditSupportCase}
+              />
+            )}
+
+          {state.phase === "support_case_created" && state.supportResult && (
+            <DrFlitSupportCaseCreated result={state.supportResult} onOpen={onNavigate} />
+          )}
+
+          {state.phase === "support_case_error" && (
+            <DrFlitSupportCaseError
+              message={state.supportError ?? "No pudimos radicar tu caso en este momento."}
+              onRetry={onSubmitSupportCase}
+              onEdit={onEditSupportCase}
+              onOpen={onNavigate}
             />
           )}
 
