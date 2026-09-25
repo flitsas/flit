@@ -57,7 +57,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 - [ ] A-01 Inventario de lo que depende de `Development` y nombres de ambiente
 - [ ] A-02 Salir de `Development` en DEV
 - [ ] A-03 Gateway y API validan firma, emisor y audiencia
-- [ ] A-04 Espiga técnica de OpenIddict
+- [x] A-04 Espiga técnica de OpenIddict
 - [ ] A-05 Servidor OIDC en `core-api`
 - [ ] A-06 Pantallas de login en el hub
 - [ ] A-07 Token por producto y refresh en Redis
@@ -174,4 +174,4 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 | Fecha | Tarea | PR | Nota |
 |---|---|---|---|
-| | | | |
+| 2026-09-25 | A-04 (HU #12897) | Feature #12886 | Espiga en rama local `spike/AB-12897-openiddict` (no se fusiona). Respuestas y decisión en `a-espiga-openiddict.md`: OpenIddict 7.x, tablas `identity.oidc_*`, emisor por host sellado, `CredentialVerifier` y llave persistente. Exige subir EF/Extensions a 10.0.11 e IdentityModel a 8.19.2. |
