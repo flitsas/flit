@@ -1,9 +1,11 @@
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Analytics.Application.Abstractions;
+using Flit.DrFlit.Application.Abstractions;
 using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Consultations.Avaluos;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
+using Flit.Infrastructure.DrFlit;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Ict;
 using Flit.Infrastructure.Improntas;
@@ -304,6 +306,7 @@ public static class InfrastructureExtensions
         AddRues(services, configuration);
         AddRentingChannel(services, configuration);
         AddOcr(services, configuration);
+        AddDrFlit(services);
         AddQuipux(services);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
@@ -1229,6 +1232,15 @@ public static class InfrastructureExtensions
         services.AddHostedService<QuipuxStatusPollProcessor>();
     }
 
+    /// <summary>
+    /// Épica #12718 (ADR-0060) — DR. FLIT. El LLM del chat reutiliza el <see cref="AnthropicMessagesClient"/>
+    /// y las opciones <c>Anthropic:DrFlit*</c> que registra <see cref="AddOcr"/>, así que no lee configuración propia.
+    /// </summary>
+    private static void AddDrFlit(IServiceCollection services)
+    {
+        services.AddScoped<IDrFlitChatModel, AnthropicDrFlitChatModel>();
+    }
+
     private static void AddOcr(IServiceCollection services, IConfiguration configuration)
     {
         // OCR semántico de documentos de trámites. Env var CRUDA primero (override 12-factor),
@@ -1250,16 +1262,24 @@ public static class InfrastructureExtensions
             o.ClassifierModel = Cfg("Anthropic:ClassifierModel", "ANTHROPIC_CLASSIFIER_MODEL") ?? "claude-sonnet-5";
             o.ClassifierMaxTokens = int.TryParse(Cfg("Anthropic:ClassifierMaxTokens", "ANTHROPIC_CLASSIFIER_MAX_TOKENS"), out var cm) ? cm : 8000;
             o.ClassifierTimeoutSeconds = int.TryParse(Cfg("Anthropic:ClassifierTimeoutSeconds", "ANTHROPIC_CLASSIFIER_TIMEOUT_SECONDS"), out var ctd) ? ctd : 180;
+
+            // Épica #12718 (ADR-0060) — chat de DR. FLIT sobre el mismo cliente y la misma API key.
+            o.DrFlitModel = Cfg("Anthropic:DrFlitModel", "ANTHROPIC_DRFLIT_MODEL") ?? "claude-haiku-4-5";
+            o.DrFlitMaxTokens = int.TryParse(Cfg("Anthropic:DrFlitMaxTokens", "ANTHROPIC_DRFLIT_MAX_TOKENS"), out var dm) ? dm : 600;
+            o.DrFlitTimeoutSeconds = int.TryParse(Cfg("Anthropic:DrFlitTimeoutSeconds", "ANTHROPIC_DRFLIT_TIMEOUT_SECONDS"), out var dt) ? dt : 20;
+            o.DrFlitDailyMessageLimit = int.TryParse(Cfg("Anthropic:DrFlitDailyMessageLimit", "ANTHROPIC_DRFLIT_DAILY_MESSAGE_LIMIT"), out var dl) ? dl : 30;
+            o.DrFlitEnabled = !string.Equals(Cfg("Anthropic:DrFlitEnabled", "ANTHROPIC_DRFLIT_ENABLED"), "false", StringComparison.OrdinalIgnoreCase);
         });
 
         // Typed HttpClient (compatible con PublishAot, como Verifik/Kyverum). El timeout del cliente es
-        // el MAYOR de los dos deadlines (analizador y clasificador); cada llamada impone el suyo con un
-        // CTS enlazado, así el analizador conserva sus 60s y el clasificador dispone de los suyos.
+        // el MAYOR de los deadlines (analizador, clasificador y chat de DR. FLIT); cada llamada impone
+        // el suyo con un CTS enlazado, así el analizador conserva sus 60s y el clasificador los suyos.
         services.AddHttpClient<AnthropicMessagesClient>((sp, c) =>
         {
             var o = sp.GetRequiredService<IOptions<AnthropicOptions>>().Value;
             c.BaseAddress = new Uri(o.BaseUrl);
-            c.Timeout = TimeSpan.FromSeconds(Math.Max(o.TimeoutSeconds, o.ClassifierTimeoutSeconds));
+            c.Timeout = TimeSpan.FromSeconds(
+                Math.Max(Math.Max(o.TimeoutSeconds, o.ClassifierTimeoutSeconds), o.DrFlitTimeoutSeconds));
         });
         services.AddScoped<AnthropicDocumentOcrAnalyzer>();
         services.AddScoped<AnthropicDocumentBatchClassifier>();
