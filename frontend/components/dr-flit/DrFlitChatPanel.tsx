@@ -10,6 +10,8 @@ import {
   type DrFlitChatState,
 } from "./dr-flit-conversation";
 import { DrFlitUsageNotice } from "./DrFlitUsageNotice";
+import { DrFlitSupportCaseForm } from "./DrFlitSupportCaseForm";
+import type { DrFlitSupportCaseDraft } from "./dr-flit-chat-types";
 import {
   DR_FLIT_MANUAL_HOME_HREF,
   type DrFlitClientBranch,
@@ -42,6 +44,11 @@ export function DrFlitChatPanel({
   onBackToSearch,
   onSend,
   onNavigate,
+  onOpenSupportCase,
+  onUpdateSupportDraft,
+  onContinueSupportCase,
+  onCancelSupportCase,
+  onAttachSupportFile,
   panelRef,
   closeButtonRef,
   inputRef,
@@ -58,6 +65,12 @@ export function DrFlitChatPanel({
   onBackToSearch: () => void;
   onSend: (text: string) => void;
   onNavigate: (href: string) => void;
+  /** Feature #12917 — formulario del caso de soporte en el chat. */
+  onOpenSupportCase: () => void;
+  onUpdateSupportDraft: (draft: DrFlitSupportCaseDraft) => void;
+  onContinueSupportCase: () => void;
+  onCancelSupportCase: () => void;
+  onAttachSupportFile: (file: File) => Promise<string | null>;
   /** HU #12711 — ver `DrFlitClientBranchChoices`. */
   canSearchValidaciones?: boolean;
   panelRef: RefObject<HTMLDivElement | null>;
@@ -85,6 +98,7 @@ export function DrFlitChatPanel({
     state.manualHomeHref,
     state.showBackToSearch,
     state.isTyping,
+    state.phase,
   ]);
 
   if (!open) return null;
@@ -250,7 +264,17 @@ export function DrFlitChatPanel({
           )}
 
           {state.showSupportInfo && !state.isTyping && (
-            <DrFlitSupportPanel onOpenCase={onNavigate} />
+            <DrFlitSupportPanel onOpenCase={onNavigate} onOpenCaseForm={onOpenSupportCase} />
+          )}
+
+          {state.phase === "collecting_support_case" && state.supportDraft && (
+            <DrFlitSupportCaseForm
+              draft={state.supportDraft}
+              onChange={onUpdateSupportDraft}
+              onContinue={onContinueSupportCase}
+              onCancel={onCancelSupportCase}
+              onAttach={onAttachSupportFile}
+            />
           )}
 
           {state.showSessionMenu && !state.isTyping && (

@@ -39,7 +39,10 @@ import type {
   DrFlitChatTurn,
   DrFlitChatUsage,
   DrFlitCitation,
+  DrFlitSupportCaseCreated,
+  DrFlitSupportCaseDraft,
 } from "./dr-flit-chat-types";
+import { validateSupportDraft } from "./dr-flit-support-case";
 
 export type DrFlitMessageRole = "bot" | "user";
 
@@ -64,7 +67,18 @@ export type DrFlitPhase =
   /** Esperando la respuesta de POST /dr-flit/chat. */
   | "chat_loading"
   /** Respuesta del LLM (status ok), con o sin citas del manual. */
-  | "showing_chat_reply";
+  | "showing_chat_reply"
+  // ── Feature #12917 — caso de soporte ──
+  /** Formulario del caso abierto (prellenado). */
+  | "collecting_support_case"
+  /** Resumen + «Confirmar y radicar caso»: único punto que llama a POST /support-cases. */
+  | "confirming_support_case"
+  /** POST /support-cases en curso. */
+  | "submitting_support_case"
+  /** «Tu caso #N quedó radicado». */
+  | "support_case_created"
+  /** El sistema de soporte no respondió: canales estáticos y reintento sin perder el formulario. */
+  | "support_case_error";
 
 export interface DrFlitChatState {
   messages: DrFlitMessage[];
@@ -90,6 +104,12 @@ export interface DrFlitChatState {
    * conversaciones guardadas en sessionStorage antes de la épica no lo traen.
    */
   chatUsage?: DrFlitChatUsage | null;
+  /** Feature #12917 — formulario del caso en curso (solo ids de adjuntos, nunca binarios). */
+  supportDraft?: DrFlitSupportCaseDraft | null;
+  /** Feature #12917 — resultado de la radicación. */
+  supportResult?: DrFlitSupportCaseCreated | null;
+  /** Feature #12917 — motivo del último fallo al radicar. */
+  supportError?: string | null;
 }
 
 let messageSeq = 0;
@@ -705,11 +725,20 @@ export function citationToHelpResult(citation: DrFlitCitation): DrFlitHelpResult
 export function applyChatSuccess(
   state: DrFlitChatState,
   response: DrFlitChatResponse,
+  /** HU #12929 — borrador prellenado: con él, «soporte» abre el formulario del caso en el chat. */
+  supportDraft?: DrFlitSupportCaseDraft | null,
 ): DrFlitChatState {
   const botMsg: DrFlitMessage = { id: createMessageId(), role: "bot", text: response.reply };
 
   if (response.intent === "gestion") {
     return applyChatGestion({ ...state, messages: [...state.messages, botMsg], chatUsage: response.usage }, response);
+  }
+
+  if (response.intent === "soporte" && supportDraft) {
+    return applyOpenSupportCase(
+      { ...state, messages: [...state.messages, botMsg], chatUsage: response.usage },
+      supportDraft,
+    );
   }
 
   if (response.intent === "soporte") {
@@ -856,4 +885,78 @@ export function hasActiveConversation(state: DrFlitChatState): boolean {
     state.manualHomeHref != null ||
     state.isTyping
   );
+}
+
+// ── Feature #12917 — caso de soporte (ADR-0060 §7.2 y §11) ─────────────────────────────────────
+
+/**
+ * HU #12929 AC1 — abre el formulario del caso dentro del chat con el borrador prellenado. Llega por la
+ * intención «soporte» del LLM o por «Generar un caso de soporte» del panel de soporte.
+ */
+export function applyOpenSupportCase(
+  state: DrFlitChatState,
+  draft: DrFlitSupportCaseDraft,
+): DrFlitChatState {
+  const botMsg: DrFlitMessage = {
+    id: createMessageId(),
+    role: "bot",
+    text: "Completa estos datos y te muestro un resumen antes de radicar el caso. Ya llené lo que la plataforma sabe de ti.",
+  };
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "collecting_support_case",
+    session: "ayuda",
+    showSessionMenu: false,
+    showSupportInfo: false,
+    showBackToSearch: false,
+    supportDraft: draft,
+    supportResult: null,
+    supportError: null,
+  };
+}
+
+/** Cada cambio del formulario queda en el estado (y en sessionStorage): no se pierde al navegar. */
+export function applyUpdateSupportDraft(
+  state: DrFlitChatState,
+  draft: DrFlitSupportCaseDraft,
+): DrFlitChatState {
+  return { ...state, supportDraft: draft };
+}
+
+/**
+ * HU #12929 AC2 — «Continuar»: con campos faltantes no avanza (el formulario los marca) y no llama a
+ * ningún endpoint; completo, pasa al resumen de confirmación.
+ */
+export function applyContinueSupportCase(state: DrFlitChatState): DrFlitChatState {
+  const draft = state.supportDraft;
+  if (!draft || Object.keys(validateSupportDraft(draft)).length > 0) return state;
+  return { ...state, phase: "confirming_support_case", supportError: null };
+}
+
+/** Volver del resumen al formulario para corregir, sin perder lo escrito. */
+export function applyEditSupportCase(state: DrFlitChatState): DrFlitChatState {
+  if (!state.supportDraft) return state;
+  return { ...state, phase: "collecting_support_case" };
+}
+
+/** Cancelar el caso: se descarta el borrador y se vuelve al menú. */
+export function applyCancelSupportCase(state: DrFlitChatState): DrFlitChatState {
+  const botMsg: DrFlitMessage = {
+    id: createMessageId(),
+    role: "bot",
+    text: "Listo, no radiqué ningún caso. Elige otra opción de Gestión o Ayuda.",
+  };
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "idle",
+    showBackToSearch: false,
+    ...idleMenuFlags(),
+    supportDraft: null,
+    supportResult: null,
+    supportError: null,
+  };
 }

@@ -710,6 +710,7 @@ export function Shell({
             visibleModuleCodes ? visibleModuleCodes.includes("historial-placa") : true
           }
           canSearchValidaciones={visibleDock.some((it) => it.id === "validaciones")}
+          supportContact={{ name: currentUser?.displayName ?? null, email: currentUser?.email ?? null }}
         />
 
         {/* Bottom dock — móvil/tablet (<lg): lanzador + hoja agrupada. */}

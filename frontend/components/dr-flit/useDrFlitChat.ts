@@ -3,12 +3,18 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
 import { resolveContextArticle, visibleAudiences } from "@/lib/manual/catalog";
-import { postDrFlitChat } from "@/lib/api/dr-flit-client";
+import { postDrFlitChat, uploadSupportAttachment } from "@/lib/api/dr-flit-client";
+import type { DrFlitSupportCaseDraft } from "./dr-flit-chat-types";
+import { createSupportDraft, resolveAffectedModule } from "./dr-flit-support-case";
 import { readJwtPayload, resolveDrFlitContext } from "./dr-flit-context";
 import { buildHistorialPlacaHref, DR_FLIT_CHAT_ENABLED } from "./dr-flit-intents";
 import {
   applyBackToSearch,
+  applyCancelSupportCase,
   applyChatDegraded,
+  applyContinueSupportCase,
+  applyOpenSupportCase,
+  applyUpdateSupportDraft,
   applyChatRateLimited,
   applyChatSuccess,
   buildChatHistory,
@@ -47,6 +53,11 @@ export interface UseDrFlitChatOptions {
    * RBAC, como el propio dock).
    */
   historialPlacaEnabled?: boolean;
+  /**
+   * HU #12929 — nombre y correo del usuario (del `currentUser` del Shell) para prellenar el caso de
+   * soporte. La compañía sale del `tenant_name` del JWT.
+   */
+  supportContact?: { name?: string | null; email?: string | null };
 }
 
 export function useDrFlitChat(
@@ -56,6 +67,8 @@ export function useDrFlitChat(
   options: UseDrFlitChatOptions = {},
 ) {
   const historialPlacaEnabled = options.historialPlacaEnabled ?? true;
+  const supportName = options.supportContact?.name ?? displayName ?? null;
+  const supportEmail = options.supportContact?.email ?? null;
   const hydrated = useRef(loadDrFlitSession());
   // Tras remount (p. ej. layout de otro módulo) el panel arranca cerrado;
   // la conversación sí se restaura hasta “Terminar chat”.
@@ -201,7 +214,8 @@ export function useDrFlitChat(
         const response = await postDrFlitChat({ message, history, routeScope: routeScope ?? null });
         if (gen !== searchGen.current) return;
         setState((prev) => {
-          if (response.status === "ok") return applyChatSuccess(prev, response);
+          if (response.status === "ok")
+            return applyChatSuccess(prev, response, response.intent === "soporte" ? newSupportDraft() : null);
           if (response.status === "rate_limited") return applyChatRateLimited(prev, response);
           return applyChatDegraded(prev, { helpAudiences }, response.usage);
         });
@@ -213,6 +227,50 @@ export function useDrFlitChat(
     // Solo la entrada a chat_loading dispara la llamada; el resto del estado se lee en ese momento.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.queryValue]);
+
+  /** HU #12929 — borrador del caso prellenado con lo que la plataforma ya sabe del usuario. */
+  const newSupportDraft = useCallback(
+    () =>
+      createSupportDraft(
+        { name: supportName, email: supportEmail, company: readJwtPayload()?.tenant_name ?? null },
+        resolveAffectedModule(routeScope),
+      ),
+    [supportName, supportEmail, routeScope],
+  );
+
+  const openSupportCase = useCallback(() => {
+    setState((prev) => applyOpenSupportCase(prev, newSupportDraft()));
+  }, [newSupportDraft]);
+
+  const updateSupportDraft = useCallback((draft: DrFlitSupportCaseDraft) => {
+    setState((prev) => applyUpdateSupportDraft(prev, draft));
+  }, []);
+
+  const continueSupportCase = useCallback(() => {
+    setState((prev) => applyContinueSupportCase(prev));
+  }, []);
+
+  const cancelSupportCase = useCallback(() => {
+    setState((prev) => applyCancelSupportCase(prev));
+  }, []);
+
+  /** Sube un adjunto y guarda solo su id en el borrador. Devuelve el motivo si falló. */
+  const attachSupportFile = useCallback(async (file: File): Promise<string | null> => {
+    try {
+      const uploaded = await uploadSupportAttachment(file);
+      setState((prev) =>
+        prev.supportDraft
+          ? applyUpdateSupportDraft(prev, {
+              ...prev.supportDraft,
+              attachments: [...prev.supportDraft.attachments, uploaded],
+            })
+          : prev,
+      );
+      return null;
+    } catch (err) {
+      return errorMessage(err);
+    }
+  }, []);
 
   /** Contexto de rol/red vigente; se resuelve al momento (el JWT o el alcance pueden cambiar). */
   const currentContext = useCallback(
@@ -286,6 +344,11 @@ export function useDrFlitChat(
     sendText,
     resetConversation,
     navigate,
+    openSupportCase,
+    updateSupportDraft,
+    continueSupportCase,
+    cancelSupportCase,
+    attachSupportFile,
     panelId,
     closeButtonRef,
     fabRef,

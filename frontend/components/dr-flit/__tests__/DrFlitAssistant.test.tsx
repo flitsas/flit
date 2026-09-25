@@ -84,8 +84,9 @@ describe("DrFlitAssistant", () => {
     // HU-F — sin NEXT_PUBLIC_DR_FLIT_SUPPORT_PHONE no se inventa una línea de atención.
     expect(screen.queryByText("Línea de atención")).not.toBeInTheDocument();
 
+    // Épica #12718 (HU #12930) — el formulario web oficial se conserva como alternativa visible.
     await user.click(
-      screen.getByRole("button", { name: /Generar un caso de soporte/i }),
+      screen.getByRole("button", { name: /O usa el formulario web de FLIT SAS/i }),
     );
     expect(window.open).toHaveBeenCalledWith(
       DR_FLIT_SUPPORT_CASE_URL,
@@ -93,6 +94,12 @@ describe("DrFlitAssistant", () => {
       "noopener,noreferrer",
     );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    // …y «Generar un caso de soporte» abre el formulario del caso dentro del chat.
+    await user.click(
+      screen.getByRole("button", { name: /Generar un caso de soporte/i }),
+    );
+    expect(screen.getByRole("form", { name: "Formulario del caso de soporte" })).toBeInTheDocument();
   });
 
   it("placa consulta API y muestra resultados", async () => {
