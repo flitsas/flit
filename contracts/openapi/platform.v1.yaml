@@ -1,0 +1,316 @@
+openapi: 3.0.3
+info:
+  title: FLIT Suite — API de plataforma
+  version: "1.0.0"
+  description: >
+    Endpoints de plataforma de la FLIT Suite (contrato de plataforma v1, §6), servidos por core-api
+    bajo /api/v1/platform. Productos de la suite, su habilitación por empresa y el manifiesto que
+    registra cada producto (HU #12966, tarea B-06). Los errores siguen RFC 7807 con un campo `code`
+    estable (contrato §10). Las consultas externas compartidas (/platform/consultas) se documentan
+    cuando se implementen (frente C).
+  license:
+    name: Propietario FLIT
+    url: https://flitsas.com
+
+servers:
+  - url: https://api.flit.co
+    description: Producción (vía Gateway YARP)
+  - url: http://localhost:4002
+    description: Local (Gateway)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Platform
+    description: Productos de la suite y su habilitación por empresa.
+
+paths:
+  /api/v1/platform/me/apps:
+    get:
+      tags: [Platform]
+      operationId: listMyApps
+      summary: Productos que el usuario puede abrir
+      description: >
+        La plataforma (el hub) siempre aparece. Otro producto aparece si está encendido para la
+        empresa del usuario y para su cabeza, y el usuario tiene rol en él. Al SuperAdmin se le
+        devuelven todos los productos activos. `current` marca el producto del host de la petición.
+      responses:
+        "200":
+          description: Productos, en el orden del catálogo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MyApp"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/platform/products/{code}/manifest:
+    put:
+      tags: [Platform]
+      operationId: applyProductManifest
+      summary: Registrar el manifiesto de un producto
+      description: >
+        Lo llama cada servicio al arrancar, con token de servicio y scope `platform.manifest`.
+        Idempotente: crea o actualiza módulos, permisos y roles por defecto del producto, y no borra
+        nada. Cada `slug` debe empezar por `<code>.`.
+      parameters:
+        - $ref: "#/components/parameters/ProductCode"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductManifest"
+      responses:
+        "200":
+          description: Manifiesto aplicado; cuenta lo que se creó.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManifestApplyResult"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: El token no tiene el scope platform.manifest.
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+
+  /api/v1/platform/admin/tenants/{tenantId}/products:
+    get:
+      tags: [Platform]
+      operationId: listTenantProducts
+      summary: Productos de una empresa (SuperAdmin)
+      description: Todo el catálogo salvo la plataforma, con su estado para la empresa. Sin fila = apagado.
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: Estado de cada producto.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TenantProduct"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Solo el SuperAdmin.
+        "404":
+          $ref: "#/components/responses/Problem"
+
+  /api/v1/platform/admin/tenants/{tenantId}/products/{productCode}:
+    put:
+      tags: [Platform]
+      operationId: setTenantProduct
+      summary: Encender o apagar un producto para una empresa (SuperAdmin)
+      description: >
+        Idempotente y auditado en admin.tenant_config_audit_logs. Una empresa hija no puede encender un
+        producto que su cabeza tiene apagado (409 PRODUCT_NOT_ENABLED_FOR_HEAD). Apagar la cabeza deja
+        sin el producto a sus hijas sin reescribir sus filas.
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - name: productCode
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+                notes:
+                  type: string
+                  nullable: true
+                  maxLength: 500
+      responses:
+        "200":
+          description: Estado resultante. `changed` es false si ya estaba igual.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/TenantProductState"
+                  - type: object
+                    properties:
+                      changed:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Solo el SuperAdmin.
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ProductCode:
+      name: code
+      in: path
+      required: true
+      description: Código del contrato §1 (plataforma, tramites, comparendos, diagnostico, demo).
+      schema:
+        type: string
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Unauthorized:
+      description: Sin sesión o token inválido.
+    Problem:
+      description: Error RFC 7807 con `code` estable (contrato §10).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    MyApp:
+      type: object
+      required: [code, name, icon, url, current]
+      properties:
+        code:
+          type: string
+          example: tramites
+        name:
+          type: string
+          example: Trámites
+        icon:
+          type: string
+          description: Nombre de ícono lucide.
+          example: file-text
+        url:
+          type: string
+          example: https://tramites.flitsas.online
+        current:
+          type: boolean
+
+    TenantProductState:
+      type: object
+      required: [productCode, enabled]
+      properties:
+        productCode:
+          type: string
+        enabled:
+          type: boolean
+        notes:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedBy:
+          type: string
+          format: uuid
+          nullable: true
+
+    TenantProduct:
+      allOf:
+        - $ref: "#/components/schemas/TenantProductState"
+        - type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+
+    ProductManifest:
+      type: object
+      required: [version, modules, defaultRoles]
+      properties:
+        version:
+          type: string
+          example: "1.0.0"
+        modules:
+          type: array
+          items:
+            type: object
+            required: [code, name, permissions]
+            properties:
+              code:
+                type: string
+              name:
+                type: string
+              permissions:
+                type: array
+                items:
+                  type: object
+                  required: [slug, name]
+                  properties:
+                    slug:
+                      type: string
+                      description: "<producto>.<módulo>.<acción>, por ejemplo comparendos.bandeja.read"
+                    name:
+                      type: string
+        defaultRoles:
+          type: array
+          items:
+            type: object
+            required: [code, name, permissions]
+            properties:
+              code:
+                type: string
+              name:
+                type: string
+              permissions:
+                type: array
+                description: Slugs del mismo manifiesto.
+                items:
+                  type: string
+
+    ManifestApplyResult:
+      type: object
+      required: [modulesCreated, permissionsCreated, rolesCreated]
+      properties:
+        modulesCreated:
+          type: integer
+        permissionsCreated:
+          type: integer
+        rolesCreated:
+          type: integer
+
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        code:
+          type: string
+          description: >
+            PRODUCT_NOT_ENABLED, PRODUCT_NOT_FOUND, PRODUCT_INACTIVE, PRODUCT_ALWAYS_ON,
+            PRODUCT_NOT_ENABLED_FOR_HEAD, PRODUCT_NOTES_TOO_LONG, TENANT_NOT_FOUND,
+            MANIFEST_INVALID, MANIFEST_SLUG_PREFIX, MANIFEST_CONFLICT

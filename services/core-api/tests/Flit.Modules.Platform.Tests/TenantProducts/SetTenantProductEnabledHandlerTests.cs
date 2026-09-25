@@ -1,4 +1,5 @@
 using Flit.Modules.Platform.Application.TenantProducts;
+using Flit.Modules.Platform.Domain.Access;
 using Flit.Modules.Platform.Domain.Products;
 using Flit.Modules.Platform.Domain.TenantProducts;
 using FluentAssertions;
@@ -18,9 +19,11 @@ public sealed class SetTenantProductEnabledHandlerTests
 
     private readonly IProductCatalog _catalog = Substitute.For<IProductCatalog>();
     private readonly ITenantProductRepository _repository = Substitute.For<ITenantProductRepository>();
+    private readonly IProductAccessStore _access = Substitute.For<IProductAccessStore>();
 
     public SetTenantProductEnabledHandlerTests()
     {
+        _access.GetTenantChainAsync(TenantId, Arg.Any<CancellationToken>()).Returns([TenantId]);
         _catalog.FindAsync("comparendos", Arg.Any<CancellationToken>())
             .Returns(new Product("comparendos", "Comparendos", "ticket", ProductStatuses.Active));
         _catalog.FindAsync("viejo", Arg.Any<CancellationToken>())
@@ -31,7 +34,7 @@ public sealed class SetTenantProductEnabledHandlerTests
                 Changed: true));
     }
 
-    private SetTenantProductEnabledHandler Handler() => new(_catalog, _repository);
+    private SetTenantProductEnabledHandler Handler() => new(_catalog, _repository, _access);
 
     [Fact]
     public async Task Encender_NormalizaElCodigoYLasNotas_YDelegaEnElRepositorio()
@@ -90,5 +93,27 @@ public sealed class SetTenantProductEnabledHandlerTests
         var act = () => Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "comparendos", true, notes), AdminId, TestContext.Current.CancellationToken);
 
         (await act.Should().ThrowAsync<TenantProductException>()).Which.Code.Should().Be(TenantProductException.NotesTooLong);
+    }
+
+    // HU #12966 — una hija no enciende un producto que su cabeza tiene apagado (ADR-0057)
+    [Fact]
+    public async Task EncenderEnHijaConCabezaApagada_SeRechaza()
+    {
+        var head = Guid.NewGuid();
+        _access.GetTenantChainAsync(TenantId, Arg.Any<CancellationToken>()).Returns([TenantId, head]);
+        _access.GetTenantsWithProductEnabledAsync(Arg.Any<IReadOnlyList<Guid>>(), "comparendos", Arg.Any<CancellationToken>())
+            .Returns(new HashSet<Guid>());
+
+        var act = () => Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "comparendos", true, null), AdminId, TestContext.Current.CancellationToken);
+
+        (await act.Should().ThrowAsync<TenantProductException>()).Which.Code.Should().Be(TenantProductException.ProductNotEnabledForHead);
+    }
+
+    [Fact]
+    public async Task ApagarEnHija_NoConsultaLaCabeza()
+    {
+        await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "comparendos", false, null), AdminId, TestContext.Current.CancellationToken);
+
+        await _access.DidNotReceiveWithAnyArgs().GetTenantChainAsync(default, TestContext.Current.CancellationToken);
     }
 }
