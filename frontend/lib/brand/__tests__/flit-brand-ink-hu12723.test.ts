@@ -1,11 +1,10 @@
 // HU #12723 AC1 / AC6 — token --flit-brand-ink con contraste WCAG AA documentado.
 // Uso de ejemplo: contrastRatio("#476BD9", "#FFFFFF") ≥ 4.5; --color-flit-brand sigue #557eff.
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { contrastRatio, MIN_CONTRAST_RATIO } from "../contrast";
+import { readDesignCss } from "../../../__tests__/helpers/read-design-css";
 
-const GLOBALS = readFileSync(resolve(__dirname, "../../../app/globals.css"), "utf8");
+const GLOBALS = readDesignCss();
 
 /** Fondo del dock en tema oscuro (comentario HU #12723 junto al token dark). */
 const DARK_DOCK_BG = "#162744";
