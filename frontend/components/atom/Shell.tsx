@@ -710,7 +710,15 @@ export function Shell({
             visibleModuleCodes ? visibleModuleCodes.includes("historial-placa") : true
           }
           canSearchValidaciones={visibleDock.some((it) => it.id === "validaciones")}
-          supportContact={{ name: currentUser?.displayName ?? null, email: currentUser?.email ?? null }}
+          // Épica #12718 — el JWT no trae display_name: currentUser.displayName cae al correo o a
+          // «Usuario». Al caso de soporte solo va un nombre real; si no hay, la persona lo escribe.
+          supportContact={{
+            name:
+              currentUser?.displayName && currentUser.displayName !== currentUser.email && currentUser.displayName !== "Usuario"
+                ? currentUser.displayName
+                : null,
+            email: currentUser?.email ?? null,
+          }}
         />
 
         {/* Bottom dock — móvil/tablet (<lg): lanzador + hoja agrupada. */}
