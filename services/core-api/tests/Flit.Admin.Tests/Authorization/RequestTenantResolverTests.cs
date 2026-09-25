@@ -385,6 +385,8 @@ public sealed class RequestTenantResolverTests
             ("/api/v1/tramites/actors", TenantEnforcementMiddleware.RouteMatch.Prefix),
             // HU #12358 (Feature #12257) — prefijo único de la vista consolidada de la red.
             ("/api/v1/tramites/network", TenantEnforcementMiddleware.RouteMatch.Prefix),
+            // HU #12922 (Épica #12718) — DR. FLIT: el cupo diario y los casos de soporte usan el tenant del token.
+            ("/api/v1/dr-flit", TenantEnforcementMiddleware.RouteMatch.Prefix),
             // HU #12361 (Feature #12257) — auditoría del acceso de red consultada por el cliente hijo
             // (/mine): prefijo propio porque StartsWithSegments no lo cubre desde /network.
             ("/api/v1/tramites/network-access-audit", TenantEnforcementMiddleware.RouteMatch.Prefix),
@@ -415,10 +417,11 @@ public sealed class RequestTenantResolverTests
             || r.Path == "/api/v1/me/ui-preferences"
             || r.Path == "/api/v1/company/branding"
             || r.Path == "/api/v1/company/domain"
-            || r.Path == "/api/v1/me/branding",
+            || r.Path == "/api/v1/me/branding"
+            || r.Path == "/api/v1/dr-flit",
             "las únicas excepciones fuera de /api/v1/tramites son gestión avanzada (Bug #12554), "
             + "preferencias de UI (Bug #12558), autogestión de marca (HU #12412), autogestión de "
-            + "dominio (HU #12416) y herencia de marca de sesión (HU #12418) — cualquier prefijo "
+            + "dominio (HU #12416), herencia de marca de sesión (HU #12418) y DR. FLIT (HU #12922) — cualquier prefijo "
             + "nuevo fuera de estos casos debe declararse aquí explícitamente");
     }
 }
