@@ -3,8 +3,16 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
 import { resolveContextArticle, visibleAudiences } from "@/lib/manual/catalog";
-import { createSupportCase, postDrFlitChat, uploadSupportAttachment } from "@/lib/api/dr-flit-client";
-import type { DrFlitSupportCaseDraft } from "./dr-flit-chat-types";
+import {
+  acceptDrFlitConsent,
+  createSupportCase,
+  getDrFlitConsent,
+  isConsentRequiredError,
+  postDrFlitChat,
+  uploadSupportAttachment,
+} from "@/lib/api/dr-flit-client";
+import { ApiError } from "@/lib/api/types";
+import type { DrFlitConsentStatus, DrFlitSupportCaseDraft } from "./dr-flit-chat-types";
 import { createSupportDraft, resolveAffectedModule, toSupportCaseRequest } from "./dr-flit-support-case";
 import { readJwtPayload, resolveDrFlitContext } from "./dr-flit-context";
 import { buildHistorialPlacaHref, DR_FLIT_CHAT_ENABLED } from "./dr-flit-intents";
@@ -13,7 +21,12 @@ import {
   applyCancelSupportCase,
   applyChatDegraded,
   applyContinueSupportCase,
-  applyDismissPrivacyNotice,
+  applyConsentAccepted,
+  applyConsentDeclined,
+  applyConsentError,
+  applyConsentStatus,
+  applyRequestConsent,
+  hasConsent,
   applyEditSupportCase,
   applyOpenSupportCase,
   applySubmitSupportCase,
@@ -45,6 +58,12 @@ import {
   saveDrFlitSession,
 } from "./dr-flit-session-store";
 import { searchTramites, searchValidaciones } from "./dr-flit-search";
+
+/** HU #12931 — estado del consentimiento a partir de un 428 (trae la versión vigente) o del previo. */
+function consentFromError(err: unknown, prev: DrFlitChatState): DrFlitConsentStatus {
+  const version = err instanceof ApiError ? (err.body as { version?: string } | null)?.version : undefined;
+  return { version: version ?? prev.consent?.version ?? "", accepted: false };
+}
 
 function errorMessage(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
@@ -80,6 +99,7 @@ export function useDrFlitChat(
   // Tras remount (p. ej. layout de otro módulo) el panel arranca cerrado;
   // la conversación sí se restaura hasta “Terminar chat”.
   const [open, setOpen] = useState(false);
+  const [consentBusy, setConsentBusy] = useState(false);
   const [state, setState] = useState<DrFlitChatState>(() => {
     const restored = hydrated.current?.state;
     if (!restored) return createInitialState(displayName);
@@ -90,6 +110,27 @@ export function useDrFlitChat(
     }
     return restored;
   });
+  // El estado vigente para callbacks asíncronos (p. ej. la versión del consentimiento al aceptar).
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  /** HU #12931 — al abrir el panel se consulta si el usuario ya aceptó la versión vigente. */
+  useEffect(() => {
+    if (!open || state.consent) return;
+    let cancelled = false;
+    getDrFlitConsent()
+      .then((status) => {
+        if (!cancelled) setState((prev) => applyConsentStatus(prev, status));
+      })
+      // Sin respuesta se trata como no aceptado: se pedirá al usar la IA o el caso.
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, state.consent]);
+
   const panelId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const fabRef = useRef<HTMLButtonElement>(null);
@@ -233,9 +274,15 @@ export function useDrFlitChat(
           if (response.status === "rate_limited") return applyChatRateLimited(prev, response);
           return applyChatDegraded(prev, { helpAudiences }, response.usage);
         });
-      } catch {
+      } catch (err) {
         if (gen !== searchGen.current) return;
-        setState((prev) => applyChatDegraded(prev, { helpAudiences }));
+        // HU #12931 — el backend exige el consentimiento (p. ej. cambió la versión del texto): se pide
+        // y el mensaje se envía al aceptar. Cualquier otro error cae al buscador local.
+        setState((prev) =>
+          isConsentRequiredError(err)
+            ? applyRequestConsent({ ...prev, consent: consentFromError(err, prev) }, { kind: "chat", text: message })
+            : applyChatDegraded(prev, { helpAudiences }),
+        );
       }
     })();
     // Solo la entrada a chat_loading dispara la llamada; el resto del estado se lee en ese momento.
@@ -256,7 +303,12 @@ export function useDrFlitChat(
         const created = await createSupportCase(request);
         if (!cancelled) setState((prev) => applySupportCaseCreated(prev, created));
       } catch (err) {
-        if (!cancelled) setState((prev) => applySupportCaseError(prev, errorMessage(err)));
+        if (cancelled) return;
+        setState((prev) =>
+          isConsentRequiredError(err)
+            ? applyRequestConsent({ ...prev, consent: consentFromError(err, prev) }, { kind: "submit" })
+            : applySupportCaseError(prev, errorMessage(err)),
+        );
       }
     })();
     return () => {
@@ -266,12 +318,10 @@ export function useDrFlitChat(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase]);
 
-  const dismissPrivacyNotice = useCallback(() => {
-    setState((prev) => applyDismissPrivacyNotice(prev));
-  }, []);
-
   const submitSupportCase = useCallback(() => {
-    setState((prev) => applySubmitSupportCase(prev));
+    setState((prev) =>
+      hasConsent(prev) ? applySubmitSupportCase(prev) : applyRequestConsent(prev, { kind: "submit" }),
+    );
   }, []);
 
   const editSupportCase = useCallback(() => {
@@ -289,8 +339,34 @@ export function useDrFlitChat(
   );
 
   const openSupportCase = useCallback(() => {
-    setState((prev) => applyOpenSupportCase(prev, newSupportDraft()));
+    // HU #12931 — el caso envía datos a soporte: sin consentimiento, primero se pide.
+    setState((prev) =>
+      hasConsent(prev) ? applyOpenSupportCase(prev, newSupportDraft()) : applyRequestConsent(prev, { kind: "support" }),
+    );
   }, [newSupportDraft]);
+
+  /** HU #12931 — registra la aceptación de la versión vigente y continúa lo pendiente. */
+  const acceptConsent = useCallback(async () => {
+    setConsentBusy(true);
+    try {
+      const version = stateRef.current.consent?.version || (await getDrFlitConsent()).version;
+      const status = await acceptDrFlitConsent(version);
+      setState((prev) => applyConsentAccepted(prev, status, newSupportDraft()));
+    } catch (err) {
+      const current = err instanceof ApiError && err.status === 409 ? (err.body as { version?: string } | null)?.version : null;
+      setState((prev) =>
+        current
+          ? applyConsentError(applyConsentStatus(prev, { version: current, accepted: false }), "El texto se actualizó. Léelo de nuevo antes de aceptar.")
+          : applyConsentError(prev, errorMessage(err)),
+      );
+    } finally {
+      setConsentBusy(false);
+    }
+  }, [newSupportDraft]);
+
+  const declineConsent = useCallback(() => {
+    setState((prev) => applyConsentDeclined(prev));
+  }, []);
 
   const updateSupportDraft = useCallback((draft: DrFlitSupportCaseDraft) => {
     setState((prev) => applyUpdateSupportDraft(prev, draft));
@@ -365,7 +441,7 @@ export function useDrFlitChat(
       const helpAudiences = visibleAudiences(currentContext().role);
       // HU #12931 AC2 — escribir cuenta como haber visto el aviso: no bloquea ni se repite.
       setState((prev) =>
-        applyUserText(applyDismissPrivacyNotice(prev), text, { helpAudiences, chatEnabled: DR_FLIT_CHAT_ENABLED }),
+        applyUserText(prev, text, { helpAudiences, chatEnabled: DR_FLIT_CHAT_ENABLED, requireConsent: !hasConsent(prev) }),
       );
     },
     [currentContext],
@@ -402,7 +478,9 @@ export function useDrFlitChat(
     attachSupportFile,
     submitSupportCase,
     editSupportCase,
-    dismissPrivacyNotice,
+    acceptConsent,
+    declineConsent,
+    consentBusy,
     panelId,
     closeButtonRef,
     fabRef,

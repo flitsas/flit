@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using Flit.Admin.Application.Auditing;
 using Flit.Api.Authorization;
+using Flit.DrFlit.Application.Abstractions;
 using Flit.DrFlit.Application.Chat;
 using Flit.DrFlit.Application.SupportCases;
 using Microsoft.AspNetCore.Mvc;
@@ -31,7 +33,23 @@ public static class DrFlitEndpoints
 
         var group = app.MapGroup("/api/v1/dr-flit").RequireAuthorization();
 
+        // HU #12931 — consentimiento de tratamiento de datos: consultar y aceptar la versión vigente.
+        group.MapGet("/consent", GetConsentAsync)
+            .WithName("DrFlitGetConsent")
+            .WithSummary("Versión vigente del tratamiento de datos de DR. FLIT y si el usuario ya la aceptó")
+            .Produces<DrFlitConsentResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized);
+
+        group.MapPost("/consent", AcceptConsentAsync)
+            .WithName("DrFlitAcceptConsent")
+            .WithSummary("Registra que el usuario aceptó la versión vigente del tratamiento de datos")
+            .Produces<DrFlitConsentResponse>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status401Unauthorized);
+
         group.MapPost("/chat", ChatAsync)
+            .AddEndpointFilter<DrFlitConsentRequiredFilter>()
             .WithName("DrFlitChat")
             .WithSummary("Clasifica la intención del mensaje libre y responde dudas citando el manual")
             .Produces<DrFlitChatResponse>(StatusCodes.Status200OK)
@@ -39,6 +57,7 @@ public static class DrFlitEndpoints
             .Produces(StatusCodes.Status401Unauthorized);
 
         group.MapPost("/support-cases", CreateSupportCaseAsync)
+            .AddEndpointFilter<DrFlitConsentRequiredFilter>()
             .WithName("DrFlitCreateSupportCase")
             .WithSummary("Crea un caso de soporte (Bug en FLIT - SOPORTE) a partir del formulario confirmado")
             .Produces<DrFlitSupportCaseCreatedResponse>(StatusCodes.Status201Created)
@@ -47,6 +66,7 @@ public static class DrFlitEndpoints
             .ProducesProblem(StatusCodes.Status502BadGateway);
 
         group.MapPost("/support-cases/attachments", UploadAttachmentAsync)
+            .AddEndpointFilter<DrFlitConsentRequiredFilter>()
             .WithName("DrFlitUploadSupportAttachment")
             .WithSummary("Sube un adjunto temporal para un caso de soporte aún no creado")
             .DisableAntiforgery() // API con JWT en header, sin cookies: el antiforgery no aplica (igual que banners/branding)
@@ -154,6 +174,60 @@ public static class DrFlitEndpoints
                 (string?)null,
                 new DrFlitSupportAttachmentResponse(result.Attachment!.Id, result.Attachment.FileName, result.Attachment.SizeBytes))
             : BadRequest(result.Error ?? "Adjunto inválido.");
+    }
+
+    /// <summary>HU #12931 — versión vigente y si el usuario ya la aceptó (una vez por usuario y versión).</summary>
+    internal static async Task<IResult> GetConsentAsync(
+        HttpContext httpContext,
+        IDrFlitConsentStore store,
+        IDrFlitConsentSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var userId = ResolveUserId(httpContext.User);
+        if (userId is null)
+            return Results.Unauthorized();
+
+        var version = settings.CurrentVersion;
+        var accepted = await store.HasAcceptedAsync(userId.Value, version, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(new DrFlitConsentResponse(version, accepted));
+    }
+
+    /// <summary>
+    /// HU #12931 — registra la aceptación con su evidencia (fecha, IP, user agent). Solo se acepta la
+    /// versión vigente: si el cliente muestra un texto viejo, 409 con la versión que corresponde.
+    /// </summary>
+    internal static async Task<IResult> AcceptConsentAsync(
+        HttpContext httpContext,
+        [FromHeader(Name = "X-Tenant-Id")] Guid? tenantHeader,
+        [FromBody] DrFlitConsentAcceptBody? body,
+        IDrFlitConsentStore store,
+        IDrFlitConsentSettings settings,
+        IAuditContextAccessor auditContext,
+        CancellationToken cancellationToken)
+    {
+        var caller = ResolveCaller(httpContext, tenantHeader);
+        if (caller.Error is not null)
+            return caller.Error;
+        if (string.IsNullOrWhiteSpace(body?.Version))
+            return BadRequest("Falta la versión aceptada.");
+
+        var current = settings.CurrentVersion;
+        if (!string.Equals(body.Version.Trim(), current, StringComparison.Ordinal))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Versión desactualizada",
+                detail: "El texto de tratamiento de datos cambió. Léelo de nuevo antes de aceptarlo.",
+                extensions: new Dictionary<string, object?> { ["code"] = "consent_version_mismatch", ["version"] = current });
+        }
+
+        var userAgent = httpContext.Request.Headers.UserAgent.ToString();
+        await store.RecordAsync(
+            new DrFlitConsentAcceptance(
+                caller.TenantId, caller.UserId, current, auditContext.ClientIp, userAgent.Length > 0 ? userAgent : null),
+            cancellationToken).ConfigureAwait(false);
+
+        return Results.Created((string?)null, new DrFlitConsentResponse(current, true));
     }
 
     /// <summary>
@@ -294,6 +368,15 @@ public sealed class DrFlitSupportCaseRequestBody
 /// <summary>Respuesta 201 de <c>POST /api/v1/dr-flit/support-cases</c>.</summary>
 /// <param name="CaseUrl">Solo si el caller es SuperAdmin; para el resto, <c>null</c>.</param>
 public sealed record DrFlitSupportCaseCreatedResponse(int CaseId, string? CaseUrl, int AttachmentsFailed);
+
+/// <summary>HU #12931 — estado del consentimiento del usuario.</summary>
+public sealed record DrFlitConsentResponse(string Version, bool Accepted);
+
+/// <summary>Body de <c>POST /api/v1/dr-flit/consent</c>: la versión del texto que el usuario leyó.</summary>
+public sealed class DrFlitConsentAcceptBody
+{
+    public string? Version { get; set; }
+}
 
 /// <summary>Respuesta 201 de <c>POST /api/v1/dr-flit/support-cases/attachments</c>.</summary>
 public sealed record DrFlitSupportAttachmentResponse(Guid Id, string Filename, long SizeBytes);

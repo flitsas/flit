@@ -39,6 +39,7 @@ import type {
   DrFlitChatTurn,
   DrFlitChatUsage,
   DrFlitCitation,
+  DrFlitConsentStatus,
   DrFlitSupportCaseCreated,
   DrFlitSupportCaseDraft,
 } from "./dr-flit-chat-types";
@@ -78,7 +79,10 @@ export type DrFlitPhase =
   /** «Tu caso #N quedó radicado». */
   | "support_case_created"
   /** El sistema de soporte no respondió: canales estáticos y reintento sin perder el formulario. */
-  | "support_case_error";
+  | "support_case_error"
+  // ── HU #12931 ──
+  /** Texto de tratamiento de datos con «Acepto» / «Ahora no» antes de usar IA o soporte. */
+  | "awaiting_consent";
 
 export interface DrFlitChatState {
   messages: DrFlitMessage[];
@@ -111,12 +115,21 @@ export interface DrFlitChatState {
   /** Feature #12917 — motivo del último fallo al radicar. */
   supportError?: string | null;
   /**
-   * HU #12931 — el usuario ya vio el aviso de tratamiento de datos en esta sesión. Vive en el estado
-   * (sessionStorage), así no se repite al reabrir el panel; «Terminar chat» empieza una conversación
-   * nueva y lo vuelve a mostrar.
+   * HU #12931 — estado del consentimiento del usuario según el backend (`GET /dr-flit/consent`).
+   * `null`/ausente = todavía no se consultó: se trata como no aceptado.
    */
-  privacyNoticeSeen?: boolean;
+  consent?: DrFlitConsentStatus | null;
+  /** HU #12931 — acción que espera la aceptación para continuar. */
+  pendingConsent?: DrFlitPendingConsent | null;
+  /** HU #12931 — motivo si no se pudo registrar la aceptación. */
+  consentError?: string | null;
 }
+
+/** HU #12931 — lo que el usuario pidió antes de que se le solicitara el consentimiento. */
+export type DrFlitPendingConsent =
+  | { kind: "chat"; text: string }
+  | { kind: "support" }
+  | { kind: "submit" };
 
 let messageSeq = 0;
 
@@ -360,6 +373,11 @@ export interface UserTextOptions {
    * una opción del menú.
    */
   chatEnabled?: boolean;
+  /**
+   * HU #12931 — el usuario no ha aceptado el tratamiento de datos: el texto libre que iría al LLM pide
+   * primero la aceptación y se envía al aceptar.
+   */
+  requireConsent?: boolean;
 }
 
 function applyHelpQuery(
@@ -425,7 +443,10 @@ export function applyUserText(
   }
 
   if ((state.phase !== "awaiting_value" || !state.pendingIntent) && options.chatEnabled) {
-    return applyChatSend({ ...state, messages: [...state.messages, userMsg] }, text);
+    const withMessage = { ...state, messages: [...state.messages, userMsg] };
+    return options.requireConsent
+      ? applyRequestConsent(withMessage, { kind: "chat", text })
+      : applyChatSend(withMessage, text);
   }
 
   if (state.phase !== "awaiting_value" || !state.pendingIntent) {
@@ -1015,13 +1036,84 @@ export function applySupportCaseError(state: DrFlitChatState, message: string): 
   };
 }
 
-// ── HU #12931 — aviso de Habeas Data ──────────────────────────────────────────────────────────
+// ── HU #12931 — consentimiento del tratamiento de datos ───────────────────────────────────────
+//
+// El chat con IA y el caso de soporte envían datos a terceros (el LLM y Azure DevOps): exigen la
+// aceptación de la versión vigente. El menú sin IA (Gestión, Necesito ayuda, Normativa) no la necesita.
+// Se acepta una vez por usuario y versión (lo guarda el backend); «Ahora no» no reinicia nada.
 
-/** El aviso se muestra hasta que el usuario lo reconoce o empieza a escribir. */
-export function shouldShowPrivacyNotice(state: DrFlitChatState): boolean {
-  return !state.privacyNoticeSeen;
+export function hasConsent(state: DrFlitChatState): boolean {
+  return state.consent?.accepted === true;
 }
 
-export function applyDismissPrivacyNotice(state: DrFlitChatState): DrFlitChatState {
-  return state.privacyNoticeSeen ? state : { ...state, privacyNoticeSeen: true };
+/** Resultado de `GET /dr-flit/consent` (o de haber aceptado). */
+export function applyConsentStatus(state: DrFlitChatState, status: DrFlitConsentStatus): DrFlitChatState {
+  return { ...state, consent: status };
+}
+
+/**
+ * AC1 — la acción pedida necesita consentimiento: se muestra el texto con «Acepto» / «Ahora no». Para el
+ * chat, `state` ya trae el mensaje del usuario al final: se envía al aceptar.
+ */
+export function applyRequestConsent(state: DrFlitChatState, pending: DrFlitPendingConsent): DrFlitChatState {
+  return {
+    ...state,
+    phase: "awaiting_consent",
+    pendingConsent: pending,
+    consentError: null,
+    isTyping: false,
+    showSessionMenu: false,
+    showSupportInfo: false,
+    showBackToSearch: false,
+    showClientBranch: false,
+    helpResults: null,
+    tramiteResults: null,
+    validacionResults: null,
+    manualHomeHref: null,
+  };
+}
+
+/**
+ * AC1 — aceptado: se guarda el estado y continúa lo que el usuario había pedido. `supportDraft` es el
+ * borrador nuevo para cuando lo pendiente era abrir el formulario del caso.
+ */
+export function applyConsentAccepted(
+  state: DrFlitChatState,
+  status: DrFlitConsentStatus,
+  supportDraft: DrFlitSupportCaseDraft,
+): DrFlitChatState {
+  const pending = state.pendingConsent;
+  const base: DrFlitChatState = { ...state, consent: status, pendingConsent: null, consentError: null };
+  if (pending?.kind === "chat") return applyChatSend(base, pending.text);
+  if (pending?.kind === "support") return applyOpenSupportCase(base, supportDraft);
+  if (pending?.kind === "submit" && base.supportDraft)
+    return { ...base, phase: "submitting_support_case", isTyping: true, supportError: null };
+  return { ...base, phase: "idle", ...idleMenuFlags() };
+}
+
+/** No se pudo registrar la aceptación: se queda en el texto con el motivo, sin continuar. */
+export function applyConsentError(state: DrFlitChatState, message: string): DrFlitChatState {
+  return { ...state, consentError: message };
+}
+
+/**
+ * AC2 — «Ahora no»: no se envía nada a terceros y el menú sin IA sigue disponible. La próxima vez que
+ * escriba texto libre o abra un caso se vuelve a pedir.
+ */
+export function applyConsentDeclined(state: DrFlitChatState): DrFlitChatState {
+  const botMsg: DrFlitMessage = {
+    id: createMessageId(),
+    role: "bot",
+    text: "Entendido. Sin tu autorización no uso el asistente con IA ni radico casos. Puedes seguir usando **Gestión**, **Necesito ayuda** y **Normativa**.",
+  };
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "idle",
+    showBackToSearch: false,
+    ...idleMenuFlags(),
+    pendingConsent: null,
+    consentError: null,
+  };
 }

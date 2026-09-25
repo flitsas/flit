@@ -4,6 +4,7 @@
 import type {
   DrFlitChatRequest,
   DrFlitChatResponse,
+  DrFlitConsentStatus,
   DrFlitSupportAttachment,
   DrFlitSupportCaseCreated,
 } from "@/components/dr-flit/dr-flit-chat-types";
@@ -122,4 +123,36 @@ export async function createSupportCase(
     throw new DrFlitSupportCaseError(response.status, friendlyErrorMessage(data), code, data);
   }
   return data as unknown as DrFlitSupportCaseCreated;
+}
+
+/** HU #12931 — versión vigente del tratamiento de datos y si el usuario ya la aceptó. */
+export async function getDrFlitConsent(): Promise<DrFlitConsentStatus> {
+  const response = await fetch(resolveApiUrl("/api/v1/dr-flit/consent"), { headers: tenantHeader() });
+  const data = await readJson(response);
+  if (!response.ok) {
+    throw new ApiError(response.status, friendlyErrorMessage(data as Record<string, unknown> | null), data);
+  }
+  return data as DrFlitConsentStatus;
+}
+
+/**
+ * HU #12931 — registra la aceptación de la versión que el usuario leyó. Si el texto cambió entretanto,
+ * el backend responde 409 con la versión vigente en `body.version`.
+ */
+export async function acceptDrFlitConsent(version: string): Promise<DrFlitConsentStatus> {
+  const response = await fetch(resolveApiUrl("/api/v1/dr-flit/consent"), {
+    method: "POST",
+    headers: { ...tenantHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({ version }),
+  });
+  const data = await readJson(response);
+  if (!response.ok) {
+    throw new ApiError(response.status, friendlyErrorMessage(data as Record<string, unknown> | null), data);
+  }
+  return data as DrFlitConsentStatus;
+}
+
+/** `true` si el backend rechazó por falta de consentimiento (428 `consent_required`). */
+export function isConsentRequiredError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 428;
 }

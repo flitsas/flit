@@ -17,6 +17,12 @@ vi.mock("../dr-flit-search", async () => {
   };
 });
 
+// HU #12931 — consentimiento aceptado: estas pruebas son del menú y del panel, no de la autorización.
+vi.mock("@/lib/api/dr-flit-client", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/dr-flit-client")>("@/lib/api/dr-flit-client");
+  return { ...actual, getDrFlitConsent: vi.fn().mockResolvedValue({ version: "2026-09-25", accepted: true }) };
+});
+
 import { searchTramites, searchValidaciones } from "../dr-flit-search";
 
 import { DR_FLIT_SUPPORT_CASE_URL } from "../dr-flit-intents";
