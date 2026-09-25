@@ -1,4 +1,6 @@
+using Flit.Modules.Platform.Application.Access;
 using Flit.Modules.Platform.Application.TenantProducts;
+using Flit.Modules.Security.Application.Products;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Modules.Platform;
@@ -17,6 +19,8 @@ public static class PlatformModuleExtensions
     {
         services.AddScoped<SetTenantProductEnabledHandler>();
         services.AddScoped<ListTenantProductsHandler>();
+        // HU #12965 (B-05): implementación real del contrato §4.
+        services.AddScoped<IProductAccessResolver, ProductAccessResolver>();
         return services;
     }
 }

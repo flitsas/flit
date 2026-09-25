@@ -1,5 +1,6 @@
 using Flit.Infrastructure.Persistence.Repositories.Platform;
 using Flit.Modules.Platform;
+using Flit.Modules.Platform.Domain.Access;
 using Flit.Modules.Platform.Domain.Products;
 using Flit.Modules.Platform.Domain.TenantProducts;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +19,7 @@ internal static class PlatformInfrastructureExtensions
         services.AddPlatformModule();
         services.AddScoped<IProductCatalog, ProductCatalogRepository>();
         services.AddScoped<ITenantProductRepository, TenantProductRepository>();
+        services.AddScoped<IProductAccessStore, ProductAccessStore>();
         return services;
     }
 }
