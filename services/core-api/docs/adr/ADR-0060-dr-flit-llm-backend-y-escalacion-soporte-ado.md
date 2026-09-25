@@ -281,3 +281,13 @@ listo para ese día (se cambia la implementación de Infrastructure sin tocar el
 - Azure DevOps REST API — Work Items (`POST .../_apis/wit/workitems/${type}`) y Attachments
   (`POST .../_apis/wit/attachments`), `api-version=7.1`.
 - Anthropic Messages API — Prompt Caching (`cache_control: {type: "ephemeral"}`).
+
+## Actualización 2026-09-25 — consentimiento obligatorio (HU #12931)
+
+Tras la prueba integrada en Chrome, el usuario (Willyn Londoño Calle) aprobó revertir la decisión de alcance de §10 del diseño (aviso de Habeas Data informativo, no auditable):
+
+- El chat con IA y el caso de soporte exigen **autorización expresa y registrada** del tratamiento de datos: envían datos a terceros (el proveedor del LLM, con transferencia internacional, y Azure DevOps). Evidencia en `dr_flit.consent_acceptances` (usuario, tenant, versión, fecha, IP, user agent), DDL 121.
+- Se acepta **una vez por usuario y versión** del texto (`DrFlit:Consent:Version`); cambiar la versión la vuelve a pedir a todos.
+- El backend es quien la exige: `/chat`, `/support-cases` y `/support-cases/attachments` responden **428 `consent_required`** sin la versión vigente aceptada, sin llamar al LLM ni a Azure DevOps.
+- El menú sin IA (Gestión, Necesito ayuda, Normativa) no la necesita; «Ahora no» no reinicia la conversación.
+- Pendiente: revisión del texto por Legal.

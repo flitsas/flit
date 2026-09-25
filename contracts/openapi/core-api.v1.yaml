@@ -10476,6 +10476,7 @@ paths:
           description: Falta X-Tenant-Id, mensaje vacío o > 2000, historial > 12 turnos o turno inválido. No consume tope ni llama al LLM.
         "401": { description: No autenticado. }
         "403": { description: Usuario de compañía sin tenant en el token. }
+        "428": { description: "Falta aceptar la versión vigente del tratamiento de datos (code consent_required, HU #12931). No se llama al LLM ni a Azure DevOps." }
 
   /api/v1/dr-flit/support-cases:
     post:
@@ -10535,6 +10536,7 @@ paths:
         "400": { description: "Campo faltante o inválido, más adjuntos que el tope, o un adjunto ajeno o vencido." }
         "401": { description: No autenticado. }
         "403": { description: Usuario de compañía sin tenant en el token. }
+        "428": { description: "Falta aceptar la versión vigente del tratamiento de datos (code consent_required, HU #12931). No se llama al LLM ni a Azure DevOps." }
         "502":
           description: Azure DevOps no respondió tras el reintento. La fila queda failed; los adjuntos siguen disponibles para reintentar.
           content:
@@ -10585,6 +10587,65 @@ paths:
         "400": { description: "Archivo ausente, tipo no permitido o que excede el tamaño máximo." }
         "401": { description: No autenticado. }
         "403": { description: Usuario de compañía sin tenant en el token. }
+        "428": { description: "Falta aceptar la versión vigente del tratamiento de datos (code consent_required, HU #12931). No se llama al LLM ni a Azure DevOps." }
+
+  /api/v1/dr-flit/consent:
+    get:
+      tags: [DR. FLIT]
+      operationId: drFlitGetConsent
+      summary: Versión vigente del tratamiento de datos de DR. FLIT y si el usuario ya la aceptó
+      description: HU #12931. Se acepta una vez por usuario y versión (DrFlit:Consent:Version).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Estado del consentimiento.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, accepted]
+                properties:
+                  version: { type: string }
+                  accepted: { type: boolean }
+        "401": { description: No autenticado. }
+    post:
+      tags: [DR. FLIT]
+      operationId: drFlitAcceptConsent
+      summary: Registra la aceptación de la versión vigente del tratamiento de datos
+      description: >
+        HU #12931 (Ley 1581 de 2012). Guarda usuario, tenant, versión, fecha, IP y user agent en
+        dr_flit.consent_acceptances. Idempotente por usuario y versión. Exigida por /chat,
+        /support-cases y /support-cases/attachments (428 consent_required sin ella).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: string, description: Versión del texto que el usuario leyó. }
+      responses:
+        "201":
+          description: Aceptación registrada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { type: string }
+                  accepted: { type: boolean }
+        "400": { description: Falta la versión o X-Tenant-Id. }
+        "401": { description: No autenticado. }
+        "409": { description: "La versión enviada no es la vigente (code consent_version_mismatch, version vigente en el cuerpo)." }
 
 components:
   securitySchemes:

@@ -22,7 +22,14 @@ import { createSupportDraft } from "../dr-flit-support-case";
 
 vi.mock("@/lib/api/dr-flit-client", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/dr-flit-client")>("@/lib/api/dr-flit-client");
-  return { ...actual, postDrFlitChat: vi.fn(), uploadSupportAttachment: vi.fn(), createSupportCase: vi.fn() };
+  // HU #12931 — el consentimiento ya está aceptado: aquí se prueba el caso, no la autorización.
+  return {
+    ...actual,
+    postDrFlitChat: vi.fn(),
+    uploadSupportAttachment: vi.fn(),
+    createSupportCase: vi.fn(),
+    getDrFlitConsent: vi.fn().mockResolvedValue({ version: "2026-09-25", accepted: true }),
+  };
 });
 
 import {

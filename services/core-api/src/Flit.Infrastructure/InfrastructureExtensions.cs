@@ -1290,6 +1290,11 @@ public static class InfrastructureExtensions
         services.AddSingleton<IDrFlitSupportCaseSettings, DrFlitSupportCaseSettings>();
         services.AddScoped<IDrFlitSupportAttachmentStore, DrFlitSupportAttachmentStore>();
         services.AddScoped<IDrFlitSupportCaseRepository, DrFlitSupportCaseRepository>(); // HU #12925
+
+        // HU #12931 — consentimiento de tratamiento de datos para el chat con IA y los casos de soporte.
+        services.Configure<DrFlitConsentOptions>(configuration.GetSection(DrFlitConsentOptions.SectionName));
+        services.AddSingleton<IDrFlitConsentSettings, DrFlitConsentSettings>();
+        services.AddScoped<IDrFlitConsentStore, DrFlitConsentStore>();
     }
 
     private static void AddOcr(IServiceCollection services, IConfiguration configuration)

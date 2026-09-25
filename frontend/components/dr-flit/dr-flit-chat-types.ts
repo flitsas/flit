@@ -82,3 +82,9 @@ export interface DrFlitSupportCaseCreated {
   caseUrl: string | null;
   attachmentsFailed: number;
 }
+
+/** HU #12931 — `GET/POST /api/v1/dr-flit/consent`. */
+export interface DrFlitConsentStatus {
+  version: string;
+  accepted: boolean;
+}

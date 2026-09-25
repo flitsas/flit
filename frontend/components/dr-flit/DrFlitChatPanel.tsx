@@ -6,13 +6,12 @@ import {
   hasActiveConversation,
   isComposerEnabled,
   remainingChatMessages,
-  shouldShowPrivacyNotice,
   shouldWarnChatUsage,
   type DrFlitChatState,
 } from "./dr-flit-conversation";
 import { DrFlitUsageNotice } from "./DrFlitUsageNotice";
 import { DrFlitSupportCaseForm } from "./DrFlitSupportCaseForm";
-import { DrFlitPrivacyNotice } from "./DrFlitPrivacyNotice";
+import { DrFlitConsentPrompt } from "./DrFlitConsentPrompt";
 import { DrFlitSupportCaseConfirm } from "./DrFlitSupportCaseConfirm";
 import { DrFlitSupportCaseCreated } from "./DrFlitSupportCaseCreated";
 import { DrFlitSupportCaseError } from "./DrFlitSupportCaseError";
@@ -56,7 +55,9 @@ export function DrFlitChatPanel({
   onAttachSupportFile,
   onSubmitSupportCase,
   onEditSupportCase,
-  onDismissPrivacyNotice,
+  onAcceptConsent,
+  onDeclineConsent,
+  consentBusy,
   panelRef,
   closeButtonRef,
   inputRef,
@@ -81,8 +82,10 @@ export function DrFlitChatPanel({
   onAttachSupportFile: (file: File) => Promise<string | null>;
   onSubmitSupportCase: () => void;
   onEditSupportCase: () => void;
-  /** HU #12931 — marcar como visto el aviso de tratamiento de datos. */
-  onDismissPrivacyNotice: () => void;
+  /** HU #12931 — autorización del tratamiento de datos antes de usar IA o soporte. */
+  onAcceptConsent: () => void;
+  onDeclineConsent: () => void;
+  consentBusy: boolean;
   /** HU #12711 — ver `DrFlitClientBranchChoices`. */
   canSearchValidaciones?: boolean;
   panelRef: RefObject<HTMLDivElement | null>;
@@ -90,15 +93,12 @@ export function DrFlitChatPanel({
   inputRef: RefObject<HTMLInputElement | null>;
 }) {
   const threadRef = useRef<HTMLDivElement>(null);
-  const privacyNoticePending = shouldShowPrivacyNotice(state);
 
   useEffect(() => {
     if (!open) return;
     const el = threadRef.current;
     if (!el) return;
-    // HU #12931 — mientras el aviso de datos no se haya visto, el hilo arranca arriba para que se lea;
-    // luego, como siempre, se sigue la conversación desde el último mensaje.
-    el.scrollTop = privacyNoticePending ? 0 : el.scrollHeight;
+    el.scrollTop = el.scrollHeight;
   }, [
     open,
     state.messages,
@@ -114,7 +114,6 @@ export function DrFlitChatPanel({
     state.showBackToSearch,
     state.isTyping,
     state.phase,
-    privacyNoticePending,
   ]);
 
   if (!open) return null;
@@ -181,8 +180,6 @@ export function DrFlitChatPanel({
           style={{ background: "var(--dr-flit-panel-bg)" }}
           aria-live="polite"
         >
-          {shouldShowPrivacyNotice(state) && <DrFlitPrivacyNotice onDismiss={onDismissPrivacyNotice} />}
-
           {state.messages.map((m) => (
             <DrFlitMessageBubble key={m.id} message={m} />
           ))}
@@ -317,6 +314,15 @@ export function DrFlitChatPanel({
               onRetry={onSubmitSupportCase}
               onEdit={onEditSupportCase}
               onOpen={onNavigate}
+            />
+          )}
+
+          {state.phase === "awaiting_consent" && (
+            <DrFlitConsentPrompt
+              accepting={consentBusy}
+              error={state.consentError ?? null}
+              onAccept={onAcceptConsent}
+              onDecline={onDeclineConsent}
             />
           )}
 

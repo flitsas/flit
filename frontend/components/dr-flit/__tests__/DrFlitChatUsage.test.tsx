@@ -18,7 +18,10 @@ import {
 import type { DrFlitChatResponse } from "../dr-flit-chat-types";
 import { clearDrFlitSession } from "../dr-flit-session-store";
 
-vi.mock("@/lib/api/dr-flit-client", () => ({ postDrFlitChat: vi.fn() }));
+// HU #12931 — el consentimiento ya está aceptado: aquí se prueba el chat, no la autorización.
+vi.mock("@/lib/api/dr-flit-client", async () => ({
+  ...(await vi.importActual<typeof import("@/lib/api/dr-flit-client")>("@/lib/api/dr-flit-client")),
+  postDrFlitChat: vi.fn(), getDrFlitConsent: vi.fn().mockResolvedValue({ version: "2026-09-25", accepted: true }) }));
 
 import { postDrFlitChat } from "@/lib/api/dr-flit-client";
 
