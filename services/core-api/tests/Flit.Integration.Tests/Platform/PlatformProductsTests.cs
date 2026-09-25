@@ -191,4 +191,56 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
             .WithInnerException<PostgresException>()
             .Which.ConstraintName.Should().Be("fk_tenant_products_products");
     }
+
+    // ── B-07 (HU #12967): los booleans de módulos pasan a la habilitación de productos ──
+
+    [PostgresFact]
+    public async Task B07_MigracionCopiaLosBooleans_YElLectorLeeLaHabilitacion()
+    {
+        await SeedTenantAsync();
+        await using (var ctx = NewContext())
+        {
+            await ctx.Database.OpenConnectionAsync();
+            await using var cmd = ctx.Database.GetDbConnection().CreateCommand();
+            cmd.CommandText = $"""
+                INSERT INTO admin.tenant_operational_policies (tenant_id, tramites_module_enabled, comparendos_module_enabled)
+                VALUES ('{TenantSeed.LoneId}', false, true);
+                """;
+            await cmd.ExecuteNonQueryAsync();
+
+            using var stream = typeof(FlitDbContext).Assembly.GetManifestResourceStream("Flit.Infrastructure.Persistence.Sql.Ddl.121-HU12967-booleans-a-habilitacion.sql")!;
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            cmd.CommandText = reader.ReadToEnd();
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        await using var check = NewContext();
+        var flags = await new TenantProductFlagsReader(check).GetAsync(TenantSeed.LoneId, TestContext.Current.CancellationToken);
+        flags.Tramites.Should().BeFalse();
+        flags.Comparendos.Should().BeTrue();
+    }
+
+    [PostgresFact]
+    public async Task B07_LaMigracionNoPisaLoQueCambioUnSuperAdmin()
+    {
+        await SeedTenantAsync();
+        await using (var ctx = NewContext())
+        {
+            // Un SuperAdmin ya decidió Trámites a mano (updated_by no nulo).
+            await ctx.Database.ExecuteSqlRawAsync(
+                "UPDATE platform.tenant_products SET updated_by = gen_random_uuid() WHERE tenant_id = {0} AND product_code = 'tramites'",
+                TenantSeed.LoneId);
+            await ctx.Database.OpenConnectionAsync();
+            await using var cmd = ctx.Database.GetDbConnection().CreateCommand();
+            cmd.CommandText = $"INSERT INTO admin.tenant_operational_policies (tenant_id, tramites_module_enabled) VALUES ('{TenantSeed.LoneId}', false);";
+            await cmd.ExecuteNonQueryAsync();
+            using var stream = typeof(FlitDbContext).Assembly.GetManifestResourceStream("Flit.Infrastructure.Persistence.Sql.Ddl.121-HU12967-booleans-a-habilitacion.sql")!;
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            cmd.CommandText = reader.ReadToEnd();
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        await using var check = NewContext();
+        (await new TenantProductFlagsReader(check).GetAsync(TenantSeed.LoneId, TestContext.Current.CancellationToken)).Tramites.Should().BeTrue();
+    }
 }

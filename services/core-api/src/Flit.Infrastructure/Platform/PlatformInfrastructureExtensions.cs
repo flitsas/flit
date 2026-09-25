@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Persistence.Repositories.Platform;
 using Flit.Modules.Platform;
 using Flit.Modules.Platform.Domain.Access;
@@ -22,6 +23,7 @@ internal static class PlatformInfrastructureExtensions
         services.AddScoped<ITenantProductRepository, TenantProductRepository>();
         services.AddScoped<IProductAccessStore, ProductAccessStore>();
         services.AddScoped<IProductManifestStore, ProductManifestStore>();
+        services.AddScoped<ITenantProductFlags, TenantProductFlagsReader>();
         return services;
     }
 }

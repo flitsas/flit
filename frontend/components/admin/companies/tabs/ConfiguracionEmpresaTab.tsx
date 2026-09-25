@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ToggleSwitch } from "../ToggleSwitch";
 import { ConsultaProvidersSection } from "../ConsultaProvidersSection";
 import { AvaluoProvidersSection } from "../AvaluoProvidersSection";
@@ -12,6 +12,9 @@ import {
   type SettingsForm,
 } from "../settingsForm";
 import type { EnrutamientoSMTP, FinesQuerySource } from "@/lib/api/types";
+import { setTenantProduct } from "@/lib/api/platform";
+import { getToken } from "@/lib/api/client";
+import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 
 // Pestaña Configuración Empresa (HU #10194, AC2/AC4 / RF09-RF10). Baúl de firmas,
 // enrutamiento SMTP, destinatario de notificaciones, métodos de recaudo + tabla
@@ -23,14 +26,40 @@ export interface ConfiguracionEmpresaTabProps {
   /** Tabla consolidada de Organismos de Tránsito (grant + bloqueos + restricciones). */
   otSlot?: ReactNode;
   fieldErrors?: Record<string, string>;
+  /** HU #12967: empresa de la ficha, para encender o apagar productos en la plataforma. */
+  tenantId?: string;
 }
+
+type ProductCode = "tramites" | "comparendos";
 
 export function ConfiguracionEmpresaTab({
   form,
   onChange,
   otSlot,
   fieldErrors,
+  tenantId,
 }: ConfiguracionEmpresaTabProps) {
+  // HU #12967 (B-07): Trámites y Comparendos son la habilitación de productos. Solo el SuperAdmin
+  // los cambia, al instante y fuera del «Guardar todo»; para el resto quedan de solo lectura.
+  const [superAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  const [productBusy, setProductBusy] = useState<ProductCode | null>(null);
+  const [productError, setProductError] = useState<string | null>(null);
+  const canEditProducts = superAdmin && Boolean(tenantId);
+
+  const toggleProduct = async (code: ProductCode, enabled: boolean) => {
+    if (!tenantId) return;
+    setProductBusy(code);
+    setProductError(null);
+    try {
+      const state = await setTenantProduct(tenantId, code, enabled);
+      onChange(code === "tramites" ? { tramitesModuleEnabled: state.enabled } : { comparendosModuleEnabled: state.enabled });
+    } catch (e) {
+      setProductError(e instanceof Error ? e.message : "No se pudo cambiar el producto.");
+    } finally {
+      setProductBusy(null);
+    }
+  };
+
   const toggleMetodo = (metodo: string, on: boolean) => {
     const next = on
       ? [...form.metodosRecaudo, metodo]
@@ -245,20 +274,32 @@ export function ConfiguracionEmpresaTab({
           Decide qué servicios ve esta compañía en su dashboard. No hay regla de &ldquo;al menos
           uno activo&rdquo;: se pueden apagar los 3 sin bloquear el guardado.
         </p>
+        <p className="mb-2 max-w-md text-[11px] opacity-60">
+          {canEditProducts
+            ? "Trámites y Comparendos son productos de la plataforma: el cambio se aplica al instante, sin «Guardar todo»."
+            : "Trámites y Comparendos son productos de la plataforma y solo los cambia FLIT."}
+        </p>
         <ToggleSwitch
           id="tramitesModuleEnabled"
           label="Módulo de Trámites"
-          description="Habilita el módulo de Trámites en el dashboard de la compañía."
+          description="Habilita el producto Trámites para la compañía."
           checked={form.tramitesModuleEnabled}
-          onChange={(v) => onChange({ tramitesModuleEnabled: v })}
+          disabled={!canEditProducts || productBusy !== null}
+          onChange={(v) => void toggleProduct("tramites", v)}
         />
         <ToggleSwitch
           id="comparendosModuleEnabled"
           label="Módulo de Comparendos"
-          description="Habilita el módulo de Comparendos en el dashboard de la compañía."
+          description="Habilita el producto Comparendos para la compañía."
           checked={form.comparendosModuleEnabled}
-          onChange={(v) => onChange({ comparendosModuleEnabled: v })}
+          disabled={!canEditProducts || productBusy !== null}
+          onChange={(v) => void toggleProduct("comparendos", v)}
         />
+        {productError && (
+          <p className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+            {productError}
+          </p>
+        )}
         <ToggleSwitch
           id="resolucionesModuleEnabled"
           label="Módulo de Resoluciones"
