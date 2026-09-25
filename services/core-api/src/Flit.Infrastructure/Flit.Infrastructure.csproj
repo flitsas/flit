@@ -40,6 +40,7 @@
     <ProjectReference Include="..\Flit.Modules.Improntas.Domain\Flit.Modules.Improntas.Domain.csproj" />
     <ProjectReference Include="..\Flit.Modules.Quipux.Application\Flit.Modules.Quipux.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Quipux.Domain\Flit.Modules.Quipux.Domain.csproj" />
+    <ProjectReference Include="..\Flit.Modules.Platform\Flit.Modules.Platform.csproj" />
     <!-- Contratos gRPC compartidos con core-ict (ICT). Plano C: core-api es CLIENTE de IctStateCallback
          (reflejo de estado del trámite → core-ict). El .csproj vive en services/core-ict/. -->
     <ProjectReference Include="..\..\..\core-ict\src\Flit.Ict.Grpc.Contracts\Flit.Ict.Grpc.Contracts.csproj" />
