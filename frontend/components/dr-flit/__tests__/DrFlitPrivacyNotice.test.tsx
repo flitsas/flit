@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { DrFlitAssistant } from "../DrFlitAssistant";
@@ -101,5 +101,48 @@ describe("HU #12931 — aviso de tratamiento de datos", () => {
 
     expect(screen.queryByRole("region", { name: "Tratamiento de datos" })).not.toBeInTheDocument();
     expect(loadDrFlitSession()?.state.privacyNoticeSeen).toBe(true);
+  });
+});
+
+describe("Prueba integrada 2026-09-25 — hallazgos corregidos", () => {
+  beforeEach(() => {
+    vi.mocked(postDrFlitChat).mockReset();
+    clearDrFlitSession();
+  });
+
+  afterEach(() => clearDrFlitSession());
+
+  it("el panel recorta con overflow-clip: un focus() interno no puede desplazarlo", async () => {
+    const user = userEvent.setup();
+    render(<DrFlitAssistant displayName="Ana" />);
+    await user.click(screen.getByRole("button", { name: "Abrir DR. FLIT" }));
+
+    const panel = screen.getByRole("dialog");
+    expect(panel.className).toContain("overflow-clip");
+    expect(panel.className).not.toContain("overflow-hidden");
+  });
+
+  it("sin nombre en el perfil, el formulario del caso no usa el correo como nombre", async () => {
+    vi.mocked(postDrFlitChat).mockResolvedValue({
+      status: "ok",
+      intent: "soporte",
+      reply: "Te ayudo.",
+      citations: [],
+      suggestGestionIntent: null,
+      usage: { messagesUsedToday: 1, dailyLimit: 30 },
+    });
+    const user = userEvent.setup();
+    render(
+      <DrFlitAssistant
+        displayName="demo@flit.local"
+        supportContact={{ name: null, email: "demo@flit.local" }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Abrir DR. FLIT" }));
+    await user.type(screen.getByRole("textbox"), "tengo un error{enter}");
+
+    const form = await screen.findByRole("form", { name: "Formulario del caso de soporte" });
+    expect(within(form).getByLabelText(/^Nombre/)).toHaveValue("");
+    expect(within(form).getByLabelText(/^Correo/)).toHaveValue("demo@flit.local");
   });
 });

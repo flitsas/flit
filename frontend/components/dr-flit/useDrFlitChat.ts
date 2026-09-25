@@ -72,7 +72,9 @@ export function useDrFlitChat(
   options: UseDrFlitChatOptions = {},
 ) {
   const historialPlacaEnabled = options.historialPlacaEnabled ?? true;
-  const supportName = options.supportContact?.name ?? displayName ?? null;
+  // Sin nombre en el perfil el campo queda vacío para que la persona lo escriba: el displayName del
+  // Shell cae al correo cuando no hay nombre, y un correo no es un nombre.
+  const supportName = options.supportContact ? (options.supportContact.name ?? null) : (displayName ?? null);
   const supportEmail = options.supportContact?.email ?? null;
   const hydrated = useRef(loadDrFlitSession());
   // Tras remount (p. ej. layout de otro módulo) el panel arranca cerrado;
