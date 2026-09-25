@@ -136,11 +136,27 @@ describe("HU #12931 — en el panel", () => {
     expect(prompt).toHaveTextContent("Ley 1581 de 2012");
     expect(postDrFlitChat).not.toHaveBeenCalled();
 
-    await user.click(within(prompt).getByRole("button", { name: "Acepto" }));
+    await user.click(within(prompt).getByRole("button", { name: "Acepto y continuar" }));
 
     expect(acceptDrFlitConsent).toHaveBeenCalledWith(VERSION);
     expect(await screen.findByText("Así se crea un trámite.")).toBeInTheDocument();
     expect(vi.mocked(postDrFlitChat).mock.calls[0]![0].message).toBe("¿cómo creo un trámite?");
+  });
+
+  it("AC1 — texto corto a la vista; el detalle completo se despliega con «Ver detalle»", async () => {
+    const user = await openPanel();
+    await user.type(screen.getByRole("textbox"), "hola{enter}");
+
+    const prompt = screen.getByRole("region", { name: "Autorización de tratamiento de datos" });
+    const toggle = within(prompt).getByRole("button", { name: "Ver detalle" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(within(prompt).queryByText(/herramienta de gestión de casos/)).not.toBeVisible();
+
+    await user.click(toggle);
+
+    expect(within(prompt).getByRole("button", { name: "Ocultar detalle" })).toHaveAttribute("aria-expanded", "true");
+    expect(within(prompt).getByText(/herramienta de gestión de casos/)).toBeVisible();
+    expect(acceptDrFlitConsent).not.toHaveBeenCalled();
   });
 
   it("AC1 — el formulario del caso también exige la autorización", async () => {
@@ -149,7 +165,7 @@ describe("HU #12931 — en el panel", () => {
     await user.click(screen.getByRole("button", { name: "Generar un caso de soporte" }));
 
     expect(screen.queryByRole("form", { name: "Formulario del caso de soporte" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Acepto" }));
+    await user.click(screen.getByRole("button", { name: "Acepto y continuar" }));
 
     expect(await screen.findByRole("form", { name: "Formulario del caso de soporte" })).toBeInTheDocument();
   });
@@ -200,7 +216,7 @@ describe("HU #12931 — en el panel", () => {
     const user = await openPanel();
 
     await user.type(screen.getByRole("textbox"), "hola{enter}");
-    await user.click(await screen.findByRole("button", { name: "Acepto" }));
+    await user.click(await screen.findByRole("button", { name: "Acepto y continuar" }));
 
     expect(acceptDrFlitConsent).toHaveBeenCalledWith("2026-10-01");
     expect(await screen.findByText("Así se crea un trámite.")).toBeInTheDocument();
@@ -212,7 +228,7 @@ describe("HU #12931 — en el panel", () => {
     const user = await openPanel();
     await user.type(screen.getByRole("textbox"), "hola{enter}");
 
-    await user.click(screen.getByRole("button", { name: "Acepto" }));
+    await user.click(screen.getByRole("button", { name: "Acepto y continuar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("El texto se actualizó");
     expect(postDrFlitChat).not.toHaveBeenCalled();

@@ -106,10 +106,20 @@ export function getHelpOptionById(
   return DR_FLIT_HELP_OPTIONS.find((o) => o.id === id);
 }
 
-export function buildGreeting(displayName?: string | null): string {
+/**
+ * Saludo inicial. Un correo no es un nombre (el JWT a veces no trae display_name): en ese caso se saluda
+ * sin nombre. Con el chat con IA activo se invita a escribir la duda con sus palabras, que es lo más
+ * directo; el menú queda como atajo.
+ */
+export function buildGreeting(
+  displayName?: string | null,
+  chatEnabled: boolean = DR_FLIT_CHAT_ENABLED,
+): string {
   const name = displayName?.trim();
-  const hello = name ? `Hola ${name}` : "Hola";
-  return `${hello} 👋, soy DR. FLIT. En **Gestión** localizo registros; en **Ayuda** te guío con documentación y soporte.`;
+  const hello = name && !name.includes("@") ? `Hola ${name}` : "Hola";
+  return chatEnabled
+    ? `${hello} 👋, soy DR. FLIT. **Escríbeme tu duda con tus palabras** o elige una opción: en **Gestión** localizo registros y en **Ayuda** te guío con documentación y soporte.`
+    : `${hello} 👋, soy DR. FLIT. En **Gestión** localizo registros; en **Ayuda** te guío con documentación y soporte.`;
 }
 
 export function buildValuePrompt(intent: DrFlitIntent): string {
