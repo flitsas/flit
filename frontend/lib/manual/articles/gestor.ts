@@ -16,6 +16,14 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "El botón central flotante (FAB) «Inicio FLIT» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
           "Muestra un resumen operativo de tu compañía: volumen de trámites, estados recientes u otros indicadores según lo habilitado para tu tenant. No aparece como píldora del dock inferior; siempre está disponible desde el FAB.",
         ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/dashboard-gestor.png",
+            alt: "Dashboard de FLIT con los indicadores de trámites, la distribución por estado, las validaciones biométricas y el seguimiento operativo",
+            caption: "El Inicio: indicadores del periodo, distribución por estado y seguimiento operativo.",
+          },
+        ],
       },
       {
         id: "cuando-usar",
@@ -86,6 +94,14 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "El sistema crea una instancia en estado Borrador y te lleva al asistente; el tipo de trámite se elige dentro del paso 1.",
           "Completa cada paso que el servidor expone: actores, datos del vehículo, consultas externas (RUNT, SIMIT, RUES…), adjuntos, validación de identidad si aplica.",
           "Revisa los bloqueos en la barra del asistente. Solo cuando estén resueltos podrás firmar o radicar.",
+        ],
+        media: [
+          {
+            kind: "diagram",
+            id: "flujo-crear-tramite",
+            alt: "Diagrama del flujo de un trámite: elegir tipo, completar actores y vehículo, cargar documentos, resolver identidad y firmas, radicar y esperar la decisión del organismo, con retorno a subsanar si es rechazado",
+            caption: "El recorrido completo de un trámite, de Borrador a la decisión del organismo.",
+          },
         ],
         callouts: [
           {

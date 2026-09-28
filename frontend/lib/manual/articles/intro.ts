@@ -17,6 +17,14 @@ export const INTRO_ARTICLES: ManualArticle[] = [
           "Bienvenido al ecosistema de FLIT. Este portal está diseñado para que resuelvas dudas sobre el uso de la plataforma en segundos, sin depender de una llamada a soporte en cada paso.",
           `Documenta las acciones del ${COPY.A06} (empresa cliente que radica trámites vehiculares), del Gestor de ${COPY.A05} (OT), del Administrador de compañía (consola, red de clientes, marca) y del equipo FLIT (Super Admin: compañías, plataforma, integraciones, RBAC). Cada artículo indica «Aplica para» y DR. FLIT solo sugiere los de tu perfil.`,
         ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/login.png",
+            alt: "Pantalla de inicio de sesión de FLIT 2.0 con los campos Usuario Corporativo y Contraseña",
+            caption: "Todo empieza aquí: inicia sesión con tu usuario corporativo.",
+          },
+        ],
       },
       {
         id: "navegar",

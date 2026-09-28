@@ -1,0 +1,20 @@
+{
+  "$comment": "HU #13013 (Épica #12755) — manifiesto del pipeline automatizado de capturas del manual. Cada entrada produce public/manual/screenshots/{id}.png con `pnpm manual:screenshots` (la app debe estar corriendo en local con los usuarios seed). La guarda screenshots-freshness.test.ts exige 1:1 entre entradas y archivos.",
+  "viewport": { "width": 1440, "height": 900 },
+  "entries": [
+    {
+      "id": "login",
+      "articleSlug": "0-introduccion/1-bienvenida",
+      "profile": "public",
+      "route": "/login",
+      "waitFor": "#login-email"
+    },
+    {
+      "id": "dashboard-gestor",
+      "articleSlug": "1-gestor/1-inicio",
+      "profile": "admin_company",
+      "route": "/",
+      "waitFor": "text=Distribución General de Trámites"
+    }
+  ]
+}
