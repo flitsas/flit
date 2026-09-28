@@ -75,6 +75,8 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         "tramites.vehicle_classification_fur",
         // Interruptores globales de la jerarquía (HU #12323): nacen encendidos por seed.
         "identity.hierarchy_switches",
+        // Catálogo de productos de la FLIT Suite (HU #12958, DDL 119).
+        "platform.products",
     };
 
     /// <summary>
@@ -92,6 +94,8 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         "admin.notification_test_settings",
         "tramites.runt_confirmation_settings",
         "audit.audit_logs",
+        // HU #12958: tramites encendido para las compañías mock (backfill y disparador del DDL 119).
+        "platform.tenant_products",
     };
 
     private const string MigrationsHistoryTable = "__EFMigrationsHistory";

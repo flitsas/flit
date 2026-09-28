@@ -9,4 +9,5 @@ internal static class SchemaNames
     public const string Analytics = "analytics";
     public const string Catalogs = "catalogs";
     public const string Audit = "audit";
+    public const string Platform = "platform";
 }

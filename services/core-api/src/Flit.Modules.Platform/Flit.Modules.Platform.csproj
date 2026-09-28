@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Modules.Platform</RootNamespace>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Contrato de plataforma v1, §4: Platform referencia a Security.Application (ProductCodes e
+         IProductAccessResolver, que implementa B-05); nunca al revés. -->
+    <ProjectReference Include="..\Flit.Modules.Security.Application\Flit.Modules.Security.Application.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+</Project>

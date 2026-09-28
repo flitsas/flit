@@ -24,6 +24,9 @@ importers:
 
   frontend:
     dependencies:
+      '@flit/ui':
+        specifier: workspace:*
+        version: link:../packages/ui
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -106,6 +109,31 @@ importers:
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@20.19.43)(jsdom@29.1.1)(vite@8.0.16(@types/node@20.19.43)(jiti@2.7.0))
+
+  packages/ui:
+    dependencies:
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      tailwind-merge:
+        specifier: ^3.6.0
+        version: 3.6.0
+    devDependencies:
+      '@types/react':
+        specifier: ^19
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19
+        version: 19.2.3(@types/react@19.2.17)
+      lucide-react:
+        specifier: ^1.20.0
+        version: 1.20.0(react@19.2.4)
+      react:
+        specifier: 19.2.4
+        version: 19.2.4
+      react-dom:
+        specifier: 19.2.4
+        version: 19.2.4(react@19.2.4)
 
 packages:
 
