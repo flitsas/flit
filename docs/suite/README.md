@@ -51,7 +51,7 @@ El líder lo actualiza en la revisión semanal. Estado: ⏳ pendiente · 🟡 en
 | `@flit/ui` v0 | B | C | ✅ PR #445 |
 | `Flit.Platform.Contracts` | C | Todos | ⏳ |
 | Redis y RabbitMQ en DEV | L | A, B, C | ⏳ |
-| Esqueleto de `frontend-hub` | B | A | ⏳ |
+| Esqueleto de `frontend-hub` | B | A | 🟡 Feature #12889 |
 | Publicador de eventos | C | A, B | ⏳ |
 | Servidor OIDC y `/platform/issuers` en DEV | A | B, C | ⏳ |
 | `IProductAccessResolver` real | B | A | 🟡 PR #448 |

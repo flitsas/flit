@@ -615,6 +615,39 @@ services:
     restart: *restart
     logging: *default-logging
 
+  # ── FLIT Suite: hub en flitsas.online (B-09) — HUB_PORT ────────────────────
+  # Perfil `suite`: `docker compose up` NO lo levanta todavía. Se enciende agregando
+  # COMPOSE_PROFILES=suite al .env del ambiente, cuando el borde (nginx, DNS y certificado)
+  # tenga el host del hub. Mientras tanto el CD construye la imagen y no cambia nada en el servidor.
+  # Una sola imagen para DEV, QA y PDN: todo lo de abajo se lee en runtime (frontend-hub/lib/config.server.ts).
+  frontend-hub:
+    profiles: ["suite"]
+    image: ghcr.io/flitsas/flitdev/frontend-hub:${FRONTEND_HUB_TAG:-latest}
+    environment:
+      PORT: "${HUB_PORT:-4040}"
+      HOSTNAME: "0.0.0.0"
+      # /api/v1/* del navegador y la marca del host van al gateway por la red interna, con el
+      # sello X-Flit-Domain y la clave interna (mismo criterio que el servicio frontend).
+      CORE_API_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
+      BRANDING_INTERNAL_API_URL: http://gateway:${GATEWAY_PORT:-4002}
+      FLIT_INTERNAL_API_KEY: ${FLIT_INTERNAL_API_KEY:-}
+      # Hosts FLIT (sin marca de red). Mismo valor que NEXT_PUBLIC_FLIT_HOSTS de Trámites en cd.yml.
+      FLIT_HOSTS: ${FLIT_HOSTS:-flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online}
+      # «Iniciar sesión» lleva al login de Trámites hasta que exista el del hub (A-06).
+      TRAMITES_URL: ${HUB_TRAMITES_URL:-${CORS_ORIGIN:-https://dev.flitsas.online}}
+    ports:
+      - "127.0.0.1:${HUB_PORT:-4040}:${HUB_PORT:-4040}"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${HUB_PORT:-4040}/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      - gateway
+    restart: *restart
+    logging: *default-logging
+
 # ── Red interna (Marca Blanca, #12421) ──────────────────────────────────────
 # Subred EXPLICITA de la red "default" (la que TODO servicio de arriba usa ya
 # de forma implicita, al no declarar `networks:` propio — este bloque no

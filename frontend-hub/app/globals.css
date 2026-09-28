@@ -1,0 +1,9 @@
+@import "tailwindcss";
+/* Tokens de diseño FLIT: @theme, :root y .dark viven en @flit/ui (B-02). */
+@import "@flit/ui/tokens.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Las clases de Tailwind que usan los componentes de @flit/ui también se generan aquí. */
+@source "../../packages/ui/src";
+@source "../../packages/brand/src";
