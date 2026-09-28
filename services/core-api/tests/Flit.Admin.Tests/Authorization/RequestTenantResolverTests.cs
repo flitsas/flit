@@ -361,6 +361,10 @@ public sealed class RequestTenantResolverTests
     [InlineData("/api/v1/me/branding/", true)]
     [InlineData("/api/v1/me/brandingx", false)]
     [InlineData("/api/v1/me/branding/otra", false)]
+    // HU #12922 — DR. FLIT es Prefix: cubre chat, support-cases y consent; sin sufijos pegados.
+    [InlineData("/api/v1/dr-flit/chat", true)]
+    [InlineData("/api/v1/dr-flit/support-cases/attachments", true)]
+    [InlineData("/api/v1/dr-flitx", false)]
     public void IsRuntimeScoped_MatchingIdenticoAlHistorico(string path, bool expected)
     {
         TenantEnforcementMiddleware.IsRuntimeScoped(new PathString(path)).Should().Be(expected);
@@ -408,6 +412,9 @@ public sealed class RequestTenantResolverTests
             ("/api/v1/me/branding", TenantEnforcementMiddleware.RouteMatch.Exact),
             // HU #12578 (Feature #12565) — listado dedicado "Revocatorias" del lado gestor.
             ("/api/v1/tramites/revocation-requests", TenantEnforcementMiddleware.RouteMatch.Exact),
+            // HU #12922 (Épica #12718) — DR. FLIT: el tope diario del chat se cuenta por tenant y usuario,
+            // así que el tenant sale del token, nunca del header crudo. Prefix cubre también /support-cases.
+            ("/api/v1/dr-flit", TenantEnforcementMiddleware.RouteMatch.Prefix),
         });
         routes.Should().OnlyContain(r =>
             r.Path.StartsWith(TenantEnforcementMiddleware.RuntimeRoutePrefix + "/", StringComparison.Ordinal)
@@ -415,10 +422,11 @@ public sealed class RequestTenantResolverTests
             || r.Path == "/api/v1/me/ui-preferences"
             || r.Path == "/api/v1/company/branding"
             || r.Path == "/api/v1/company/domain"
-            || r.Path == "/api/v1/me/branding",
+            || r.Path == "/api/v1/me/branding"
+            || r.Path == "/api/v1/dr-flit",
             "las únicas excepciones fuera de /api/v1/tramites son gestión avanzada (Bug #12554), "
             + "preferencias de UI (Bug #12558), autogestión de marca (HU #12412), autogestión de "
-            + "dominio (HU #12416) y herencia de marca de sesión (HU #12418) — cualquier prefijo "
-            + "nuevo fuera de estos casos debe declararse aquí explícitamente");
+            + "dominio (HU #12416), herencia de marca de sesión (HU #12418) y DR. FLIT (HU #12922) — "
+            + "cualquier prefijo nuevo fuera de estos casos debe declararse aquí explícitamente");
     }
 }
