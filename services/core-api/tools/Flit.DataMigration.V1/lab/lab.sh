@@ -41,14 +41,14 @@ existe_db() { [[ "$(pg -d postgres -Atc "select 1 from pg_database where datname
 preparar() {
   [[ "$LAB_V2_DB" != "$LAB_V2_TEMPLATE_DB" ]] || falla "LAB_V2_DB no puede ser la base de dev: se clonaría sobre sí misma."
   if [[ "${1:-}" == "--recrear" ]] && existe_db "$LAB_V2_DB"; then
-    echo "Borrando $LAB_V2_DB…"
+    echo "Borrando ${LAB_V2_DB}…"
     pg -d postgres -c "DROP DATABASE \"$LAB_V2_DB\" WITH (FORCE);" >/dev/null
   fi
   if ! existe_db "$LAB_V2_DB"; then
     echo "Clonando $LAB_V2_TEMPLATE_DB en $LAB_V2_DB (la de dev no se modifica)…"
     pg -d postgres -c "CREATE DATABASE \"$LAB_V2_DB\" TEMPLATE \"$LAB_V2_TEMPLATE_DB\";" >/dev/null
   fi
-  echo "Aplicando migraciones de la rama a $LAB_V2_DB…"
+  echo "Aplicando migraciones de la rama a ${LAB_V2_DB}…"
   (cd "$CORE_API" && ConnectionStrings__Core="$(cadena "$LAB_V2_DB")" dotnet ef database update \
       --project src/Flit.Infrastructure --startup-project src/Flit.Api) | grep -E "Applying|Done|rror" || true
 }
