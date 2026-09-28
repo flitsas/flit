@@ -9,7 +9,7 @@ describe("hubConfig", () => {
     expect(hubConfig({} as NodeJS.ProcessEnv)).toEqual({
       apiOrigin: "http://localhost:4002",
       internalApiKey: undefined,
-      loginUrl: "/login",
+      loginUrl: "/auth/login",
     });
   });
 
@@ -22,7 +22,7 @@ describe("hubConfig", () => {
     expect(config).toEqual({
       apiOrigin: "http://gateway:4002",
       internalApiKey: "k",
-      loginUrl: "/login",
+      loginUrl: "/auth/login",
     });
   });
 

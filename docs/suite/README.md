@@ -58,7 +58,7 @@ El líder lo actualiza en la revisión semanal. Estado: ⏳ pendiente · 🟡 en
 | `DomainContext.ProductCode` | B | A | 🟡 PR #448 |
 | Manifiesto y `me/apps` | B | C | ⏳ |
 | k3s DEV con Argo CD | L | C | ⏳ |
-| `@flit/auth` v1 | A | B, C | ⏳ |
+| `@flit/auth` v1 | A | B, C | 🟡 Feature #12887 |
 | `@flit/shell` v1 | B | A, C | ⏳ |
 | Plantilla `flit-product` | C | B, C (Fase 3) | ⏳ |
 | Producto `demo` en DEV | C | Puerta de salida | ⏳ |

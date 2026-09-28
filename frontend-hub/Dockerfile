@@ -1,6 +1,6 @@
 # Imagen del hub de la FLIT Suite (B-09): build en tiempo de imagen + next start.
 # UNA sola imagen para DEV, QA y PDN: no recibe build-args. Todo lo que cambia por ambiente
-# (CORE_API_ORIGIN, FLIT_HOSTS, FLIT_INTERNAL_API_KEY, HUB_LOGIN_URL...) se lee en el servidor
+# (CORE_API_ORIGIN, FLIT_HOSTS, FLIT_HUB_URL, FLIT_SESSION_SECRET, FLIT_INTERNAL_API_KEY...) se lee en el servidor
 # al atender cada petición (frontend-hub/lib/config.server.ts). El compose inyecta PORT.
 
 FROM node:22-alpine
@@ -16,6 +16,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY frontend-hub/package.json ./frontend-hub/
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/brand/package.json ./packages/brand/
+COPY packages/auth/package.json ./packages/auth/
 
 # Solo las dependencias del hub y de sus paquetes del workspace (incluidas las dev: next build las necesita).
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --filter "@flit/frontend-hub..."
@@ -23,6 +24,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 COPY frontend-hub ./frontend-hub
 COPY packages/ui ./packages/ui
 COPY packages/brand ./packages/brand
+COPY packages/auth ./packages/auth
 RUN pnpm --filter @flit/frontend-hub build
 
 ENV NODE_ENV=production

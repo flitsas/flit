@@ -636,6 +636,12 @@ services:
       CORE_API_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
       BRANDING_INTERNAL_API_URL: http://gateway:${GATEWAY_PORT:-4002}
       FLIT_INTERNAL_API_KEY: ${FLIT_INTERNAL_API_KEY:-}
+      # @flit/auth (HU #13000, A-09): el hub es cliente `plataforma` de su propio servidor OIDC. FLIT_HUB_URL es la URL
+      # pública del hub (la exporta el CD); el canje de tokens va por la red interna al gateway. FLIT_SESSION_SECRET
+      # cifra la cookie de sesión: obligatoria, al menos 32 caracteres, distinta por ambiente y solo en el .env.
+      FLIT_HUB_URL: ${FLIT_HUB_URL:-https://dev.flitsas.online}
+      FLIT_OIDC_INTERNAL_URL: http://gateway:${GATEWAY_PORT:-4002}
+      FLIT_SESSION_SECRET: ${FLIT_SESSION_SECRET:-}
       # Hosts FLIT (sin marca de red). Mismo valor que NEXT_PUBLIC_FLIT_HOSTS de Trámites en cd.yml.
       FLIT_HOSTS: ${FLIT_HOSTS:-flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online}
     ports:

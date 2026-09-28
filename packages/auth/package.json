@@ -1,0 +1,29 @@
+{
+  "name": "@flit/auth",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sesión OIDC de las apps Next.js de la FLIT Suite (A-09, contrato §8): login por el hub, sesión cifrada en el servidor y proxy a la API con el token.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./server": "./src/server.ts",
+    "./client": "./src/client.tsx",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "next": "16.3.4",
+    "react": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "next": "16.3.4",
+    "react": "19.2.4",
+    "typescript": "^5",
+    "vitest": "^4.1.9"
+  }
+}

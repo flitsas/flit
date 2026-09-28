@@ -115,6 +115,9 @@ importers:
 
   frontend-hub:
     dependencies:
+      '@flit/auth':
+        specifier: workspace:*
+        version: link:../packages/auth
       '@flit/brand':
         specifier: workspace:*
         version: link:../packages/brand
@@ -176,6 +179,27 @@ importers:
       tailwindcss:
         specifier: ^4
         version: 4.3.1
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@types/node@20.19.43)(jsdom@29.1.1)(vite@8.0.16(@types/node@20.19.43)(jiti@2.7.0))
+
+  packages/auth:
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      '@types/react':
+        specifier: ^19
+        version: 19.2.17
+      next:
+        specifier: 16.3.4
+        version: 16.3.4(@babel/core@7.29.7)(@types/node@20.19.43)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react:
+        specifier: 19.2.4
+        version: 19.2.4
       typescript:
         specifier: ^5
         version: 5.9.3

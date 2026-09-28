@@ -521,6 +521,8 @@ jobs:
             export HUB_PORT=${{ needs.setup.outputs.hub_port }}
             # FLIT Suite: hosts de los productos en este ambiente (Suite:Hosts:Environment de core-api).
             export FLIT_SUITE_ENV=${{ needs.setup.outputs.suite_env }}
+            # URL pública del hub (emisor OIDC) para @flit/auth.
+            export FLIT_HUB_URL=https://${{ needs.setup.outputs.front_domain }}
             # Marca Blanca (#12421): CIDR de la red Docker de ESTE stack (distinto por ambiente).
             export FLIT_INTERNAL_SUBNET=${{ needs.setup.outputs.internal_subnet }}
 

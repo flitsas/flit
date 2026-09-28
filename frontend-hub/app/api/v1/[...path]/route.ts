@@ -1,14 +1,14 @@
-import { proxyToApi } from "@/lib/api-proxy.server";
-import { hubConfig } from "@/lib/config.server";
+import { hubApiProxy } from "@/lib/auth.server";
 
-// El navegador del hub llama a /api/v1/* en su mismo host; esto lo reenvía al gateway (lib/api-proxy.server.ts).
+// /api/v1/* del navegador del hub: @flit/auth lo reenvía al gateway con el Bearer de la sesión del hub (A-09) y
+// sella el dominio con el host real. Sin sesión pasa sin token: la API decide (recuperación, activación).
 export const dynamic = "force-dynamic";
 
 type Context = { params: Promise<{ path: string[] }> };
 
 async function handle(request: Request, context: Context): Promise<Response> {
   const { path } = await context.params;
-  return proxyToApi(request, "/api/v1", path, hubConfig());
+  return hubApiProxy(request, path);
 }
 
 export const GET = handle;

@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@flit/auth": "workspace:*",
     "@flit/brand": "workspace:*",
     "@flit/ui": "workspace:*",
     "clsx": "^2.1.1",

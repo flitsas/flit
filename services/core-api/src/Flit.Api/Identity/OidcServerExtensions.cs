@@ -76,6 +76,11 @@ public static class OidcServerExtensions
                 // El access token es un JWT firmado y legible: los productos lo validan con el JWKS (espiga A-04).
                 server.DisableAccessTokenEncryption();
 
+                // HU #13000 (A-09): el refresh token es una referencia opaca (~40 caracteres) y su contenido vive en
+                // identity.oidc_tokens. Viaja en la cookie cifrada de sesión de cada producto, que va en cada petición:
+                // el JWE completo pesaba ~1,5 KB. Además se revoca en el servidor sin depender de su vencimiento.
+                server.UseReferenceRefreshTokens();
+
                 // TLS termina en el borde (nginx); la API recibe HTTP por la red interna.
                 server.UseAspNetCore()
                       .EnableAuthorizationEndpointPassthrough()

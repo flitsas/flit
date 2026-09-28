@@ -8,7 +8,7 @@ const monorepoRoot = path.resolve(__dirname, "..");
 // build. La configuración por ambiente se lee en el servidor al atender cada petición (lib/config.server.ts),
 // y el navegador habla con la API por el proxy /api/v1/* de este mismo host (app/api/v1/[...path]).
 const nextConfig: NextConfig = {
-  transpilePackages: ["@flit/ui", "@flit/brand"],
+  transpilePackages: ["@flit/ui", "@flit/brand", "@flit/auth"],
   outputFileTracingRoot: monorepoRoot,
   turbopack: {
     root: monorepoRoot,
