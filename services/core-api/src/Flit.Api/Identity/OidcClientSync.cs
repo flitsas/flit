@@ -21,13 +21,11 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        await using var scope = services.CreateAsyncScope();
-        var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
-        var hosts = scope.ServiceProvider.GetRequiredService<IProductHosts>();
-        var options = scope.ServiceProvider.GetRequiredService<IOptions<OidcOptions>>().Value;
+        var hosts = services.GetRequiredService<IProductHosts>();
+        var options = services.GetRequiredService<IOptions<OidcOptions>>().Value;
 
         foreach (var product in ProductCodes.All)
-            await UpsertAsync(manager, ProductClient(product, hosts, options), cancellationToken).ConfigureAwait(false);
+            await UpsertAsync(ProductClient(product, hosts, options), cancellationToken).ConfigureAwait(false);
 
         foreach (var (clientId, service) in options.ServiceClients)
         {
@@ -37,7 +35,7 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
                 continue;
             }
 
-            await UpsertAsync(manager, ServiceClient(clientId, service), cancellationToken).ConfigureAwait(false);
+            await UpsertAsync(ServiceClient(clientId, service), cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -95,14 +93,39 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
         return descriptor;
     }
 
-    private static async Task UpsertAsync(IOpenIddictApplicationManager manager, OpenIddictApplicationDescriptor descriptor, CancellationToken ct)
+    /// <summary>
+    /// Crear o actualizar. Varias instancias arrancan a la vez (réplicas, despliegue): si otra ya escribió el mismo
+    /// cliente, se relee y se reintenta; al tercer choque se deja, porque la otra instancia escribió lo mismo.
+    /// </summary>
+    private async Task UpsertAsync(OpenIddictApplicationDescriptor descriptor, CancellationToken ct)
     {
-        var existing = await manager.FindByClientIdAsync(descriptor.ClientId!, ct).ConfigureAwait(false);
-        if (existing is null)
-            await manager.CreateAsync(descriptor, ct).ConfigureAwait(false);
-        else
-            await manager.UpdateAsync(existing, descriptor, ct).ConfigureAwait(false);
+        for (var attempt = 1; ; attempt++)
+        {
+            // Un scope (y un DbContext) por intento: con el mismo, EF devolvería la entidad vieja que ya tiene rastreada.
+            await using var scope = services.CreateAsyncScope();
+            var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+            try
+            {
+                var existing = await manager.FindByClientIdAsync(descriptor.ClientId!, ct).ConfigureAwait(false);
+                if (existing is null)
+                    await manager.CreateAsync(descriptor, ct).ConfigureAwait(false);
+                else
+                    await manager.UpdateAsync(existing, descriptor, ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (ex is OpenIddictExceptions.ConcurrencyException or Microsoft.EntityFrameworkCore.DbUpdateException)
+            {
+                if (attempt >= 3)
+                {
+                    LogConcurrentSync(logger, descriptor.ClientId!);
+                    return;
+                }
+            }
+        }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cliente OIDC {ClientId} sincronizado por otra instancia al mismo tiempo; se deja su versión.")]
+    private static partial void LogConcurrentSync(ILogger logger, string clientId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Cliente OIDC de servicio {ClientId} sin secreto: no se registra.")]
     private static partial void LogServiceClientSkipped(ILogger logger, string clientId);

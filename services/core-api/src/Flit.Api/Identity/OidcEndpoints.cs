@@ -3,7 +3,6 @@ using Flit.Admin.Domain.Companies.Domains;
 using Flit.Modules.Platform.Application.Hosts;
 using Flit.Modules.Security.Application.Auth.Login;
 using Flit.Modules.Security.Application.Auth.Network;
-using Flit.Modules.Security.Application.Products;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
@@ -26,13 +25,7 @@ public static class OidcEndpoints
     {
         // Contrato §6: emisores que los servicios aceptan (caché de 5 minutos del lado del consumidor).
         app.MapGet("/api/v1/platform/issuers", async (IProductHosts hosts, ITenantDomainRepository domains, IConfiguration configuration, CancellationToken ct) =>
-        {
-            var scheme = configuration["Suite:Hosts:Scheme"] ?? "https";
-            var issuers = new List<string> { hosts.UrlFor(ProductCodes.Plataforma).TrimEnd('/') + "/" };
-            foreach (var host in await domains.ListActiveHostsAsync(ct).ConfigureAwait(false))
-                issuers.Add($"{scheme}://{host.Trim().ToLowerInvariant()}/");
-            return Results.Ok(issuers.Distinct(StringComparer.Ordinal).ToArray());
-        }).AllowAnonymous().WithTags("Platform").WithName("ListIssuers");
+            Results.Ok(await OidcIssuerRegistry.ListAsync(hosts, domains, configuration["Suite:Hosts:Scheme"] ?? "https", ct).ConfigureAwait(false))).AllowAnonymous().WithTags("Platform").WithName("ListIssuers");
 
         if (!app.ServiceProvider.GetRequiredService<IOptions<OidcOptions>>().Value.Enabled)
             return app;
@@ -100,11 +93,26 @@ public static class OidcEndpoints
             return Results.Challenge(new AuthenticationProperties(), [OidcDefaults.HubSessionScheme]);
         }
 
-        var principal = await factory.ForUserAsync(session.Principal!, request.ClientId!, request.GetScopes(), ct).ConfigureAwait(false);
-        return Results.SignIn(principal, null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        var grant = await factory.ForUserAsync(session.Principal!, request.ClientId!, request.GetScopes(), ct).ConfigureAwait(false);
+        if (grant.Principal is null)
+        {
+            // HU #12992 (A-07): la cuenta ya no sirve para abrir sesión, se cierra la del hub y se vuelve a pedir.
+            if (grant.DeniedCode == OidcPrincipalFactory.SessionInvalid)
+            {
+                await http.SignOutAsync(OidcDefaults.HubSessionScheme).ConfigureAwait(false);
+                return request.HasPromptValue(PromptValues.None)
+                    ? Forbid(Errors.LoginRequired, grant.DeniedCode)
+                    : Results.Challenge(new AuthenticationProperties(), [OidcDefaults.HubSessionScheme]);
+            }
+
+            // Producto apagado o sin rol (contrato §2 y §10): no hay código, el producto recibe access_denied.
+            return Forbid(Errors.AccessDenied, grant.DeniedCode!);
+        }
+
+        return Results.SignIn(grant.Principal, null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
-    private static async Task<IResult> TokenAsync(HttpContext http, OidcPrincipalFactory factory)
+    private static async Task<IResult> TokenAsync(HttpContext http, OidcPrincipalFactory factory, CancellationToken ct)
     {
         var request = http.GetOpenIddictServerRequest() ?? throw new InvalidOperationException("La petición OIDC no llegó al servidor.");
 
@@ -116,7 +124,11 @@ public static class OidcEndpoints
         if (!result.Succeeded || result.Principal is null)
             return Forbid(Errors.InvalidGrant, "El código o el refresh token ya no es válido.");
 
-        return Results.SignIn(result.Principal, null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        // HU #12992 (A-07): en cada canje —también en cada refresh— se relee el usuario y su acceso al producto.
+        var grant = await factory.ForUserAsync(result.Principal, request.ClientId!, result.Principal.GetScopes(), ct).ConfigureAwait(false);
+        return grant.Principal is null
+            ? Forbid(Errors.InvalidGrant, grant.DeniedCode!)
+            : Results.SignIn(grant.Principal, null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
     /// <summary>Cierra la sesión del hub y vuelve al <c>post_logout_redirect_uri</c> registrado del producto.</summary>

@@ -71,6 +71,7 @@ public static class OidcServerExtensions
 
                 server.SetAccessTokenLifetime(TimeSpan.FromMinutes(options.AccessTokenMinutes));
                 server.SetRefreshTokenLifetime(TimeSpan.FromDays(options.RefreshTokenDays));
+                server.SetRefreshTokenReuseLeeway(TimeSpan.FromSeconds(options.RefreshTokenReuseLeewaySeconds));
 
                 // El access token es un JWT firmado y legible: los productos lo validan con el JWKS (espiga A-04).
                 server.DisableAccessTokenEncryption();
@@ -113,6 +114,7 @@ public static class OidcServerExtensions
         });
 
         services.AddScoped<OidcPrincipalFactory>();
+        OidcTokenAcceptance.Register(services); // HU #12992 (A-07): la API acepta los tokens del hub
         services.AddHostedService<OidcClientSync>();
         services.AddHostedService<OidcPruningService>();
         return services;

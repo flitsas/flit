@@ -17,6 +17,13 @@ public sealed class OidcOptions
     /// <summary>Vida del refresh token. Se rota en cada uso.</summary>
     public int RefreshTokenDays { get; set; } = 14;
 
+    /// <summary>
+    /// HU #12992 (A-07): margen para reusar un refresh ya canjeado. En 0, reusarlo lo rechaza y revoca la cadena (señal
+    /// de robo). OpenIddict trae 30 s por defecto para refrescos en paralelo; <c>@flit/auth</c> (A-09) refresca en el
+    /// servidor, uno a la vez, así que no lo necesita.
+    /// </summary>
+    public int RefreshTokenReuseLeewaySeconds { get; set; }
+
     /// <summary>Vida de la sesión del hub (cookie <c>flit_hub</c>), con renovación por uso.</summary>
     public int HubSessionHours { get; set; } = 12;
 
