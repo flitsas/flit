@@ -1,6 +1,6 @@
 flowchart TD
     A["Crea la prevalidación\ncon los datos de la persona"] --> B["FLIT envía el enlace\nal correo o celular del cliente"]
-    B --> C["El cliente abre el enlace\ny se toma las 3 fotos"]
+    B --> C["El cliente abre el enlace:\nselfie + cédula por ambas caras"]
     C --> D{"¿Resultado de la\nvalidación?"}
     D -- "Aprobada" --> E["Queda lista para usarse\nen los trámites de esa persona"]
     D -- "Rechazada" --> F["Revisa el motivo\ny reenvía la validación"]
