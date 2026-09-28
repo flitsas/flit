@@ -43,7 +43,10 @@ public sealed class ConsoleReportGoldenTests
 
         File.Exists(ruta).Should().BeTrue(
             $"el golden '{nombre}' debe existir; genéralo una sola vez con GOLDEN_UPDATE=1");
-        producido.Should().Be(File.ReadAllText(ruta));
+        // El reporte se escribe con \n (NewWriter), pero el golden se lee del disco tal como lo dejó
+        // git: en Windows con core.autocrlf queda en \r\n y las 8 comparaciones fallaban sin que
+        // el reporte hubiera cambiado. Se normaliza solo el lado esperado.
+        producido.Should().Be(File.ReadAllText(ruta).ReplaceLineEndings("\n"));
     }
 
     private static string SourceFixturesDirectory()
