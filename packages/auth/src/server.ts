@@ -34,3 +34,16 @@ export async function getSession(productCode: string): Promise<SessionUser | nul
   if (session.expiresAt <= Math.floor(Date.now() / 1000) && !session.refreshToken) return null;
   return sessionUser(session.accessToken);
 }
+
+/**
+ * Access token vigente de la sesión, para que un Server Component llame a la API antes de pintar (p. ej. el inicio del
+ * hub, B-11). `null` si venció o falta menos de un minuto: en ese caso la página pide los datos por el proxy desde el
+ * navegador, que sí renueva. Nunca se entrega al navegador.
+ */
+export async function getAccessToken(productCode: string): Promise<string | null> {
+  const config = authConfig(productCode);
+  const sealed = readChunked(await cookies(), sessionCookie(productCode));
+  const session = sealed ? await unsealSession(sealed, config.sessionSecret) : null;
+  if (!session || session.expiresAt - Math.floor(Date.now() / 1000) < 60) return null;
+  return session.accessToken;
+}

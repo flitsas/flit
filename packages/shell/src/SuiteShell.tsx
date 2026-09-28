@@ -110,7 +110,7 @@ export function SuiteShell({
       {/* Colchón para que el dock fijo no tape el final del contenido (guía §4.3). */}
       <main className="mx-auto max-w-screen-2xl px-4 pb-28 pt-6">{children}</main>
 
-      <Dock groups={groups} homeHref={homeHref} homeLabel={`Inicio ${productName}`} homeIconSrc={homeIconSrc} homeActive={pathname === homeHref} />
+      <Dock groups={groups} homeHref={homeHref} homeLabel={`Inicio ${productName}`} homeIconSrc={homeIconSrc} homeActive={pathname === homeHref.split("?")[0]} />
     </div>
   );
 }

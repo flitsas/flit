@@ -35,7 +35,7 @@ describe("SuiteShell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Productos" }));
     const panel = screen.getByRole("region", { name: "Productos" });
-    expect(within(panel).getByRole("link", { name: "Inicio" })).toHaveAttribute("href", "https://dev.flitsas.online");
+    expect(within(panel).getByRole("link", { name: "Inicio" })).toHaveAttribute("href", "https://dev.flitsas.online/?inicio=1");
     expect(within(panel).getByRole("link", { name: "Trámites" })).toHaveAttribute("aria-current", "page");
   });
 });

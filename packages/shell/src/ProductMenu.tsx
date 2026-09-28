@@ -63,7 +63,9 @@ export function ProductMenu({ productCode, apps: given }: { productCode: string;
                 return (
                   <li key={app.code}>
                     <a
-                      href={app.url}
+                      // El inicio del hub con ?inicio=1: sin él, quien tiene un solo producto entraría directo a ese
+                      // producto (B-11, opción 4) y no podría volver al hub.
+                      href={app.code === "plataforma" ? withHomeFlag(app.url) : app.url}
                       aria-current={current ? "page" : undefined}
                       className={`flex flex-col items-center gap-1.5 rounded-xl px-2 py-3 text-center text-xs transition-colors hover:bg-[var(--nav-app-bg)] ${
                         current ? "font-semibold text-flit-brand" : "text-[var(--nav-texto-fuerte)]"
@@ -81,4 +83,8 @@ export function ProductMenu({ productCode, apps: given }: { productCode: string;
       )}
     </div>
   );
+}
+
+function withHomeFlag(url: string): string {
+  return `${url.replace(/\/+$/, "")}/?inicio=1`;
 }

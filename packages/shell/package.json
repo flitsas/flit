@@ -10,7 +10,8 @@
   "exports": {
     "./SuiteShell": "./src/SuiteShell.tsx",
     "./nav": "./src/nav.ts",
-    "./shell.css": "./src/styles/shell.css"
+    "./shell.css": "./src/styles/shell.css",
+    "./apps": "./src/apps.ts"
   },
   "scripts": {
     "test": "vitest run",
