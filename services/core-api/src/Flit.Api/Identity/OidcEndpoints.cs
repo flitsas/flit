@@ -79,7 +79,8 @@ public static class OidcEndpoints
         return Results.Ok(new HubLoginResponse(SafeReturnUrl(request.ReturnUrl)));
     }
 
-    private static async Task<IResult> AuthorizeAsync(HttpContext http, OidcPrincipalFactory factory, CancellationToken ct)
+    private static async Task<IResult> AuthorizeAsync(
+        HttpContext http, OidcPrincipalFactory factory, IOpenIddictApplicationManager applications, IOpenIddictAuthorizationManager authorizations, CancellationToken ct)
     {
         var request = http.GetOpenIddictServerRequest() ?? throw new InvalidOperationException("La petición OIDC no llegó al servidor.");
 
@@ -109,8 +110,34 @@ public static class OidcEndpoints
             return Forbid(Errors.AccessDenied, grant.DeniedCode!);
         }
 
+        // HU #13004 (A-13): una autorización explícita por (sesión del hub, producto). Sus refresh tokens cuelgan de
+        // ella y su id queda en la sesión del hub: al cerrar sesión se revocan solo las de ESTE navegador.
+        var application = await applications.FindByClientIdAsync(request.ClientId!, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Cliente OIDC desconocido.");
+        var authorization = await authorizations.CreateAsync(
+            grant.Principal,
+            grant.Principal.GetClaim(Claims.Subject)!,
+            (await applications.GetIdAsync(application, ct).ConfigureAwait(false))!,
+            AuthorizationTypes.AdHoc,
+            grant.Principal.GetScopes(),
+            ct).ConfigureAwait(false);
+        var authorizationId = (await authorizations.GetIdAsync(authorization, ct).ConfigureAwait(false))!;
+        grant.Principal.SetAuthorizationId(authorizationId);
+        await RememberAuthorizationAsync(http, session, authorizationId).ConfigureAwait(false);
+
         return Results.SignIn(grant.Principal, null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
+
+    /// <summary>Agrega la autorización a la sesión del hub (se guardan las últimas <see cref="MaxSessionAuthorizations"/>).</summary>
+    private static async Task RememberAuthorizationAsync(HttpContext http, AuthenticateResult session, string authorizationId)
+    {
+        var identity = new ClaimsIdentity(session.Principal!.Claims.Where(c => c.Type != OidcDefaults.AuthorizationClaim), OidcDefaults.HubSessionScheme);
+        foreach (var id in session.Principal!.FindAll(OidcDefaults.AuthorizationClaim).Select(c => c.Value).Append(authorizationId).TakeLast(MaxSessionAuthorizations))
+            identity.AddClaim(new Claim(OidcDefaults.AuthorizationClaim, id));
+        await http.SignInAsync(OidcDefaults.HubSessionScheme, new ClaimsPrincipal(identity), session.Properties).ConfigureAwait(false);
+    }
+
+    private const int MaxSessionAuthorizations = 20;
 
     private static async Task<IResult> TokenAsync(HttpContext http, OidcPrincipalFactory factory, CancellationToken ct)
     {
@@ -126,14 +153,30 @@ public static class OidcEndpoints
 
         // HU #12992 (A-07): en cada canje —también en cada refresh— se relee el usuario y su acceso al producto.
         var grant = await factory.ForUserAsync(result.Principal, request.ClientId!, result.Principal.GetScopes(), ct).ConfigureAwait(false);
-        return grant.Principal is null
-            ? Forbid(Errors.InvalidGrant, grant.DeniedCode!)
-            : Results.SignIn(grant.Principal, null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        if (grant.Principal is null)
+            return Forbid(Errors.InvalidGrant, grant.DeniedCode!);
+
+        // Los refresh nuevos siguen colgando de la misma autorización (A-13): revocarla corta toda la cadena.
+        if (result.Principal.GetAuthorizationId() is { } authorizationId)
+            grant.Principal.SetAuthorizationId(authorizationId);
+        return Results.SignIn(grant.Principal, null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
-    /// <summary>Cierra la sesión del hub y vuelve al <c>post_logout_redirect_uri</c> registrado del producto.</summary>
-    private static async Task<IResult> LogoutAsync(HttpContext http)
+    /// <summary>
+    /// Cierra la sesión del hub y vuelve al <c>post_logout_redirect_uri</c> registrado del producto. HU #13004 (A-13):
+    /// revoca las autorizaciones de esta sesión y sus tokens, así los demás productos abiertos en este navegador pierden
+    /// la sesión en su siguiente renovación (≤ 15 min). Las sesiones de otros dispositivos no se tocan.
+    /// </summary>
+    private static async Task<IResult> LogoutAsync(HttpContext http, IOpenIddictAuthorizationManager authorizations, IOpenIddictTokenManager tokens, CancellationToken ct)
     {
+        var session = await http.AuthenticateAsync(OidcDefaults.HubSessionScheme).ConfigureAwait(false);
+        foreach (var id in session.Principal?.FindAll(OidcDefaults.AuthorizationClaim).Select(c => c.Value) ?? [])
+        {
+            await tokens.RevokeByAuthorizationIdAsync(id, ct).ConfigureAwait(false);
+            if (await authorizations.FindByIdAsync(id, ct).ConfigureAwait(false) is { } authorization)
+                await authorizations.TryRevokeAsync(authorization, ct).ConfigureAwait(false);
+        }
+
         await http.SignOutAsync(OidcDefaults.HubSessionScheme).ConfigureAwait(false);
         return Results.SignOut(new AuthenticationProperties { RedirectUri = "/" }, [OpenIddictServerAspNetCoreDefaults.AuthenticationScheme]);
     }

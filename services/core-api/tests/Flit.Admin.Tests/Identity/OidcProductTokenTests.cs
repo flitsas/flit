@@ -159,6 +159,43 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
+    public async Task CerrarSesion_RevocaLosRefreshDeEsteNavegador_NoLosDeOtroDispositivo()
+    {
+        // HU #13004 (A-13): salir de un producto cierra la sesión del hub y revoca las autorizaciones de esta sesión.
+        var ct = TestContext.Current.CancellationToken;
+        var browser = await LoggedInAsync(ct);
+        var otherDevice = await LoggedInAsync(ct);
+        var refreshHere = (await OidcServerTests.CodeFlowAsync(browser, "tramites", ct)).GetProperty("refresh_token").GetString()!;
+        var refreshThere = (await OidcServerTests.CodeFlowAsync(otherDevice, "tramites", ct)).GetProperty("refresh_token").GetString()!;
+
+        var logout = await browser.GetAsync(
+            $"/connect/logout?client_id=tramites&post_logout_redirect_uri={Uri.EscapeDataString("https://dev.tramites.flitsas.online/")}", ct);
+
+        logout.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        logout.Headers.Location!.ToString().Should().StartWith("https://dev.tramites.flitsas.online/");
+        (await OidcServerTests.RefreshAsync(browser, refreshHere, ct)).StatusCode.Should().Be(HttpStatusCode.BadRequest, "la sesión de este navegador se cerró");
+        (await OidcServerTests.RefreshAsync(otherDevice, refreshThere, ct)).StatusCode.Should().Be(HttpStatusCode.OK, "otro dispositivo conserva su sesión");
+
+        var reauthorize = await browser.GetAsync(OidcServerTests.AuthorizeUrl("tramites", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"), ct);
+        reauthorize.Headers.Location!.AbsolutePath.Should().Be("/login", "la sesión del hub también se cerró");
+    }
+
+    [Fact]
+    public async Task UsuarioDesactivado_PierdeElAccesoEnSuSiguienteRenovacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var client = await LoggedInAsync(ct);
+        var refresh = (await OidcServerTests.CodeFlowAsync(client, "tramites", ct)).GetProperty("refresh_token").GetString()!;
+
+        await using (var db = NewDb())
+            await db.Users.Where(u => u.Id == _userId).ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, "inactive"), ct);
+        var response = await OidcServerTests.RefreshAsync(client, refresh, ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("error_description").GetString().Should().Be("SESSION_INVALID");
+    }
+
+    [Fact]
     public async Task SuperAdmin_EntraAUnProductoApagado_ConSuperAdminEnLosRoles()
     {
         var ct = TestContext.Current.CancellationToken;

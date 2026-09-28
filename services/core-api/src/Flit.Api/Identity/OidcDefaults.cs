@@ -16,4 +16,7 @@ public static class OidcDefaults
     public const string TenantIdClaim = "tenant_id";
     public const string DomainClaim = "dom";
     public const string SuperAdminClaim = "is_super_admin";
+
+    /// <summary>Autorizaciones OIDC abiertas desde esta sesión del hub (A-13): se revocan al cerrarla.</summary>
+    public const string AuthorizationClaim = "oidc_authz";
 }
