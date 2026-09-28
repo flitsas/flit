@@ -38,6 +38,8 @@ public sealed class UploadSupportAttachmentHandler(
     IDrFlitSupportCaseSettings settings,
     TimeProvider clock)
 {
+    private static readonly char[] PathSeparators = ['/', '\\'];
+
     /// <summary>Extensión → tipo MIME. Solo se aceptan las que además estén en la configuración.</summary>
     private static readonly Dictionary<string, string> MimeByExtension = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -56,7 +58,10 @@ public sealed class UploadSupportAttachmentHandler(
         if (command.Content is null || command.DeclaredLength <= 0 || string.IsNullOrWhiteSpace(command.FileName))
             return new(UploadSupportAttachmentOutcome.MissingFile, Error: "Falta el archivo.");
 
-        var fileName = Path.GetFileName(command.FileName.Trim());
+        // Path.GetFileName solo corta el separador nativo: en el servidor Linux un nombre venido de un
+        // navegador Windows ("C:\temp\captura.png") pasaría completo. Se cortan ambos separadores a mano.
+        var trimmedName = command.FileName.Trim();
+        var fileName = trimmedName[(trimmedName.LastIndexOfAny(PathSeparators) + 1)..];
         var extension = Path.GetExtension(fileName);
         if (!MimeByExtension.TryGetValue(extension, out var mime)
             || !settings.AllowedMimeTypes.Contains(mime, StringComparer.OrdinalIgnoreCase))
