@@ -3,6 +3,7 @@ using Flit.Admin.Application.Auditing;
 using Flit.Api.Authorization;
 using Flit.DrFlit.Application.Abstractions;
 using Flit.DrFlit.Application.Chat;
+using Flit.DrFlit.Application.Manual;
 using Flit.DrFlit.Application.SupportCases;
 using Microsoft.AspNetCore.Mvc;
 
@@ -103,7 +104,10 @@ public static class DrFlitEndpoints
             .ToList();
 
         var result = await assistant
-            .AskAsync(new DrFlitChatRequest(tenantId, userId, body.Message!.Trim(), history), cancellationToken)
+            .AskAsync(
+                new DrFlitChatRequest(
+                    tenantId, userId, body.Message!.Trim(), history, ResolveManualProfile(httpContext.User)),
+                cancellationToken)
             .ConfigureAwait(false);
 
         return Results.Ok(ToResponse(result));
@@ -229,6 +233,29 @@ public static class DrFlitEndpoints
 
         return Results.Created((string?)null, new DrFlitConsentResponse(current, true));
     }
+
+    /// <summary>
+    /// HU #13023 — perfil EFECTIVO del rol del JWT, con la MISMA precedencia que
+    /// <c>roleFromPayload</c>/<c>isOtUser</c> del frontend (<c>dr-flit-context.ts</c>): SuperAdmin →
+    /// OT (rol <c>ot_admin</c> o tenant de tipo TRANSIT_OFFICE) → AdminCompany → Gestor. Acota el
+    /// manual del <c>system</c> a la audiencia de quien pregunta.
+    /// </summary>
+    internal static DrFlitManualProfile ResolveManualProfile(ClaimsPrincipal user)
+    {
+        if (RequestTenantResolver.IsSuperAdmin(user))
+            return DrFlitManualProfile.SuperAdmin;
+        if (RequestTenantResolver.HasRole(user, AdminAuthorization.OtAdminRole) || IsTransitOfficeTenant(user))
+            return DrFlitManualProfile.OtAdmin;
+        if (RequestTenantResolver.HasRole(user, AdminAuthorization.AdminCompanyRole))
+            return DrFlitManualProfile.AdminCompany;
+        return DrFlitManualProfile.Gestor;
+    }
+
+    private static bool IsTransitOfficeTenant(ClaimsPrincipal user) =>
+        string.Equals(
+            user.FindFirstValue(AdminAuthorization.EntityTypeClaimType),
+            AdminAuthorization.TransitOfficeEntityType,
+            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Tenant y usuario de la petición. El tenant del cupo y de los adjuntos sale del token para un usuario

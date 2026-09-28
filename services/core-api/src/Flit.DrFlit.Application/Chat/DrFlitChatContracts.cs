@@ -32,11 +32,13 @@ public static class DrFlitChatStatusWire
 
 /// <summary>Mensaje libre del usuario, con el contexto que ya validó el endpoint.</summary>
 /// <param name="History">Turnos previos de la conversación (los guarda el cliente), del más viejo al más nuevo.</param>
+/// <param name="Profile">Perfil efectivo del rol del JWT (HU #13023): acota el manual del <c>system</c> a su audiencia.</param>
 public sealed record DrFlitChatRequest(
     Guid TenantId,
     Guid UserId,
     string Message,
-    IReadOnlyList<DrFlitTurn> History);
+    IReadOnlyList<DrFlitTurn> History,
+    DrFlitManualProfile Profile = DrFlitManualProfile.Gestor);
 
 /// <summary>Respuesta del chat lista para serializar.</summary>
 /// <param name="Intent">Intención clasificada; <c>null</c> cuando no hubo respuesta válida del LLM.</param>

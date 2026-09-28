@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Flit.DrFlit.Application.Chat;
+using Flit.DrFlit.Application.Manual;
 using Flit.Infrastructure.DrFlit;
 using Flit.Infrastructure.Ocr;
 using FluentAssertions;
@@ -16,7 +17,7 @@ namespace Flit.Infrastructure.Tests.DrFlit;
 /// Uso de ejemplo:
 /// <code>
 /// var provider = new DrFlitManualCatalogProvider(hostEnvironment, logger);
-/// var catalog = provider.GetCatalog(); // null ⇒ el chat degrada; si no, BySlug + SystemPrompt listos
+/// var catalog = provider.GetCatalog(); // null ⇒ el chat degrada; si no, BySlug + GetSystemPrompt(perfil) listos
 /// </code>
 /// </summary>
 public sealed class DrFlitManualCatalogProviderTests : IDisposable
@@ -91,6 +92,7 @@ public sealed class DrFlitManualCatalogProviderTests : IDisposable
         article.Title.Should().Be("Crear un trámite");
         article.Href.Should().Be("/manual/1-gestor/2-crear-tramite");
         article.SourceHref.Should().Be("/legal/res.pdf");
+        article.Audience.Should().Be("Gestor", "HU #13023: la audiencia estructurada acota el prompt por perfil");
         article.Text.Should().Be(
             "aplica para: Gestor\n" +
             "Cómo iniciar un trámite.\n" +
@@ -164,7 +166,16 @@ public sealed class DrFlitManualCatalogProviderTests : IDisposable
                 NullLogger<AnthropicMessagesClient>.Instance),
             options);
 
-        await model.CompleteAsync(catalog.SystemPrompt, [new DrFlitTurn(DrFlitTurnRole.User, "hola")], TestContext.Current.CancellationToken);
+        // HU #13023 — la variante SuperAdmin ve todas las audiencias del artefacto real: si un artículo
+        // trae una audiencia fuera del espejo de audience.ts, este conteo delata la desincronización.
+        var superAdmin = catalog.Articles
+            .Count(a => DrFlitManualAudiences.IsVisible(a.Audience, DrFlitManualProfile.SuperAdmin));
+        superAdmin.Should().Be(catalog.Articles.Count);
+
+        await model.CompleteAsync(
+            catalog.GetSystemPrompt(DrFlitManualProfile.SuperAdmin),
+            [new DrFlitTurn(DrFlitTurnRole.User, "hola")],
+            TestContext.Current.CancellationToken);
 
         using var doc = JsonDocument.Parse(sent!);
         var system = doc.RootElement.GetProperty("system").EnumerateArray().ToList();
