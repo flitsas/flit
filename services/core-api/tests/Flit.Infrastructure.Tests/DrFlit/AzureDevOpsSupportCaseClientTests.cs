@@ -82,7 +82,8 @@ public sealed class AzureDevOpsSupportCaseClientTests
         fields["Custom.Environment"].GetString().Should().Be("QA");
         fields["Custom.AffectedModule"].GetString().Should().Be("Matricula");
         fields["Custom.TypeBug"].GetString().Should().Be("Sin Definir");
-        fields.Should().NotContainKey("System.AssignedTo", "el Bug se crea sin asignar: soporte triagea");
+        fields["System.AssignedTo"].GetString().Should().Be(
+            "Soporte@flitsas.com", "el Bug entra directo a la cola de la cuenta de soporte");
     }
 
     [Fact]
@@ -98,7 +99,7 @@ public sealed class AzureDevOpsSupportCaseClientTests
         };
         var handler = new Handler((_, _) => Created());
 
-        await Client(handler, mapping, new AzureDevOpsOptions { Pat = "p", TitlePrefix = "[ BOT ]" })
+        await Client(handler, mapping, new AzureDevOpsOptions { Pat = "p", TitlePrefix = "[ BOT ]", AssignedTo = "otra.cola@flitsas.com" })
             .CreateBugAsync(Ticket, [], TestContext.Current.CancellationToken);
 
         var fields = Fields(handler.Bodies.Single());
@@ -108,6 +109,18 @@ public sealed class AzureDevOpsSupportCaseClientTests
         fields["Custom.Incidence"].GetString().Should().Be("2");
         fields["Custom.Environment"].GetString().Should().Be("PDN");
         fields["Custom.TypeBug"].GetString().Should().Be("Incidente");
+        fields["System.AssignedTo"].GetString().Should().Be("otra.cola@flitsas.com");
+    }
+
+    [Fact]
+    public async Task AC1_AssignedToVacio_CreaElBugSinAsignar()
+    {
+        var handler = new Handler((_, _) => Created());
+
+        await Client(handler, ado: new AzureDevOpsOptions { Pat = "p", AssignedTo = " " })
+            .CreateBugAsync(Ticket, [], TestContext.Current.CancellationToken);
+
+        Fields(handler.Bodies.Single()).Should().NotContainKey("System.AssignedTo", "vacío conserva el comportamiento de triage sin asignar");
     }
 
     [Fact]

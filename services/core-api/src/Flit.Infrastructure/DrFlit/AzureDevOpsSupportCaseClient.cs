@@ -19,7 +19,7 @@ namespace Flit.Infrastructure.DrFlit;
 /// <list type="number">
 ///   <item>Sube cada adjunto a <c>_apis/wit/attachments</c>. Si uno falla se excluye y se cuenta (AC3).</item>
 ///   <item>Crea el Bug en una sola llamada con los campos mapeados por <see cref="DrFlitFieldMappingOptions"/>
-///   y las relaciones <c>AttachedFile</c> de los que sí subieron. Sin <c>AssignedTo</c>: soporte triagea.</item>
+///   y las relaciones <c>AttachedFile</c> de los que sí subieron, asignado a la cuenta de soporte configurada.</item>
 /// </list>
 /// Reintenta 1 vez ante fallo de transporte, timeout o 5xx. Logs sin PII: solo códigos y el id del work item.
 /// </summary>
@@ -103,6 +103,11 @@ internal sealed class AzureDevOpsSupportCaseClient(
             Add("Custom.AffectedModule", ResolveAffectedModule(ticket.AffectedModule)),
             Add("Custom.TypeBug", _mapping.TypeBug),
         };
+
+        // Asignado a la cuenta de soporte para que entre directo a su cola; con la opción vacía se
+        // conserva el comportamiento anterior (sin asignar, soporte triagea).
+        if (!string.IsNullOrWhiteSpace(_options.AssignedTo))
+            ops.Add(Add("System.AssignedTo", _options.AssignedTo.Trim()));
 
         AddMapped(ops, "Custom.Primacy", _mapping.Primacy, ticket.Priority.ToString());
         AddMapped(ops, "Microsoft.VSTS.Common.Severity", _mapping.Severity, ticket.Priority.ToString());

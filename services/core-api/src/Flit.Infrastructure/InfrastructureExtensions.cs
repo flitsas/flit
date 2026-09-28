@@ -1263,6 +1263,7 @@ public static class InfrastructureExtensions
             o.Pat = Cfg("DrFlit:AzureDevOps:Pat", "DR_FLIT_ADO_PAT") ?? string.Empty;
             o.TimeoutSeconds = int.TryParse(Cfg("DrFlit:AzureDevOps:TimeoutSeconds", "DR_FLIT_ADO_TIMEOUT_SECONDS"), out var ts) ? ts : o.TimeoutSeconds;
             o.TitlePrefix = configuration["DrFlit:AzureDevOps:TitlePrefix"] ?? o.TitlePrefix;
+            o.AssignedTo = Cfg("DrFlit:AzureDevOps:AssignedTo", "DR_FLIT_EMAIL") ?? o.AssignedTo;
         });
         services.Configure<DrFlitFieldMappingOptions>(o =>
         {
