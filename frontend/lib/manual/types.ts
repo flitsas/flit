@@ -21,12 +21,25 @@ export type ManualCallout = {
   text: string;
 };
 
+/**
+ * Medio visual de una sección (HU #13012, Épica #12755). `alt` es obligatorio: lo exige la guarda
+ * de accesibilidad y es lo único del medio que viaja al artefacto del LLM (nunca el binario).
+ * - `image`: captura generada por el pipeline automatizado; `src` vive bajo `/manual/`.
+ * - `diagram`: flujo Mermaid compilado a SVG en build (HU #13014); se resuelve como
+ *   `/manual/diagrams/{id}.svg`. El SVG usa `currentColor`/variables para adaptarse al tema.
+ */
+export type ManualMedia =
+  | { kind: "image"; src: string; alt: string; caption?: string }
+  | { kind: "diagram"; id: string; alt: string; caption?: string };
+
 export type ManualSectionBlock = {
   id: string;
   title: string;
   paragraphs: string[];
   bullets?: string[];
   callouts?: ManualCallout[];
+  /** Capturas y diagramas de la sección; se muestran después del texto y antes de los callouts. */
+  media?: ManualMedia[];
 };
 
 /**
