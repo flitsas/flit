@@ -98,6 +98,14 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Catálogo de causales que el organismo marca al rechazar («¿Qué falló?»). Cada causal tiene código, descripción y familia (matrícula inicial o traspaso: no son intercambiables). Se crean, editan y activan o desactivan; una causal inactiva deja de ofrecerse sin borrar el historial.",
         ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/admin-causales.png",
+            alt: "Consola de causales de rechazo con las familias de matrícula inicial y traspaso",
+            caption: "Causales de rechazo: lo que el organismo elige al rechazar un trámite.",
+          },
+        ],
       },
     ],
   },
@@ -141,6 +149,14 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         title: "2. Improntas",
         paragraphs: [
           "Generación de improntas: emite el Certificado de Improntas Digitales del vehículo (Res. 17145/2023 Mintransporte) y descárgalo. Historial de improntas: consulta las generadas para tu inquilino, filtrables por placa y rango de fechas. La firma digital de cada impronta la verifica el organismo desde su pestaña «Validar impronta».",
+        ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/admin-improntas.png",
+            alt: "Consola de generación de improntas con los datos del vehículo y la organización solicitante",
+            caption: "Improntas: generar el certificado y consultar el historial.",
+          },
         ],
       },
     ],
@@ -190,6 +206,14 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
             text: "«Retirar» un tipo de trámite lo saca del selector del gestor de inmediato, pero no borra el historial de los trámites que ya lo usaron; pídelo con confirmación explícita.",
           },
         ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/admin-tipos-tramite.png",
+            alt: "Catálogo de tipos de trámite con sus familias y el acceso a las pestañas de parametrización",
+            caption: "Tipos de trámite: el catálogo que define qué puede radicar cada compañía.",
+          },
+        ],
       },
       {
         id: "mandatos",
@@ -212,6 +236,14 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Confirmación RUNT: consulta periódica al RUNT para confirmar que los trámites aprobados en FLIT quedaron registrados. Pestaña Configuración (global, permiso de administrar) y pestaña Historial (corridas e intentos por trámite: qué se consultó, qué respondió el RUNT y por qué se marcó SÍ o NO).",
           "Banners: configura y programa el contenido del carrusel informativo que ven los usuarios, sin intervención técnica.",
+        ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/admin-banners.png",
+            alt: "Consola de banners promocionales con la programación del carrusel del dashboard",
+            caption: "Banners: lo que rota en el carrusel del Inicio de todos los usuarios.",
+          },
         ],
       },
     ],
@@ -268,6 +300,14 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Catálogo unificado de los procesos automáticos de la plataforma, filtrable por Todos / ICT / Quipux: estado de cada uno y su cadencia, configurada una sola vez por módulo. Cadencia ICT: ventana horaria (Bogotá), intervalos, lotes y concurrencia; los cambios aplican en el siguiente ciclo, sin reinicio.",
         ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/admin-jobs.png",
+            alt: "Catálogo de procesos periódicos con el filtro por módulo y la cadencia de cada job",
+            caption: "Procesos periódicos: los automatismos de la plataforma y su cadencia.",
+          },
+        ],
       },
       {
         id: "migracion",
@@ -319,6 +359,14 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           {
             variant: "warning",
             text: "Quitar un permiso a un rol afecta de inmediato a todos sus usuarios. El Super Admin no pasa por RBAC: tiene bypass total.",
+          },
+        ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/admin-rbac.png",
+            alt: "Consola RBAC con las pestañas de módulos y permisos y de roles del sistema",
+            caption: "RBAC: quién puede ver y hacer qué, por rol.",
           },
         ],
       },
