@@ -372,11 +372,13 @@ public static class InfrastructureExtensions
         services.Configure<NotificationEmailAssetsOptions>(
             configuration.GetSection(NotificationEmailAssetsOptions.SectionName));
 
-        // SMTP real, o consola en Development cuando no hay host configurado.
+        // SMTP real, o consola cuando no hay host configurado y Smtp:UseConsoleWhenNoHost está encendida (HU #12895,
+        // A-02: por defecto, solo en Development).
         // HU #11358 AC5 — Scoped (no Singleton): todos los AddHttpClient<T> del repo son
         // Transient, así que un adaptador HTTP debajo de IEmailSender (HU #11361) sería una
         // dependencia cautiva si el puerto siguiera siendo instancia única.
-        var useConsoleEmailSender = environment.IsDevelopment() && string.IsNullOrWhiteSpace(emailSettings.Host);
+        var useConsoleEmailSender = configuration.GetValue("Smtp:UseConsoleWhenNoHost", environment.IsDevelopment())
+            && string.IsNullOrWhiteSpace(emailSettings.Host);
         if (useConsoleEmailSender)
             services.AddScoped<ConsoleEmailSender>();
         else
@@ -1308,8 +1310,9 @@ public static class InfrastructureExtensions
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
         var env = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         await db.Database.MigrateAsync(cancellationToken);
-        await DevelopmentAuthSeeder.SeedAsync(db, hasher, env, cancellationToken);
+        await DevelopmentAuthSeeder.SeedAsync(db, hasher, SeedSettings.From(configuration, env), cancellationToken);
     }
 }
 

@@ -53,10 +53,10 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 ## Estado
 
-- [ ] A-00 Cerrar §2, §3 y §8 (`@flit/auth`) del contrato con B y C
+- [x] A-00 Cerrar §2, §3 y §8 (`@flit/auth`) del contrato con B y C
 - [x] A-01 Inventario de lo que depende de `Development` y nombres de ambiente
-- [ ] A-02 Salir de `Development` en DEV
-- [ ] A-03 Gateway y API validan firma, emisor y audiencia
+- [x] A-02 Salir de `Development` en DEV
+- [x] A-03 Gateway y API validan firma, emisor y audiencia (la API; el gateway pasa a A-05)
 - [x] A-04 Espiga técnica de OpenIddict
 - [ ] A-05 Servidor OIDC en `core-api`
 - [ ] A-06 Pantallas de login en el hub
@@ -87,7 +87,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 ### A-02 · Salir de `Development` en DEV · Fase 0 · semanas 1–2 · M
 
 - **Qué:** aplicar el inventario. DEV corre con su nombre de ambiente propio y las mismas funciones que hoy, sin los atajos de desarrollo.
-- **Dónde:** configuración por ambiente en `docker-compose.prod.yml` y `cd.yml`. Pide al líder el cambio en esos archivos (R4) y tú haces el del código.
+- **Dónde:** configuración por ambiente en `docker-compose.prod.yml`, con variables `${VAR:-valor de hoy}` para que desplegar no cambie nada; el cambio real es una línea en el `.env` de DEV.
 - **Hecho cuando:** DEV funciona un sprint sin `Development`, incluidos Marca Blanca, ICT y el migrador. QA y PDN siguen en una HU aparte con aprobación del líder (R13).
 - **Pruebas:** arranque de cada servicio con el ambiente nuevo; `tests/Flit.Integration.Tests/MarcaBlanca`.
 
@@ -97,6 +97,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 - **Dónde:** `Flit.Gateway/Program.cs`, `Flit.Api/Authorization/ApiSecurityExtensions.cs`, `Flit.Infrastructure/Security/RsaJwtTokenIssuer.cs`.
 - **Hecho cuando:** un token sin firma, con otro emisor o vencido recibe 401 en gateway y API en DEV. ADR-0060 deja de depender de que el gateway "no valide".
 - **Pruebas:** unitarias de las policies; integración con token manipulado; suite de Marca Blanca.
+- **Gateway (movido a A-05):** validar en el gateway exige una llave publicada; con el JWKS del servidor OIDC se valida sin copiar llaves. Mientras tanto la API rechaza cualquier token inválido, y el gateway no puede exigir el token de la API en las rutas de ICT, que usan otra llave.
 
 ### A-04 · Espiga de OpenIddict · Fase 0 · semana 3 · M
 
@@ -175,5 +176,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 | Fecha | Tarea | PR | Nota |
 |---|---|---|---|
 | 2026-09-25 | A-01 (HU #12894) | Feature #12886 | `a-inventario-ambientes.md`: 21 puntos, 15 preguntas para quien tiene acceso a la VPS y cambios compatibles para A-02/A-03. Hallazgo: según el repo, API y gateway no validan firma del JWT en ningún ambiente (sin llave pública); a confirmar con `docker inspect`. |
-| 2026-09-25 | A-03 (HU #12896), parte API | Feature #12886 | La API firma con llave persistente (`security.jwt_signing_keys`, cifrada con Data Protection) y valida firma, emisor, audiencia y vencimiento de sus tokens (`Jwt:PersistSigningKey`, `Jwt:ValidateIssuedTokens`, encendidas en `docker-compose.prod.yml` con salida por `.env`). Sin llaves en el `.env` ni acceso a la VPS. Cualquier token inválido responde `SESSION_EXPIRED` para que el frontend lleve al login. Se corrigió la doble escritura del 401 vencido. Pendiente: el gateway (sigue permisivo; la API es la que aplica). |
+| 2026-09-25 | A-03 (HU #12896), parte API | Feature #12886 | La API firma con llave persistente (`security.jwt_signing_keys`, cifrada con Data Protection) y valida firma, emisor, audiencia y vencimiento de sus tokens (`Jwt:PersistSigningKey`, `Jwt:ValidateIssuedTokens`, encendidas en `docker-compose.prod.yml` con salida por `.env`). Sin llaves en el `.env` ni acceso a la VPS. Cualquier token inválido responde `SESSION_EXPIRED` para que el frontend lleve al login. Se corrigió la doble escritura del 401 vencido. El gateway pasa a A-05 (ver la tarea). |
 | 2026-09-25 | A-04 (HU #12897) | Feature #12886 | Espiga en rama local `spike/AB-12897-openiddict` (no se fusiona). Respuestas y decisión en `a-espiga-openiddict.md`: OpenIddict 7.x, tablas `identity.oidc_*`, emisor por host sellado, `CredentialVerifier` y llave persistente. Exige subir EF/Extensions a 10.0.11 e IdentityModel a 8.19.2. |
+| 2026-09-28 | A-00 (HU #12893) | PR #433 | El contrato v1 se cerró en el PR #433, sin reunión, al pasar a un solo desarrollador. |
+| 2026-09-28 | A-02 (HU #12895) | Feature #12886 | Lo que decidía `Development` pasa a banderas: `Seed:RbacCatalog` y `Seed:DemoUsers` (el seeder separa catálogo RBAC de cuentas demo), `Swagger:Enabled` (API e ICT), `Smtp:UseConsoleWhenNoHost` y `Gateway:DisableJwtPolicy`; validación del contenedor de DI fija. Compose: `ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}` en los tres servicios, banderas con el valor de hoy, `FLIT_DEV_SEED` y se retira `Jwt__DevGenerate`, que nadie leía. Probado arrancando la API como `Dev` sobre una base nueva: catálogo completo, sin cuentas demo ni Swagger. De paso: el seeder creaba SuperAdmin y AdminCompany con producto `tramites` en bases nuevas; ahora `plataforma`. Falta que alguien con acceso ponga `FLIT_DOTNET_ENVIRONMENT=Dev` en el `.env` de DEV. |

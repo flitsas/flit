@@ -29,6 +29,15 @@ AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport
 
 var builder = WebApplication.CreateBuilder(args);
 
+// HU #12895 (FLIT Suite A-02): la validación del contenedor de DI (scopes y construcción) queda fija y no depende del
+// nombre del ambiente. En Development ya estaba activa, así que DEV, QA y PDN no cambian; un ambiente con otro nombre
+// sigue detectando al arrancar los errores de DI en vez de descubrirlos en la primera petición.
+builder.Host.UseDefaultServiceProvider(options =>
+{
+    options.ValidateScopes = true;
+    options.ValidateOnBuild = true;
+});
+
 // Persistencia (EF Core + PostgreSQL) + servicios de seguridad/login (HU #10168).
 var coreConnStr = builder.Configuration.GetConnectionString("Core")
     ?? builder.Configuration.GetConnectionString("FlitDb");
@@ -217,18 +226,18 @@ if (app.Configuration.GetValue("Database:AutoMigrate", true))
         MigrationLog.NoPendingMigrations(logger);
     }
 
-    // Seed de datos de desarrollo (usuario demo para login: demo@flit.local / DemoPass1!).
-    // Idempotente (no recrea si ya existe) y no-op fuera de Development. Corre DESPUÉS de
-    // migrar para que existan las tablas de identity/security. Antes faltaba esta llamada,
-    // por eso identity.users quedaba vacía y no se podía iniciar sesión.
+    // Seed idempotente, DESPUÉS de migrar para que existan las tablas de identity/security. HU #12895 (A-02): el
+    // catálogo RBAC (Seed:RbacCatalog) y las cuentas demo (Seed:DemoUsers) se encienden por separado; por defecto,
+    // ambos solo en Development.
     var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-    await DevelopmentAuthSeeder.SeedAsync(db, hasher, app.Environment, CancellationToken.None);
+    await DevelopmentAuthSeeder.SeedAsync(
+        db, hasher, SeedSettings.From(app.Configuration, app.Environment), CancellationToken.None);
 }
 
-// Swagger UI solo en Development: /swagger (doc en /swagger/v1/swagger.json). No se
-// expone en producción (la API es de borde tras el Gateway). Va antes de auth para que
-// la página de la UI sea accesible sin token; cada «Try it out» sí envía el JWT.
-if (app.Environment.IsDevelopment())
+// Swagger UI: /swagger (doc en /swagger/v1/swagger.json). Va antes de auth para que la página de la UI sea accesible
+// sin token; cada «Try it out» sí envía el JWT. HU #12895 (A-02): Swagger:Enabled lo decide, por defecto solo en
+// Development; fuera de local se apaga con FLIT_SWAGGER_ENABLED=false en el .env.
+if (app.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopment()))
 {
     app.UseFlitSwagger();
 }

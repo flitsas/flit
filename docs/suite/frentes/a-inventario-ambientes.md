@@ -97,6 +97,11 @@ Solo interesa saber si una variable existe o está vacía, **nunca su valor**.
 
 ## Cambios propuestos (A-02 y A-03)
 
+> **Estado (2026-09-28):** los cambios 1 a 5 están hechos (HU #12895), con otra forma en tres puntos: el nombre del ambiente
+> usa su propia variable, `FLIT_DOTNET_ENVIRONMENT`; la llave del JWT se persiste en la base (HU #12896) en vez de
+> `Jwt:DevGenerate`, que se retiró; y las migraciones de datos demo conservan su condición y solo reciben `FLIT_DEV_SEED`.
+> El cambio 6 está hecho en la API; el del gateway pasa a A-05. Variables en `.env.prod.example`.
+
 Todos son **compatibles hacia atrás**: con el `.env` actual nada cambia. El cambio real es una línea en el `.env` de
 DEV, que pone quien tiene acceso a la VPS, y se revierte borrándola.
 

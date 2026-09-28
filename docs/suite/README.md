@@ -45,17 +45,17 @@ El líder lo actualiza en la revisión semanal. Estado: ⏳ pendiente · 🟡 en
 | Contrato v1 cerrado | L + A + B + C | Todos | ✅ PR #433, sin reunión |
 | Interfaz `IProductAccessResolver` y `ProductCodes` (contrato §4) | B | A | ✅ PR #436 |
 | Workspace con `packages/*` y `frontend-*`, `CODEOWNERS` y bloques compartidos | L | B, C | ✅ PR #437 (`CODEOWNERS` retirado al pasar a un solo desarrollador) |
-| Inventario plataforma contra Trámites y decisión D1 | B | A | 🟡 PR #444 |
-| Schema `platform`: productos y su habilitación por empresa | B | A | 🟡 PR #446 |
-| Token validado en gateway y API (DEV) | A | Todos | ⏳ |
-| `@flit/ui` v0 | B | C | 🟡 PR #445 |
+| Inventario plataforma contra Trámites y decisión D1 | B | A | ✅ PR #444 |
+| Schema `platform`: productos y su habilitación por empresa | B | A | ✅ PR #446 |
+| Token validado en la API (el gateway con el JWKS de A-05) | A | Todos | 🟡 Feature #12886 |
+| `@flit/ui` v0 | B | C | ✅ PR #445 |
 | `Flit.Platform.Contracts` | C | Todos | ⏳ |
 | Redis y RabbitMQ en DEV | L | A, B, C | ⏳ |
 | Esqueleto de `frontend-hub` | B | A | ⏳ |
 | Publicador de eventos | C | A, B | ⏳ |
 | Servidor OIDC y `/platform/issuers` en DEV | A | B, C | ⏳ |
-| `IProductAccessResolver` real | B | A | ⏳ |
-| `DomainContext.ProductCode` | B | A | ⏳ |
+| `IProductAccessResolver` real | B | A | 🟡 PR #448 |
+| `DomainContext.ProductCode` | B | A | 🟡 PR #448 |
 | Manifiesto y `me/apps` | B | C | ⏳ |
 | k3s DEV con Argo CD | L | C | ⏳ |
 | `@flit/auth` v1 | A | B, C | ⏳ |

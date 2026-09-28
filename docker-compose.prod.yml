@@ -127,7 +127,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      # HU #12895 (FLIT Suite A-02) — nombre del ambiente .NET, igual en core-api, core-ict y gateway. Sin la variable
+      # sigue en Development, como hoy. Tiene nombre propio (no ASPNETCORE_ENVIRONMENT) para que otra variable del .env
+      # no lo cambie sin querer. Qué depende del nombre: docs/suite/frentes/a-inventario-ambientes.md.
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:${CORE_API_PORT:-4003}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       Cors__AllowedOrigins: ${CORS_ORIGIN:-https://dev.flitsas.online}
@@ -149,9 +152,19 @@ services:
       # El file-manager sobre Contabo (filemanager.flitsas.com) SI lo exige y responde
       # 401 sin el. Tiene que ir en el MISMO valor que en core-ict (ADR-0057).
       FileManager__AuthToken: ${FILE_MANAGER_AUTH_TOKEN:-}
-      # Login deshabilitado temporalmente: DevGenerate evita exigir llaves JWT
-      # montadas. Para reactivar login, montar jwt-private/public.pem y quitar esto.
-      Jwt__DevGenerate: "true"
+      # HU #12895 (A-02) — lo que antes decidía el nombre del ambiente, ahora explícito. Los valores por defecto son los
+      # de hoy (los tres ambientes corren como Development), así que desplegar esto no cambia nada. Cada uno se apaga
+      # con una línea en el .env:
+      #   FLIT_SEED_RBAC_CATALOG  roles de sistema, módulos, permisos y catálogo de organismos (dejar en true)
+      #   FLIT_SEED_DEMO_USERS    cuentas demo con contraseña fija y sus empresas (false fuera de DEV)
+      #   FLIT_SWAGGER_ENABLED    /swagger público (false en PDN)
+      #   SMTP_USE_CONSOLE_WHEN_NO_HOST  sin SMTP_HOST, el correo sale por consola en vez de fallar
+      #   FLIT_DEV_SEED           las migraciones de datos demo también siembran con otro nombre de ambiente
+      Seed__RbacCatalog: ${FLIT_SEED_RBAC_CATALOG:-true}
+      Seed__DemoUsers: ${FLIT_SEED_DEMO_USERS:-true}
+      Swagger__Enabled: ${FLIT_SWAGGER_ENABLED:-true}
+      Smtp__UseConsoleWhenNoHost: ${SMTP_USE_CONSOLE_WHEN_NO_HOST:-true}
+      FLIT_DEV_SEED: ${FLIT_DEV_SEED:-}
       # HU #12896 (FLIT Suite A-03) — la API firma con una llave PERSISTENTE (security.jwt_signing_keys,
       # cifrada con Data Protection) en vez de una efímera que cambiaba en cada despliegue, y VALIDA firma,
       # emisor, audiencia y vencimiento de sus tokens. Antes aceptaba cualquier token (a-inventario-ambientes.md,
@@ -333,9 +346,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      # HU #12895 (A-02) — mismo nombre de ambiente que core-api (ver su comentario).
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:${CORE_ICT_PORT:-4020}
       Urls: http://0.0.0.0:${CORE_ICT_PORT:-4020}
+      # HU #12895 (A-02) — misma variable que core-api.
+      Swagger__Enabled: ${FLIT_SWAGGER_ENABLED:-true}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       # gRPC hacia core-api (orquestación + consultas): puerto interno dedicado HTTP/2.
       CoreApiGrpc__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
@@ -471,7 +487,8 @@ services:
     # content root = working_dir, para que YARP cargue sus rutas de appsettings.json
     working_dir: /app/gateway
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      # HU #12895 (A-02) — mismo nombre de ambiente que core-api (ver su comentario).
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:${GATEWAY_PORT:-4002}
       Cors__AllowedOrigins__0: ${CORS_ORIGIN:-https://dev.flitsas.online}
       # Segundo origen: el dominio de marca blanca sirve el MISMO front (mismo
@@ -486,8 +503,9 @@ services:
       # el 4030 de DEV/local; sin este override, en QA/PDN el gateway apunta a un
       # puerto donde nadie escucha y responde 502 sin cuerpo.
       ReverseProxy__Clusters__migracion-cluster__Destinations__migracion-api-1__Address: http://migracion-api:${MIGRACION_API_PORT:-4030}/
-      # Login deshabilitado temporalmente: sin llave JWT el gateway no valida firma
-      # ni exige autenticación (ver Flit.Gateway/Program.cs).
+      # El gateway no valida el token ni exige autenticación (ver Flit.Gateway/Program.cs): lo hace core-api con su
+      # llave persistente (HU #12896). El filtro que quita la policy de las rutas lo decide Gateway__DisableJwtPolicy
+      # (por defecto, solo en Development); sin efecto funcional mientras JwtRequired deje pasar todo.
       # ── Marca Blanca (#12417/#12421) ────────────────────────────────────────
       # Como llega a core-api para resolver la lista de dominios activos (CORS dinamico)
       # y la MISMA clave que Internal__ApiKey de core-api arriba (ver ese comentario si
