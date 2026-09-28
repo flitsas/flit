@@ -13,6 +13,7 @@
 set -euo pipefail
 
 LAB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CALLER_DIR="$PWD"
 CORE_API="$(cd "$LAB_DIR/../../.." && pwd)"
 OUT="$LAB_DIR/out"
 
@@ -101,6 +102,14 @@ migrar() {
   local v1src v2dst
   v1src="$(cadena "$LAB_V1_DB")"; v2dst="$(cadena "$LAB_V2_DB")"
   existe_db "$LAB_V2_DB" || falla "No existe $LAB_V2_DB. Corre primero: ./lab.sh preparar"
+  # El migrador corre desde core-api: una ruta relativa de --ids-file se resuelve desde donde se
+  # invocó el script, no desde ahí.
+  local args=() prev=""
+  for a in "$@"; do
+    if [[ "$prev" == "--ids-file" && "$a" != /* ]]; then a="$CALLER_DIR/$a"; fi
+    args+=("$a"); prev="$a"
+  done
+  set -- "${args[@]}"
   cd "$CORE_API"
   FLITMIG_ConnectionStrings__V1Source="$v1src" \
   FLITMIG_ConnectionStrings__V2Target="$v2dst" \
