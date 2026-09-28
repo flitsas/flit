@@ -54,7 +54,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "Antes de abrir Trámites, para tener contexto del día o la semana.",
-          "Para verificar que tu sesión y tenant son los correctos (nombre de compañía en la barra superior).",
+          "Para verificar que entraste con la compañía correcta (su nombre aparece en la barra superior).",
           "Como atajo de regreso desde cualquier módulo: un clic en el FAB te devuelve al inicio.",
         ],
       },
@@ -105,7 +105,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "antes",
         title: "1. Antes de empezar",
         paragraphs: [
-          "Confirma que tu compañía tiene habilitado el tipo de trámite (políticas operativas del tenant). Si la matrícula inicial está apagada, no verás esa modalidad al crear.",
+          "Confirma que tu compañía tiene habilitado el tipo de trámite (lo define su configuración operativa). Si la matrícula inicial está apagada, no verás esa modalidad al crear.",
           "Necesitas permiso tramites.create además de tramites.read. Sin create solo puedes consultar trámites existentes.",
         ],
         bullets: [
@@ -859,7 +859,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         callouts: [
           {
             variant: "warning",
-            text: "El botón aparece deshabilitado con el motivo «La compañía tiene bloqueada la creación de trámites» si tu Administrador bloqueó la creación de trámites para el tenant. Mientras eso siga así, tampoco podrás crear trámites uno por uno.",
+            text: "El botón aparece deshabilitado con el motivo «La compañía tiene bloqueada la creación de trámites» si tu Administrador bloqueó la creación de trámites para la compañía. Mientras eso siga así, tampoco podrás crear trámites uno por uno.",
           },
         ],
       },
