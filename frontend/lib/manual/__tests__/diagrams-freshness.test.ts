@@ -14,7 +14,9 @@ import { MANUAL_ARTICLES } from "@/lib/manual/catalog";
 const SRC_DIR = join(__dirname, "..", "diagrams");
 const OUT_DIR = join(__dirname, "..", "..", "..", "public", "manual", "diagrams");
 
-const sha256 = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
+// Hash canónico con LF, igual que el script: git puede materializar los .mmd con CRLF en Windows.
+const sha256 = (text: string) =>
+  createHash("sha256").update(text.replaceAll("\r\n", "\n"), "utf8").digest("hex");
 
 const fuentes = existsSync(SRC_DIR)
   ? readdirSync(SRC_DIR).filter((f) => f.endsWith(".mmd"))

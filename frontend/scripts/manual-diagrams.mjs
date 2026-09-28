@@ -22,7 +22,9 @@ const SRC_DIR = join(ROOT, "lib", "manual", "diagrams");
 const OUT_DIR = join(ROOT, "public", "manual", "diagrams");
 const MERMAID_BUNDLE = join(ROOT, "node_modules", "mermaid", "dist", "mermaid.min.js");
 
-const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
+// Hash canónico con LF: git puede materializar los .mmd con CRLF en Windows y el hash debe ser
+// idéntico en cualquier plataforma.
+const sha256 = (text) => createHash("sha256").update(text.replaceAll("\r\n", "\n"), "utf8").digest("hex");
 
 async function main() {
   const sources = readdirSync(SRC_DIR).filter((f) => f.endsWith(".mmd"));
