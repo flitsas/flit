@@ -46,6 +46,24 @@ documentos generados.
 | `--force` | Re-migra aunque ya esté en `migration_map`. |
 | `--conservar-jpg-identidad` | Solo `transfer-attachments`. Migra también las imágenes sueltas de la validación de identidad (ver *Qué no se migra*). |
 
+## Laboratorio local
+
+`lab/lab.sh` levanta todo contra bases locales y se niega a correr si alguna apunta fuera:
+
+```bash
+cd tools/Flit.DataMigration.V1/lab
+cp lab.env.example lab.env        # ajustar usuario de Postgres y rutas; lab.env no se versiona
+./lab.sh preparar                 # clona la base de dev en la de laboratorio y aplica las migraciones
+./lab.sh ids                      # out/ids-transfer.txt y out/ids-registration.txt (solo Entregado)
+./lab.sh pdf                      # servicio de PDF de V1 en localhost:4601 (otra terminal)
+./lab.sh v1                       # V1 contra la copia, sin tocar su .env (otra terminal)
+./lab.sh migrar --tipo transfer --ids-file out/ids-transfer.txt --dry-run
+./lab.sh estado
+```
+
+Sin el servicio de PDF, V1 no puede armar el FUR, la portada, las cartas selfie ni el mandato: en
+el clúster lo resuelve como `back-svc-pdfservice-grpc-pdn`, un nombre que desde local no existe.
+
 ## Configuración
 
 `appsettings.json` trae las conexiones del laboratorio local. En cualquier entorno real deben
