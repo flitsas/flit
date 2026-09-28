@@ -85,6 +85,9 @@ public static class OidcServerExtensions
 
                 // El emisor sale del host sellado (OidcIssuer). OpenIddict reconoce los endpoints comparando la URL
                 // pedida contra la base: se reescriben LAS DOS, o el descubrimiento da 404 (espiga A-04).
+                // HU #12993 (A-08): retornos a los dominios activos de la red que atiende la petición.
+                OidcNetworkRedirects.Register(server);
+
                 server.AddEventHandler<OpenIddictServerEvents.ProcessRequestContext>(handler => handler
                     .UseInlineHandler(context =>
                     {
