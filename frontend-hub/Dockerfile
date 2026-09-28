@@ -1,6 +1,6 @@
 # Imagen del hub de la FLIT Suite (B-09): build en tiempo de imagen + next start.
 # UNA sola imagen para DEV, QA y PDN: no recibe build-args. Todo lo que cambia por ambiente
-# (CORE_API_ORIGIN, FLIT_HOSTS, TRAMITES_URL, FLIT_INTERNAL_API_KEY...) se lee en el servidor
+# (CORE_API_ORIGIN, FLIT_HOSTS, FLIT_INTERNAL_API_KEY, HUB_LOGIN_URL...) se lee en el servidor
 # al atender cada petición (frontend-hub/lib/config.server.ts). El compose inyecta PORT.
 
 FROM node:22-alpine

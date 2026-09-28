@@ -1,11 +1,10 @@
 # frontend-hub
 
-Hub de la FLIT Suite en `flitsas.online` (tarea **B-09**, plan maestro §4). Hoy es el esqueleto: portada con la
-marca del host y el proxy hacia la API. Lo que falta llega por tareas:
+Hub de la FLIT Suite en `flitsas.online` (tarea **B-09**, plan maestro §4): portada con la marca del host, login
+del hub en `app/(auth)` (A-06) y proxy hacia la API y el servidor OIDC. Lo que falta llega por tareas:
 
 | Tarea | Qué agrega |
 |---|---|
-| A-06 | Login, recuperación y activación de invitación en `app/(auth)` sobre el servidor OIDC (A-05) |
 | B-11 | Inicio con los productos del usuario (opción 4, «Hub con entrada directa») y menú de productos |
 | B-12 | Administración de plataforma: empresa, usuarios y roles, productos, marca y dominio, auditoría |
 
@@ -15,7 +14,9 @@ marca del host y el proxy hacia la API. Lo que falta llega por tareas:
 pnpm run dev:hub          # http://localhost:4040
 ```
 
-Con la API en `http://localhost:4002` (gateway) basta. Para apuntar a otro lado, variables del servidor:
+Con la API en `http://localhost:4002` (gateway) basta. El login necesita el servidor OIDC encendido en la API
+(`Suite__Oidc__Enabled=true`) y `Suite__Hosts__Overrides__plataforma=http://localhost:4040`, para que el emisor sea
+este host. Para apuntar a otro lado, variables del servidor:
 
 | Variable | Para qué | Por defecto |
 |---|---|---|
@@ -23,7 +24,7 @@ Con la API en `http://localhost:4002` (gateway) basta. Para apuntar a otro lado,
 | `BRANDING_INTERNAL_API_URL` | Dónde se pide la marca de un dominio de red | `http://localhost:4002` |
 | `FLIT_INTERNAL_API_KEY` | Clave para que el gateway acepte el sello `X-Flit-Domain` | vacía (no se envía) |
 | `FLIT_HOSTS` | Hosts FLIT, sin marca de red (admite `*.dominio` y `!host`) | los de `@flit/brand` |
-| `TRAMITES_URL` / `HUB_LOGIN_URL` | Adónde lleva «Iniciar sesión» hasta A-06 | `http://localhost:3000/login` |
+| `HUB_LOGIN_URL` | Adónde lleva «Iniciar sesión» | `/login` (login del hub, A-06) |
 
 ## Reglas
 
