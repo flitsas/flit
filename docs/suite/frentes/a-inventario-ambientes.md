@@ -69,6 +69,24 @@
   parece de ejemplo. Conviene rotarlo y reemplazarlo por una variable.
 - `InfrastructureExtensions.InitializeInfrastructureAsync` (`:1300-1308`) no se llama desde ninguna parte.
 
+## Llamadas internas y cómo se autentican
+
+Ninguna usa el token de usuario de la API por su cuenta, así que validarlo (A-03) no las afecta:
+
+| Llamada | Cómo se autentica hoy | Con el token validado |
+|---|---|---|
+| `core-ict` → `core-api` (gRPC de orquestación y consultas) | Token de servicio HMAC (`Ict__ServiceToken__Secret`), policy `IctService` | Igual: otro esquema, no pasa por la validación del JWT de usuario |
+| Clientes externos de ICT (`/api/v1/ict/*`) | JWT propio de ICT, firmado por `core-ict` con su llave | Igual. Por eso el gateway no puede exigir el token de la API en esas rutas |
+| `migrador` | Directo a la base y al file-manager; no llama a la API | Nada |
+| `migracion-api` | Cabecera `X-Migration-Key` a través del gateway | Nada |
+| Frontend (`CORE_API_ORIGIN`, rewrites de `next.config.ts`) | Reenvía la petición del navegador con su `Authorization` | El token del usuario se valida en la API; un token viejo recibe `SESSION_EXPIRED` y el frontend lleva al login |
+
+## Nombres de ambiente propuestos
+
+`Development` queda solo para local. Los desplegados: **`Dev`**, **`QA`** y **`Production`**. Con A-02 el nombre sale
+de `FLIT_DOTNET_ENVIRONMENT` en el `.env` de cada servidor; sin ella sigue siendo `Development`. `appsettings.QA.json`
+(API y gateway) empezará a cargarse cuando QA se llame `QA`: revisar su contenido antes (punto 17).
+
 ## Preguntas para quien tiene acceso a la VPS
 
 Solo interesa saber si una variable existe o está vacía, **nunca su valor**.
