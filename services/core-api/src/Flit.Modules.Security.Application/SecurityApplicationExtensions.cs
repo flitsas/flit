@@ -33,6 +33,7 @@ public static class SecurityApplicationExtensions
         services.AddScoped<INetworkUrlBaseResolver, NetworkUrlBaseResolver>();
 
         services.AddScoped<LoginHandler>();
+        services.AddScoped<CredentialVerifier>(); // HU #12990 (A-05): login del hub
         services.AddScoped<ForgotPasswordHandler>();
         services.AddScoped<ResetPasswordHandler>();
         services.AddScoped<AdminResetPasswordHandler>();
