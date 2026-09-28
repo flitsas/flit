@@ -10,6 +10,7 @@ describe("hubConfig", () => {
       apiOrigin: "http://localhost:4002",
       internalApiKey: undefined,
       loginUrl: "/auth/login",
+      tramitesUrl: "http://localhost:3000",
     });
   });
 
@@ -17,12 +18,14 @@ describe("hubConfig", () => {
     const config = hubConfig({
       CORE_API_ORIGIN: "http://gateway:4002/",
       FLIT_INTERNAL_API_KEY: "k",
+      TRAMITES_URL: "https://dev.tramites.flitsas.online/",
     } as unknown as NodeJS.ProcessEnv);
 
     expect(config).toEqual({
       apiOrigin: "http://gateway:4002",
       internalApiKey: "k",
       loginUrl: "/auth/login",
+      tramitesUrl: "https://dev.tramites.flitsas.online",
     });
   });
 

@@ -65,7 +65,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 - [x] B-07 Migrar los booleans de módulos a la habilitación de productos
 - [x] B-08 `DomainContext` con producto y `tenant_domains.purpose`
 - [x] B-09 Esqueleto de `frontend-hub`
-- [ ] B-10 Paquete `@flit/shell`
+- [x] B-10 Paquete `@flit/shell`
 - [ ] B-11 Inicio del hub y menú de productos
 - [ ] B-12 Administración de plataforma en el hub
 - [ ] B-13 Trámites adopta `@flit/shell`
@@ -181,3 +181,4 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 | 2026-09-25 | B-07 (HU #12967) | Feature #12888 | Trámites y Comparendos se leen de `platform.tenant_products` (`ITenantProductFlags`); la configuración de empresa ya no los escribe y solo el SuperAdmin los cambia, al instante, desde la misma pantalla. Columnas marcadas obsoletas; se retiran un sprint después. |
 | 2026-09-25 | B-08 (HU #12968) | Feature #12888 | `DomainContext.ProductCode` (hosts FLIT por `Suite:Hosts`; redes por `admin.tenant_domains.purpose`, HUB por defecto). Unicidad por (red, propósito); las operaciones de dominio existentes siguen sobre el HUB. MarcaBlanca 25/25 sin cambios. |
 | 2026-09-28 | B-09 (HU #12985) | Feature #12889 | `frontend-hub` (Next.js 16, puerto 4040): portada con la marca del host, proxy `/api/v1/*` que sella el dominio y `/healthz`; `app/(auth)` reservado para A-06. Sin `NEXT_PUBLIC_*`: una imagen para los tres ambientes, configuración en runtime (`FLIT_HOSTS`, `CORE_API_ORIGIN`, `TRAMITES_URL`). La marca por host sale a `@flit/brand` (Trámites reexporta, sin cambios). CD construye la imagen; en el compose el servicio va bajo el perfil `suite` y no arranca hasta encenderlo en el `.env`. Probado en local contra la API: login y `me/apps` por el proxy. |
+| 2026-09-28 | B-10 (HU #12986) | Feature #12889 | `packages/shell`: `SuiteShell` (contrato §8) con marca del host, nombre del producto, menú de productos (`me/apps`), menú de cuenta y dock inferior desde un catálogo (`NavCatalog`, Contratos A y B de la guía: orden por secciones, filtro por permiso, rol o SuperAdmin, ruta activa por prefijo más largo) y menú móvil con los mismos grupos. El dock y sus estilos se portaron del de Trámites sin su catálogo; una prueba falla si el paquete importa código de una app. El hub ya lo usa con su propio catálogo (administración de plataforma, que sigue en Trámites hasta B-12). El producto `demo` no existe aún (C-08): el segundo catálogo será el de Trámites en B-13. Probado en el navegador con AdminCompany. |

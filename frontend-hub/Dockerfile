@@ -17,6 +17,7 @@ COPY frontend-hub/package.json ./frontend-hub/
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/brand/package.json ./packages/brand/
 COPY packages/auth/package.json ./packages/auth/
+COPY packages/shell/package.json ./packages/shell/
 
 # Solo las dependencias del hub y de sus paquetes del workspace (incluidas las dev: next build las necesita).
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --filter "@flit/frontend-hub..."
@@ -25,6 +26,7 @@ COPY frontend-hub ./frontend-hub
 COPY packages/ui ./packages/ui
 COPY packages/brand ./packages/brand
 COPY packages/auth ./packages/auth
+COPY packages/shell ./packages/shell
 RUN pnpm --filter @flit/frontend-hub build
 
 ENV NODE_ENV=production

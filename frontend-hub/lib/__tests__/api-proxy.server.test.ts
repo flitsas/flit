@@ -4,7 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import { proxyToApi } from "../api-proxy.server";
 
-const config = { apiOrigin: "http://gateway:4002", internalApiKey: "clave", loginUrl: "/login" };
+const config = { apiOrigin: "http://gateway:4002", internalApiKey: "clave", loginUrl: "/login", tramitesUrl: "https://dev.tramites.flitsas.online" };
 
 afterEach(() => vi.unstubAllGlobals());
 
