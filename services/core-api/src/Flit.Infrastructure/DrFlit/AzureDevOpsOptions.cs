@@ -21,6 +21,12 @@ public sealed class AzureDevOpsOptions
 
     /// <summary>Prefijo del título del Bug; el formulario web usa <c>[ Formulario ]</c>.</summary>
     public string TitlePrefix { get; set; } = "[ DR. FLIT ]";
+
+    /// <summary>
+    /// Correo al que se asigna el Bug al crearlo (la cuenta de soporte, para que el caso entre directo a
+    /// su cola en vez de quedar sin asignar). Vacío = sin asignar. Env: <c>DR_FLIT_EMAIL</c>.
+    /// </summary>
+    public string AssignedTo { get; set; } = "Soporte@flitsas.com";
 }
 
 /// <summary>
