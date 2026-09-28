@@ -36,6 +36,13 @@
       "profile": "admin_company",
       "route": "/?m=historial-placa",
       "settleMs": 4000
+    },
+    {
+      "id": "ot-inicio",
+      "articleSlug": "2-ot/13-inicio",
+      "profile": "ot_admin",
+      "route": "/",
+      "settleMs": 4000
     }
   ]
 }
