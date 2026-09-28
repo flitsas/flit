@@ -158,18 +158,6 @@ public sealed class ProcedureInstanceLoader(
             // directamente en 'aprobado' sin simular todo el ciclo de vida.
             if (!string.Equals(mapped.FinalStatus, TramiteEstado.Borrador, StringComparison.Ordinal))
             {
-                // Releer antes de tocar el estado NO es opcional: `row_version` es token de
-                // concurrencia optimista, y los pasos 2 y 3 lo movieron por debajo de EF.
-                //
-                // Al insertar campos y actores se disparan los triggers de denormalización
-                // (47-tramites-campos-busqueda: vin, plate, vendedor_nombre, comprador_nombre), que
-                // hacen UPDATE sobre esta misma fila; cada uno pasa por trg_row_version y suma uno.
-                // EF sigue creyendo el 0 con el que insertó, así que su UPDATE saldría con
-                // `WHERE row_version = 0`, afectaría cero filas y reventaría por concurrencia.
-                //
-                // Solo se nota en trámites que NO quedan en borrador — el 99 % de V1 —, porque un
-                // borrador nunca llega hasta aquí.
-                await db.Entry(mapped.Instance).ReloadAsync(cancellationToken);
                 mapped.Instance.Status = mapped.FinalStatus;
                 await db.SaveChangesAsync(cancellationToken);
             }
