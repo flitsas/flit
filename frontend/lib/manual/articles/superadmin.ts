@@ -260,8 +260,17 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
     title: "DR. FLIT para el equipo FLIT",
     audience: "Super Admin",
     sectionId: "superadmin",
-    keywords: ["dr flit superadmin", "buscar en todas las companias", "soporte interno", "asistente global"],
-    summary: "Qué cambia en el asistente cuando quien pregunta es Super Admin.",
+    keywords: [
+      "dr flit superadmin",
+      "buscar en todas las companias",
+      "soporte interno",
+      "asistente global",
+      "casos de soporte",
+      "tablero de soporte",
+      "tope de mensajes",
+    ],
+    summary:
+      "Qué cambia en el asistente cuando quien pregunta es Super Admin: alcance global, enlace directo a los casos y operación del chat con IA.",
     blocks: [
       {
         id: "alcance",
@@ -272,9 +281,23 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       },
       {
         id: "ayuda",
-        title: "2. Ayuda",
+        title: "2. Ayuda con inteligencia artificial",
         paragraphs: [
-          "«Necesito ayuda» te ofrece toda la documentación (Gestor, Organismo, Administración de compañía y Super Admin), así que sirve para responder por un cliente: escribe la duda tal como te la plantearon y abre el artículo que le corresponde a su perfil.",
+          "El chat responde en lenguaje natural con base en toda la documentación (Gestor, Organismo, Administración de compañía y Super Admin), citando los artículos usados. Sirve para responder por un cliente: escribe la duda tal como te la plantearon y abre el artículo que corresponde a su perfil.",
+          "Aplican las mismas reglas que a todos: autorización de tratamiento de datos la primera vez, tope diario de mensajes con aviso previo, y respuesta del buscador del manual cuando la inteligencia artificial no está disponible.",
+        ],
+      },
+      {
+        id: "casos",
+        title: "3. Casos de soporte: qué ve el equipo FLIT",
+        paragraphs: [
+          "Los casos radicados desde el chat llegan al tablero de soporte del equipo FLIT con la descripción, el resultado esperado, la frecuencia, la prioridad y los adjuntos del usuario, listos para triage. A los usuarios se les confirma solo el número de caso; como Super Admin, tú además ves el enlace directo al caso en el tablero.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "El tope diario de mensajes del chat y el modelo de inteligencia artificial se configuran por ambiente desde la operación de la plataforma; si el equipo necesita ajustarlos, es un cambio de configuración, no de código.",
+          },
         ],
       },
     ],
