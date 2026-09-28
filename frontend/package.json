@@ -18,6 +18,7 @@
   "dependencies": {
     "@flit/auth": "workspace:*",
     "@flit/brand": "workspace:*",
+    "@flit/shell": "workspace:*",
     "@flit/ui": "workspace:*",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",

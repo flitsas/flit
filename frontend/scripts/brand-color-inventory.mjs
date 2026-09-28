@@ -97,8 +97,9 @@ export const SURFACES = [
     label: "Cabecera y menú",
     files: [
       "components/atom/Shell.tsx",
-      // Menú/dock de navegación renderizado dentro de la cabecera del Shell.
-      "components/atom/dock/DockDesktop.tsx",
+      // B-13: la barra y el dock de Trámites los dibuja @flit/shell (antes components/atom/dock/DockDesktop.tsx).
+      "../packages/shell/src/SuiteShell.tsx",
+      "../packages/shell/src/dock/Dock.tsx",
     ],
   },
   {

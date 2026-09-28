@@ -52,4 +52,60 @@ describe("buildDock", () => {
     const external: NavCatalog = { sections: catalog.sections, items: [{ key: "x", label: "Hub", href: "https://dev.flitsas.online/", section: "operacion", icon: Box }] };
     expect(buildDock(external, viewer(), "/").flatMap((g) => g.items)[0].active).toBe(false);
   });
+
+  // B-13 (HU #12989) — lo que Trámites necesita del contrato.
+  it("una entrada con consulta solo está activa en esa ruta y con esos parámetros", () => {
+    const spa: NavCatalog = {
+      sections: catalog.sections,
+      items: [
+        { key: "reportes", label: "Reportes", href: "/?m=reportes", section: "reportes", icon: Box },
+        { key: "tramites", label: "Trámites", href: "/tramites", section: "operacion", icon: Box },
+      ],
+    };
+    const active = (path: string, search: string) =>
+      buildDock(spa, viewer(), path, search).flatMap((g) => g.items).find((i) => i.active)?.key ?? null;
+    expect(active("/", "?m=reportes")).toBe("reportes");
+    expect(active("/", "?m=usuarios")).toBeNull();
+    expect(active("/admin/companies", "?m=reportes")).toBeNull();
+    expect(active("/tramites/abc", "")).toBe("tramites");
+  });
+
+  it("filtra por módulo RBAC y, sin la lista de módulos, no muestra lo que depende de uno", () => {
+    const withModule: NavCatalog = {
+      sections: catalog.sections,
+      items: [{ key: "reportes", label: "Reportes", href: "/?m=reportes", section: "reportes", icon: Box, module: "reportes" }],
+    };
+    expect(buildDock(withModule, { permissions: [], isSuperAdmin: false, modules: ["tramites"] }, "/")).toEqual([]);
+    expect(buildDock(withModule, { permissions: [], isSuperAdmin: false, modules: ["reportes"] }, "/")).toHaveLength(1);
+    expect(buildDock(withModule, { permissions: [], isSuperAdmin: false }, "/")).toEqual([]);
+  });
+
+  it("con varios permisos basta uno", () => {
+    const anyOf: NavCatalog = {
+      sections: catalog.sections,
+      items: [{ key: "runt", label: "RUNT", href: "/runt", section: "admin", icon: Box, permission: ["runt.manage", "runt.read"] }],
+    };
+    expect(buildDock(anyOf, viewer(["runt.read"]), "/")).toHaveLength(1);
+    expect(buildDock(anyOf, viewer(["otro"]), "/")).toEqual([]);
+  });
+
+  it("un contenedor sin hijos visibles desaparece y nunca queda activo por sí mismo", () => {
+    const nested: NavCatalog = {
+      sections: catalog.sections,
+      items: [
+        {
+          key: "plataforma",
+          label: "Plataforma",
+          href: "",
+          section: "admin",
+          icon: Box,
+          children: [{ key: "mandatos", label: "Mandatos", href: "/admin/mandatos", section: "admin", icon: Box, superAdminOnly: true }],
+        },
+      ],
+    };
+    expect(buildDock(nested, viewer(), "/")).toEqual([]);
+    const [group] = buildDock(nested, viewer([], true), "/tramites");
+    expect(group.active).toBe(false);
+    expect(buildDock(nested, viewer([], true), "/admin/mandatos")[0].items[0].children?.[0].active).toBe(true);
+  });
 });

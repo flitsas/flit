@@ -9,19 +9,21 @@ const UMBRAL_BAJAR = 4;
 const UMBRAL_SUBIR = 8;
 
 /**
- * Condensa el dock al bajar por el área de contenido (no `window`: el Shell hace
- * scroll en un contenedor interno). Solo presentación del menú; no toca catálogo
- * ni rutas.
+ * Condensa el dock al bajar y lo expande al subir o cerca del inicio. Escucha el contenedor con scroll del layout `app`
+ * (Trámites) o, sin él, la ventana (hub). Solo presentación del menú; no toca catálogo ni rutas. Viene del Shell de
+ * Trámites (B-13).
  */
-export function useDockScrollCondense(scrollRef: RefObject<HTMLElement | null>) {
+export function useDockScrollCondense(scrollRef?: RefObject<HTMLElement | null>) {
   const [condensed, setCondensed] = useState(false);
   const condensedRef = useRef(false);
 
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
+    const box = scrollRef ? scrollRef.current : null;
+    if (scrollRef && !box) return;
+    const readY = () => (box ? box.scrollTop : window.scrollY);
+    const target: HTMLElement | Window = box ?? window;
 
-    let lastY = el.scrollTop;
+    let lastY = readY();
     let ticking = false;
     let lockUntil = 0;
 
@@ -29,7 +31,7 @@ export function useDockScrollCondense(scrollRef: RefObject<HTMLElement | null>) 
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
-        const y = el.scrollTop;
+        const y = readY();
         const now = performance.now();
 
         if (now >= lockUntil) {
@@ -49,8 +51,8 @@ export function useDockScrollCondense(scrollRef: RefObject<HTMLElement | null>) 
       });
     };
 
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
+    target.addEventListener("scroll", onScroll, { passive: true });
+    return () => target.removeEventListener("scroll", onScroll);
   }, [scrollRef]);
 
   return condensed;

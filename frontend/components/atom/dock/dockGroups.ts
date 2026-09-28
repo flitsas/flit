@@ -12,6 +12,9 @@ import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 import { COPY } from "@/lib/copy/copy-catalog";
 
 /**
+ * Secciones del dock de Trámites y a cuál va cada entrada. El catálogo (`tramitesNav.ts`) las usa; el dock lo dibuja
+ * @flit/shell (B-13).
+ *
  * Agrupadores del dock — orden estable de las píldoras.
  * Trámites e Identidad son grupos de un solo ítem → píldora directa (no submenú).
  * Dashboard no se lista: el FAB central abre Inicio.
@@ -105,6 +108,8 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   // SuperAdmin + AdminCompany ("Administración"): consola / listado de compañías
   "admin-companies": "administradores",
   "mi-empresa": "administradores",
+  // B-13 — «Red de clientes» (AdminCompany cabeza de grupo) no tenía grupo y el dock la descartaba en silencio.
+  "admin-network": "administradores",
   "admin-documents": "administradores",
   "admin-improntas": "administradores",
   // Generación documental (Feature #12201): visible por módulo accesible, no por rol.
@@ -132,52 +137,3 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   // ICT anida Log ICT y Reportes ICT; solo el padre necesita grupo (mismo patrón que Tránsito).
   ict: "integraciones",
 };
-
-export type DockEntryLike = {
-  key: string;
-  label: string;
-  icon: DockIconComponent;
-  active: boolean;
-  onClick: () => void;
-  /** Submenú anidado (p. ej. Administradores → Plataforma → Mandatos). */
-  children?: DockEntryLike[];
-};
-
-export type DockGroupView = {
-  id: DockGroupId;
-  label: string;
-  icon: (typeof DOCK_GROUP_ICON)[DockGroupId];
-  items: DockEntryLike[];
-  /** Algún ítem del grupo está activo. */
-  active: boolean;
-};
-
-/** Aplana ítems con hijos (móvil / tests): los leafs de navegación. */
-export function flattenDockEntries(entries: DockEntryLike[]): DockEntryLike[] {
-  return entries.flatMap((it) => (it.children?.length ? it.children : [it]));
-}
-
-/** Agrupa entradas visibles; omite agrupadores vacíos. Ítems sin mapa van a un cubo final no listado (no deberían existir). */
-export function buildDockGroups(entries: DockEntryLike[]): DockGroupView[] {
-  const buckets = new Map<DockGroupId, DockEntryLike[]>();
-  for (const id of DOCK_GROUP_ORDER) buckets.set(id, []);
-
-  for (const it of entries) {
-    const gid = DOCK_ITEM_GROUP[it.key];
-    if (!gid) continue;
-    buckets.get(gid)!.push(it);
-  }
-
-  return DOCK_GROUP_ORDER.map((id) => {
-    const items = buckets.get(id) ?? [];
-    return {
-      id,
-      label: DOCK_GROUP_LABEL[id],
-      icon: DOCK_GROUP_ICON[id],
-      items,
-      active: items.some(
-        (i) => i.active || Boolean(i.children?.some((c) => c.active)),
-      ),
-    };
-  }).filter((g) => g.items.length > 0);
-}

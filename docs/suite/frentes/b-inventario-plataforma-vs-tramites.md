@@ -238,7 +238,8 @@ Inventario completo agrupado por archivo en el anexo A. A nivel de grupo:
    pero no está en `DOCK_ITEM_GROUP` y `buildDockGroups` descarta en silencio lo que no tiene grupo
    (`dockGroups.ts:167`). La clave `mi-empresa` (`dockGroups.ts:107`) no la emite nadie. Es un bug
    actual de Trámites; se corrige al crear el catálogo de B-10 (y se puede corregir antes con una
-   línea, si Trámites lo pide).
+   línea, si Trámites lo pide). **Corregido en B-13:** el catálogo falla si una entrada no tiene grupo, y
+   `admin-network` y `mi-empresa` ya lo tienen.
 5. **La gestión de usuarios está triplicada**: `/api/v1/security/*`, `/api/v1/admin/ot/{users,invitations}/*`
    y `/api/v1/admin/companies/{h}/children/{c}/{invitations,users}`. Las tres son plataforma. En B-12 el
    hub usa `/security/*`; unificar las otras dos queda como deuda con su propia HU.

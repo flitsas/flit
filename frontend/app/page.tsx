@@ -119,9 +119,8 @@ function HomeContent() {
     if (authed && module) trackModuleView(module);
   }, [module, authed]);
 
-  // Track B — Trámites vive en /tramites (ruta propia): el dock y el CTA del
-  // dashboard navegan allá. El resto de módulos viven en esta SPA y sincronizan
-  // su estado con la URL (?m=) para soportar back/forward y deep-links.
+  // Track B — Trámites vive en /tramites (ruta propia): el CTA del dashboard navega allá. El dock ya no pasa por
+  // aquí (B-13): sus entradas son enlaces a /tramites o /?m=…, y el efecto de arriba lee el módulo de la URL.
   function handleNav(m: ModuleId) {
     if (m === "tramites") {
       router.push("/tramites");
@@ -137,10 +136,9 @@ function HomeContent() {
 
   return (
     <Shell
-      active={module ?? "dashboard"}
-      onNav={handleNav}
       onLogout={logout}
       visibleModuleCodes={modulesLoading ? [] : accessibleCodes}
+      search={params.toString()}
     >
       {modulesError ? (
         <div

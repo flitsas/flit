@@ -6,7 +6,16 @@ import { appIcon, fetchMyApps, type SuiteApp } from "./apps";
 
 // Menú de productos (▦, B-10/B-11): la única forma de cambiar de producto. Cada producto abre en su host; la sesión
 // del hub hace que no haya que volver a iniciar sesión.
-export function ProductMenu({ productCode, apps: given }: { productCode: string; apps?: SuiteApp[] }) {
+export function ProductMenu({
+  productCode,
+  apps: given,
+  loadApps = fetchMyApps,
+}: {
+  productCode: string;
+  apps?: SuiteApp[];
+  /** Cómo pedir `me/apps` si no vienen cargados; por defecto, el proxy /api/v1 de la app con su cookie. */
+  loadApps?: (signal: AbortSignal) => Promise<SuiteApp[]>;
+}) {
   const [open, setOpen] = useState(false);
   const [apps, setApps] = useState<SuiteApp[] | null>(given ?? null);
   const ref = useRef<HTMLDivElement>(null);
@@ -14,9 +23,9 @@ export function ProductMenu({ productCode, apps: given }: { productCode: string;
   useEffect(() => {
     if (!open || apps) return;
     const controller = new AbortController();
-    fetchMyApps(controller.signal).then(setApps).catch(() => setApps([]));
+    loadApps(controller.signal).then(setApps).catch(() => setApps([]));
     return () => controller.abort();
-  }, [open, apps]);
+  }, [open, apps, loadApps]);
 
   useEffect(() => {
     if (!open) return;

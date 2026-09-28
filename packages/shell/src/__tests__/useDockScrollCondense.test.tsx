@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { createRef } from "react";
-import { useDockScrollCondense } from "../useDockScrollCondense";
+import { useDockScrollCondense } from "../dock/useDockScrollCondense";
 
 describe("useDockScrollCondense", () => {
   let now = 0;
@@ -58,5 +58,17 @@ describe("useDockScrollCondense", () => {
       el.dispatchEvent(new Event("scroll"));
     });
     expect(result.current).toBe(false);
+  });
+
+  it("sin contenedor escucha la ventana (layout `page` del hub)", () => {
+    const { result } = renderHook(() => useDockScrollCondense());
+
+    act(() => {
+      now = 100;
+      Object.defineProperty(window, "scrollY", { configurable: true, value: 300 });
+      window.dispatchEvent(new Event("scroll"));
+    });
+    expect(result.current).toBe(true);
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
   });
 });

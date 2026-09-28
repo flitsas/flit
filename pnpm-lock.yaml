@@ -30,6 +30,9 @@ importers:
       '@flit/brand':
         specifier: workspace:*
         version: link:../packages/brand
+      '@flit/shell':
+        specifier: workspace:*
+        version: link:../packages/shell
       '@flit/ui':
         specifier: workspace:*
         version: link:../packages/ui

@@ -125,7 +125,7 @@ describe("HU #12420 AC3 — superficies saneadas sin hex de marca literal (host 
 describe("HU #12420 AC3 — Shell sin hex de marca literal, claro y oscuro", () => {
   function renderShell() {
     return render(
-      <Shell active="dashboard" onNav={vi.fn()}>
+      <Shell visibleModuleCodes={[]}>
         <div>contenido</div>
       </Shell>,
     );
@@ -144,9 +144,8 @@ describe("HU #12420 AC3 — Shell sin hex de marca literal, claro y oscuro", () 
       const { container } = renderShell();
       expectHtmlHasNoLiteralBrandHex(container, "Shell (oscuro)");
       // AC2 — el neutro de dark mode (#05060A → fondo del shell, HU #12420 no lo toca) sigue
-      // presente; jsdom normaliza los `style.background`/`color` con hex a `rgb(...)` al
-      // serializar el atributo, por eso se compara contra el equivalente rgb.
-      expect(container.innerHTML).toMatch(/rgb\(5,\s*6,\s*10\)/i);
+      // presente. Desde B-13 lo pone la barra de la suite con la variante `dark:` de Tailwind.
+      expect(container.innerHTML).toContain("dark:bg-[#05060A]");
     } finally {
       window.localStorage.removeItem("flit-theme");
       document.documentElement.classList.remove("dark");

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, type RefObject } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { DockEntry, DockGroup } from "../nav";
 import { useDisclosureNav } from "./useDisclosureNav";
+import { useDockScrollCondense } from "./useDockScrollCondense";
 import { useEdgeClamp } from "./useEdgeClamp";
 
 // Dock inferior flotante de la suite (GUIA-DOCK-INFERIOR-FLOTANTE.md), portado del de Trámites sin su catálogo:
@@ -17,30 +18,14 @@ type Props = {
   homeLabel: string;
   homeIconSrc: string;
   homeActive: boolean;
+  /** Contenedor con scroll (layout `app`); sin él, la ventana. El dock queda dentro de ese contenedor, no fijo. */
+  scrollRef?: RefObject<HTMLElement | null>;
 };
 
-/** Condensado por scroll (guía §8): cerca del final de la página, píldoras grandes solo con icono. */
-function useAtBottom(): boolean {
-  const [atBottom, setAtBottom] = useState(false);
-  useEffect(() => {
-    const onScroll = () => {
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      setAtBottom(max > 80 && window.scrollY >= max - 80);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, []);
-  return atBottom;
-}
-
-export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive }: Props) {
+export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scrollRef }: Props) {
   const { openSection, toggle, close, navRef, triggerId, panelId } = useDisclosureNav("flit-suite-dock");
-  const atBottom = useAtBottom();
+  // Guía §8: al bajar, píldoras grandes solo con icono; al subir o cerca del inicio, con etiqueta.
+  const atBottom = useDockScrollCondense(scrollRef);
   const showLabels = !atBottom || !!openSection;
   const large = atBottom && !openSection;
 
@@ -63,7 +48,7 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive }: P
   );
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 hidden justify-center px-4 pb-5 lg:flex">
+    <div className={`pointer-events-none ${scrollRef ? "absolute" : "fixed"} inset-x-0 bottom-0 z-40 hidden justify-center px-4 pb-5 lg:flex`}>
       <nav
         ref={navRef}
         aria-label="Navegación principal"
@@ -124,9 +109,11 @@ function DockGroupPill({
   const { ref: panelRef, shift } = useEdgeClamp<HTMLDivElement>(open ? group.id : null);
   // Guía §5.3: una sola opción sin submenú → enlace directo, sin panel.
   const sole = group.items.length === 1 && !group.items[0].children?.length ? group.items[0] : null;
+  // Una sola entrada con submenú: la píldora lleva su nombre (Administradores → solo «Plataforma» → «Plataforma»).
+  const only = group.items.length === 1 ? group.items[0] : null;
   const pillActive = sole ? sole.active : group.active;
-  const Icon = sole?.icon ?? group.icon;
-  const pillLabel = sole ? sole.label : group.label;
+  const Icon = only?.icon ?? group.icon;
+  const pillLabel = only ? only.label : group.label;
   const iconClass = large ? "h-[18px] w-[18px] shrink-0" : "h-4 w-4 shrink-0";
 
   const base = `dock-pill relative flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full transition-all duration-[var(--nav-duracion)] ease-[var(--nav-ease)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2 ${
