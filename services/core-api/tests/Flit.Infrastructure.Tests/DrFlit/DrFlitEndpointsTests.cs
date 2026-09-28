@@ -321,4 +321,69 @@ public sealed class DrFlitEndpointsTests
 
         status.Should().Be(StatusCodes.Status401Unauthorized);
     }
+
+    // ── HU #13023 — perfil efectivo del JWT (misma precedencia que dr-flit-context.ts) ──
+
+    private static ClaimsPrincipal Principal(params Claim[] claims) =>
+        new(new ClaimsIdentity(claims, "TestAuth"));
+
+    [Fact]
+    public void HU13023_SuperAdmin_GanaSobreCualquierOtroRol()
+    {
+        var user = Principal(
+            new Claim(AdminAuthorization.RoleClaimType, AdminAuthorization.SuperAdminRole),
+            new Claim(AdminAuthorization.RoleClaimType, AdminAuthorization.OtAdminRole),
+            new Claim(AdminAuthorization.RoleClaimType, AdminAuthorization.AdminCompanyRole));
+
+        DrFlitEndpoints.ResolveManualProfile(user).Should().Be(DrFlitManualProfile.SuperAdmin);
+    }
+
+    [Theory]
+    [InlineData(AdminAuthorization.RoleClaimType)]
+    [InlineData("role_code")]
+    public void HU13023_RolOtAdmin_EsPerfilOt(string claimType)
+    {
+        var user = Principal(new Claim(claimType, AdminAuthorization.OtAdminRole));
+
+        DrFlitEndpoints.ResolveManualProfile(user).Should().Be(DrFlitManualProfile.OtAdmin);
+    }
+
+    [Fact]
+    public void HU13023_TenantTransitOffice_EsPerfilOt_AunqueSuRolNoSeaOtAdmin()
+    {
+        // Espejo de isOtUser: un "Gestor OT" (rol distinto en tenant OT) también ve el manual del OT.
+        var user = Principal(
+            new Claim(AdminAuthorization.RoleClaimType, "gestor_tramites_ot"),
+            new Claim(AdminAuthorization.EntityTypeClaimType, AdminAuthorization.TransitOfficeEntityType));
+
+        DrFlitEndpoints.ResolveManualProfile(user).Should().Be(DrFlitManualProfile.OtAdmin);
+    }
+
+    [Fact]
+    public void HU13023_AdminCompany_YGestorPorDefecto()
+    {
+        DrFlitEndpoints.ResolveManualProfile(
+            Principal(new Claim(AdminAuthorization.RoleClaimType, AdminAuthorization.AdminCompanyRole)))
+            .Should().Be(DrFlitManualProfile.AdminCompany);
+        DrFlitEndpoints.ResolveManualProfile(
+            Principal(new Claim(AdminAuthorization.RoleClaimType, "Radicador")))
+            .Should().Be(DrFlitManualProfile.Gestor);
+        DrFlitEndpoints.ResolveManualProfile(Principal()).Should().Be(DrFlitManualProfile.Gestor);
+    }
+
+    [Fact]
+    public async Task HU13023_AC1_ElChatDeUnOt_LlamaAlLlmConLaVarianteDeSuPerfil()
+    {
+        ModelReturns(DrFlitModelCallStatus.Ok, """{"intent":"duda","reply":"ok","citedSlugs":[]}""");
+        var ctx = Context();
+        ctx.User.AddIdentity(new ClaimsIdentity(
+            [new Claim(AdminAuthorization.RoleClaimType, AdminAuthorization.OtAdminRole)], "TestAuth"));
+
+        await Post(Ask(), ctx: ctx);
+
+        await _model.Received(1).CompleteAsync(
+            Catalog.GetSystemPrompt(DrFlitManualProfile.OtAdmin),
+            Arg.Any<IReadOnlyList<DrFlitTurn>>(),
+            TestContext.Current.CancellationToken);
+    }
 }

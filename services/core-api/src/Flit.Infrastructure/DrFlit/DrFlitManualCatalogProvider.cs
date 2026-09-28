@@ -87,7 +87,8 @@ internal sealed class DrFlitManualCatalogProvider : IDrFlitManualCatalogProvider
         string.IsNullOrWhiteSpace(a.Href) ? $"/manual/{a.Slug}" : a.Href,
         Flatten(a),
         a.Sources?.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Href))?.Href,
-        a.PrimarySource);
+        a.PrimarySource,
+        string.IsNullOrWhiteSpace(a.Audience) ? null : a.Audience.Trim());
 
     /// <summary>
     /// Aplana el artículo a texto para el prompt: audiencia, resumen, y cada bloque con su título,
