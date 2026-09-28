@@ -16,7 +16,9 @@ export function ManualMediaFigure({ media }: { media: ManualMedia }) {
   return (
     <figure
       className="mt-4 overflow-hidden rounded-xl border"
-      style={{ borderColor: "var(--manual-border)", background: "var(--manual-bg)" }}
+      // Backdrop blanco fijo: capturas y diagramas se generan sobre la UI clara, y así siguen
+      // legibles cuando el manual está en tema oscuro (el borde y el caption sí siguen al tema).
+      style={{ borderColor: "var(--manual-border)", background: "#ffffff" }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element -- assets estáticos locales de tamaño variable; next/image no aporta aquí */}
       <img
