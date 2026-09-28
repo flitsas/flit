@@ -15,6 +15,20 @@
       "profile": "admin_company",
       "route": "/",
       "waitFor": "text=Distribución General de Trámites"
+    },
+    {
+      "id": "reportes",
+      "articleSlug": "1-gestor/11-reportes",
+      "profile": "admin_company",
+      "route": "/?m=reportes",
+      "settleMs": 4000
+    },
+    {
+      "id": "usuarios",
+      "articleSlug": "1-gestor/12-usuarios",
+      "profile": "admin_company",
+      "route": "/?m=usuarios",
+      "settleMs": 4000
     }
   ]
 }

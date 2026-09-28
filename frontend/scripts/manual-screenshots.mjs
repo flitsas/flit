@@ -88,8 +88,8 @@ async function capture(context, base, entry) {
   try {
     await page.goto(base + entry.route, { waitUntil: "domcontentloaded" });
     if (entry.waitFor) await page.locator(entry.waitFor).first().waitFor({ timeout: 45000 });
-    // Pequeña espera de asentamiento: animaciones de entrada y fuentes.
-    await page.waitForTimeout(700);
+    // Espera de asentamiento: animaciones, fuentes y datos del módulo (ajustable por entrada).
+    await page.waitForTimeout(entry.settleMs ?? 700);
     await page.screenshot({ path: join(OUT_DIR, `${entry.id}.png`), fullPage: false });
   } finally {
     await page.close();
