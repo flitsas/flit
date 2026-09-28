@@ -1,7 +1,7 @@
 // Lectura y escritura de la sesión cifrada en las cookies de la petición.
 import type { AuthConfig } from "./config";
 import { appOrigin } from "./config";
-import { SESSION_COOKIE, chunkedCookies, clearChunkedCookies, parseCookies, readChunked } from "./cookies";
+import { sessionCookie, chunkedCookies, clearChunkedCookies, parseCookies, readChunked } from "./cookies";
 import { base64UrlDecode, base64UrlEncode, seal, unseal } from "./crypto";
 import { refreshSession } from "./tokens";
 import type { StoredSession } from "./types";
@@ -46,19 +46,19 @@ export async function unsealSession(sealed: string, secret: string): Promise<Sto
 }
 
 export async function readSession(request: Request, config: AuthConfig): Promise<StoredSession | null> {
-  const sealed = readChunked(parseCookies(request.headers.get("cookie")), SESSION_COOKIE);
+  const sealed = readChunked(parseCookies(request.headers.get("cookie")), sessionCookie(config.productCode));
   return sealed ? unsealSession(sealed, config.sessionSecret) : null;
 }
 
 export async function sessionCookies(session: StoredSession, request: Request, config: AuthConfig): Promise<string[]> {
-  return chunkedCookies(SESSION_COOKIE, await seal(pack(session), config.sessionSecret), {
+  return chunkedCookies(sessionCookie(config.productCode), await seal(pack(session), config.sessionSecret), {
     secure: isSecure(request, config),
     maxAgeSeconds: SESSION_MAX_AGE,
   });
 }
 
 export function clearSessionCookies(request: Request, config: AuthConfig): string[] {
-  return clearChunkedCookies(SESSION_COOKIE, isSecure(request, config));
+  return clearChunkedCookies(sessionCookie(config.productCode), isSecure(request, config));
 }
 
 export interface FreshSession {

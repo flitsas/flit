@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { chunkedCookies, parseCookies, readChunked, SESSION_COOKIE, TX_COOKIE } from "../cookies";
+import { chunkedCookies, parseCookies, readChunked, sessionCookie, txCookie } from "../cookies";
 import { base64UrlEncode, pkceChallenge, seal, unseal } from "../crypto";
 import { createApiProxy } from "../proxy";
 import { createAuthRoutes, safeReturnTo } from "../routes";
@@ -22,6 +22,7 @@ const config: AuthConfig = {
 };
 const routes = createAuthRoutes({ productCode: "tramites", config: () => config });
 const APP = "https://dev.tramites.flitsas.online";
+const SESSION = sessionCookie("tramites");
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -35,7 +36,7 @@ function cookieHeader(setCookies: string[]): string {
 }
 
 async function sessionCookieHeader(session: StoredSession): Promise<string> {
-  return cookieHeader(chunkedCookies(SESSION_COOKIE, await seal(pack(session), config.sessionSecret), { secure: true, maxAgeSeconds: 60 }));
+  return cookieHeader(chunkedCookies(SESSION, await seal(pack(session), config.sessionSecret), { secure: true, maxAgeSeconds: 60 }));
 }
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -62,12 +63,12 @@ describe("cifrado y cookies", () => {
 
   it("una sesión grande se parte en trozos y se vuelve a unir", () => {
     const value = "x".repeat(9000);
-    const headers = chunkedCookies(SESSION_COOKIE, value, { secure: true, maxAgeSeconds: 60 });
-    expect(readChunked(parseCookies(cookieHeader(headers)), SESSION_COOKIE)).toBe(value);
+    const headers = chunkedCookies(SESSION, value, { secure: true, maxAgeSeconds: 60 });
+    expect(readChunked(parseCookies(cookieHeader(headers)), SESSION)).toBe(value);
   });
 
   it("ninguna cookie lleva Domain y todas son HttpOnly y SameSite=Lax", () => {
-    for (const header of chunkedCookies(SESSION_COOKIE, "x".repeat(5000), { secure: true, maxAgeSeconds: 60 })) {
+    for (const header of chunkedCookies(SESSION, "x".repeat(5000), { secure: true, maxAgeSeconds: 60 })) {
       expect(header.toLowerCase()).not.toContain("domain=");
       expect(header).toContain("HttpOnly");
       expect(header).toContain("SameSite=Lax");
@@ -92,7 +93,7 @@ describe("login y callback", () => {
     expect(location.searchParams.get("client_id")).toBe("tramites");
     expect(location.searchParams.get("redirect_uri")).toBe(`${APP}/auth/callback`);
     expect(location.searchParams.get("code_challenge_method")).toBe("S256");
-    const tx = response.headers.getSetCookie().find((c) => c.startsWith(`${TX_COOKIE}=`))!;
+    const tx = response.headers.getSetCookie().find((c) => c.startsWith(`${txCookie("tramites")}=`))!;
     expect(tx).toContain("HttpOnly");
     expect(tx.toLowerCase()).not.toContain("domain=");
   });
@@ -118,7 +119,7 @@ describe("login y callback", () => {
     expect(await pkceChallenge(form.get("code_verifier")!)).toBe(challenge);
     expect((init.headers as Record<string, string>)["x-flit-domain"]).toBe("dev.flitsas.online");
 
-    const session = await unsealSession(readChunked(parseCookies(cookieHeader(response.headers.getSetCookie())), SESSION_COOKIE)!, config.sessionSecret);
+    const session = await unsealSession(readChunked(parseCookies(cookieHeader(response.headers.getSetCookie())), SESSION)!, config.sessionSecret);
     expect(session).toMatchObject({ accessToken, refreshToken: "r1" });
   });
 
@@ -178,7 +179,7 @@ describe("renovación y proxy", () => {
 
     expect(new URLSearchParams(fetchMock.mock.calls[0][1].body as string).get("refresh_token")).toBe("r1");
     expect((fetchMock.mock.calls[1][1].headers as Headers).get("authorization")).toBe(`Bearer ${renewed}`);
-    const stored = await unsealSession(readChunked(parseCookies(cookieHeader(response.headers.getSetCookie())), SESSION_COOKIE)!, config.sessionSecret);
+    const stored = await unsealSession(readChunked(parseCookies(cookieHeader(response.headers.getSetCookie())), SESSION)!, config.sessionSecret);
     expect(stored?.refreshToken).toBe("r2");
   });
 
@@ -192,7 +193,7 @@ describe("renovación y proxy", () => {
 
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({ code: "SESSION_EXPIRED" });
-    expect(response.headers.getSetCookie().some((c) => c.startsWith(`${SESSION_COOKIE}=;`) && c.includes("Max-Age=0"))).toBe(true);
+    expect(response.headers.getSetCookie().some((c) => c.startsWith(`${SESSION}=;`) && c.includes("Max-Age=0"))).toBe(true);
   });
 
   it("sin sesión el proxy no llama a la API", async () => {
@@ -204,6 +205,19 @@ describe("renovación y proxy", () => {
 
     expect(response.status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("claims", () => {
+  it("/auth/claims devuelve el token sin firma, que no sirve como credencial", async () => {
+    const accessToken = jwt({ sub: "u1", permissions: ["a"], exp: now() + 900 });
+    const response = await routes.claims(new Request(`${APP}/auth/claims`, {
+      headers: { cookie: await sessionCookieHeader({ accessToken, refreshToken: "r1", expiresAt: now() + 900 }) },
+    }));
+
+    const { claimsToken } = (await response.json()) as { claimsToken: string };
+    expect(claimsToken).toBe(accessToken.slice(0, accessToken.lastIndexOf(".") + 1));
+    expect(claimsToken.endsWith(".")).toBe(true);
   });
 });
 

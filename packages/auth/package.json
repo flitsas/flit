@@ -8,7 +8,8 @@
   "exports": {
     "./server": "./src/server.ts",
     "./client": "./src/client.tsx",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./request": "./src/request.ts"
   },
   "scripts": {
     "test": "vitest run",

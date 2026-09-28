@@ -37,8 +37,8 @@ const { user, status } = useSession(); // de "@flit/auth/client"
 
 ## Sesión sin Redis
 
-- **Dónde vive:** en la cookie `flit_session`: comprimida, cifrada con AES-GCM (llave derivada de
-  `FLIT_SESSION_SECRET`), `HttpOnly`, `SameSite=Lax` y **sin `Domain`**. Si pasa de ~3,8 KB se parte en `flit_session.1`, …
+- **Dónde vive:** en la cookie `flit_session_<producto>`: comprimida, cifrada con AES-GCM (llave derivada de
+  `FLIT_SESSION_SECRET`), `HttpOnly`, `SameSite=Lax` y **sin `Domain`**. Si pasa de ~3,8 KB se parte en `flit_session_<producto>.1`, …
 - **Tamaño:** el payload del JWT se guarda como texto (comprime mejor que su base64) y el refresh token es una
   referencia opaca que el hub guarda en su base. Una sesión típica pesa ~1,3 KB, lo que importa porque Node limita
   toda la cabecera `Cookie` a 16 KB.

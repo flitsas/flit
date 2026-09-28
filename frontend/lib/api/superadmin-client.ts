@@ -13,6 +13,7 @@ import type {
   UpdateConformationProfileRequest,
   UpdateProcedureTypeRequest,
 } from './types/procedure-parametrization';
+import { sessionAwareBase } from '@/lib/api/base-url';
 import { getToken } from './client';
 import { fetchAllCompanies } from './admin-companies';
 
@@ -81,7 +82,7 @@ const BASE_URL =
 
 function resolveBaseUrl(): string {
   return (
-    BASE_URL ||
+    sessionAwareBase(BASE_URL) ||
     (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000')
   );
 }

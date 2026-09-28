@@ -24,6 +24,9 @@ importers:
 
   frontend:
     dependencies:
+      '@flit/auth':
+        specifier: workspace:*
+        version: link:../packages/auth
       '@flit/brand':
         specifier: workspace:*
         version: link:../packages/brand

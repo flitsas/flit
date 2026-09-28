@@ -6,7 +6,7 @@ const monorepoRoot = path.resolve(__dirname, "..");
 
 const nextConfig: NextConfig = {
   // Paquetes del workspace publicados como TypeScript (FLIT Suite, B-02 y B-09).
-  transpilePackages: ["@flit/ui", "@flit/brand"],
+  transpilePackages: ["@flit/ui", "@flit/brand", "@flit/auth"],
   outputFileTracingRoot: monorepoRoot,
   turbopack: {
     root: monorepoRoot,

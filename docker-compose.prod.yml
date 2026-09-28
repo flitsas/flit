@@ -613,6 +613,13 @@ services:
       CORE_API_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
       # ict-admin-route del Gateway (/api/v1/ict/{**catch-all}) -> core-ict-cluster.
       CORE_ICT_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
+      # HU #13001 (FLIT Suite A-10) — sesión de Trámites. legacy (por defecto) = la de siempre. oidc = login por el hub
+      # con @flit/auth: el token queda en el servidor y el navegador llama /api/v1 por el mismo origen. Encender oidc
+      # exige el hub desplegado en FLIT_HUB_URL y Trámites en su propio host (A-11); se revierte volviendo a legacy.
+      FLIT_SESSION_MODE: ${FLIT_SESSION_MODE:-legacy}
+      FLIT_HUB_URL: ${FLIT_HUB_URL:-https://dev.flitsas.online}
+      FLIT_OIDC_INTERNAL_URL: http://gateway:${GATEWAY_PORT:-4002}
+      FLIT_SESSION_SECRET: ${FLIT_SESSION_SECRET:-}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-4001}:${FRONTEND_PORT:-4001}"
     depends_on:

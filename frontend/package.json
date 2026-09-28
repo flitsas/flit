@@ -16,6 +16,7 @@
     "format:check": "echo 'format:check: sin formateador configurado en el repo (deuda: adoptar Prettier/Biome en ADR aparte)' && exit 0"
   },
   "dependencies": {
+    "@flit/auth": "workspace:*",
     "@flit/brand": "workspace:*",
     "@flit/ui": "workspace:*",
     "clsx": "^2.1.1",

@@ -1,5 +1,6 @@
 // Cliente SuperAdmin — Plataforma → Mandatos (config por OT + plantilla propia + preview + extract).
 import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
+import { sessionAwareBase } from "@/lib/api/base-url";
 import { ApiError } from "./types";
 import type {
   MandateAssignmentMode,
@@ -180,7 +181,7 @@ export async function uploadMandateOtPdfTemplate(
   signal?: AbortSignal,
 ): Promise<MandateOtConfigView> {
   const baseUrl =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    sessionAwareBase(API_BASE_URL) || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(`${base}/ot/${officeId}/template`, baseUrl);
   const token = getToken();
   const form = new FormData();
@@ -396,7 +397,7 @@ export async function extractMandateConfigFromFile(
   signal?: AbortSignal,
 ): Promise<MandateConfigExtractResult> {
   const baseUrl =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    sessionAwareBase(API_BASE_URL) || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(`${base}/extract`, baseUrl);
   const token = getToken();
   const form = new FormData();
@@ -507,7 +508,7 @@ export async function sendMandateSimulation(
 
 async function postPdf(path: string, body: unknown, signal?: AbortSignal): Promise<Blob> {
   const baseUrl =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    sessionAwareBase(API_BASE_URL) || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(path, baseUrl);
   const token = getToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -536,7 +537,7 @@ async function postPdf(path: string, body: unknown, signal?: AbortSignal): Promi
 
 async function fetchPdf(path: string, signal?: AbortSignal): Promise<Blob> {
   const baseUrl =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    sessionAwareBase(API_BASE_URL) || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(path, baseUrl);
   const token = getToken();
   const headers: Record<string, string> = {};

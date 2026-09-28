@@ -2,7 +2,7 @@
 // /auth/session. Authorization code con PKCE contra el hub; el token nunca llega al navegador.
 import { sessionUser } from "./claims";
 import { appOrigin, authConfig, type AuthConfig } from "./config";
-import { TX_COOKIE, parseCookies, serializeCookie } from "./cookies";
+import { parseCookies, serializeCookie, txCookie } from "./cookies";
 import { pkceChallenge, randomToken, seal, unseal } from "./crypto";
 import { clearSessionCookies, freshSession, isSecure, sessionCookies } from "./store";
 import { exchangeCode, TokenError } from "./tokens";
@@ -25,7 +25,7 @@ export interface AuthRoutesOptions {
   config?: () => AuthConfig;
 }
 
-export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "callback" | "logout" | "refresh" | "session", RouteHandler> {
+export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "callback" | "logout" | "refresh" | "session" | "claims", RouteHandler> {
   const callbackPath = options.callbackPath ?? "/auth/callback";
   const errorPath = options.errorPath ?? "/403";
   const config = options.config ?? (() => authConfig(options.productCode));
@@ -48,7 +48,7 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
       }).toString();
 
       return redirect(authorize.toString(), [
-        serializeCookie(TX_COOKIE, await seal(tx, cfg.sessionSecret), { secure: isSecure(request, cfg), maxAgeSeconds: 600 }),
+        serializeCookie(txCookie(cfg.productCode), await seal(tx, cfg.sessionSecret), { secure: isSecure(request, cfg), maxAgeSeconds: 600 }),
       ]);
     },
 
@@ -57,8 +57,8 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
       const cfg = config();
       const url = new URL(request.url);
       const secure = isSecure(request, cfg);
-      const clearTx = serializeCookie(TX_COOKIE, "", { secure, maxAgeSeconds: 0 });
-      const rawTx = parseCookies(request.headers.get("cookie")).get(TX_COOKIE);
+      const clearTx = serializeCookie(txCookie(cfg.productCode), "", { secure, maxAgeSeconds: 0 });
+      const rawTx = parseCookies(request.headers.get("cookie")).get(txCookie(cfg.productCode));
       const tx = rawTx ? await unseal<Transaction>(rawTx, cfg.sessionSecret) : null;
 
       if (!tx || url.searchParams.get("state") !== tx.state) {
@@ -98,6 +98,18 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
       return json(session ? { expiresAt: session.expiresAt } : { code: "SESSION_EXPIRED" }, session ? 200 : 401, setCookies);
     },
 
+    /**
+     * GET /auth/claims → `{ claimsToken }`: el token SIN firma (`header.payload.`), solo para apps que ya leen los
+     * claims del JWT en el navegador (Trámites, A-10). No sirve como credencial: la API lo rechaza y el proxy lo
+     * descarta; el token real nunca sale del servidor.
+     */
+    async claims(request) {
+      const { session, setCookies } = await freshSession(request, config());
+      return session
+        ? json({ claimsToken: claimsToken(session.accessToken) }, 200, setCookies)
+        : json({ code: "SESSION_EXPIRED" }, 401, setCookies);
+    },
+
     /** GET /auth/session → SessionUser para useSession(); 401 sin sesión. */
     async session(request) {
       const { session, setCookies } = await freshSession(request, config());
@@ -106,6 +118,12 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
         : json({ code: "SESSION_EXPIRED" }, 401, setCookies);
     },
   };
+}
+
+/** `header.payload.` del JWT: los claims para dibujar la interfaz, sin la firma que lo haría usable. */
+export function claimsToken(accessToken: string): string {
+  const [header, payload] = accessToken.split(".");
+  return `${header}.${payload}.`;
 }
 
 /** Solo rutas relativas de esta misma app (evita un redireccionamiento abierto). */

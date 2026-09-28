@@ -1,8 +1,10 @@
 // Cookies de @flit/auth. Contrato §8: HttpOnly, SameSite=Lax y NUNCA con atributo Domain (cada host tiene su
 // sesión). Una sesión cifrada puede pasar de 4 KB (permisos del token): se parte en trozos nombre, nombre.1, …
 
-export const SESSION_COOKIE = "flit_session";
-export const TX_COOKIE = "flit_oidc_tx";
+// Por producto: en producción cada app tiene su host, pero en local todas comparten `localhost` o `127.0.0.1` (las
+// cookies no distinguen puerto) y la sesión del hub pisaría la de Trámites.
+export const sessionCookie = (productCode: string): string => `flit_session_${productCode}`;
+export const txCookie = (productCode: string): string => `flit_oidc_tx_${productCode}`;
 
 /** Margen por trozo: los navegadores aceptan ~4096 bytes por cookie, incluidos nombre y atributos. */
 const CHUNK = 3800;

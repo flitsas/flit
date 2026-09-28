@@ -12,11 +12,11 @@
 import { cookies } from "next/headers";
 import { sessionUser } from "./claims";
 import { authConfig } from "./config";
-import { SESSION_COOKIE, readChunked } from "./cookies";
+import { readChunked, sessionCookie } from "./cookies";
 import { unsealSession } from "./store";
 import type { SessionUser } from "./types";
 
-export { createAuthRoutes, safeReturnTo, type AuthRoutesOptions, type RouteHandler } from "./routes";
+export { claimsToken, createAuthRoutes, safeReturnTo, type AuthRoutesOptions, type RouteHandler } from "./routes";
 export { createApiProxy, type ApiProxyOptions } from "./proxy";
 export { authConfig, type AuthConfig } from "./config";
 export type { SessionUser } from "./types";
@@ -28,7 +28,7 @@ export type { SessionUser } from "./types";
  */
 export async function getSession(productCode: string): Promise<SessionUser | null> {
   const config = authConfig(productCode);
-  const sealed = readChunked(await cookies(), SESSION_COOKIE);
+  const sealed = readChunked(await cookies(), sessionCookie(productCode));
   const session = sealed ? await unsealSession(sealed, config.sessionSecret) : null;
   if (!session) return null;
   if (session.expiresAt <= Math.floor(Date.now() / 1000) && !session.refreshToken) return null;

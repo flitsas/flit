@@ -2,6 +2,7 @@
 // Módulo Admin OT (SuperAdmin u ot_admin). Endpoints acotados por transitOfficeId en la ruta.
 // El número de documento y el correo son PII (Ley 1581): se reciben solo para precargar el formulario.
 import { apiFetch, API_BASE_URL, getToken, friendlyErrorMessage } from "./client";
+import { sessionAwareBase } from "@/lib/api/base-url";
 import { companyScopedPath } from "./company-scoped-path";
 import { ApiError } from "./types";
 
@@ -157,7 +158,7 @@ export async function fetchMandateSignerSignatureImage(
   signal?: AbortSignal,
 ): Promise<Blob> {
   const baseUrl =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    sessionAwareBase(API_BASE_URL) || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(`${base(transitOfficeId)}/${mandateSignerId}/signature-image`, baseUrl);
   const token = getToken();
   const headers: Record<string, string> = {};
