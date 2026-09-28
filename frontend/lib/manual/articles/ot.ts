@@ -182,6 +182,14 @@ export const OT_ARTICLES: ManualArticle[] = [
             text: "Toda decisión queda en el historial del trámite con fecha y hora, y dispara el correo correspondiente a la compañía. Si tu organismo opera en Quipux, la consola está en solo lectura: decides allí, no aquí.",
           },
         ],
+        media: [
+          {
+            kind: "diagram",
+            id: "flujo-decision-ot",
+            alt: "Diagrama del flujo de decisión del organismo: revisar el expediente, asignar placa si aplica, y aprobar o rechazar con causal, con retorno a subsanación si se rechaza",
+            caption: "La decisión de punta a punta: revisar, placa si aplica, aprobar o rechazar con causal.",
+          },
+        ],
       },
     ],
   },
