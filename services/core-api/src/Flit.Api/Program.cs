@@ -12,6 +12,7 @@ using Flit.Api.Endpoints.Tramites;
 using Flit.Api.OpenApi;
 using Flit.Api.Platform;
 using Flit.Api.RateLimiting;
+using Flit.Api.Identity;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Security;
@@ -198,6 +199,7 @@ if (ictGrpcPort is { } grpcPort)
 // Una línea por frente que llama a su propio método de extensión (regla R5 de
 // docs/suite/reglas-trabajo-paralelo.md). No se reordenan las líneas existentes.
 builder.Services.AddPlatformApi(builder.Configuration); // Frente B · HU #12966
+builder.Services.AddFlitOidc(builder.Configuration); // Frente A · HU #12990 (Suite:Oidc:Enabled)
 // === FLIT Suite: fin servicios ===
 
 var app = builder.Build();
@@ -412,6 +414,7 @@ app.MapUsageEventsEndpoints(); // Reportes2 HU-A
 // === FLIT Suite: endpoints ===
 // Una línea por frente: app.MapPlatformEndpoints(), app.MapIdentityEndpoints(), … (regla R5).
 app.MapPlatformEndpoints(); // Frente B · HU #12966
+app.MapFlitOidcEndpoints(); // Frente A · HU #12990 (/connect/* solo con Suite:Oidc:Enabled)
 // === FLIT Suite: fin endpoints ===
 
 app.Run();

@@ -21,7 +21,7 @@ describe("proxyToApi", () => {
       headers: { host: "dev.flitsas.online", authorization: "Bearer t" },
     });
 
-    await proxyToApi(request, ["platform", "me", "apps"], config);
+    await proxyToApi(request, "/api/v1", ["platform", "me", "apps"], config);
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://gateway:4002/api/v1/platform/me/apps?x=1");
@@ -36,7 +36,7 @@ describe("proxyToApi", () => {
       headers: { host: "Marca.Example.com:443", "x-flit-domain": "otra-red.com", "x-internal-key": "robada" },
     });
 
-    await proxyToApi(request, ["public", "branding"], config);
+    await proxyToApi(request, "/api/v1", ["public", "branding"], config);
 
     const headers = (fetchMock.mock.calls[0][1] as RequestInit).headers as Headers;
     expect(headers.get("x-flit-domain")).toBe("marca.example.com");
@@ -47,7 +47,7 @@ describe("proxyToApi", () => {
     const fetchMock = stubFetch();
     const request = new Request("https://dev.flitsas.online/api/v1/a", { headers: { host: "dev.flitsas.online", "x-internal-key": "robada" } });
 
-    await proxyToApi(request, ["a"], { ...config, internalApiKey: undefined });
+    await proxyToApi(request, "/api/v1", ["a"], { ...config, internalApiKey: undefined });
 
     expect(((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).has("x-internal-key")).toBe(false);
   });
@@ -60,7 +60,7 @@ describe("proxyToApi", () => {
       body: '{"x":1}',
     });
 
-    const response = await proxyToApi(request, ["a", "b"], config);
+    const response = await proxyToApi(request, "/api/v1", ["a", "b"], config);
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.method).toBe("PUT");
@@ -75,17 +75,31 @@ describe("proxyToApi", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
     const request = new Request("https://dev.flitsas.online/api/v1/a", { headers: { host: "dev.flitsas.online" } });
 
-    const response = await proxyToApi(request, ["a"], config);
+    const response = await proxyToApi(request, "/api/v1", ["a"], config);
 
     expect(response.status).toBe(502);
     expect(await response.json()).toMatchObject({ code: "API_UNAVAILABLE" });
+  });
+
+  it("reenvía el servidor OIDC con su propio prefijo y deja pasar la cookie y la redirección", async () => {
+    const upstream = new Response(null, { status: 302, headers: { location: "https://dev.flitsas.online/login?returnUrl=%2Fx" } });
+    upstream.headers.append("set-cookie", "flit_hub=a; path=/; secure; httponly; samesite=lax");
+    const fetchMock = stubFetch(upstream);
+    const request = new Request("https://dev.flitsas.online/connect/authorize?client_id=tramites", { headers: { host: "dev.flitsas.online" } });
+
+    const response = await proxyToApi(request, "/connect", ["authorize"], config);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("http://gateway:4002/connect/authorize?client_id=tramites");
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://dev.flitsas.online/login?returnUrl=%2Fx");
+    expect(response.headers.get("set-cookie")).toContain("flit_hub=a");
   });
 
   it("codifica cada segmento de la ruta", async () => {
     const fetchMock = stubFetch();
     const request = new Request("https://dev.flitsas.online/api/v1/x", { headers: { host: "dev.flitsas.online" } });
 
-    await proxyToApi(request, ["docs", "a b", "..%2f"], config);
+    await proxyToApi(request, "/api/v1", ["docs", "a b", "..%2f"], config);
 
     expect(fetchMock.mock.calls[0][0]).toBe("http://gateway:4002/api/v1/docs/a%20b/..%252f");
   });

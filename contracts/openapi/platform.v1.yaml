@@ -159,6 +159,28 @@ paths:
         "409":
           $ref: "#/components/responses/Problem"
 
+  /api/v1/platform/issuers:
+    get:
+      tags: [Platform]
+      operationId: listIssuers
+      summary: Emisores de token válidos
+      description: >
+        Hub de la plataforma en este ambiente y dominios de red activos (Marca Blanca), como URL con
+        barra final, igual que el `iss` de los tokens del servidor OIDC del hub (A-05). Los servicios
+        aceptan solo tokens de estos emisores y guardan la lista 5 minutos. Anónimo.
+      security: []
+      responses:
+        "200":
+          description: Emisores, sin repetidos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  format: uri
+              example: ["https://dev.flitsas.online/", "https://app.movilidadandina.com/"]
+
 components:
   securitySchemes:
     bearerAuth:

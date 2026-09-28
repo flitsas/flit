@@ -401,6 +401,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlitDbContext).Assembly);
+
+        // HU #12990 (FLIT Suite A-05): almacenes del servidor OIDC del hub (OpenIddict) en identity.oidc_*.
+        Configurations.Identity.OidcModel.Map(modelBuilder);
     }
 
     // ── Vigencia del expediente consolidado (Feature #10701 / HU #10860) ─────────────────────

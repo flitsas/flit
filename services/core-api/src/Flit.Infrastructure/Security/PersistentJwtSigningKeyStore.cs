@@ -7,12 +7,13 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Flit.Infrastructure.Security;
 
 /// <summary>
-/// Llave RSA de firma del JWT guardada en <c>security.jwt_signing_keys</c>, con la llave privada cifrada por
+/// Llave RSA guardada en <c>security.jwt_signing_keys</c>, con la llave privada cifrada por
 /// Data Protection (HU #12896, A-03). La primera instancia que la necesita la crea; las siguientes, y los reinicios,
-/// leen la misma. Dos instancias que arrancan a la vez no pisan la llave: el INSERT usa ON CONFLICT DO NOTHING y
+/// leen la misma. La usan el JWT de core-api y las llaves de firma y cifrado del servidor OIDC (HU #12990, A-05),
+/// cada una con su key_id. Dos instancias que arrancan a la vez no pisan la llave: el INSERT usa ON CONFLICT DO NOTHING y
 /// ambas releen la fila guardada.
 /// </summary>
-internal static class PersistentJwtSigningKeyStore
+public static class PersistentJwtSigningKeyStore
 {
     private const string Purpose = "Flit.Jwt.SigningKey.v1";
 

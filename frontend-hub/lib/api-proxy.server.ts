@@ -1,4 +1,5 @@
-// Proxy /api/v1/* del hub hacia el gateway (B-09), resuelto en runtime con CORE_API_ORIGIN.
+// Proxy del hub hacia el gateway (B-09), resuelto en runtime con CORE_API_ORIGIN: /api/v1/* y, desde A-05, el
+// servidor OIDC (/connect/* y /.well-known/*), que vive en core-api pero se sirve en el host del hub.
 //
 // Sella el dominio: descarta X-Flit-Domain y X-Internal-Key que mande el navegador y pone el host real de la
 // petición con la clave interna, igual que la resolución de marca. Así el gateway (DomainSealTransform) confía
@@ -22,9 +23,13 @@ const DROPPED_REQUEST_HEADERS = new Set([
 /** fetch ya descomprime el cuerpo: reenviar estas cabeceras haría que el navegador lo intente de nuevo. */
 const DROPPED_RESPONSE_HEADERS = new Set(["content-encoding", "content-length", "transfer-encoding", "connection"]);
 
-export async function proxyToApi(request: Request, path: string[], config: HubConfig): Promise<Response> {
+/**
+ * @param prefix ruta fija del lado de la API (`/api/v1`, `/connect`, `/.well-known`).
+ * @param path segmentos que capturó la ruta del hub; se codifican uno por uno.
+ */
+export async function proxyToApi(request: Request, prefix: string, path: string[], config: HubConfig): Promise<Response> {
   const incoming = new URL(request.url);
-  const target = `${config.apiOrigin}/api/v1/${path.map(encodeURIComponent).join("/")}${incoming.search}`;
+  const target = `${config.apiOrigin}${prefix}/${path.map(encodeURIComponent).join("/")}${incoming.search}`;
 
   const headers = new Headers();
   request.headers.forEach((value, name) => {

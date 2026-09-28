@@ -172,6 +172,11 @@ services:
       # vuelve al comportamiento anterior sin redesplegar código.
       Jwt__PersistSigningKey: ${JWT_PERSIST_SIGNING_KEY:-true}
       Jwt__ValidateIssuedTokens: ${JWT_VALIDATE_ISSUED_TOKENS:-true}
+      # FLIT Suite — prefijo de ambiente de los hosts (contrato §1): dev, qa o vacío en PDN. Lo exporta el CD según la
+      # rama; sin él, me/apps y el emisor OIDC apuntarían a los hosts de PDN.
+      Suite__Hosts__Environment: ${FLIT_SUITE_ENV:-}
+      # HU #12990 (A-05) — servidor OIDC del hub. Apagado: /connect/* responde 404 y el login actual no cambia.
+      Suite__Oidc__Enabled: ${FLIT_OIDC_ENABLED:-false}
       # Verifik se configura por env vars CRUDAS (no por convención .NET `Verifik__`):
       # InfrastructureExtensions lee Environment.GetEnvironmentVariable("VERIFIK_*").
       # Pasar las claves `Verifik__*` NO funciona (el código no las lee) → token vacío → 401.

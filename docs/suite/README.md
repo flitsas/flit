@@ -53,7 +53,7 @@ El líder lo actualiza en la revisión semanal. Estado: ⏳ pendiente · 🟡 en
 | Redis y RabbitMQ en DEV | L | A, B, C | ⏳ |
 | Esqueleto de `frontend-hub` | B | A | 🟡 Feature #12889 |
 | Publicador de eventos | C | A, B | ⏳ |
-| Servidor OIDC y `/platform/issuers` en DEV | A | B, C | ⏳ |
+| Servidor OIDC y `/platform/issuers` en DEV | A | B, C | 🟡 Feature #12886 (apagado hasta el borde) |
 | `IProductAccessResolver` real | B | A | 🟡 PR #448 |
 | `DomainContext.ProductCode` | B | A | 🟡 PR #448 |
 | Manifiesto y `me/apps` | B | C | ⏳ |
