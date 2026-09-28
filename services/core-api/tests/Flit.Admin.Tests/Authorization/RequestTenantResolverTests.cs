@@ -361,6 +361,10 @@ public sealed class RequestTenantResolverTests
     [InlineData("/api/v1/me/branding/", true)]
     [InlineData("/api/v1/me/brandingx", false)]
     [InlineData("/api/v1/me/branding/otra", false)]
+    // HU #12922 — DR. FLIT es Prefix: cubre chat, support-cases y consent; sin sufijos pegados.
+    [InlineData("/api/v1/dr-flit/chat", true)]
+    [InlineData("/api/v1/dr-flit/support-cases/attachments", true)]
+    [InlineData("/api/v1/dr-flitx", false)]
     public void IsRuntimeScoped_MatchingIdenticoAlHistorico(string path, bool expected)
     {
         TenantEnforcementMiddleware.IsRuntimeScoped(new PathString(path)).Should().Be(expected);
@@ -421,7 +425,7 @@ public sealed class RequestTenantResolverTests
             || r.Path == "/api/v1/dr-flit",
             "las únicas excepciones fuera de /api/v1/tramites son gestión avanzada (Bug #12554), "
             + "preferencias de UI (Bug #12558), autogestión de marca (HU #12412), autogestión de "
-            + "dominio (HU #12416), herencia de marca de sesión (HU #12418) y DR. FLIT (HU #12922) — cualquier prefijo "
-            + "nuevo fuera de estos casos debe declararse aquí explícitamente");
+            + "dominio (HU #12416), herencia de marca de sesión (HU #12418) y DR. FLIT (HU #12922) — "
+            + "cualquier prefijo nuevo fuera de estos casos debe declararse aquí explícitamente");
     }
 }
