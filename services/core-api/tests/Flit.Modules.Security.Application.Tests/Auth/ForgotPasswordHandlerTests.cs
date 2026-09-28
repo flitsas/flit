@@ -61,6 +61,26 @@ public sealed class ForgotPasswordHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_ConLasUrlsDelAmbiente_ElCorreoUsaSusImagenesYNoLasDeDev()
+    {
+        // HU #13003 (A-12): antes la plantilla no recibía la base de recursos y todos los ambientes cargaban las de DEV.
+        var handler = new ForgotPasswordHandler(
+            _userAccountRepository, _tokenRepository, _tokenGenerator, _emailSender, _options,
+            _auditWriter, _auditContext, _networkMembership, _domainContext, _urlBaseResolver,
+            NullLogger<ForgotPasswordHandler>.Instance,
+            emailLinks: new EmailLinksOptions { AssetsBaseUrl = "https://qa.flitsas.online/email-assets" });
+        _userAccountRepository.FindActiveByEmailAsync("demo@flit.local", Arg.Any<CancellationToken>())
+            .Returns(new PasswordRecoveryUser(Guid.NewGuid(), "demo@flit.local", "Demo User", Guid.NewGuid()));
+        _tokenGenerator.Generate().Returns(new GeneratedToken("raw-token", "hash-token"));
+
+        await handler.HandleAsync(new ForgotPasswordCommand("demo@flit.local"), CancellationToken.None);
+
+        await _emailSender.Received(1).SendAsync(
+            Arg.Is<EmailMessage>(m => m.HtmlBody.Contains("https://qa.flitsas.online/email-assets/") && !m.HtmlBody.Contains("dev.flitsas.online")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task HandleAsync_UnknownEmail_DoesNotCreateTokenNorSendEmailNorThrow()
     {
         _userAccountRepository.FindActiveByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())

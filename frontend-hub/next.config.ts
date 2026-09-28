@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: monorepoRoot,
   },
+  // A-12 (HU #13003): mismo arreglo que Trámites para los enlaces de recuperación ya enviados.
+  async redirects() {
+    return [{ source: "/reset-password", destination: "/auth/reset-password", permanent: false }];
+  },
 };
 
 export default nextConfig;

@@ -26,7 +26,8 @@ public sealed partial class ReactivateInvitationHandler(
     InvitationOptions options,
     INetworkUrlBaseResolver urlBaseResolver,
     ILogger<ReactivateInvitationHandler> logger,
-    IEmailThemeResolver? themeResolver = null)
+    IEmailThemeResolver? themeResolver = null,
+    EmailLinksOptions? emailLinks = null)
 {
     private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
 
@@ -96,7 +97,7 @@ public sealed partial class ReactivateInvitationHandler(
             .ConfigureAwait(false);
         var link = InvitationEmailTemplate.BuildActivateLink(activateUrlBase, token.RawToken);
         var theme = await _themeResolver.ResolveAsync(invitation.TenantId, cancellationToken).ConfigureAwait(false);
-        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link, theme: theme);
+        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link, assetsBaseUrl: emailLinks?.AssetsBaseUrl, theme: theme);
         var message = new EmailMessage(
             invitation.TenantId, "security.invitation", invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody)
         {

@@ -13,7 +13,8 @@ public sealed partial class CreateInvitationHandler(
     InvitationOptions options,
     INetworkUrlBaseResolver urlBaseResolver,
     ILogger<CreateInvitationHandler> logger,
-    IEmailThemeResolver? themeResolver = null)
+    IEmailThemeResolver? themeResolver = null,
+    EmailLinksOptions? emailLinks = null)
 {
     // HU #12428 — parámetro opcional (patrón NullBrandingCacheInvalidator/NullEmailThemeResolver):
     // los tests que no ejercitan esta historia no cambian su construcción del handler.
@@ -71,7 +72,7 @@ public sealed partial class CreateInvitationHandler(
         var link = InvitationEmailTemplate.BuildActivateLink(activateUrlBase, token.RawToken);
         // HU #12428 AC1/AC8 — tema por la red del tenant destino (cabeza, hija o FLIT).
         var theme = await _themeResolver.ResolveAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
-        var composed = InvitationEmailTemplate.Compose(command.FullName, link, theme: theme);
+        var composed = InvitationEmailTemplate.Compose(command.FullName, link, assetsBaseUrl: emailLinks?.AssetsBaseUrl, theme: theme);
         // HU #11363 AC1 — id estable del catálogo (TemplateIds.Invitation en Flit.Infrastructure);
         // comparte plantilla con ResendInvitationHandler (dos disparadores, una sola entrada).
         var message = new EmailMessage(command.TenantId, "security.invitation", email, email, composed.Subject, composed.HtmlBody)

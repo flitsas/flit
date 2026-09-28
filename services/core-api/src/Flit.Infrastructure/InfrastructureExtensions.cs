@@ -360,6 +360,15 @@ public static class InfrastructureExtensions
             .Get<PasswordRecoveryOptions>() ?? new PasswordRecoveryOptions();
         services.AddSingleton(passwordRecovery);
 
+        // HU #13003 (A-12): URLs de los correos de seguridad por ambiente. Sin sección propia, se derivan de las que ya
+        // configura cada ambiente (recursos de correo y URL pública de la marca).
+        var emailLinks = configuration.GetSection(EmailLinksOptions.SectionName).Get<EmailLinksOptions>() ?? new EmailLinksOptions();
+        if (string.IsNullOrWhiteSpace(emailLinks.AssetsBaseUrl))
+            emailLinks.AssetsBaseUrl = configuration["Notifications:EmailAssets:BaseUrl"] ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(emailLinks.LoginUrl) && configuration["PublicBranding:PublicBaseUrl"] is { Length: > 0 } publicBase)
+            emailLinks.LoginUrl = publicBase.TrimEnd('/') + "/login";
+        services.AddSingleton(emailLinks);
+
         var emailSettings = configuration
             .GetSection(EmailSettings.SectionName)
             .Get<EmailSettings>() ?? new EmailSettings();

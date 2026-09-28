@@ -177,6 +177,13 @@ services:
       Suite__Hosts__Environment: ${FLIT_SUITE_ENV:-}
       # HU #12990 (A-05) — servidor OIDC del hub. Apagado: /connect/* responde 404 y el login actual no cambia.
       Suite__Oidc__Enabled: ${FLIT_OIDC_ENABLED:-false}
+      # HU #13003 (A-12) — URLs de los correos por ambiente. Antes no se pasaban y QA y PDN enviaban enlaces e imágenes
+      # de DEV (appsettings.json). FLIT_HUB_URL la exporta el CD (https://<dominio del front de este ambiente>).
+      # La recuperación va a /auth/reset-password: la ruta /reset-password de appsettings.json no existe en el front.
+      PasswordRecovery__ResetUrlBase: ${FLIT_HUB_URL:-https://dev.flitsas.online}/auth/reset-password
+      Invitations__ActivateUrlBase: ${FLIT_HUB_URL:-https://dev.flitsas.online}/invite/activate
+      Notifications__EmailAssets__BaseUrl: ${FLIT_HUB_URL:-https://dev.flitsas.online}/email-assets
+      PublicBranding__PublicBaseUrl: ${FLIT_HUB_URL:-https://dev.flitsas.online}
       # Verifik se configura por env vars CRUDAS (no por convención .NET `Verifik__`):
       # InfrastructureExtensions lee Environment.GetEnvironmentVariable("VERIFIK_*").
       # Pasar las claves `Verifik__*` NO funciona (el código no las lee) → token vacío → 401.

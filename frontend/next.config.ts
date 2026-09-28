@@ -18,6 +18,11 @@ const nextConfig: NextConfig = {
   },
   // Proxy SuperAdmin API in dev — avoids browser CORS to :4003.
   // Requires: pnpm run dev:core-api + pnpm run dev:frontend (leave NEXT_PUBLIC_API_URL unset).
+  // HU #13003 (A-12): los correos de recuperación enlazaban /reset-password, que no existe; la pantalla es
+  // /auth/reset-password. Los enlaces ya enviados siguen sirviendo (conservan ?token=).
+  async redirects() {
+    return [{ source: "/reset-password", destination: "/auth/reset-password", permanent: false }];
+  },
   async rewrites() {
     const apiOrigin = process.env.CORE_API_ORIGIN ?? 'http://localhost:4003';
     // core-ict es un servicio aparte (:4020). En Docker lo enruta el Gateway; en `pnpm run dev`

@@ -16,7 +16,8 @@ public sealed partial class ActivateAccountHandler(
     ITenantNetworkMembership networkMembership,
     IDomainContextAccessor domainContext,
     ILogger<ActivateAccountHandler> logger,
-    IEmailThemeResolver? themeResolver = null)
+    IEmailThemeResolver? themeResolver = null,
+    EmailLinksOptions? emailLinks = null)
 {
     private readonly IEmailThemeResolver _themeResolver = themeResolver ?? NullEmailThemeResolver.Instance;
 
@@ -83,7 +84,8 @@ public sealed partial class ActivateAccountHandler(
         try
         {
             var theme = await _themeResolver.ResolveAsync(invitation.TenantId, cancellationToken).ConfigureAwait(false);
-            var composed = WelcomeRegistrationEmailTemplate.Compose(theme: theme);
+            var composed = WelcomeRegistrationEmailTemplate.Compose(
+                loginUrl: emailLinks?.LoginUrl, assetsBaseUrl: emailLinks?.AssetsBaseUrl, theme: theme);
             var message = new EmailMessage(
                 invitation.TenantId,
                 "security.welcome-registration",
