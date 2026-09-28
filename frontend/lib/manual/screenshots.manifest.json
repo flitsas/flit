@@ -29,6 +29,13 @@
       "profile": "admin_company",
       "route": "/?m=usuarios",
       "settleMs": 4000
+    },
+    {
+      "id": "historial-placa",
+      "articleSlug": "1-gestor/9-historial-placa",
+      "profile": "admin_company",
+      "route": "/?m=historial-placa",
+      "settleMs": 4000
     }
   ]
 }

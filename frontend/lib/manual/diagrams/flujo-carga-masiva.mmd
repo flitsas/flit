@@ -1,0 +1,8 @@
+flowchart TD
+    A["Descarga la plantilla\ndel tipo de trámite"] --> B["Diligencia una fila\npor cada trámite"]
+    B --> C["Sube el archivo:\nel lote se procesa\nen segundo plano"]
+    C --> D["Revisa el resultado\nfila por fila"]
+    D --> E{"¿Filas con error?"}
+    E -- "No" --> F["Todos quedan como\nBorradores listos\npara completar"]
+    E -- "Sí" --> G["Corrige solo las filas\ncon error en el Excel"]
+    G --> C

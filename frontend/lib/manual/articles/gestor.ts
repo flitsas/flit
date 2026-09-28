@@ -580,6 +580,14 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Responde «qué le ha pasado a esta placa dentro de FLIT»: escribe la placa y obtienes la lista de sus trámites, del más reciente al más antiguo, con tipo, estado, fechas, gestor, organismo, comprador y vendedor.",
           "Para tu compañía ves solo tus trámites; el Super Admin ve la placa en todas las compañías.",
         ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/historial-placa.png",
+            alt: "Módulo Historial por placa con el campo de consulta y el estado inicial esperando una placa",
+            caption: "Historial por placa: escribe la placa y consulta toda su vida en FLIT.",
+          },
+        ],
       },
       {
         id: "como-llegar",
@@ -880,6 +888,14 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Completa una fila por trámite con los datos de vehículo y actores, y guarda el archivo en formato .xlsx (no cambies la extensión).",
           "Selecciona el archivo y pulsa «Procesar archivo». No necesitas esperar en la pantalla: el sistema encola el lote y lo procesa en segundo plano, fila por fila (cada fila hace sus propias consultas, así que un lote grande tarda). Puedes cerrar la ventana y seguir trabajando; el resultado completo aparece luego en la pestaña Resultados.",
+        ],
+        media: [
+          {
+            kind: "diagram",
+            id: "flujo-carga-masiva",
+            alt: "Diagrama del flujo de carga masiva: descargar plantilla, diligenciar, subir, revisar el resultado por fila y corregir solo las filas con error",
+            caption: "El ciclo de la carga masiva: plantilla, lote, resultado y corrección.",
+          },
         ],
       },
       {
