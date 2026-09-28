@@ -39,7 +39,15 @@ async function main() {
   await page.evaluate(() => {
     // Tema neutro sobre fondo blanco: la figura del manual fuerza backdrop claro, así que el
     // mismo SVG es legible en tema claro y oscuro de la app.
-    window.mermaid.initialize({ startOnLoad: false, theme: "neutral", fontFamily: "Poppins, sans-serif" });
+    // htmlLabels:false es obligatorio: con etiquetas HTML mermaid emite foreignObject con
+    // marcado no-XML (<br> sin cerrar) y el navegador no decodifica el SVG dentro de un <img>.
+    window.mermaid.initialize({
+      startOnLoad: false,
+      theme: "neutral",
+      fontFamily: "Poppins, sans-serif",
+      htmlLabels: false,
+      flowchart: { htmlLabels: false },
+    });
   });
 
   const failures = [];
