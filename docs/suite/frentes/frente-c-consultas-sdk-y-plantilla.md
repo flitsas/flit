@@ -55,7 +55,7 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 ## Estado
 
-- [ ] C-00 Cerrar §6 (consultas) y §7 (eventos) del contrato con A y B
+- [x] C-00 Cerrar §6 (consultas) y §7 (eventos) del contrato con A y B
 - [ ] C-01 Publicador de eventos con outbox y RabbitMQ
 - [ ] C-02 `Flit.Platform.Contracts`
 - [ ] C-03 SDK .NET de producto
