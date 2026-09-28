@@ -616,33 +616,65 @@
       "href": "/manual/1-gestor/6-ayuda-dr-flit",
       "audience": "Gestor",
       "sectionId": "gestor",
-      "summary": "Búsquedas operativas, ayuda contextual y canales de soporte desde el asistente.",
+      "summary": "Escríbele con tus palabras: responde dudas citando este manual, busca trámites y radica casos de soporte sin salir de la plataforma.",
       "primarySource": false,
       "blocks": [
         {
           "id": "abrir",
-          "title": "1. Cómo abrir DR. FLIT",
+          "title": "1. Cómo abrir DR. FLIT y hablarle",
           "paragraphs": [
-            "El botón flotante del asistente está disponible en toda la aplicación cuando estás autenticado. Pulsa para abrir el panel; puedes seguir usando la pantalla mientras está abierto. La conversación se conserva al cambiar de módulo hasta que pulses «Terminar chat»."
+            "El botón flotante del asistente está disponible en toda la aplicación cuando estás autenticado. Al abrirlo verás un saludo que te invita a escribir tu duda con tus propias palabras — no necesitas elegir ningún menú: escribe «¿cómo creo un traspaso?» o «me sale un error al firmar» y DR. FLIT entiende qué necesitas.",
+            "Debajo del saludo tienes atajos: los chips de Gestión (Placa, VIN, Trámite, Cliente) para búsquedas directas, y la lista de Ayuda (Necesito ayuda, Normativa, Soporte).",
+            "La conversación se conserva al cambiar de módulo y al cerrar el panel con la X. Solo «Terminar chat» la borra."
           ],
           "bullets": [],
           "callouts": []
         },
         {
-          "id": "opciones",
-          "title": "2. Qué puedes hacer",
+          "id": "autorizacion",
+          "title": "2. Autorización de datos (una sola vez)",
           "paragraphs": [
-            "El menú tiene dos sesiones: Gestión y Ayuda."
+            "La primera vez que uses el chat con inteligencia artificial o vayas a radicar un caso de soporte, DR. FLIT te pide autorizar el tratamiento de tus datos (Ley 1581 de 2012). Pulsa «Ver detalle» si quieres leer el texto completo y «Acepto y continuar» para seguir con lo que estabas haciendo."
           ],
           "bullets": [
-            "Gestión → Buscar por placa: trámites de esa placa y acceso al historial completo.",
-            "Gestión → Buscar por VIN.",
-            "Gestión → Buscar por trámite: escribe el radicado (FT1-0000012 o solo 12).",
-            "Gestión → Buscar por cliente: nombre o documento; luego eliges ver sus trámites o su validación de identidad.",
-            "Ayuda → Necesito ayuda: escribe tu duda en lenguaje natural; si hay artículo en este manual, verás chips para abrirlo. Si estás en un módulo con documentación, te lo sugiere de entrada.",
-            "Ayuda → Normativa: la Resolución 20233040017145 de 2023 (Ministerio de Transporte), la norma que avala los trámites virtuales: resumen por temas y PDF completo.",
-            "Ayuda → Soporte: correo y formulario oficial para radicar un caso."
+            "Si eliges «Ahora no», nada se envía y puedes seguir usando Gestión, Necesito ayuda y Normativa sin inteligencia artificial; la conversación no se borra.",
+            "Solo se pide una vez: aceptada la versión vigente, no vuelve a aparecer aunque termines el chat o entres desde otro navegador.",
+            "No escribas datos personales (cédulas, teléfonos) en el chat; para el caso de soporte hay un formulario aparte que los protege."
           ],
+          "callouts": []
+        },
+        {
+          "id": "dudas",
+          "title": "3. Dudas: respuestas con base en este manual",
+          "paragraphs": [
+            "Escribe tu pregunta y DR. FLIT responde con base en el manual funcional, citando al final los artículos de donde salió la respuesta — tarjetas con enlace directo para abrir la documentación completa. Si la pregunta no es clara, te hace una pregunta de seguimiento; si el manual no tiene la respuesta, te lo dice y te ofrece escalar a soporte."
+          ],
+          "bullets": [
+            "«cómo creo un trámite de traspaso»",
+            "«qué documentos necesito para matrícula»",
+            "«cómo envío prevalidación»",
+            "«qué significa asignado»"
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "El chat con inteligencia artificial tiene un tope diario de mensajes. DR. FLIT te avisa cuando te acercas y, si lo alcanzas, el menú completo sigue funcionando; al día siguiente el chat se reactiva solo."
+            },
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Si el asistente no está disponible, no te quedas sin ayuda: responde el buscador del manual con una «respuesta rápida» y los enlaces a los artículos."
+            }
+          ]
+        },
+        {
+          "id": "gestion",
+          "title": "4. Buscar trámites desde el chat",
+          "paragraphs": [
+            "Pídelo con tus palabras — «busca la placa ABC123», «muéstrame el trámite 12» — y DR. FLIT te lleva directo a la búsqueda de Gestión sin que repitas nada. También puedes usar los chips: Placa, VIN, Trámite (radicado con o sin prefijo) o Cliente (nombre o documento)."
+          ],
+          "bullets": [],
           "callouts": [
             {
               "variant": "info",
@@ -652,21 +684,21 @@
           ]
         },
         {
-          "id": "ejemplos",
-          "title": "3. Ejemplos de preguntas útiles",
-          "paragraphs": [],
+          "id": "soporte",
+          "title": "5. Radicar un caso de soporte sin salir del chat",
+          "paragraphs": [
+            "Cuéntale el problema («me sale un error al firmar un trámite») y DR. FLIT abre el formulario del caso con tus datos ya precargados: correo, compañía y fecha. Tú completas el título, el detalle del error, el resultado que esperabas, con qué frecuencia pasa y la prioridad; si quieres, adjuntas imágenes o PDF."
+          ],
           "bullets": [
-            "«cómo creo un trámite de traspaso»",
-            "«qué documentos necesito para matrícula»",
-            "«cómo envío prevalidación»",
-            "«cómo solicito una revocatoria»",
-            "«qué significa asignado»"
+            "Antes de enviar verás un resumen completo; nada se radica hasta que pulses «Confirmar y radicar caso».",
+            "Al confirmar recibes tu número: «Tu caso #N quedó radicado». El equipo de soporte te responde al correo registrado.",
+            "Si el sistema de soporte no responde en ese momento, verás los canales de contacto (correo de soporte) y podrás «Reintentar» o «Editar el caso» sin perder nada de lo que escribiste."
           ],
           "callouts": [
             {
               "variant": "tip",
               "title": null,
-              "text": "DR. FLIT enlaza documentación; no sustituye al soporte para incidentes de producción o caídas de RUNT. Para eso usa Ayuda → Soporte."
+              "text": "Para incidentes de producción o caídas de RUNT, el caso de soporte es el camino: llega directo al tablero del equipo FLIT con tu descripción y adjuntos."
             }
           ]
         }
@@ -1216,28 +1248,40 @@
       "href": "/manual/2-ot/8-ayuda-dr-flit",
       "audience": "Organismo de Tránsito",
       "sectionId": "ot",
-      "summary": "Asistente para localizar trámites de tu bandeja y abrir la documentación del organismo.",
+      "summary": "Escríbele con tus palabras: responde dudas del hub citando el manual, localiza trámites de tu bandeja y radica casos de soporte.",
       "primarySource": false,
       "blocks": [
         {
-          "id": "busqueda",
-          "title": "1. Búsquedas operativas",
+          "id": "escribir",
+          "title": "1. Escríbele con tus palabras",
           "paragraphs": [
-            "Como administrador del organismo puedes buscar en DR. FLIT por placa, VIN, trámite (radicado, con o sin prefijo) o cliente (nombre, documento o razón social). Los resultados salen de tu bandeja: solo trámites que las compañías ya te entregaron, con la compañía radicadora en cada tarjeta y una pista de qué sigue según el estado."
+            "Abre el asistente con el botón flotante y escribe directo: «¿cómo asigno una placa?», «¿cómo decido una revocatoria?». DR. FLIT responde con base en el manual del Organismo y cita al final los artículos de donde salió la respuesta, con enlace para abrirlos. Si tu pregunta no es clara, te pregunta de vuelta; si no tiene la respuesta, te lo dice y te ofrece escalar a soporte.",
+            "La primera vez te pedirá autorizar el tratamiento de datos (Ley 1581 de 2012): «Acepto y continuar» para usar la inteligencia artificial, o «Ahora no» para seguir con el menú clásico sin ella. Solo se pide una vez por versión del aviso."
+          ],
+          "bullets": [
+            "Solo verás artículos del Organismo y los transversales; la documentación del Gestor no aplica a tu perfil.",
+            "El chat con inteligencia artificial tiene un tope diario de mensajes; al alcanzarlo el menú sigue funcionando y al día siguiente se reactiva solo.",
+            "Si el asistente no está disponible, responde el buscador del manual con una «respuesta rápida» y los enlaces."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "busqueda",
+          "title": "2. Búsquedas operativas",
+          "paragraphs": [
+            "Pídelo en el chat («busca la placa ABC123», «muéstrame el radicado 12») o usa los chips de Gestión: Placa, VIN, Trámite o Cliente (nombre, documento o razón social). Los resultados salen de tu bandeja: solo trámites que las compañías ya te entregaron, con la compañía radicadora en cada tarjeta y una pista de qué sigue según el estado."
           ],
           "bullets": [],
           "callouts": []
         },
         {
-          "id": "ayuda",
-          "title": "2. Necesito ayuda",
+          "id": "normativa-soporte",
+          "title": "3. Normativa y soporte",
           "paragraphs": [],
           "bullets": [
-            "Escribe consultas como «asignar placa», «decidir revocatoria», «validar impronta» o «requisitos documentales».",
-            "Si estás en una pestaña del hub con artículo propio, DR. FLIT te lo sugiere antes de que escribas.",
-            "Solo verás artículos del Organismo y los transversales; la documentación del Gestor no aplica a tu perfil.",
             "Ayuda → Normativa abre la Resolución 20233040017145 de 2023: los requisitos que puede exigir tu organismo son los del Título 5 y no otros (art. 5.1.1).",
-            "Si no hay coincidencia, usa el enlace al Centro de Ayuda completo o Ayuda → Soporte."
+            "Para reportar un problema, cuéntaselo al chat o entra por Ayuda → Soporte: el formulario llega con tu correo, organismo y fecha precargados; completa el detalle, la frecuencia y la prioridad, adjunta evidencias si quieres, revisa el resumen y pulsa «Confirmar y radicar caso». Recibes tu número de caso al instante.",
+            "Si el sistema de soporte no responde en ese momento, verás los canales de contacto y podrás reintentar sin perder lo escrito."
           ],
           "callouts": []
         }
@@ -1891,7 +1935,7 @@
       "href": "/manual/4-superadmin/6-dr-flit-global",
       "audience": "Super Admin",
       "sectionId": "superadmin",
-      "summary": "Qué cambia en el asistente cuando quien pregunta es Super Admin.",
+      "summary": "Qué cambia en el asistente cuando quien pregunta es Super Admin: alcance global, enlace directo a los casos y operación del chat con IA.",
       "primarySource": false,
       "blocks": [
         {
@@ -1905,12 +1949,28 @@
         },
         {
           "id": "ayuda",
-          "title": "2. Ayuda",
+          "title": "2. Ayuda con inteligencia artificial",
           "paragraphs": [
-            "«Necesito ayuda» te ofrece toda la documentación (Gestor, Organismo, Administración de compañía y Super Admin), así que sirve para responder por un cliente: escribe la duda tal como te la plantearon y abre el artículo que le corresponde a su perfil."
+            "El chat responde en lenguaje natural con base en toda la documentación (Gestor, Organismo, Administración de compañía y Super Admin), citando los artículos usados. Sirve para responder por un cliente: escribe la duda tal como te la plantearon y abre el artículo que corresponde a su perfil.",
+            "Aplican las mismas reglas que a todos: autorización de tratamiento de datos la primera vez, tope diario de mensajes con aviso previo, y respuesta del buscador del manual cuando la inteligencia artificial no está disponible."
           ],
           "bullets": [],
           "callouts": []
+        },
+        {
+          "id": "casos",
+          "title": "3. Casos de soporte: qué ve el equipo FLIT",
+          "paragraphs": [
+            "Los casos radicados desde el chat llegan al tablero de soporte del equipo FLIT con la descripción, el resultado esperado, la frecuencia, la prioridad y los adjuntos del usuario, listos para triage. A los usuarios se les confirma solo el número de caso; como Super Admin, tú además ves el enlace directo al caso en el tablero."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "El tope diario de mensajes del chat y el modelo de inteligencia artificial se configuran por ambiente desde la operación de la plataforma; si el equipo necesita ajustarlos, es un cambio de configuración, no de código."
+            }
+          ]
         }
       ],
       "sources": []
