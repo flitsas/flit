@@ -55,9 +55,9 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 ## Estado
 
-- [ ] B-00 Cerrar §4, §5, §6 y §8 del contrato con A y C
-- [ ] B-01 Inventario plataforma contra Trámites
-- [ ] B-02 Paquete `@flit/ui` v0
+- [x] B-00 Cerrar §4, §5, §6 y §8 del contrato con A y C
+- [x] B-01 Inventario plataforma contra Trámites
+- [x] B-02 Paquete `@flit/ui` v0
 - [x] B-03 Módulo de plataforma y schema `platform`
 - [x] B-04 `product_code` en módulos y roles
 - [x] B-05 `IProductAccessResolver` con herencia de jerarquía
@@ -100,7 +100,8 @@ Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen
 
 - **Qué:** columna `product_code` en `security.modules` y `security.roles`. Un rol solo puede incluir permisos de módulos de su producto. Migración que etiqueta los existentes con `tramites` o `plataforma` según B-01. `GET /api/v1/security/modules?product=`.
 - **Dónde:** `Flit.Infrastructure/Persistence/Configurations/Security/RbacConfigurations.cs`, `Persistence/Entities/Security/Role.cs` y `SecurityModule.cs`, `Persistence/Repositories/SecurityModuleRepository.cs`. Migración (R6).
-- **Hecho cuando:** los roles actuales siguen funcionando igual y cada uno tiene producto. La HU #10664 no se revierte: los módulos siguen sin habilitación por empresa.
+- **Rol por producto (decisión D1 del inventario B-01):** el índice de rol único de `security.user_role_assignments` pasa de (usuario, empresa) a (usuario, empresa, producto del rol). Se crea `admin_tramites` (producto `tramites`) con los permisos de Trámites que hoy tiene `AdminCompany`, y la migración se lo asigna a cada usuario con `AdminCompany`. `AdminCompany` queda solo con permisos de plataforma. El `product_code` de cada módulo y rol sale de la sección 5 de `b-inventario-plataforma-vs-tramites.md`, por `code` (el seeder solo corre en `Development`).
+- **Hecho cuando:** los roles actuales siguen funcionando igual y cada uno tiene producto. La HU #10664 no se revierte: los módulos siguen sin habilitación por empresa. Ningún usuario con `AdminCompany` pierde acceso a lo que hoy usa en Trámites.
 
 ### B-05 · `IProductAccessResolver` · Fase 1 · M
 

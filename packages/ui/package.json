@@ -1,0 +1,42 @@
+{
+  "name": "@flit/ui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tokens y átomos de UI compartidos por las apps de la FLIT Suite (B-02, contrato §8).",
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens": "./src/tokens.ts",
+    "./tokens.css": "./src/styles/tokens.css",
+    "./cn": "./src/cn.ts",
+    "./DataTable": "./src/DataTable.tsx",
+    "./InlineAlert": "./src/InlineAlert.tsx",
+    "./Loader": "./src/Loader.tsx",
+    "./Modal": "./src/Modal.tsx",
+    "./Pagination": "./src/Pagination.tsx",
+    "./SearchableSelect": "./src/SearchableSelect.tsx",
+    "./StatusBadge": "./src/StatusBadge.tsx",
+    "./statusTones": "./src/statusTones.ts",
+    "./table-styles": "./src/table-styles.ts",
+    "./UiStateBoundary": "./src/UiStateBoundary.tsx"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.6.0"
+  },
+  "peerDependencies": {
+    "lucide-react": "^1.20.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "lucide-react": "^1.20.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  }
+}
