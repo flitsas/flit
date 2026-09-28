@@ -43,6 +43,62 @@
       "profile": "ot_admin",
       "route": "/",
       "settleMs": 4000
+    },
+    {
+      "id": "admin-companias",
+      "articleSlug": "4-superadmin/1-companias-y-organismos",
+      "profile": "superadmin",
+      "route": "/admin/companies",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-documental",
+      "articleSlug": "4-superadmin/2-documental-e-improntas",
+      "profile": "superadmin",
+      "route": "/admin/documents",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-tipos-tramite",
+      "articleSlug": "4-superadmin/3-plataforma",
+      "profile": "superadmin",
+      "route": "/admin/plataforma/tipos-tramite",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-banners",
+      "articleSlug": "4-superadmin/3-plataforma",
+      "profile": "superadmin",
+      "route": "/admin/banners",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-jobs",
+      "articleSlug": "4-superadmin/4-integraciones-y-procesos",
+      "profile": "superadmin",
+      "route": "/admin/jobs",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-improntas",
+      "articleSlug": "4-superadmin/2-documental-e-improntas",
+      "profile": "superadmin",
+      "route": "/admin/improntas",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-causales",
+      "articleSlug": "4-superadmin/1-companias-y-organismos",
+      "profile": "superadmin",
+      "route": "/admin/causales-rechazo",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-rbac",
+      "articleSlug": "4-superadmin/5-rbac-y-auditoria",
+      "profile": "superadmin",
+      "route": "/?m=rbac",
+      "settleMs": 4000
     }
   ]
 }
