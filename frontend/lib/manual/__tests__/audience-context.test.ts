@@ -142,8 +142,13 @@ describe("manual/context (HU-G)", () => {
     expect(
       resolveContextArticle("/admin/transit-offices/ot-1/rules|dashboard", visibleAudiences("gestor")),
     ).toBeNull();
+    // Épica #12751/#12755: Reglas pasó a ser exclusiva de Super Admin (el usuario OT recibe 403),
+    // así que su artículo ya no se sugiere contextualmente a un ot_admin.
     expect(
-      resolveContextArticle("/admin/transit-offices/ot-1/rules|dashboard", visibleAudiences("ot_admin"))
+      resolveContextArticle("/admin/transit-offices/ot-1/rules|dashboard", visibleAudiences("ot_admin")),
+    ).toBeNull();
+    expect(
+      resolveContextArticle("/admin/transit-offices/ot-1/rules|dashboard", visibleAudiences("superadmin"))
         ?.slug,
     ).toBe("2-ot/5-reglas");
   });
