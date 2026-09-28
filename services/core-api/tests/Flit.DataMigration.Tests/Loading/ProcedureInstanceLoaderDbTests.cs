@@ -236,6 +236,98 @@ public sealed class ProcedureInstanceLoaderDbTests
     }
 
     /// <summary>
+    /// <c>--force</c> sobre una base donde solo se corrió la instancia 1 no muere por la libreta de
+    /// adjuntos.
+    ///
+    /// <para>
+    /// Re-migrar borra también las filas de <c>migration_attachment_map</c>, y esa tabla la creaba
+    /// solo la instancia 2. En una base que nunca la corrió, el borrado fallaba con
+    /// <c>42P01 relation … does not exist</c>: un error por una tabla que ni siquiera se usa.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Re_migrar_con_force_no_exige_la_libreta_de_adjuntos()
+    {
+        var conexion = ConexionV2();
+        if (conexion is null)
+        {
+            Assert.Skip("Sin ConnectionStrings__Core: no hay base contra la que probar.");
+        }
+
+        await using var db = Abrir(conexion);
+
+        // La base como la deja una corrida de solo la instancia 1 antes del arreglo: sin la tabla.
+        await db.Database.ExecuteSqlRawAsync(
+            "DROP TABLE IF EXISTS migration.migration_attachment_map;",
+            TestContext.Current.CancellationToken);
+
+        var escenario = await Escenario.PrepararAsync(db, TestContext.Current.CancellationToken);
+
+        try
+        {
+            var loader = new ProcedureInstanceLoader(db, escenario.Libreta, "test-force");
+            await loader.LoadAsync(
+                escenario.Mapear(v1Id: 900_005, finalStatus: TramiteEstado.Entregado),
+                dryRun: false, force: false, TestContext.Current.CancellationToken);
+
+            var resultado = await loader.LoadAsync(
+                escenario.Mapear(v1Id: 900_005, finalStatus: TramiteEstado.Entregado),
+                dryRun: false, force: true, TestContext.Current.CancellationToken);
+
+            resultado.Status.Should().Be(
+                LoadStatus.Migrated,
+                $"--force debe poder re-migrar aunque nunca se haya corrido la instancia 2. Motivo: {resultado.Reason}");
+        }
+        finally
+        {
+            await escenario.LimpiarAsync(db, TestContext.Current.CancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Un trámite que Postgres rechaza va a cuarentena con la causa real, no con el envoltorio de EF.
+    ///
+    /// <para>
+    /// EF envuelve todo error de la base en el mismo texto («An error occurred while saving the
+    /// entity changes…»). Una FK rota, una clave duplicada y un CHECK violado se leían idénticos en
+    /// el reporte, y ninguno le decía al operador qué corregir.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Un_fallo_de_la_base_llega_al_motivo_con_su_causa_real()
+    {
+        var conexion = ConexionV2();
+        if (conexion is null)
+        {
+            Assert.Skip("Sin ConnectionStrings__Core: no hay base contra la que probar.");
+        }
+
+        await using var db = Abrir(conexion);
+        var escenario = await Escenario.PrepararAsync(db, TestContext.Current.CancellationToken);
+
+        try
+        {
+            var mapeado = escenario.Mapear(v1Id: 900_006, finalStatus: TramiteEstado.Entregado);
+
+            // Un actor que apunta a una entidad de actor inexistente: la FK lo rechaza al guardar.
+            mapeado.Actors[0].ProcedureEntityId = Guid.CreateVersion7();
+
+            var loader = new ProcedureInstanceLoader(db, escenario.Libreta, "test-motivo");
+            var resultado = await loader.LoadAsync(
+                mapeado, dryRun: false, force: false, TestContext.Current.CancellationToken);
+
+            resultado.Status.Should().Be(LoadStatus.Quarantined);
+            // La causa real: el código de Postgres y la tabla que la rechazó. No se compara el nombre
+            // de la restricción porque la base la nombra distinto de la configuración de EF.
+            resultado.Reason.Should().Contain("23503").And.Contain("procedure_entities");
+        }
+        finally
+        {
+            await escenario.LimpiarAsync(db, TestContext.Current.CancellationToken);
+        }
+    }
+
+    /// <summary>
     /// El mínimo que V2 exige para poder insertar un trámite: un tenant, un tipo de trámite del
     /// catálogo y un usuario al que atribuir la carga. El tipo y las entidades de actor los siembran
     /// las migraciones; el tenant es propio de cada corrida para que dos ejecuciones no se pisen.
