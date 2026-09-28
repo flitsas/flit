@@ -46,6 +46,7 @@ jobs:
       migracion_port: ${{ steps.env.outputs.migracion_port }}
       hub_port: ${{ steps.env.outputs.hub_port }}
       suite_env: ${{ steps.env.outputs.suite_env }}
+      tramites_domain: ${{ steps.env.outputs.tramites_domain }}
       internal_subnet: ${{ steps.env.outputs.internal_subnet }}
     steps:
       - name: Map branch to environment
@@ -71,6 +72,7 @@ jobs:
               front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030; hub_port=6040
               # FLIT Suite (contrato §1): prefijo de ambiente de los hosts; vacío en PDN.
               suite_env=
+              tramites_domain=tramites.flitsas.online
               internal_subnet=10.114.60.0/24
               ;;
             staging)
@@ -81,6 +83,7 @@ jobs:
               image_tag=qa
               front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030; hub_port=5040
               suite_env=qa
+              tramites_domain=qa.tramites.flitsas.online
               internal_subnet=10.114.50.0/24
               ;;
             develop)
@@ -91,6 +94,7 @@ jobs:
               image_tag=dev
               front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030; hub_port=4040
               suite_env=dev
+              tramites_domain=dev.tramites.flitsas.online
               # 172.28.40.0/24 (doc) ya estaba ocupado en el VPS compartido → Pool overlaps.
               # CIDR 10.114.x/24: el rango 172.28.x/24 choca en el VPS compartido (Pool overlaps).
               internal_subnet=10.114.40.0/24
@@ -122,6 +126,7 @@ jobs:
             echo "migracion_port=$migracion_port"
             echo "hub_port=$hub_port"
             echo "suite_env=$suite_env"
+            echo "tramites_domain=$tramites_domain"
             echo "internal_subnet=$internal_subnet"
           } >> "$GITHUB_OUTPUT"
           echo "Ambiente: $env_name | front: $front_domain ($front_port) | api: $api_domain ($gateway_port) | build-tag: $image_tag | deploy-tag: $deploy_tag | subnet: $internal_subnet"
@@ -523,6 +528,8 @@ jobs:
             export FLIT_SUITE_ENV=${{ needs.setup.outputs.suite_env }}
             # URL pública del hub (emisor OIDC) para @flit/auth.
             export FLIT_HUB_URL=https://${{ needs.setup.outputs.front_domain }}
+            # Host propio de Trámites en la suite (A-11); el hub redirige ahí cuando FLIT_TRAMITES_HOST_ENABLED=true.
+            export FLIT_TRAMITES_URL=https://${{ needs.setup.outputs.tramites_domain }}
             # Marca Blanca (#12421): CIDR de la red Docker de ESTE stack (distinto por ambiente).
             export FLIT_INTERNAL_SUBNET=${{ needs.setup.outputs.internal_subnet }}
 
