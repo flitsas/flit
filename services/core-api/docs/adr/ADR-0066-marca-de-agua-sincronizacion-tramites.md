@@ -1,4 +1,4 @@
-# ADR-0061: Marca de agua de sincronización de trámites por secuencia global y triggers
+# ADR-0066: Marca de agua de sincronización de trámites por secuencia global y triggers
 
 **Fecha**: 2026-09-29
 **Status**: Propuesto

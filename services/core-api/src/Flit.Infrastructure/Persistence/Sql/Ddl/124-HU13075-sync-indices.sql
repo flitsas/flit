@@ -16,7 +16,7 @@
 --
 -- Actores, campos y comercial ya tienen índices únicos que empiezan por procedure_instance_id.
 --
--- Excepción al criterio A11 (tenant_id como primera columna) documentada en ADR-0061: la lectura del
+-- Excepción al criterio A11 (tenant_id como primera columna) documentada en ADR-0066: la lectura del
 -- feed cruza compañías y la acota el ámbito exclusivo del servicio externo, no el índice.
 --
 -- Sin CONCURRENTLY: la migración corre en la transacción de EF. Son índices pequeños (tres de ellos
