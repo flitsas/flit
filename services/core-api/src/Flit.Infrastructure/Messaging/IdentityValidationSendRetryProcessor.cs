@@ -171,9 +171,13 @@ internal sealed class IdentityValidationSendRetryProcessor(
         cmd.Transaction = transaction;
         cmd.CommandText = """
             SELECT id
-            FROM tramites.procedure_instance_biometric_validations
+            FROM tramites.procedure_instance_biometric_validations v
             WHERE status = @status
               AND attempts < max_attempts
+              -- Bug #13055: no se envía el enlace a personas de un trámite anulado o revocado.
+              AND NOT EXISTS (
+                  SELECT 1 FROM tramites.procedure_instances pi
+                  WHERE pi.id = v.procedure_instance_id AND pi.status IN ('anulado', 'revocado'))
             ORDER BY created_at
             LIMIT 1
             FOR UPDATE SKIP LOCKED
