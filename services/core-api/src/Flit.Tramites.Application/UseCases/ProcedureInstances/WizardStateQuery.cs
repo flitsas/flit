@@ -109,7 +109,7 @@ public sealed record WizardStateDto(
     /// Feature #13110 — el wizard puede ofrecer «Omitir prenda» (<c>omitir</c>). <c>true</c> solo si la
     /// decisión de prenda aplica al trámite (<see cref="WizardCapabilitiesDto.HasPrendaGate"/>: tipo
     /// prendario o gravamen reportado por el RUNT) y <see cref="PrendaDecision.OmitirAdmitido"/> la
-    /// admite: en Matrícula Inicial siempre; en Traspaso y el resto, solo con el certificado de prenda
+    /// admite: en la familia Matrículas siempre; en Traspaso y el resto, solo con el certificado de prenda
     /// opcional en el OT (<see cref="PrendaDocumentRequired"/> = <c>false</c>). Es la misma regla que
     /// aplica el PUT de prenda: el asistente recibe la respuesta y no la replica.
     /// </summary>

@@ -123,7 +123,7 @@ Se **suma** al tipo de la tabla 1 cuando el expediente trae gravamen (wizard / s
 
 No se nombra al acreedor ni el NIT en el objeto.
 
-**Decisión `omitir` («Omitir prenda», Feature #13110):** existe gravamen, pero no se solicita ningún trámite de prenda. El objeto no nombra la prenda ni el gravamen: queda el literal de la tabla 1 (más la tabla 3 si hay transformaciones). Por ejemplo `MATRÍCULA INICIAL` o `TRASPASO`, nunca `… CON INSCRIPCIÓN DE PRENDA` ni `… CON LEVANTAMIENTO DE PRENDA`.
+**Decisión `omitir` («Omitir prenda», Feature #13110):** existe gravamen, pero no se solicita ningún trámite de prenda. El objeto no nombra la prenda ni el gravamen: queda el literal de la tabla 1 (más la tabla 3 si hay transformaciones). Por ejemplo `MATRÍCULA INICIAL` (también en `MATRICULA_LEASING`: el objeto no nombra el leasing), `REMATRÍCULA` o `TRASPASO`, nunca `… CON INSCRIPCIÓN DE PRENDA` ni `… CON LEVANTAMIENTO DE PRENDA`. Se admite en toda la familia Matrículas con prenda complementaria (`MATRICULA_NUEVA`, `MATRICULA_LEASING`, `REMATRICULA`) sin importar CF-06; en Traspaso solo si el OT tiene el certificado como opcional.
 
 ---
 
@@ -153,7 +153,8 @@ Se **suma** al tipo de la tabla 1 cuando el gestor activa transformaciones. No d
 | Traspaso + levantar prenda | T1 + T2 levantamiento | `TRASPASO CON LEVANTAMIENTO DE PRENDA` |
 | Traspaso + levantar prenda + color | T1 + T2 + T3 | `TRASPASO CON LEVANTAMIENTO DE PRENDA Y CAMBIO DE COLOR` |
 | Traspaso + ambas prendas + color y carrocería | T1 + T2×2 + T3×2 | `TRASPASO CON LEVANTAMIENTO DE PRENDA, INSCRIPCIÓN DE PRENDA, CAMBIO DE COLOR Y CAMBIO DE CARROCERÍA` |
-| Matrícula inicial con gravamen RUNT omitido | T1 (T2 vacía por `omitir`) | `MATRÍCULA INICIAL` |
+| Matrícula inicial o leasing con gravamen RUNT omitido | T1 (T2 vacía por `omitir`) | `MATRÍCULA INICIAL` |
+| Rematrícula con gravamen RUNT omitido | T1 (T2 vacía por `omitir`) | `REMATRÍCULA` |
 | Traspaso con gravamen omitido | T1 (T2 vacía por `omitir`) | `TRASPASO` |
 | Solo inscribir prenda | T1 (no T2) | `INSCRIBIR PRENDA` |
 | Solo cambio de color | T1 (no T3 color) | `CAMBIO DE COLOR` |

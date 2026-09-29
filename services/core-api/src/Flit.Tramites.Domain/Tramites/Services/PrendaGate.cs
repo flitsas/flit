@@ -8,7 +8,7 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// R10 (HU #10597) — gate PURO de la decisión de prenda: exige una decisión de prenda vigente y, si la
 /// decisión requiere documento (solicitar/registrar/levantar), su adjunto (y el acreedor cuando la
 /// decisión constituye gravamen, HU #11591). <c>omitir</c>/<c>sin_prenda</c> satisfacen el gate sin
-/// documento (<c>omitir</c> = la vía "asumo el riesgo"). Devuelve el código de error o <c>null</c> si
+/// documento (<c>omitir</c> = «Omitir prenda»). Devuelve el código de error o <c>null</c> si
 /// puede avanzar.
 ///
 /// <para><b>Dos disparadores comparten este núcleo, sin duplicar la regla:</b> <see cref="Evaluate"/>

@@ -21,7 +21,8 @@ public static class PrendaDecision
 
     /// <summary>
     /// «Omitir prenda»: existe gravamen pero no se solicita ningún trámite de prenda (no se inscribe ni se
-    /// levanta). Admisión: <see cref="OmitirAdmitido"/>.
+    /// levanta). Admisión: <see cref="OmitirAdmitido"/> (siempre en la familia Matrículas; en el resto,
+    /// solo con el certificado de prenda opcional en el OT).
     /// </summary>
     public const string Omitir = "omitir";
 
@@ -46,8 +47,8 @@ public static class PrendaDecision
         !string.IsNullOrWhiteSpace(decision) && RequierenDocumento.Contains(decision);
 
     /// <summary>
-    /// Feature #13110 (CF-06 / HU #10881) — ¿se puede elegir <see cref="Omitir"/>? En Matrícula Inicial
-    /// siempre: la prenda es un trámite propio (art. 5.3.13.1) y no inscribirla no depende de la política
+    /// Feature #13110 (CF-06 / HU #10881) — ¿se puede elegir <see cref="Omitir"/>? En la familia Matrículas
+    /// (Matrícula Inicial, Matrícula Leasing, Rematrícula) siempre: la prenda es un trámite propio (art. 5.3.13.1) y no inscribirla no depende de la política
     /// del organismo. En Traspaso y en el resto de familias, solo si el organismo NO exige el certificado
     /// de prenda (<paramref name="otExigeDocumento"/> = <c>false</c>). Es la única fuente de la regla: la
     /// consumen el PUT de prenda (rechazo <c>prenda_omitir_no_admitido</c>) y el estado del wizard
