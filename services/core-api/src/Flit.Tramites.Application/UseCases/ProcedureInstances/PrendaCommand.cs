@@ -41,7 +41,7 @@ public sealed class RegistrarPrendaHandler(
     IProcedureInstancePrendaRepository prendas,
     IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null)
 {
-    /// <summary>Error: el OT exige el certificado de prenda, así que "omitir" no es elegible (salvo Matrícula Inicial, Feature #13110).</summary>
+    /// <summary>Error: el OT exige el certificado de prenda, así que "omitir" no es elegible (salvo la familia Matrículas, Feature #13110).</summary>
     public const string OmitirNoAdmitidoError = "prenda_omitir_no_admitido";
 
     /// <summary>Error: este tipo no tiene dimensión de gravamen (familia OTROS, tipo no prendario).</summary>
@@ -98,7 +98,7 @@ public sealed class RegistrarPrendaHandler(
         // bloquear después dejaría guardada una decisión que ningún adjunto puede satisfacer. Las
         // decisiones ya guardadas no se revisan: la regla mira la elección nueva.
         //
-        // Feature #13110 — excepción de Matrícula Inicial: ahí "Omitir prenda" siempre se admite (la
+        // Feature #13110 — excepción de la familia Matrículas: ahí "Omitir prenda" siempre se admite (la
         // prenda es un trámite propio, art. 5.3.13.1). La regla vive en PrendaDecision.OmitirAdmitido,
         // la misma que publica el estado del wizard (PrendaOmitAllowed). La familia se lee null-safe
         // (instance.Family lanza sin la navegación cargada); sin tipo cargado se trata como "no es
@@ -191,8 +191,23 @@ public sealed class RegistrarPrendaHandler(
         return (ToDto(nueva), null);
     }
 
-    internal static PrendaDto ToDto(ProcedureInstancePrenda p) =>
-        new(p.Id, p.Decision, p.Estado, p.AcreedorNombre, p.AcreedorDocumento, p.LevantamientoEntidad, p.CreatedAt);
+    /// <summary>
+    /// Contrato de salida del PUT y del GET de prenda. Feature #13110 (Habeas Data, Ley 1581) — con
+    /// <c>omitir</c> el acreedor y la entidad de levantamiento se devuelven <c>null</c> aunque la fila
+    /// los tenga: cubre las filas <c>omitir</c> guardadas antes de la limpieza en escritura.
+    /// </summary>
+    internal static PrendaDto ToDto(ProcedureInstancePrenda p)
+    {
+        var conserva = PrendaDecision.ConservaDatosDeAcreedor(p.Decision);
+        return new(
+            p.Id,
+            p.Decision,
+            p.Estado,
+            conserva ? p.AcreedorNombre : null,
+            conserva ? p.AcreedorDocumento : null,
+            conserva ? p.LevantamientoEntidad : null,
+            p.CreatedAt);
+    }
 
     private static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

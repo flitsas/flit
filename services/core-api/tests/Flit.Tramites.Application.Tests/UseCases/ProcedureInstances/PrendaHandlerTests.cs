@@ -200,6 +200,50 @@ public sealed class PrendaHandlerTests
         fila.LevantamientoEntidad.Should().BeNull();
     }
 
+    /// <summary>
+    /// AC4 (Habeas Data, Ley 1581) — una fila <c>omitir</c> guardada ANTES de la limpieza en escritura,
+    /// con acreedor y entidad, no los expone: el GET (y el PUT, mismo <c>ToDto</c>) los devuelve null.
+    /// La regresión con <c>registrar</c> conserva los datos.
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.Omitir, false)]
+    [InlineData(PrendaDecision.Registrar, true)]
+    public async Task Get_OmitirHistoricoConAcreedor_DevuelveNull(string decision, bool expone)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        _prendas.Rows.Add(new ProcedureInstancePrenda
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            Decision = decision,
+            Estado = PrendaEstado.Vigente,
+            AcreedorNombre = "Banco Historico",
+            AcreedorDocumento = "900555666",
+            LevantamientoEntidad = "Oficina Norte",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        var dto = (await _get.HandleAsync(id, tenantId, ct)).Should().ContainSingle().Subject;
+
+        dto.Decision.Should().Be(decision);
+        if (expone)
+        {
+            dto.AcreedorNombre.Should().Be("Banco Historico");
+            dto.AcreedorDocumento.Should().Be("900555666");
+            dto.LevantamientoEntidad.Should().Be("Oficina Norte");
+        }
+        else
+        {
+            dto.AcreedorNombre.Should().BeNull();
+            dto.AcreedorDocumento.Should().BeNull();
+            dto.LevantamientoEntidad.Should().BeNull();
+        }
+
+        _prendas.Rows[0].AcreedorNombre.Should().Be("Banco Historico", "la máscara es de salida: no reescribe filas históricas");
+    }
+
     /// <summary>AC5 (CF-12) — "registrar" conserva el acreedor; "sin_prenda" no cambia respecto a develop.</summary>
     [Theory]
     [InlineData(PrendaDecision.Registrar)]
@@ -222,14 +266,18 @@ public sealed class PrendaHandlerTests
         fila.AcreedorDocumento.Should().Be("900123456");
     }
 
-    /// <summary>Con el opt-out del OT vigente, "asumo el riesgo" sigue siendo una elección legítima.</summary>
+    /// <summary>
+    /// AC1 (familia completa, decisión 2026-09-29) — la excepción a CF-06 es de la FAMILIA Matrículas,
+    /// no solo de <c>MATRICULA_NUEVA</c>: una Matrícula Leasing con OT que exige el certificado
+    /// también admite «Omitir prenda».
+    /// </summary>
     [Fact]
-    public async Task Registrar_omitir_con_certificado_opcional_se_acepta()
+    public async Task Omitir_MatriculaLeasingConOtQueExige_SeAcepta()
     {
         var ct = TestContext.Current.CancellationToken;
         var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
-        InstanceExists(id, tenantId);
-        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyQueExige(false));
+        InstanceExists(id, tenantId, type: ProcedureTypeFixture.MatriculaLeasing);
+        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyQueExige(true));
 
         var (result, error) = await registrar.HandleAsync(
             id, tenantId, new RegistrarPrendaInput(PrendaDecision.Omitir), null, ct);
