@@ -105,7 +105,7 @@ Devuelve una URL firmada de corta vida para descargar un adjunto del trámite (u
 
 - Vigencia de la URL: **10 minutos** (mismo mecanismo y mismo tope que el resto de la plataforma; el ADR-0029 exige ≤ 15 min).
 - `expiraEn` es **informativo**: el TTL real lo firma el servicio de almacenamiento y puede no devolverlo. El consumidor debe tratar la URL como de un solo uso inmediato y volver a pedirla si falla, en vez de confiar en `expiraEn`.
-- 404 si el trámite o el adjunto no existen o el adjunto no pertenece al trámite.
+- `404 attachment_not_found` si el trámite o el adjunto no existen, el adjunto no pertenece al trámite, o el trámite está fuera de alcance (nunca radicado o migrado desde FLIT 1). Nunca 410.
 - Exige `external.tramites.read`. Queda en la bitácora de acceso.
 
 ## 4. Ítem de trámite
