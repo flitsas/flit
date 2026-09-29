@@ -3,6 +3,7 @@ using System;
 using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flit.Infrastructure.Migrations
 {
     [DbContext(typeof(FlitDbContext))]
-    partial class FlitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260929183510_HU13084_ExternalClients")]
+    partial class HU13084_ExternalClients
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -8292,10 +8295,6 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("ConsolidadoWizardGeneradoEn")
                         .HasColumnType("timestamptz")
                         .HasColumnName("consolidado_wizard_generado_en");
-
-                    b.Property<DateTimeOffset?>("ExpedienteActualizadoEn")
-                        .HasColumnType("timestamptz")
-                        .HasColumnName("expediente_actualizado_en");
 
                     b.Property<bool>("ConsolidadoWizardVigente")
                         .ValueGeneratedOnAdd()
