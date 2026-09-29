@@ -48,21 +48,48 @@ documentos generados.
 
 ## Laboratorio local
 
-`lab/lab.sh` levanta todo contra bases locales y se niega a correr si alguna apunta fuera:
+Para probar contra una copia de producción de V1 sin tocar ningún ambiente real. Todo corre en
+local y **las tres piezas tienen que apuntar a la misma copia**: los ids de V1 se repiten entre
+ambientes, y un snapshot de otro ambiente devolvería documentos ajenos sin dar error.
 
-```bash
-cd tools/Flit.DataMigration.V1/lab
-cp lab.env.example lab.env        # ajustar usuario de Postgres y rutas; lab.env no se versiona
-./lab.sh preparar                 # clona la base de dev en la de laboratorio y aplica las migraciones
-./lab.sh ids                      # out/ids-transfer.txt y out/ids-registration.txt (solo Entregado)
-./lab.sh pdf                      # servicio de PDF de V1 en localhost:4601 (otra terminal)
-./lab.sh v1                       # V1 contra la copia, sin tocar su .env (otra terminal)
-./lab.sh migrar --tipo transfer --ids-file out/ids-transfer.txt --dry-run
-./lab.sh estado
-```
+1. **Bases.** La copia de V1 (p. ej. `pdn_copy_updated`) y una V2 de laboratorio clonada de dev.
+   Una base con solo las migraciones no sirve, porque le falta el catálogo `catalogs.transit_offices`:
+   ```bash
+   createdb flit_migrador_lab
+   pg_dump -Fc flit2dev_backup | pg_restore --no-owner -d flit_migrador_lab
+   dotnet ef database update --project src/Flit.Infrastructure --startup-project src/Flit.Api \
+     --connection "Host=localhost;Database=flit_migrador_lab;Username=…"
+   ```
+2. **Ids a migrar.** `lab/entregados.sql` lista los entregados:
+   ```bash
+   psql -d pdn_copy_updated -At -v tipo=transfer -f lab/entregados.sql > ids-transfer.txt
+   ```
+3. **Servicio de PDF de V1** (`BackSrvPdfService`), solo para la instancia 3. Sin él, V1 no puede
+   armar el FUR, la portada, las cartas selfie ni el mandato; en el clúster lo resuelve como
+   `back-svc-pdfservice-grpc-pdn`, un nombre que desde local no existe.
+   ```bash
+   DOTNET_ROLL_FORWARD=Major \
+   PdfService__ChromiumPath="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+   dotnet run                                   # escucha en localhost:4601
+   ```
+4. **V1** (`BackCrudTransfer`, rama `release`), solo para la instancia 3. En una rama local, su
+   `.env` debe apuntar `DB_*` y `TRANSFER_DB_*` a la copia, con `*_SYNCHRONIZE=false`, y
+   `PDF_SERVICE_URL="dns:///localhost:4601"`. Ese `.env` **no se commitea**. Se levanta con
+   `npm run dev:swagger` en el puerto 3201.
+5. **Migrar**, siempre con `--dry-run` primero:
+   ```bash
+   export FLITMIG_ConnectionStrings__V1Source="Host=localhost;Database=pdn_copy_updated;Username=…"
+   export FLITMIG_ConnectionStrings__V2Target="Host=localhost;Database=flit_migrador_lab;Username=…"
+   export FLITMIG_Migration__CreateTenantIfMissing=true   # solo en el laboratorio
+   export FLITMIG_V1Snapshot__BaseUrl="http://localhost:3201/"
+   dotnet run -- --tipo transfer --ids-file ids-transfer.txt --dry-run
+   ```
+   Para usar la UI de `/admin/migracion`, levantar `Flit.DataMigration.Api` con las mismas
+   variables más `FLITMIG_MigracionApi__Enabled=true` y `FLITMIG_MigracionApi__ApiKey`, y el
+   frontend con `MIGRACION_API_URL` y `MIGRACION_API_KEY`.
 
-Sin el servicio de PDF, V1 no puede armar el FUR, la portada, las cartas selfie ni el mandato: en
-el clúster lo resuelve como `back-svc-pdfservice-grpc-pdn`, un nombre que desde local no existe.
+Para que el organismo vea un migrado en su bandeja, la empresa necesita un grant vigente con ese
+organismo (`admin.tenant_transit_office_grants`).
 
 ## Configuración
 
