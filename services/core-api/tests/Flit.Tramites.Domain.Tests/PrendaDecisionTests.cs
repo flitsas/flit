@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Xunit;
 
@@ -61,5 +62,36 @@ public sealed class PrendaDecisionTests
     {
         PrendaDocTipos.All.Should().BeEquivalentTo(
             new[] { "prenda_solicitud", "prenda_registro", "prenda_levantamiento" });
+    }
+    // ── Feature #13110 — «Omitir prenda» ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// CF-06 con la excepción de Matrícula Inicial.
+    /// <para>Uso de ejemplo: <c>PrendaDecision.OmitirAdmitido(ProcedureFamily.Matriculas, otExigeDocumento: true)</c> → <c>true</c>.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(ProcedureFamily.Matriculas, true, true)]
+    [InlineData(ProcedureFamily.Matriculas, false, true)]
+    [InlineData(ProcedureFamily.Traspaso, true, false)]
+    [InlineData(ProcedureFamily.Traspaso, false, true)]
+    [InlineData(ProcedureFamily.Otros, true, false)]
+    [InlineData(ProcedureFamily.Otros, false, true)]
+    public void OmitirAdmitido_PorFamiliaYPoliticaDelOt(ProcedureFamily family, bool otExige, bool esperado)
+    {
+        PrendaDecision.OmitirAdmitido(family, otExige).Should().Be(esperado);
+    }
+
+    /// <summary>CF-6/CF-12 — solo <c>omitir</c> descarta acreedor y entidad de levantamiento.</summary>
+    [Theory]
+    [InlineData("solicitar", true)]
+    [InlineData("registrar", true)]
+    [InlineData("levantar", true)]
+    [InlineData("omitir", false)]
+    [InlineData(" OMITIR ", false)]
+    [InlineData("sin_prenda", true)]
+    [InlineData(null, true)]
+    public void ConservaDatosDeAcreedor_SoloOmitirLosDescarta(string? decision, bool esperado)
+    {
+        PrendaDecision.ConservaDatosDeAcreedor(decision).Should().Be(esperado);
     }
 }

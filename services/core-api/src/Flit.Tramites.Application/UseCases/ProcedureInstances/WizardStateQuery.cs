@@ -106,6 +106,16 @@ public sealed record WizardStateDto(
     public bool PrendaDocumentRequired { get; init; } = true;
 
     /// <summary>
+    /// Feature #13110 — el wizard puede ofrecer «Omitir prenda» (<c>omitir</c>). <c>true</c> solo si la
+    /// decisión de prenda aplica al trámite (<see cref="WizardCapabilitiesDto.HasPrendaGate"/>: tipo
+    /// prendario o gravamen reportado por el RUNT) y <see cref="PrendaDecision.OmitirAdmitido"/> la
+    /// admite: en Matrícula Inicial siempre; en Traspaso y el resto, solo con el certificado de prenda
+    /// opcional en el OT (<see cref="PrendaDocumentRequired"/> = <c>false</c>). Es la misma regla que
+    /// aplica el PUT de prenda: el asistente recibe la respuesta y no la replica.
+    /// </summary>
+    public bool PrendaOmitAllowed { get; init; }
+
+    /// <summary>
     /// ADR-0050 — identidad del tipo con el que se conformó el expediente, para que el asistente
     /// titule el trámite que se está haciendo. Sin esto, el frontend solo tenía la familia y
     /// rotulaba «Matrícula Inicial» cualquier cosa que no fuera un traspaso.
@@ -425,23 +435,40 @@ public sealed class GetWizardStateHandler(
                         IdentityValidationEnabled = identityRequired,
                         RnmcEnabled = rnmcEnabled,
                         PrendaDocumentRequired = prendaDocumentRequired,
+                        PrendaOmitAllowed = ResolvePrendaOmitAllowed(
+                            dynamicState, instance, prendaDocumentRequired),
                     },
                     instance), null);
             }
         }
 
+        var staticState = ComputeState(
+            instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
+            runtExigido);
         var state = AnnotateInstanceFlags(
-            ComputeState(
-                instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
-                runtExigido) with
+            staticState with
             {
                 IdentityValidationEnabled = identityRequired,
                 RnmcEnabled = rnmcEnabled,
                 PrendaDocumentRequired = prendaDocumentRequired,
+                PrendaOmitAllowed = ResolvePrendaOmitAllowed(
+                    staticState, instance, prendaDocumentRequired),
             },
             instance);
         return (state, null);
     }
+
+    /// <summary>
+    /// Feature #13110 — <see cref="WizardStateDto.PrendaOmitAllowed"/>: la decisión de prenda aplica (el
+    /// <c>HasPrendaGate</c> que ya viaja en las capacidades, derivado del tipo y del gravamen RUNT) y
+    /// <see cref="PrendaDecision.OmitirAdmitido"/> lo permite para la familia y la política del OT. La
+    /// familia se lee null-safe: sin el tipo cargado cae a OTROS (no es matrícula), igual que el PUT.
+    /// </summary>
+    private static bool ResolvePrendaOmitAllowed(
+        WizardStateDto state, ProcedureInstance instance, bool prendaDocumentRequired) =>
+        (state.Capabilities?.HasPrendaGate ?? false)
+        && PrendaDecision.OmitirAdmitido(
+            ProcedureFamilyCodes.FromCodeOrOtros(instance.ProcedureType?.Family), prendaDocumentRequired);
 
     /// <summary>
     /// Política compañía+OT del certificado de prenda (snapshot al <see cref="ProcedureInstance.CreatedAt"/>).

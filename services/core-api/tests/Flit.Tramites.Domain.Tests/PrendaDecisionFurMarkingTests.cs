@@ -49,4 +49,19 @@ public sealed class PrendaDecisionFurMarkingTests
         PrendaDecision.ImplicaGravamen(PrendaDecision.Levantar).Should().BeFalse();
         PrendaDecision.ImplicaGravamen(PrendaDecision.Solicitar).Should().BeTrue();
     }
+    /// <summary>Feature #13110 (AC8) — el conjunto vigente solo con <c>omitir</c> no marca prenda en el FUR.</summary>
+    [Fact]
+    public void ToFurMarking_ConjuntoSoloOmitir_DevuelveNinguna()
+    {
+        PrendaDecision.ToFurMarking(new[] { PrendaDecision.Omitir }).Should().Be(FurPrendaMarking.Ninguna);
+    }
+
+    /// <summary>Invariante del dictamen 13110: <c>omitir</c> junto a otra vigente no anula a la otra.</summary>
+    [Theory]
+    [InlineData(PrendaDecision.Registrar, FurPrendaMarking.Constitucion)]
+    [InlineData(PrendaDecision.Levantar, FurPrendaMarking.Levantamiento)]
+    public void ToFurMarking_OmitirConOtraVigente_MandaLaOtra(string otra, FurPrendaMarking esperado)
+    {
+        PrendaDecision.ToFurMarking(new[] { PrendaDecision.Omitir, otra }).Should().Be(esperado);
+    }
 }
