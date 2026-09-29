@@ -197,7 +197,9 @@ public sealed class SyncPropagacionHijasMigrationTests(PostgresDatabaseFixture f
         await SembrarTramiteAsync(Otro, 2);
 
         // Se simula el histórico previo a la migración: dos trámites sin versión, el «Otro» más antiguo.
+        // Sin el índice único del DDL 124, que en el despliegue real se crea DESPUÉS de esta asignación.
         await EjecutarSinTriggersAsync(
+            "DROP INDEX IF EXISTS tramites.uq_procedure_instances_sync_version",
             "UPDATE tramites.procedure_instances SET sync_version = 0, created_at = now() - interval '2 days' WHERE id = @otro",
             "UPDATE tramites.procedure_instances SET sync_version = 0, created_at = now() - interval '1 day' WHERE id = @id");
         var maximoAntes = await SecuenciaAsync();
@@ -205,6 +207,8 @@ public sealed class SyncPropagacionHijasMigrationTests(PostgresDatabaseFixture f
         var rowVersionAntes = await EscalarAsync<long>("SELECT row_version FROM tramites.procedure_instances WHERE id = @id");
 
         await EjecutarUpAsync();
+        // El índice único vuelve a crearse sobre las versiones asignadas: prueba que no quedaron repetidas.
+        await EjecutarSqlAsync(new HU13075_SyncIndices().UpOperations.OfType<SqlOperation>().Single().Sql);
 
         var otro = await VersionAsync(Otro);
         var tramite = await VersionAsync(Tramite);
@@ -302,6 +306,13 @@ public sealed class SyncPropagacionHijasMigrationTests(PostgresDatabaseFixture f
             ["ALTER TABLE tramites.procedure_instances DISABLE TRIGGER USER",
              .. sentencias,
              "ALTER TABLE tramites.procedure_instances ENABLE TRIGGER USER"]);
+
+    private async Task EjecutarSqlAsync(string sql)
+    {
+        await using var conn = await Fixture.OpenConnectionAsync();
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+    }
 
     private async Task EjecutarUpAsync()
     {
