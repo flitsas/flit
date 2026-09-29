@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  isAdminRole,
   profileLabel,
   profileShortLabel,
   resolveProfile,
@@ -18,14 +19,24 @@ const PROFILE_STYLE: Record<UserProfileKind, { bg: string; color: string }> = {
  * `full` usa el nombre completo del perfil ("Organismo de Tránsito"), que cabe en un modal
  * pero no en una celda de tabla.
  */
-export function ProfileBadge({ profile, full = false }: { profile: UserProfileKind; full?: boolean }) {
+export function ProfileBadge({
+  profile,
+  full = false,
+  admin = false,
+}: {
+  profile: UserProfileKind;
+  full?: boolean;
+  /** Bug #13055 — añade «· Admin» al chip del administrador de la compañía u organismo. */
+  admin?: boolean;
+}) {
   const style = PROFILE_STYLE[profile];
+  const base = full ? profileLabel(profile) : profileShortLabel(profile);
   return (
     <span
       className="inline-flex w-fit max-w-full truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
       style={{ background: style.bg, color: style.color }}
     >
-      {full ? profileLabel(profile) : profileShortLabel(profile)}
+      {admin ? `${base} · Admin` : base}
     </span>
   );
 }
@@ -49,7 +60,7 @@ export function ProfileCell({ roleCode, profile, tenantType }: Omit<ProfileRoleC
   const kind = resolveProfile({ profile, roleCode, tenantType });
   return (
     <div className="flex min-w-0 items-center">
-      <ProfileBadge profile={kind} />
+      <ProfileBadge profile={kind} admin={isAdminRole(roleCode)} />
     </div>
   );
 }

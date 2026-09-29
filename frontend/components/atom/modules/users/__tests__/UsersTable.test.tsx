@@ -55,7 +55,7 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
   it("AC1 — perfil Gestor y rol Administrador de Compañía en celdas separadas", () => {
     renderTable();
     const fila = screen.getByText("Ana Torres").closest("div.grid") as HTMLElement;
-    expect(within(fila).getByText("Gestor")).toBeInTheDocument();
+    expect(within(fila).getByText("Gestor · Admin")).toBeInTheDocument();
     const rol = within(fila).getByText("Administrador de Compañía");
     expect(rol).toBeInTheDocument();
     // La celda de rol ya no lleva la opacidad reducida que la hacía ilegible.
@@ -82,7 +82,7 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
     expect(within(filaFlit).getByText("Super Administrador")).toBeInTheDocument();
 
     const filaOt = screen.getByText("Beto Ruiz").closest("div.grid") as HTMLElement;
-    expect(within(filaOt).getByText("OT")).toBeInTheDocument();
+    expect(within(filaOt).getByText("OT · Admin")).toBeInTheDocument();
     expect(within(filaOt).getByText("Administrador OT")).toBeInTheDocument();
   });
 
