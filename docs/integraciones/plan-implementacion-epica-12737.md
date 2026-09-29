@@ -418,19 +418,17 @@ Rutas relativas a `services/core-api/` salvo indicación.
 
 ## 8. Features e HUs previstas bajo #12737
 
-Tags `DOR; adopcion-ia; fase-1-diseño`; sprint siguiente al activo. SP en escala Fibonacci. Orden: **F1 ∥ F2 → F3 → F4 → F5**.
+Features creadas el 2026-09-29 en Sprint 9 (decisión del PO). Tags `DOR; adopcion-ia; fase-1-diseño`. SP en escala Fibonacci. Prioridad: **F1 → F3 con F2 en paralelo → F4 → F5**.
 
 | Feature | HU | Capa | SP | Depende de |
 |---|---|---|---|---|
-| **F1 `[TRAMITES] - Marca de agua de sincronización de trámites`** | HU1.1 Columnas `sync_*`, secuencia y trigger del padre (DDL 118a) | BACKEND/DB | 5 | — |
+| **F1 #13062 `[TRAMITES] - Marca de agua de sincronización de trámites`** | HU1.1 Columnas `sync_*`, secuencia y trigger del padre (DDL 118a) | BACKEND/DB | 5 | — |
 | | HU1.2 Triggers statement-level en 5 tablas hijas + backfill + índice único (DDL 118b) | BACKEND/DB | 8 | HU1.1 |
 | | HU1.3 Índices de apoyo (DDL 119), validación `db-schema-validator`, ADR marca de agua, prueba de integración de concurrencia EF | BACKEND/DB | 5 | HU1.2 |
-| **F2 `[INTEGRACIONES] - Autenticación de clientes externos`** | HU2.1 Schema `integrations`, entidad `ExternalClient`, repositorio, DDL 120 | BACKEND | 5 | — |
-| | HU2.2 `POST /external/auth/token`: verificación Argon2id, emisor JWT dedicado, esquema `ExternalClient` + policies | BACKEND | 8 | HU2.1 |
-| | HU2.3 Lockout temporal, rotación con ventana, `must_rotate`, rate limit del token | BACKEND | 5 | HU2.2 |
-| | HU2.4 Endpoints admin SuperAdmin (crear/listar/rotar/desactivar/desbloquear/access-log) + ADR auth externa | BACKEND | 5 | HU2.1 |
-| | HU2.5 Pantalla admin «Clientes externos» (opcional esta fase) | FRONTEND | 8 | HU2.4 |
-| **F3 `[INTEGRACIONES] - Endpoint de sincronización de trámites, URL de adjunto de factura y contrato OpenAPI`** | HU3.1 `ExternalIntegrationScope` + `ProcedureSyncReadRepository` (SQL keyset, ventana de estabilidad) + arch test de alcance | BACKEND | 8 | F1 |
+| **F2 #13065 `[INTEGRACIONES] - Cliente de integración para sistemas externos`** | HU2.1 Schema `integrations`, entidad `ExternalClient` y repositorio calcados de `IntegrationClient` (core-ict), DDL 120 | BACKEND | 3 | — |
+| | HU2.2 `POST /external/auth/token`: Argon2id, emisor JWT dedicado, esquema `ExternalClient` + policies por permiso, bloqueo, rotación con ventana, `must_rotate`, límite por IP | BACKEND | 5 | HU2.1 |
+| | HU2.3 Endpoints admin SuperAdmin (listar/crear/editar/regenerar secreto/desbloquear) + alta `flito-*` + ADR auth externa | BACKEND | 3 | HU2.1 |
+| **F3 #13066 `[INTEGRACIONES] - Endpoint de sincronización de trámites, URL de adjunto de factura y contrato OpenAPI`** | HU3.1 `ExternalIntegrationScope` + `ProcedureSyncReadRepository` (SQL keyset, ventana de estabilidad) + arch test de alcance | BACKEND | 8 | F1 |
 | | HU3.2 Mapeo de ítem: pivot vehículo, normalizaciones, comprador/aprobación/factura/organismo/compañía, nulls estrictos, tombstones | BACKEND | 8 | HU3.1 |
 | | HU3.3 `GET /external/tramites/sync`: cursor opaco, `since`, validaciones 400, exención de tenant middleware, enmascarado PII por scope | BACKEND | 5 | HU3.2, F2 |
 | | HU3.4 `GET /external/tramites/{id}/adjuntos/{adjuntoId}/url` (presigned) | BACKEND | 3 | F2 |
@@ -438,14 +436,13 @@ Tags `DOR; adopcion-ia; fase-1-diseño`; sprint siguiente al activo. SP en escal
 | | HU3.6 Pruebas de integración (Testcontainers) sync/cursor/concurrencia + prueba de carga p95 | QA/BACKEND | 5 | HU3.3 |
 | | HU3.7 ADR cursor keyset + ADR lectura cross-tenant externa | BACKEND | 2 | HU3.1 |
 | | HU3.8 Ruta Gateway `/api/v1/external/**` sin `JwtRequired` + timeout (necesaria para alcanzar el endpoint desde fuera en DEV) | INFRA | 2 | F2 |
-| **F4 `[INTEGRACIONES] - Protección, auditoría y cumplimiento del acceso externo`** | HU4.1 Rate limit `external-client` por `client_id` (429 + `Retry-After`) | BACKEND | 3 | F2 |
-| | HU4.2 `external_access_log` + middleware de bitácora (sin PII en logs) | BACKEND | 5 | F2 |
-| | HU4.3 Métricas/alertas (429, cliente sin lectura exitosa > 30 min) | BACKEND/INFRA | 3 | HU4.2 |
-| | HU4.4 Job de retención de bitácora (ADR-0059) | BACKEND | 3 | HU4.2 |
-| **F5 (opcional) `[INTEGRACIONES] - Consulta de detalle de trámite para clientes externos`** | HU5.1 `GET /external/tramites/{idOrRadicado}` | BACKEND | 3 | F3 |
+| **F4 #13067 `[INTEGRACIONES] - Protección, auditoría y cumplimiento del acceso externo`** | HU4.1 Rate limit `external-client` por `client_id` (429 + `Retry-After`) | BACKEND | 3 | F2 |
+| | HU4.2 `external_access_log` + middleware de bitácora (sin PII en logs), retención 12 meses | BACKEND | 5 | F2 |
+| | *Segunda fase:* métricas/alertas (429, sin lectura > 30 min) y job de retención (ADR-0059) | — | — | — |
+| **F5 (opcional) #13068 `[INTEGRACIONES] - Consulta de detalle de trámite para clientes externos`** | HU5.1 `GET /external/tramites/{idOrRadicado}` | BACKEND | 3 | F3 |
 | | HU5.2 Pruebas + OpenAPI | BACKEND | 2 | HU5.1 |
 
-Total: 22 HU · ~112 SP (sin F5: ~107; sin HU2.5: ~99).
+Total: 16 HU · ~73 SP sin F5 (18 HU · ~78 SP con F5).
 
 ## 9. Pruebas
 
@@ -511,7 +508,7 @@ incidente (solo desactivar el prefijo en Gateway), porque rehacer el backfill vu
 2. `pageSize` máx (1000) y cuota (120/min) definitivos — confirmar con operación.
 3. Retención de `external_access_log` por ambiente (propuesta 90/180/365 días).
 4. TTL de la URL firmada del adjunto (propuesta 10 min).
-5. HU2.5 (pantalla admin) en esta fase o solo API.
+5. ~~HU2.5 (pantalla admin) en esta fase o solo API~~ → **cerrada (2026-09-29): solo API**, como los clientes ICT.
 6. ~~Si `since` + `cursor` juntos → 400 o ignorar `since`~~ → **cerrada (2026-09-29): 400 `cursor_and_since_exclusive`**.
 
 ## 12. Entregables hacia FLITO
