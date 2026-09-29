@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Ban, Check, CircleDashed, Hourglass, X, type LucideIcon } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -387,26 +393,59 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
             <p className="text-[11px] italic opacity-55">Sin solicitudes registradas.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] text-[11px]">
+              {/* Bug #13055 — tabla homologada con el modelo de trámites (subtabla fija, sin paginación). */}
+              <table
+                aria-label="Solicitudes ante el RUNT"
+                className="min-w-[520px] text-[11px]"
+                style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+              >
                 <thead>
-                  <tr className="text-left text-[10px] font-semibold uppercase opacity-55">
-                    <th className="px-2 py-1">Fecha</th>
-                    <th className="px-2 py-1">Trámite(s)</th>
-                    <th className="px-2 py-1">Estado</th>
-                    <th className="px-2 py-1">Entidad</th>
-                    <th className="px-2 py-1">N.º</th>
+                  <tr>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                    >
+                      Fecha
+                    </th>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS}`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                    >
+                      Trámite(s)
+                    </th>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS}`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                    >
+                      Estado
+                    </th>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS}`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                    >
+                      Entidad
+                    </th>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                    >
+                      N.º
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {vista.solicitudes.map((s) => (
-                    <tr key={`${s.noSolicitud}-${s.fecha}`} className="border-t border-[#DFE5ED] dark:border-white/10">
-                      <td className="px-2 py-1.5 font-mono tabular-nums">{s.fecha}</td>
-                      <td className="px-2 py-1.5 font-medium">{s.tramites}</td>
-                      <td className="px-2 py-1.5">
-                        <EstadoSolicitud estado={s.estado} />
-                      </td>
-                      <td className="px-2 py-1.5">{s.entidad}</td>
-                      <td className="px-2 py-1.5 font-mono opacity-70">{s.noSolicitud}</td>
+                    <tr key={`${s.noSolicitud}-${s.fecha}`} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                    <td className="border-y px-4 py-3 rounded-l-xl border-l font-mono tabular-nums" style={{ borderColor: "#DFE5ED" }}>{s.fecha}</td>
+                    <td className="border-y px-4 py-3 font-medium" style={{ borderColor: "#DFE5ED" }}>{s.tramites}</td>
+                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}><EstadoSolicitud estado={s.estado} /></td>
+                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>{s.entidad}</td>
+                    <td className="border-y px-4 py-3 rounded-r-xl border-r font-mono opacity-70" style={{ borderColor: "#DFE5ED" }}>{s.noSolicitud}</td>
                     </tr>
                   ))}
                 </tbody>

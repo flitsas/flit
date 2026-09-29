@@ -7,6 +7,8 @@ import { CreateButton } from "@/components/atom/CreateButton";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { DocumentTypeListTable } from "@/components/admin/documents/DocumentTypeListTable";
 import { CreateDocumentTypeDialog } from "@/components/admin/documents/CreateDocumentTypeDialog";
 import {
@@ -35,7 +37,6 @@ import {
   ADMIN_CONTENT_SURFACE_CLS,
 } from "@/components/admin/admin-ui-styles";
 
-const PAGE_SIZE = 20;
 
 // Consola documental — catálogo de tipos de documento (HU #10198, AC1/AC7) con alta,
 // edición y baja lógica. Paginación server-side; 4 estados UI vía UiStateBoundary.
@@ -50,7 +51,8 @@ export default function AdminDocumentsPage() {
 function DocumentsCatalog() {
   const router = useRouter();
   const { show } = useToast();
-  const [page, setPage] = useState(1);
+  // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [draftFilters, setDraftFilters] = useState<DocumentTypeCatalogFilters>(EMPTY_DOCUMENT_TYPE_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<DocumentTypeCatalogFilters>(EMPTY_DOCUMENT_TYPE_FILTERS);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -74,7 +76,7 @@ function DocumentsCatalog() {
         const data = await fetchDocumentTypes(
           {
             page,
-            pageSize: PAGE_SIZE,
+            pageSize,
             includeInactive: true,
             q: appliedFilters.q || undefined,
             origen: appliedFilters.origen || undefined,
@@ -93,7 +95,7 @@ function DocumentsCatalog() {
         }
       }
     },
-    [page, appliedFilters],
+    [page, pageSize, appliedFilters],
   );
 
   useEffect(() => {
@@ -212,6 +214,9 @@ function DocumentsCatalog() {
           onApply={applyFilters}
           onClear={clearFilters}
         />
+        {status === "loading" ? (
+          <CarLoaderModal label="Cargando catálogo de documentos…" />
+        ) : (
         <UiStateBoundary
           status={status}
           onRetry={() => void load()}
@@ -232,6 +237,7 @@ function DocumentsCatalog() {
               page={result.page}
               pageSize={result.pageSize}
               onPageChange={setPage}
+              onPageSizeChange={setPageSize}
               onEdit={openEdit}
               onDeactivate={handleDeactivate}
               onReactivate={handleReactivate}
@@ -239,6 +245,7 @@ function DocumentsCatalog() {
             />
           )}
         </UiStateBoundary>
+        )}
       </div>
 
       <CreateDocumentTypeDialog

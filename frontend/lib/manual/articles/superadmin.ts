@@ -45,7 +45,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         ],
         bullets: [
           "Trámites: familias habilitadas (Matrículas, Traspaso, Otros) con switch de bloqueo por familia y la lista blanca de trámites permitidos.",
-          "Configuración Empresa: parámetros de firma (con la firma precargada desde el baúl), validar SOAT ante RUNT, avisos al aprobar o rechazar y sus destinatarios, métodos de recaudo, fuente de comparendos, módulos activos del dashboard (Comparendos, Resoluciones), proveedores de consulta y de avalúo, y la tabla de organismos de tránsito con los bloqueos y restricciones que aplica cada uno.",
+          "Configuración Empresa: parámetros de firma (con la firma precargada desde el baúl), validar SOAT ante RUNT, avisos al aprobar o rechazar y sus destinatarios, métodos de recaudo, fuente de comparendos, módulos activos del dashboard (Comparendos, Resoluciones), proveedores de consulta y de avalúo, y la tabla de organismos de tránsito con los bloqueos y restricciones que aplica cada uno. El buscador de esa tabla (por nombre o código, con o sin tildes) recorre todos los organismos, no solo la página que estás viendo.",
           "Documentos: parámetros documentales de la gestora.",
           "Representantes legales.",
           "Mandatarios.",

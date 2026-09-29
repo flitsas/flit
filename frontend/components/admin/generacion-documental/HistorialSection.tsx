@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   fetchStandaloneDocuments,
@@ -28,8 +29,6 @@ import {
 } from "./generacion-documental-nav";
 import { standaloneDocumentStatusQuery } from "./status-labels";
 
-const PAGE_SIZE = 20;
-
 /**
  * Vista del historial del módulo "Generación documental" (HU-03; CF-17, CF-18, CF-19, CF-22).
  *
@@ -47,7 +46,8 @@ export function HistorialSection() {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [rows, setRows] = useState<StandaloneDocumentListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
+  // Bug #13055: paginación estándar con «Filas por página» (10/25/50/100), de servidor.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [filters, setFilters] = useState<HistorialFiltersValue>(HISTORIAL_FILTERS_EMPTY);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -66,13 +66,13 @@ export function HistorialSection() {
   const filtered = hasHistorialFilters(filters);
 
   const load = useCallback(
-    async (targetPage: number, current: HistorialFiltersValue, signal?: AbortSignal) => {
+    async (targetPage: number, size: number, current: HistorialFiltersValue, signal?: AbortSignal) => {
       setStatus("loading");
       try {
         const result = await fetchStandaloneDocuments(
           {
             page: targetPage,
-            pageSize: PAGE_SIZE,
+            pageSize: size,
             documentType: current.documentType
               ? (current.documentType as StandaloneDocumentListItem["documentType"])
               : undefined,
@@ -118,15 +118,15 @@ export function HistorialSection() {
         }
       }
     },
-    [],
+    [setPage],
   );
 
   useEffect(() => {
     const controller = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga al cambiar página o filtros
-    void load(page, filters, controller.signal);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga al cambiar página, tamaño o filtros
+    void load(page, pageSize, filters, controller.signal);
     return () => controller.abort();
-  }, [load, page, filters]);
+  }, [load, page, pageSize, filters]);
 
   // Compañías del selector. Solo para SuperAdmin, y de un vistazo: no se pagina porque el control
   // es un `select`, no un buscador. Si la consulta falla el selector se queda con «Mi compañía» y
@@ -163,7 +163,7 @@ export function HistorialSection() {
     // Un filtro nuevo invalida la página en curso: la 3 de un listado de 5 filas no existe.
     setPage(1);
     setFilters(value);
-  }, []);
+  }, [setPage]);
 
   const handleDownload = useCallback(async (row: StandaloneDocumentListItem) => {
     setDownloadError(null);
@@ -243,7 +243,7 @@ export function HistorialSection() {
 
       <UiStateBoundary
         status={status}
-        onRetry={() => void load(page, filters)}
+        onRetry={() => void load(page, pageSize, filters)}
         skeletonRows={5}
         emptyMessage={emptyMessage}
         emptyCta={emptyCta}
@@ -253,8 +253,9 @@ export function HistorialSection() {
           rows={rows}
           totalCount={totalCount}
           page={page}
-          pageSize={PAGE_SIZE}
+          pageSize={pageSize}
           onPageChange={setPage}
+          onPageSizeChange={setPageSize}
           onDownload={(row) => void handleDownload(row)}
           downloadingId={downloadingId}
         />

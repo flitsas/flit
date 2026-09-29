@@ -337,6 +337,20 @@ public sealed class KyverumWebhookHandler(
             KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
             SignaturePresent: signaturePresent, SecretPresent: secretPresent), ct);
 
+        // Bug #13055 — trámite anulado o revocado: la validación conserva su estado (ni conteo de
+        // intentos, ni rechazo por agotamiento, ni consulta de respaldo). Se responde 200 para que
+        // Kyverum no reintente, y la auditoría deja constancia de que el proveedor sí respondió.
+        if (v.CongeladaPorTramite)
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.TramiteInactivo,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+                SignaturePresent: signaturePresent, SecretPresent: secretPresent, HttpStatus: 200,
+                Message: $"Trámite {v.ProcedureInstance!.Status}: el resultado del proveedor no se aplica."), ct);
+            return ("ok", null);
+        }
+
         // Descifrado del secreto (vía rápida HMAC). CryptographicException (keyring/ApplicationName) ⇒ NO 500.
         string? secret = null;
         string? decryptError = null;

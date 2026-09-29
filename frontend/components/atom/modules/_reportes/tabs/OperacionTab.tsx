@@ -147,7 +147,8 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
       >
         {metrics.data && (
           <div className="flex flex-col gap-4">
-            <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="stuck-title">
+            <section aria-labelledby="stuck-title">
+              {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
               <h2
                 id="stuck-title"
                 className="text-sm font-bold mb-3"
@@ -159,15 +160,15 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
                 <p className="text-xs opacity-60">No hay trámites atascados. ¡Buen ritmo!</p>
               ) : (
                 <div className={CARDLIST_SCROLL}>
-                  <table className={CARDLIST_TABLE} data-testid="stuck-table">
+                  <table className={CARDLIST_TABLE} data-testid="stuck-table" aria-labelledby="stuck-title">
                     <thead>
                       <tr className={CARDLIST_HEAD_ROW}>
-                        <th className={CARDLIST_TH}>Referencia</th>
-                        <th className={CARDLIST_TH}>Estado</th>
-                        <th className={CARDLIST_TH}>Días detenido</th>
-                        <th className={CARDLIST_TH}>Organismo</th>
-                        <th className={CARDLIST_TH}>Tipo</th>
-                        <th className={CARDLIST_TH}>Radicador</th>
+                        <th scope="col" className={CARDLIST_TH}>Referencia</th>
+                        <th scope="col" className={CARDLIST_TH}>Estado</th>
+                        <th scope="col" className={CARDLIST_TH}>Días detenido</th>
+                        <th scope="col" className={CARDLIST_TH}>Organismo</th>
+                        <th scope="col" className={CARDLIST_TH}>Tipo</th>
+                        <th scope="col" className={CARDLIST_TH}>Radicador</th>
                       </tr>
                     </thead>
                     <tbody>

@@ -26,6 +26,9 @@ import {
   type OtReviewersReport,
 } from "@/lib/api/ot-metrics";
 import { XLSX_MIME } from "@/lib/xlsx";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { ColumnPicker } from "@/components/consultas/ColumnPicker";
 import { activePreset } from "@/components/consultas/columns";
 import {
@@ -78,6 +81,8 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultVisibleReviewerColumns);
   const [report, setReport] = useState<OtReviewersReport | null>(null);
   const [busy, setBusy] = useState(false);
+  // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
+  const pg = usePaginacion();
   const [error, setError] = useState<string | null>(null);
   const [exportState, setExportState] = useState<{ busy: boolean; notice: string | null }>({
     busy: false,
@@ -362,7 +367,9 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
           </p>
         )}
 
-        {sinFilas ? (
+        {busy && !report ? (
+          <CarLoaderModal label="Generando el informe…" />
+        ) : sinFilas ? (
           <Empty>
             {busy
               ? "Generando el informe…"
@@ -371,12 +378,13 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                 : "Nadie decidió trámites en el periodo y con los filtros seleccionados."}
           </Empty>
         ) : (
+          <>
           <div className={CARDLIST_SCROLL}>
             <table className={`min-w-[40rem] ${CARDLIST_TABLE}`} data-testid="ot-reviewers-table">
               <thead>
                 <tr className={CARDLIST_HEAD_ROW}>
                   {columns.map((column) => (
-                    <th key={column.id} className={CARDLIST_TH}>
+                    <th key={column.id} scope="col" className={CARDLIST_TH}>
                       {column.sort ? (
                         <button
                           type="button"
@@ -395,7 +403,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                 </tr>
               </thead>
               <tbody>
-                {report!.filas.map((row) => (
+                {pg.paginar(report!.filas).map((row) => (
                   <tr key={row.userId} className={CARDLIST_ROW}>
                     {columns.map((column) => (
                       <td
@@ -410,6 +418,16 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={pg.page}
+            pageSize={pg.pageSize}
+            totalCount={report!.filas.length}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+            ariaLabel="Paginación de revisores"
+            noun="revisores"
+          />
+          </>
         )}
       </Section>
     </div>

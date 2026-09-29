@@ -6,6 +6,12 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import type { IdentityAuditEvent } from '@/lib/api/types/procedure-runtime';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { FLIT } from '@/lib/flit-design-tokens';
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from '@/components/atom/table-styles';
 
 import { formatFechaHora } from '@/lib/format/date';
 /**
@@ -250,44 +256,58 @@ export function IdentityValidationTrackingPanel({
             // horizontal: son cinco columnas y la última es texto largo. Sin el mínimo, «Detalle»
             // se estrangula hasta una palabra por línea en cuanto la tarjeta va a media pantalla.
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] text-left text-xs">
-                {/* Cabecera rellena en versalitas, como en la referencia: la fila de títulos se
-                    separa de los datos por fondo, no por opacidad — que además incumplía el piso. */}
+              {/* Bug #13055 — tabla homologada con el modelo de trámites (bitácora corta del panel: sin
+                  paginación). */}
+              <table
+                className="min-w-[520px] text-left text-xs"
+                style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}
+              >
                 <thead>
-                  <tr style={{ background: '#EEF5FF', color: '#59677D' }}>
-                    <th scope="col" className="rounded-l-lg px-3 py-2 font-semibold uppercase tracking-wide">
-                      Fecha
-                    </th>
-                    <th scope="col" className="px-3 py-2 font-semibold uppercase tracking-wide">Etapa</th>
-                    <th scope="col" className="px-3 py-2 font-semibold uppercase tracking-wide">Resultado</th>
-                    <th scope="col" className="px-3 py-2 font-semibold uppercase tracking-wide">Cifrado</th>
-                    <th scope="col" className="rounded-r-lg px-3 py-2 font-semibold uppercase tracking-wide">
-                      {detailLayout ? 'Detalle técnico' : 'Detalle'}
-                    </th>
+                  <tr>
+                    {['Fecha', 'Etapa', 'Resultado', 'Cifrado', detailLayout ? 'Detalle técnico' : 'Detalle'].map(
+                      (col, i, arr) => (
+                        <th
+                          key={col}
+                          scope="col"
+                          className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? 'rounded-l-xl' : ''} ${i === arr.length - 1 ? 'rounded-r-xl' : ''}`}
+                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                        >
+                          {col}
+                        </th>
+                      ),
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {events.map((e, i) => (
-                    <tr key={i} className="border-t align-top" style={{ borderColor: FLIT.border.soft }}>
-                      <td className="whitespace-nowrap px-3 py-2.5 opacity-70">{formatFecha(e.occurredAt)}</td>
-                      <td className="px-3 py-2.5 font-medium">{auditStageLabel(e.stage, detailLayout)}</td>
-                      <td className="px-3 py-2.5 font-semibold">
-                        {detailLayout ? (
-                          <StatusBadge
-                            label={auditOutcomeLabel(e)}
-                            tone={auditOutcomeTone(e)}
-                            ariaLabel={`Resultado: ${auditOutcomeLabel(e)}`}
-                          />
-                        ) : (
-                          <span style={eventoCorrecto(e) ? { color: 'var(--flit-success-ink)' } : undefined}>
-                            {auditOutcomeLabel(e)}
-                          </span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5">{auditCifradoText(e, detailLayout)}</td>
-                      <td className="px-3 py-2.5 opacity-70">{auditDetailText(e)}</td>
-                    </tr>
-                  ))}
+                  {events.map((e, i) => {
+                    const celda = 'border-y px-4 py-3 align-top';
+                    const estilo = { borderColor: '#DFE5ED' };
+                    return (
+                      <tr key={i} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                        <td className={`${celda} whitespace-nowrap rounded-l-xl border-l`} style={estilo}>
+                          <span className="opacity-70">{formatFecha(e.occurredAt)}</span>
+                        </td>
+                        <td className={`${celda} font-medium`} style={estilo}>{auditStageLabel(e.stage, detailLayout)}</td>
+                        <td className={`${celda} font-semibold`} style={estilo}>
+                          {detailLayout ? (
+                            <StatusBadge
+                              label={auditOutcomeLabel(e)}
+                              tone={auditOutcomeTone(e)}
+                              ariaLabel={`Resultado: ${auditOutcomeLabel(e)}`}
+                            />
+                          ) : (
+                            <span style={eventoCorrecto(e) ? { color: 'var(--flit-success-ink)' } : undefined}>
+                              {auditOutcomeLabel(e)}
+                            </span>
+                          )}
+                        </td>
+                        <td className={`${celda} whitespace-nowrap`} style={estilo}>{auditCifradoText(e, detailLayout)}</td>
+                        <td className={`${celda} rounded-r-xl border-r`} style={estilo}>
+                          <span className="opacity-70">{auditDetailText(e)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

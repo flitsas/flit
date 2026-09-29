@@ -39,6 +39,9 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { ColumnPicker } from "./ColumnPicker";
 import {
   activePreset,
@@ -62,7 +65,6 @@ import {
   Section,
 } from "./ui";
 
-const PAGE_SIZE = 25;
 
 /**
  * Filas por archivo de export. No es un tope del TOTAL exportable —eso lo impone el motor de
@@ -143,7 +145,8 @@ export function QueryConsole<TRow>({
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultColumns);
 
   const [result, setResult] = useState<QueryResult<TRow> | null>(null);
-  const [page, setPage] = useState(1);
+  // Bug #13055 — paginación de servidor estándar, con «Filas por página» (reemplaza Anterior/Siguiente).
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [busy, setBusy] = useState(false);
   // El export tiene su propio estado: compartirlo con el contador dejaría el botón inservible cada
   // vez que se refresca la cifra, que es todo el rato mientras alguien ajusta los filtros.
@@ -268,7 +271,7 @@ export function QueryConsole<TRow>({
       try {
         const data = await source.run(definition, {
           page: targetPage,
-          pageSize: PAGE_SIZE,
+          pageSize,
           signal,
         });
         if (signal?.aborted) return;
@@ -282,7 +285,7 @@ export function QueryConsole<TRow>({
     },
     // La clave serializada evita relanzar por una identidad de objeto nueva con el mismo contenido.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [definitionKey, source],
+    [definitionKey, source, pageSize],
   );
 
   // Un respiro antes de consultar: el contador se actualiza mientras se marcan casillas, y sin esto
@@ -290,20 +293,20 @@ export function QueryConsole<TRow>({
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => void load(controller.signal, 1), 250);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- cambiar los filtros invalida la página: quedarse en la 4 de un resultado que ahora tiene 2 dejaría la tabla vacía sin motivo
+    // Cambiar los filtros invalida la página: quedarse en la 4 de un resultado que ahora tiene 2 dejaría la tabla vacía sin motivo.
     setPage(1);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [load]);
+  }, [load, setPage]);
 
   const changePage = useCallback(
     (next: number) => {
       setPage(next);
       void load(undefined, next);
     },
-    [load],
+    [load, setPage],
   );
 
   const setCondiciones = useCallback((condiciones: QueryCondition[]) => {
@@ -481,7 +484,6 @@ export function QueryConsole<TRow>({
   const columns = allColumns.filter((c) => visibleColumns.includes(c.id));
   const presetActivo = activePreset(presets, visibleColumns);
   const modificada = activeSnapshot !== null && activeSnapshot !== preguntaKey;
-  const totalPaginas = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
 
   // Si «empezar de cero» tirara esto sin avisar, armar una consulta larga y darle sin querer
   // perdería el trabajo entero. Solo hace falta confirmar cuando hay algo que de verdad se pierde:
@@ -670,6 +672,9 @@ export function QueryConsole<TRow>({
             </p>
           )}
 
+          {/* Bug #13055 — primera carga con el loader del carrito; los refrescos posteriores (filtros
+              en vivo) no bloquean la pantalla. */}
+          {busy && !result && <CarLoaderModal label="Consultando…" />}
           {!result || result.filas.length === 0 ? (
             <Empty>
               {busy
@@ -710,32 +715,15 @@ export function QueryConsole<TRow>({
                 </table>
               </div>
 
-              {totalPaginas > 1 && (
-                <div className="flex items-center justify-between gap-3 text-xs">
-                  <span className="text-[#6B7280] dark:text-white/50">
-                    Página {page} de {totalPaginas}
-                  </span>
-                  <span className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => changePage(page - 1)}
-                      disabled={page <= 1 || busy}
-                      className="rounded-lg border border-[#DFE5ED] px-3 py-1 font-semibold disabled:opacity-40 dark:border-white/15"
-                    >
-                      Anterior
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => changePage(page + 1)}
-                      disabled={page >= totalPaginas || busy}
-                      className="rounded-lg border border-[#DFE5ED] px-3 py-1 font-semibold disabled:opacity-40 dark:border-white/15"
-                      data-testid={`${prefix}-siguiente`}
-                    >
-                      Siguiente
-                    </button>
-                  </span>
-                </div>
-              )}
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                totalCount={result.total}
+                onPageChange={changePage}
+                onPageSizeChange={setPageSize}
+                noun={`${singular}s`}
+                ariaLabel="Paginación de la consulta"
+              />
             </>
           )}
         </Section>

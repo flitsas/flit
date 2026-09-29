@@ -3,8 +3,8 @@
 /**
  * Paginación numerada del diseño FLIT: ‹ 1 2 … N ›, con la página activa rellena en azul.
  *
- * Nació dentro de `TramitesTable` y vive aquí porque la usa más de una pantalla. Es distinta de
- * `components/atom/Pagination`, que solo ofrece Anterior / Siguiente: cuando el listado tiene
+ * Nació dentro de `TramitesTable`; vive en components/atom porque es la paginación ESTÁNDAR de todas las
+ * tablas (Bug #13055). La compone `Pagination` junto al selector «Filas por página»: cuando el listado tiene
  * decenas de páginas, saltar a una concreta exige los números.
  *
  * La línea de conteo se pinta SIEMPRE —es la única pieza que dice cuántos registros hay—, pero

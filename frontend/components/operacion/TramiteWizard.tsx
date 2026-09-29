@@ -4779,6 +4779,7 @@ function StepBody({
                 subtitle="Avalúo de referencia y condiciones económicas del traspaso."
                 defaultOpen
                 level="h3"
+                keepMounted
               >
                 <CommercialForm
                   key="comercial-en-requisitos"
@@ -4801,6 +4802,7 @@ function StepBody({
                         title="Asignación de Prenda / Limitación a la Propiedad"
                         level="h3"
                         className="h-full min-w-0"
+                        keepMounted
                       >
                         <PrendaForm
                           ref={prendaFormRef}
@@ -4881,6 +4883,7 @@ function StepBody({
                           defaultOpen
                           level="h3"
                           className="h-full min-w-0"
+                          keepMounted
                         >
                           <PrendaForm
                             ref={prendaFormRef}

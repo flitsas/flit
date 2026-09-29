@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, FileText, RotateCcw, Search, Users } from "lucide-react";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   MandatoOtConfigForm,
@@ -26,16 +27,14 @@ import {
 } from "@/lib/plataforma/mandato-templates";
 import { useToast } from "@/components/admin/Toast";
 
-/** Filas por página — mismo patrón que OTConfigTablePanel (HU #10495 / design guardian). */
-const PAGE_SIZE = 10;
-
 /**
  * Configurador SuperAdmin — plantillas + config por OT (Plataforma → Mandatos).
  */
 export function MandatosCatalogPanel() {
   const { show: showToast } = useToast();
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
+  const pg = usePaginacion();
   const [rows, setRows] = useState<MandateOtConfigView[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [previewing, setPreviewing] = useState<string | null>(null);
@@ -73,12 +72,7 @@ export function MandatosCatalogPanel() {
     );
   }, [rows, search]);
 
-  const lastPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, lastPage);
-  const pageRows = useMemo(
-    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
-    [filtered, safePage],
-  );
+  const pageRows = pg.paginar(filtered);
 
   const handlePreviewTemplate = async (code: MandatoTemplateCode) => {
     setPreviewing(code);
@@ -244,7 +238,7 @@ export function MandatosCatalogPanel() {
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
-                setPage(1);
+                pg.setPage(1);
               }}
               placeholder="Buscar OT o plantilla…"
               className="w-full rounded-xl border border-[#DFE5ED] bg-white py-2 pr-3 pl-9 text-sm text-[#162244] outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
@@ -263,10 +257,11 @@ export function MandatosCatalogPanel() {
           emptyMessage="No hay organismos activos en FLIT, o ninguno coincide con la búsqueda."
           minWidth={860}
           pagination={{
-            page: safePage,
-            pageSize: PAGE_SIZE,
+            page: Math.min(pg.page, Math.max(1, Math.ceil(filtered.length / pg.pageSize))),
+            pageSize: pg.pageSize,
             totalCount: filtered.length,
-            onPageChange: setPage,
+            onPageChange: pg.setPage,
+            onPageSizeChange: pg.setPageSize,
           }}
         />
       </section>

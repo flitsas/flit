@@ -5,7 +5,7 @@
 // cualquier compañía (selector); un admin no-super, solo la suya. El SECRETO lo genera el sistema y se
 // muestra UNA sola vez (no se puede recuperar) — se regenera con "Regenerar secreto".
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, KeyRound, RotateCcw, X } from "lucide-react";
+import { Check, Copy, KeyRound, Power, PowerOff, RotateCcw, X } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ApiError } from "@/lib/api/types";
 import {
@@ -18,6 +18,17 @@ import {
 import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import type { CompanyListItem } from "@/lib/api/types";
 import { SearchableSelect } from "@/components/atom/SearchableSelect";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { Pagination } from "@/components/atom/Pagination";
+import { RowActions } from "@/components/atom/RowActions";
+import { StatusBadge } from "@/components/atom/StatusBadge";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 
 import { formatFechaHora } from "@/lib/format/date";
 interface Props {
@@ -25,6 +36,8 @@ interface Props {
   isSuperAdmin: boolean;
   tenantId: string | null;
 }
+
+const CELDA_BORDE = { borderColor: "#DFE5ED" };
 
 function errorMessage(e: unknown): string {
   if (e instanceof ApiError) {
@@ -59,6 +72,7 @@ function parseScopes(scopes: string): string {
 }
 
 export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
+  const pg = usePaginacion();
   const [clients, setClients] = useState<IctClient[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);
@@ -263,79 +277,99 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
         </form>
       )}
 
-      <UiStateBoundary
-        status={status}
-        emptyMessage="No hay clientes ICT registrados."
-        errorMessage="No se pudieron cargar los clientes ICT."
-        onRetry={() => void load()}
-        skeletonRows={3}
-      >
-        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800">
-              <tr>
-                <th className="px-3 py-2">Usuario</th>
-                <th className="px-3 py-2">Compañía</th>
-                <th className="px-3 py-2">Scopes</th>
-                <th className="px-3 py-2">Estado</th>
-                <th className="px-3 py-2">Último ingreso</th>
-                <th className="px-3 py-2">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((c) => (
-                <tr key={c.id} className="border-t border-slate-100 text-[#162744] dark:border-slate-700 dark:text-slate-200">
-                  <td className="px-3 py-2 font-medium">{c.username}</td>
-                  <td className="px-3 py-2">{c.tenantName}</td>
-                  <td className="px-3 py-2 max-w-[240px] truncate font-mono text-xs" title={parseScopes(c.scopes)}>
-                    {parseScopes(c.scopes)}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        c.isActive ? "bg-[#557EFF]/10 text-[#557EFF]" : "bg-[#FF4E00]/10 text-[#FF4E00]"
-                      }`}
+      {/* Bug #13055 — tabla homologada con el modelo de trámites: cabecera y filas de table-styles,
+          RowActions, loader del carrito y paginación en cliente con «Filas por página». */}
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando clientes ICT…" />
+      ) : (
+        <UiStateBoundary
+          status={status}
+          emptyMessage="No hay clientes ICT registrados."
+          errorMessage="No se pudieron cargar los clientes ICT."
+          onRetry={() => void load()}
+        >
+          <div className="overflow-x-auto">
+            <table
+              aria-label="Clientes ICT"
+              className="text-xs"
+              style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+            >
+              <thead>
+                <tr>
+                  {["Usuario", "Compañía", "Scopes", "Estado", "Último ingreso", "Acciones"].map((col, i, arr) => (
+                    <th
+                      key={col}
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? "rounded-l-xl" : ""} ${i === arr.length - 1 ? "rounded-r-xl text-right" : ""}`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                     >
-                      {c.isActive ? "Activo" : "Inactivo"}
-                    </span>
-                    {c.testMode && (
-                      <span
-                        className="ml-1 inline-flex rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600"
-                        title="No consulta fuentes de pago; todas sus filas caen en Con Novedades."
-                      >
-                        Prueba
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {c.lastLoginAt ? formatFechaHora(new Date(c.lastLoginAt)) : "—"}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        disabled={busyId === c.id}
-                        onClick={() => void toggleActive(c)}
-                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-40 dark:hover:bg-slate-800"
-                      >
-                        {c.isActive ? "Desactivar" : "Activar"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busyId === c.id}
-                        onClick={() => void handleResetSecret(c)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs text-[#557EFF] hover:bg-[#557EFF]/10 disabled:opacity-40"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" /> Regenerar secreto
-                      </button>
-                    </div>
-                  </td>
+                      {col}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </UiStateBoundary>
+              </thead>
+              <tbody>
+                {pg.paginar(clients).map((c) => (
+                  <tr key={c.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                    <td className="rounded-l-xl border-y border-l px-4 py-3 font-medium" style={CELDA_BORDE}>{c.username}</td>
+                    <td className="border-y px-4 py-3" style={CELDA_BORDE}>{c.tenantName}</td>
+                    <td
+                      className="max-w-[240px] truncate border-y px-4 py-3 font-mono text-xs"
+                      style={CELDA_BORDE}
+                      title={parseScopes(c.scopes)}
+                    >
+                      {parseScopes(c.scopes)}
+                    </td>
+                    <td className="border-y px-4 py-3" style={CELDA_BORDE}>
+                      <StatusBadge label={c.isActive ? "Activo" : "Inactivo"} tone={c.isActive ? "success" : "danger"} />
+                      {c.testMode && (
+                        <span
+                          className="ml-1 inline-flex align-middle"
+                          title="No consulta fuentes de pago; todas sus filas caen en Con Novedades."
+                        >
+                          <StatusBadge label="Prueba" tone="warning" />
+                        </span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap border-y px-4 py-3" style={CELDA_BORDE}>
+                      {c.lastLoginAt ? formatFechaHora(new Date(c.lastLoginAt)) : "—"}
+                    </td>
+                    <td className="rounded-r-xl border-y border-r px-4 py-3" style={CELDA_BORDE}>
+                      <RowActions
+                        actions={[
+                          {
+                            icon: c.isActive ? PowerOff : Power,
+                            label: `${c.isActive ? "Desactivar" : "Activar"} cliente ${c.username}`,
+                            tone: c.isActive ? "danger" : "primary",
+                            disabled: busyId === c.id,
+                            onClick: () => void toggleActive(c),
+                          },
+                          {
+                            icon: RotateCcw,
+                            label: `Regenerar secreto de ${c.username}`,
+                            tone: "primary",
+                            disabled: busyId === c.id,
+                            onClick: () => void handleResetSecret(c),
+                          },
+                        ]}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination
+            page={pg.page}
+            pageSize={pg.pageSize}
+            totalCount={clients.length}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+            noun="clientes ICT"
+            ariaLabel="Paginación de clientes ICT"
+          />
+        </UiStateBoundary>
+      )}
     </div>
   );
 }

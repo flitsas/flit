@@ -30,15 +30,18 @@ public sealed record TenantBiometricValidationListQuery(
     /// <summary>HU #10867 — true = solo standalone (sin trámite); false = solo ligadas; null = todas.</summary>
     bool? Standalone = null)
 {
-    /// <summary>Filas por página: el cliente elige de 10 en 10 hasta 50 (HU #10347 — paginación).</summary>
+    /// <summary>
+    /// Filas por página (HU #10347). Bug #13055 — tope en 100, como el resto de listados: la pantalla
+    /// ofrece 10/25/50/100 (HU #12707 AC9) y con tope 50 la opción de 100 descuadraba el paginador.
+    /// </summary>
     public const int MinPageSize = 10;
-    public const int MaxPageSize = 50;
+    public const int MaxPageSize = 100;
     public const int DefaultPageSize = 20;
 
     /// <summary>Página normalizada (1-based, mínimo 1).</summary>
     public int SafePage() => Page < 1 ? 1 : Page;
 
-    /// <summary>Tamaño de página acotado al rango permitido [10, 50].</summary>
+    /// <summary>Tamaño de página acotado al rango permitido [10, 100].</summary>
     public int SafePageSize() => Math.Clamp(PageSize, MinPageSize, MaxPageSize);
 
     private static readonly HashSet<string> ValidEstados = new(StringComparer.OrdinalIgnoreCase)

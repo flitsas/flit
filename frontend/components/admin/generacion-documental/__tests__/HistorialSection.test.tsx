@@ -81,7 +81,7 @@ describe("HistorialSection — cuatro estados de UI (CF-22)", () => {
     await waitFor(() => expect(mocks.fetchStandaloneDocuments).toHaveBeenCalled());
     // HU-03 añadió los filtros: la primera carga los manda sin valor, no los omite del objeto.
     expect(mocks.fetchStandaloneDocuments).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1, pageSize: 20 }),
+      expect.objectContaining({ page: 1, pageSize: 10 }),
       expect.any(AbortSignal),
     );
   });

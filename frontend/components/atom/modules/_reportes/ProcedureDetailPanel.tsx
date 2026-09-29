@@ -2,14 +2,22 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { Pagination } from "@/components/atom/Pagination";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { fetchProcedureDetails } from "@/lib/api/analytics";
 import { ApiError } from "@/lib/api/types";
 import type { AnalyticsCategory, ProcedureDetailsPage } from "@/lib/api/types";
 import { CATEGORY_META, statusLabel } from "./categories";
 import type { DateRange } from "./range";
-
-const PAGE_SIZE = 10;
 
 interface ProcedureDetailPanelProps {
   /** Categoría a filtrar; indefinida = todas (drill-down solo por estado, Reportes 2.0). */
@@ -41,7 +49,8 @@ function formatDate(value?: string | null): string {
  */
 export function ProcedureDetailPanel({ category, status, range, tenantId, onClose }: ProcedureDetailPanelProps) {
   const meta = category ? CATEGORY_META[category] : undefined;
-  const [page, setPage] = useState(1);
+  // Bug #13055 — paginación estándar con «Filas por página» (10/25/50/100), de servidor.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [data, setData] = useState<ProcedureDetailsPage | null>(null);
   const [uiStatus, setUiStatus] = useState<UiStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string>();
@@ -62,7 +71,7 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
       setUiStatus("loading");
       try {
         const res = await fetchProcedureDetails(
-          { from: range.from, to: range.to, category, status, page, pageSize: PAGE_SIZE, tenantId },
+          { from: range.from, to: range.to, category, status, page, pageSize, tenantId },
           controller.signal,
         );
         if (controller.signal.aborted) return;
@@ -76,11 +85,10 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
     }
     void load();
     return () => controller.abort();
-  }, [category, status, range.from, range.to, tenantId, page, reloadKey]);
+  }, [category, status, range.from, range.to, tenantId, page, pageSize, reloadKey]);
 
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / PAGE_SIZE)) : 1;
   const categoryLabel = meta?.label ?? "Todos los trámites";
   const title = status ? `${categoryLabel} · ${statusLabel(status)}` : categoryLabel;
 
@@ -123,57 +131,45 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
             emptyMessage="Sin trámites en el periodo seleccionado."
             skeletonRows={6}
           >
-            <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-xs">
-              <thead>
-                <tr className="text-[10px] uppercase text-left" style={{ color: "#162744" }}>
-                  <th className="px-2 py-2 font-semibold">Referencia</th>
-                  <th className="px-2 py-2 font-semibold">Tipo</th>
-                  <th className="px-2 py-2 font-semibold">Estado</th>
-                  <th className="px-2 py-2 font-semibold">Radicador</th>
-                  <th className="px-2 py-2 font-semibold">Enviado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data?.items.map((row) => (
-                  <tr key={row.id} className="border-t">
-                    <td className="px-2 py-2 font-medium">{row.referenceNumber}</td>
-                    <td className="px-2 py-2 opacity-80">{row.procedureTypeName}</td>
-                    <td className="px-2 py-2">{statusLabel(row.status)}</td>
-                    <td className="px-2 py-2 opacity-80">{row.createdByDisplayName}</td>
-                    <td className="px-2 py-2 opacity-80">{formatDate(row.submittedAt)}</td>
+            {/* Bug #13055 — tabla homologada con el modelo de trámites. */}
+            <div className={CARDLIST_SCROLL}>
+              <table className={`min-w-[520px] ${CARDLIST_TABLE}`} aria-label="Detalle de trámites">
+                <thead>
+                  <tr className={CARDLIST_HEAD_ROW}>
+                    <th scope="col" className={CARDLIST_TH}>Referencia</th>
+                    <th scope="col" className={CARDLIST_TH}>Tipo</th>
+                    <th scope="col" className={CARDLIST_TH}>Estado</th>
+                    <th scope="col" className={CARDLIST_TH}>Radicador</th>
+                    <th scope="col" className={CARDLIST_TH}>Enviado</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data?.items.map((row) => (
+                    <tr key={row.id} className={CARDLIST_ROW}>
+                      <td className={`${CARDLIST_CELL} font-medium`}>{row.referenceNumber}</td>
+                      <td className={`${CARDLIST_CELL} opacity-80`}>{row.procedureTypeName}</td>
+                      <td className={CARDLIST_CELL}>{statusLabel(row.status)}</td>
+                      <td className={`${CARDLIST_CELL} opacity-80`}>{row.createdByDisplayName}</td>
+                      <td className={`${CARDLIST_CELL} opacity-80`}>{formatDate(row.submittedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </UiStateBoundary>
         </div>
 
         {uiStatus === "ready" && data && (
-          <footer className="flex items-center justify-between px-5 py-3 border-t shrink-0">
-            <span className="text-[11px] opacity-70">
-              Página {data.page} de {totalPages}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="text-[11px] font-semibold px-3 py-1.5 rounded-lg border disabled:opacity-40"
-              >
-                Anterior
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-40"
-                style={{ background: "#557EFF" }}
-              >
-                Siguiente
-              </button>
-            </div>
+          <footer className="px-5 py-3 border-t shrink-0">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              totalCount={data.totalCount}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              ariaLabel="Paginación del detalle de trámites"
+              noun="trámites"
+            />
           </footer>
         )}
       </aside>

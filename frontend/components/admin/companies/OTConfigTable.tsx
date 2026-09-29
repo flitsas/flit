@@ -44,6 +44,19 @@ export interface OTConfigTableProps {
   onError?: (message: string) => void;
   /** HU #12357 AC7 — deshabilita switches y menú de configuración. */
   readOnly?: boolean;
+  /**
+   * Bug #13055 — búsqueda controlada por el contenedor. Cuando el contenedor pagina, tiene que
+   * filtrar ANTES de cortar la página (si no, solo se busca en las filas visibles): la tabla pinta
+   * el campo y ya no filtra por término. Sin estas props la tabla busca sobre `offices` como antes.
+   */
+  search?: string;
+  onSearchChange?: (value: string) => void;
+}
+
+/** ¿El organismo coincide con el término? Nombre o código, sin mayúsculas ni tildes. */
+export function officeMatchesSearch(office: TransitOffice, term: string): boolean {
+  const folded = fold(term);
+  return !folded || fold(office.name).includes(folded) || fold(office.code).includes(folded);
 }
 
 /** Deriva si un OT es operable y, si no, la razón para el badge. */
@@ -72,8 +85,13 @@ export function OTConfigTable({
   onOpenConfig,
   onError,
   readOnly = false,
+  search: searchProp,
+  onSearchChange,
 }: OTConfigTableProps) {
-  const [search, setSearch] = useState("");
+  const [searchState, setSearchState] = useState("");
+  const searchControlled = searchProp !== undefined;
+  const search = searchControlled ? searchProp : searchState;
+  const setSearch = searchControlled ? (value: string) => onSearchChange?.(value) : setSearchState;
   const [granted, setGranted] = useState<Set<string>>(() => new Set(grantedIds));
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   // IDs con confirmación "Guardado" visible unos segundos tras persistir con éxito.
@@ -113,12 +131,12 @@ export function OTConfigTable({
 
   const filtered = useMemo(() => {
     const base = readOnly ? offices.filter((o) => granted.has(o.id)) : offices;
-    const term = fold(search);
-    if (!term) {
+    // Controlada: el contenedor ya filtró sobre la lista completa.
+    if (searchControlled) {
       return base;
     }
-    return base.filter((o) => fold(o.name).includes(term) || fold(o.code).includes(term));
-  }, [offices, search, readOnly, granted]);
+    return base.filter((o) => officeMatchesSearch(o, search));
+  }, [offices, search, searchControlled, readOnly, granted]);
 
   const handleToggleGrant = async (office: TransitOffice) => {
     const enable = !granted.has(office.id);

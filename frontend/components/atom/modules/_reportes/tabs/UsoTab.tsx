@@ -82,7 +82,8 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
             />
           </div>
 
-          <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="wizard-steps-title">
+          <section aria-labelledby="wizard-steps-title">
+            {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
             <h2
               id="wizard-steps-title"
               className="text-sm font-bold mb-3"
@@ -94,15 +95,15 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
               <p className="text-xs opacity-60">Aún no hay telemetría del wizard.</p>
             ) : (
               <div className={CARDLIST_SCROLL}>
-                <table className={CARDLIST_TABLE} data-testid="wizard-steps-table">
+                <table className={CARDLIST_TABLE} data-testid="wizard-steps-table" aria-labelledby="wizard-steps-title">
                   <thead>
                     <tr className={CARDLIST_HEAD_ROW}>
-                      <th className={CARDLIST_TH}>Paso</th>
-                      <th className={CARDLIST_TH}>Vistas</th>
-                      <th className={CARDLIST_TH}>Completados</th>
-                      <th className={CARDLIST_TH}>Abandono</th>
-                      <th className={CARDLIST_TH}>Tiempo promedio</th>
-                      <th className={CARDLIST_TH}>Tiempo mediano</th>
+                      <th scope="col" className={CARDLIST_TH}>Paso</th>
+                      <th scope="col" className={CARDLIST_TH}>Vistas</th>
+                      <th scope="col" className={CARDLIST_TH}>Completados</th>
+                      <th scope="col" className={CARDLIST_TH}>Abandono</th>
+                      <th scope="col" className={CARDLIST_TH}>Tiempo promedio</th>
+                      <th scope="col" className={CARDLIST_TH}>Tiempo mediano</th>
                     </tr>
                   </thead>
                   <tbody>

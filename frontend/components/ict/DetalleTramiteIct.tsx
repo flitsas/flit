@@ -22,6 +22,21 @@ import {
   type TramiteIct,
 } from "@/lib/api/ict-trazabilidad";
 import { formatearDuracion } from "@/lib/ict/trazabilidad";
+import { RowActions } from "@/components/atom/RowActions";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
+
+// Bug #13055 — las subtablas de este detalle (consultas a fuentes y log del trámite) son tablas cortas,
+// no listados: llevan la cabecera y las filas del modelo de trámites, sin paginación.
+const TH_CLS = TABLA_HEADER_CELL_CLS;
+const TH_STYLE = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG };
+const TD_CLS = "border-y px-4 py-3";
+const TD_STYLE = { borderColor: "#DFE5ED" };
+const TABLA_STYLE = { width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" } as const;
 
 import { formatFechaHora } from "@/lib/format/date";
 type Pestana = "recorrido" | "consultas" | "datos" | "log";
@@ -310,44 +325,53 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
             </p>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-xs">
+            <table className="min-w-[640px] text-xs" style={TABLA_STYLE}>
               <thead>
-                <tr className="text-left text-[10px] font-semibold uppercase opacity-55">
-                  <th className="px-3 py-2">Nivel</th>
-                  <th className="px-3 py-2">Consulta</th>
-                  <th className="px-3 py-2">Documento o placa</th>
-                  <th className="px-3 py-2">Consultada</th>
-                  <th className="px-3 py-2">Válida</th>
-                  <th className="px-3 py-2">Intentos</th>
-                  <th className="px-3 py-2" />
+                <tr>
+                  {["Nivel", "Consulta", "Documento o placa", "Consultada", "Válida", "Intentos", "Respuesta"].map(
+                    (col, i, arr) => (
+                      <th
+                        key={col}
+                        scope="col"
+                        className={`${TH_CLS} ${i === 0 ? "rounded-l-xl" : ""} ${i === arr.length - 1 ? "rounded-r-xl" : ""}`}
+                        style={TH_STYLE}
+                      >
+                        {col}
+                      </th>
+                    ),
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {dato.map((c) => (
                   <tr
                     key={c.id}
-                    className="border-t border-[#DFE5ED] dark:border-white/10"
+                    className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
                     style={c.bloquea ? { background: "rgba(153,27,27,0.06)" } : undefined}
                   >
-                    <td className="px-3 py-2">{c.nivelActorEtiqueta}</td>
-                    <td className="px-3 py-2">{c.tipoConsultaEtiqueta}</td>
-                    <td className="px-3 py-2 font-mono text-[11px]">{c.identificador ?? "—"}</td>
-                    <td className="px-3 py-2">
+                    <td className={`${TD_CLS} rounded-l-xl border-l`} style={TD_STYLE}>{c.nivelActorEtiqueta}</td>
+                    <td className={TD_CLS} style={TD_STYLE}>{c.tipoConsultaEtiqueta}</td>
+                    <td className={`${TD_CLS} font-mono text-[11px]`} style={TD_STYLE}>{c.identificador ?? "—"}</td>
+                    <td className={TD_CLS} style={TD_STYLE}>
                       <SiNo valor={c.consultada} />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={TD_CLS} style={TD_STYLE}>
                       <SiNo valor={c.valida} />
                     </td>
-                    <td className="px-3 py-2 font-mono tabular-nums">{c.intentos}</td>
-                    <td className="px-3 py-2">
+                    <td className={`${TD_CLS} font-mono tabular-nums`} style={TD_STYLE}>{c.intentos}</td>
+                    <td className={`${TD_CLS} rounded-r-xl border-r`} style={TD_STYLE}>
                       {c.respuesta ? (
-                        <button
-                          type="button"
-                          onClick={() => setAbierta(abierta === c.id ? null : c.id)}
-                          className="rounded-md bg-[#557EFF]/10 px-2 py-1 text-[10px] font-semibold text-[#557EFF] hover:bg-[#557EFF]/20"
-                        >
-                          {abierta === c.id ? "Ocultar respuesta" : "Ver respuesta"}
-                        </button>
+                        <RowActions
+                          className="justify-start"
+                          actions={[
+                            {
+                              icon: abierta === c.id ? EyeOff : Eye,
+                              label: `${abierta === c.id ? "Ocultar" : "Ver"} respuesta de ${c.tipoConsultaEtiqueta}`,
+                              tone: "primary",
+                              onClick: () => setAbierta(abierta === c.id ? null : c.id),
+                            },
+                          ]}
+                        />
                       ) : (
                         <span className="opacity-45">—</span>
                       )}
@@ -530,29 +554,33 @@ function PanelLog({ numero }: { numero: number }) {
             el módulo Log ICT.
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-xs">
+            <table className="min-w-[680px] text-xs" style={TABLA_STYLE}>
               <thead>
-                <tr className="text-left text-[10px] font-semibold uppercase opacity-55">
-                  <th className="px-3 py-2">Hora</th>
-                  <th className="px-3 py-2">Tipo</th>
-                  <th className="px-3 py-2">Método</th>
-                  <th className="px-3 py-2">Destino</th>
-                  <th className="px-3 py-2">Código</th>
-                  <th className="px-3 py-2">Duración</th>
+                <tr>
+                  {["Hora", "Tipo", "Método", "Destino", "Código", "Duración"].map((col, i, arr) => (
+                    <th
+                      key={col}
+                      scope="col"
+                      className={`${TH_CLS} ${i === 0 ? "rounded-l-xl" : ""} ${i === arr.length - 1 ? "rounded-r-xl" : ""}`}
+                      style={TH_STYLE}
+                    >
+                      {col}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {dato.map((e) => (
-                  <tr key={e.id} className="border-t border-[#DFE5ED] align-top dark:border-white/10">
-                    <td className="px-3 py-2 font-mono tabular-nums">
+                  <tr key={e.id} className={`bg-white align-top dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                    <td className={`${TD_CLS} rounded-l-xl border-l font-mono tabular-nums`} style={TD_STYLE}>
                       {formatFechaHora(new Date(e.ocurrido))}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={TD_CLS} style={TD_STYLE}>
                       {e.tipo}
                       <span className="block text-[10px] opacity-55">{e.direccion}</span>
                     </td>
-                    <td className="px-3 py-2 font-mono text-[11px] font-semibold">{e.metodo}</td>
-                    <td className="px-3 py-2">
+                    <td className={`${TD_CLS} font-mono text-[11px] font-semibold`} style={TD_STYLE}>{e.metodo}</td>
+                    <td className={TD_CLS} style={TD_STYLE}>
                       <span className="break-all font-mono text-[11px]">{e.ruta}</span>
                       {/* La cifra que explica por qué el log crudo resulta ilegible. */}
                       {e.tramitesEnLaPeticion > 1 && (
@@ -562,7 +590,7 @@ function PanelLog({ numero }: { numero: number }) {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={TD_CLS} style={TD_STYLE}>
                       <span
                         className="rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold"
                         style={
@@ -574,7 +602,7 @@ function PanelLog({ numero }: { numero: number }) {
                         {e.codigo}
                       </span>
                     </td>
-                    <td className="px-3 py-2 font-mono tabular-nums">
+                    <td className={`${TD_CLS} rounded-r-xl border-r font-mono tabular-nums`} style={TD_STYLE}>
                       {e.duracionMs.toLocaleString("es-CO")} ms
                     </td>
                   </tr>

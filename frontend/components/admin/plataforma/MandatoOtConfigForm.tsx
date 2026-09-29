@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Eye, FileText, Search, Trash2, Upload } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import {
   deleteMandateOtCustomTemplate,
@@ -35,9 +36,6 @@ Objeto: radicar el trámite {{tramite}} del vehículo placa {{placa}} ante {{org
 Placeholders: {{placa}} {{tramite}} {{organismo}} {{ciudad}} {{fecha}} {{mandante_nombre}} {{mandante_documento}} {{mandatario_nombre}} {{mandatario_documento}} {{mandatario_institucional}} {{mandatario_nit}}
 
 Las firmas se agregan automáticamente al pie del documento.`;
-
-/** Filas por página en reglas compañía×OT (DataTable + Pagination del design system). */
-const COMPANY_PAGE_SIZE = 10;
 
 /**
  * HU #11705 — el cargue de un PDF propio y el editor de texto libre quedan OCULTOS: cargar un
@@ -104,7 +102,9 @@ export function MandatoOtConfigForm({
   const [rulesStatus, setRulesStatus] = useState<"loading" | "ready" | "error">("loading");
   const [savingCompanyId, setSavingCompanyId] = useState<string | null>(null);
   const [companySearch, setCompanySearch] = useState("");
-  const [companyPage, setCompanyPage] = useState(1);
+  // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
+  const companyPg = usePaginacion();
+  const { setPage: setCompanyPage } = companyPg;
 
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -133,16 +133,7 @@ export function MandatoOtConfigForm({
     });
   }, [companyRules, companySearch, lockToCompanyId]);
 
-  const companyLastPage = Math.max(1, Math.ceil(filteredCompanyRules.length / COMPANY_PAGE_SIZE));
-  const safeCompanyPage = Math.min(companyPage, companyLastPage);
-  const companyPageRows = useMemo(
-    () =>
-      filteredCompanyRules.slice(
-        (safeCompanyPage - 1) * COMPANY_PAGE_SIZE,
-        safeCompanyPage * COMPANY_PAGE_SIZE,
-      ),
-    [filteredCompanyRules, safeCompanyPage],
-  );
+  const companyPageRows = companyPg.paginar(filteredCompanyRules);
 
   const explicitRulesCount = useMemo(
     () => companyRules.filter((r) => r.hasExplicitRule).length,
@@ -924,10 +915,14 @@ export function MandatoOtConfigForm({
                   ariaLabel="Reglas de mandato por compañía"
                   allowHorizontalScroll={false}
                   pagination={{
-                    page: safeCompanyPage,
-                    pageSize: COMPANY_PAGE_SIZE,
+                    page: Math.min(
+                      companyPg.page,
+                      Math.max(1, Math.ceil(filteredCompanyRules.length / companyPg.pageSize)),
+                    ),
+                    pageSize: companyPg.pageSize,
                     totalCount: filteredCompanyRules.length,
-                    onPageChange: setCompanyPage,
+                    onPageChange: companyPg.setPage,
+                    onPageSizeChange: companyPg.setPageSize,
                   }}
                 />
               </div>

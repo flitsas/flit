@@ -15,6 +15,10 @@
 //
 // Los colores salen de los tokens de `globals.css` (`--table-*`), así que el tema oscuro ya está
 // resuelto y no hay un segundo sitio donde cambiarlos.
+//
+// Bug #13055 — alineada con `table-styles` (el modelo único de tabla del guardián): cabecera de
+// 10 px fija al hacer scroll y fila blanca que se eleva con sombra azul al pasar el puntero, en vez
+// del cambio de fondo por celda. Antes había dos recetas y los reportes se veían distintos.
 
 /** Envoltorio con desplazamiento horizontal. Va por fuera de la `<table>`. */
 export const CARDLIST_SCROLL = "overflow-x-auto";
@@ -26,15 +30,16 @@ export const CARDLIST_SCROLL = "overflow-x-auto";
 export const CARDLIST_TABLE = "w-full border-separate border-spacing-y-2 text-xs";
 
 /** El `<tr>` de la cabecera. La alineación se deja a cada `<th>` para no estorbar a las numéricas. */
-export const CARDLIST_HEAD_ROW = "text-left text-[11px] font-semibold uppercase tracking-wider";
+export const CARDLIST_HEAD_ROW = "text-left text-[10px] font-semibold uppercase tracking-wider";
 
 /** Cada `<th>`. El fondo va aquí y no en el `<tr>`: con `border-separate` es lo que pinta parejo. */
 export const CARDLIST_TH =
-  "bg-[color:var(--table-header-bg)] px-4 py-3 font-semibold text-[color:var(--table-header-fg)] " +
-  "first:rounded-l-xl last:rounded-r-xl";
+  "sticky top-0 z-10 bg-[color:var(--table-header-bg)] px-4 py-2.5 font-semibold " +
+  "text-[color:var(--table-header-fg)] first:rounded-l-xl last:rounded-r-xl";
 
 /** El `<tr>` de una fila. `group` habilita el resaltado al pasar por encima si la fila se pulsa. */
-export const CARDLIST_ROW = "group bg-card";
+export const CARDLIST_ROW =
+  "group bg-white transition hover:shadow-[0_8px_24px_rgba(85,126,255,0.18)] dark:bg-[#0B0F14]";
 
 /** Cada `<td>`. El borde completo de la tarjeta sale de los cuatro lados repartidos entre celdas. */
 export const CARDLIST_CELL =
@@ -42,5 +47,4 @@ export const CARDLIST_CELL =
   "first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r";
 
 /** Añadir a cada `<td>` de una fila que se pueda pulsar. Requiere `CARDLIST_ROW` en su `<tr>`. */
-export const CARDLIST_CELL_CLICKABLE =
-  "transition-colors group-hover:bg-[color:var(--table-row-hover)]";
+export const CARDLIST_CELL_CLICKABLE = "cursor-pointer";

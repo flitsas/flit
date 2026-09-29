@@ -4,6 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { RowActions } from "@/components/atom/RowActions";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { useToast } from "@/components/admin/Toast";
 import {
   createOtWebhook,
@@ -15,13 +24,15 @@ import type { OtApiCallLog, OtWebhook } from "@/lib/api/types-ot";
 import { OtSidePanel } from "./OtSidePanel";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { OtTabBar } from "./OtTabBar";
-import { OtTablePagination } from "./OtTablePagination";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
 import { maskTargetUrl } from "./ot-utils";
 import { WebhookFormPanel } from "./WebhookFormPanel";
 
 import { formatFechaHora } from "@/lib/format/date";
-const LOG_PAGE_SIZE = 20;
+// Bug #13055 — tabla homologada con el modelo de trámites.
+const HEAD_STYLE = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG } as const;
+const CELL_STYLE = { borderColor: "#DFE5ED" } as const;
+const ROW_CLS = `bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`;
 
 type Tab = "webhooks" | "logs";
 
@@ -37,7 +48,11 @@ export function WebhooksSection() {
   const [logStatus, setLogStatus] = useState<UiStatus>("loading");
   const [logs, setLogs] = useState<OtApiCallLog[]>([]);
   const [logTotal, setLogTotal] = useState(0);
-  const [logPage, setLogPage] = useState(1);
+  // Bitácora: paginación de servidor con «Filas por página».
+  const { page: logPage, setPage: setLogPage, pageSize: logPageSize, setPageSize: setLogPageSize } =
+    usePaginacion();
+  // Lista de webhooks: paginación en cliente.
+  const pgWebhooks = usePaginacion();
   const [selectedLog, setSelectedLog] = useState<OtApiCallLog | null>(null);
 
   const [direction, setDirection] = useState("outbound");
@@ -68,7 +83,7 @@ export function WebhooksSection() {
             to: dateTo ? `${dateTo}T23:59:59.999Z` : undefined,
             minResponseCode: httpClass === "5xx" ? 500 : undefined,
             page: targetPage,
-            pageSize: LOG_PAGE_SIZE,
+            pageSize: logPageSize,
           },
           signal,
         );
@@ -81,7 +96,7 @@ export function WebhooksSection() {
         if (!signal?.aborted) setLogStatus("error");
       }
     },
-    [direction, httpClass, dateFrom, dateTo],
+    [direction, httpClass, dateFrom, dateTo, logPageSize, setLogPage],
   );
 
   useEffect(() => {
@@ -141,6 +156,9 @@ export function WebhooksSection() {
               Nuevo webhook
             </button>
           </div>
+          {webhookStatus === "loading" ? (
+            <CarLoaderModal label="Cargando webhooks…" />
+          ) : (
           <UiStateBoundary
             status={webhookStatus}
             emptyMessage="No hay webhooks configurados."
@@ -148,46 +166,51 @@ export function WebhooksSection() {
             onRetry={() => void loadWebhooks()}
           >
             <div className="overflow-x-auto">
-            <table className="w-full border-separate border-spacing-y-2 text-xs">
+            <table
+              className="text-xs"
+              style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+            >
+              <caption className="sr-only">Webhooks configurados</caption>
               <thead>
-                <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
-                  <th className="rounded-l-xl px-4 py-2.5 bg-muted">
+                <tr>
+                  <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={HEAD_STYLE}>
                     Evento
                   </th>
-                  <th className="px-4 py-2.5 bg-muted">
+                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={HEAD_STYLE}>
                     URL destino
                   </th>
-                  <th className="px-4 py-2.5 bg-muted">
+                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={HEAD_STYLE}>
                     Estado
                   </th>
-                  <th className="px-4 py-2.5 bg-muted">
+                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={HEAD_STYLE}>
                     Creado
                   </th>
-                  <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
+                  <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={HEAD_STYLE}>
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {webhooks.map((w) => (
-                  <tr key={w.id} className="bg-card">
-                    <td className="rounded-l-xl border-y border-l px-4 py-3">
+                {pgWebhooks.paginar(webhooks).map((w) => (
+                  <tr key={w.id} className={ROW_CLS}>
+                    <td className="rounded-l-xl border-y border-l px-4 py-3" style={CELL_STYLE}>
                       {w.eventType}
                     </td>
-                    <td className="border-y px-4 py-3 font-mono">
+                    <td className="border-y px-4 py-3 font-mono" style={CELL_STYLE}>
                       {maskTargetUrl(w.targetUrl)}
                     </td>
-                    <td className="border-y px-4 py-3">
+                    <td className="border-y px-4 py-3" style={CELL_STYLE}>
                       <StatusBadge
                         label={w.isActive ? "Activo" : "Inactivo"}
                         tone={w.isActive ? "success" : "danger"}
                       />
                     </td>
-                    <td className="border-y px-4 py-3 opacity-70">
+                    <td className="border-y px-4 py-3 opacity-70" style={CELL_STYLE}>
                       {formatFechaHora(new Date(w.createdAt))}
                     </td>
                     <td
                       className="rounded-r-xl border-y border-r px-4 py-3 text-right"
+                      style={CELL_STYLE}
                     >
                       <RowActions
                         actions={[
@@ -208,7 +231,17 @@ export function WebhooksSection() {
               </tbody>
             </table>
             </div>
+            <Pagination
+              page={pgWebhooks.page}
+              pageSize={pgWebhooks.pageSize}
+              totalCount={webhooks.length}
+              onPageChange={pgWebhooks.setPage}
+              onPageSizeChange={pgWebhooks.setPageSize}
+              ariaLabel="Paginación de webhooks"
+              noun="webhooks"
+            />
           </UiStateBoundary>
+          )}
         </div>
       )}
 
@@ -275,6 +308,9 @@ export function WebhooksSection() {
             </div>
           </form>
 
+          {logStatus === "loading" ? (
+            <CarLoaderModal label="Cargando bitácora…" />
+          ) : (
           <UiStateBoundary
             status={logStatus}
             emptyMessage="Sin registros en el período seleccionado."
@@ -283,22 +319,26 @@ export function WebhooksSection() {
             skeletonRows={5}
           >
             <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-xs">
+            <table
+              className="min-w-[720px] text-xs"
+              style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+            >
+              <caption className="sr-only">Bitácora de llamadas a la API</caption>
               <thead>
-                <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
-                  <th className="rounded-l-xl px-4 py-2.5 bg-muted">
+                <tr>
+                  <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={HEAD_STYLE}>
                     Endpoint
                   </th>
-                  <th className="px-4 py-2.5 bg-muted">
+                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={HEAD_STYLE}>
                     Método
                   </th>
-                  <th className="px-4 py-2.5 bg-muted">
+                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={HEAD_STYLE}>
                     Código
                   </th>
-                  <th className="px-4 py-2.5 bg-muted">
+                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={HEAD_STYLE}>
                     Duración (ms)
                   </th>
-                  <th className="rounded-r-xl px-4 py-2.5 bg-muted">
+                  <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`} style={HEAD_STYLE}>
                     Fecha
                   </th>
                 </tr>
@@ -307,25 +347,27 @@ export function WebhooksSection() {
                 {logs.map((log, i) => (
                   <tr
                     key={`${log.calledAt}-${i}`}
-                    className="cursor-pointer bg-card hover:opacity-90"
+                    className={`cursor-pointer ${ROW_CLS}`}
                     onClick={() => setSelectedLog(log)}
                   >
                     <td
                       className="max-w-[220px] truncate rounded-l-xl border-y border-l px-4 py-3"
+                      style={CELL_STYLE}
                     >
                       {log.endpoint}
                     </td>
-                    <td className="border-y px-4 py-3">
+                    <td className="border-y px-4 py-3" style={CELL_STYLE}>
                       {log.httpMethod}
                     </td>
-                    <td className="border-y px-4 py-3">
+                    <td className="border-y px-4 py-3" style={CELL_STYLE}>
                       {log.responseCode ?? "—"}
                     </td>
-                    <td className="border-y px-4 py-3">
+                    <td className="border-y px-4 py-3" style={CELL_STYLE}>
                       {log.durationMs ?? "—"}
                     </td>
                     <td
                       className="rounded-r-xl border-y border-r px-4 py-3 opacity-70"
+                      style={CELL_STYLE}
                     >
                       {formatFechaHora(new Date(log.calledAt))}
                     </td>
@@ -334,13 +376,17 @@ export function WebhooksSection() {
               </tbody>
             </table>
             </div>
-            <OtTablePagination
-              totalCount={logTotal}
+            <Pagination
               page={logPage}
-              pageSize={LOG_PAGE_SIZE}
+              pageSize={logPageSize}
+              totalCount={logTotal}
               onPageChange={setLogPage}
+              onPageSizeChange={setLogPageSize}
+              ariaLabel="Paginación de la bitácora"
+              noun="registros"
             />
           </UiStateBoundary>
+          )}
         </div>
       )}
 
