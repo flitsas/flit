@@ -127,7 +127,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
     expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
     // Esta sección vive dentro de un organismo: el perfil de fila es siempre OT.
-    expect(within(fila).getByText("OT")).toBeInTheDocument();
+    expect(within(fila).getByText("OT · Admin")).toBeInTheDocument();
     expect(within(fila).getByText("Admin OT")).toBeInTheDocument();
     expect(
       within(fila).getByRole("button", { name: /editar usuario laura garcía/i }),
