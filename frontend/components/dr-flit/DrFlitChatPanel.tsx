@@ -5,9 +5,20 @@ import { useEffect, useRef, type RefObject } from "react";
 import {
   hasActiveConversation,
   isComposerEnabled,
+  remainingChatMessages,
+  shouldWarnChatUsage,
   type DrFlitChatState,
 } from "./dr-flit-conversation";
+import { DrFlitUsageNotice } from "./DrFlitUsageNotice";
+import { DrFlitSupportCaseForm } from "./DrFlitSupportCaseForm";
+import { DrFlitConsentPrompt } from "./DrFlitConsentPrompt";
+import { DrFlitSupportCaseConfirm } from "./DrFlitSupportCaseConfirm";
+import { DrFlitSupportCaseCreated } from "./DrFlitSupportCaseCreated";
+import { DrFlitSupportCaseError } from "./DrFlitSupportCaseError";
+import type { DrFlitSupportCaseDraft } from "./dr-flit-chat-types";
 import {
+  DR_FLIT_CHAT_ENABLED,
+  DR_FLIT_COMPOSER_EXAMPLE,
   DR_FLIT_MANUAL_HOME_HREF,
   type DrFlitClientBranch,
   type DrFlitHelpOptionId,
@@ -39,6 +50,16 @@ export function DrFlitChatPanel({
   onBackToSearch,
   onSend,
   onNavigate,
+  onOpenSupportCase,
+  onUpdateSupportDraft,
+  onContinueSupportCase,
+  onCancelSupportCase,
+  onAttachSupportFile,
+  onSubmitSupportCase,
+  onEditSupportCase,
+  onAcceptConsent,
+  onDeclineConsent,
+  consentBusy,
   panelRef,
   closeButtonRef,
   inputRef,
@@ -55,6 +76,18 @@ export function DrFlitChatPanel({
   onBackToSearch: () => void;
   onSend: (text: string) => void;
   onNavigate: (href: string) => void;
+  /** Feature #12917 — formulario del caso de soporte en el chat. */
+  onOpenSupportCase: () => void;
+  onUpdateSupportDraft: (draft: DrFlitSupportCaseDraft) => void;
+  onContinueSupportCase: () => void;
+  onCancelSupportCase: () => void;
+  onAttachSupportFile: (file: File) => Promise<string | null>;
+  onSubmitSupportCase: () => void;
+  onEditSupportCase: () => void;
+  /** HU #12931 — autorización del tratamiento de datos antes de usar IA o soporte. */
+  onAcceptConsent: () => void;
+  onDeclineConsent: () => void;
+  consentBusy: boolean;
   /** HU #12711 — ver `DrFlitClientBranchChoices`. */
   canSearchValidaciones?: boolean;
   panelRef: RefObject<HTMLDivElement | null>;
@@ -82,6 +115,7 @@ export function DrFlitChatPanel({
     state.manualHomeHref,
     state.showBackToSearch,
     state.isTyping,
+    state.phase,
   ]);
 
   if (!open) return null;
@@ -96,7 +130,9 @@ export function DrFlitChatPanel({
       role="dialog"
       aria-modal="false"
       aria-labelledby={`${panelId}-title`}
-      className="dr-flit dr-flit-panel-enter fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col overflow-hidden"
+      // overflow-clip y no overflow-hidden: recorta igual, pero un focus() de un campo del formulario del
+      // caso no puede desplazar el panel fijo (con hidden lo desplazaba y el panel quedaba en blanco).
+      className="dr-flit dr-flit-panel-enter fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col overflow-clip"
       style={{
         background: "var(--dr-flit-panel-bg)",
         borderTopLeftRadius: "var(--dr-flit-radius-widget)",
@@ -238,8 +274,58 @@ export function DrFlitChatPanel({
             </button>
           )}
 
+          {shouldWarnChatUsage(state) && state.chatUsage && !state.isTyping && (
+            <DrFlitUsageNotice
+              remaining={remainingChatMessages(state) ?? 0}
+              used={state.chatUsage.messagesUsedToday}
+              limit={state.chatUsage.dailyLimit}
+            />
+          )}
+
           {state.showSupportInfo && !state.isTyping && (
-            <DrFlitSupportPanel onOpenCase={onNavigate} />
+            <DrFlitSupportPanel onOpenCase={onNavigate} onOpenCaseForm={onOpenSupportCase} />
+          )}
+
+          {state.phase === "collecting_support_case" && state.supportDraft && (
+            <DrFlitSupportCaseForm
+              draft={state.supportDraft}
+              onChange={onUpdateSupportDraft}
+              onContinue={onContinueSupportCase}
+              onCancel={onCancelSupportCase}
+              onAttach={onAttachSupportFile}
+            />
+          )}
+
+          {(state.phase === "confirming_support_case" || state.phase === "submitting_support_case") &&
+            state.supportDraft && (
+              <DrFlitSupportCaseConfirm
+                draft={state.supportDraft}
+                submitting={state.phase === "submitting_support_case"}
+                onConfirm={onSubmitSupportCase}
+                onEdit={onEditSupportCase}
+              />
+            )}
+
+          {state.phase === "support_case_created" && state.supportResult && (
+            <DrFlitSupportCaseCreated result={state.supportResult} onOpen={onNavigate} />
+          )}
+
+          {state.phase === "support_case_error" && (
+            <DrFlitSupportCaseError
+              message={state.supportError ?? "No pudimos radicar tu caso en este momento."}
+              onRetry={onSubmitSupportCase}
+              onEdit={onEditSupportCase}
+              onOpen={onNavigate}
+            />
+          )}
+
+          {state.phase === "awaiting_consent" && (
+            <DrFlitConsentPrompt
+              accepting={consentBusy}
+              error={state.consentError ?? null}
+              onAccept={onAcceptConsent}
+              onDecline={onDeclineConsent}
+            />
           )}
 
           {state.showSessionMenu && !state.isTyping && (
@@ -272,6 +358,11 @@ export function DrFlitChatPanel({
         onSend={onSend}
         inputRef={inputRef}
         disabled={state.isTyping || !composerEnabled}
+        placeholder={
+          DR_FLIT_CHAT_ENABLED && state.phase !== "awaiting_value"
+            ? DR_FLIT_COMPOSER_EXAMPLE
+            : undefined
+        }
       />
     </div>
   );

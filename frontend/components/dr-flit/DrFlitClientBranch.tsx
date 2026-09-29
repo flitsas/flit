@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, FileStack, ShieldCheck } from "lucide-react";
+import { ChevronRight, FileStack, ShieldCheck } from "lucide-react";
 import {
   DR_FLIT_CLIENT_BRANCHES,
   type DrFlitClientBranch,
@@ -70,7 +70,7 @@ export function DrFlitClientBranchChoices({
                   />
                 </span>
                 <span className="flex-1">{branch.label}</span>
-                <ArrowUpRight
+                <ChevronRight
                   className="h-4 w-4 shrink-0"
                   style={{ color: "var(--dr-flit-brand-blue)" }}
                   aria-hidden="true"

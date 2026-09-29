@@ -40,6 +40,11 @@ describe("dr-flit-intents", () => {
 
   it("arma saludo", () => {
     expect(buildGreeting("Juan")).toContain("Hola Juan");
+    // Un correo no es un nombre: se saluda sin él.
+    expect(buildGreeting("demo@flit.local")).toMatch(/^Hola 👋/);
+    // Con el chat con IA se invita a escribir; sin él, solo el menú.
+    expect(buildGreeting("Juan", true)).toContain("Escríbeme tu duda con tus palabras");
+    expect(buildGreeting("Juan", false)).not.toContain("Escríbeme");
   });
 });
 
