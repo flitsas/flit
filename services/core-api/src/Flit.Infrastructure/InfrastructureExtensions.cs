@@ -322,6 +322,9 @@ public static class InfrastructureExtensions
         services.AddSingleton<IPasswordHasher, Argon2PasswordHasher>();
         services.AddSingleton<IJwtTokenIssuer, RsaJwtTokenIssuer>();
 
+        // HU #13087 — pase de los clientes de integración externos (llave, emisor y audiencia propios).
+        services.AddExternalClientAuth(configuration);
+
         // Recuperación de contraseña (HU #10169): repos, generador de token y email.
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();

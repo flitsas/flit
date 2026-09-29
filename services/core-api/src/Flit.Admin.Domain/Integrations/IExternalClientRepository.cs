@@ -16,4 +16,17 @@ public interface IExternalClientRepository
 
     /// <summary>Clientes no dados de baja, ordenados por identificador.</summary>
     Task<IReadOnlyList<ExternalClientView>> ListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #13087 — suma un intento fallido en una sola sentencia (dos intentos simultáneos no se pisan).
+    /// Al llegar a <paramref name="maxFailedAttempts"/> bloquea hasta <c>now + lockDuration</c> y vuelve
+    /// a poner el contador en cero. Devuelve el bloqueo vigente tras el intento (<c>null</c> si no quedó
+    /// bloqueado).
+    /// </summary>
+    Task<DateTimeOffset?> RegisterFailedAttemptAsync(
+        Guid id, int maxFailedAttempts, TimeSpan lockDuration, DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>HU #13087 — pase emitido: limpia intentos y bloqueo y sella <c>last_token_at</c>.</summary>
+    Task RegisterTokenIssuedAsync(Guid id, DateTimeOffset now, CancellationToken cancellationToken = default);
 }
