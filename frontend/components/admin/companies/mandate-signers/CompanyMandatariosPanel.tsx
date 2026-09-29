@@ -1,8 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pencil, RotateCcw, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { RowActions } from "@/components/atom/RowActions";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import {
   createCompanyMandateSigner,
   fetchCompanyMandateSigners,
@@ -21,6 +30,7 @@ import {
   motivoSinFirma,
   organismosSinMedioDeFirma,
 } from "@/lib/plataforma/mandatario-firma";
+import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "../legal-representatives/rl-flit-styles";
 import { CompanyMandatarioForm } from "./CompanyMandatarioForm";
 
 /**
@@ -149,8 +159,8 @@ export function CompanyMandatariosPanel({
       <div className="flex justify-end">
         <button
           type="button"
-          className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "#557EFF" }}
+          className={rlPrimaryCtaClass}
+          style={rlPrimaryCtaStyle}
           onClick={openCreate}
           disabled={sinOrganismos}
         >
@@ -158,6 +168,11 @@ export function CompanyMandatariosPanel({
         </button>
       </div>
 
+      {/* Bug #13055 — tabla homologada con la de Trámites: loader del carrito, cabecera y filas de
+          table-styles y acciones con RowActions (antes: gris genérico y botones de texto). */}
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando mandatarios…" />
+      ) : (
       <UiStateBoundary
         status={status}
         emptyMessage="Esta compañía no tiene mandatarios registrados."
@@ -166,19 +181,47 @@ export function CompanyMandatariosPanel({
         skeletonRows={4}
       >
         <div className="overflow-x-auto">
-          <table className="w-full border-separate border-spacing-y-2 text-xs">
+          <table
+            className="text-xs"
+            style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+          >
+            <caption className="sr-only">Mandatarios de la compañía</caption>
             <thead>
-              <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
-                <th className="rounded-l-xl bg-muted px-4 py-2.5">Mandatario</th>
-                <th className="bg-muted px-4 py-2.5">Documento</th>
-                <th className="bg-muted px-4 py-2.5">Organismos</th>
-                <th className="rounded-r-xl bg-muted px-4 py-2.5 text-right">Acciones</th>
+              <tr>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Mandatario
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Documento
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Organismos
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Acciones
+                </th>
               </tr>
             </thead>
             <tbody>
               {signers.map((signer) => (
-                <tr key={signer.id} className="bg-card">
-                  <td className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
+                <tr key={signer.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                  <td className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     <span className="font-semibold">{signer.fullName}</span>
                     {!signer.isActive && (
                       <span className="ml-2 inline-block rounded-full border bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
@@ -186,10 +229,10 @@ export function CompanyMandatariosPanel({
                       </span>
                     )}
                   </td>
-                  <td className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`}>
+                  <td className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     {formatDocumentWithType(signer.documentType, signer.documentNumber)}
                   </td>
-                  <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
+                  <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     {(signer.transitOfficeIds ?? []).length === 0
                       ? "—"
                       : (signer.transitOfficeIds ?? [])
@@ -212,27 +255,34 @@ export function CompanyMandatariosPanel({
                       </div>
                     )}
                   </td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      className="mr-3 text-[11px] font-semibold"
-                      style={{ color: "#557EFF" }}
-                      onClick={() => {
-                        setEditing(signer);
-                        setFormOpen(true);
-                      }}
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="text-[11px] font-semibold disabled:opacity-50"
-                      style={{ color: signer.isActive ? "#E5484D" : "#8CC63F" }}
-                      onClick={() => void handleToggleActivo(signer)}
-                      disabled={busyId === signer.id}
-                    >
-                      {signer.isActive ? "Inactivar" : "Reactivar"}
-                    </button>
+                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
+                    <RowActions
+                      actions={[
+                        {
+                          icon: Pencil,
+                          label: `Editar mandatario ${signer.fullName}`,
+                          onClick: () => {
+                            setEditing(signer);
+                            setFormOpen(true);
+                          },
+                          tone: "primary",
+                        },
+                        signer.isActive
+                          ? {
+                              icon: UserX,
+                              label: `Inactivar mandatario ${signer.fullName}`,
+                              onClick: () => void handleToggleActivo(signer),
+                              tone: "danger",
+                              disabled: busyId === signer.id,
+                            }
+                          : {
+                              icon: RotateCcw,
+                              label: `Reactivar mandatario ${signer.fullName}`,
+                              onClick: () => void handleToggleActivo(signer),
+                              disabled: busyId === signer.id,
+                            },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}
@@ -240,6 +290,7 @@ export function CompanyMandatariosPanel({
           </table>
         </div>
       </UiStateBoundary>
+      )}
 
       {formOpen && (
         <CompanyMandatarioForm
