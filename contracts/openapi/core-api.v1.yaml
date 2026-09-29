@@ -10395,6 +10395,258 @@ paths:
         "403": { description: Sin permiso (requiere SuperAdmin). }
         "404": { description: Plantilla inexistente. Sin cuerpo. }
 
+  /api/v1/dr-flit/chat:
+    post:
+      tags: [DR. FLIT]
+      operationId: drFlitChat
+      summary: Clasifica la intención del mensaje libre y responde dudas citando el manual
+      description: >
+        Épica #12718, HU #12922 (ADR-0060 §5.1). Cualquier usuario autenticado. El tope diario
+        (`Anthropic:DrFlitDailyMessageLimit`) se cuenta por tenant y usuario; para un usuario de
+        compañía el tenant sale del token (el header se exige pero no cambia el cupo), para
+        SuperAdmin sale del header. LLM caído, salida fuera de contrato o manual no disponible
+        responden 200 con `status: degraded`, `intent: no_claro` y `reply` vacío; el tope
+        alcanzado responde 200 con `status: rate_limited`, sin llamar al LLM. Nunca 5xx por esas
+        causas. El texto del mensaje y de la respuesta no se loguea.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, minLength: 1, maxLength: 2000 }
+                history:
+                  type: array
+                  maxItems: 12
+                  description: Últimos turnos de la conversación (sessionStorage del cliente), del más viejo al más nuevo.
+                  items:
+                    type: object
+                    required: [role, text]
+                    properties:
+                      role: { type: string, enum: [user, assistant] }
+                      text: { type: string, minLength: 1, maxLength: 2000 }
+                routeScope:
+                  type: string
+                  nullable: true
+                  description: Módulo o ruta actual. Aceptado por contrato; hoy no se usa.
+      responses:
+        "200":
+          description: Respuesta del chat (ok, degraded o rate_limited).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, intent, reply, citations, usage]
+                properties:
+                  status: { type: string, enum: [ok, degraded, rate_limited] }
+                  intent: { type: string, enum: [duda, soporte, gestion, no_claro] }
+                  reply: { type: string }
+                  citations:
+                    type: array
+                    description: Solo con intent duda. Cada slug fue verificado contra el catálogo del manual.
+                    items:
+                      type: object
+                      required: [slug, title, href, primarySource]
+                      properties:
+                        slug: { type: string }
+                        title: { type: string }
+                        href: { type: string, example: /manual/1-gestor/2-crear-tramite }
+                        sourceHref: { type: string, nullable: true }
+                        primarySource: { type: boolean }
+                  suggestGestionIntent:
+                    type: string
+                    nullable: true
+                    enum: [placa, vin, tramite, cliente, null]
+                  usage:
+                    type: object
+                    required: [messagesUsedToday, dailyLimit]
+                    properties:
+                      messagesUsedToday: { type: integer }
+                      dailyLimit: { type: integer }
+        "400":
+          description: Falta X-Tenant-Id, mensaje vacío o > 2000, historial > 12 turnos o turno inválido. No consume tope ni llama al LLM.
+        "401": { description: No autenticado. }
+        "403": { description: Usuario de compañía sin tenant en el token. }
+        "428": { description: "Falta aceptar la versión vigente del tratamiento de datos (code consent_required, HU #12931). No se llama al LLM ni a Azure DevOps." }
+
+  /api/v1/dr-flit/support-cases:
+    post:
+      tags: [DR. FLIT]
+      operationId: drFlitCreateSupportCase
+      summary: Crea un caso de soporte (Bug en FLIT - SOPORTE) a partir del formulario confirmado
+      description: >
+        Épica #12718, HU #12925 (ADR-0060 §5.2 y §7.2). Nunca recibe nada del chat: solo el formulario
+        estructurado que el usuario confirmó. Persiste el intento en dr_flit.support_cases (pending) antes
+        de llamar a Azure DevOps y lo marca created o failed. Los campos de clasificación del Bug salen de
+        DrFlit:SupportCase:FieldMapping y el ambiente de DR_FLIT_DEPLOY_ENVIRONMENT (default DEV). El Bug se
+        crea sin asignar. Tenant: el del token para usuarios de compañía; el del header para SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, email, compania, detalle, resultadoEsperado, frecuencia, titulo, prioridad]
+              properties:
+                nombre: { type: string, maxLength: 200 }
+                email: { type: string, format: email }
+                telefono: { type: string, nullable: true, maxLength: 30 }
+                compania: { type: string, maxLength: 200 }
+                detalle: { type: string, maxLength: 4000 }
+                resultadoEsperado: { type: string, maxLength: 2000 }
+                frecuencia: { type: string, enum: [una_vez, a_veces, siempre] }
+                titulo: { type: string, maxLength: 200 }
+                prioridad: { type: string, enum: [Alta, Media, Baja] }
+                affectedModule:
+                  type: string
+                  nullable: true
+                  description: Mejor esfuerzo del cliente; el backend lo valida contra el allow-list y aplica el default configurado.
+                attachmentIds:
+                  type: array
+                  description: Ids de POST /support-cases/attachments. Deben ser del mismo usuario, estar vigentes y no superar DrFlit:SupportCase:MaxAttachments (default 5).
+                  items: { type: string, format: uuid }
+      responses:
+        "201":
+          description: Caso radicado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [caseId, attachmentsFailed]
+                properties:
+                  caseId: { type: integer, description: "Id del work item en FLIT - SOPORTE (número de caso)." }
+                  caseUrl: { type: string, nullable: true, description: Solo si el caller es SuperAdmin. }
+                  attachmentsFailed: { type: integer, description: "Adjuntos que no se pudieron subir a ADO (el caso se crea igual)." }
+        "400": { description: "Campo faltante o inválido, más adjuntos que el tope, o un adjunto ajeno o vencido." }
+        "401": { description: No autenticado. }
+        "403": { description: Usuario de compañía sin tenant en el token. }
+        "428": { description: "Falta aceptar la versión vigente del tratamiento de datos (code consent_required, HU #12931). No se llama al LLM ni a Azure DevOps." }
+        "502":
+          description: Azure DevOps no respondió tras el reintento. La fila queda failed; los adjuntos siguen disponibles para reintentar.
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, enum: [support_unavailable] }
+                  detail: { type: string }
+  /api/v1/dr-flit/support-cases/attachments:
+    post:
+      tags: [DR. FLIT]
+      operationId: drFlitUploadSupportAttachment
+      summary: Sube un adjunto temporal para un caso de soporte aún no creado
+      description: >
+        Épica #12718, HU #12924 (ADR-0060 §5.3). Valida extensión, tipo declarado, firma de los primeros
+        bytes y tamaño contra DrFlit:SupportCase (defaults 20 MB; png, jpeg, webp, pdf, txt). Queda en el
+        almacenamiento de adjuntos sin caso y vence a las 24 h si no se confirma. La cantidad por caso se
+        valida al confirmar, no aquí.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Adjunto guardado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, filename, sizeBytes]
+                properties:
+                  id: { type: string, format: uuid }
+                  filename: { type: string }
+                  sizeBytes: { type: integer }
+        "400": { description: "Archivo ausente, tipo no permitido o que excede el tamaño máximo." }
+        "401": { description: No autenticado. }
+        "403": { description: Usuario de compañía sin tenant en el token. }
+        "428": { description: "Falta aceptar la versión vigente del tratamiento de datos (code consent_required, HU #12931). No se llama al LLM ni a Azure DevOps." }
+
+  /api/v1/dr-flit/consent:
+    get:
+      tags: [DR. FLIT]
+      operationId: drFlitGetConsent
+      summary: Versión vigente del tratamiento de datos de DR. FLIT y si el usuario ya la aceptó
+      description: HU #12931. Se acepta una vez por usuario y versión (DrFlit:Consent:Version).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Estado del consentimiento.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, accepted]
+                properties:
+                  version: { type: string }
+                  accepted: { type: boolean }
+        "401": { description: No autenticado. }
+    post:
+      tags: [DR. FLIT]
+      operationId: drFlitAcceptConsent
+      summary: Registra la aceptación de la versión vigente del tratamiento de datos
+      description: >
+        HU #12931 (Ley 1581 de 2012). Guarda usuario, tenant, versión, fecha, IP y user agent en
+        dr_flit.consent_acceptances. Idempotente por usuario y versión. Exigida por /chat,
+        /support-cases y /support-cases/attachments (428 consent_required sin ella).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: X-Tenant-Id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: string, description: Versión del texto que el usuario leyó. }
+      responses:
+        "201":
+          description: Aceptación registrada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { type: string }
+                  accepted: { type: boolean }
+        "400": { description: Falta la versión o X-Tenant-Id. }
+        "401": { description: No autenticado. }
+        "409": { description: "La versión enviada no es la vigente (code consent_version_mismatch, version vigente en el cuerpo)." }
+
 components:
   securitySchemes:
     bearerAuth:

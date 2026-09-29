@@ -25,49 +25,66 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
       "documentos personalizados",
       "historial de cambios",
       "guardar todo",
+      "vista restringida",
+      "representantes legales",
+      "mandatarios",
+      "equipo flit",
+      "soporte",
+      "usuarios de la hija",
+      "que ves en administracion",
     ],
     summary:
-      "Qué configura cada pestaña de «Administración» y cómo se guardan los cambios de forma segura.",
+      "Qué ves hoy en «Administración», qué gestiona directamente el equipo FLIT y cómo pedirle un cambio.",
     blocks: [
       {
         id: "entrar",
-        title: "1. Cómo entrar",
+        title: "1. Qué ves al entrar",
         paragraphs: [
-          "Píldora «Administración» del dock (solo Administrador de compañía). Abre la ficha de tu compañía con pestañas: Trámites, Configuración Empresa, Documentos, Placas preasignadas, Representantes legales, Mandatarios, Usuarios e Historial de Cambios.",
-          "Las pestañas de configuración comparten un solo formulario: «Guardar todo» no guarda directo, abre una ventana que lista exactamente qué cambió y pide confirmar. El resultado se muestra allí mismo.",
+          "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Documentos, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
+          "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "No es un permiso que te falte ni un error de la plataforma: la ficha completa quedó reservada al equipo FLIT. Sigue leyendo para saber qué puedes hacer tú y a quién pedirle el resto.",
+          },
         ],
       },
       {
-        id: "tramites",
-        title: "2. Pestaña Trámites (políticas por familia)",
-        paragraphs: ["Decide qué puede radicar tu compañía, por familia de tipo de trámite:"],
-        bullets: [
-          "MATRÍCULAS (primera matrícula, cancelación y demás): «No permitir trámites de matrículas», «Solo vehículos propios», «Permitir vehículos de categorías misceláneas», «Validar SOAT ante el RUNT al procesar».",
-          "TRASPASO: «No permitir trámites de traspaso» (activo = la compañía no puede crear traspasos).",
-          "OTROS (blindaje, duplicados, prendas, cambios de color o carrocería…): «No permitir otros trámites».",
-        ],
-      },
-      {
-        id: "config",
-        title: "3. Pestaña Configuración Empresa",
+        id: "tus-pestanas",
+        title: "2. Lo que gestionas tú mismo",
         paragraphs: [],
         bullets: [
-          "Proveedores de consulta (por placa, por VIN, de conductor: Kyverum RUNT, Verifik, Intempo…) con tiempo de failover; proveedores de avalúo habilitados (Fasecolda, Mercado Libre) y el sugerido; fuente de comparendos y métodos de recaudo; módulos activos (Trámites, Comparendos, Resoluciones).",
-          "Notificaciones: a quién avisar al aprobar o rechazar (radicador, comprador, vendedor o propietario) y un correo adicional de avisos.",
-          "Lista blanca de correos: dominios o correos autorizados para las invitaciones de usuarios.",
-          "Organismos de tránsito: habilita los organismos donde radica tu compañía y, por cada uno, sus bloqueos y restricciones. Si tu compañía es una Concesión o una hija de red, esta lista la fija FLIT y aquí es de solo lectura.",
+          "Representantes legales: registra a quienes representan a tu compañía, sus escrituras y su firma del baúl. Ver «Representantes legales y mandatarios».",
+          "Mandatarios: registra quién firma el contrato de mandato ante cada organismo por cuenta de tu compañía. Ver «Representantes legales y mandatarios».",
+          "Usuarios de una hija de tu red (solo si la administras desde el panel de red): resetear contraseñas y suspender o desactivar sus usuarios.",
+          "Usuarios de tu propia compañía: no vive en esta ficha, es el módulo «Usuarios» del dock, con el mismo alcance de siempre (resetear contraseñas, suspender o desactivar; eliminar sigue siendo del equipo FLIT).",
         ],
       },
       {
-        id: "otras",
-        title: "4. Otras pestañas",
-        paragraphs: [],
+        id: "pide-a-flit",
+        title: "3. Qué gestiona el equipo FLIT (y cómo pedir un cambio)",
+        paragraphs: [
+          "Estas áreas ya no las editas desde tu consola. Para cualquier ajuste, escribe al equipo FLIT desde Ayuda → Soporte indicando el NIT de tu compañía y el cambio puntual que necesitas:",
+        ],
         bullets: [
-          "Documentos: plantillas y documentos personalizados de tu compañía que se generan dentro de los trámites.",
-          "Placas preasignadas: consulta de las placas que los organismos te han asignado (solo lectura).",
-          "Representantes legales y Mandatarios: ver «Representantes legales y mandatarios».",
-          "Usuarios: el mismo módulo Usuarios del dock, embebido en la ficha.",
-          "Historial de Cambios: quién cambió qué configuración y cuándo.",
+          "Trámites: qué familias puede radicar tu compañía (matrículas, traspasos, otros) y sus restricciones («Solo vehículos propios», validar SOAT ante el RUNT, etc.).",
+          "Configuración Empresa: proveedores de consulta y de avalúo, a quién avisar al aprobar o rechazar un trámite, la lista blanca de correos para invitaciones, y los organismos de tránsito habilitados para tu compañía.",
+          "Documentos: plantillas y documentos personalizados que se generan dentro de los trámites.",
+          "Placas preasignadas: consulta de las placas que los organismos te han asignado.",
+          "Historial de Cambios: quién cambió qué configuración de tu compañía y cuándo.",
+        ],
+      },
+      {
+        id: "otras-piezas",
+        title: "4. Otras piezas de tu administración",
+        paragraphs: [
+          "Estas no viven dentro de esta ficha, pero también son parte de tu administración:",
+        ],
+        bullets: [
+          "Red de clientes: píldora aparte del dock, solo si tu compañía es cabeza de Concesión o Marca Blanca. Ver «Red de clientes».",
+          "Marca y dominio de la red: dentro del panel de Red de clientes, solo si tu compañía es cabeza Marca Blanca. Ver «Marca y dominio de la red».",
+          "Generación documental: píldora aparte del dock, solo si tu rol tiene habilitado ese módulo. Ver «Generación documental sin trámite».",
         ],
       },
     ],
@@ -88,6 +105,11 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
       "empresas representadas",
       "firma fisica",
       "validacion de identidad del mandatario",
+      "acordeon por compania",
+      "nit",
+      "bloque de identidad",
+      "modulo identidad",
+      "estado de identidad",
     ],
     summary:
       "Cómo registrar representantes legales (con escrituras y firma) y mandatarios que firman el contrato de mandato ante cada organismo.",
@@ -96,11 +118,12 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         id: "representantes",
         title: "1. Representantes legales",
         paragraphs: [
-          "Pestaña «Representantes legales». Cada ficha tiene los datos de la persona, las empresas que representa (con su escritura de constitución o poder asociada) y su firma del baúl. La firma se asocia desde la ficha del representante; ya no hay un baúl suelto.",
+          "Pestaña «Representantes legales»: un directorio en acordeón, una fila por representante que despliega sus datos, las compañías que representa agrupadas por NIT (con la escritura asociada a cada una) y su firma del baúl. La firma se asocia desde la propia ficha del representante; ya no hay un baúl suelto por separado.",
+          "Cada ficha muestra siempre un bloque de «Validación de identidad» con dos etiquetas fijas —el estado de su Identidad y el de su Firma del baúl— solo para consultar. Ya no hay botones de enviar o reenviar validación desde aquí: si el representante necesita una identidad vigente, el bloque te lleva al módulo Identidad. Si la persona ya tiene una validación aprobada y vigente allí, se asocia sola al guardar.",
         ],
         bullets: [
           "Registra la persona (tipo y número de documento, nombre; correo, dirección y ciudad opcionales).",
-          "Asocia empresas representadas y su escritura (PDF): la escritura respalda la representación en los documentos del trámite.",
+          "Dentro de su ficha, asocia las empresas que representa: por cada NIT, adjunta la escritura de constitución o poder (PDF) que respalda esa representación en los documentos del trámite.",
           "Asocia la firma del baúl para que los documentos la estampen automáticamente.",
         ],
       },
@@ -111,14 +134,14 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
           "El mandatario recibe el poder del mandante (vendedor o radicador) y gestiona ante el organismo por cuenta de tu compañía. Para aparecer como opción en un trámite debe estar activo, habilitado en el organismo del trámite y aplicar a la empresa que otorga el mandato.",
         ],
         bullets: [
-          "Registrar / Editar mandatario: nombre, documento, correo (con correo se le envía la validación de identidad; si ya tiene una vigente, se reutiliza), firma del baúl opcional.",
+          "Registrar / Editar mandatario: nombre, documento, correo (queda como dato de contacto; no dispara ningún envío) y firma del baúl opcional. Al editar ves el mismo bloque de identidad de solo consulta que en representantes legales: si necesita una validación de identidad, se gestiona desde el módulo Identidad, no desde este formulario.",
           "Organismos donde aplica: solo se ofrecen los habilitados para tu compañía. Dentro de cada organismo puedes acotar las empresas para las que firma y marcar «firma de forma física» (el contrato deja la línea para firmar a mano).",
           "Regla que conviene saber: si dentro de un organismo no marcas ninguna empresa, el mandatario firma para TODAS las empresas de ese organismo; al marcar una, queda restringido a esas.",
         ],
         callouts: [
           {
             variant: "warning",
-            text: "El formulario bloquea el guardado si la persona queda sin ninguna forma de firmar en alguno de los organismos marcados: captúrale la firma del baúl, registra un correo para la validación de identidad o marca ese organismo como de firma física.",
+            text: "Si la persona queda sin ninguna forma de firmar en alguno de los organismos marcados, el formulario te avisa: captúrale la firma del baúl, consíguele una validación de identidad vigente desde el módulo Identidad, o marca ese organismo como de firma física.",
           },
         ],
       },
@@ -150,9 +173,15 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
       "solo consulta",
       "vincular cliente",
       "crear cliente",
+      "agregar cliente a la red",
+      "activar cliente",
+      "desactivar cliente",
+      "invitar usuario",
+      "administrar cliente",
+      "equipo flit",
     ],
     summary:
-      "Qué puede hacer la cabeza de una red con sus clientes: crearlos, vincularlos, administrarlos y consultar sus trámites y reportes.",
+      "Qué puede hacer la cabeza de una red con sus clientes: agregarlos, activarlos o desactivarlos, invitar usuarios y administrarlos, y consultar sus trámites y reportes.",
     blocks: [
       {
         id: "que-es",
@@ -167,11 +196,16 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         title: "2. Píldora «Red de clientes»",
         paragraphs: ["Administración → Red de clientes (solo cabezas de red):"],
         bullets: [
-          "Crear cliente: razón social, NIT, código y tipo de compañía. Nace vinculado a tu red.",
-          "Vincular cliente existente: elige entre los elegibles (una compañía sin padre y que no sea cabeza).",
-          "Activar / Desactivar cliente y Desvincular cliente, con confirmación.",
-          "Invitar el Administrador de un hijo desde Usuarios, eligiendo el cliente como destino.",
-          "Abrir la ficha de un hijo para administrar su configuración (pestañas de la consola, con un aviso de que estás en un cliente de la red).",
+          "Agregar cliente a la red: razón social, NIT, código y tipo de compañía. Nace vinculado a tu red.",
+          "Activar / Desactivar cliente, con confirmación.",
+          "Invitar usuario a un cliente: eliges el cliente como destino y el rol (Administrador de compañía, Radicador, Gestor, Documentador, Validador u Operario full).",
+          "Administrar un cliente: abre su ficha para gestionar sus Representantes legales y Mandatarios (y sus Usuarios), con un aviso de que estás en un cliente de tu red.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Vincular una compañía ya existente a tu red o desvincularla no está en este panel: eso lo hace el equipo FLIT.",
+          },
         ],
       },
       {
@@ -207,15 +241,18 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
       "dns",
       "certificado",
       "correo con marca",
+      "solo lectura",
+      "comprobar dominio",
+      "registrar dominio",
     ],
     summary:
-      "Cómo una cabeza Marca Blanca configura su identidad visual (logotipo, colores, nombre) y su dominio propio, y qué heredan sus clientes.",
+      "Cómo una cabeza Marca Blanca configura su identidad visual (logotipo, colores, nombre) y consulta el estado de su dominio propio, y qué heredan sus clientes.",
     blocks: [
       {
         id: "configurador",
         title: "1. Configurador de marca",
         paragraphs: [
-          "En la ficha de tu compañía (Administración) encuentras el configurador: logotipo de la marca, color principal, color secundario, color de texto y el nombre visible en el acceso y en el correo. La previsualización muestra la pantalla de acceso, la cabecera de la aplicación y una muestra de correo con el tema aplicado.",
+          "Solo si tu compañía es cabeza Marca Blanca: en Administración → Red de clientes encuentras el configurador de marca, debajo del listado de clientes. Ahí defines logotipo, color principal, color secundario, color de texto y el nombre visible en el acceso y en el correo. La previsualización muestra la pantalla de acceso, la cabecera de la aplicación y una muestra de correo con el tema aplicado.",
         ],
         bullets: [
           "«Guardar borrador» conserva el trabajo sin afectar a nadie.",
@@ -227,17 +264,17 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         id: "dominio",
         title: "2. Dominio de la red",
         paragraphs: [
-          "Panel «Dominio de la red»: registra el dominio propio desde el que tu red accede y recibe comunicaciones. Para comprobar la titularidad debes crear en tu DNS el registro TXT que el panel indica (con valores copiables) y pulsar «Comprobar ahora».",
+          "En la misma página, debajo del configurador de marca, ves el panel «Dominio de la red»: el estado del dominio propio desde el que tu red accede y recibe comunicaciones, y el botón «Comprobar ahora» para volver a validar el registro TXT en tu DNS. Aquí es de solo lectura: registrar el dominio por primera vez, cambiarlo o retirarlo lo hace el equipo FLIT.",
         ],
         bullets: [
-          "Estados: Pendiente de comprobación → Verificado → Activo. Un fallo muestra el motivo (TXT no encontrado o con valor distinto).",
+          "Estados: Pendiente de comprobación → Verificado → Activo. Un fallo muestra el motivo (TXT no encontrado o con valor distinto) y, mientras corre el plazo de gracia, el dominio sigue operando.",
           "Con el dominio activo, la pantalla de acceso, la recuperación de contraseña y los enlaces de invitación de tu red usan tu dominio; el certificado se emite y renueva automáticamente.",
           "El correo sale con el nombre de tu marca como remitente visible y el tema de la red en cabecera y pie.",
         ],
         callouts: [
           {
-            variant: "warning",
-            text: "Cambiar o retirar el dominio afecta el acceso de toda la red. Coordina el cambio con FLIT y hazlo fuera de horario operativo.",
+            variant: "info",
+            text: "¿Necesitas registrar un dominio nuevo, cambiarlo o retirarlo? Pídeselo al equipo FLIT desde Ayuda → Soporte; tú puedes seguir el estado y comprobarlo, pero el alta y los cambios son suyos.",
           },
         ],
       },
@@ -258,6 +295,8 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
       "historial de documentos",
       "leasing",
       "dacion en pago",
+      "modulo habilitado",
+      "permiso del modulo",
     ],
     summary:
       "Emitir Certificados RUES y documentos privados de transferencia de dominio sin abrir un trámite, por unidad o por lote, y consultar lo generado.",
@@ -266,7 +305,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         id: "que-es",
         title: "1. Qué es",
         paragraphs: [
-          "Módulo «Generación documental» (visible para quien tiene el permiso del módulo, no solo por rol). Emite documentos que normalmente nacen dentro de un trámite, pero aquí sin abrirlo, con los datos consultados en línea.",
+          "Píldora «Generación documental» del dock, visible solo si tu rol tiene habilitado este módulo (no todo Admin de Compañía lo ve por defecto: si te falta, pídeselo al equipo FLIT). Emite documentos que normalmente nacen dentro de un trámite, pero aquí sin abrirlo, con los datos consultados en línea.",
         ],
       },
       {

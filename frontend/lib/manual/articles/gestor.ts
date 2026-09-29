@@ -6,7 +6,22 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
     title: "Inicio (Dashboard)",
     audience: "Gestor",
     sectionId: "gestor",
-    keywords: ["dashboard", "inicio", "fab", "resumen", "gestor", "indicadores", "kpi"],
+    keywords: [
+      "dashboard",
+      "inicio",
+      "fab",
+      "resumen",
+      "gestor",
+      "indicadores",
+      "kpi",
+      "banner",
+      "banners",
+      "carrusel",
+      "comparendos",
+      "resoluciones",
+      "alcance de red",
+      "toda la red",
+    ],
     summary: "Qué ves al entrar como Gestor, para qué sirve el Dashboard y cómo orientarte.",
     blocks: [
       {
@@ -14,24 +29,47 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "1. Qué es el Inicio",
         paragraphs: [
           "El botón central flotante (FAB) «Inicio FLIT» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
-          "Muestra un resumen operativo de tu compañía: volumen de trámites, estados recientes u otros indicadores según lo habilitado para tu tenant. No aparece como píldora del dock inferior; siempre está disponible desde el FAB.",
+          "Arriba encontrarás un carrusel: un slide de bienvenida fijo y, detrás, los banners que la plataforma tenga activos para tu compañía (novedades, avisos, campañas). Tú no los administras; si no hay ninguno activo, el carrusel solo muestra el slide de bienvenida.",
+          "Debajo verás el resumen operativo de tu compañía: volumen de trámites, distribución por estado y seguimiento operativo. No aparece como píldora del dock inferior; siempre está disponible desde el FAB.",
+        ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/dashboard-gestor.png",
+            alt: "Dashboard de FLIT con los indicadores de trámites, la distribución por estado, las validaciones biométricas y el seguimiento operativo",
+            caption: "El Inicio: indicadores del periodo, distribución por estado y seguimiento operativo.",
+          },
+        ],
+      },
+      {
+        id: "modulos-activos",
+        title: "2. Tarjetas de módulo (Comparendos y Resoluciones)",
+        paragraphs: [
+          "Si tu compañía activó los módulos Comparendos y/o Resoluciones (configuración de tu Administrador), verás una tarjeta por cada uno con su propio resumen. Si ninguno está activo, esas tarjetas no aparecen.",
         ],
       },
       {
         id: "cuando-usar",
-        title: "2. Cuándo usarlo",
+        title: "3. Cuándo usarlo",
         paragraphs: [],
         bullets: [
           "Antes de abrir Trámites, para tener contexto del día o la semana.",
-          "Para verificar que tu sesión y tenant son los correctos (nombre de compañía en la barra superior).",
+          "Para verificar que entraste con la compañía correcta (su nombre aparece en la barra superior).",
           "Como atajo de regreso desde cualquier módulo: un clic en el FAB te devuelve al inicio.",
         ],
       },
       {
-        id: "permisos",
-        title: "3. Permisos y visibilidad",
+        id: "alcance-red",
+        title: "4. Selector de alcance de red (solo cabezas de red)",
         paragraphs: [
-          "El módulo dashboard en RBAC requiere permiso dashboard.read. Si tu rol no lo tiene, el FAB sigue visible pero algunos widgets pueden estar vacíos o no cargar datos.",
+          "Si tu compañía es cabeza de una red (Concesión o Marca Blanca), verás un selector para elegir entre «Mi compañía» y «Toda la red» (o un cliente puntual). Con la red elegida, los indicadores del Inicio cambian a los agregados de tus clientes; tu preferencia se recuerda la próxima vez que entres.",
+        ],
+      },
+      {
+        id: "permisos",
+        title: "5. Permisos y visibilidad",
+        paragraphs: [
+          "Si tu rol no tiene permiso para ver el Inicio, el FAB sigue visible pero algunos widgets pueden estar vacíos o no cargar datos.",
         ],
         callouts: [
           {
@@ -67,7 +105,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "antes",
         title: "1. Antes de empezar",
         paragraphs: [
-          "Confirma que tu compañía tiene habilitado el tipo de trámite (políticas operativas del tenant). Si la matrícula inicial está apagada, no verás esa modalidad al crear.",
+          "Confirma que tu compañía tiene habilitado el tipo de trámite (lo define su configuración operativa). Si la matrícula inicial está apagada, no verás esa modalidad al crear.",
           "Necesitas permiso tramites.create además de tramites.read. Sin create solo puedes consultar trámites existentes.",
         ],
         bullets: [
@@ -87,19 +125,27 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Completa cada paso que el servidor expone: actores, datos del vehículo, consultas externas (RUNT, SIMIT, RUES…), adjuntos, validación de identidad si aplica.",
           "Revisa los bloqueos en la barra del asistente. Solo cuando estén resueltos podrás firmar o radicar.",
         ],
+        media: [
+          {
+            kind: "diagram",
+            id: "flujo-crear-tramite",
+            alt: "Diagrama del flujo de un trámite: elegir tipo, completar actores y vehículo, cargar documentos, resolver identidad y firmas, radicar y esperar la decisión del organismo, con retorno a subsanar si es rechazado",
+            caption: "El recorrido completo de un trámite, de Borrador a la decisión del organismo.",
+          },
+        ],
         callouts: [
           {
             variant: "info",
             title: "Carga masiva",
-            text: "Junto a «Nuevo trámite» está «Carga masiva»: sube un Excel con varios trámites y el sistema los crea como borradores por lotes. El resultado por fila (creado / con error) se muestra al terminar.",
+            text: "Junto a «Exportar» hay un botón «Carga masiva» para crear varios trámites de una sola vez desde un Excel. Consulta el artículo «Carga masiva de trámites» para el paso a paso completo.",
           },
         ],
       },
       {
         id: "wizard",
-        title: "3. Cómo funciona el wizard",
+        title: "3. Cómo funciona el asistente",
         paragraphs: [
-          "El wizard es server-driven: GET /instances/{id}/wizard devuelve pasos, campos y reglas. El frontend no inventa pasos; solo renderiza lo que el backend autoriza.",
+          "Los pasos, campos y reglas que ves en el asistente los define el sistema según el tipo de trámite, el organismo de tránsito y lo que ya completaste; no son siempre los mismos ni algo que el gestor pueda reordenar.",
           "Matrícula y traspaso difieren en actores, consultas y documentos. No asumas que un trámite anterior sirve como plantilla exacta.",
         ],
         callouts: [
@@ -144,8 +190,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "donde",
         title: "1. Dónde se definen los requisitos",
         paragraphs: [
-          "Los documentos provienen del catálogo global del tipo de trámite (procedure_document_requirements) y pueden tener ajustes por Organismo de Tránsito (overrides).",
-          "En el wizard, la sección de adjuntos lista obligatorios y opcionales antes de permitir radicación. Lo que no aparece ahí no debería pedírtelo el sistema para esa instancia.",
+          "Los documentos que te pide el sistema salen del catálogo del tipo de trámite y pueden tener ajustes propios de cada Organismo de Tránsito.",
+          "En el paso Documentos del asistente, la sección de adjuntos lista los obligatorios y opcionales antes de permitir radicación. Lo que no aparece ahí no debería pedírtelo el sistema para ese trámite.",
         ],
       },
       {
@@ -163,8 +209,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "carga",
         title: "3. Cómo cargar adjuntos",
         paragraphs: [
-          "Usa el paso Documentos del wizard. Los archivos se suben vía URLs prefirmadas (S3/file-manager). Formatos típicos: PDF, JPG, PNG.",
-          "Nombre descriptivo ayuda al revisor OT. Evita fotos borrosas o PDFs protegidos con contraseña.",
+          "Usa el paso Documentos del asistente para subir cada archivo. Formatos típicos: PDF, JPG, PNG.",
+          "Un nombre descriptivo ayuda al revisor del organismo. Evita fotos borrosas o PDFs protegidos con contraseña.",
         ],
         callouts: [
           {
@@ -180,7 +226,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         bullets: [
           "Documento ilegible → vuelve a escanear o fotografiar con buena luz.",
           "Persona equivocada en el mandato → verifica actores antes de adjuntar.",
-          "Falta un obligatorio → el wizard muestra blocker hasta completarlo.",
+          "Falta un obligatorio → el asistente bloquea el avance hasta que lo completes.",
         ],
       },
     ],
@@ -218,6 +264,14 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "El estado vuelve al trámite: pendiente, aprobado, rechazado o vencido.",
           "Con todas las identidades aprobadas, el wizard puede quitar el bloqueo correspondiente.",
         ],
+        media: [
+          {
+            kind: "diagram",
+            id: "flujo-prevalidacion",
+            alt: "Diagrama del flujo de una prevalidación: crearla, enviar el enlace al cliente, captura de fotos, y según el resultado usarla en trámites, reenviarla o gestionarla desde atascadas",
+            caption: "El recorrido de una prevalidación, del envío del enlace al resultado.",
+          },
+        ],
       },
       {
         id: "estados",
@@ -251,6 +305,9 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "buscar tramite",
       "busqueda",
       "filtros",
+      "exportar a excel",
+      "exportar tramites",
+      "descargar excel",
       "consultas",
       "periodo",
       "prioritario",
@@ -327,28 +384,70 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
     title: "Ayuda con DR. FLIT (Gestor)",
     audience: "Gestor",
     sectionId: "gestor",
-    keywords: ["dr flit", "chat", "necesito ayuda", "asistente", "documentacion", "soporte"],
-    summary: "Búsquedas operativas, ayuda contextual y canales de soporte desde el asistente.",
+    keywords: [
+      "dr flit",
+      "chat",
+      "necesito ayuda",
+      "asistente",
+      "documentacion",
+      "soporte",
+      "inteligencia artificial",
+      "caso de soporte",
+      "autorizacion de datos",
+      "tope de mensajes",
+    ],
+    summary:
+      "Escríbele con tus palabras: responde dudas citando este manual, busca trámites y radica casos de soporte sin salir de la plataforma.",
     blocks: [
       {
         id: "abrir",
-        title: "1. Cómo abrir DR. FLIT",
+        title: "1. Cómo abrir DR. FLIT y hablarle",
         paragraphs: [
-          "El botón flotante del asistente está disponible en toda la aplicación cuando estás autenticado. Pulsa para abrir el panel; puedes seguir usando la pantalla mientras está abierto. La conversación se conserva al cambiar de módulo hasta que pulses «Terminar chat».",
+          "El botón flotante del asistente está disponible en toda la aplicación cuando estás autenticado. Al abrirlo verás un saludo que te invita a escribir tu duda con tus propias palabras — no necesitas elegir ningún menú: escribe «¿cómo creo un traspaso?» o «me sale un error al firmar» y DR. FLIT entiende qué necesitas.",
+          "Debajo del saludo tienes atajos: los chips de Gestión (Placa, VIN, Trámite, Cliente) para búsquedas directas, y la lista de Ayuda (Necesito ayuda, Normativa, Soporte).",
+          "La conversación se conserva al cambiar de módulo y al cerrar el panel con la X. Solo «Terminar chat» la borra.",
         ],
       },
       {
-        id: "opciones",
-        title: "2. Qué puedes hacer",
-        paragraphs: ["El menú tiene dos sesiones: Gestión y Ayuda."],
+        id: "autorizacion",
+        title: "2. Autorización de datos (una sola vez)",
+        paragraphs: [
+          "La primera vez que uses el chat con inteligencia artificial o vayas a radicar un caso de soporte, DR. FLIT te pide autorizar el tratamiento de tus datos (Ley 1581 de 2012). Pulsa «Ver detalle» si quieres leer el texto completo y «Acepto y continuar» para seguir con lo que estabas haciendo.",
+        ],
         bullets: [
-          "Gestión → Buscar por placa: trámites de esa placa y acceso al historial completo.",
-          "Gestión → Buscar por VIN.",
-          "Gestión → Buscar por trámite: escribe el radicado (FT1-0000012 o solo 12).",
-          "Gestión → Buscar por cliente: nombre o documento; luego eliges ver sus trámites o su validación de identidad.",
-          "Ayuda → Necesito ayuda: escribe tu duda en lenguaje natural; si hay artículo en este manual, verás chips para abrirlo. Si estás en un módulo con documentación, te lo sugiere de entrada.",
-          "Ayuda → Normativa: la Resolución 20233040017145 de 2023 (Ministerio de Transporte), la norma que avala los trámites virtuales: resumen por temas y PDF completo.",
-          "Ayuda → Soporte: correo y formulario oficial para radicar un caso.",
+          "Si eliges «Ahora no», nada se envía y puedes seguir usando Gestión, Necesito ayuda y Normativa sin inteligencia artificial; la conversación no se borra.",
+          "Solo se pide una vez: aceptada la versión vigente, no vuelve a aparecer aunque termines el chat o entres desde otro navegador.",
+          "No escribas datos personales (cédulas, teléfonos) en el chat; para el caso de soporte hay un formulario aparte que los protege.",
+        ],
+      },
+      {
+        id: "dudas",
+        title: "3. Dudas: respuestas con base en este manual",
+        paragraphs: [
+          "Escribe tu pregunta y DR. FLIT responde con base en el manual funcional, citando al final los artículos de donde salió la respuesta — tarjetas con enlace directo para abrir la documentación completa. Si la pregunta no es clara, te hace una pregunta de seguimiento; si el manual no tiene la respuesta, te lo dice y te ofrece escalar a soporte.",
+        ],
+        bullets: [
+          "«cómo creo un trámite de traspaso»",
+          "«qué documentos necesito para matrícula»",
+          "«cómo envío prevalidación»",
+          "«qué significa asignado»",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "El chat con inteligencia artificial tiene un tope diario de mensajes. DR. FLIT te avisa cuando te acercas y, si lo alcanzas, el menú completo sigue funcionando; al día siguiente el chat se reactiva solo.",
+          },
+          {
+            variant: "tip",
+            text: "Si el asistente no está disponible, no te quedas sin ayuda: responde el buscador del manual con una «respuesta rápida» y los enlaces a los artículos.",
+          },
+        ],
+      },
+      {
+        id: "gestion",
+        title: "4. Buscar trámites desde el chat",
+        paragraphs: [
+          "Pídelo con tus palabras — «busca la placa ABC123», «muéstrame el trámite 12» — y DR. FLIT te lleva directo a la búsqueda de Gestión sin que repitas nada. También puedes usar los chips: Placa, VIN, Trámite (radicado con o sin prefijo) o Cliente (nombre o documento).",
         ],
         callouts: [
           {
@@ -358,20 +457,20 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         ],
       },
       {
-        id: "ejemplos",
-        title: "3. Ejemplos de preguntas útiles",
-        paragraphs: [],
+        id: "soporte",
+        title: "5. Radicar un caso de soporte sin salir del chat",
+        paragraphs: [
+          "Cuéntale el problema («me sale un error al firmar un trámite») y DR. FLIT abre el formulario del caso con tus datos ya precargados: correo, compañía y fecha. Tú completas el título, el detalle del error, el resultado que esperabas, con qué frecuencia pasa y la prioridad; si quieres, adjuntas imágenes o PDF.",
+        ],
         bullets: [
-          "«cómo creo un trámite de traspaso»",
-          "«qué documentos necesito para matrícula»",
-          "«cómo envío prevalidación»",
-          "«cómo solicito una revocatoria»",
-          "«qué significa asignado»",
+          "Antes de enviar verás un resumen completo; nada se radica hasta que pulses «Confirmar y radicar caso».",
+          "Al confirmar recibes tu número: «Tu caso #N quedó radicado». El equipo de soporte te responde al correo registrado.",
+          "Si el sistema de soporte no responde en ese momento, verás los canales de contacto (correo de soporte) y podrás «Reintentar» o «Editar el caso» sin perder nada de lo que escribiste.",
         ],
         callouts: [
           {
             variant: "tip",
-            text: "DR. FLIT enlaza documentación; no sustituye al soporte para incidentes de producción o caídas de RUNT. Para eso usa Ayuda → Soporte.",
+            text: "Para incidentes de producción o caídas de RUNT, el caso de soporte es el camino: llega directo al tablero del equipo FLIT con tu descripción y adjuntos.",
           },
         ],
       },
@@ -450,6 +549,9 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "atascadas",
       "prevalidacion",
       "score",
+      "red",
+      "toda la red",
+      "solo lectura",
     ],
     summary:
       "Qué muestra el módulo Identidad, cómo buscar una persona, leer estados y vigencias y desatascar una validación.",
@@ -479,14 +581,21 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "«Nueva» crea una prevalidación de persona natural: se envía un enlace de captura al correo indicado y el resultado queda disponible para trámites posteriores.",
-          "Abre una fila para ver el detalle: proceso del proveedor, reintentos y línea de tiempo del registro.",
-          "«Ver alertas de validación» muestra las validaciones atascadas (sin respuesta del proveedor) agrupadas por persona, con opción de reintentar todas.",
+          "Abre una fila para ver el detalle en un panel lateral (drawer): proceso ante el proveedor, reintentos y línea de tiempo del registro.",
+          "«Ver alertas de validación» abre el panel de validaciones atascadas (sin respuesta del proveedor), agrupadas por persona, con opción de reintentar todas de una vez o una por una.",
         ],
         callouts: [
           {
             variant: "info",
             text: "Una validación aprobada tiene vigencia. Al acercarse la fecha, el sistema la marca; una validación vencida no sirve para firmar y hay que repetirla.",
           },
+        ],
+      },
+      {
+        id: "red",
+        title: "4. Si tu compañía es cabeza de red",
+        paragraphs: [
+          "Con el selector de alcance en «Toda la red» o sobre un cliente puntual, ves también las validaciones de tus hijas: esas filas quedan en solo lectura (puedes abrir el detalle, pero no reenviar, editar ni reintentar desde ahí). Crear una prevalidación nueva solo aplica sobre tu propia compañía.",
         ],
       },
     ],
@@ -512,6 +621,14 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Responde «qué le ha pasado a esta placa dentro de FLIT»: escribe la placa y obtienes la lista de sus trámites, del más reciente al más antiguo, con tipo, estado, fechas, gestor, organismo, comprador y vendedor.",
           "Para tu compañía ves solo tus trámites; el Super Admin ve la placa en todas las compañías.",
+        ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/historial-placa.png",
+            alt: "Módulo Historial por placa con el campo de consulta y el estado inicial esperando una placa",
+            caption: "Historial por placa: escribe la placa y consulta toda su vida en FLIT.",
+          },
         ],
       },
       {
@@ -573,13 +690,32 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
             text: "Esta acción no tiene reversa. Si el organismo la aprueba, el trámite pasa a Revocado: se liberan placa y VIN y la documentación queda histórica.",
           },
         ],
+        media: [
+          {
+            kind: "diagram",
+            id: "flujo-revocatoria",
+            alt: "Diagrama del flujo de una revocatoria: la compañía la solicita con motivo, el organismo decide, y el trámite queda Revocado con placa liberada o sigue Aprobado si la rechazan",
+            caption: "La revocatoria de punta a punta: de la solicitud a la decisión del organismo.",
+          },
+        ],
       },
       {
         id: "seguimiento",
         title: "3. Seguimiento",
         paragraphs: [
           "El sub-estado se ve como badge en el listado y el detalle: Revocatoria solicitada → Revocatoria en revisión → Revocatoria aprobada o rechazada. Cada hito envía correo a la compañía.",
-          "La vista «Revocatorias» (botón en el listado de Trámites, solo para el Administrador) agrupa los trámites con solicitud en cualquier sub-estado, con filtros por fecha, organismo y estado.",
+          "La vista «Revocatorias» agrupa todos los trámites de tu compañía con solicitud en cualquier sub-estado, con filtros por fecha, organismo y estado. Hoy se abre escribiendo la dirección /tramites/revocatorias directamente en el navegador; el listado de Trámites todavía no tiene un botón que te lleve ahí.",
+        ],
+      },
+      {
+        id: "despues",
+        title: "4. Qué pasa después de enviarla",
+        paragraphs: [
+          "La solicitud queda «En revisión» hasta que el organismo de tránsito la decide desde su propia bandeja: no hay una fecha fija de respuesta, depende de cada organismo.",
+        ],
+        bullets: [
+          "Si el organismo la aprueba: el trámite pasa a Revocado, se liberan la placa y el VIN para un trámite nuevo, y toda la documentación queda histórica (consultable, pero ya no editable).",
+          "Si el organismo la rechaza: el trámite vuelve a Aprobado tal como estaba; el motivo del rechazo queda visible en el detalle.",
         ],
       },
     ],
@@ -600,32 +736,64 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "exportar excel",
       "tiempos",
       "organismo",
+      "programacion",
+      "programaciones",
+      "alertas",
+      "informes programados",
+      "historial de alertas",
     ],
-    summary: "Qué responde cada pestaña de Reportes, qué añade Reportes Detallados y cómo exportar.",
+    summary: "Qué responde cada pestaña de Reportes y cómo programar informes y alertas.",
     blocks: [
       {
         id: "reportes",
         title: "1. Reportes y Analíticas",
-        paragraphs: ["Píldora «Reportes» del dock. Elige el rango de fechas y navega por pestañas:"],
+        paragraphs: [
+          "Píldora «Reportes» del dock. Elige el rango de fechas y navega por pestañas; cada una aparece solo si tu rol tiene el permiso correspondiente (algunas compañías no habilitan todas):",
+        ],
         bullets: [
           "Resumen general: volumen por familia (Matrículas, Traspasos, Otros) y tiempos: el de tu equipo (creación → entrega) y el del organismo (entrega → decisión).",
           "Operación / Trámites: trámites creados por mes y categoría, y embudo de estados.",
           "Organismo de Tránsito: entregados por organismo y por tipo de trámite.",
-          "Productividad: rendimiento por gestor.",
           "Uso del aplicativo: actividad de los usuarios en la plataforma.",
+          "Productividad: rendimiento por gestor.",
           "Consultas personalizadas: arma tu propio cruce con la gramática de Consultas (campo, operador, valores) y guárdalo.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si no ves ninguna pestaña, pide a tu Administrador que te asigne acceso a alguna de Reportes.",
+          },
+        ],
+        media: [
+          {
+            kind: "image",
+            src: "/manual/screenshots/reportes.png",
+            alt: "Módulo Reportes de FLIT con sus pestañas y el rango de fechas seleccionado",
+            caption: "Reportes: cada pestaña responde una pregunta distinta del negocio.",
+          },
+        ],
+      },
+      {
+        id: "programacion",
+        title: "2. Programación y alertas",
+        paragraphs: [
+          "El botón «Programación y alertas» (visible con el permiso correspondiente) abre un panel con dos secciones:",
+        ],
+        bullets: [
+          "Informes programados: elige un tipo de reporte, la frecuencia (diaria, semanal o mensual), el formato (Excel o PDF) y hasta 10 correos destinatarios; el sistema te lo envía automáticamente.",
+          "Alertas: define una condición sobre un indicador (por ejemplo, tasa de rechazo o trámites atascados) y un umbral; cuando se cruza, se notifica a los correos que configures. La misma sección guarda el historial de disparos anteriores.",
         ],
       },
       {
         id: "detallados",
-        title: "2. Reportes Detallados",
+        title: "3. Reportes Detallados (otro módulo)",
         paragraphs: [
-          "Segmenta trámite a trámite por persona (documento o nombre), tipo, categoría, estado, organismo, radicado, si tiene transformación y si es leasing, dentro del rango elegido (por defecto los últimos 30 días). Incluye indicadores de cabecera y una grilla exportable.",
+          "«Reportes Detallados» es una píldora aparte del dock, no una pestaña de Reportes. Sirve para segmentar trámite a trámite por persona, transformación, leasing u organismo. Consulta el artículo «Reportes Detallados» para el detalle.",
         ],
       },
       {
         id: "alcance",
-        title: "3. Alcance y exportación",
+        title: "4. Alcance y exportación",
         paragraphs: [
           "Los reportes miran tu compañía. Si eres Administrador de una cabeza de red (concesión o marca blanca) y eliges «Toda la red» o un cliente en el selector de alcance, la analítica cambia con él; algunas exportaciones están disponibles solo para la compañía propia.",
           "Toda exportación a Excel usa el mismo formato de fecha de la interfaz (DD/MM/YYYY HH:mm, hora de Colombia).",
@@ -648,38 +816,208 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "reenviar invitacion",
       "eliminar usuario",
       "acceso",
+      "roles y permisos",
+      "clientes ict",
+      "suspender",
+      "desactivar",
+      "bloquear",
     ],
-    summary: "Cómo invitar, editar, reactivar y retirar usuarios de tu compañía, y qué queda auditado.",
+    summary: "Las pestañas del módulo Usuarios, cómo invitar y gestionar personas, y qué es Clientes ICT.",
     blocks: [
       {
-        id: "invitar",
-        title: "1. Invitar un usuario",
+        id: "pestanas",
+        title: "1. Las pestañas del módulo",
         paragraphs: [
-          "Píldora «Usuarios» del dock (visible para el Administrador de la compañía). «Invitar usuario»: nombre, correo, perfil y roles que aplican a tu compañía. La persona recibe un enlace de activación por correo; hasta que lo use, la fila queda en «Onboarding» y puedes reenviar o cancelar la invitación.",
+          "Píldora «Usuarios» del dock (visible para el Administrador de la compañía). Según tu perfil y permisos verás hasta tres pestañas:",
         ],
-        callouts: [
+        bullets: [
+          "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
+          "Roles y permisos: consulta qué puede hacer cada rol. Para tu perfil es de solo lectura; los roles del sistema los crea y edita el equipo FLIT (Super Admin).",
+          "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 4).",
+        ],
+        media: [
           {
-            variant: "info",
-            text: "Los roles y permisos del sistema se definen en el módulo RBAC del Super Admin; aquí solo asignas los que existen para tu perfil.",
+            kind: "image",
+            src: "/manual/screenshots/usuarios.png",
+            alt: "Módulo Usuarios de FLIT con la lista del equipo, sus roles, estado y acciones",
+            caption: "Usuarios: el acceso de tu equipo, con invitación y gestión por fila.",
           },
         ],
       },
       {
+        id: "invitar",
+        title: "2. Invitar un usuario",
+        paragraphs: [
+          "En la pestaña Usuarios, «Invitar usuario»: nombre, correo, perfil y roles que aplican a tu compañía. La persona recibe un enlace de activación por correo; hasta que lo use, la fila queda en «Onboarding» y puedes reenviar o cancelar la invitación.",
+        ],
+      },
+      {
         id: "gestionar",
-        title: "2. Gestionar usuarios existentes",
-        paragraphs: [],
+        title: "3. Gestionar usuarios existentes",
+        paragraphs: [
+          "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT.",
+        ],
         bullets: [
           "Editar: cambia nombre, perfil o roles.",
-          "Restablecer contraseña: envía instrucciones de cambio al correo del usuario (requiere el permiso correspondiente o ser Administrador).",
-          "Eliminar usuario: retira el acceso; queda en la lista de eliminados con fecha.",
+          "Restablecer contraseña: envía instrucciones de cambio al correo del usuario.",
+          "Suspender: bloquea el acceso temporalmente; puedes reactivarlo cuando corresponda.",
+          "Desactivar: bloquea el acceso de forma indefinida.",
           "Último ingreso: te dice quién no ha vuelto a entrar.",
         ],
       },
       {
-        id: "auditoria",
-        title: "3. Auditoría",
+        id: "roles",
+        title: "4. Roles y permisos (solo lectura)",
         paragraphs: [
-          "La pestaña Auditoría muestra quién cambió qué y cuándo (últimos 50 eventos): invitaciones, cambios de rol, restablecimientos y eliminaciones.",
+          "Consulta los roles disponibles para tu compañía y qué incluye cada uno. Crear, editar o desactivar roles del sistema es exclusivo del Super Admin; si necesitas un ajuste, contáctalo.",
+        ],
+      },
+      {
+        id: "ict",
+        title: "5. Clientes ICT (si tu compañía integra con terceros)",
+        paragraphs: [
+          "Son credenciales que usan integraciones externas para registrar pre-trámites en tu nombre. Cada cliente tiene un usuario y un secreto que el sistema genera y muestra una sola vez (no se puede recuperar después); si lo pierdes, usa «Regenerar secreto».",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "1-gestor/13-carga-masiva",
+    title: "Carga masiva de trámites",
+    audience: "Gestor",
+    sectionId: "gestor",
+    keywords: [
+      "carga masiva",
+      "excel",
+      "plantilla",
+      "lote",
+      "lotes",
+      "subir archivo",
+      "crear varios tramites",
+      "borradores",
+      "resultado por fila",
+      "creacion bloqueada",
+    ],
+    summary: "Cómo crear varios trámites a la vez desde un Excel, leer el resultado y corregir errores.",
+    blocks: [
+      {
+        id: "donde",
+        title: "1. Dónde está",
+        paragraphs: [
+          "En Trámites, junto al botón «Exportar», está «Carga masiva». Se abre un modal con dos pestañas: «Cargar archivo» y «Resultados» (para ver en qué quedó un lote que subiste antes).",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            text: "El botón aparece deshabilitado con el motivo «La compañía tiene bloqueada la creación de trámites» si tu Administrador bloqueó la creación de trámites para la compañía. Mientras eso siga así, tampoco podrás crear trámites uno por uno.",
+          },
+        ],
+      },
+      {
+        id: "plantilla",
+        title: "2. Descarga la plantilla",
+        paragraphs: [],
+        bullets: [
+          "Elige el tipo de trámite (Matrícula o Traspaso, según lo que ofrezca tu compañía) y pulsa «Descargar plantilla».",
+          "El Excel trae una hoja de instrucciones y listas desplegables para los campos que las necesitan.",
+          "No cambies ni muevas las columnas de la primera fila: son las que el sistema usa para validar el archivo al subirlo.",
+          "Puedes cargar hasta el máximo de filas por archivo que indica el propio modal.",
+        ],
+      },
+      {
+        id: "subir",
+        title: "3. Diligencia y sube el archivo",
+        paragraphs: [
+          "Completa una fila por trámite con los datos de vehículo y actores, y guarda el archivo en formato .xlsx (no cambies la extensión).",
+          "Selecciona el archivo y pulsa «Procesar archivo». No necesitas esperar en la pantalla: el sistema encola el lote y lo procesa en segundo plano, fila por fila (cada fila hace sus propias consultas, así que un lote grande tarda). Puedes cerrar la ventana y seguir trabajando; el resultado completo aparece luego en la pestaña Resultados.",
+        ],
+        media: [
+          {
+            kind: "diagram",
+            id: "flujo-carga-masiva",
+            alt: "Diagrama del flujo de carga masiva: descargar plantilla, diligenciar, subir, revisar el resultado por fila y corregir solo las filas con error",
+            caption: "El ciclo de la carga masiva: plantilla, lote, resultado y corrección.",
+          },
+        ],
+      },
+      {
+        id: "resultados",
+        title: "4. Resultado por fila y cómo corregir",
+        paragraphs: [
+          "En la pestaña Resultados eliges el lote (por tipo, fecha y nombre de archivo) y ves, mientras el lote sigue en proceso, cuántas filas van completadas del total.",
+          "Cuando termina, verás el conteo de creados y no creados, y una tabla con cada fila: el vehículo (placa o VIN), el resultado y, si no se creó, el motivo exacto (por ejemplo: datos de contacto incompletos, vehículo no encontrado en el RUNT, porcentajes de propiedad que no suman 100, o ya existe un trámite en proceso para ese vehículo en tu empresa).",
+          "Cada fila creada te lleva directo al trámite (Borrador) con un clic; ya puedes seguirlo desde ahí. Las filas con error no crean nada: corrige el dato en tu Excel y vuelve a cargar solo esas filas en un lote nuevo.",
+        ],
+      },
+      {
+        id: "casos",
+        title: "5. Casos frecuentes",
+        paragraphs: [],
+        bullets: [
+          "Subiste un archivo con otra extensión (por ejemplo .xls o .csv): el sistema no lo acepta; guárdalo de nuevo como .xlsx.",
+          "Cambiaste el orden o el nombre de una columna: el archivo puede fallar por completo al subirlo. Descarga la plantilla otra vez y copia tus datos ahí.",
+          "Una fila de traspaso trae varios actores y el motivo dice a cuál de ellos le falta el dato (el detalle entre paréntesis identifica el documento de la persona).",
+          "El lote lleva mucho tiempo «en proceso»: no hace falta quedarte esperando; cierra la ventana y vuelve más tarde a la pestaña Resultados.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "1-gestor/14-reportes-detallados",
+    title: "Reportes Detallados",
+    audience: "Gestor",
+    sectionId: "gestor",
+    keywords: [
+      "reportes detallados",
+      "segmentacion",
+      "persona",
+      "transformacion",
+      "leasing",
+      "organismo",
+      "exportar",
+      "grilla",
+      "consulta detallada",
+    ],
+    summary: "Qué es Reportes Detallados, cuándo usarlo en vez de Reportes y cómo entrar.",
+    blocks: [
+      {
+        id: "que-es",
+        title: "1. Qué es",
+        paragraphs: [
+          "Reportes Detallados es un módulo aparte (píldora propia del dock, no una pestaña de Reportes) para consultar tus trámites trámite a trámite, en una grilla filtrable y exportable, en vez de ver solo totales agregados.",
+          "Puedes segmentar por persona (documento o nombre), tipo y categoría de trámite, estado, radicado, organismo de tránsito, si el trámite tiene una transformación (por ejemplo, cambio de características del vehículo) y si es un trámite de leasing. Por defecto muestra los últimos 30 días.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Arriba de la grilla hay indicadores de cabecera con los totales del filtro aplicado.",
+          },
+        ],
+      },
+      {
+        id: "cuando-usar",
+        title: "2. Cuándo usarlo frente a Reportes",
+        paragraphs: [],
+        bullets: [
+          "Usa Reportes cuando necesites tendencias, volúmenes y tiempos agregados (por mes, por organismo, por gestor).",
+          "Usa Reportes Detallados cuando necesites identificar trámites puntuales que cumplen una condición específica (por ejemplo, todos los trámites de leasing con transformación pendientes en un organismo) para exportarlos y trabajarlos fila por fila.",
+        ],
+      },
+      {
+        id: "entrar",
+        title: "3. Cómo entrar",
+        paragraphs: [
+          "Píldora «Reportes Detallados» del dock, visible si tu rol tiene el permiso correspondiente. Si eres Administrador de una cabeza de red, el mismo selector de alcance de Trámites te deja consultar «Toda la red» o un cliente puntual.",
+        ],
+      },
+      {
+        id: "consejos",
+        title: "4. Consejos",
+        paragraphs: [],
+        bullets: [
+          "Acota primero el rango de fechas: la grilla puede crecer rápido si tu compañía maneja mucho volumen.",
+          "Exporta a Excel cuando necesites compartir el detalle fuera de la plataforma; usa el mismo permiso de exportación que el resto de reportes.",
+          "Si buscas una persona puntual, el filtro por documento es más preciso que el de nombre.",
         ],
       },
     ],

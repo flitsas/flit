@@ -1,0 +1,104 @@
+{
+  "$comment": "HU #13013 (Épica #12755) — manifiesto del pipeline automatizado de capturas del manual. Cada entrada produce public/manual/screenshots/{id}.png con `pnpm manual:screenshots` (la app debe estar corriendo en local con los usuarios seed). La guarda screenshots-freshness.test.ts exige 1:1 entre entradas y archivos.",
+  "viewport": { "width": 1440, "height": 900 },
+  "entries": [
+    {
+      "id": "login",
+      "articleSlug": "0-introduccion/1-bienvenida",
+      "profile": "public",
+      "route": "/login",
+      "waitFor": "#login-email"
+    },
+    {
+      "id": "dashboard-gestor",
+      "articleSlug": "1-gestor/1-inicio",
+      "profile": "admin_company",
+      "route": "/",
+      "waitFor": "text=Distribución General de Trámites"
+    },
+    {
+      "id": "reportes",
+      "articleSlug": "1-gestor/11-reportes",
+      "profile": "admin_company",
+      "route": "/?m=reportes",
+      "settleMs": 4000
+    },
+    {
+      "id": "usuarios",
+      "articleSlug": "1-gestor/12-usuarios",
+      "profile": "admin_company",
+      "route": "/?m=usuarios",
+      "settleMs": 4000
+    },
+    {
+      "id": "historial-placa",
+      "articleSlug": "1-gestor/9-historial-placa",
+      "profile": "admin_company",
+      "route": "/?m=historial-placa",
+      "settleMs": 4000
+    },
+    {
+      "id": "ot-inicio",
+      "articleSlug": "2-ot/13-inicio",
+      "profile": "ot_admin",
+      "route": "/",
+      "settleMs": 4000
+    },
+    {
+      "id": "admin-companias",
+      "articleSlug": "4-superadmin/1-companias-y-organismos",
+      "profile": "superadmin",
+      "route": "/admin/companies",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-documental",
+      "articleSlug": "4-superadmin/2-documental-e-improntas",
+      "profile": "superadmin",
+      "route": "/admin/documents",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-tipos-tramite",
+      "articleSlug": "4-superadmin/3-plataforma",
+      "profile": "superadmin",
+      "route": "/admin/plataforma/tipos-tramite",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-banners",
+      "articleSlug": "4-superadmin/3-plataforma",
+      "profile": "superadmin",
+      "route": "/admin/banners",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-jobs",
+      "articleSlug": "4-superadmin/4-integraciones-y-procesos",
+      "profile": "superadmin",
+      "route": "/admin/jobs",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-improntas",
+      "articleSlug": "4-superadmin/2-documental-e-improntas",
+      "profile": "superadmin",
+      "route": "/admin/improntas",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-causales",
+      "articleSlug": "4-superadmin/1-companias-y-organismos",
+      "profile": "superadmin",
+      "route": "/admin/causales-rechazo",
+      "settleMs": 3000
+    },
+    {
+      "id": "admin-rbac",
+      "articleSlug": "4-superadmin/5-rbac-y-auditoria",
+      "profile": "superadmin",
+      "route": "/?m=rbac",
+      "settleMs": 4000
+    }
+  ]
+}

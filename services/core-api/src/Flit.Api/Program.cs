@@ -43,6 +43,9 @@ builder.Services.AddTramitesApplication();
 
 // Dashboard analítico (Feature #10139, HU #10243): handlers de lectura de agregados.
 builder.Services.AddAnalyticsApplication();
+
+// DR. FLIT (Épica #12718, ADR-0060): chat con LLM sobre el manual. Los puertos los registra Infrastructure.
+Flit.DrFlit.Application.DrFlitApplicationServiceCollectionExtensions.AddDrFlitApplication(builder.Services);
 Flit.Analytics.Application.Scheduling.AnalyticsSchedulingServiceCollectionExtensions.AddAnalyticsScheduling(builder.Services); // Reportes2 HU-D — CRUD de informes programados y alertas
 
 // Seguridad: autenticación JWT + policy SuperAdmin (HU #10189, RF01).
@@ -287,6 +290,7 @@ app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>()
 app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
 app.MapUserUiPreferencesEndpoints();
+app.MapDrFlitEndpoints(); // Épica #12718 — POST /api/v1/dr-flit/chat
 app.MapAdminCompaniesEndpoints();
 app.MapAdminCompaniesBrandingEndpoints();
 app.MapCompanyBrandingEndpoints();
