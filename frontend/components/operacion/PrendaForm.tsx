@@ -540,7 +540,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                 );
           setAcreedorNombre(filled.nombre);
           setAcreedorDocumento(filled.documento);
-          setLevantamientoEntidad(p.levantamientoEntidad ?? '');
+          // Omitir no levanta nada: tampoco se rehidrata una entidad residual de la fila.
+          setLevantamientoEntidad(p.decision === 'omitir' ? '' : (p.levantamientoEntidad ?? ''));
         } else if (hasRuntAcreedorDetail(summary) || runtHasGravamen) {
           // Consulta con prenda: sugerir "registrar" y precargar acreedor/NIT.
           if (offersRegistrar) {
@@ -1085,6 +1086,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               ) : (
                 <WizardSegmented<PrendaDecision | ''>
                   label="¿Al vehículo se le asociará una prenda?"
+                  describedBy={ofreceOmitir ? 'prenda-omitir-ayuda' : undefined}
                   value={decision}
                   onChange={handleDecisionChange}
                   disabled={readOnly}
