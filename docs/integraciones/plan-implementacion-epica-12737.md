@@ -83,7 +83,7 @@ sequenceDiagram
     note over F,S3: Descarga adjunto factura
     F->>G: GET /tramites/{id}/adjuntos/{adjuntoId}/url (Bearer)
     G->>A: proxy
-    A->>DB: SELECT attachment WHERE id AND procedure_instance_id AND deleted_at IS NULL (404 si no)
+    A->>DB: SELECT attachment WHERE id AND procedure_instance_id (404 si no)
     A->>S3: presigned GET (Content-Disposition attachment, TTL corto)
     A->>DB: INSERT external_access_log (endpoint=adjunto-url)
     A-->>F: 200 {url, expiraEn, nombreArchivo, contentType}
@@ -97,7 +97,7 @@ Convención del repo: `tramites.procedure_instances` está `ExcludeFromMigration
 crudo embebido** `src/Flit.Infrastructure/Persistence/Sql/Ddl/NNN-*.sql` cargado por una migración EF
 con `EmbeddedDdl.LoadUp(...)` (último número usado: 117). Validar con `db-schema-validator`.
 
-### 3.1 Marca de agua en `tramites.procedure_instances` (DDL 118)
+### 3.1 Marca de agua en `tramites.procedure_instances` (DDL 122 y 123, implementados)
 
 ```sql
 CREATE SEQUENCE IF NOT EXISTS tramites.procedure_sync_seq AS bigint;
@@ -148,17 +148,17 @@ El trigger de §3.1 solo mantiene `sync_version` / `sync_changed_at`; **no escri
 emite nada hacia Flito**. No se crean `tramites.procedure_sync_outbox` ni
 `integrations.external_subscriptions`, ni el `BackgroundService` de entrega.
 
-### 3.2 Índices de apoyo (DDL 119)
+### 3.2 Índices de apoyo (siguiente DDL libre, HU #13075)
 
 ```sql
 CREATE INDEX ix_pi_status_history_aprobado ON tramites.procedure_instance_status_history (procedure_instance_id, changed_at DESC)
   WHERE to_status = 'aprobado';
 CREATE INDEX ix_pi_attachments_factura ON tramites.procedure_instance_attachments (procedure_instance_id, created_at DESC)
-  WHERE tipo = 'factura' AND deleted_at IS NULL;
+  WHERE tipo = 'factura';   -- procedure_instance_attachments no tiene deleted_at
 -- actors ya tiene índice por (procedure_instance_id); field_values tiene UNIQUE (procedure_instance_id, field_key).
 ```
 
-### 3.3 Clientes externos y bitácora — schema `integrations` (DDL 120)
+### 3.3 Clientes externos y bitácora — schema `integrations` (siguiente DDL libre)
 
 ```sql
 CREATE SCHEMA IF NOT EXISTS integrations;
@@ -269,6 +269,8 @@ WITH page AS (
      AND EXISTS (SELECT 1 FROM tramites.procedure_instance_status_history h
                   WHERE h.procedure_instance_id = pi.id
                     AND h.to_status IN ('preasignacion','entregado'))
+     -- Migrados de FLIT 1 fuera del feed (decisión del PO, 2026-09-29): FLITO ya los recibe por FLIT 1.
+     AND pi.is_migrated = false
    ORDER BY pi.sync_version
    LIMIT @pageSizePlusOne
 )
@@ -305,7 +307,7 @@ SELECT p.id, p.reference_number, p.consecutivo, p.sync_version, p.sync_changed_a
          WHERE h.procedure_instance_id = p.id AND h.to_status = 'aprobado') ap ON true
   LEFT JOIN LATERAL (
         SELECT x.id, x.filename, x.created_at FROM tramites.procedure_instance_attachments x
-         WHERE x.procedure_instance_id = p.id AND x.tipo = 'factura' AND x.deleted_at IS NULL
+         WHERE x.procedure_instance_id = p.id AND x.tipo = 'factura'
          ORDER BY x.created_at DESC LIMIT 1) f ON true
   LEFT JOIN LATERAL (
         SELECT max(value_text) FILTER (WHERE field_key='vehicle_class')               AS clase,
@@ -362,7 +364,7 @@ con `Content-Disposition: attachment` y TTL corto (`ExternalClients:AttachmentUr
 | `compradores[].tipoDocumento` | `document_type` | código canónico FLIT (CC, NIT, CE, PAS, TI…), sin transformación |
 | `compradores[].numeroDocumento / nombreCompleto / celular / correo` | `document_number` / `full_name` / `phone` / `email` | PII: enmascarar sin scope `pii.read` (`9****0000`, `c***@dominio`) |
 | `compradores[].direccion / ciudad` | `metadata->>'direccion'` / `metadata->>'ciudad'` | jsonb camelCase (`ActorMetadataReader`) |
-| `factura.{adjuntoId,nombreArchivo,cargadaEn}` | `procedure_instance_attachments` | `tipo='factura' AND deleted_at IS NULL`, más reciente |
+| `factura.{adjuntoId,nombreArchivo,cargadaEn}` | `procedure_instance_attachments` | `tipo='factura'`, más reciente (la tabla no tiene `deleted_at`) |
 | `companiaGestora.{tenantId,nit,nombre}` | `identity.tenants.{id,tax_id,legal_name}` | vía `procedure_instances.tenant_id` |
 
 ## 7. Archivos a crear / modificar
@@ -422,10 +424,10 @@ Features creadas el 2026-09-29 en Sprint 9 (decisión del PO). Tags `DOR; adopci
 
 | Feature | HU | Capa | SP | Depende de |
 |---|---|---|---|---|
-| **F1 #13062 `[TRAMITES] - Marca de agua de sincronización de trámites`** | HU1.1 Columnas `sync_*`, secuencia y trigger del padre (DDL 118a) | BACKEND/DB | 5 | — |
-| | HU1.2 Triggers statement-level en 5 tablas hijas + backfill + índice único (DDL 118b) | BACKEND/DB | 8 | HU1.1 |
-| | HU1.3 Índices de apoyo (DDL 119), validación `db-schema-validator`, ADR marca de agua, prueba de integración de concurrencia EF | BACKEND/DB | 5 | HU1.2 |
-| **F2 #13065 `[INTEGRACIONES] - Cliente de integración para sistemas externos`** | HU2.1 Schema `integrations`, entidad `ExternalClient` y repositorio calcados de `IntegrationClient` (core-ict), DDL 120 | BACKEND | 3 | — |
+| **F1 #13062 `[TRAMITES] - Marca de agua de sincronización de trámites`** | HU1.1 Columnas `sync_*`, secuencia y trigger del padre (DDL 122 — hecho, HU #13073) | BACKEND/DB | 5 | — |
+| | HU1.2 Triggers statement-level en 5 tablas hijas + backfill (DDL 123 — hecho, HU #13074) | BACKEND/DB | 8 | HU1.1 |
+| | HU1.3 Índices de apoyo (siguiente DDL libre), validación `db-schema-validator`, ADR marca de agua, prueba de integración de concurrencia EF | BACKEND/DB | 5 | HU1.2 |
+| **F2 #13065 `[INTEGRACIONES] - Cliente de integración para sistemas externos`** | HU2.1 Schema `integrations`, entidad `ExternalClient` y repositorio calcados de `IntegrationClient` (core-ict), siguiente DDL libre | BACKEND | 3 | — |
 | | HU2.2 `POST /external/auth/token`: Argon2id, emisor JWT dedicado, esquema `ExternalClient` + policies por permiso, bloqueo, rotación con ventana, `must_rotate`, límite por IP | BACKEND | 5 | HU2.1 |
 | | HU2.3 Endpoints admin SuperAdmin (listar/crear/editar/regenerar secreto/desbloquear) + alta `flito-*` + ADR auth externa | BACKEND | 3 | HU2.1 |
 | **F3 #13066 `[INTEGRACIONES] - Endpoint de sincronización de trámites, URL de adjunto de factura y contrato OpenAPI`** | HU3.1 `ExternalIntegrationScope` + `ProcedureSyncReadRepository` (SQL keyset, ventana de estabilidad) + arch test de alcance | BACKEND | 8 | F1 |
@@ -484,8 +486,8 @@ Total: 16 HU · ~73 SP sin F5 (18 HU · ~78 SP con F5).
 Health: el endpoint `/health` existente no cambia.
 
 **Rollback:** el prefijo externo es aditivo; rollback de app = redeploy de imagen anterior (procedimiento
-`flit-rollback-procedure`). DDL 120 (tablas nuevas) tiene `Down` limpio. DDL 118/119: `Down` elimina
-triggers, índices y columnas; se recomienda **no** revertir el DDL 118 en PDN tras el backfill salvo
+`flit-rollback-procedure`). El DDL del schema `integrations` (tablas nuevas) tiene `Down` limpio. DDL 122/123 e índices: `Down` elimina
+triggers, índices y columnas; se recomienda **no** revertir los DDL 122/123 en PDN tras el backfill salvo
 incidente (solo desactivar el prefijo en Gateway), porque rehacer el backfill vuelve a costar la ventana.
 
 ## 11. Riesgos y decisiones abiertas del lado FLIT
