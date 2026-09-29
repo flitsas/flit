@@ -279,9 +279,11 @@ Tabla resumida (PII marcado):
 
 ## Anexo B — Features hijas propuestas
 
-Tags: `DOR; adopcion-ia; fase-1-diseño`. Sprint siguiente al activo. Orden: F1 ∥ F2 → F3 → F4 → F5.
+**Creadas en ADO el 2026-09-29** en Sprint 9 (el activo, por decisión del PO), hijas de #12737. Tags:
+`DOR; adopcion-ia; fase-1-diseño`. Prioridad: F1 → F3, con F2 en paralelo (sin F2 el endpoint no es
+alcanzable desde fuera); después F4; F5 opcional.
 
-### F1 — `[TRAMITES] - Marca de agua de sincronización de trámites` (3 HU)
+### F1 — #13062 `[TRAMITES] - Marca de agua de sincronización de trámites` (3 HU)
 **Objetivo:** dotar a cada trámite de una versión de sincronización global que cambie ante cualquier
 modificación propia o de sus datos relacionados, con asignación inicial al histórico e índices de soporte.
 - Al modificar el trámite, un actor, un campo de vehículo, el historial de estado, un adjunto o datos
@@ -294,21 +296,27 @@ modificación propia o de sus datos relacionados, con asignación inicial al his
 HUs: (1) columnas + secuencia + trigger del padre; (2) triggers statement-level en hijas + backfill;
 (3) índices de apoyo + validación de esquema + ADR.
 
-### F2 — `[INTEGRACIONES] - Autenticación de clientes externos` (5 HU)
-**Objetivo:** permitir que sistemas externos autorizados obtengan tokens de corta vida con alcances
-explícitos, gestionados por el superadministrador.
-- Cliente activo con credenciales válidas obtiene token con sus alcances; credenciales inválidas o
-  cliente inactivo reciben 401 sin revelar cuál falló.
-- Cinco fallos consecutivos bloquean temporalmente 15 minutos (configurable); desbloqueo
-  automático o por administrador.
-- El superadministrador crea, rota, desactiva y lista clientes; el secreto se exhibe una sola vez.
-- Un cliente con rotación obligatoria solo puede rotar hasta hacerlo.
-- Un endpoint protegido por alcance rechaza con 403 tokens sin ese alcance.
-- El endpoint de token tiene límite de tasa por IP.
-HUs: tabla + entidad + repositorio; endpoint token + firma dedicada + esquema/policy; lockout y
-rotación; endpoints admin [BACKEND]; pantalla admin de clientes [FRONTEND] (opcional en esta fase).
+### F2 — #13065 `[INTEGRACIONES] - Cliente de integración para sistemas externos` (3 HU)
+**Objetivo:** dar a Flito, y a futuros sistemas externos, un usuario de máquina propio con el mismo
+modelo que ya opera ICT (`core-ict`, `IntegrationClient`): secreto generado por el sistema, pase de
+corta vida, rotación, bloqueo y permisos. Se replica el patrón en core-api sin compartir tabla ni
+código. Hay dos diferencias con ICT: el cliente no queda acotado a una compañía, y el login usa los
+nombres del contrato v3 (`/external/auth/token`, pase de 30 min).
+- Cliente activo con credenciales válidas obtiene pase con sus permisos; inválidas o inactivo → 401
+  sin revelar cuál falló.
+- Cinco fallos consecutivos bloquean 15 minutos; desbloqueo automático o por el superadministrador.
+- Rotación obligatoria → 403 `secret_rotation_required` hasta rotar; el secreto anterior vale durante
+  la ventana de gracia.
+- El superadministrador lista, crea, edita y regenera el secreto; se muestra una sola vez.
+- Un pase sin el permiso requerido, o un pase de plataforma o de ICT, recibe 403 en el prefijo externo.
+- Límite de solicitudes por IP en la obtención del pase.
+- Clientes `flito-dev`, `flito-qa` y `flito-pdn` dados de alta con ambos permisos y su finalidad.
+HUs: (1) schema `integrations` + entidad + repositorio, calcados de `IntegrationClient`; (2) endpoint de
+pase con bloqueo, rotación, límite por IP y policies por permiso; (3) endpoints de administración
+para el superadministrador y alta de los clientes de Flito. La pantalla de administración queda fuera
+de esta fase: se administra por API, igual que hoy los clientes ICT.
 
-### F3 — `[INTEGRACIONES] - Endpoint de sincronización de trámites, URL de adjunto de factura y contrato OpenAPI` (8 HU)
+### F3 — #13066 `[INTEGRACIONES] - Endpoint de sincronización de trámites, URL de adjunto de factura y contrato OpenAPI` (8 HU)
 **Objetivo:** entregar el endpoint incremental con cursor opaco, la descarga firmada del adjunto de
 factura, la respuesta completa mapeada a los campos de Flito y el contrato publicado.
 - Con cursor vacío se recorre el universo completo por páginas; con cursor solo los modificados
@@ -327,27 +335,26 @@ de tenant; endpoint URL firmada de adjunto; OpenAPI + guía de consumo; pruebas 
 (Testcontainers) y de rendimiento; ruta Gateway `/api/v1/external/**` + timeout (sin ella el endpoint
 no es alcanzable desde fuera en DEV).
 
-### F4 — `[INTEGRACIONES] - Protección, auditoría y cumplimiento del acceso externo` (4 HU)
-**Objetivo:** proteger la plataforma y cumplir Ley 1581 con límite de tasa por cliente, bitácora de
-acceso y control de datos personales por alcance.
-- Cliente que excede su cuota recibe 429 con tiempo de espera; cuota configurable por ambiente.
-- Cada solicitud queda registrada con cliente, rango de versiones, cantidad, compañías tocadas, IP,
-  duración y resultado.
-- Sin el alcance de datos personales, los campos sensibles se entregan enmascarados.
-- Métricas y alerta cuando la tasa de 429 supera un umbral o un cliente lleva más de 30 min sin una
-  lectura exitosa.
-- La bitácora se depura según el periodo de retención definido.
-HUs: policy de rate limit por cliente; tabla y middleware de bitácora; métricas/alertas; job de
-retención.
+### F4 — #13067 `[INTEGRACIONES] - Protección, auditoría y cumplimiento del acceso externo` (2 HU)
+**Objetivo:** proteger la plataforma y dejar constancia de los datos personales entregados (Ley 1581)
+con lo mínimo necesario para la puesta en marcha.
+- Cliente que excede su cuota (120/min, configurable) recibe 429 con tiempo de espera.
+- Cada solicitud queda registrada con cliente, fecha, rango de versiones, cantidad, compañías tocadas,
+  resultado y si hubo datos personales en claro; retención de 12 meses.
+- Ni la bitácora ni los logs contienen datos personales, secretos ni pases.
+HUs: (1) límite de tasa por cliente; (2) tabla y middleware de bitácora.
+**Segunda fase (fuera de esta entrega):** métricas y alertas (tasa de 429 y 30 min sin lectura
+exitosa) y depuración automática de la bitácora. Mientras tanto, la vigilancia la hace el aviso en
+pantalla de FLITO a los 30 min.
 
-### F5 (opcional) — `[INTEGRACIONES] - Consulta de detalle de trámite para clientes externos` (2 HU)
+### F5 (opcional) — #13068 `[INTEGRACIONES] - Consulta de detalle de trámite para clientes externos` (2 HU)
 **Objetivo:** permitir a Flito reconsultar un trámite puntual por identificador o radicado con el mismo
 contrato de ítem.
 - Por identificador o radicado se obtiene el ítem con el contrato de sincronización; inexistente → 404.
 - Exige el mismo alcance y queda en la bitácora.
 - Un trámite eliminado devuelve la marca de borrado.
 
-Total aproximado: 20–22 HUs (F6 «Canal de aviso de cambios» retirada en v3).
+Total aproximado: 16 HU sin F5 (18 con F5). F6 «Canal de aviso de cambios» retirada en v3.
 
 ## Anexo C — ADRs a proponer y riesgos
 
