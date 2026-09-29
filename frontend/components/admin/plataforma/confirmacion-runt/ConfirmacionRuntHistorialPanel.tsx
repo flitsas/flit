@@ -4,8 +4,6 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Download, RefreshCw } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
-import { PageNav } from "@/components/atom/PageNav";
-import { controlCls } from "@/components/operacion/tramites-control-styles";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { buildWorkbook } from "@/components/consultas/columns";
@@ -406,6 +404,16 @@ export function ConfirmacionRuntHistorialPanel() {
         }
         ariaLabel="Historial de intentos de confirmación RUNT"
         minWidth={960}
+        // Bug #13055 — tabla homologada con el modelo de trámites: la paginación (filas por página
+        // + navegación numerada) viaja en la prop `pagination` del DataTable.
+        pagination={{
+          page: filtros.page,
+          pageSize,
+          totalCount: total,
+          onPageChange: (page) => aplicar({ page }),
+          pageSizeOptions: TAMANOS_DE_PAGINA,
+          onPageSizeChange: cambiarPageSize,
+        }}
         renderExpanded={(r) =>
           expandido === r.id ? (
             <IntentoDetalle
@@ -420,34 +428,6 @@ export function ConfirmacionRuntHistorialPanel() {
           ) : null
         }
       />
-      {/* Mismo pie que /tramites: «Filas por página» a la izquierda y la paginación numerada a la derecha. */}
-      {estado === "ready" && rows.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <label className="flex items-center gap-2 pt-3 text-xs opacity-70">
-            Filas por página
-            <select
-              value={pageSize}
-              onChange={(e) => cambiarPageSize(Number(e.target.value))}
-              className={controlCls(false)}
-              aria-label="Filas por página"
-            >
-              {TAMANOS_DE_PAGINA.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
-          <PageNav
-            page={filtros.page}
-            totalPages={Math.max(1, Math.ceil(total / pageSize))}
-            resumen={`Mostrando ${(filtros.page - 1) * pageSize + 1}–${(filtros.page - 1) * pageSize + rows.length} de ${total}`}
-            ariaLabel="Paginación del historial de confirmación RUNT"
-            onPageChange={(page) => aplicar({ page })}
-            className="flex-1"
-          />
-        </div>
-      ) : null}
     </div>
   );
 }

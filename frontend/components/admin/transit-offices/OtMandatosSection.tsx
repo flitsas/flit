@@ -8,6 +8,8 @@ import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions } from "@/components/atom/RowActions";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { MandatarioFirmaPreviewDialog } from "@/components/admin/transit-offices/MandatarioFirmaPreviewDialog";
 import {
   fetchMandateOtConfig,
@@ -31,7 +33,6 @@ import {
   tipoDeFirmaMandatario,
 } from "@/lib/plataforma/mandatario-firma";
 
-const COMPANY_PAGE_SIZE = 10;
 
 export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string }) {
   const { show } = useToast();
@@ -42,7 +43,11 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
   const [signers, setSigners] = useState<MandateSigner[]>([]);
   const [previewSigner, setPreviewSigner] = useState<MandateSigner | null>(null);
   const [search, setSearch] = useState("");
-  const [companyPage, setCompanyPage] = useState(1);
+  // Bug #13055 — tablas homologadas con el modelo de trámites: paginación en cliente con filas por
+  // página. El mandatario general es una sola fila fija y no pagina.
+  const pgCompanies = usePaginacion();
+  const { setPage: setCompanyPage } = pgCompanies;
+  const pgSigners = usePaginacion();
   const [panel, setPanel] = useState<{
     mode: MandatoOtConfigPanelMode;
     companyId: string | null;
@@ -125,18 +130,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     // Reinicia la página al buscar: no es fetch, solo índice de paginación.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de paginación al cambiar filtro
     setCompanyPage(1);
-  }, [search]);
-
-  const lastPage = Math.max(1, Math.ceil(filteredCompanies.length / COMPANY_PAGE_SIZE));
-  const safePage = Math.min(companyPage, lastPage);
-  const pageRows = useMemo(
-    () =>
-      filteredCompanies.slice(
-        (safePage - 1) * COMPANY_PAGE_SIZE,
-        safePage * COMPANY_PAGE_SIZE,
-      ),
-    [filteredCompanies, safePage],
-  );
+  }, [search, setCompanyPage]);
 
   const columns: DataTableColumn<CompanyOtMandateRuleView>[] = useMemo(
     () => [
@@ -179,7 +173,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
   );
 
   if (status === "loading") {
-    return <UiStateBoundary status="loading" skeletonRows={4} />;
+    return <CarLoaderModal label="Cargando mandatos…" />;
   }
 
   if (status === "error" || !office) {
@@ -324,7 +318,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
         <div data-testid="ot-mandatos-company-table">
           <DataTable
             columns={columns}
-            rows={pageRows}
+            rows={pgCompanies.paginar(filteredCompanies)}
             getRowKey={(row) => row.companyTenantId}
             ariaLabel="Empresas que radican en este organismo"
             minWidth={720}
@@ -334,10 +328,11 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
                 : "Ninguna empresa coincide con la búsqueda."
             }
             pagination={{
-              page: safePage,
-              pageSize: COMPANY_PAGE_SIZE,
+              page: pgCompanies.page,
+              pageSize: pgCompanies.pageSize,
               totalCount: filteredCompanies.length,
-              onPageChange: setCompanyPage,
+              onPageChange: pgCompanies.setPage,
+              onPageSizeChange: pgCompanies.setPageSize,
             }}
           />
         </div>
@@ -352,11 +347,18 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
         </div>
         <DataTable
           columns={signerColumns}
-          rows={signers}
+          rows={pgSigners.paginar(signers)}
           getRowKey={(row) => row.id}
           ariaLabel="Mandatarios del organismo"
           minWidth={720}
           emptyMessage="No hay mandatarios creados en este organismo."
+          pagination={{
+            page: pgSigners.page,
+            pageSize: pgSigners.pageSize,
+            totalCount: signers.length,
+            onPageChange: pgSigners.setPage,
+            onPageSizeChange: pgSigners.setPageSize,
+          }}
         />
       </div>
 

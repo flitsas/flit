@@ -727,8 +727,8 @@ describe("Reportes del organismo — Informe", () => {
     await openTab(/Informe/);
 
     await waitFor(() => expect(screen.getByTestId("ot-report-tabla")).toBeInTheDocument());
-    // 32 trámites en total con 2 filas visibles: el pie lo dice explícitamente.
-    expect(screen.getByText(/32 trámites · página 1 de 2/)).toBeInTheDocument();
+    // 32 trámites en total con 2 filas visibles: la paginación estándar lo dice explícitamente (Bug #13055).
+    expect(screen.getByText(/Mostrando 1–10 de 32/)).toBeInTheDocument();
   });
 
   it("marca el estado con su etiqueta del organismo, no con el estado crudo", async () => {

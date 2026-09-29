@@ -2,6 +2,13 @@
 
 import { Download } from "lucide-react";
 import { Pagination } from "@/components/atom/Pagination";
+import { RowActions } from "@/components/atom/RowActions";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { StandaloneDocumentListItem } from "@/lib/api/types-generacion-documental";
 import { formatGeneracionDocumentalDate, generacionDocumentalTypeLabel } from "./generacion-documental-nav";
@@ -13,6 +20,8 @@ export interface HistorialTableProps {
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  /** Bug #13055: «Filas por página»; sin este manejador el selector no se muestra. */
+  onPageSizeChange?: (pageSize: number) => void;
   /** Redescarga del PDF ya generado (CF-19). Sin handler, la acción no se ofrece. */
   onDownload?: (row: StandaloneDocumentListItem) => void;
   /** Id de la fila cuya presigned URL se está pidiendo, para bloquear el doble clic. */
@@ -36,35 +45,68 @@ export function HistorialTable({
   page,
   pageSize,
   onPageChange,
+  onPageSizeChange,
   onDownload,
   downloadingId = null,
 }: HistorialTableProps) {
   return (
     <div className="flex flex-1 flex-col">
+      {/* Bug #13055 — tabla homologada con el modelo de trámites. */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-xs">
+        <table
+          className="min-w-[720px] text-xs"
+          style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+        >
           <caption className="sr-only">Documentos generados por la compañía</caption>
           <thead>
-            <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-              <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
+            <tr>
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
                 Tipo
               </th>
-              <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS}`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
                 Escenario
               </th>
-              <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS}`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
                 Empresa
               </th>
-              <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS}`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
                 Usuario
               </th>
-              <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS}`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
                 Fecha
               </th>
-              <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS}`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
                 Resultado
               </th>
-              <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
                 Acciones
               </th>
             </tr>
@@ -73,37 +115,43 @@ export function HistorialTable({
             {rows.map((row) => {
               const statusView = standaloneDocumentStatusView(row.status);
               return (
-                <tr key={row.id} className="bg-white dark:bg-[#0B0F14]">
-                  <td className="rounded-l-xl border-y border-l px-4 py-3 font-medium">
-                    {generacionDocumentalTypeLabel(row.documentType)}
-                  </td>
-                  <td className="border-y px-4 py-3 opacity-80">{row.scenario ?? "—"}</td>
-                  <td className="border-y px-4 py-3 opacity-80">{row.companyName ?? "—"}</td>
-                  <td className="border-y px-4 py-3 opacity-80">{row.createdByUserName ?? "—"}</td>
-                  <td className="border-y px-4 py-3 opacity-80">
-                    {formatGeneracionDocumentalDate(row.createdAt)}
-                  </td>
-                  <td className="border-y px-4 py-3">
-                    <StatusBadge label={statusView.label} tone={statusView.tone} />
-                  </td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3">
-                    {onDownload && row.status === "generated" ? (
-                      <button
-                        type="button"
-                        onClick={() => onDownload(row)}
-                        disabled={downloadingId === row.id}
-                        aria-busy={downloadingId === row.id}
-                        aria-label={`Descargar ${generacionDocumentalTypeLabel(row.documentType)} del ${formatGeneracionDocumentalDate(row.createdAt)}`}
-                        className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-                        style={{ borderColor: "#DFE5ED", color: "#557EFF" }}
-                      >
-                        <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                        {downloadingId === row.id ? "Preparando…" : "Descargar"}
-                      </button>
-                    ) : (
-                      <span className="opacity-60">—</span>
-                    )}
-                  </td>
+                <tr key={row.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                <td className="border-y px-4 py-3 rounded-l-xl border-l font-medium" style={{ borderColor: "#DFE5ED" }}>
+                  {generacionDocumentalTypeLabel(row.documentType)}
+                </td>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                  {row.scenario ?? "—"}
+                </td>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                  {row.companyName ?? "—"}
+                </td>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                  {row.createdByUserName ?? "—"}
+                </td>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                  {formatGeneracionDocumentalDate(row.createdAt)}
+                </td>
+                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                  <StatusBadge label={statusView.label} tone={statusView.tone} />
+                </td>
+                <td className="border-y px-4 py-3 rounded-r-xl border-r" style={{ borderColor: "#DFE5ED" }}>
+                  {onDownload && row.status === "generated" ? (
+                    <RowActions
+                      actions={[
+                        {
+                          icon: Download,
+                          label: `Descargar ${generacionDocumentalTypeLabel(row.documentType)} del ${formatGeneracionDocumentalDate(row.createdAt)}`,
+                          tone: "primary",
+                          onClick: () => onDownload(row),
+                          disabled: downloadingId === row.id,
+                          disabledTitle: "Preparando la descarga…",
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <span className="opacity-60">—</span>
+                  )}
+                </td>
                 </tr>
               );
             })}
@@ -111,7 +159,13 @@ export function HistorialTable({
         </table>
       </div>
 
-      <Pagination page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={onPageChange} />
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        totalCount={totalCount}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+      />
     </div>
   );
 }

@@ -48,6 +48,8 @@ export interface ClientProceduresTableProps {
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  /** Bug #13055 — «Filas por página». */
+  onPageSizeChange?: (pageSize: number) => void;
   onApprove: (row: OtClientProcedure) => void;
   onReject: (row: OtClientProcedure) => void;
   showApprovalActions?: boolean;
@@ -376,6 +378,7 @@ export function ClientProceduresTable({
   page,
   pageSize,
   onPageChange,
+  onPageSizeChange,
   onApprove,
   onReject,
   showApprovalActions = true,
@@ -547,7 +550,8 @@ export function ClientProceduresTable({
           {rows.map((row) => (
             <tr
               key={row.id}
-              className={`bg-card ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
+              // Bug #13055 — tabla homologada con el modelo de trámites.
+              className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
               onClick={onVerDetalle ? () => onVerDetalle(row) : undefined}
               // La fila no es un `<button>`: sigue siendo una fila de tabla, así que el teclado
               // necesita su propia puerta. Enter y Espacio hacen lo mismo que el clic, y el menú
@@ -570,6 +574,7 @@ export function ClientProceduresTable({
                 <td
                   key={columna.key}
                   className={`${indice === 0 ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
+                  style={{ borderColor: "#DFE5ED" }}
                 >
                   {renderCelda(columna.key, row)}
                 </td>
@@ -586,6 +591,7 @@ export function ClientProceduresTable({
               {/* Las acciones cortan la propagación: pulsar «Aprobar» abriría además el detalle. */}
               <td
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
+                style={{ borderColor: "#DFE5ED" }}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               >
@@ -621,6 +627,7 @@ export function ClientProceduresTable({
         page={page}
         pageSize={pageSize}
         onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
       />
     </div>
   );
