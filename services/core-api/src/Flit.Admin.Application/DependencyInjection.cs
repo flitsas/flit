@@ -120,6 +120,14 @@ public static class DependencyInjection
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<Integrations.Auth.IssueExternalClientTokenHandler>();
 
+        // HU #13088 — administración de clientes externos (SuperAdmin).
+        services.AddScoped<Integrations.Clients.ListExternalClientsHandler>();
+        services.AddScoped<Integrations.Clients.GetExternalClientHandler>();
+        services.AddScoped<Integrations.Clients.CreateExternalClientHandler>();
+        services.AddScoped<Integrations.Clients.UpdateExternalClientHandler>();
+        services.AddScoped<Integrations.Clients.RegenerateExternalClientSecretHandler>();
+        services.AddScoped<Integrations.Clients.UnlockExternalClientHandler>();
+
         // Alta de compañías (botón "Crear compañía" en la consola, #10118).
         services.AddScoped<CreateCompanyHandler>();
 

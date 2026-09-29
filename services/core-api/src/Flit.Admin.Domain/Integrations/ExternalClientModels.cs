@@ -43,6 +43,14 @@ public sealed record ExternalClientCredentials(
     int FailedAttempts,
     DateTimeOffset? LockedUntil);
 
+/// <summary>HU #13088 — cambios de administración; <c>null</c> = sin cambio.</summary>
+public sealed record ExternalClientChanges(
+    string? DisplayName = null,
+    string? Purpose = null,
+    IReadOnlyList<string>? Scopes = null,
+    bool? IsActive = null,
+    bool? MustRotate = null);
+
 /// <summary>
 /// El <c>client_id</c> ya existe (uq_external_clients_client_id). Los identificadores no se reutilizan,
 /// tampoco los de clientes dados de baja.
