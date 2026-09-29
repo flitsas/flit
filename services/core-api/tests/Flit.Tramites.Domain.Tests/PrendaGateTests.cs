@@ -466,4 +466,18 @@ public sealed class PrendaGateTests
         Action act = () => PrendaGate.EvaluateAccionUnica(vigentes: null!, docTipos: []);
         act.Should().Throw<ArgumentNullException>();
     }
+    /// <summary>
+    /// Feature #13110 (AC7) — con el OT que exige el certificado, <c>omitir</c> no dispara el
+    /// override (no pide documento) y el núcleo lo acepta sin documento ni acreedor, tanto en el gate
+    /// de matrícula como en el de traspaso con gravámenes en warn.
+    /// </summary>
+    [Fact]
+    public void EvaluateOtOverride_Omitir_ConOtQueExige_Null()
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, PrendaDecision.Omitir, docTipos: [])
+            .Should().BeNull();
+        PrendaGate.EvaluateMatriculaInicial(Prenda(PrendaDecision.Omitir), docTipos: []).Should().BeNull();
+        PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, Prenda(PrendaDecision.Omitir), docTipos: [])
+            .Should().BeNull();
+    }
 }

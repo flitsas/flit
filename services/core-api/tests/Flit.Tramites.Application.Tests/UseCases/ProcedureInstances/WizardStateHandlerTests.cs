@@ -1106,4 +1106,72 @@ public sealed class WizardStateHandlerTests
             Guid tenantId, string documentType, string documentNumber, CancellationToken cancellationToken = default)
             => Task.FromResult(match);
     }
+    // ── Feature #13110 — PrendaOmitAllowed: el servidor publica si se ofrece «Omitir prenda» ──────
+
+    /// <summary>
+    /// Instancia con (o sin) gravamen reportado por el RUNT en los field_values, que es la señal que
+    /// alimenta <c>HasPrendaGate</c> en matrícula y traspaso.
+    /// </summary>
+    private static ProcedureInstance ConGravamenRunt(string modalidad, bool gravamen)
+    {
+        var instance = Base(modalidad);
+        instance.TransitOfficeId = Guid.NewGuid();
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "runt_tiene_prendas",
+            ValueText = gravamen ? "SI" : "NO",
+            Source = "runt",
+        });
+        return instance;
+    }
+
+    /// <summary>
+    /// AC6 (CF-1, CF-2, CF-9) — matriz familia × gravamen RUNT × política del OT.
+    /// <para>Uso de ejemplo: <c>GET /tramites/instances/{id}/wizard-state</c> de una matrícula con
+    /// <c>runt_tiene_prendas=SI</c> y OT que exige el certificado devuelve
+    /// <c>{ prendaDocumentRequired: true, prendaOmitAllowed: true }</c>.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("matricula_inicial", true, true, true)]
+    [InlineData("matricula_inicial", false, true, false)]
+    [InlineData("traspaso", true, true, false)]
+    [InlineData("traspaso", true, false, true)]
+    public async Task Get_PrendaOmitAllowed_PorFamiliaGravamenYPoliticaDelOt(
+        string modalidad, bool gravamen, bool otExige, bool esperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Setup(ConGravamenRunt(modalidad, gravamen));
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(otExige));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.PrendaDocumentRequired.Should().Be(otExige);
+        result.Capabilities!.HasPrendaGate.Should().Be(gravamen);
+        result.PrendaOmitAllowed.Should().Be(esperado);
+    }
+
+    /// <summary>
+    /// AC6 — el campo se asigna también en el return del camino estático (un expediente migrado en
+    /// estado final no entra al motor dinámico), no solo en el dinámico.
+    /// </summary>
+    [Theory]
+    [InlineData("matricula_inicial", true, true)]
+    [InlineData("traspaso", true, false)]
+    public async Task Get_PrendaOmitAllowed_CaminoEstatico_TambienSeAsigna(
+        string modalidad, bool otExige, bool esperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = ConGravamenRunt(modalidad, gravamen: true);
+        instance.IsMigrated = true;
+        instance.Status = TramiteEstado.Aprobado;
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(otExige));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.EsMigrado.Should().BeTrue();
+        result.PrendaOmitAllowed.Should().Be(esperado);
+    }
 }
