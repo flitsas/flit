@@ -36,8 +36,9 @@ vi.mock('@/lib/api/tramites-client', () => ({
 
 const client = vi.mocked(tramitesClient);
 
-// CF-06 (HU #10881) — "asumo el riesgo" no puede convivir con un organismo que exige el certificado:
-// con el override activo, elegir `omitir` satisfacía los dos gates y dejaba la regla del OT evadible.
+// CF-06 (HU #10881) — «Omitir prenda» no puede convivir con un organismo que exige el certificado:
+// con el override activo, elegir `omitir` satisfacía los dos gates y dejaba la regla del OT evadible
+// (Feature #13110: la excepción de Matrícula Inicial la resuelve el servidor con `prendaOmitAllowed`).
 describe('traspasoDecisions — "omitir" y el override del organismo', () => {
   it('no ofrece "omitir" cuando el OT exige el certificado de prenda', () => {
     expect(traspasoDecisions(true)).not.toContain('omitir');
@@ -1604,7 +1605,7 @@ describe('HU #13112 — Omitir prenda', () => {
         estado: 'vigente',
         acreedorNombre: 'RESIDUAL SA',
         acreedorDocumento: '800111222',
-        levantamientoEntidad: null,
+        levantamientoEntidad: 'NOTARIA RESIDUAL',
         createdAt: '2026-09-29T00:00:00Z',
       },
     ] as never);
@@ -1616,6 +1617,55 @@ describe('HU #13112 — Omitir prenda', () => {
     const nombre = screen.getByLabelText('Acreedor (beneficiario)', { exact: false });
     expect(nombre).toHaveValue('');
     expect(nombre).toBeDisabled();
+    // Security (revisión PR #481): la entidad residual tampoco se muestra ni se envía.
+    expect(screen.queryByDisplayValue('NOTARIA RESIDUAL')).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('RESIDUAL SA')).not.toBeInTheDocument();
+  });
+
+  it('AC5 — al guardar un omitir rehidratado con fila residual no envía acreedor ni entidad', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    client.getPrenda.mockResolvedValue([
+      {
+        id: 'p-omitir',
+        decision: 'omitir',
+        estado: 'vigente',
+        acreedorNombre: 'RESIDUAL SA',
+        acreedorDocumento: '800111222',
+        levantamientoEntidad: 'NOTARIA RESIDUAL',
+        createdAt: '2026-09-29T00:00:00Z',
+      },
+    ] as never);
+    render(<PrendaForm ref={ref} instanceId="m1" omitAllowed runtHasGravamen embeddedInWizard />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Omitir prenda' })).toHaveAttribute('aria-pressed', 'true'),
+    );
+
+    expect(await ref.current!.save()).toBe(true);
+    expect(client.putPrenda).toHaveBeenCalledWith('m1', {
+      decision: 'omitir',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+      levantamientoEntidad: null,
+    });
+  });
+
+  it('AC4 — en matrícula el grupo segmentado se describe con la ayuda (aria-describedby)', async () => {
+    render(<PrendaForm instanceId="m1" omitAllowed runtHasGravamen />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const grupo = screen.getByRole('group', { name: '¿Al vehículo se le asociará una prenda?' });
+    expect(grupo).toHaveAttribute('aria-describedby', 'prenda-omitir-ayuda');
+    expect(document.getElementById('prenda-omitir-ayuda')).toHaveTextContent(
+      'La prenda seguirá vigente en el RUNT.',
+    );
+  });
+
+  it('AC4 — sin omitir ofrecido el grupo no apunta a una ayuda inexistente', async () => {
+    render(<PrendaForm instanceId="m1" omitAllowed={false} />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const grupo = screen.getByRole('group', { name: '¿Al vehículo se le asociará una prenda?' });
+    expect(grupo).not.toHaveAttribute('aria-describedby');
   });
 
   it('AC6 — al cambiar de omitir a registrar vuelve la precarga del RUNT y los campos se rehabilitan', async () => {
