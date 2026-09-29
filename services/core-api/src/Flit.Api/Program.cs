@@ -140,6 +140,8 @@ builder.Services.AddScoped<Flit.Modules.Security.Application.Auth.IDomainContext
 builder.Services.Configure<Flit.Api.RateLimiting.PublicBrandingOptions>(
     builder.Configuration.GetSection(Flit.Api.RateLimiting.PublicBrandingOptions.SectionName));
 builder.Services.AddPublicBrandingRateLimiter();
+// HU #13087 — policy external-token (10/min por IP); va después: fija el OnRejected común.
+builder.Services.AddExternalClientRateLimiter(builder.Configuration);
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
@@ -283,6 +285,7 @@ app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>()
 
 // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();
+app.MapExternalAuthEndpoints(); // HU #13087 (Épica #12737) — POST /api/v1/external/auth/token
 app.MapSecurityEndpoints();
 app.MapUserUiPreferencesEndpoints();
 app.MapDrFlitEndpoints(); // Épica #12718 — POST /api/v1/dr-flit/chat

@@ -90,6 +90,35 @@ internal sealed class ExternalClientRepository(FlitDbContext context) : IExterna
         return entities.Select(ToView).ToList();
     }
 
+    public async Task<DateTimeOffset?> RegisterFailedAttemptAsync(
+        Guid id, int maxFailedAttempts, TimeSpan lockDuration, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        // Una sola sentencia: el incremento lo hace la base, así dos fallos simultáneos cuentan dos.
+        var lockUntil = now.Add(lockDuration);
+        var result = await context.Database.SqlQuery<DateTimeOffset?>($"""
+            UPDATE integrations.external_clients
+               SET failed_attempts = CASE WHEN failed_attempts + 1 >= {maxFailedAttempts} THEN 0 ELSE failed_attempts + 1 END,
+                   locked_until    = CASE WHEN failed_attempts + 1 >= {maxFailedAttempts} THEN {lockUntil} ELSE locked_until END
+             WHERE id = {id}
+            RETURNING locked_until AS "Value"
+            """)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Count == 0 || result[0] is not { } until || until <= now ? null : until;
+    }
+
+    public async Task RegisterTokenIssuedAsync(Guid id, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        await context.Database.ExecuteSqlAsync($"""
+            UPDATE integrations.external_clients
+               SET failed_attempts = 0, locked_until = NULL, last_token_at = {now}
+             WHERE id = {id}
+            """, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private static ExternalClientView ToView(ExternalClient entity) => new(
         entity.Id,
         entity.ClientId,
