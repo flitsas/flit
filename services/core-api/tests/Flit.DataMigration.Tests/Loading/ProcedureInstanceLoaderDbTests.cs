@@ -318,8 +318,10 @@ public sealed class ProcedureInstanceLoaderDbTests
 
             resultado.Status.Should().Be(LoadStatus.Quarantined);
             // La causa real: el código de Postgres y la tabla que la rechazó. No se compara el nombre
-            // de la restricción porque la base la nombra distinto de la configuración de EF.
-            resultado.Reason.Should().Contain("23503").And.Contain("procedure_entities");
+            // de la restricción porque la base la nombra distinto de la configuración de EF, ni la
+            // tabla referenciada (procedure_entities): esa solo viene en el DETALLE del error, que
+            // Npgsql omite sin `Include Error Detail=true`, y la cadena del CI no lo lleva.
+            resultado.Reason.Should().Contain("23503").And.Contain("procedure_instance_actors");
         }
         finally
         {
