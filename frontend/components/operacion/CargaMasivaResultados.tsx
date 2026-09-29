@@ -14,6 +14,12 @@ import {
   type BulkTramitesBatchSummary,
 } from '@/lib/api/bulk-tramites-client';
 import { controlCls } from './tramites-control-styles';
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from '@/components/atom/table-styles';
 
 interface Props {
   /** Se recarga cuando cambia: el modal lo sube al encolar un lote nuevo. */
@@ -149,27 +155,43 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
           )}
 
           <div className="max-h-64 overflow-y-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 bg-white text-[#162744]/70 dark:bg-[#0B0F14] dark:text-white/60">
+            {/* Bug #13055 — tabla homologada con el modelo de trámites (resultados del lote dentro del
+                modal: tabla de resultados, sin paginación). */}
+            <table
+              className="text-left text-xs"
+              style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}
+            >
+              <thead>
                 <tr>
-                  <th className="py-1.5 pr-2 font-semibold">Fila</th>
-                  <th className="py-1.5 pr-2 font-semibold">Vehículo</th>
-                  <th className="py-1.5 pr-2 font-semibold">Resultado</th>
-                  <th className="py-1.5 font-semibold">Motivo</th>
+                  {['Fila', 'Vehículo', 'Resultado', 'Motivo'].map((col, i, arr) => (
+                    <th
+                      key={col}
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? 'rounded-l-xl' : ''} ${i === arr.length - 1 ? 'rounded-r-xl' : ''}`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                    >
+                      {col}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {detalle.rows.map((fila) => (
                   <tr
                     key={fila.rowNumber}
-                    className="border-t border-[#DFE5ED] align-top dark:border-white/10"
+                    className={`bg-white align-top dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
                     data-testid={`carga-masiva-fila-${fila.rowNumber}`}
                   >
-                    <td className="py-1.5 pr-2 text-[#162744] dark:text-white">{fila.rowNumber}</td>
-                    <td className="py-1.5 pr-2 text-[#162744] dark:text-white">
+                    <td
+                      className="rounded-l-xl border-y border-l px-4 py-3 text-[#162744] dark:text-white"
+                      style={{ borderColor: '#DFE5ED' }}
+                    >
+                      {fila.rowNumber}
+                    </td>
+                    <td className="border-y px-4 py-3 text-[#162744] dark:text-white" style={{ borderColor: '#DFE5ED' }}>
                       {fila.identificador ?? '—'}
                     </td>
-                    <td className="py-1.5 pr-2">
+                    <td className="border-y px-4 py-3" style={{ borderColor: '#DFE5ED' }}>
                       {fila.procedureInstanceId ? (
                         <button
                           type="button"
@@ -185,7 +207,10 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
                         </span>
                       )}
                     </td>
-                    <td className="py-1.5 text-[#162744]/70 dark:text-white/60">
+                    <td
+                      className="rounded-r-xl border-y border-r px-4 py-3 text-[#162744]/70 dark:text-white/60"
+                      style={{ borderColor: '#DFE5ED' }}
+                    >
                       {fila.motivo ? mensajeMotivo(fila.motivo) : '—'}
                     </td>
                   </tr>

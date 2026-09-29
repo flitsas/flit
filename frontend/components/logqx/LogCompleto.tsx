@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronRight, Download } from "lucide-react";
-import { PageNav } from "@/components/atom/PageNav";
+import { Pagination } from "@/components/atom/Pagination";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { fetchLogQxEventos, type LogQxEvent, type LogQxEventosPage } from "@/lib/api/admin-log-qx";
 import {
@@ -26,12 +34,11 @@ import { bogotaClock, buildXlsx, XLSX_MIME, type XlsxCell } from "@/lib/xlsx";
  * lista corta no parezca pérdida de datos.
  */
 
-const PAGE_SIZE = 50;
-
 export function LogCompleto({ submissionId }: { submissionId: string }) {
   const [ocultarSinNovedad, setOcultarSinNovedad] = useState(true);
   const [soloErrores, setSoloErrores] = useState(false);
-  const [page, setPage] = useState(1);
+  // Bug #13055 — paginación de servidor estándar, con «Filas por página».
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
 
   const [data, setData] = useState<LogQxEventosPage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +48,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
   const reqIdRef = useRef(0);
 
   const load = useCallback(
-    async (opts: { ocultar: boolean; errores: boolean; page: number }) => {
+    async (opts: { ocultar: boolean; errores: boolean; page: number; pageSize: number }) => {
       const reqId = ++reqIdRef.current;
       setFetching(true);
       try {
@@ -49,7 +56,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
           ocultarSinNovedad: opts.ocultar,
           soloErrores: opts.errores,
           page: opts.page,
-          pageSize: PAGE_SIZE,
+          pageSize: opts.pageSize,
         });
         if (reqId !== reqIdRef.current) return;
         setData(res);
@@ -67,14 +74,14 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load({ ocultar: ocultarSinNovedad, errores: soloErrores, page });
-  }, [load, ocultarSinNovedad, soloErrores, page]);
+    void load({ ocultar: ocultarSinNovedad, errores: soloErrores, page, pageSize });
+  }, [load, ocultarSinNovedad, soloErrores, page, pageSize]);
 
   const cambiar = useCallback((fn: () => void) => {
     setAbierto(null);
     setPage(1);
     fn();
-  }, []);
+  }, [setPage]);
 
   const status: "loading" | "error" | "empty" | "ready" =
     fetching && data === null
@@ -139,11 +146,12 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
         </button>
       </div>
 
+      {/* Bug #13055 — carga con el loader del carrito (antes, esqueleto). */}
+      {status === "loading" && <CarLoaderModal label="Cargando el log de la radicación…" />}
       <UiStateBoundary
-        status={status}
-        skeletonRows={8}
+        status={status === "loading" ? "ready" : status}
         errorMessage={error ?? "No se pudo cargar el log."}
-        onRetry={() => void load({ ocultar: ocultarSinNovedad, errores: soloErrores, page })}
+        onRetry={() => void load({ ocultar: ocultarSinNovedad, errores: soloErrores, page, pageSize })}
         emptyMessage={
           soloErrores
             ? "Esta radicación no registró ningún error."
@@ -153,21 +161,31 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
         {data && data.data.length > 0 && (
           <>
             <div className="overflow-x-auto px-4 pt-3">
-              <table className="w-full min-w-[820px] border-separate border-spacing-y-2 text-xs">
+              <table className="w-full min-w-[820px] text-xs" style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
                 <thead>
-                  <tr
-                    className="text-left text-[10px] font-semibold uppercase"
-                    style={{ color: "#162744" }}
-                  >
-                    <th className="rounded-l-xl px-3 py-2.5" style={{ background: "#DFE5ED", width: 34 }}>
+                  <tr>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG, width: 34 }}
+                    >
                       <span className="sr-only">Detalle</span>
                     </th>
                     {["Fecha y hora", "Etapa", "Resultado", "Código", "Duración"].map((c) => (
-                      <th key={c} className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                      <th
+                        key={c}
+                        scope="col"
+                        className={TABLA_HEADER_CELL_CLS}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
                         {c}
                       </th>
                     ))}
-                    <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                    >
                       Origen
                     </th>
                   </tr>
@@ -187,19 +205,27 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
             </div>
 
             <div className="px-4 pb-3">
-              {/* Misma paginación numerada del listado de trámites (`PageNav`). El resumen dice
-                  además cuántos eventos tiene la radicación entera, para que una lista corta por
-                  el filtro no se lea como pérdida de datos. */}
-              <PageNav
+              {/* Paginación estándar con «Filas por página». Además se dice cuántos eventos tiene la
+                  radicación entera, para que una lista corta por el filtro no se lea como pérdida
+                  de datos. */}
+              <Pagination
                 page={page}
-                totalPages={Math.max(1, Math.ceil(data.totalCount / PAGE_SIZE))}
-                resumen={`Mostrando ${data.data.length.toLocaleString("es-CO")} de ${data.totalCount.toLocaleString("es-CO")} · ${data.totalEventos.toLocaleString("es-CO")} eventos en la radicación`}
+                pageSize={pageSize}
+                totalCount={data.totalCount}
+                noun="eventos"
                 ariaLabel="Paginación del log"
                 onPageChange={(p) => {
                   setAbierto(null);
                   setPage(Math.max(1, p));
                 }}
+                onPageSizeChange={(n) => {
+                  setAbierto(null);
+                  setPageSize(n);
+                }}
               />
+              <p className="text-right text-[11px] opacity-60">
+                {data.totalEventos.toLocaleString("es-CO")} eventos en la radicación
+              </p>
             </div>
           </>
         )}
@@ -227,8 +253,8 @@ function FilaEvento({
   return (
     <>
       <tr
-        className={`cursor-pointer transition ${
-          abierto ? "bg-[#557EFF]/[0.06]" : "bg-white hover:bg-[#557EFF]/[0.04] dark:bg-[#0B0F14]"
+        className={`cursor-pointer bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${
+          abierto ? "shadow-[0_8px_24px_rgba(85,126,255,0.18)]" : ""
         }`}
         onClick={onToggle}
         tabIndex={0}

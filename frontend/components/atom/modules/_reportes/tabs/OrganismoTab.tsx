@@ -230,7 +230,8 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
           </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="ranking-title">
+            <section aria-labelledby="ranking-title">
+              {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
               <h2 id="ranking-title" className="text-sm font-bold mb-3" title="Orden por mediana de tiempo de decisión ascendente; desempata la tasa de rechazo.">
                 Ranking de agilidad
               </h2>
@@ -238,14 +239,14 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
                 <p className="text-xs opacity-60">Sin organismos con decisiones en el periodo.</p>
               ) : (
                 <div className={CARDLIST_SCROLL}>
-                  <table className={CARDLIST_TABLE} data-testid="ranking-ot">
+                  <table className={CARDLIST_TABLE} data-testid="ranking-ot" aria-labelledby="ranking-title">
                     <thead>
                       <tr className={CARDLIST_HEAD_ROW}>
-                        <th className={CARDLIST_TH}>#</th>
-                        <th className={CARDLIST_TH}>Organismo</th>
-                        <th className={CARDLIST_TH}>p50</th>
-                        <th className={CARDLIST_TH}>Rechazo</th>
-                        <th className={CARDLIST_TH}>Volumen</th>
+                        <th scope="col" className={CARDLIST_TH}>#</th>
+                        <th scope="col" className={CARDLIST_TH}>Organismo</th>
+                        <th scope="col" className={CARDLIST_TH}>p50</th>
+                        <th scope="col" className={CARDLIST_TH}>Rechazo</th>
+                        <th scope="col" className={CARDLIST_TH}>Volumen</th>
                       </tr>
                     </thead>
                     <tbody>

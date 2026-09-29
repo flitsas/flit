@@ -152,7 +152,7 @@ describe('SuperAdmin — todas las compañías (AC5–AC7)', () => {
     expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(expect.any(Object), '*');
     expect(mocks.listStuckIdentityValidations).toHaveBeenCalledWith('*');
     // Cabecera: Compañía primero.
-    const filas = screen.getByRole('list', { name: /validaciones de identidad/i });
+    const filas = screen.getByRole('table', { name: /validaciones de identidad/i });
     expect(within(filas).getByText('Renting Andino SAS')).toBeInTheDocument();
     expect(await screen.findByText('NIT 800333444')).toBeInTheDocument();
     expect(screen.getAllByText('Compañía')[0]).toBeInTheDocument();

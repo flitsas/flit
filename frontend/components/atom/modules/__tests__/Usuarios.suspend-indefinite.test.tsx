@@ -107,7 +107,7 @@ describe("Usuarios — bloquear usuario (ajuste QA: desactivación indefinida, H
 
     await screen.findByText("Ana Torres");
     // Chip de estado en la fila (también existe la opción del filtro "Bloqueado"/"Activo").
-    const row = screen.getByText("Ana Torres").closest("div.grid");
+    const row = screen.getByText("Ana Torres").closest("tr");
     expect(row).toBeTruthy();
     expect(within(row as HTMLElement).getByText("Bloqueado")).toBeInTheDocument();
     expect(within(row as HTMLElement).queryByText("Activo")).not.toBeInTheDocument();

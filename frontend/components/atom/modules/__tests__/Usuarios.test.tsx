@@ -135,8 +135,8 @@ describe("Usuarios — tabla con columnas Perfil y Rol separadas (AC4)", () => {
 
     render(<Usuarios />);
 
-    const fila = (await screen.findByText("Gina Paredes")).closest("div.grid") as HTMLElement;
-    const encabezado = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    const fila = (await screen.findByText("Gina Paredes")).closest("tr") as HTMLElement;
+    const encabezado = screen.getByText("Usuario").closest("tr") as HTMLElement;
     expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
     expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
     // Bug #13055 — el chip distingue al administrador: con solo «Gestor» parecía que todos
@@ -168,7 +168,7 @@ describe("Usuarios — tabla con columnas Perfil y Rol separadas (AC4)", () => {
 
     render(<Usuarios />);
 
-    const fila = (await screen.findByText("Raúl Díaz")).closest("div.grid") as HTMLElement;
+    const fila = (await screen.findByText("Raúl Díaz")).closest("tr") as HTMLElement;
     expect(within(fila).getByText("Gestor")).toBeInTheDocument();
     expect(within(fila).queryByText(/· Admin/)).not.toBeInTheDocument();
   });

@@ -8,10 +8,13 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, X } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoader, CarLoaderModal } from "@/components/atom/CarLoader";
-import { PageNav } from "@/components/atom/PageNav";
+import { Pagination } from "@/components/atom/Pagination";
+import { RowActions } from "@/components/atom/RowActions";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import {
   TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
@@ -43,7 +46,6 @@ const LOG_TYPES: ReadonlyArray<{ value: IctLogType; label: string }> = [
   { value: "external", label: "Fuente externa" },
 ];
 
-const PAGE_SIZE = 25;
 const BORDER = "#DFE5ED";
 
 const inputCls =
@@ -81,7 +83,8 @@ function LogsTab() {
   const [searchInput, setSearchInput] = useState("");
   const [fromInput, setFromInput] = useState("");
   const [toInput, setToInput] = useState("");
-  const [page, setPage] = useState(1);
+  // Bug #13055 — paginación de servidor estándar, con «Filas por página».
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [data, setData] = useState<IctLogEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -93,7 +96,7 @@ function LogsTab() {
     // Carga al montar y al cambiar filtros: skeleton intencional.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    fetchIctLogs({ ...applied, page, pageSize: PAGE_SIZE }, controller.signal)
+    fetchIctLogs({ ...applied, page, pageSize }, controller.signal)
       .then((res) => {
         setData(res.items);
         setTotal(res.total);
@@ -109,9 +112,8 @@ function LogsTab() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [applied, page]);
+  }, [applied, page, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hayFiltros = Boolean(applied.logType || applied.search || applied.from || applied.to);
 
   function applyFilters(e: React.FormEvent) {
@@ -231,31 +233,31 @@ function LogsTab() {
                     className="text-left text-[10px] font-semibold uppercase tracking-wider"
                     style={{ color: TABLA_HEADER_FG }}
                   >
-                    <th className="rounded-l-xl px-3 py-2.5" style={{ background: TABLA_HEADER_BG, width: 34 }}>
+                    <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG, width: 34 }}>
                       <span className="sr-only">Detalle</span>
                     </th>
-                    <th className="px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                    <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                       Fecha
                     </th>
-                    <th className="px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                    <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                       Tipo
                     </th>
-                    <th className="px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                    <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                       Dirección
                     </th>
-                    <th className="px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                    <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                       Método
                     </th>
-                    <th className="px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                    <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                       Ruta
                     </th>
-                    <th className="px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                    <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                       Estado
                     </th>
-                    <th className="px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                    <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                       Duración
                     </th>
-                    <th className="rounded-r-xl px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                    <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                       Correlación
                     </th>
                   </tr>
@@ -266,7 +268,7 @@ function LogsTab() {
                     return (
                       <Fragment key={row.id}>
                         <tr
-                          className={`cursor-pointer bg-white text-xs dark:bg-[#162744] ${TABLA_ROW_HOVER_CLS}`}
+                          className={`cursor-pointer bg-white text-xs dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
                           onClick={() => setExpandedId(open ? null : row.id)}
                         >
                           <td
@@ -326,14 +328,19 @@ function LogsTab() {
               </table>
             </div>
 
-            <PageNav
+            <Pagination
               page={page}
-              totalPages={totalPages}
+              pageSize={pageSize}
+              totalCount={total}
               onPageChange={(p) => {
                 setExpandedId(null);
                 setPage(p);
               }}
-              resumen={`Mostrando ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)} de ${total.toLocaleString("es-CO")} registros`}
+              onPageSizeChange={(n) => {
+                setExpandedId(null);
+                setPageSize(n);
+              }}
+              noun="registros"
               ariaLabel="Paginación del Log ICT"
             />
           </>
@@ -516,6 +523,8 @@ function IctAlertEventsList() {
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [acking, setAcking] = useState<string | null>(null);
+  // Bug #13055 — la lista de eventos pagina en cliente (llegan hasta 50).
+  const pg = usePaginacion();
 
   const tenantId = useMemo<string | undefined>(() => {
     if (typeof window === "undefined") return undefined;
@@ -584,29 +593,29 @@ function IctAlertEventsList() {
                 className="text-left text-[10px] font-semibold uppercase tracking-wider"
                 style={{ color: TABLA_HEADER_FG }}
               >
-                <th className="rounded-l-xl px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Fecha
                 </th>
-                <th className="px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Alerta
                 </th>
-                <th className="px-4 py-2.5 text-right" style={{ background: TABLA_HEADER_BG }}>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}  text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Valor
                 </th>
-                <th className="px-4 py-2.5 text-right" style={{ background: TABLA_HEADER_BG }}>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}  text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Umbral
                 </th>
-                <th className="px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Detalle
                 </th>
-                <th className="rounded-r-xl px-4 py-2.5" style={{ background: TABLA_HEADER_BG }}>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Acción
                 </th>
               </tr>
             </thead>
             <tbody>
-              {events.map((e) => (
-                <tr key={e.id} className={`bg-white text-xs dark:bg-[#162744] ${TABLA_ROW_HOVER_CLS}`}>
+              {pg.paginar(events).map((e) => (
+                <tr key={e.id} className={`bg-white text-xs dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
                   <td
                     className="rounded-l-xl border-y border-l px-4 py-3 align-middle whitespace-nowrap"
                     style={{ borderColor: BORDER }}
@@ -643,15 +652,17 @@ function IctAlertEventsList() {
                         ariaLabel="Alerta reconocida"
                       />
                     ) : (
-                      <button
-                        type="button"
-                        disabled={acking === e.id}
-                        onClick={() => void handleAck(e.id)}
-                        className="inline-flex items-center gap-1 rounded-xl border border-[#DFE5ED] bg-white px-3 py-1.5 text-xs font-semibold text-[#557EFF] hover:bg-[#EFF6FF] disabled:opacity-40 dark:border-white/15 dark:bg-[#0B0F14]"
-                      >
-                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                        {acking === e.id ? "Reconociendo…" : "Reconocer"}
-                      </button>
+                      <RowActions
+                        actions={[
+                          {
+                            icon: Check,
+                            label: `Reconocer alerta ${e.ruleName}`,
+                            tone: "primary",
+                            disabled: acking === e.id,
+                            onClick: () => void handleAck(e.id),
+                          },
+                        ]}
+                      />
                     )}
                   </td>
                 </tr>
@@ -659,6 +670,15 @@ function IctAlertEventsList() {
             </tbody>
           </table>
           </div>
+          <Pagination
+            page={pg.page}
+            pageSize={pg.pageSize}
+            totalCount={events.length}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+            noun="eventos"
+            ariaLabel="Paginación de eventos de alerta ICT"
+          />
         </UiStateBoundary>
       )}
     </div>
