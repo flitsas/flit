@@ -55,8 +55,10 @@ public sealed class DrFlitAssistant(
         }
 
         var started = Stopwatch.GetTimestamp();
+        // Variante del manual por perfil (HU #13023): solo la audiencia del que pregunta, cacheable;
+        // las citas se validan más abajo contra el catálogo completo (BySlug), no contra la variante.
         var call = await model
-            .CompleteAsync(catalog.SystemPrompt, BuildTurns(request), ct)
+            .CompleteAsync(catalog.GetSystemPrompt(request.Profile), BuildTurns(request), ct)
             .ConfigureAwait(false);
         var elapsedMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
