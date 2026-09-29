@@ -9,6 +9,7 @@ import {
 } from '@/lib/tramites/network-scope';
 import { formatCOP } from '@/lib/format/currency';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { PRENDA_DECISION_LABELS } from '@/components/operacion/prenda-decision-labels';
 import {
   TarjetaDetalle,
   CampoValor,
@@ -41,26 +42,18 @@ const CAUSAL_LABELS: Record<CommercialCausal, string> = {
   ADJUDICACION: 'Adjudicación',
 };
 
-/** Etiqueta legible de la decisión de prenda (mismo catálogo cerrado que `PrendaForm`). */
-const PRENDA_DECISION_LABELS: Record<PrendaDecision, string> = {
-  solicitar: 'Solicitar constitución de prenda',
-  registrar: 'Registrar prenda',
-  levantar: 'Levantar gravamen',
-  omitir: 'Continuar sin gestionar (asumo el riesgo)',
-  sin_prenda: 'Sin prenda',
-};
-
 /**
  * Tono semántico por decisión: `sin_prenda`/`levantar` son un resultado favorable (sin gravamen
- * vigente), `solicitar`/`registrar` señalan un gravamen activo o en trámite, y `omitir` es una
- * advertencia (riesgo asumido por el gestor).
+ * vigente), `solicitar`/`registrar` señalan un gravamen activo o en trámite, y `omitir` («Omitir
+ * prenda», HU #13112) es informativo: el gravamen sigue en el RUNT y el trámite no lo toca, no es un
+ * error. La etiqueta sale de la fuente única `prenda-decision-labels.ts`.
  */
 const PRENDA_DECISION_TONE: Record<PrendaDecision, StatusTone> = {
   sin_prenda: 'success',
   levantar: 'success',
   registrar: 'warning',
   solicitar: 'warning',
-  omitir: 'danger',
+  omitir: 'info',
 };
 
 function esComercialVacio(data: CommercialData | null): boolean {
