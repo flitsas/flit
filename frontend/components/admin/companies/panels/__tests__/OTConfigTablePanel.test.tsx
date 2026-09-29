@@ -25,6 +25,13 @@ vi.mock("@/lib/api/admin-companies", () => ({
   setOtBlockingPolicy: vi.fn(),
   fetchOtConsultationRestrictions: vi.fn(),
   setOtConsultationRestriction: vi.fn(),
+  // Cargas que el panel sumó después (convenios, prenda opcional, bloqueos de marca): sin ellas en
+  // el mock, la carga lanzaba TypeError y el panel quedaba en error en TODOS los casos.
+  fetchTransitAgreements: vi.fn(() => Promise.resolve({ transitOfficeIds: [] })),
+  setTransitAgreement: vi.fn(),
+  fetchOtPrendaDocumentPolicies: vi.fn(() => Promise.resolve([])),
+  setOtPrendaDocumentPolicy: vi.fn(),
+  fetchTransitBlocks: vi.fn(() => Promise.resolve({ transitOfficeIds: [] })),
 }));
 
 vi.mock("@/lib/api/admin-transit-office-tenants", () => ({
@@ -197,6 +204,39 @@ describe("OTConfigTablePanel (HU #10194 — tabla consolidada de OT)", () => {
     // 14 activos con páginas de 10: la primera página corta en el noveno.
     expect(screen.getByText("Organismo 9")).toBeInTheDocument();
     expect(screen.queryByText("Organismo 10")).not.toBeInTheDocument();
+  });
+
+  it("(c quater) la búsqueda recorre el catálogo completo, no solo la página visible (Bug #13055)", async () => {
+    const muchos = Array.from({ length: 14 }, (_, i) => ({
+      id: `x${i}`,
+      code: `9${String(i).padStart(4, "0")}`,
+      name: i === 12 ? "Tránsito de Chía" : `Organismo ${i}`,
+      departmentCode: "11",
+      cityCode: "11001",
+    }));
+    vi.mocked(fetchTransitOffices).mockResolvedValue(muchos);
+    vi.mocked(fetchTransitGrants).mockResolvedValue({ transitOfficeIds: [] });
+    vi.mocked(fetchTransitOfficesOperationalStatus).mockResolvedValue(
+      muchos.map((o) => activo(o.id, o.code, o.name)),
+    );
+    vi.mocked(fetchOtBlockingPolicies).mockResolvedValue([]);
+    vi.mocked(fetchOtConsultationRestrictions).mockResolvedValue([]);
+    const user = userEvent.setup();
+    render(<OTConfigTablePanel tenantId={TENANT} />);
+
+    await screen.findByText("Organismo 0");
+    expect(screen.queryByText("Tránsito de Chía")).not.toBeInTheDocument();
+
+    // Sin tilde: el término se normaliza igual que el nombre.
+    await user.type(screen.getByLabelText("Buscar organismo de tránsito"), "transito de chia");
+
+    expect(await screen.findByText("Tránsito de Chía")).toBeInTheDocument();
+    expect(screen.queryByText("Organismo 0")).not.toBeInTheDocument();
+
+    // Por código, también fuera de la primera página.
+    await user.clear(screen.getByLabelText("Buscar organismo de tránsito"));
+    await user.type(screen.getByLabelText("Buscar organismo de tránsito"), "90013");
+    expect(await screen.findByText("Organismo 13")).toBeInTheDocument();
   });
 
   it("(d) el menú «⋯ Acciones» → «Configurar» abre el modal unificado con ambas secciones y togglea un criterio de cada una", async () => {
