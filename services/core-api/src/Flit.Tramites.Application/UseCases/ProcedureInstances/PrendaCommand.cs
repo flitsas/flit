@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -40,7 +41,7 @@ public sealed class RegistrarPrendaHandler(
     IProcedureInstancePrendaRepository prendas,
     IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null)
 {
-    /// <summary>Error: el OT exige el certificado de prenda, así que "omitir" no es elegible.</summary>
+    /// <summary>Error: el OT exige el certificado de prenda, así que "omitir" no es elegible (salvo Matrícula Inicial, Feature #13110).</summary>
     public const string OmitirNoAdmitidoError = "prenda_omitir_no_admitido";
 
     /// <summary>Error: este tipo no tiene dimensión de gravamen (familia OTROS, tipo no prendario).</summary>
@@ -91,19 +92,25 @@ public sealed class RegistrarPrendaHandler(
 
         var decision = input.Decision.Trim().ToLowerInvariant();
 
-        // CF-06 (HU #10881) — "omitir" es la vía "asumo el riesgo", y con un OT que exige el
-        // certificado de prenda no hay riesgo que el gestor pueda asumir por su cuenta: la regla es
-        // del organismo. Se rechaza AL ELEGIR, que es donde el gate de radicación decía que había que
-        // decidirlo (ver PrendaGate.EvaluateOtOverride). Bloquear después dejaría guardada una
-        // decisión que ningún adjunto puede satisfacer —el paso de prenda no ofrece cargar documento
-        // para "omitir"—, que es exactamente el atasco que corrigió esta tanda. Las decisiones ya
-        // guardadas no se revisan: la regla mira la elección nueva, no reabre trámites en curso.
-        if (string.Equals(decision, PrendaDecision.Omitir, StringComparison.OrdinalIgnoreCase)
-            && await _documentPolicy
-                .IsRequiredAsync(tenantId, instance.TransitOfficeId, instance.CreatedAt, ct)
-                .ConfigureAwait(false))
+        // CF-06 (HU #10881) — con un OT que exige el certificado de prenda, "omitir" no es elegible en
+        // Traspaso ni en el resto de familias: la regla es del organismo. Se rechaza AL ELEGIR, que es
+        // donde el gate de radicación decía que había que decidirlo (ver PrendaGate.EvaluateOtOverride):
+        // bloquear después dejaría guardada una decisión que ningún adjunto puede satisfacer. Las
+        // decisiones ya guardadas no se revisan: la regla mira la elección nueva.
+        //
+        // Feature #13110 — excepción de Matrícula Inicial: ahí "Omitir prenda" siempre se admite (la
+        // prenda es un trámite propio, art. 5.3.13.1). La regla vive en PrendaDecision.OmitirAdmitido,
+        // la misma que publica el estado del wizard (PrendaOmitAllowed). La familia se lee null-safe
+        // (instance.Family lanza sin la navegación cargada); sin tipo cargado se trata como "no es
+        // matrícula" y se conserva el rechazo (postura conservadora).
+        if (string.Equals(decision, PrendaDecision.Omitir, StringComparison.OrdinalIgnoreCase))
         {
-            return (null, OmitirNoAdmitidoError);
+            var family = ProcedureFamilyCodes.FromCodeOrOtros(instance.ProcedureType?.Family);
+            var otExigeDocumento = await _documentPolicy
+                .IsRequiredAsync(tenantId, instance.TransitOfficeId, instance.CreatedAt, ct)
+                .ConfigureAwait(false);
+            if (!PrendaDecision.OmitirAdmitido(family, otExigeDocumento))
+                return (null, OmitirNoAdmitidoError);
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -161,15 +168,18 @@ public sealed class RegistrarPrendaHandler(
             }, ct);
         }
 
+        // Feature #13110 (CF-6) — con "omitir" no se solicita trámite de prenda: el acreedor y la entidad
+        // de levantamiento no alimentan ningún documento y no se guardan aunque el cliente los envíe.
+        var conservaAcreedor = PrendaDecision.ConservaDatosDeAcreedor(decision);
         var nueva = new ProcedureInstancePrenda
         {
             TenantId = tenantId,
             ProcedureInstanceId = instanceId,
             Decision = decision,
             Estado = PrendaEstado.Vigente,
-            AcreedorNombre = Trimmed(input.AcreedorNombre),
-            AcreedorDocumento = Trimmed(input.AcreedorDocumento),
-            LevantamientoEntidad = Trimmed(input.LevantamientoEntidad),
+            AcreedorNombre = conservaAcreedor ? Trimmed(input.AcreedorNombre) : null,
+            AcreedorDocumento = conservaAcreedor ? Trimmed(input.AcreedorDocumento) : null,
+            LevantamientoEntidad = conservaAcreedor ? Trimmed(input.LevantamientoEntidad) : null,
             AccionFamilia = accionFamilia,
             Metadata = string.IsNullOrWhiteSpace(input.MetadataJson) ? "{}" : input.MetadataJson,
             CreatedAt = now,

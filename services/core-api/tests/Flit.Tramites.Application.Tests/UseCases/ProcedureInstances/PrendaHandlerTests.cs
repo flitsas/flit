@@ -54,11 +54,12 @@ public sealed class PrendaHandlerTests
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
-    private void InstanceExists(Guid id, Guid tenantId, string status = TramiteEstado.Borrador) =>
+    private void InstanceExists(
+        Guid id, Guid tenantId, string status = TramiteEstado.Borrador, ProcedureType? type = null) =>
         _instances.GetByIdAsync(id, tenantId, Arg.Any<CancellationToken>())
             .Returns(new ProcedureInstance
             {
-                ProcedureType = ProcedureTypeFixture.Matricula,
+                ProcedureType = type ?? ProcedureTypeFixture.Matricula,
                 Id = id,
                 TenantId = tenantId,
                 ProcedureTypeId = Guid.NewGuid(),
@@ -82,13 +83,16 @@ public sealed class PrendaHandlerTests
     /// El agujero que dejaba la regla del organismo evadible: con el override activo, "omitir"
     /// satisfacía a la vez el gate de gravámenes y el del OT, así que el gestor radicaba sin el
     /// certificado eligiendo "asumo el riesgo". Se corta AL ELEGIR, no al radicar.
+    /// <para>Feature #13110 (AC2) — antes sembraba una Matrícula; desde la excepción de Matrícula
+    /// Inicial la regla CF-06 solo aplica a Traspaso y al resto, así que siembra un Traspaso (cambio
+    /// de regla, no regresión).</para>
     /// </summary>
     [Fact]
-    public async Task Registrar_omitir_con_ot_que_exige_certificado_se_rechaza()
+    public async Task Omitir_TraspasoConOtQueExige_SigueRechazando()
     {
         var ct = TestContext.Current.CancellationToken;
         var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
-        InstanceExists(id, tenantId);
+        InstanceExists(id, tenantId, type: ProcedureTypeFixture.Traspaso);
         var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyQueExige(true));
 
         var (result, error) = await registrar.HandleAsync(
@@ -97,6 +101,125 @@ public sealed class PrendaHandlerTests
         error.Should().Be(RegistrarPrendaHandler.OmitirNoAdmitidoError);
         result.Should().BeNull();
         _prendas.Rows.Should().BeEmpty("una decisión rechazada no puede quedar persistida");
+    }
+
+    // ── Feature #13110 — «Omitir prenda» en Matrícula Inicial y limpieza del acreedor ────────────
+
+    /// <summary>
+    /// AC1 — en Matrícula Inicial "omitir" se admite aunque el OT exija el certificado: la prenda es
+    /// un trámite propio (art. 5.3.13.1) y no inscribirla no depende del organismo.
+    /// <para>Uso de ejemplo: <c>new RegistrarPrendaHandler(repo, prendas, policy).HandleAsync(id,
+    /// tenant, new RegistrarPrendaInput("omitir"))</c> devuelve <c>(PrendaDto{Decision="omitir"}, null)</c>.</para>
+    /// </summary>
+    [Fact]
+    public async Task Omitir_MatriculaConOtQueExige_SeAcepta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        InstanceExists(id, tenantId, type: ProcedureTypeFixture.Matricula);
+        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyQueExige(true));
+
+        var (result, error) = await registrar.HandleAsync(
+            id, tenantId, new RegistrarPrendaInput(PrendaDecision.Omitir), null, ct);
+
+        error.Should().BeNull();
+        result!.Decision.Should().Be(PrendaDecision.Omitir);
+        result.Estado.Should().Be(PrendaEstado.Vigente);
+        _prendas.Rows.Should().ContainSingle(r => r.Estado == PrendaEstado.Vigente && r.Decision == PrendaDecision.Omitir);
+    }
+
+    /// <summary>AC3 — Traspaso con el certificado de prenda opcional en el OT admite "omitir".</summary>
+    [Fact]
+    public async Task Omitir_TraspasoConCertificadoOpcional_SeAcepta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        InstanceExists(id, tenantId, type: ProcedureTypeFixture.Traspaso);
+        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyQueExige(false));
+
+        var (result, error) = await registrar.HandleAsync(
+            id, tenantId, new RegistrarPrendaInput(PrendaDecision.Omitir), null, ct);
+
+        error.Should().BeNull();
+        result!.Decision.Should().Be(PrendaDecision.Omitir);
+    }
+
+    /// <summary>
+    /// Edge — sin la navegación del tipo cargada no se puede afirmar que sea matrícula: se conserva
+    /// el rechazo CF-06 (postura conservadora) y no se lanza por <c>instance.Family</c>.
+    /// </summary>
+    [Fact]
+    public async Task Omitir_SinTipoCargadoYOtQueExige_SeRechaza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        _instances.GetByIdAsync(id, tenantId, Arg.Any<CancellationToken>())
+            .Returns(new ProcedureInstance
+            {
+                Id = id,
+                TenantId = tenantId,
+                ProcedureTypeId = Guid.NewGuid(),
+                ReferenceNumber = "TRM-2026-000002",
+                Status = TramiteEstado.Borrador,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyQueExige(true));
+
+        var (result, error) = await registrar.HandleAsync(
+            id, tenantId, new RegistrarPrendaInput(PrendaDecision.Omitir), null, ct);
+
+        error.Should().Be(RegistrarPrendaHandler.OmitirNoAdmitidoError);
+        result.Should().BeNull();
+        _prendas.Rows.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// AC4 (CF-6) — con "omitir" no se guarda acreedor ni entidad de levantamiento aunque el cliente
+    /// los envíe: ni en la fila persistida ni en el <see cref="PrendaDto"/> de respuesta.
+    /// </summary>
+    [Fact]
+    public async Task Omitir_ConAcreedorEnviado_NoPersisteAcreedorNiEntidad()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        InstanceExists(id, tenantId, type: ProcedureTypeFixture.Matricula);
+        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyQueExige(true));
+
+        var (result, error) = await registrar.HandleAsync(
+            id, tenantId,
+            new RegistrarPrendaInput(PrendaDecision.Omitir, "Banco XYZ", "900123456", "Oficina Centro"),
+            null, ct);
+
+        error.Should().BeNull();
+        result!.AcreedorNombre.Should().BeNull();
+        result.AcreedorDocumento.Should().BeNull();
+        result.LevantamientoEntidad.Should().BeNull();
+        var fila = _prendas.Rows.Should().ContainSingle().Subject;
+        fila.AcreedorNombre.Should().BeNull();
+        fila.AcreedorDocumento.Should().BeNull();
+        fila.LevantamientoEntidad.Should().BeNull();
+    }
+
+    /// <summary>AC5 (CF-12) — "registrar" conserva el acreedor; "sin_prenda" no cambia respecto a develop.</summary>
+    [Theory]
+    [InlineData(PrendaDecision.Registrar)]
+    [InlineData(PrendaDecision.SinPrenda)]
+    public async Task Registrar_ConservaAcreedor(string decision)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        InstanceExists(id, tenantId, type: ProcedureTypeFixture.Traspaso);
+
+        var (result, error) = await _registrar.HandleAsync(
+            id, tenantId, new RegistrarPrendaInput(decision, " Banco XYZ ", "900123456", "Oficina Centro"), null, ct);
+
+        error.Should().BeNull();
+        result!.AcreedorNombre.Should().Be("Banco XYZ");
+        result.AcreedorDocumento.Should().Be("900123456");
+        result.LevantamientoEntidad.Should().Be("Oficina Centro");
+        var fila = _prendas.Rows.Should().ContainSingle().Subject;
+        fila.AcreedorNombre.Should().Be("Banco XYZ");
+        fila.AcreedorDocumento.Should().Be("900123456");
     }
 
     /// <summary>Con el opt-out del OT vigente, "asumo el riesgo" sigue siendo una elección legítima.</summary>
