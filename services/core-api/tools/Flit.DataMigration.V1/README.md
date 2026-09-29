@@ -231,6 +231,39 @@ dotnet ef database update --project src/Flit.Infrastructure --startup-project sr
 dotnet test tests/Flit.DataMigration.Tests
 ```
 
+### Cuidados en V2 con un trámite migrado
+
+El expediente de V1 llega como adjunto tipo `consolidado` (`source = migration`) y es el que vale
+para el organismo. Lo que V2 hace después con él:
+
+- **El OT no lo toca.** Abrir, regenerar y aprobar trabajan con `consolidado_maestro`, que excluye
+  al de V1. El maestro lleva la portada de V2 y además las piezas migradas.
+- **Se reemplaza en cuanto el trámite vuelve a gestionarse en V2.** La protección
+  `migrado_solo_lectura` de `GenerarConsolidadoHandler` solo cubre los estados finales. Estos
+  caminos regeneran el consolidado del gestor, y con él pueden regenerarse el FUR y el mandato:
+  - el visor o el botón regenerar del gestor, cuando subsana un rechazo;
+  - «Limpiar» o «Cargar consolidado» del admin.
+  El rechazo del OT por sí solo no lo reemplaza: la regeneración anticipada que dispara omite a
+  los migrados (`RegenerarConsolidadoAnticipadoHandler`, `OmitidoMigrado`). Al aprobar, V2 intenta
+  regenerar, el guard lo frena y queda un evento `regeneracion_documental_fallida` con
+  `migrado_solo_lectura`. Es ruido en la bitácora, no un error.
+- **Es intencional.** Un migrado rechazado se subsana en V2 y desde ahí es un trámite de V2, así
+  que su expediente pasa a ser el nuevo. Si hace falta el de V1 después de eso, su trazabilidad
+  sigue en `migration.migration_attachment_map`.
+- **Prenda y transformación se traducen al modelo de V2** (HU #13072), así que el listado, los
+  filtros y Consultas las marcan igual que en un nativo:
+
+  | V1 | V2 |
+  |---|---|
+  | `registered_pledge` («Inscripción de prenda a favor de…») | prenda `registrar`, acreedor `pledge_in_favour` |
+  | `has_garment_lifting` | prenda `levantar`, acreedor `warranty_creditor_*` |
+  | Acreedor del RUNT sin inscripción ni levantamiento | prenda `omitir`. **Sin** marca, como un nativo |
+  | `switch_vehicle_color`, `switch_vehicle_bodywork`, `switch_vehicle_fuel_type` | `cambio_*` = `true`. El dato de V1 pasa a `vehicle_*_runt` y `new_vehicle_*` queda como efectivo |
+  | `is_armored_vehicle` | `blindaje` = `true` |
+
+  `is_dismantling_armor` (desmonte de blindaje) no tiene equivalente en V2 y se queda en
+  `legacy_v1_extras`, igual que todas las columnas originales.
+
 ### Lo que falta antes de producción
 
 1. **`CreateTenantIfMissing` debe ser `false`.** En laboratorio crea tenants; en producción un NIT
