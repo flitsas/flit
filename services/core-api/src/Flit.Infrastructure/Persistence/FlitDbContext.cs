@@ -11,6 +11,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.RevocationRequests;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace Flit.Infrastructure.Persistence;
 
@@ -409,6 +410,16 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // (y tests) que construye el contexto a mano: así no se puede saltar. El PORQUÉ de cada decisión
     // —qué cuenta como cambio, y por qué el UPDATE va en un segundo save— está en
     // ConsolidadoVigenciaTracker.
+    //
+    // Bug #13055 — además encola la regeneración anticipada de los consolidados. La cola se toma del
+    // contenedor de la aplicación (el que registró el contexto con AddDbContext): un contexto armado a
+    // mano en tests no tiene contenedor, la cola sale null y no se encola nada.
+    private Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoRegeneracionQueue? RegeneracionQueue() =>
+        this.GetService<IDbContextOptions>()
+            .FindExtension<CoreOptionsExtension>()
+            ?.ApplicationServiceProvider
+            ?.GetService(typeof(Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoRegeneracionQueue))
+            as Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoRegeneracionQueue;
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
@@ -420,6 +431,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         {
             base.SaveChanges(acceptAllChangesOnSuccess);
         }
+
+        ConsolidadoVigenciaTracker
+            .EncolarRegeneracionAsync(this, RegeneracionQueue(), candidatas, CancellationToken.None)
+            .GetAwaiter().GetResult();
 
         return afectadas;
     }
@@ -437,6 +452,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         {
             await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
         }
+
+        await ConsolidadoVigenciaTracker
+            .EncolarRegeneracionAsync(this, RegeneracionQueue(), candidatas, cancellationToken)
+            .ConfigureAwait(false);
 
         // El número de filas que se devuelve es el del save del LLAMADOR: las marcas de vigencia son
         // contabilidad interna del consolidado y no deben alterar un conteo del que ya depende código

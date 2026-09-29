@@ -241,7 +241,7 @@ describe("ClientProceduresSection — HU #10220", () => {
 
     await waitFor(() =>
       expect(searchOtClientProcedures).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "entregado", pageSize: 20 }),
+        expect.objectContaining({ status: "entregado", pageSize: 10 }),
         expect.anything(),
         undefined,
       ),

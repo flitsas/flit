@@ -138,7 +138,7 @@ describe('Auditoria — AC3 estados de UI', () => {
 
     render(<Auditoria />);
 
-    const list = await screen.findByRole('list', { name: /registros de auditoría/i });
+    const list = await screen.findByRole('table', { name: /registros de auditoría/i });
     expect(within(list).getByText('Usuarios')).toBeInTheDocument();
     expect(within(list).getByText('Autenticación')).toBeInTheDocument();
     expect(within(list).getByText('Éxito')).toBeInTheDocument();
@@ -289,7 +289,7 @@ describe('Auditoria — AC2 filtros funcionales', () => {
 describe('Auditoria — AC4 paginación', () => {
   const PAGED: AdminAuditLogPageResponse = {
     ...FULL,
-    totalCount: 45, // 45 / 20 (default pageSize) = 3 páginas
+    totalCount: 45, // 45 / 10 (default pageSize) = 3 páginas
   };
 
   it('navega a la página siguiente: consulta el backend con page=2 y actualiza el conteo mostrado', async () => {
@@ -299,13 +299,13 @@ describe('Auditoria — AC4 paginación', () => {
     render(<Auditoria />);
     await screen.findByText('190.10.20.30');
 
-    expect(screen.getByText(/mostrando 1–20 de 45/i)).toBeInTheDocument();
+    expect(screen.getByText(/mostrando 1–10 de 45/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /página siguiente/i }));
 
     await waitFor(() =>
       expect(mocks.fetchAdminAuditLog).toHaveBeenCalledWith(
-        expect.objectContaining({ page: 2, pageSize: 20 }),
+        expect.objectContaining({ page: 2, pageSize: 10 }),
       ),
     );
   });

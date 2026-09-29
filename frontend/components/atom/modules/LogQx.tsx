@@ -20,7 +20,15 @@ import {
 } from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { PageNav } from "@/components/atom/PageNav";
+import { Pagination } from "@/components/atom/Pagination";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
 import {
@@ -61,7 +69,7 @@ import {
  * que resuelve el caso frecuente sin navegar ni perder los filtros.
  */
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 /** Filtros que viajan en el estado y en el query string, para restituirlos al volver. */
 interface Filtros {
@@ -122,14 +130,6 @@ function leerFiltrosDeLaUrl(): Filtros | null {
   return Object.values(filtros).some(Boolean) ? filtros : null;
 }
 
-/** «Mostrando 26–50 de 300»; la bandeja pagina en servidor, así que el rango se calcula. */
-function resumenPagina(page: number, pageSize: number, total: number): string {
-  if (total === 0) return "Mostrando 0 de 0";
-  const desde = (page - 1) * pageSize + 1;
-  const hasta = Math.min(page * pageSize, total);
-  return `Mostrando ${desde}–${hasta} de ${total}`;
-}
-
 function hoyMenos(dias: number): string {
   const d = new Date();
   d.setDate(d.getDate() - dias);
@@ -170,7 +170,8 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   const [entries, setEntries] = useState<LogQxBandejaEntry[] | null>(null);
   const [contadores, setContadores] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  // Bug #13055 — paginación de servidor estándar, con «Filas por página».
+  const { page, pageSize, setPage, setPageSize } = usePaginacion(PAGE_SIZE);
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [abierta, setAbierta] = useState<string | null>(null);
@@ -178,7 +179,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   // Guard anti-race: solo se aplica el resultado de la petición más reciente.
   const reqIdRef = useRef(0);
 
-  const load = useCallback(async (f: Filtros, targetPage: number) => {
+  const load = useCallback(async (f: Filtros, targetPage: number, tamano: number) => {
     const reqId = ++reqIdRef.current;
     setFetching(true);
     try {
@@ -193,7 +194,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
         familia: f.familia || undefined,
         instanceId: f.instanceId || undefined,
         page: targetPage,
-        pageSize: PAGE_SIZE,
+        pageSize: tamano,
       };
       const res = await fetchLogQxBandeja(params);
       if (reqId !== reqIdRef.current) return;
@@ -214,8 +215,8 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   // disponible en render. Mismo patrón que Auditoria.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load(aplicados, page);
-  }, [aplicados, page, load]);
+    void load(aplicados, page, pageSize);
+  }, [aplicados, page, pageSize, load]);
 
   const aplicar = useCallback(
     (f: Filtros) => {
@@ -223,7 +224,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
       setAbierta(null);
       setAplicados(f);
     },
-    [],
+    [setPage],
   );
 
   const handleSubmit = useCallback(
@@ -485,11 +486,12 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
         </button>
       </form>
 
+      {/* Bug #13055 — carga con el loader del carrito (antes, esqueleto). */}
+      {status === "loading" && <CarLoaderModal label="Cargando LOG QX…" />}
       <UiStateBoundary
-        status={status}
-        skeletonRows={6}
+        status={status === "loading" ? "ready" : status}
         errorMessage={error ?? "No se pudo cargar el LOG QX."}
-        onRetry={() => void load(aplicados, page)}
+        onRetry={() => void load(aplicados, page, pageSize)}
         emptyMessage="Ningún trámite con integración Quipux coincide con los filtros. Amplía el rango de fechas o quita algún filtro."
       >
         {entries && entries.length > 0 && (
@@ -498,21 +500,31 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
                 pastilla #DFE5ED y cada fila como tarjeta blanca separada, no una rejilla de
                 bordes. */}
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] border-separate border-spacing-y-2 text-xs">
+              <table className="w-full min-w-[1040px] text-xs" style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
                 <thead>
-                  <tr
-                    className="text-left text-[10px] font-semibold uppercase"
-                    style={{ color: "#162744" }}
-                  >
-                    <th className="rounded-l-xl px-3 py-2.5" style={{ background: "#DFE5ED", width: 34 }}>
+                  <tr>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG, width: 34 }}
+                    >
                       <span className="sr-only">Detalle</span>
                     </th>
                     {COLUMNAS.map((c) => (
-                      <th key={c} className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                      <th
+                        key={c}
+                        scope="col"
+                        className={TABLA_HEADER_CELL_CLS}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
                         {c}
                       </th>
                     ))}
-                    <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                    >
                       Antigüedad
                     </th>
                   </tr>
@@ -535,15 +547,19 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
                 </tbody>
               </table>
             </div>
-            {/* Misma paginación numerada del listado de trámites (`PageNav`). */}
-            <PageNav
+            <Pagination
               page={page}
-              totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
-              resumen={resumenPagina(page, PAGE_SIZE, total)}
+              pageSize={pageSize}
+              totalCount={total}
               ariaLabel="Paginación del LOG QX"
+              noun="trámites"
               onPageChange={(p) => {
                 setAbierta(null);
                 setPage(Math.max(1, p));
+              }}
+              onPageSizeChange={(n) => {
+                setAbierta(null);
+                setPageSize(n);
               }}
             />
           </>
@@ -622,8 +638,8 @@ function FilaTramite({
   return (
     <>
       <tr
-        className={`cursor-pointer transition ${
-          abierta ? "bg-[#557EFF]/[0.06]" : "bg-white hover:bg-[#557EFF]/[0.04] dark:bg-[#0B0F14]"
+        className={`cursor-pointer bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${
+          abierta ? "shadow-[0_8px_24px_rgba(85,126,255,0.18)]" : ""
         }`}
         onClick={onToggle}
         tabIndex={0}

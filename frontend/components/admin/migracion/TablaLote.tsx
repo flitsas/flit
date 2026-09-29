@@ -10,6 +10,14 @@ import {
 } from "@/lib/migracion/progreso";
 import { claveFila, enlaceTramite, ETIQUETA_TRAMITE } from "@/lib/migracion/types";
 import { ReporteMigracion } from "./ReporteMigracion";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 
 /**
  * La tabla del lote: una casilla por trámite y el resultado de cada uno en cuanto llega.
@@ -30,6 +38,12 @@ export function TablaLote({
   bloqueada: boolean;
 }) {
   const [abierta, setAbierta] = useState<string | null>(null);
+  // Bug #13055 — tabla homologada con el modelo de trámites: sin tarjeta envolvente, cabecera y
+  // filas del modelo y paginación en cliente con filas por página. La selección vive en `seleccion`
+  // (por clave), así que cambiar de página no la pierde.
+  const pg = usePaginacion();
+  const head = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG } as const;
+  const cell = { borderColor: "#DFE5ED" } as const;
 
   const seleccionables = filas.filter((f) => !estaTerminada(f));
   const todasMarcadas =
@@ -53,11 +67,16 @@ export function TablaLote({
   }
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-[#DFE5ED] dark:border-white/10">
-      <table className="w-full min-w-[640px] text-sm">
+    <div className="flex flex-col">
+    <div className="overflow-x-auto">
+      <table
+        className="min-w-[640px] text-sm"
+        style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+      >
+        <caption className="sr-only">Trámites del lote de migración</caption>
         <thead>
-          <tr className="border-b border-[#DFE5ED] text-left text-xs uppercase tracking-wide opacity-60 dark:border-white/10">
-            <th scope="col" className="w-10 p-3">
+          <tr>
+            <th scope="col" className={`${TABLA_HEADER_CELL_CLS} w-10 rounded-l-xl`} style={head}>
               <input
                 type="checkbox"
                 aria-label="Seleccionar todos los pendientes"
@@ -67,22 +86,22 @@ export function TablaLote({
                 disabled={bloqueada || seleccionables.length === 0}
               />
             </th>
-            <th scope="col" className="w-16 p-3 font-semibold">Fila</th>
-            <th scope="col" className="p-3 font-semibold">Trámite</th>
-            <th scope="col" className="p-3 font-semibold">Id V1</th>
-            <th scope="col" className="p-3 font-semibold">Estado</th>
-            <th scope="col" className="p-3 font-semibold">Resultado</th>
+            <th scope="col" className={`${TABLA_HEADER_CELL_CLS} w-16`} style={head}>Fila</th>
+            <th scope="col" className={TABLA_HEADER_CELL_CLS} style={head}>Trámite</th>
+            <th scope="col" className={TABLA_HEADER_CELL_CLS} style={head}>Id V1</th>
+            <th scope="col" className={TABLA_HEADER_CELL_CLS} style={head}>Estado</th>
+            <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`} style={head}>Resultado</th>
           </tr>
         </thead>
         <tbody>
-          {filas.map((fila) => {
+          {pg.paginar(filas).map((fila) => {
             const clave = claveFila(fila);
             const desplegada = abierta === clave;
 
             return (
               <Fragment key={clave}>
-                <tr className="border-b border-[#DFE5ED]/60 last:border-0 dark:border-white/5">
-                  <td className="p-3">
+                <tr className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                  <td className="rounded-l-xl border-y border-l px-4 py-3" style={cell}>
                     <input
                       type="checkbox"
                       aria-label={`Seleccionar ${ETIQUETA_TRAMITE[fila.tramite]} ${fila.v1Id}`}
@@ -92,10 +111,10 @@ export function TablaLote({
                       disabled={bloqueada}
                     />
                   </td>
-                  <td className="p-3 tabular-nums opacity-60">{fila.fila}</td>
-                  <td className="p-3">{ETIQUETA_TRAMITE[fila.tramite]}</td>
-                  <td className="p-3 font-medium tabular-nums">{fila.v1Id}</td>
-                  <td className="p-3">
+                  <td className="border-y px-4 py-3 tabular-nums opacity-60" style={cell}>{fila.fila}</td>
+                  <td className="border-y px-4 py-3" style={cell}>{ETIQUETA_TRAMITE[fila.tramite]}</td>
+                  <td className="border-y px-4 py-3 font-medium tabular-nums" style={cell}>{fila.v1Id}</td>
+                  <td className="border-y px-4 py-3" style={cell}>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <Estado estado={fila.estado} />
                       {/*
@@ -110,7 +129,7 @@ export function TablaLote({
                       )}
                     </div>
                   </td>
-                  <td className="p-3">
+                  <td className="rounded-r-xl border-y border-r px-4 py-3" style={cell}>
                     <div className="flex flex-wrap items-center gap-2">
                       {fila.respuesta?.destino && (
                         <a
@@ -145,8 +164,12 @@ export function TablaLote({
                 </tr>
 
                 {desplegada && fila.respuesta && (
-                  <tr className="border-b border-[#DFE5ED]/60 dark:border-white/5">
-                    <td colSpan={6} className="bg-black/[0.02] p-4 dark:bg-white/[0.02]">
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="rounded-xl border bg-white p-4 dark:bg-[#0B0F14]"
+                      style={cell}
+                    >
                       <ReporteMigracion respuesta={fila.respuesta} />
                     </td>
                   </tr>
@@ -156,6 +179,16 @@ export function TablaLote({
           })}
         </tbody>
       </table>
+    </div>
+    <Pagination
+      page={pg.page}
+      pageSize={pg.pageSize}
+      totalCount={filas.length}
+      onPageChange={pg.setPage}
+      onPageSizeChange={pg.setPageSize}
+      ariaLabel="Paginación del lote"
+      noun="trámites"
+    />
     </div>
   );
 }

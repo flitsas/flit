@@ -154,7 +154,7 @@ function JobsTable({ rows }: { rows: UnifiedJobRow[] }) {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.key} className={`bg-white text-xs dark:bg-[#162744] ${TABLA_ROW_HOVER_CLS}`}>
+            <tr key={row.key} className={`bg-white text-xs dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
               <td
                 className="rounded-l-xl border-y border-l px-4 py-3 align-middle"
                 style={{ borderColor: BORDER }}

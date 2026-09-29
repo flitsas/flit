@@ -1,24 +1,19 @@
 "use client";
 
-import { PageNav } from "@/components/atom/PageNav";
+import { Pagination } from "@/components/atom/Pagination";
 
 /**
- * Paginación server-side de las tablas OT. Delega en `PageNav`, la MISMA pieza que usa el listado
- * del gestor: páginas numeradas con elipsis, alineadas a la derecha, en el azul de marca sobre su
- * propio tinte — que es la paginación del diseño.
- *
- * Antes delegaba en `Pagination`, centrada y con "Anterior / Siguiente". Las dos hacían lo mismo
- * con distinta cara, así que la bandeja y el listado del gestor paginaban de dos formas.
- *
- * Se conserva la firma (`totalCount` + `pageSize`) para no tocar a los consumidores
- * (ClientProceduresTable, bitácora de WebhooksSection); el total de páginas y la línea de conteo
- * se derivan aquí.
+ * Bug #13055 — paginación homologada con el modelo de trámites. Reexport fino de `Pagination`
+ * (numerada, «Filas por página» y «Mostrando X–Y de N»); se conserva la firma para no tocar a los
+ * consumidores que aún la importan. Con `onPageSizeChange` muestra el selector de filas.
  */
 export interface OtTablePaginationProps {
   totalCount: number;
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
+  ariaLabel?: string;
 }
 
 export function OtTablePagination({
@@ -26,20 +21,18 @@ export function OtTablePagination({
   page,
   pageSize,
   onPageChange,
+  onPageSizeChange,
+  ariaLabel = "Paginación de trámites del organismo",
 }: OtTablePaginationProps) {
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const desde = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
-  const hasta = Math.min(page * pageSize, totalCount);
-
   return (
-    <PageNav
+    <Pagination
       page={page}
-      totalPages={totalPages}
+      pageSize={pageSize}
+      totalCount={totalCount}
       onPageChange={onPageChange}
-      // Rango y no un solo número: la bandeja pagina en SERVIDOR, así que "Mostrando 5 de 420"
-      // no diría en qué punto de las 420 se está.
-      resumen={`Mostrando ${desde}–${hasta} de ${totalCount}`}
-      ariaLabel="Paginación de trámites del organismo"
+      onPageSizeChange={onPageSizeChange}
+      ariaLabel={ariaLabel}
+      noun="trámites"
       className="mt-auto"
     />
   );

@@ -79,6 +79,12 @@ export interface WizardAccordionProps {
    * hijo con el mismo nivel).
    */
   level?: 'h3' | 'h4';
+  /**
+   * Bug #13055 — conserva el contenido montado (solo oculto) al colapsar. Necesario cuando el hijo
+   * guarda estado sin persistir o expone un ref de guardado (`CommercialForm`, `PrendaForm`): al
+   * desmontarse, lo digitado se perdía y "Guardar y continuar" veía el ref en null.
+   */
+  keepMounted?: boolean;
 }
 
 export function WizardAccordion({
@@ -94,6 +100,7 @@ export function WizardAccordion({
   testId,
   className = '',
   level = 'h3',
+  keepMounted = false,
 }: WizardAccordionProps) {
   const HeadingTag = level;
   const rowCtx = useContext(WizardAccordionRowCtx);
@@ -121,7 +128,8 @@ export function WizardAccordion({
     <div
       data-testid={testId}
       // `overflow-hidden` solo cerrado: con el panel abierto recorta comboboxes absolutos
-      // (p. ej. Secretaría de tránsito en radicación). Cerrado no hay hijos, el clip solo
+      // (p. ej. Secretaría de tránsito en radicación). Cerrado no hay hijos visibles (con
+      // `keepMounted` siguen montados pero con `hidden`), el clip solo
       // redondea el hover de la cabecera.
       className={`${open ? 'overflow-visible' : 'overflow-hidden'} rounded-2xl border bg-white dark:bg-[#162744] ${className}`}
       style={{ borderColor: '#DFE5ED' }}
@@ -169,11 +177,12 @@ export function WizardAccordion({
           </button>
         </div>
       </div>
-      {open ? (
+      {open || keepMounted ? (
         <div
           id={panelId}
           role="region"
           aria-label={regionLabel ?? title}
+          hidden={!open}
           className="border-t px-4 pb-4 pt-3"
           style={{ borderColor: '#DFE5ED' }}
         >

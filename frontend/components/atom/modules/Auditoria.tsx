@@ -5,6 +5,14 @@ import { ModuleTitle } from './ModuleTitle';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { Pagination } from '@/components/atom/Pagination';
 import { UiStateBoundary } from '@/components/admin/UiStateBoundary';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
+import { usePaginacion } from '@/components/atom/usePaginacion';
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from '@/components/atom/table-styles';
 import {
   AuditoriaFilterToolbar,
   EMPTY_AUDITORIA_FILTERS,
@@ -75,9 +83,8 @@ function buildApiFilters(f: AuditoriaUiFilters): Omit<AdminAuditLogQuery, 'page'
   };
 }
 
-/** Opciones de filas por página. */
-const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100];
-const DEFAULT_PAGE_SIZE = 20;
+/** Bug #13055 — tamaño inicial dentro del estándar de filas por página (10/25/50/100). */
+const DEFAULT_PAGE_SIZE = 10;
 
 export function Auditoria() {
   const [entries, setEntries] = useState<AdminAuditLogEntry[] | null>(null);
@@ -86,8 +93,7 @@ export function Auditoria() {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // Paginación server-side.
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const { page, pageSize, setPage, setPageSize } = usePaginacion(DEFAULT_PAGE_SIZE);
   const [total, setTotal] = useState(0);
   // Refs "latest value": se sincronizan en un efecto (nunca escribiendo `.current` en
   // render, para no violar las reglas de refs de React) y se leen dentro de `load` para
@@ -166,7 +172,7 @@ export function Auditoria() {
         setPage(1);
       }, 300);
     }
-  }, []);
+  }, [setPage]);
 
   const handleRefresh = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -178,13 +184,9 @@ export function Auditoria() {
     setFilters(EMPTY_AUDITORIA_FILTERS);
     setApplied(EMPTY_AUDITORIA_FILTERS);
     setPage(1);
-  }, []);
+  }, [setPage]);
 
-  const handlePageChange = useCallback((p: number) => setPage(Math.max(1, p)), []);
-  const handlePageSizeChange = useCallback((size: number) => {
-    setPageSize(size);
-    setPage(1); // cambiar el tamaño reinicia a la primera página
-  }, []);
+  const handlePageChange = useCallback((p: number) => setPage(Math.max(1, p)), [setPage]);
 
   // 4 estados de UI. La carga inicial (skeleton) solo aplica antes de la primera respuesta.
   const initialLoading = !hasLoadedOnce && entries === null && error === null;
@@ -246,9 +248,10 @@ export function Auditoria() {
         </div>
       )}
 
+      {/* Bug #13055 — carga con el loader del carrito; vacío/error con UiStateBoundary. */}
+      {status === 'loading' && <CarLoaderModal label="Cargando auditoría…" />}
       <UiStateBoundary
-        status={status}
-        skeletonRows={6}
+        status={status === 'loading' ? 'ready' : status}
         errorMessage={error ?? 'No se pudo cargar la auditoría.'}
         onRetry={handleRefresh}
         emptyMessage={
@@ -260,25 +263,14 @@ export function Auditoria() {
         {entries && entries.length > 0 && (
           <>
             <AuditoriaTable rows={entries} />
-            <div className="flex flex-wrap items-center justify-between gap-3 shrink-0">
-              <label className="flex items-center gap-1.5 text-[11px]">
-                <span className="opacity-60">Filas por página</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                  disabled={fetching}
-                  aria-label="Filas por página"
-                  className="rounded-lg border bg-white px-2 py-1 text-xs outline-none focus:border-[#557EFF] disabled:opacity-50 dark:bg-[#0B0F14]"
-                >
-                  {PAGE_SIZE_OPTIONS.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <Pagination page={page} pageSize={pageSize} totalCount={total} onPageChange={handlePageChange} className="mt-0 justify-end" />
-            </div>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              totalCount={total}
+              onPageChange={handlePageChange}
+              onPageSizeChange={setPageSize}
+              noun="registros de auditoría"
+            />
           </>
         )}
       </UiStateBoundary>
@@ -287,39 +279,44 @@ export function Auditoria() {
 }
 
 /**
- * Plantilla de columnas compartida por cabecera y filas: Fecha/hora, Módulo, Operación,
- * Resultado, Actor, Afectado, Tipo tenant, IP.
+ * Bug #13055 — tabla homologada con el modelo de trámites: `<table>` semántica (antes una grilla de
+ * div) con la cabecera #DFE5ED fija y filas-tarjeta de `table-styles`.
+ * Columnas: Fecha/hora, Módulo, Operación, Resultado, Actor, Afectado, Tipo tenant, IP.
  */
-const GRID_COLS =
-  'minmax(0,1.3fr) minmax(0,0.9fr) minmax(0,1fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.1fr) minmax(0,0.9fr)';
+const COLUMNAS = ['Fecha y hora', 'Módulo', 'Operación', 'Resultado', 'Actor', 'Afectado', 'Tipo tenant', 'IP'];
+const CELDA = 'border-y px-4 py-3';
+const CELDA_STYLE = { borderColor: '#DFE5ED' };
 
 function AuditoriaTable({ rows }: { rows: AdminAuditLogEntry[] }) {
   return (
     // Scroll horizontal en pantallas angostas. `shrink-0` evita que el flex del módulo
     // colapse el contenedor de scroll a casi nada.
     <div className="overflow-x-auto shrink-0">
-      <div className="min-w-[960px]">
-        {/* Cabecera decorativa: el lector de pantalla lee el aria-label completo de cada fila. */}
-        <div
-          className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
-          style={{ background: '#DFE5ED', color: '#162744', gridTemplateColumns: GRID_COLS }}
-          aria-hidden="true"
-        >
-          <div>Fecha y hora</div>
-          <div>Módulo</div>
-          <div>Operación</div>
-          <div>Resultado</div>
-          <div>Actor</div>
-          <div>Afectado</div>
-          <div>Tipo tenant</div>
-          <div>IP</div>
-        </div>
-        <ul className="space-y-2 pt-2" aria-label="Registros de auditoría">
+      <table
+        aria-label="Registros de auditoría"
+        className="text-xs"
+        style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px', minWidth: 960 }}
+      >
+        <thead>
+          <tr>
+            {COLUMNAS.map((col, i) => (
+              <th
+                key={col}
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? 'rounded-l-xl' : ''} ${i === COLUMNAS.length - 1 ? 'rounded-r-xl' : ''}`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
           {rows.map((r) => (
             <AuditoriaRow key={r.id} row={r} />
           ))}
-        </ul>
-      </div>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -361,41 +358,41 @@ function AuditoriaRow({ row: r }: { row: AdminAuditLogEntry }) {
     `, actor ${shortId(r.changedBy)}, afectado ${afectado}, tenant ${tenantTypeLabel}, IP ${r.clientIp ?? 'no disponible'}.`;
 
   return (
-    <li>
-      <div
-        role="row"
-        aria-label={ariaLabel}
-        className="grid gap-2 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
-        style={{ gridTemplateColumns: GRID_COLS }}
-      >
-        <div className="min-w-0 text-[10px] leading-tight opacity-80">{formatFecha(r.changedAt)}</div>
-        <div className="min-w-0 truncate">{moduleLabel}</div>
-        <div className="min-w-0 truncate font-mono text-[11px]">{r.operation ?? '—'}</div>
-        <div className="min-w-0">
-          {r.result ? (
-            <StatusBadge
-              label={resultLabel}
-              tone={isSuccess ? 'success' : 'danger'}
-              ariaLabel={`Resultado: ${resultLabel}`}
-            />
-          ) : (
-            <span className="opacity-60">—</span>
-          )}
-          {isFailure && r.errorCode && (
-            <span className="mt-0.5 block text-[10px] opacity-70 truncate" title={r.errorCode}>
-              {r.errorCode}
-            </span>
-          )}
-        </div>
-        <div className="min-w-0 truncate font-mono text-[11px]" title={r.changedBy ?? undefined}>
-          {shortId(r.changedBy)}
-        </div>
-        <div className="min-w-0 truncate font-mono text-[11px]" title={r.targetEntityId ?? undefined}>
-          {afectado}
-        </div>
-        <div className="min-w-0 truncate">{tenantTypeLabel}</div>
-        <div className="min-w-0 truncate font-mono text-[11px]">{r.clientIp ?? '—'}</div>
-      </div>
-    </li>
+    <tr
+      aria-label={ariaLabel}
+      className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+    >
+      <td className={`${CELDA} rounded-l-xl border-l text-[10px] leading-tight`} style={CELDA_STYLE}>
+        <span className="opacity-80">{formatFecha(r.changedAt)}</span>
+      </td>
+      <td className={CELDA} style={CELDA_STYLE}>{moduleLabel}</td>
+      <td className={`${CELDA} font-mono text-[11px]`} style={CELDA_STYLE}>{r.operation ?? '—'}</td>
+      <td className={CELDA} style={CELDA_STYLE}>
+        {r.result ? (
+          <StatusBadge
+            label={resultLabel}
+            tone={isSuccess ? 'success' : 'danger'}
+            ariaLabel={`Resultado: ${resultLabel}`}
+          />
+        ) : (
+          <span className="opacity-60">—</span>
+        )}
+        {isFailure && r.errorCode && (
+          <span className="mt-0.5 block text-[10px] opacity-70 truncate" title={r.errorCode}>
+            {r.errorCode}
+          </span>
+        )}
+      </td>
+      <td className={`${CELDA} font-mono text-[11px]`} style={CELDA_STYLE} title={r.changedBy ?? undefined}>
+        {shortId(r.changedBy)}
+      </td>
+      <td className={`${CELDA} font-mono text-[11px]`} style={CELDA_STYLE} title={r.targetEntityId ?? undefined}>
+        {afectado}
+      </td>
+      <td className={CELDA} style={CELDA_STYLE}>{tenantTypeLabel}</td>
+      <td className={`${CELDA} rounded-r-xl border-r font-mono text-[11px]`} style={CELDA_STYLE}>
+        {r.clientIp ?? '—'}
+      </td>
+    </tr>
   );
 }

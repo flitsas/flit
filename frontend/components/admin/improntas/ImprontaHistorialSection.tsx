@@ -1,14 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { fetchImprontasHistorial } from "@/lib/api/admin-improntas";
 import type { ImprontaHistorialItem } from "@/lib/api/types-improntas";
 import { ImprontaHistorialTable } from "./ImprontaHistorialTable";
 import { IMPRONTA_FILTER_FORM_CLS, IMPRONTA_INPUT_CLS } from "./improntas-form-styles";
 import { improntaDateFromToIso, improntaDateToToIso } from "./improntas-nav";
-
-const PAGE_SIZE = 20;
 
 interface ImprontaFilters {
   placa: string;
@@ -33,7 +32,8 @@ export function ImprontaHistorialSection() {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [rows, setRows] = useState<ImprontaHistorialItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
+  // Bug #13055: paginación estándar con «Filas por página» (10/25/50/100), de servidor.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
 
   const [placaInput, setPlacaInput] = useState("");
   const [dateFromInput, setDateFromInput] = useState("");
@@ -41,7 +41,7 @@ export function ImprontaHistorialSection() {
   const [appliedFilters, setAppliedFilters] = useState<ImprontaFilters>(EMPTY_FILTERS);
 
   const load = useCallback(
-    async (filters: ImprontaFilters, targetPage: number, signal?: AbortSignal) => {
+    async (filters: ImprontaFilters, targetPage: number, size: number, signal?: AbortSignal) => {
       setStatus("loading");
       try {
         const result = await fetchImprontasHistorial(
@@ -50,7 +50,7 @@ export function ImprontaHistorialSection() {
             dateFrom: improntaDateFromToIso(filters.dateFrom),
             dateTo: improntaDateToToIso(filters.dateTo),
             page: targetPage,
-            pageSize: PAGE_SIZE,
+            pageSize: size,
           },
           signal,
         );
@@ -67,21 +67,21 @@ export function ImprontaHistorialSection() {
         }
       }
     },
-    [],
+    [setPage],
   );
 
   useEffect(() => {
     const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga al cambiar de página, con los filtros ya aplicados
-    void load(appliedFilters, page, controller.signal);
+    void load(appliedFilters, page, pageSize, controller.signal);
     return () => controller.abort();
-  }, [load, page, appliedFilters]);
+  }, [load, page, pageSize, appliedFilters]);
 
   const applyFilters = () => {
     const next: ImprontaFilters = { placa: placaInput, dateFrom: dateFromInput, dateTo: dateToInput };
     setAppliedFilters(next);
     setPage(1);
-    void load(next, 1);
+    void load(next, 1, pageSize);
   };
 
   const hasActiveFilter =
@@ -141,7 +141,7 @@ export function ImprontaHistorialSection() {
 
       <UiStateBoundary
         status={status}
-        onRetry={() => void load(appliedFilters, page)}
+        onRetry={() => void load(appliedFilters, page, pageSize)}
         skeletonRows={5}
         emptyMessage={
           hasActiveFilter
@@ -154,8 +154,9 @@ export function ImprontaHistorialSection() {
           rows={rows}
           totalCount={totalCount}
           page={page}
-          pageSize={PAGE_SIZE}
+          pageSize={pageSize}
           onPageChange={setPage}
+          onPageSizeChange={setPageSize}
         />
       </UiStateBoundary>
     </div>

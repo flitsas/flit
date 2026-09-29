@@ -302,11 +302,11 @@ export function TrendChart({
           <table className={`min-w-[28rem] ${CARDLIST_TABLE}`}>
             <thead>
               <tr className={CARDLIST_HEAD_ROW}>
-                <th className={CARDLIST_TH}>Periodo</th>
-                <th className={CARDLIST_TH}>Radicados</th>
-                <th className={CARDLIST_TH}>Aprobados</th>
-                <th className={CARDLIST_TH}>Rechazados</th>
-                <th className={CARDLIST_TH}>Acumulado</th>
+                <th scope="col" className={CARDLIST_TH}>Periodo</th>
+                <th scope="col" className={CARDLIST_TH}>Radicados</th>
+                <th scope="col" className={CARDLIST_TH}>Aprobados</th>
+                <th scope="col" className={CARDLIST_TH}>Rechazados</th>
+                <th scope="col" className={CARDLIST_TH}>Acumulado</th>
               </tr>
             </thead>
             <tbody>

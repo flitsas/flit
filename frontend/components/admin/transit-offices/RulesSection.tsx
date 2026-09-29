@@ -8,6 +8,8 @@ import { createOtRule, fetchOtRules, updateOtRule } from "@/lib/api/admin-ot";
 import type { OtRule } from "@/lib/api/types-ot";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions } from "@/components/atom/RowActions";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RuleFormPanel } from "./RuleFormPanel";
 
@@ -24,6 +26,8 @@ export function RulesSection({ transitOfficeId }: RulesSectionProps = {}) {
   const [formOpen, setFormOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<OtRule | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
+  const pg = usePaginacion();
 
   // HU #12854 (backend) / HU #12856 — Reglas resuelve el organismo por ?transitOfficeId cuando
   // el caller es Super Admin (mismo patrón que RequirementsSection).
@@ -157,6 +161,9 @@ export function RulesSection({ transitOfficeId }: RulesSectionProps = {}) {
         </button>
       </div>
 
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando reglas…" />
+      ) : (
       <UiStateBoundary
         status={status}
         emptyMessage="No hay reglas configuradas."
@@ -167,12 +174,20 @@ export function RulesSection({ transitOfficeId }: RulesSectionProps = {}) {
       >
         <DataTable
           columns={columns}
-          rows={rules}
+          rows={pg.paginar(rules)}
           getRowKey={(row) => row.id}
           ariaLabel="Reglas del motor de reglas OT"
           minWidth={640}
+          pagination={{
+            page: pg.page,
+            pageSize: pg.pageSize,
+            totalCount: rules.length,
+            onPageChange: pg.setPage,
+            onPageSizeChange: pg.setPageSize,
+          }}
         />
       </UiStateBoundary>
+      )}
 
       <RuleFormPanel
         open={formOpen}

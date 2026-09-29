@@ -925,14 +925,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             },
             cancellationToken).ConfigureAwait(false);
 
-        // HU #12796 (AC3) — hito de asignación de placa, YA confirmado: la placa cambia FUR, mandato y
-        // expediente, así que se anticipan los dos consolidados. Un fallo de asignación no encola nada.
-        if (assigned.Succeeded)
-        {
-            EncolarRegeneracionAnticipada(accessible.ClientTenantId, procedureInstanceId, TipoConsolidado.Wizard);
-            EncolarRegeneracionAnticipada(accessible.ClientTenantId, procedureInstanceId, TipoConsolidado.Maestro);
-        }
-
+        // HU #12796 (AC3) — el hito de asignación de placa SÍ anticipa los dos consolidados, pero lo encola
+        // el endpoint (AdminPlateRangesEndpoints) DESPUÉS de regenerar el FUR. Bug #13055: encolar aquí
+        // dejaba al worker armando el consolidado con el FUR viejo, sin placa, mientras el endpoint aún
+        // regeneraba el nuevo, y lo marcaba vigente.
         return assigned;
     }
 

@@ -14,9 +14,8 @@ import { BannerListTable } from "@/components/admin/banners/BannerListTable";
 import { BannerFormPanel } from "@/components/admin/banners/BannerFormPanel";
 import { BannerDeleteDialog } from "@/components/admin/banners/BannerDeleteDialog";
 import { createBanner, fetchBanners, updateBanner, type Banner, type BannerPagedResult } from "@/lib/api/admin-banners";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { ADMIN_BACK_LINK_CLS } from "@/components/admin/admin-ui-styles";
-
-const PAGE_SIZE = 20;
 
 /**
  * Consola admin de banners promocionales (HU #12241, Feature #12236): listado administrable
@@ -49,7 +48,8 @@ function NoAccess() {
 function BannersList() {
   const router = useRouter();
   const { show } = useToast();
-  const [page, setPage] = useState(1);
+  // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [result, setResult] = useState<BannerPagedResult | null>(null);
   const [formTarget, setFormTarget] = useState<Banner | null | "new">(null);
@@ -59,7 +59,7 @@ function BannersList() {
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const data = await fetchBanners({ page, pageSize: PAGE_SIZE }, signal);
+        const data = await fetchBanners({ page, pageSize }, signal);
         if (signal?.aborted) return;
         setResult(data);
         setStatus(data.data.length === 0 ? "empty" : "ready");
@@ -67,7 +67,7 @@ function BannersList() {
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [page],
+    [page, pageSize],
   );
 
   useEffect(() => {
@@ -140,6 +140,7 @@ function BannersList() {
               page={result.page}
               pageSize={result.pageSize}
               onPageChange={setPage}
+              onPageSizeChange={setPageSize}
               onEdit={setFormTarget}
               onDelete={setDeleteTarget}
             />

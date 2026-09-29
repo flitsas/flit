@@ -29,6 +29,8 @@ export interface BannerListTableProps {
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  /** Filas por página (Bug #13055). */
+  onPageSizeChange?: (pageSize: number) => void;
   onEdit: (banner: Banner) => void;
   onDelete: (banner: Banner) => void;
 }
@@ -49,6 +51,7 @@ export function BannerListTable({
   page,
   pageSize,
   onPageChange,
+  onPageSizeChange,
   onEdit,
   onDelete,
 }: BannerListTableProps) {
@@ -196,7 +199,7 @@ export function BannerListTable({
         </table>
       </div>
 
-      <Pagination page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={onPageChange} className="mt-auto" />
+      <Pagination page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} className="mt-auto" />
 
       <Modal
         open={preview !== null}

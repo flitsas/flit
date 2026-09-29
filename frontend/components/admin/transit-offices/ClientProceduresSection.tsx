@@ -105,8 +105,9 @@ import { buildWorkbook, type DataColumn } from "@/components/consultas/columns";
 import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from "@/components/consultas/export";
 import { selloDeArchivo } from "@/components/operacion/tramites-export";
 import { XLSX_MIME } from "@/lib/xlsx";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 
-const PAGE_SIZE = 20;
+// Bug #13055 — tamaño inicial; el usuario lo cambia con «Filas por página».
 
 /**
  * Tamaño de página del recorrido del export: el tope DURO del endpoint
@@ -431,7 +432,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [status, setStatus] = useState<UiStatus>("loading");
   const [rows, setRows] = useState<OtClientProcedure[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
+  const { page, setPage, pageSize, setPageSize } = usePaginacion();
   // N 03 — `entregado` reemplaza a pending_ot como estado en cola de decisión OT.
   const [statusFilter, setStatusFilter] = useState(ESTADO_POR_DEFECTO);
   /** Sub-estado de placa; lo fijan las tarjetas de la cabecera, no el panel de búsqueda. */
@@ -792,7 +793,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           {
             ...buildListQuery(),
             page: targetPage,
-            pageSize: PAGE_SIZE,
+            pageSize,
           },
           signal,
           transitOfficeId ? { transitOfficeId } : undefined,
@@ -834,7 +835,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [buildListQuery, page, transitOfficeId],
+    [buildListQuery, page, pageSize, transitOfficeId],
   );
 
   // Epic #12686 (HU #12808) — la tira se mantiene al día sola; la tabla, no. La tarjeta que manda
@@ -1778,8 +1779,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           rows={rows}
           totalCount={totalCount}
           page={page}
-          pageSize={PAGE_SIZE}
+          pageSize={pageSize}
           onPageChange={setPage}
+          onPageSizeChange={setPageSize}
           visibleColumns={visibleColumns}
           sortBy={sortBy}
           sortDir={sortDir}

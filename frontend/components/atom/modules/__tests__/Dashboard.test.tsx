@@ -129,11 +129,11 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(screen.queryByText("Tu compañía no tiene módulos adicionales activados.")).not.toBeInTheDocument();
   });
 
-  it("BUG12588 / HU #12725 D3: «Otros» ya no es KPI aparte (absorbido en Total) y capitaliza estados en Distribución General", async () => {
+  it("Bug #13055 (revierte D3 de HU #12725): «Otros Trámites» vuelve como KPI y se capitalizan los estados en Distribución General", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
     await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalled());
-    expect(screen.queryByText("Otros Trámites")).not.toBeInTheDocument();
+    expect(await screen.findByText("Otros Trámites")).toBeInTheDocument();
     expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
     // Labels de negocio capitalizados (estadoLabel), no los códigos crudos que persiste la BD.
     expect(await screen.findByText("Aprobado")).toBeInTheDocument();
@@ -596,7 +596,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
     mocks.getActiveBanners.mockResolvedValue([]);
   });
 
-  it.each(["Total trámites", "Matrículas", "Traspasos", "Completados"])(
+  it.each(["Total trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
     "«%s» se renderiza completo, sin recortar",
     async (label) => {
       render(<Dashboard onNewTramite={noop} />);
@@ -667,16 +667,16 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
     expect(filterRow.className).toMatch(/grid-cols-2/);
   });
 
-  it("AC3 — KPIs en grilla 2×2 (Total, Matrículas, Traspasos, Completados); sin «Otros Trámites»", async () => {
+  it("AC3 (Bug #13055) — KPIs en 3 columnas con «Otros Trámites» de vuelta", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
     const grid = await screen.findByTestId("dashboard-kpi-grid");
-    expect(grid.className).toContain("grid-cols-2");
+    expect(grid.className).toContain("grid-cols-3");
     expect(within(grid).getByText("Total trámites")).toBeInTheDocument();
     expect(within(grid).getByText("Matrículas")).toBeInTheDocument();
     expect(within(grid).getByText("Traspasos")).toBeInTheDocument();
+    expect(within(grid).getByText("Otros Trámites")).toBeInTheDocument();
     expect(within(grid).getByText("Completados")).toBeInTheDocument();
-    expect(within(grid).queryByText("Otros Trámites")).not.toBeInTheDocument();
     // Total incluye todas las categorías (5+2+0 = 7 en FULL_OVERVIEW).
     expect(within(grid).getByText("7")).toBeInTheDocument();
   });
@@ -713,11 +713,11 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
     expect(filterRow.compareDocumentPosition(kpiGrid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("AC4 contrato — exactamente 4 tarjetas KPI en el grid (sin quinta «Otros»)", async () => {
+  it("AC4 contrato (Bug #13055) — exactamente 5 tarjetas KPI en el grid, «Otros» incluida", async () => {
     render(<Dashboard onNewTramite={noop} />);
     const grid = await screen.findByTestId("dashboard-kpi-grid");
     const cards = grid.querySelectorAll(":scope > div");
-    expect(cards).toHaveLength(4);
+    expect(cards).toHaveLength(5);
   });
 
   it("AC5 contrato — layout apila en mobile (grid-cols-1) y items-stretch; dark tokens en KPI", async () => {

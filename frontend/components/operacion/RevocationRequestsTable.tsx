@@ -3,7 +3,7 @@
 import { Eye } from 'lucide-react';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { RowActions } from '@/components/atom/RowActions';
-import { PageNav } from '@/components/atom/PageNav';
+import { Pagination } from '@/components/atom/Pagination';
 import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
@@ -29,6 +29,11 @@ export interface RevocationRequestsTableProps {
   skip: number;
   take: number;
   onPageChange: (skip: number) => void;
+  /**
+   * Bug #13055 — «Filas por página»: recibe el nuevo `take`. Quien consume debe guardarlo, volver a
+   * `skip = 0` y recargar. Sin este manejador la tabla no ofrece el selector.
+   */
+  onTakeChange?: (take: number) => void;
   onView?: (item: RevocationRequestListItem) => void;
 }
 
@@ -38,12 +43,10 @@ export function RevocationRequestsTable({
   skip,
   take,
   onPageChange,
+  onTakeChange,
   onView,
 }: RevocationRequestsTableProps) {
   const page = Math.floor(skip / take) + 1;
-  const totalPages = Math.max(1, Math.ceil(total / take));
-  const desde = total === 0 ? 0 : skip + 1;
-  const hasta = Math.min(skip + items.length, total);
 
   return (
     <div className="flex flex-1 flex-col gap-3">
@@ -179,11 +182,13 @@ export function RevocationRequestsTable({
         </table>
       </div>
 
-      <PageNav
+      <Pagination
         page={page}
-        totalPages={totalPages}
+        pageSize={take}
+        totalCount={total}
         onPageChange={(p) => onPageChange((p - 1) * take)}
-        resumen={total > 0 ? `Mostrando ${desde}–${hasta} de ${total}` : 'Sin resultados'}
+        onPageSizeChange={onTakeChange}
+        noun="resultados"
         ariaLabel="Paginación de solicitudes de revocatoria"
       />
     </div>

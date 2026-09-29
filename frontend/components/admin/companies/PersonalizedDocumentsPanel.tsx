@@ -17,6 +17,13 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
+import { RowActions } from "@/components/atom/RowActions";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -413,30 +420,35 @@ function PersonalizedDocumentSection({
             <History className="h-3.5 w-3.5" aria-hidden />
             Historial
           </h4>
-          <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "#DFE5ED" }}>
-            <table className="w-full text-left text-[11px]" aria-label={`Historial de ${meta.title}`}>
+          {/* Bug #13055 — tabla homologada con el modelo de trámites (fija: historial de versiones, sin paginar) */}
+          <div className="overflow-x-auto">
+            <table
+              className="text-[11px]"
+              aria-label={`Historial de ${meta.title}`}
+              style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+            >
               <thead>
-                <tr className="bg-[#F4F7FC] dark:bg-white/5">
-                  <th scope="col" className="px-3 py-2 font-semibold">Versión</th>
-                  <th scope="col" className="px-3 py-2 font-semibold">Autor</th>
-                  <th scope="col" className="px-3 py-2 font-semibold">Fecha</th>
-                  <th scope="col" className="px-3 py-2 font-semibold">Páginas</th>
-                  <th scope="col" className="px-3 py-2 font-semibold">Vigencia</th>
-                  <th scope="col" className="px-3 py-2 font-semibold">Acciones</th>
+                <tr>
+                  <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Versión</th>
+                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Autor</th>
+                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Fecha</th>
+                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Páginas</th>
+                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Vigencia</th>
+                  <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {[...history]
                   .sort((a, b) => b.version - a.version)
                   .map((v) => (
-                    <tr key={v.id} className="border-t" style={{ borderColor: "#DFE5ED" }}>
-                      <td className="px-3 py-2 font-mono">v{v.version}</td>
-                      <td className="px-3 py-2 font-mono" title={v.createdBy ?? undefined}>
+                    <tr key={v.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                      <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>v{v.version}</td>
+                      <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }} title={v.createdBy ?? undefined}>
                         {shortId(v.createdBy)}
                       </td>
-                      <td className="px-3 py-2">{formatDate(v.createdAt)}</td>
-                      <td className="px-3 py-2">{v.pageCount ?? "—"}</td>
-                      <td className="px-3 py-2">
+                      <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>{formatDate(v.createdAt)}</td>
+                      <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>{v.pageCount ?? "—"}</td>
+                      <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                         {v.isActive ? (
                           <span
                             className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
@@ -448,29 +460,29 @@ function PersonalizedDocumentSection({
                           <span className="opacity-60">Histórico</span>
                         )}
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void openPreview(v)}
-                            className="text-[11px] font-semibold"
-                            style={{ color: "#557EFF" }}
-                          >
-                            Ver
-                          </button>
-                          {!v.isActive && (
-                            <button
-                              type="button"
-                              disabled={rowBusyId === v.id}
-                              onClick={() => setDialog({ kind: "reactivate", versionId: v.id, version: v.version })}
-                              className="flex items-center gap-1 text-[11px] font-semibold disabled:opacity-50"
-                              style={{ color: "#557EFF" }}
-                            >
-                              <RotateCcw className="h-3 w-3" aria-hidden />
-                              Reactivar
-                            </button>
-                          )}
-                        </div>
+                      <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
+                        <RowActions
+                          actions={[
+                            {
+                              icon: Eye,
+                              label: `Ver versión ${v.version}`,
+                              onClick: () => void openPreview(v),
+                              tone: "primary",
+                            },
+                            ...(!v.isActive
+                              ? [
+                                  {
+                                    icon: RotateCcw,
+                                    label: `Reactivar versión ${v.version}`,
+                                    onClick: () =>
+                                      setDialog({ kind: "reactivate", versionId: v.id, version: v.version }),
+                                    tone: "primary" as const,
+                                    disabled: rowBusyId === v.id,
+                                  },
+                                ]
+                              : []),
+                          ]}
+                        />
                       </td>
                     </tr>
                   ))}
