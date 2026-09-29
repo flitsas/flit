@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
 using Flit.DataMigration.V1.Source;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.DataMigration.V1.Mapping;
@@ -347,6 +349,150 @@ public static class V1MapperShared
             (TransitOfficeFieldKeys.CityName, office.CityName ?? record.Column("traffic_secretary_city")),
         ];
     }
+
+    // ---------------------------------------------------------------- transformación
+
+    /// <summary>
+    /// Una transformación declarada en V1: la bandera de V2 que la marca y, si cambia un dato del
+    /// vehículo, la clave de ese dato y su valor nuevo.
+    /// </summary>
+    public sealed record Transformacion(string ClaveBandera, string? ClaveVehiculo, string? ValorNuevo);
+
+    /// <summary>
+    /// Transformaciones que V1 declaró en el trámite (HU #13072). Las columnas son las mismas en
+    /// traspaso y matrícula.
+    ///
+    /// <para>
+    /// V2 marca una transformación con las claves de <see cref="TramiteMarcas.ClavesTransformacion"/>
+    /// en <c>"true"</c>, y el cambio en sí lo lee del diff entre el dato del RUNT
+    /// (<c>vehicle_*_runt</c>) y el efectivo (<c>vehicle_*</c>). V1 guarda lo mismo con otros nombres:
+    /// el dato original en <c>vehicle_*</c> y el nuevo en <c>new_vehicle_*</c>. El mapper pone el
+    /// original en <c>_runt</c> y el nuevo como efectivo, igual que un trámite nativo.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>is_dismantling_armor</c> (desmonte de blindaje) no tiene clave en V2: se queda en
+    /// <c>legacy_v1_extras</c> como el resto de columnas sin destino.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<Transformacion> Transformaciones(V1SourceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        var result = new List<Transformacion>();
+
+        void Cambio(string columnaSwitch, string columnaNueva, string bandera, string claveVehiculo)
+        {
+            if (EsVerdadero(record.Column(columnaSwitch)))
+            {
+                result.Add(new Transformacion(bandera, claveVehiculo, record.Column(columnaNueva)));
+            }
+        }
+
+        Cambio("switch_vehicle_color", "new_vehicle_color", MandatoObjetoComposer.CambioColor, "vehicle_color");
+        Cambio("switch_vehicle_bodywork", "new_vehicle_bodywork", MandatoObjetoComposer.CambioCarroceria, "vehicle_body_type");
+        Cambio("switch_vehicle_fuel_type", "new_vehicle_fuel_type", MandatoObjetoComposer.CambioCombustible, "vehicle_fuel");
+
+        if (EsVerdadero(record.Column("is_armored_vehicle")))
+        {
+            result.Add(new Transformacion(MandatoObjetoComposer.Blindaje, null, null));
+        }
+
+        return result;
+    }
+
+    // ---------------------------------------------------------------- prenda
+
+    /// <summary>
+    /// Decisiones de prenda de V2 a partir de lo que V1 declaró (HU #13072). Las columnas de prenda
+    /// son las mismas en traspaso y matrícula; <c>has_garment_lifting</c> y
+    /// <c>warranty_creditor_*</c> solo existen en traspaso y en matrícula llegan vacías.
+    ///
+    /// <list type="bullet">
+    ///   <item><c>registered_pledge</c> («Inscripción de prenda a favor de X») ⇒ <c>registrar</c>.</item>
+    ///   <item><c>has_garment_lifting</c> («Levantamiento de prenda») ⇒ <c>levantar</c>.</item>
+    ///   <item>Acreedor del RUNT en <c>warranty_creditor_*</c> sin inscripción ni levantamiento,
+    ///   omitido o no ⇒ <c>omitir</c>: hay gravamen y el trámite siguió sin gestionarlo. Un nativo en
+    ///   ese caso tampoco lleva la marca «Con prenda».</item>
+    /// </list>
+    ///
+    /// <para>
+    /// Las dos primeras reglas son decisiones de producto (2026-09-29); ninguna combinación se
+    /// descarta en silencio. Inscripción y levantamiento pueden coexistir: son familias distintas y
+    /// el índice único de V2 admite una vigente por familia.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<ProcedureInstancePrenda> MapPrendas(
+        V1SourceRecord record,
+        Guid tenantId,
+        Guid instanceId,
+        Guid systemUserId,
+        DateTimeOffset createdAt)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        var inscrita = EsVerdadero(record.Column("registered_pledge"));
+        var levantada = EsVerdadero(record.Column("has_garment_lifting"));
+        var aFavorDe = record.Column("pledge_in_favour");
+        var acreedorRunt = record.Column("warranty_creditor_name");
+        var documentoRunt = record.Column("warranty_creditor_document_number");
+
+        var prendas = new List<ProcedureInstancePrenda>();
+
+        ProcedureInstancePrenda Prenda(string decision, string? nombre, string? documento) => new()
+        {
+            Id = DeterministicGuid.ForV1Child(record.SourceTable, record.Id, $"prenda:{decision}"),
+            TenantId = tenantId,
+            ProcedureInstanceId = instanceId,
+            Decision = decision,
+            Estado = PrendaEstado.Vigente,
+            AccionFamilia = PrendaDecision.AccionFamiliaFor(decision),
+            AcreedorNombre = nombre is null ? null : Truncate(nombre, 200),
+            AcreedorDocumento = documento is null ? null : Truncate(documento, 20),
+            Metadata = JsonSerializer.Serialize(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["origen"] = SourceTag,
+                ["registered_pledge"] = record.Column("registered_pledge"),
+                ["pledge_in_favour"] = aFavorDe,
+                ["has_garment_lifting"] = record.Column("has_garment_lifting"),
+                ["warranty_creditor_name"] = acreedorRunt,
+                ["warranty_creditor_omit_garment"] = record.Column("warranty_creditor_omit_garment"),
+            }),
+            CreatedAt = createdAt,
+            CreatedBy = systemUserId,
+        };
+
+        if (inscrita)
+        {
+            // Sin a-favor-de, el acreedor del RUNT es el único nombre que hay.
+            prendas.Add(Prenda(
+                PrendaDecision.Registrar,
+                aFavorDe ?? acreedorRunt,
+                aFavorDe is null ? documentoRunt : null));
+        }
+
+        if (levantada)
+        {
+            // Se levanta el gravamen que reporta el RUNT; V1 imprime pledge_in_favour en el
+            // literal, así que queda de respaldo.
+            prendas.Add(Prenda(PrendaDecision.Levantar, acreedorRunt ?? aFavorDe, documentoRunt));
+        }
+
+        if (!inscrita && !levantada && acreedorRunt is not null)
+        {
+            prendas.Add(Prenda(PrendaDecision.Omitir, acreedorRunt, documentoRunt));
+        }
+
+        return prendas;
+    }
+
+    /// <summary>
+    /// Un booleano de V1 leído como texto. El lector escribe <c>true</c>/<c>false</c>, pero se
+    /// aceptan también las otras formas afirmativas que V2 ya reconoce en los migrados.
+    /// </summary>
+    public static bool EsVerdadero(string? value) =>
+        value is not null
+        && TramiteMarcas.ValoresAfirmativos.Contains(value.Trim().ToLowerInvariant());
 
     // ---------------------------------------------------------------- utilidades
 
