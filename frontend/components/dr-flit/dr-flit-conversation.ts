@@ -13,6 +13,7 @@ import {
   buildHelpIntro,
   buildHelpValuePrompt,
   buildNormativaIntro,
+  buildQuickManualIntro,
   buildSearchError,
   buildSupportIntro,
   buildTramitesIntro,
@@ -33,6 +34,16 @@ import type {
   DrFlitTramiteResult,
   DrFlitValidacionResult,
 } from "./dr-flit-types";
+import type {
+  DrFlitChatResponse,
+  DrFlitChatTurn,
+  DrFlitChatUsage,
+  DrFlitCitation,
+  DrFlitConsentStatus,
+  DrFlitSupportCaseCreated,
+  DrFlitSupportCaseDraft,
+} from "./dr-flit-chat-types";
+import { validateSupportDraft } from "./dr-flit-support-case";
 
 export type DrFlitMessageRole = "bot" | "user";
 
@@ -52,7 +63,26 @@ export type DrFlitPhase =
   | "showing_validaciones"
   | "showing_help"
   | "showing_support"
-  | "error";
+  | "error"
+  // ── Épica #12718 (ADR-0060 §11) — chat con LLM ──
+  /** Esperando la respuesta de POST /dr-flit/chat. */
+  | "chat_loading"
+  /** Respuesta del LLM (status ok), con o sin citas del manual. */
+  | "showing_chat_reply"
+  // ── Feature #12917 — caso de soporte ──
+  /** Formulario del caso abierto (prellenado). */
+  | "collecting_support_case"
+  /** Resumen + «Confirmar y radicar caso»: único punto que llama a POST /support-cases. */
+  | "confirming_support_case"
+  /** POST /support-cases en curso. */
+  | "submitting_support_case"
+  /** «Tu caso #N quedó radicado». */
+  | "support_case_created"
+  /** El sistema de soporte no respondió: canales estáticos y reintento sin perder el formulario. */
+  | "support_case_error"
+  // ── HU #12931 ──
+  /** Texto de tratamiento de datos con «Acepto» / «Ahora no» antes de usar IA o soporte. */
+  | "awaiting_consent";
 
 export interface DrFlitChatState {
   messages: DrFlitMessage[];
@@ -73,7 +103,33 @@ export interface DrFlitChatState {
   manualHomeHref: string | null;
   isTyping: boolean;
   pendingClientBranch: DrFlitClientBranch | null;
+  /**
+   * HU #12926/#12928 — uso del tope diario que devolvió la última respuesta del chat. Opcional: las
+   * conversaciones guardadas en sessionStorage antes de la épica no lo traen.
+   */
+  chatUsage?: DrFlitChatUsage | null;
+  /** Feature #12917 — formulario del caso en curso (solo ids de adjuntos, nunca binarios). */
+  supportDraft?: DrFlitSupportCaseDraft | null;
+  /** Feature #12917 — resultado de la radicación. */
+  supportResult?: DrFlitSupportCaseCreated | null;
+  /** Feature #12917 — motivo del último fallo al radicar. */
+  supportError?: string | null;
+  /**
+   * HU #12931 — estado del consentimiento del usuario según el backend (`GET /dr-flit/consent`).
+   * `null`/ausente = todavía no se consultó: se trata como no aceptado.
+   */
+  consent?: DrFlitConsentStatus | null;
+  /** HU #12931 — acción que espera la aceptación para continuar. */
+  pendingConsent?: DrFlitPendingConsent | null;
+  /** HU #12931 — motivo si no se pudo registrar la aceptación. */
+  consentError?: string | null;
 }
+
+/** HU #12931 — lo que el usuario pidió antes de que se le solicitara el consentimiento. */
+export type DrFlitPendingConsent =
+  | { kind: "chat"; text: string }
+  | { kind: "support" }
+  | { kind: "submit" };
 
 let messageSeq = 0;
 
@@ -311,6 +367,17 @@ export function applySelectHelpOption(
 export interface UserTextOptions {
   /** HU-F — audiencias del manual visibles para el perfil (`visibleAudiences`). Sin ellas, todo. */
   helpAudiences?: readonly ManualAudience[];
+  /**
+   * HU #12926 — el texto libre fuera de un flujo guiado va al chat con LLM. Apagado (flag
+   * `NEXT_PUBLIC_DR_FLIT_CHAT_ENABLED=false`), se conserva el comportamiento previo: pedir que elija
+   * una opción del menú.
+   */
+  chatEnabled?: boolean;
+  /**
+   * HU #12931 — el usuario no ha aceptado el tratamiento de datos: el texto libre que iría al LLM pide
+   * primero la aceptación y se envía al aceptar.
+   */
+  requireConsent?: boolean;
 }
 
 function applyHelpQuery(
@@ -367,12 +434,21 @@ export function applyUserText(
     text,
   };
 
-  if (state.phase === "awaiting_help_query") {
+  // Con el chat con IA, la pregunta tras «Necesito ayuda» va a la IA (un solo camino para preguntar);
+  // el buscador local del manual queda para cuando el chat está apagado.
+  if (state.phase === "awaiting_help_query" && !options.chatEnabled) {
     return applyHelpQuery(
       { ...state, messages: [...state.messages, userMsg] },
       text,
       options,
     );
+  }
+
+  if ((state.phase !== "awaiting_value" || !state.pendingIntent) && options.chatEnabled) {
+    const withMessage = { ...state, messages: [...state.messages, userMsg] };
+    return options.requireConsent
+      ? applyRequestConsent(withMessage, { kind: "chat", text })
+      : applyChatSend(withMessage, text);
   }
 
   if (state.phase !== "awaiting_value" || !state.pendingIntent) {
@@ -601,8 +677,222 @@ export function isComposerEnabled(state: DrFlitChatState): boolean {
   return (
     state.phase === "idle" ||
     state.phase === "awaiting_value" ||
-    state.phase === "awaiting_help_query"
+    state.phase === "awaiting_help_query" ||
+    state.phase === "showing_chat_reply"
   );
+}
+
+// ── Épica #12718 (ADR-0060 §11) — chat con LLM ─────────────────────────────────────────────────
+
+/** Máximo de turnos previos que acepta el backend (`history.maxItems`). */
+export const DR_FLIT_CHAT_HISTORY_LIMIT = 12;
+
+/** Máximo de caracteres por turno (`maxLength` del contrato). */
+export const DR_FLIT_CHAT_TURN_MAX_LENGTH = 2000;
+
+/**
+ * HU #12926 — el texto libre entra a `chat_loading`; el efecto de `useDrFlitChat` llama al backend.
+ * `state` ya trae el mensaje del usuario al final.
+ */
+export function applyChatSend(state: DrFlitChatState, text: string): DrFlitChatState {
+  return {
+    ...state,
+    ...clearActionState(),
+    phase: "chat_loading",
+    queryValue: text,
+    showSessionMenu: false,
+    showSupportInfo: false,
+    showBackToSearch: false,
+    isTyping: true,
+  };
+}
+
+/**
+ * HU #12926 AC3 — turnos previos al mensaje en curso, acotados a los últimos
+ * {@link DR_FLIT_CHAT_HISTORY_LIMIT}: el payload no crece con la conversación. El último mensaje del
+ * usuario (el que se está enviando) no va aquí: viaja como `message`.
+ */
+export function buildChatHistory(state: DrFlitChatState): DrFlitChatTurn[] {
+  const previous = state.messages.slice(0, -1);
+  return previous
+    .filter((m) => m.text.trim().length > 0)
+    .slice(-DR_FLIT_CHAT_HISTORY_LIMIT)
+    .map((m) => ({
+      role: m.role === "user" ? "user" : "assistant",
+      text: m.text.slice(0, DR_FLIT_CHAT_TURN_MAX_LENGTH),
+    }));
+}
+
+/**
+ * Tarjeta del manual a partir de una cita del LLM. El backend ya validó que el slug existe; del
+ * catálogo local salen la audiencia y el resumen que la tarjeta muestra.
+ */
+export function citationToHelpResult(citation: DrFlitCitation): DrFlitHelpResult {
+  const article = getArticleBySlug(citation.slug);
+  if (article) return toHelpResult(article);
+  return {
+    slug: citation.slug,
+    title: citation.title,
+    audience: "Todos",
+    summary: "",
+    href: citation.href,
+    ...(citation.sourceHref ? { sourceHref: citation.sourceHref, sourceLabel: "Abrir la fuente" } : {}),
+    ...(citation.primarySource ? { primarySource: true } : {}),
+  };
+}
+
+/**
+ * Respuesta del LLM con `status: ok`, bifurcada por intención (ADR-0060 §11):
+ * <ul>
+ *   <li>`duda` (HU #12926) — reply + tarjetas de cita;</li>
+ *   <li>`gestion` (HU #12927) — a la sesión Gestión de siempre: con sugerencia, directo a pedir el
+ *   valor de ese tipo de búsqueda; sin ella, el menú para que el usuario elija;</li>
+ *   <li>`no_claro` (HU #12927) — la pregunta de seguimiento del modelo, y se sigue escribiendo;</li>
+ *   <li>`soporte` — canales de soporte (el formulario de caso llega con la Feature #12917).</li>
+ * </ul>
+ */
+export function applyChatSuccess(
+  state: DrFlitChatState,
+  response: DrFlitChatResponse,
+  /** HU #12929 — borrador prellenado: con él, «soporte» abre el formulario del caso en el chat. */
+  supportDraft?: DrFlitSupportCaseDraft | null,
+): DrFlitChatState {
+  const botMsg: DrFlitMessage = { id: createMessageId(), role: "bot", text: response.reply };
+
+  if (response.intent === "gestion") {
+    return applyChatGestion({ ...state, messages: [...state.messages, botMsg], chatUsage: response.usage }, response);
+  }
+
+  if (response.intent === "soporte" && supportDraft) {
+    return applyOpenSupportCase(
+      { ...state, messages: [...state.messages, botMsg], chatUsage: response.usage },
+      supportDraft,
+    );
+  }
+
+  if (response.intent === "soporte") {
+    return {
+      ...state,
+      ...clearActionState(),
+      messages: [...state.messages, botMsg],
+      phase: "showing_support",
+      session: "ayuda",
+      showSessionMenu: false,
+      showSupportInfo: true,
+      showBackToSearch: true,
+      chatUsage: response.usage,
+    };
+  }
+
+  const helpResults = response.intent === "duda" ? response.citations.map(citationToHelpResult) : [];
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "showing_chat_reply",
+    session: "ayuda",
+    queryValue: state.queryValue,
+    showSessionMenu: false,
+    showSupportInfo: false,
+    showBackToSearch: true,
+    helpResults: helpResults.length > 0 ? helpResults : null,
+    chatUsage: response.usage,
+  };
+}
+
+/**
+ * HU #12928 — margen de UI para avisar que quedan pocos mensajes con el asistente hoy. Es solo
+ * presentación (ajustable aquí): el tope real lo decide y lo cuenta el backend (`usage`).
+ */
+export const DR_FLIT_USAGE_WARNING_MARGIN = 5;
+
+/** Mensajes que quedan hoy según el último `usage`, o `null` si no hay dato. */
+export function remainingChatMessages(state: DrFlitChatState): number | null {
+  const usage = state.chatUsage;
+  if (!usage || usage.dailyLimit <= 0) return null;
+  return Math.max(0, usage.dailyLimit - usage.messagesUsedToday);
+}
+
+/** HU #12928 AC1 — hay que avisar: quedan pocos pero todavía alguno. */
+export function shouldWarnChatUsage(state: DrFlitChatState): boolean {
+  const remaining = remainingChatMessages(state);
+  return remaining !== null && remaining > 0 && remaining <= DR_FLIT_USAGE_WARNING_MARGIN;
+}
+
+/**
+ * HU #12928 AC2 — tope diario alcanzado: el mensaje amigable del backend y de vuelta al menú, que
+ * funciona completo sin LLM. No se bloquea el compositor: al día siguiente (hora Colombia) el backend
+ * vuelve a aceptar mensajes sin que el usuario haga nada (AC3).
+ */
+export function applyChatRateLimited(
+  state: DrFlitChatState,
+  response: DrFlitChatResponse,
+): DrFlitChatState {
+  const botMsg: DrFlitMessage = { id: createMessageId(), role: "bot", text: response.reply };
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "idle",
+    session: "gestion",
+    showBackToSearch: false,
+    ...idleMenuFlags(),
+    chatUsage: response.usage,
+  };
+}
+
+/**
+ * HU #12927 AC1/AC2 — intención de búsqueda. Reutiliza la sesión Gestión existente sin fase nueva: con
+ * `suggestGestionIntent` pide directamente el valor (mismo estado que deja `applySelectIntent`); sin
+ * sugerencia, deja el menú para que el usuario elija el tipo de búsqueda.
+ */
+function applyChatGestion(state: DrFlitChatState, response: DrFlitChatResponse): DrFlitChatState {
+  const suggestion = response.suggestGestionIntent;
+  const selected = suggestion ? applySelectIntent(state, suggestion) : null;
+  if (selected) {
+    // applySelectIntent simula el clic del usuario en el menú («Buscar por placa»); aquí el usuario no
+    // hizo clic, así que se conserva solo la pregunta del bot por el valor.
+    const [, prompt] = selected.next.messages.slice(-2);
+    return {
+      ...selected.next,
+      messages: [...state.messages, ...(prompt ? [prompt] : [])],
+      showBackToSearch: true,
+      chatUsage: state.chatUsage,
+    };
+  }
+
+  return {
+    ...state,
+    ...clearActionState(),
+    phase: "idle",
+    session: "gestion",
+    showSessionMenu: true,
+    showSupportInfo: false,
+    showBackToSearch: false,
+  };
+}
+
+/**
+ * HU #12926 AC2 — el LLM no respondió (degradado, error HTTP o de red): responde el buscador local
+ * del manual, el mismo de siempre, con una nota de que es una respuesta rápida. El menú sigue ahí.
+ */
+export function applyChatDegraded(
+  state: DrFlitChatState,
+  options: UserTextOptions = {},
+  usage: DrFlitChatUsage | null = state.chatUsage ?? null,
+): DrFlitChatState {
+  const text = state.queryValue ?? "";
+  const next = applyHelpQuery(state, text, options);
+  const count = next.helpResults?.length ?? 0;
+  const intro = next.messages.at(-1);
+  return {
+    ...next,
+    messages: [
+      ...next.messages.slice(0, -1),
+      { id: intro?.id ?? createMessageId(), role: "bot", text: buildQuickManualIntro(text, count) },
+    ],
+    chatUsage: usage,
+  };
 }
 
 /** True si hay una interacción en curso (no el menú principal Gestión/Ayuda). */
@@ -624,4 +914,208 @@ export function hasActiveConversation(state: DrFlitChatState): boolean {
     state.manualHomeHref != null ||
     state.isTyping
   );
+}
+
+// ── Feature #12917 — caso de soporte (ADR-0060 §7.2 y §11) ─────────────────────────────────────
+
+/**
+ * HU #12929 AC1 — abre el formulario del caso dentro del chat con el borrador prellenado. Llega por la
+ * intención «soporte» del LLM o por «Generar un caso de soporte» del panel de soporte.
+ */
+export function applyOpenSupportCase(
+  state: DrFlitChatState,
+  draft: DrFlitSupportCaseDraft,
+): DrFlitChatState {
+  const botMsg: DrFlitMessage = {
+    id: createMessageId(),
+    role: "bot",
+    text: "Completa estos datos y te muestro un resumen antes de radicar el caso. Ya llené lo que la plataforma sabe de ti.",
+  };
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "collecting_support_case",
+    session: "ayuda",
+    showSessionMenu: false,
+    showSupportInfo: false,
+    showBackToSearch: false,
+    supportDraft: draft,
+    supportResult: null,
+    supportError: null,
+  };
+}
+
+/** Cada cambio del formulario queda en el estado (y en sessionStorage): no se pierde al navegar. */
+export function applyUpdateSupportDraft(
+  state: DrFlitChatState,
+  draft: DrFlitSupportCaseDraft,
+): DrFlitChatState {
+  return { ...state, supportDraft: draft };
+}
+
+/**
+ * HU #12929 AC2 — «Continuar»: con campos faltantes no avanza (el formulario los marca) y no llama a
+ * ningún endpoint; completo, pasa al resumen de confirmación.
+ */
+export function applyContinueSupportCase(state: DrFlitChatState): DrFlitChatState {
+  const draft = state.supportDraft;
+  if (!draft || Object.keys(validateSupportDraft(draft)).length > 0) return state;
+  return { ...state, phase: "confirming_support_case", supportError: null };
+}
+
+/** Volver del resumen al formulario para corregir, sin perder lo escrito. */
+export function applyEditSupportCase(state: DrFlitChatState): DrFlitChatState {
+  if (!state.supportDraft) return state;
+  return { ...state, phase: "collecting_support_case" };
+}
+
+/** Cancelar el caso: se descarta el borrador y se vuelve al menú. */
+export function applyCancelSupportCase(state: DrFlitChatState): DrFlitChatState {
+  const botMsg: DrFlitMessage = {
+    id: createMessageId(),
+    role: "bot",
+    text: "Listo, no radiqué ningún caso. Elige otra opción de Gestión o Ayuda.",
+  };
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "idle",
+    showBackToSearch: false,
+    ...idleMenuFlags(),
+    supportDraft: null,
+    supportResult: null,
+    supportError: null,
+  };
+}
+
+/**
+ * HU #12930 AC1 — clic explícito en «Confirmar y radicar caso» (o «Reintentar» tras un error). Es la
+ * única transición que lleva a `submitting_support_case`, y solo el efecto de esa fase llama a
+ * POST /support-cases: ninguna respuesta del LLM puede disparar la radicación (ADR-0060 §8.2.3).
+ */
+export function applySubmitSupportCase(state: DrFlitChatState): DrFlitChatState {
+  if (!state.supportDraft) return state;
+  if (state.phase !== "confirming_support_case" && state.phase !== "support_case_error") return state;
+  return { ...state, phase: "submitting_support_case", supportError: null, isTyping: true };
+}
+
+/** HU #12930 AC1/AC2/AC4 — caso radicado: número de caso (y enlace solo si el backend lo mandó). */
+export function applySupportCaseCreated(
+  state: DrFlitChatState,
+  result: DrFlitSupportCaseCreated,
+): DrFlitChatState {
+  const botMsg: DrFlitMessage = {
+    id: createMessageId(),
+    role: "bot",
+    text: `Tu caso **#${result.caseId}** quedó radicado. El equipo de soporte lo revisará y te contactará por los datos que dejaste.`,
+  };
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "support_case_created",
+    showSessionMenu: false,
+    showSupportInfo: false,
+    showBackToSearch: true,
+    supportDraft: null,
+    supportResult: result,
+    supportError: null,
+  };
+}
+
+/**
+ * HU #12930 AC3 — no se pudo radicar: se ofrecen los canales de soporte como salida y se conserva el
+ * formulario para reintentar sin volver a escribir.
+ */
+export function applySupportCaseError(state: DrFlitChatState, message: string): DrFlitChatState {
+  return {
+    ...state,
+    phase: "support_case_error",
+    isTyping: false,
+    supportError: message,
+  };
+}
+
+// ── HU #12931 — consentimiento del tratamiento de datos ───────────────────────────────────────
+//
+// El chat con IA y el caso de soporte envían datos a terceros (el LLM y Azure DevOps): exigen la
+// aceptación de la versión vigente. El menú sin IA (Gestión, Necesito ayuda, Normativa) no la necesita.
+// Se acepta una vez por usuario y versión (lo guarda el backend); «Ahora no» no reinicia nada.
+
+export function hasConsent(state: DrFlitChatState): boolean {
+  return state.consent?.accepted === true;
+}
+
+/** Resultado de `GET /dr-flit/consent` (o de haber aceptado). */
+export function applyConsentStatus(state: DrFlitChatState, status: DrFlitConsentStatus): DrFlitChatState {
+  return { ...state, consent: status };
+}
+
+/**
+ * AC1 — la acción pedida necesita consentimiento: se muestra el texto con «Acepto» / «Ahora no». Para el
+ * chat, `state` ya trae el mensaje del usuario al final: se envía al aceptar.
+ */
+export function applyRequestConsent(state: DrFlitChatState, pending: DrFlitPendingConsent): DrFlitChatState {
+  return {
+    ...state,
+    phase: "awaiting_consent",
+    pendingConsent: pending,
+    consentError: null,
+    isTyping: false,
+    showSessionMenu: false,
+    showSupportInfo: false,
+    showBackToSearch: false,
+    showClientBranch: false,
+    helpResults: null,
+    tramiteResults: null,
+    validacionResults: null,
+    manualHomeHref: null,
+  };
+}
+
+/**
+ * AC1 — aceptado: se guarda el estado y continúa lo que el usuario había pedido. `supportDraft` es el
+ * borrador nuevo para cuando lo pendiente era abrir el formulario del caso.
+ */
+export function applyConsentAccepted(
+  state: DrFlitChatState,
+  status: DrFlitConsentStatus,
+  supportDraft: DrFlitSupportCaseDraft,
+): DrFlitChatState {
+  const pending = state.pendingConsent;
+  const base: DrFlitChatState = { ...state, consent: status, pendingConsent: null, consentError: null };
+  if (pending?.kind === "chat") return applyChatSend(base, pending.text);
+  if (pending?.kind === "support") return applyOpenSupportCase(base, supportDraft);
+  if (pending?.kind === "submit" && base.supportDraft)
+    return { ...base, phase: "submitting_support_case", isTyping: true, supportError: null };
+  return { ...base, phase: "idle", ...idleMenuFlags() };
+}
+
+/** No se pudo registrar la aceptación: se queda en el texto con el motivo, sin continuar. */
+export function applyConsentError(state: DrFlitChatState, message: string): DrFlitChatState {
+  return { ...state, consentError: message };
+}
+
+/**
+ * AC2 — «Ahora no»: no se envía nada a terceros y el menú sin IA sigue disponible. La próxima vez que
+ * escriba texto libre o abra un caso se vuelve a pedir.
+ */
+export function applyConsentDeclined(state: DrFlitChatState): DrFlitChatState {
+  const botMsg: DrFlitMessage = {
+    id: createMessageId(),
+    role: "bot",
+    text: "Entendido. Sin tu autorización no uso el asistente con IA ni radico casos. Puedes seguir usando **Gestión**, **Necesito ayuda** y **Normativa**.",
+  };
+  return {
+    ...state,
+    ...clearActionState(),
+    messages: [...state.messages, botMsg],
+    phase: "idle",
+    showBackToSearch: false,
+    ...idleMenuFlags(),
+    pendingConsent: null,
+    consentError: null,
+  };
 }
