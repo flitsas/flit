@@ -4,7 +4,7 @@
 **Status**: Propuesto
 **Deciders**: David Alejandro Chica Hernandez (PO), Claude Code (agente de implementación). Aceptación: Líder Técnico.
 **Tags**: arquitectura, backend, modelo-de-datos, modulo-tramites, integraciones
-**Épica / Feature**: #12737 / #13062 (HU #13073, #13074, #13075) · **Contrato**: `docs/integraciones/external-api-tramites-sync.md` (v3.1)
+**Épica / Feature**: #12737 / #13062 (HU #13073, #13074, #13075, #13076) · **Contrato**: `docs/integraciones/external-api-tramites-sync.md` (v3.1)
 
 ## Contexto
 
@@ -48,6 +48,14 @@ pueden compartir valor.
    explícita al criterio A11** del checklist de esquema: la lectura del feed no filtra por compañía;
    un índice con `tenant_id` delante no le sirve. La lectura entre compañías se acota por el ámbito
    exclusivo del servicio externo (HU #13076), no por el índice.
+7. **Recorrido por (transacción, versión) y solo transacciones cerradas** (HU #13076, DDL 126). La
+   versión se toma al escribir, no al confirmar: un cursor solo por versión perdería para siempre el
+   cambio de una transacción larga que confirma después de otra con versión mayor. La lectura ordena
+   por `(COALESCE(sync_xact, 0), sync_version)` (índice `ix_procedure_instances_sync_cursor`) y solo
+   entrega filas cuya transacción es anterior a `pg_snapshot_xmin(pg_current_snapshot())`: por debajo
+   de ese límite ya no puede confirmar nada nuevo. Las filas de la asignación inicial, sin `sync_xact`,
+   cuentan como la transacción 0. La ventana de 5 s del contrato se mantiene. El cursor es opaco para
+   el consumidor, así que el contrato no cambia.
 
 ## Alternativas consideradas
 
@@ -68,9 +76,10 @@ con latencia objetivo de minutos.
 
 ## Tradeoff aceptado
 
-- **Orden de commit ≠ orden de secuencia.** Una transacción larga puede confirmar después de otra
-  con una versión mayor. La lectura aplica una ventana de estabilidad de 5 s; el riesgo residual de
-  una transacción más larga se resuelve en la HU #13076 (ventana por snapshot).
+- **Orden de commit ≠ orden de secuencia**, resuelto por el punto 7. A cambio, una transacción que
+  quede abierta mucho tiempo (incluso en otra base del mismo servidor, porque el límite es del
+  clúster) **retrasa** el feed hasta que termine. No se pierde nada. Se vigilará con una métrica de
+  retraso (F4).
 - **Un UPDATE extra del trámite** por sentencia que toca una tabla hija. Es por PK, no sube
   `row_version`, no audita, y se omite si la transacción ya selló el trámite.
 - **Los textos de catálogo** (nombre del organismo, de la compañía, del tipo de trámite) no mueven la
@@ -85,6 +94,9 @@ con latencia objetivo de minutos.
 - Sigue vigente el comportamiento previo de los triggers de denormalización (DDL 47): suben
   `row_version` y el código recarga el trámite cuando lo necesita (`ConsolidadoVigenciaTracker`,
   `OtClientProcedureRepository.AssignPlateAsync`). Esta decisión no lo empeora ni lo corrige.
+- El ámbito de lectura entre compañías (`ExternalSyncReadScope`) no es un permiso de RLS: el rol de
+  core-api es propietario de las tablas de `tramites`, sin `FORCE ROW LEVEL SECURITY`. La
+  exclusividad la sostiene una prueba de arquitectura.
 - Revertir en PDN tras la asignación inicial es posible (los `Down` existen) pero no recomendable:
   rehacer la asignación vuelve a costar la ventana.
 
