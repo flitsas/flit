@@ -28,7 +28,8 @@ public sealed class GenerarConsolidadoMaestroHandler(
     Domain.Integration.ISignatureVaultPolicy? signatureVaultPolicy = null,
     IVehicleSignatureImprintRepository? vehicleSignatureImprintRepository = null,
     Microsoft.Extensions.Logging.ILogger<GenerarConsolidadoMaestroHandler>? logger = null,
-    IMaestroRadicadoLookup? maestroRadicado = null)
+    IMaestroRadicadoLookup? maestroRadicado = null,
+    IExpedienteHotDocumentsRegenerator? hotDocsRegenerator = null)
 {
     // HU #12787 (AC2) — sin Quipux cableado nada está radicado: comportamiento previo.
     private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
@@ -116,10 +117,31 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // compañía" regeneraría el maestro en CADA acceso, no una sola vez. Limitación asumida (AC4 del
         // Bug #11612): un trámite antiguo con el maestro vigente conserva el guión hasta que se
         // invalide por las vías normales.
-        if (!force && instance.ConsolidadoMaestroVigente && vigente is not null)
+        // Bug #13055 — salvo que el FUR sea anterior a la placa: ese maestro nunca la tuvo.
+        var furDesactualizado = FurVigenciaPlaca.FurDesactualizado(instance);
+        if (!force && instance.ConsolidadoMaestroVigente && vigente is not null && !furDesactualizado)
         {
             var vigenteDto = new ConsolidadoDocumentDto(vigente.Id, vigente.Tipo, vigente.Filename, vigente.Sha256);
             return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
+        }
+
+        // Bug #13055 — el maestro solo fusiona lo persistido: si el FUR no refleja la placa asignada o
+        // corregida por el OT, se regenera antes de fusionar. Best-effort: si falla, se fusiona el FUR
+        // que hay, igual que antes de esta corrección.
+        if (furDesactualizado && hotDocsRegenerator is not null)
+        {
+            try
+            {
+                await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // Se sigue con el FUR anterior.
+            }
+
+            // Mismo motivo que ReloadAsync del wizard: row_version nuevo y adjuntos sin fantasmas.
+            repo.ResetTracking();
+            instance = await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct).ConfigureAwait(false) ?? instance;
         }
 
         // Fuente = tabla maestra de adjuntos de la instancia (AC2), excluyendo solo los consolidados

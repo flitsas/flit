@@ -106,6 +106,7 @@ public static class AdminPlateRangesEndpoints
         IOtClientProcedureRepository otRepo, RegenerarDocumentosTrazadoHandler regeneracionTrazada,
         IPlateAssignmentEmailEnqueuer plateAssignmentEmailEnqueuer,
         FirmarImprontaManualSiListaHandler firmaImpronta,
+        IConsolidadoRegeneracionQueue regeneracionQueue,
         ILoggerFactory loggerFactory, CancellationToken ct)
     {
         if (!RequestTenantResolver.TryResolveTenantId(http.User, out var otTenantId))
@@ -248,6 +249,10 @@ public static class AdminPlateRangesEndpoints
                 AdminPlateRegenLog.FirmaImprontaOmitida(firmaImprontaLogger, ex, instanceId);
             }
 
+            // HU #12796 (AC3) / Bug #13055 — con el FUR ya regenerado (o fallido, en cuyo caso los
+            // consolidados lo reintentan por FurVigenciaPlaca), se anticipan los dos consolidados.
+            EncolarConsolidados(regeneracionQueue, procedure.ClientTenantId, instanceId);
+
             // HU #11485 (Feature #11482, ADR-0046) — aviso de correo al comprador tras asignar placa
             // (Flujo B). Best-effort en el scope RLS del cliente: un fallo NO revierte la asignación.
             try
@@ -281,9 +286,13 @@ public static class AdminPlateRangesEndpoints
     // esto es una corrección de digitación sobre un trámite que ya pudo haber avanzado; regenerar
     // documentos/avisar al comprador en cada corrección no está pedido por ningún AC de la HU y
     // duplicaría el aviso que ya salió con la asignación original.
+    //
+    // Bug #13055 — sí se anticipan los consolidados: el FUR persistido quedó con la placa anterior y
+    // FurVigenciaPlaca hace que ambos lo regeneren antes de fusionar. No se re-envía el correo.
     private static async Task<IResult> UpdateProcedurePlateAsync(
         Guid instanceId, UpdatePlateRequest request, HttpContext http,
-        IOtClientProcedureRepository otRepo, ILoggerFactory loggerFactory, CancellationToken ct)
+        IOtClientProcedureRepository otRepo, IConsolidadoRegeneracionQueue regeneracionQueue,
+        ILoggerFactory loggerFactory, CancellationToken ct)
     {
         if (!RequestTenantResolver.TryResolveTenantId(http.User, out var otTenantId))
         {
@@ -351,7 +360,18 @@ public static class AdminPlateRangesEndpoints
             return Results.Problem(statusCode: statusCode, title: title, detail: detail);
         }
 
+        EncolarConsolidados(regeneracionQueue, outcome.Procedure!.ClientTenantId, instanceId);
         return Results.Ok(outcome.Procedure);
+    }
+
+    /// <summary>
+    /// Anticipa los dos consolidados con el tenant CLIENTE dueño del trámite. Best-effort: un descarte
+    /// de la cola no es un error del hito (el camino perezoso los reconstruye en la próxima vista).
+    /// </summary>
+    private static void EncolarConsolidados(IConsolidadoRegeneracionQueue queue, Guid clientTenantId, Guid instanceId)
+    {
+        queue.Encolar(clientTenantId, instanceId, TipoConsolidado.Wizard);
+        queue.Encolar(clientTenantId, instanceId, TipoConsolidado.Maestro);
     }
 
     private static Guid? ResolveUserId(ClaimsPrincipal user)

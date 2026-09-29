@@ -17,7 +17,8 @@ namespace Flit.Admin.Tests.OtClientProcedures;
 /// <summary>
 /// HU #12796 (Épica #12760, D1) — hitos de regeneración anticipada del lado del organismo
 /// (<see cref="OtClientProcedureRepository"/>): rechazar u observar un expediente ENTREGADO encola los dos
-/// consolidados (AC2); asignar la placa en preasignación encola los dos (AC3); aprobar no encola (AC4); la
+/// consolidados (AC2); la asignación de placa los encola desde el endpoint, no desde aquí (AC3, Bug #13055);
+/// aprobar no encola (AC4); la
 /// edición de campos invalida pero no encola (AC5). El encolado va DESPUÉS del commit del scope cliente y
 /// lleva el tenant CLIENTE dueño del trámite, nunca el del OT.
 ///
@@ -203,8 +204,8 @@ public sealed class ConsolidadoRegeneracionHitosOtTests
 
     // ── AC3 — Asignación de placa ───────────────────────────────────────────────────
 
-    [Fact] // AC3 happy path — asignar la placa en preasignación encola los dos, tenant cliente.
-    public async Task AC3_AsignarPlaca_EncolaLosDos()
+    [Fact] // AC3 / Bug #13055 — el repositorio ya NO encola: lo hace el endpoint tras regenerar el FUR.
+    public async Task AC3_AsignarPlaca_ElRepositorioNoEncola_LoHaceElEndpointTrasElFur()
     {
         var (db, procedureId) = await SeedAsync(TramiteEstado.Preasignacion);
         var queue = new RecordingOtRegeneracionQueue();
@@ -215,7 +216,8 @@ public sealed class ConsolidadoRegeneracionHitosOtTests
 
         outcome.Succeeded.Should().BeTrue(outcome.Failure + " " + outcome.Detail);
         outcome.Procedure!.Status.Should().Be(TramiteEstado.Asignado);
-        queue.Solicitudes.Should().BeEquivalentTo(Ambos(procedureId));
+        queue.Solicitudes.Should().BeEmpty(
+            "encolar antes de regenerar el FUR dejaba al worker fusionando el FUR sin placa (Bug #13055)");
     }
 
     [Fact] // AC3 edge — placa no disponible: la asignación falla y no encola nada.
