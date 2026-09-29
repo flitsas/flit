@@ -113,4 +113,7 @@ public static class IdentityValidationAuditOutcomes
     public const string SignatureInvalid = "firma_invalida";
     public const string ProviderUnavailable = "proveedor_no_disponible";
     public const string Expired = "expirado";
+
+    /// <summary>Bug #13055 — el trámite dueño está anulado o revocado: el resultado se ignora.</summary>
+    public const string TramiteInactivo = "tramite_inactivo";
 }

@@ -148,6 +148,15 @@ public sealed class ProcedureInstanceBiometricValidation
 
     public ProcedureInstance? ProcedureInstance { get; set; }
 
+    /// <summary>
+    /// Bug #13055 — el trámite dueño está anulado o revocado: la validación conserva su estado y no
+    /// admite resultados tardíos. Requiere la navegación <see cref="ProcedureInstance"/> cargada; una
+    /// prevalidación standalone (sin trámite) nunca se congela.
+    /// </summary>
+    public bool CongeladaPorTramite =>
+        ProcedureInstance is not null
+        && Flit.Tramites.Domain.Tramites.Estados.TramiteEstado.CongelaValidacionIdentidad(ProcedureInstance.Status);
+
     /// <summary>HU #10865 — navegación a la entidad persona del tenant.</summary>
     public Person? Person { get; set; }
 

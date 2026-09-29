@@ -48,6 +48,7 @@ internal static class PublicBiometricaEndpoints
                 "expirada" => Results.Problem(statusCode: 410, title: "Gone", detail: "El enlace de validación biométrica expiró."),
                 "estado_invalido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La validación biométrica ya no admite intentos."),
                 "intentos_agotados" => Results.Problem(statusCode: 429, title: "Too Many Requests", detail: "Se agotaron los intentos de validación biométrica."),
+                "tramite_inactivo" => Results.Problem(statusCode: 410, title: "Gone", detail: "El trámite fue anulado o revocado; este enlace ya no es válido."),
                 _ => Results.Ok(result),
             };
         }).WithName("CompletePublicBiometric").AllowAnonymous().DisableAntiforgery();
