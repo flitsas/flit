@@ -148,7 +148,7 @@ El trigger de §3.1 solo mantiene `sync_version` / `sync_changed_at`; **no escri
 emite nada hacia Flito**. No se crean `tramites.procedure_sync_outbox` ni
 `integrations.external_subscriptions`, ni el `BackgroundService` de entrega.
 
-### 3.2 Índices de apoyo (DDL 124 — hecho, HU #13075; ver ADR-0061)
+### 3.2 Índices de apoyo (DDL 124 — hecho, HU #13075; ver ADR-0066)
 
 ```sql
 CREATE INDEX ix_pi_status_history_aprobado ON tramites.procedure_instance_status_history (procedure_instance_id, changed_at DESC)
