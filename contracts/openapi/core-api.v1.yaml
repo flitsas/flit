@@ -5857,8 +5857,9 @@ paths:
         Registra la decisión de prenda (gravamen) vigente del trámite: `solicitar`/`registrar`
         (constituye), `levantar` (levanta), `omitir` (Omitir prenda: el gravamen sigue vigente en el
         RUNT; no se inscribe ni se levanta) o `sin_prenda` (declara ausencia de gravamen). `omitir`: en
-        Matrícula Inicial siempre se admite; en Traspaso y en el resto, solo si el organismo tiene el
-        certificado de prenda como opcional (CF-06). Con `omitir`, `acreedorNombre`,
+        la familia Matrículas (Matrícula Inicial, Matrícula Leasing, Rematrícula) siempre se admite; en
+        Traspaso y en el resto, solo si el organismo tiene el certificado de prenda como opcional (CF-06).
+        Cancelación de matrícula no tiene dimensión de gravamen (`prenda_no_admitida_en_tipo`). Con `omitir`, `acreedorNombre`,
         `acreedorDocumento` y `levantamientoEntidad` se ignoran y se devuelven null. Versionado por reemplazo: si ya hay una decisión
         vigente de la MISMA familia (`constitucion`=solicitar/registrar, `levantamiento`=levantar), se
         marca `reemplazada` y esta queda como la nueva vigente (R17, HU #10599).
@@ -5911,7 +5912,7 @@ paths:
         "409":
           description: >
             `prenda_omitir_no_admitido` (el organismo exige el certificado, CF-06/HU #10881; no aplica
-            a Matrícula Inicial, Feature #13110),
+            a la familia Matrículas, Feature #13110),
             `prenda_no_admitida_en_tipo` (el tipo no tiene dimensión de gravamen, ADR-0050),
             `estado_final` (trámite en estado final, R17) o `prenda_segunda_decision_no_admitida`
             (Matrícula/Traspaso: ya hay una vigente y el tipo no admite la acción complementaria,

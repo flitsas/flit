@@ -629,11 +629,11 @@ public sealed class FurHandlerTests
     /// RESIDUAL (histórica, anterior a la limpieza del PUT) y el RUNT reportando gravamen: ni el
     /// acreedor ni el dato RUNT pueden llegar al documento.
     /// </summary>
-    private async Task<FurDocumentData> GenerarConOmitir(ProcedureType tipo, CancellationToken ct)
+    private async Task<FurDocumentData> GenerarConOmitir(ProcedureType tipo, string tipologia, CancellationToken ct)
     {
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        var instance = Instance(id, tenant, tipologia);
         instance.ProcedureType = tipo;
         WithOrganismo(instance);
         WithField(instance, "runt_tiene_prendas", "SI");
@@ -672,7 +672,8 @@ public sealed class FurHandlerTests
     [Fact]
     public async Task Omitir_EnMatriculaInicial_FurSinPrendaNiAcreedor()
     {
-        var data = await GenerarConOmitir(ProcedureTypeFixture.Matricula, TestContext.Current.CancellationToken);
+        var data = await GenerarConOmitir(
+            ProcedureTypeFixture.Matricula, TramiteTipologiaCatalog.CodigoMatriculaInicial, TestContext.Current.CancellationToken);
 
         data.PrendaMarking.Should().Be(FurPrendaMarking.Ninguna);
         data.AcreedorPrenda.Should().BeNull();
@@ -690,7 +691,8 @@ public sealed class FurHandlerTests
     [Fact]
     public async Task Omitir_EnTraspaso_FurSinPrendaNiAcreedor()
     {
-        var data = await GenerarConOmitir(ProcedureTypeFixture.Traspaso, TestContext.Current.CancellationToken);
+        var data = await GenerarConOmitir(
+            ProcedureTypeFixture.Traspaso, TramiteTipologiaCatalog.CodigoTraspasoStandard, TestContext.Current.CancellationToken);
 
         data.PrendaMarking.Should().Be(FurPrendaMarking.Ninguna);
         data.AcreedorPrenda.Should().BeNull();

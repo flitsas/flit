@@ -147,14 +147,14 @@ Constantes de código: `FurPrendaObservation.Etiqueta`, `EtiquetaLevantamiento` 
 
 ### Decisión `omitir` («Omitir prenda»)
 
-Aplica en `MATRICULA_NUEVA`/`MATRICULA_INICIAL` (gravamen reportado por RUNT) y en `TRASPASO_*` (solo si el OT admite el certificado de gravamen como opcional). El gestor declara que existe gravamen pero **no se solicita ningún trámite de prenda en este FUR**: no hay adjunto, justificación ni acreedor.
+Aplica en toda la familia `MATRICULAS` con prenda complementaria (`MATRICULA_NUEVA`, `MATRICULA_LEASING`, `REMATRICULA`; gravamen reportado por RUNT), **sin importar** la política CF-06 del OT, y en `TRASPASO_*` y demás tipos con dimensión de gravamen **solo si** el OT admite el certificado de gravamen como opcional (CF-06). `CANCELACION_MATRICULA` queda fuera (su perfil apaga la prenda, DDL 93). El gestor declara que existe gravamen pero **no se solicita ningún trámite de prenda en este FUR**: no hay adjunto, justificación ni acreedor.
 
-- Numeral 3: solo la casilla de la tabla 1 (1 o 2) y las de la tabla 3 que estén activas. **Ni 11 ni 12.**
+- Numeral 3: solo la casilla de la tabla 1 (1 en `MATRICULA_NUEVA`/`MATRICULA_LEASING`, 16 en `REMATRICULA`, 2 en `TRASPASO_*`) y las de la tabla 3 que estén activas. **Ni 11 ni 12.**
 - Numeral 20: nada por gravamen (LIM. PROPIEDAD, OTRO y A FAVOR DE vacíos).
-- Párrafo 23: no hay bloque de gravamen. Los demás bloques se mantienen en su orden.
+- Párrafo 23: no hay bloque de gravamen. Los demás bloques se mantienen en su orden; en `MATRICULA_LEASING` (y en `TRASPASO_UNILATERAL`) el bloque 1 de locatario **sí** se imprime completo — `omitir` solo suprime el bloque 3 (gravamen), nunca el del tipo.
 - El dato de gravamen de la consulta RUNT **no** alimenta el FUR: el formulario declara lo que se solicita, no lo que reporta el RUNT.
 
-Fuente: art. 5.1.8 (el FUR acumula los trámites *solicitados*) y 5.3.13.1 (la inscripción de prenda es un trámite propio). Dejar las casillas vacías es **decisión de producto** (Feature #13110). En traspaso, el riesgo del art. 5.3.2.1 num. 3 está aceptado y registrado en el Feature. Código: `PrendaDecision.ToFurMarking` devuelve `FurPrendaMarking.Ninguna`.
+Fuente: art. 5.1.8 (el FUR acumula los trámites *solicitados*) y 5.3.13.1 (la inscripción de prenda es un trámite propio). Dejar las casillas vacías es **decisión de producto** (Feature #13110; alcance ampliado a toda la familia Matrículas el 2026-09-29). En traspaso, el riesgo del art. 5.3.2.1 num. 3 está aceptado y registrado en el Feature. Código: `PrendaDecision.ToFurMarking` devuelve `FurPrendaMarking.Ninguna`.
 
 ---
 
