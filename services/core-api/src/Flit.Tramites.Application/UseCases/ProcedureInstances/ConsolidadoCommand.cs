@@ -204,8 +204,8 @@ public sealed class GenerarConsolidadoHandler(
         // Limitación asumida (AC4 del Bug #11612): un trámite antiguo con el consolidado vigente
         // conserva el guión en la portada hasta que se invalide por las vías normales (regenerar el
         // FUR, cambiar de estado, adjuntar documentos o forzar la regeneración).
-        // Bug #13055 — salvo que el FUR sea anterior a la placa: ese consolidado nunca la tuvo.
-        var furDesactualizado = FurVigenciaPlaca.FurDesactualizado(instance);
+        // Bug #13055 — salvo que el FUR sea anterior al último cambio del expediente (datos o placa).
+        var furDesactualizado = FurVigenciaExpediente.FurDesactualizado(instance);
         if (!force && instance.ConsolidadoWizardVigente && consolidadoVigente is not null && !furDesactualizado)
         {
             var vigenteDto = new ConsolidadoDocumentDto(

@@ -117,16 +117,16 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // compañía" regeneraría el maestro en CADA acceso, no una sola vez. Limitación asumida (AC4 del
         // Bug #11612): un trámite antiguo con el maestro vigente conserva el guión hasta que se
         // invalide por las vías normales.
-        // Bug #13055 — salvo que el FUR sea anterior a la placa: ese maestro nunca la tuvo.
-        var furDesactualizado = FurVigenciaPlaca.FurDesactualizado(instance);
+        // Bug #13055 — salvo que el FUR sea anterior al último cambio del expediente (datos o placa).
+        var furDesactualizado = FurVigenciaExpediente.FurDesactualizado(instance);
         if (!force && instance.ConsolidadoMaestroVigente && vigente is not null && !furDesactualizado)
         {
             var vigenteDto = new ConsolidadoDocumentDto(vigente.Id, vigente.Tipo, vigente.Filename, vigente.Sha256);
             return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
         }
 
-        // Bug #13055 — el maestro solo fusiona lo persistido: si el FUR no refleja la placa asignada o
-        // corregida por el OT, se regenera antes de fusionar. Best-effort: si falla, se fusiona el FUR
+        // Bug #13055 — el maestro solo fusiona lo persistido: si el FUR no refleja el último cambio del
+        // expediente (datos o placa), se regenera antes de fusionar. Best-effort: si falla, se fusiona el FUR
         // que hay, igual que antes de esta corrección.
         if (furDesactualizado && hotDocsRegenerator is not null)
         {

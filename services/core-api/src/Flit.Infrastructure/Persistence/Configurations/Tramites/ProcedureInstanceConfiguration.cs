@@ -159,6 +159,12 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("consolidado_maestro_generado_en")
             .HasColumnType("timestamptz");
 
+        // Bug #13055 — último cambio de los datos que imprime el FUR (lo sella ConsolidadoVigenciaTracker).
+        // Columna agregada por migración SQL cruda (tabla ExcludeFromMigrations); aquí solo se mapea.
+        builder.Property(x => x.ExpedienteActualizadoEn)
+            .HasColumnName("expediente_actualizado_en")
+            .HasColumnType("timestamptz");
+
         // HU #12165 (Feature #12156) — ventana de 1 hora de corrección de placa por el OT (HU
         // #12167). Columnas agregadas por migración SQL cruda (la tabla está ExcludeFromMigrations);
         // aquí solo se mapean para el modelo EF.

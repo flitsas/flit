@@ -87,6 +87,16 @@ public sealed class ProcedureInstance
     public DateTimeOffset? PlateUpdatedAt { get; set; }
 
     /// <summary>
+    /// Bug #13055 — último instante en que cambiaron los DATOS que imprime el FUR (campos, actores,
+    /// participantes, datos comerciales, prenda, firmas o validación de identidad), desde cualquier
+    /// pantalla: gestor, OT o administración. Lo sella <c>ConsolidadoVigenciaTracker</c> al guardar,
+    /// solo si el trámite ya tiene FUR. Un FUR anterior a esta marca está desactualizado y se regenera
+    /// antes de armar el consolidado. <c>null</c> = sin cambios registrados desde que existe la
+    /// columna. Columna agregada por migración SQL cruda (la tabla está ExcludeFromMigrations).
+    /// </summary>
+    public DateTimeOffset? ExpedienteActualizadoEn { get; set; }
+
+    /// <summary>
     /// Feature #12276 — momento en que la Confirmación RUNT dio Confirmado. NULL = no confirmado: la
     /// columna del gestor muestra NO si ya hubo intentos y — si nunca se consultó. Ortogonal al
     /// <see cref="Status"/>: la corrida jamás lo cambia.

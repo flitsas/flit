@@ -8299,6 +8299,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamptz")
                         .HasColumnName("consolidado_wizard_generado_en");
 
+                    b.Property<DateTimeOffset?>("ExpedienteActualizadoEn")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("expediente_actualizado_en");
+
                     b.Property<bool>("ConsolidadoWizardVigente")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

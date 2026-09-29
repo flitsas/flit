@@ -22,7 +22,7 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// await maestroHandler.HandleAsync(id, tenant, ct: ct);  // regenera el FUR y luego fusiona
 /// </code>
 /// </summary>
-public sealed class FurVigenciaPlacaConsolidadoTests
+public sealed class FurVigenciaExpedienteConsolidadoTests
 {
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly FakeStorage _storage = new();
@@ -73,6 +73,25 @@ public sealed class FurVigenciaPlacaConsolidadoTests
 
         error.Should().BeNull();
         result!.Regenerado.Should().BeTrue("el maestro vigente se armó con el FUR sin la placa corregida");
+        _regenerador.Llamadas.Should().Be(1);
+    }
+
+    [Theory] // Bug #13055 (alcance ampliado) — cualquier cambio de datos, no solo la placa.
+    [InlineData(TipoConsolidado.Wizard)]
+    [InlineData(TipoConsolidado.Maestro)]
+    public async Task CambioDeDatosPosteriorAlFur_RegeneraElFurAntesDeFusionar(TipoConsolidado documento)
+    {
+        var instance = Instancia(furAntesDeLaPlaca: false);
+        // p. ej. el gestor corrige la dirección del comprador o el OT un dato del vehículo.
+        instance.ExpedienteActualizadoEn = FurDe(instance).UploadedAt.AddMinutes(2);
+        AgregarConsolidadoVigente(instance, documento == TipoConsolidado.Wizard ? "consolidado" : "consolidado_maestro");
+
+        var (result, error) = documento == TipoConsolidado.Wizard
+            ? await Wizard().HandleAsync(instance.Id, instance.TenantId, Ct)
+            : await Maestro().HandleAsync(instance.Id, instance.TenantId, ct: Ct);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeTrue("el consolidado vigente se armó con el FUR anterior al cambio");
         _regenerador.Llamadas.Should().Be(1);
     }
 

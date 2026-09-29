@@ -250,7 +250,7 @@ public static class AdminPlateRangesEndpoints
             }
 
             // HU #12796 (AC3) / Bug #13055 — con el FUR ya regenerado (o fallido, en cuyo caso los
-            // consolidados lo reintentan por FurVigenciaPlaca), se anticipan los dos consolidados.
+            // consolidados lo reintentan por FurVigenciaExpediente), se anticipan los dos consolidados.
             EncolarConsolidados(regeneracionQueue, procedure.ClientTenantId, instanceId);
 
             // HU #11485 (Feature #11482, ADR-0046) — aviso de correo al comprador tras asignar placa
@@ -288,7 +288,7 @@ public static class AdminPlateRangesEndpoints
     // duplicaría el aviso que ya salió con la asignación original.
     //
     // Bug #13055 — sí se anticipan los consolidados: el FUR persistido quedó con la placa anterior y
-    // FurVigenciaPlaca hace que ambos lo regeneren antes de fusionar. No se re-envía el correo.
+    // FurVigenciaExpediente hace que ambos lo regeneren antes de fusionar. No se re-envía el correo.
     private static async Task<IResult> UpdateProcedurePlateAsync(
         Guid instanceId, UpdatePlateRequest request, HttpContext http,
         IOtClientProcedureRepository otRepo, IConsolidadoRegeneracionQueue regeneracionQueue,

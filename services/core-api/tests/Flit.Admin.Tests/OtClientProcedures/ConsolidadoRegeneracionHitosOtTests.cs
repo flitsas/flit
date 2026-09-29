@@ -268,9 +268,13 @@ public sealed class ConsolidadoRegeneracionHitosOtTests
         queue.Solicitudes.Should().BeEmpty();
     }
 
-    // ── AC5 — Edición no anticipa ───────────────────────────────────────────────────
+    // ── AC5 — La edición no la encola el repositorio del OT ─────────────────────────
+    // Bug #13055 — desde este bug las ediciones SÍ anticipan la regeneración, pero la encola el propio
+    // DbContext (ConsolidadoVigenciaTracker, cola tomada del contenedor de la app) y solo si el trámite ya
+    // tiene consolidados; ver ExpedienteRegeneracionAutomaticaTests. Aquí el contexto no tiene contenedor,
+    // así que se sigue verificando lo que es de este repositorio: invalidar sin encolar por su cuenta.
 
-    [Fact] // AC5 — ediciones sucesivas de field_values invalidan (tracker del DbContext) sin encolar.
+    [Fact] // AC5 — ediciones sucesivas de field_values invalidan (tracker del DbContext); el repositorio no encola.
     public async Task AC5_EdicionesSucesivas_InvalidanSinEncolar()
     {
         var (db, procedureId) = await SeedAsync(TramiteEstado.Borrador);
