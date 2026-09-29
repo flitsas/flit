@@ -59,6 +59,8 @@ Content-Type: application/json
 - 403 `secret_rotation_required` si el cliente tiene rotación obligatoria pendiente.
 - El consumidor cachea el token y lo renueva antes de `expiresIn` o ante un 401.
 
+Todos los errores de `/api/v1/external/*` son `application/problem+json`; el código estable va en la extensión `code` (p. ej. `{"type":"about:blank","title":"invalid_client","status":401,"detail":"…","code":"invalid_client"}`). Además: `429 rate_limited` con `Retry-After` (10 solicitudes de token/min por IP) y `503 external_auth_unavailable` si el ambiente no tiene llave de emisión. `423` incluye `Retry-After` en segundos. La respuesta 200 lleva `Cache-Control: no-store`. Tras una rotación, el secreto anterior sigue siendo válido 24 h.
+
 Todos los demás endpoints exigen `Authorization: Bearer <jwt>`.
 
 ## 3. Sincronización
