@@ -7,6 +7,7 @@ export type {
   ManualArticle,
   ManualAudience,
   ManualCallout,
+  ManualMedia,
   ManualNavSection,
   ManualProfile,
   ManualSectionBlock,

@@ -3,6 +3,7 @@
     <Project Path="src/Flit.Admin.Domain/Flit.Admin.Domain.csproj" />
     <Project Path="src/Flit.Admin.Application/Flit.Admin.Application.csproj" />
     <Project Path="src/Flit.Analytics.Application/Flit.Analytics.Application.csproj" />
+    <Project Path="src/Flit.DrFlit.Application/Flit.DrFlit.Application.csproj" />
     <Project Path="src/Flit.Queries.Domain/Flit.Queries.Domain.csproj" />
     <Project Path="src/Flit.Api/Flit.Api.csproj" />
     <Project Path="src/Flit.Gateway/Flit.Gateway.csproj" />
@@ -22,6 +23,7 @@
     <Project Path="tests/Flit.Modules.Security.Application.Tests/Flit.Modules.Security.Application.Tests.csproj" />
     <Project Path="tests/Flit.Admin.Tests/Flit.Admin.Tests.csproj" />
     <Project Path="tests/Flit.Analytics.Application.Tests/Flit.Analytics.Application.Tests.csproj" />
+    <Project Path="tests/Flit.DrFlit.Application.Tests/Flit.DrFlit.Application.Tests.csproj" />
     <Project Path="tests/Flit.Modules.Quipux.Application.Tests/Flit.Modules.Quipux.Application.Tests.csproj" />
     <Project Path="tests/Flit.DataMigration.Tests/Flit.DataMigration.Tests.csproj" />
     <Project Path="tests/Flit.Integration.Tests/Flit.Integration.Tests.csproj" />

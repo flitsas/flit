@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, BookOpen, Headphones, Scale } from "lucide-react";
+import { ChevronRight, BookOpen, Headphones, Scale } from "lucide-react";
 import { DR_FLIT_HELP_OPTIONS, type DrFlitHelpOptionId } from "./dr-flit-intents";
 
 const ICONS: Record<DrFlitHelpOptionId, typeof BookOpen> = {
@@ -56,7 +56,7 @@ export function DrFlitHelpOptions({
                     style={{ color: "var(--dr-flit-brand-title)" }}
                   >
                     {option.label}
-                    <ArrowUpRight
+                    <ChevronRight
                       className="h-4 w-4 shrink-0"
                       style={{ color: "var(--dr-flit-brand-blue)" }}
                       aria-hidden
