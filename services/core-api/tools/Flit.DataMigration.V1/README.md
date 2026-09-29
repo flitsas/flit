@@ -46,6 +46,51 @@ documentos generados.
 | `--force` | Re-migra aunque ya esté en `migration_map`. |
 | `--conservar-jpg-identidad` | Solo `transfer-attachments`. Migra también las imágenes sueltas de la validación de identidad (ver *Qué no se migra*). |
 
+## Laboratorio local
+
+Para probar contra una copia de producción de V1 sin tocar ningún ambiente real. Todo corre en
+local y **las tres piezas tienen que apuntar a la misma copia**: los ids de V1 se repiten entre
+ambientes, y un snapshot de otro ambiente devolvería documentos ajenos sin dar error.
+
+1. **Bases.** La copia de V1 (p. ej. `pdn_copy_updated`) y una V2 de laboratorio clonada de dev.
+   Una base con solo las migraciones no sirve, porque le falta el catálogo `catalogs.transit_offices`:
+   ```bash
+   createdb flit_migrador_lab
+   pg_dump -Fc flit2dev_backup | pg_restore --no-owner -d flit_migrador_lab
+   dotnet ef database update --project src/Flit.Infrastructure --startup-project src/Flit.Api \
+     --connection "Host=localhost;Database=flit_migrador_lab;Username=…"
+   ```
+2. **Ids a migrar.** `lab/entregados.sql` lista los entregados:
+   ```bash
+   psql -d pdn_copy_updated -At -v tipo=transfer -f lab/entregados.sql > ids-transfer.txt
+   ```
+3. **Servicio de PDF de V1** (`BackSrvPdfService`), solo para la instancia 3. Sin él, V1 no puede
+   armar el FUR, la portada, las cartas selfie ni el mandato; en el clúster lo resuelve como
+   `back-svc-pdfservice-grpc-pdn`, un nombre que desde local no existe.
+   ```bash
+   DOTNET_ROLL_FORWARD=Major \
+   PdfService__ChromiumPath="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+   dotnet run                                   # escucha en localhost:4601
+   ```
+4. **V1** (`BackCrudTransfer`, rama `release`), solo para la instancia 3. En una rama local, su
+   `.env` debe apuntar `DB_*` y `TRANSFER_DB_*` a la copia, con `*_SYNCHRONIZE=false`, y
+   `PDF_SERVICE_URL="dns:///localhost:4601"`. Ese `.env` **no se commitea**. Se levanta con
+   `npm run dev:swagger` en el puerto 3201.
+5. **Migrar**, siempre con `--dry-run` primero:
+   ```bash
+   export FLITMIG_ConnectionStrings__V1Source="Host=localhost;Database=pdn_copy_updated;Username=…"
+   export FLITMIG_ConnectionStrings__V2Target="Host=localhost;Database=flit_migrador_lab;Username=…"
+   export FLITMIG_Migration__CreateTenantIfMissing=true   # solo en el laboratorio
+   export FLITMIG_V1Snapshot__BaseUrl="http://localhost:3201/"
+   dotnet run -- --tipo transfer --ids-file ids-transfer.txt --dry-run
+   ```
+   Para usar la UI de `/admin/migracion`, levantar `Flit.DataMigration.Api` con las mismas
+   variables más `FLITMIG_MigracionApi__Enabled=true` y `FLITMIG_MigracionApi__ApiKey`, y el
+   frontend con `MIGRACION_API_URL` y `MIGRACION_API_KEY`.
+
+Para que el organismo vea un migrado en su bandeja, la empresa necesita un grant vigente con ese
+organismo (`admin.tenant_transit_office_grants`).
+
 ## Configuración
 
 `appsettings.json` trae las conexiones del laboratorio local. En cualquier entorno real deben
@@ -58,7 +103,7 @@ export FLITMIG_Migration__CreateTenantIfMissing=false   # obligatorio en producc
 
 # Solo para --tipo transfer-documents: API de traspasos de V1 y file-manager de V2
 export FLITMIG_V1Snapshot__BaseUrl="https://…/"
-export FLITMIG_V1Snapshot__AuthToken="…"
+export FLITMIG_V1Snapshot__AuthToken="…"   # opcional: el endpoint de snapshot no pide autenticación desde el 2026-07-29
 export FLITMIG_TargetFileManager__BaseUrl="https://…/"
 ```
 
@@ -167,7 +212,10 @@ Invertir este orden falla con `check_violation`.
 | Estado final | Manda el **master** de V1, no el último evento del historial (divergen en ~23%). |
 | Estados 4 (Sent) y 8 (Archived) | No existen en V2 → se colapsan al más cercano **y** se avisa. Pendiente de negocio. |
 | Adjuntos (instancia 2) | Copia origen→destino con **dos file-managers configurables** (`Source`/`TargetFileManager`). `Mode=Copy` descarga del origen y sube al destino (stores distintos, p. ej. AWS→MinIO); `Mode=Reference` no mueve el binario y usa el id de V1 como `storage_path` (mismo store). Escribe `procedure_instance_attachments` con `source='migration'` y `sha256` real. Ver `Mapping/AttachmentColumnMap.cs` (columna→`tipo`) y `migration_attachment_map` (libreta). La referencia jsonb `legacy_attachments` se conserva como respaldo. |
-| `reference_number` | `MIG-TR-{id de V1}` — nunca colisiona con el consecutivo `TRM-{año}-{n}` de la app. |
+| `reference_number` | El migrador **no** lo fija: lo compone el trigger `tr_procedure_instances_radicado` de V2 con el prefijo de familia y el consecutivo global (`FT1-0000123`), igual que a un trámite nativo. La trazabilidad a V1 vive en `migration.migration_map` y en `is_migrated`. Un migrado no se distingue por el radicado. |
+| Organismo de tránsito | `traffic_secretary_code` se cruza con `catalogs.transit_offices` y fija `TransitOfficeId` y el field_value `transit_office_id`, como el flujo nativo. Sin cruce queda el texto de V1 y un aviso: el trámite no llega a ninguna bandeja de organismo. |
+| Copropietarios | Hasta 4 actores por rol con ordinal y `ownership_percentage` (ADR-0053). El titular se escribe de último para que `comprador_nombre` del listado sea el suyo. |
+| Revocado | El estado 9 de matrícula va a `revocado` (HU #12165). |
 | Tipo de documento | V1 usa la convención RUNT de una letra (`C`, `N`, `P`, `T`); se traduce a `CC`, `NIT`, `PAS`, `TI`. |
 | Usuario | Los registros se atribuyen a un usuario de sistema (`migracion.v1@flitsas.io`), no a una persona. |
 
@@ -180,19 +228,68 @@ V2 = el de producción de V1 (mismo bucket S3), y a futuro V2 usa MinIO — por 
 configurable. El round-trip (leer del origen → sha256 → subir al destino → verificar sha256) se
 validó de punta a punta contra AWS pdn → MinIO dev.
 
-## Estado actual (2026-07-28)
+## Estado actual (2026-09-28)
 
-Las **tres instancias** funcionan para los **dos trámites**, probadas contra datos reales de
-producción (`pdn_copy_updated`) y verificadas en la UI de V2:
+**Alcance vigente:** solo los trámites en estado **Entregado** de V1 (traspaso 5, matrícula 6). Es
+la Epic #13046 de FLIT - EVOLUTION; en la copia `pdn_copy_updated` son 215. El migrador no filtra
+por estado: la lista de ids la arma una consulta aparte.
 
-| | data plana | adjuntos | documentos generados |
-|---|---|---|---|
-| **Traspaso** | ✅ | ✅ | ✅ |
-| **Matrícula inicial** | ✅ | ✅ | ✅ |
+En julio las tres instancias quedaron probadas para los dos trámites contra `pdn_copy_updated` y
+verificadas en la UI de V2. El 14 de septiembre se adaptó el mapeo a la estructura de V2 de ese
+momento (organismo de tránsito, copropietarios, revocado, cabeza de red). Desde entonces V2 cambió
+el radicado, los estados de preasignación y asignación, y la ruta por RUNT; la corrida sobre los
+entregados es la que confirma que el migrador sigue al día.
 
-- Integridad comprobada bajando los binarios de MinIO y recalculando el sha256.
-- Re-ejecución (`--force`) reparada en las tres instancias y verificada.
-- ⛔ Otros servicios — bloqueado: V2 no publica esos tipos de trámite.
+Otros servicios siguen bloqueados: V2 no publica esos tipos de trámite.
+
+### Pruebas
+
+Las pruebas del cargador (`Loading/ProcedureInstanceLoaderDbTests`) abren una conexión de verdad,
+porque lo que rompe este migrador vive en la base: triggers, FK y CHECK. En CI corren contra el
+Postgres del workflow `core-api.yml`, con todas las migraciones aplicadas. Sin cadena de conexión
+se saltan.
+
+Para correrlas en local contra una base limpia:
+
+```bash
+createdb flit_migrador_ci
+export ConnectionStrings__Core="Host=localhost;Database=flit_migrador_ci;Username=…"
+dotnet ef database update --project src/Flit.Infrastructure --startup-project src/Flit.Api
+dotnet test tests/Flit.DataMigration.Tests
+```
+
+### Cuidados en V2 con un trámite migrado
+
+El expediente de V1 llega como adjunto tipo `consolidado` (`source = migration`) y es el que vale
+para el organismo. Lo que V2 hace después con él:
+
+- **El OT no lo toca.** Abrir, regenerar y aprobar trabajan con `consolidado_maestro`, que excluye
+  al de V1. El maestro lleva la portada de V2 y además las piezas migradas.
+- **Se reemplaza en cuanto el trámite vuelve a gestionarse en V2.** La protección
+  `migrado_solo_lectura` de `GenerarConsolidadoHandler` solo cubre los estados finales. Estos
+  caminos regeneran el consolidado del gestor, y con él pueden regenerarse el FUR y el mandato:
+  - el visor o el botón regenerar del gestor, cuando subsana un rechazo;
+  - «Limpiar» o «Cargar consolidado» del admin.
+  El rechazo del OT por sí solo no lo reemplaza: la regeneración anticipada que dispara omite a
+  los migrados (`RegenerarConsolidadoAnticipadoHandler`, `OmitidoMigrado`). Al aprobar, V2 intenta
+  regenerar, el guard lo frena y queda un evento `regeneracion_documental_fallida` con
+  `migrado_solo_lectura`. Es ruido en la bitácora, no un error.
+- **Es intencional.** Un migrado rechazado se subsana en V2 y desde ahí es un trámite de V2, así
+  que su expediente pasa a ser el nuevo. Si hace falta el de V1 después de eso, su trazabilidad
+  sigue en `migration.migration_attachment_map`.
+- **Prenda y transformación se traducen al modelo de V2** (HU #13072), así que el listado, los
+  filtros y Consultas las marcan igual que en un nativo:
+
+  | V1 | V2 |
+  |---|---|
+  | `registered_pledge` («Inscripción de prenda a favor de…») | prenda `registrar`, acreedor `pledge_in_favour` |
+  | `has_garment_lifting` | prenda `levantar`, acreedor `warranty_creditor_*` |
+  | Acreedor del RUNT sin inscripción ni levantamiento | prenda `omitir`. **Sin** marca, como un nativo |
+  | `switch_vehicle_color`, `switch_vehicle_bodywork`, `switch_vehicle_fuel_type` | `cambio_*` = `true`. El dato de V1 pasa a `vehicle_*_runt` y `new_vehicle_*` queda como efectivo |
+  | `is_armored_vehicle` | `blindaje` = `true` |
+
+  `is_dismantling_armor` (desmonte de blindaje) no tiene equivalente en V2 y se queda en
+  `legacy_v1_extras`, igual que todas las columnas originales.
 
 ### Lo que falta antes de producción
 
@@ -201,13 +298,11 @@ producción (`pdn_copy_updated`) y verificadas en la UI de V2:
 2. **Cruzar los NIT reales de V1 contra los tenants de la V2 de producción.** Los del backup son
    MOCK. `tenant_id` es NOT NULL **sin FK**: un NIT mal resuelto mete los trámites de una empresa
    dentro de otra y RLS los esconde de su dueño.
-3. **El V1 que ejecute la instancia 3 tiene que coincidir con el esquema de producción.** La rama
-   `develop` declara columnas que producción no tiene (MFA, liveness) y TypeORM las mete en el
-   SELECT: contra pdn real, ese V1 no puede leer las tablas afectadas.
-4. **Multipropietario** (321 matrículas en pdn): hoy solo se migra el titular y se avisa. Falta la
-   decisión de producto sobre cómo representar a los copropietarios en V2.
-5. **Los trámites migrados no salen en el listado por defecto** de V2: carga los 200 más recientes y
-   filtra en cliente. Todo lo migrado es histórico, así que solo se alcanza por URL directa.
-6. **Reporte de reconciliación exportable** — hoy solo va a consola.
+3. **El V1 que ejecute la instancia 3 tiene que coincidir con el esquema de su base.** La rama
+   `develop` de V1 declara columnas que producción no tiene (MFA, liveness) y TypeORM las mete en el
+   SELECT. En laboratorio, V1 corre en local contra la copia con un `.env` propio.
+4. **Un entregado migrado tiene que poder decidirse en V2**: aparecer en la bandeja de su organismo
+   y aprobarse o rechazarse. Lo verifica la Feature #13048.
+5. **Reporte de reconciliación exportable** — hoy solo va a consola.
 
 Diseño completo y contexto de negocio: `repos/migration-flit-v1-to-v2/`.
