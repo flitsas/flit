@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ManualArticle } from "@/lib/manual/catalog";
 import { getAdjacentArticles } from "@/lib/manual/catalog";
 import { ManualCalloutBox } from "./ManualCallout";
+import { ManualMediaFigure } from "./ManualMediaFigure";
 
 export function ManualArticleView({ article }: { article: ManualArticle }) {
   const { prev, next } = getAdjacentArticles(article.slug);
@@ -64,6 +65,9 @@ export function ManualArticleView({ article }: { article: ManualArticle }) {
                 ))}
               </ul>
             )}
+            {block.media?.map((m) => (
+              <ManualMediaFigure key={m.kind === "image" ? m.src : m.id} media={m} />
+            ))}
             {block.callouts?.map((c) => (
               <ManualCalloutBox key={c.text.slice(0, 32)} callout={c} />
             ))}
