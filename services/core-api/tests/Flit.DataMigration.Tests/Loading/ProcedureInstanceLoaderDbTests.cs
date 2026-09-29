@@ -328,6 +328,88 @@ public sealed class ProcedureInstanceLoaderDbTests
     }
 
     /// <summary>
+    /// HU #13072 — la prenda y la transformación de V1 llegan a las tablas que lee V2 al marcar el
+    /// trámite. Pasa por el mapper real, no por un grafo armado a mano, para que un CHECK de la tabla
+    /// de prenda (decisión, familia, estado) o su índice único por familia fallen aquí y no en la ola.
+    /// </summary>
+    [Fact]
+    public async Task La_prenda_y_la_transformacion_de_V1_quedan_en_las_tablas_de_V2()
+    {
+        var conexion = ConexionV2();
+        if (conexion is null)
+        {
+            Assert.Skip("Sin ConnectionStrings__Core: no hay base contra la que probar.");
+        }
+
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = Abrir(conexion);
+        var escenario = await Escenario.PrepararAsync(db, ct);
+
+        try
+        {
+            var registro = new Flit.DataMigration.V1.Source.V1SourceRecord
+            {
+                Id = 900_006,
+                SourceTable = "vehicle_transfer_master",
+                ProcessStatus = 5,
+                StatusHistory = [],
+                Columns = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["vehicle_owner_document_type"] = "C",
+                    ["vehicle_owner_document_number"] = "1000000001",
+                    ["vehicle_owner_name"] = Escenario.Vendedor,
+                    ["vehicle_buyer_document_type"] = "C",
+                    ["vehicle_buyer_document_number"] = "1000000002",
+                    ["vehicle_buyer_name"] = Escenario.Comprador,
+                    ["vehicle_colors"] = "BLANCO",
+                    ["switch_vehicle_color"] = "true",
+                    ["new_vehicle_color"] = "ROJO",
+                    ["registered_pledge"] = "true",
+                    ["pledge_in_favour"] = "MAQUIMAS",
+                    ["has_garment_lifting"] = "true",
+                    ["warranty_creditor_name"] = "BANCO SANTANDER COLOMBIA S.A.",
+                },
+            };
+            var mapeado = TransferMapper.Map(registro, new MappingContext
+            {
+                TenantId = escenario.TenantId,
+                ProcedureTypeId = escenario.ProcedureTypeId,
+                SystemUserId = escenario.SystemUserId,
+                OwnerEntityId = escenario.OwnerEntityId,
+                BuyerEntityId = escenario.BuyerEntityId,
+            });
+
+            var resultado = await new ProcedureInstanceLoader(db, escenario.Libreta, "test-prenda")
+                .LoadAsync(mapeado, dryRun: false, force: false, ct);
+            resultado.Status.Should().Be(LoadStatus.Migrated, resultado.Reason);
+
+            var prendas = await db.ProcedureInstancePrendas.AsNoTracking()
+                .Where(p => p.ProcedureInstanceId == mapeado.Instance.Id)
+                .ToListAsync(ct);
+            prendas.Select(p => (p.Decision, p.AccionFamilia, p.Estado)).Should().BeEquivalentTo(
+            [
+                (PrendaDecision.Registrar, PrendaAccionFamilia.Constitucion, PrendaEstado.Vigente),
+                (PrendaDecision.Levantar, PrendaAccionFamilia.Levantamiento, PrendaEstado.Vigente),
+            ]);
+
+            var campos = await db.ProcedureInstanceFieldValues.AsNoTracking()
+                .Where(f => f.ProcedureInstanceId == mapeado.Instance.Id
+                    && (f.FieldKey == "cambio_color" || f.FieldKey == "vehicle_color" || f.FieldKey == "vehicle_color_runt"))
+                .ToDictionaryAsync(f => f.FieldKey, f => f.ValueText, ct);
+            campos.Should().BeEquivalentTo(new Dictionary<string, string?>
+            {
+                ["cambio_color"] = "true",
+                ["vehicle_color"] = "ROJO",
+                ["vehicle_color_runt"] = "BLANCO",
+            });
+        }
+        finally
+        {
+            await escenario.LimpiarAsync(db, ct);
+        }
+    }
+
+    /// <summary>
     /// El mínimo que V2 exige para poder insertar un trámite: un tenant, un tipo de trámite del
     /// catálogo y un usuario al que atribuir la carga. El tipo y las entidades de actor los siembran
     /// las migraciones; el tenant es propio de cada corrida para que dos ejecuciones no se pisen.
