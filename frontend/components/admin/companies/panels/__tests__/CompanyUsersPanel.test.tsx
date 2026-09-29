@@ -52,8 +52,8 @@ describe("CompanyUsersPanel — tabla con columnas Perfil y Rol separadas (AC4)"
 
     render(<CompanyUsersPanel tenantId="tenant-1" />);
 
-    const fila = (await screen.findByText("Hugo Vélez")).closest("div.grid") as HTMLElement;
-    const encabezado = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    const fila = (await screen.findByText("Hugo Vélez")).closest("tr") as HTMLElement;
+    const encabezado = screen.getByText("Usuario").closest("tr") as HTMLElement;
     expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
     expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
     expect(within(fila).getByText("Gestor · Admin")).toBeInTheDocument();

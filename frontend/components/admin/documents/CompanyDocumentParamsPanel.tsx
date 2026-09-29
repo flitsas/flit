@@ -4,6 +4,13 @@
 // Permite fijar el estado (OCULTO/OBLIGATORIO/OPCIONAL) de un tipo de documento por gestora,
 // consumiendo el endpoint admin de HU #10521. Sin parámetros, el checklist queda en su estado base.
 import { useCallback, useEffect, useState } from "react";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import {
   fetchCompanyDocumentParams,
   upsertCompanyDocumentParam,
@@ -96,40 +103,45 @@ export function CompanyDocumentParamsPanel({
       ) : null}
 
       {loading ? (
-        <p>Cargando…</p>
+        <CarLoaderModal label="Cargando parámetros documentales…" />
       ) : items.length === 0 ? (
         <p className="text-sm text-gray-500">Sin parámetros: se aplica el comportamiento base.</p>
       ) : (
+        /* Bug #13055 — tabla homologada con el modelo de trámites (fija: parámetros por gestora, sin paginar) */
         <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr>
-              <th scope="col" className="py-1">Documento</th>
-              <th scope="col" className="py-1">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td className="py-1 font-mono">{item.documentTypeCode}</td>
-                <td className="py-1">
-                  <select
-                    aria-label={`Estado de ${item.documentTypeCode}`}
-                    value={item.state}
-                    disabled={saving}
-                    onChange={(e) => void save(item.documentTypeCode, e.target.value as CompanyDocumentParamState)}
-                  >
-                    {STATES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </td>
+          <table
+            aria-label="Parámetros documentales"
+            className="text-left text-sm"
+            style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+          >
+            <thead>
+              <tr>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Documento</th>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Estado</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                  <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>{item.documentTypeCode}</td>
+                  <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                    <select
+                      aria-label={`Estado de ${item.documentTypeCode}`}
+                      value={item.state}
+                      disabled={saving}
+                      onChange={(e) => void save(item.documentTypeCode, e.target.value as CompanyDocumentParamState)}
+                    >
+                      {STATES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

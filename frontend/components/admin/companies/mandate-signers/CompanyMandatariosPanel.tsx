@@ -5,7 +5,9 @@ import { Pencil, RotateCcw, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
@@ -49,6 +51,8 @@ export function CompanyMandatariosPanel({
 }) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
+  // Bug #13055 — paginación en cliente con filas por página, como el listado de trámites.
+  const pg = usePaginacion();
   const [signers, setSigners] = useState<MandateSigner[]>([]);
   const [offices, setOffices] = useState<CompanyTransitOfficeOption[]>([]);
   const [companies, setCompanies] = useState<RepresentedCompanyOption[]>([]);
@@ -219,7 +223,7 @@ export function CompanyMandatariosPanel({
               </tr>
             </thead>
             <tbody>
-              {signers.map((signer) => (
+              {pg.paginar(signers).map((signer) => (
                 <tr key={signer.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
                   <td className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     <span className="font-semibold">{signer.fullName}</span>
@@ -289,6 +293,15 @@ export function CompanyMandatariosPanel({
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={pg.page}
+          pageSize={pg.pageSize}
+          totalCount={signers.length}
+          onPageChange={pg.setPage}
+          onPageSizeChange={pg.setPageSize}
+          noun="mandatarios"
+        />
       </UiStateBoundary>
       )}
 

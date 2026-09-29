@@ -76,7 +76,8 @@ describe("CompanyListTable (AC1)", () => {
       />,
     );
 
-    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    // Bug #13055 — paginación estándar: «Mostrando X–Y de N» + navegación numerada.
+    expect(screen.getByText("Mostrando 1–20 de 40")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /página siguiente/i }));
     expect(onPageChange).toHaveBeenCalledWith(2);
   });

@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mail, Settings2, UserPlus } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -16,6 +19,12 @@ import { ChildCompanyStatusDialog } from "./ChildCompanyStatusDialog";
 import { CreateChildCompanyDialog } from "./CreateChildCompanyDialog";
 
 import { formatFechaHora } from "@/lib/format/date";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 export interface NetworkChildrenPanelProps {
 
   headTenantId: string;
@@ -26,6 +35,7 @@ export interface NetworkChildrenPanelProps {
 export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkChildrenPanelProps) {
   const router = useRouter();
   const [status, setStatus] = useState<UiStatus>("loading");
+  const pg = usePaginacion();
   const [children, setChildren] = useState<CompanyChildListItem[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [statusTarget, setStatusTarget] = useState<CompanyChildListItem | null>(null);
@@ -110,6 +120,9 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
         <CreateButton label="Agregar cliente a la red" icon={UserPlus} onClick={() => setCreateOpen(true)} />
       </div>
 
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando tu red de clientes…" />
+      ) : (
       <UiStateBoundary
         status={status}
         onRetry={() => void load()}
@@ -128,44 +141,49 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
         skeletonRows={4}
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-xs">
+          {/* Bug #13055 — tabla homologada con el modelo de trámites */}
+<table
+ aria-label="Red de clientes"
+ className="min-w-[720px] text-xs"
+ style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+>
             <thead>
-              <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-                <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+              <tr>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Cliente
                 </th>
-                <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   NIT
                 </th>
-                <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Tipo
                 </th>
-                <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Estado
                 </th>
-                <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Vinculación
                 </th>
-                <th className="rounded-r-xl px-4 py-2.5 text-right" style={{ background: "#DFE5ED" }}>
+                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Acciones
                 </th>
               </tr>
             </thead>
             <tbody>
-              {children.map((child) => (
-                <tr key={child.id} className="bg-white dark:bg-[#0B0F14]">
-                  <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">{child.razonSocial}</td>
-                  <td className="border-y px-4 py-3 font-mono">{child.nit}</td>
-                  <td className="border-y px-4 py-3">{tenantTypeLabel(child.tenantType)}</td>
-                  <td className="border-y px-4 py-3">
+              {pg.paginar(children).map((child) => (
+                <tr key={child.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                  <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>{child.razonSocial}</td>
+                  <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>{child.nit}</td>
+                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>{tenantTypeLabel(child.tenantType)}</td>
+                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                     {child.estadoActivo ? (
                       <StatusBadge label="Activo" tone="success" />
                     ) : (
                       <StatusBadge label="Inactivo" tone="danger" />
                     )}
                   </td>
-                  <td className="border-y px-4 py-3 opacity-70">{formatDate(child.fechaVinculacion)}</td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
+                  <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>{formatDate(child.fechaVinculacion)}</td>
+                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
                     <RowActions
                       actions={[
                         {
@@ -199,7 +217,18 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
             </tbody>
           </table>
         </div>
+        {/* Bug #13055 — paginación en cliente con filas por página, como el listado de trámites */}
+        <Pagination
+          page={pg.page}
+          pageSize={pg.pageSize}
+          totalCount={children.length}
+          onPageChange={pg.setPage}
+          onPageSizeChange={pg.setPageSize}
+          noun="clientes"
+        />
+
       </UiStateBoundary>
+      )}
 
       <CreateChildCompanyDialog
         open={createOpen}

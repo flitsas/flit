@@ -54,7 +54,7 @@ describe("AdminCompaniesPage HU #11222 / #11227", () => {
     await waitFor(() => expect(fetchCompaniesIndex).toHaveBeenCalled());
 
     expect(fetchCompaniesIndex).toHaveBeenCalledWith(
-      expect.objectContaining({ excludeTransitOffices: true, page: 1, pageSize: 20 }),
+      expect.objectContaining({ excludeTransitOffices: true, page: 1, pageSize: 10 }),
       expect.any(AbortSignal),
     );
   });

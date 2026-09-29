@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2 } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import {
@@ -26,7 +28,6 @@ import { isHeadTenantType, type CompanyListItem, type CompanyPagedResult } from 
 import { usePermissions } from "@/hooks/usePermissions";
 import { ADMIN_BACK_LINK_CLS, ADMIN_CONTENT_SURFACE_CLS } from "@/components/admin/admin-ui-styles";
 
-const PAGE_SIZE = 20;
 
 // Consola admin — listado de compañías (HU #10194, AC1/AC7) + alta de compañías
 // (#10118). Filtrado y paginación server-side; 4 estados UI vía UiStateBoundary.
@@ -44,7 +45,8 @@ function CompaniesList() {
   const { show } = useToast();
   const { isSuperAdmin, isAdminCompany, tenantId } = usePermissions();
   const [filters, setFilters] = useState<CompanyFilters>({});
-  const [page, setPage] = useState(1);
+  // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   // HU #11227 — solo SuperAdmin; desactivado = excluir OT (default).
   const [includeTransitOffices, setIncludeTransitOffices] = useState(false);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -72,7 +74,7 @@ function CompaniesList() {
           {
             ...filters,
             page,
-            pageSize: PAGE_SIZE,
+            pageSize,
             // SuperAdmin: toggle; cualquier otro caso (defensa) excluye OT.
             excludeTransitOffices: isSuperAdmin ? !includeTransitOffices : true,
           },
@@ -89,7 +91,7 @@ function CompaniesList() {
         }
       }
     },
-    [filters, page, includeTransitOffices, isSuperAdmin, isAdminCompany],
+    [filters, page, pageSize, includeTransitOffices, isSuperAdmin, isAdminCompany],
   );
 
   useEffect(() => {
@@ -179,6 +181,9 @@ function CompaniesList() {
       <CompanyFiltersPanel onApply={handleApplyFilters} initialValue={filters} />
 
       <div className={ADMIN_CONTENT_SURFACE_CLS}>
+        {status === "loading" ? (
+          <CarLoaderModal label="Cargando compañías…" />
+        ) : (
         <UiStateBoundary
           status={status}
           onRetry={() => void load()}
@@ -192,12 +197,14 @@ function CompaniesList() {
               page={result.page}
               pageSize={result.pageSize}
               onPageChange={setPage}
+              onPageSizeChange={setPageSize}
               onConfigure={(tenantId) => router.push(`/admin/companies/${tenantId}`)}
               onEdit={openEdit}
               onToggleStatus={setToggleTarget}
             />
           )}
         </UiStateBoundary>
+        )}
       </div>
 
       <CreateCompanyDialog

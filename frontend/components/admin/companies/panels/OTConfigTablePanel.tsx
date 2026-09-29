@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Lock } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { useToast } from "@/components/admin/Toast";
 import {
   OTConfigTable,
@@ -46,8 +48,6 @@ import type {
   TransitOffice,
 } from "@/lib/api/types";
 
-const OT_PAGE_SIZE = 10;
-
 type PendingGrantAction = {
   officeId: string;
   officeName: string;
@@ -89,7 +89,8 @@ export function OTConfigTablePanel({
   const [restrictions, setRestrictions] = useState<OtConsultationRestriction[]>([]);
   const [prendaOptionalPolicies, setPrendaOptionalPolicies] = useState<OtPrendaDocumentPolicy[]>([]);
   const [configOffice, setConfigOffice] = useState<TransitOffice | null>(null);
-  const [page, setPage] = useState(1);
+  // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
+  const pg = usePaginacion();
   const [search, setSearch] = useState("");
   const [pendingGrant, setPendingGrant] = useState<PendingGrantAction | null>(null);
   const [grantBusy, setGrantBusy] = useState(false);
@@ -243,17 +244,13 @@ export function OTConfigTablePanel({
     [visibleOffices, search],
   );
 
-  const lastPage = Math.max(1, Math.ceil(searchedOffices.length / OT_PAGE_SIZE));
-  const safePage = Math.min(page, lastPage);
-
-  const pageOffices = useMemo(
-    () => searchedOffices.slice((safePage - 1) * OT_PAGE_SIZE, safePage * OT_PAGE_SIZE),
-    [searchedOffices, safePage],
-  );
+  const lastPage = Math.max(1, Math.ceil(searchedOffices.length / pg.pageSize));
+  const safePage = Math.min(pg.page, lastPage);
+  const pageOffices = pg.paginar(searchedOffices);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
-    setPage(1);
+    pg.setPage(1);
   };
 
   const handleToggleBlocking = async (
@@ -308,6 +305,9 @@ export function OTConfigTablePanel({
         </div>
       )}
 
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando organismos de tránsito…" />
+      ) : (
       <UiStateBoundary
         status={status === "ready" && visibleOffices.length === 0 ? "empty" : status}
         onRetry={() => void load()}
@@ -330,11 +330,14 @@ export function OTConfigTablePanel({
         />
         <Pagination
           page={safePage}
-          pageSize={OT_PAGE_SIZE}
+          pageSize={pg.pageSize}
           totalCount={searchedOffices.length}
-          onPageChange={setPage}
+          onPageChange={pg.setPage}
+          onPageSizeChange={pg.setPageSize}
+          noun="organismos"
         />
       </UiStateBoundary>
+      )}
 
       {showMarcaBlocks && (
         <div className="mt-4 border-t pt-4">

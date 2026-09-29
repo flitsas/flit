@@ -16,6 +16,7 @@ import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Modal } from "@/components/atom/Modal";
 import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { RowActions } from "@/components/atom/RowActions";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
@@ -55,8 +56,6 @@ import {
   rlPrimaryCtaStyle,
 } from "./rl-flit-styles";
 
-const PAGE_SIZE = 20;
-
 /**
  * Directorio de representantes legales.
  * Acciones por fila (iconos lineales FLIT): Editar, Empresas, Eliminar.
@@ -72,7 +71,8 @@ export function LegalRepresentativesTab({
   networkHeadId?: string | null;
 }) {
   const { show } = useToast();
-  const [page, setPage] = useState(1);
+  // Bug #13055 — filas por página elegibles; la paginación sigue siendo de servidor.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [items, setItems] = useState<LegalRepresentativeItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -93,7 +93,7 @@ export function LegalRepresentativesTab({
         const result = await fetchLegalRepresentatives(
           tenantId,
           page,
-          PAGE_SIZE,
+          pageSize,
           signal,
           networkHeadId,
         );
@@ -105,7 +105,7 @@ export function LegalRepresentativesTab({
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [tenantId, page, networkHeadId],
+    [tenantId, page, pageSize, networkHeadId],
   );
 
   useEffect(() => {
@@ -387,7 +387,13 @@ export function LegalRepresentativesTab({
             </table>
           </div>
 
-          <Pagination page={page} pageSize={PAGE_SIZE} totalCount={totalCount} onPageChange={setPage} />
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </div>
       </UiStateBoundary>
       )}

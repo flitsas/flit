@@ -108,10 +108,11 @@ describe("OTConfigTablePanel (HU #10194 — tabla consolidada de OT)", () => {
     arrange({ grantedIds: ["o1"] });
     render(<OTConfigTablePanel tenantId={TENANT} />);
 
-    expect(screen.getByTestId("ui-loading")).toBeInTheDocument();
+    // Bug #13055 — carga con el loader del carrito, no con el esqueleto.
+    expect(screen.getByText(/cargando organismos de tránsito/i)).toBeInTheDocument();
 
     const table = await screen.findByRole("table", { name: /organismos de tránsito/i });
-    expect(screen.queryByTestId("ui-loading")).not.toBeInTheDocument();
+    expect(screen.queryByText(/cargando organismos de tránsito/i)).not.toBeInTheDocument();
 
     expect(within(table).getByRole("columnheader", { name: /organismo/i })).toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: /código/i })).toBeInTheDocument();
