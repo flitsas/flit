@@ -148,12 +148,12 @@ El trigger de §3.1 solo mantiene `sync_version` / `sync_changed_at`; **no escri
 emite nada hacia Flito**. No se crean `tramites.procedure_sync_outbox` ni
 `integrations.external_subscriptions`, ni el `BackgroundService` de entrega.
 
-### 3.2 Índices de apoyo (siguiente DDL libre, HU #13075)
+### 3.2 Índices de apoyo (DDL 124 — hecho, HU #13075; ver ADR-0061)
 
 ```sql
 CREATE INDEX ix_pi_status_history_aprobado ON tramites.procedure_instance_status_history (procedure_instance_id, changed_at DESC)
   WHERE to_status = 'aprobado';
-CREATE INDEX ix_pi_attachments_factura ON tramites.procedure_instance_attachments (procedure_instance_id, created_at DESC)
+CREATE INDEX ix_pi_attachments_factura ON tramites.procedure_instance_attachments (procedure_instance_id, uploaded_at DESC)
   WHERE tipo = 'factura';   -- procedure_instance_attachments no tiene deleted_at
 -- actors ya tiene índice por (procedure_instance_id); field_values tiene UNIQUE (procedure_instance_id, field_key).
 ```
@@ -282,7 +282,7 @@ SELECT p.id, p.reference_number, p.consecutivo, p.sync_version, p.sync_changed_a
        tof.code AS ot_codigo, tof.name AS ot_nombre, tof.city_code AS ot_codigo_secretaria,
        tof.city_name AS ot_ciudad, tof.department_name AS ot_departamento,
        COALESCE(a.compradores, '[]'::jsonb) AS compradores,
-       f.id AS factura_adjunto_id, f.filename AS factura_nombre, f.created_at AS factura_cargada_en,
+       f.id AS factura_adjunto_id, f.filename AS factura_nombre, f.uploaded_at AS factura_cargada_en,
        t.id AS tenant_id, t.tax_id AS nit, t.legal_name AS compania_nombre
   FROM page p
   JOIN tramites.procedure_types pt ON pt.id = p.procedure_type_id
@@ -306,9 +306,9 @@ SELECT p.id, p.reference_number, p.consecutivo, p.sync_version, p.sync_changed_a
         SELECT max(h.changed_at) AS fecha_aprobacion FROM tramites.procedure_instance_status_history h
          WHERE h.procedure_instance_id = p.id AND h.to_status = 'aprobado') ap ON true
   LEFT JOIN LATERAL (
-        SELECT x.id, x.filename, x.created_at FROM tramites.procedure_instance_attachments x
+        SELECT x.id, x.filename, x.uploaded_at FROM tramites.procedure_instance_attachments x
          WHERE x.procedure_instance_id = p.id AND x.tipo = 'factura'
-         ORDER BY x.created_at DESC LIMIT 1) f ON true
+         ORDER BY x.uploaded_at DESC LIMIT 1) f ON true
   LEFT JOIN LATERAL (
         SELECT max(value_text) FILTER (WHERE field_key='vehicle_class')               AS clase,
                max(value_text) FILTER (WHERE field_key='vehicle_brand')               AS marca,
@@ -364,7 +364,7 @@ con `Content-Disposition: attachment` y TTL corto (`ExternalClients:AttachmentUr
 | `compradores[].tipoDocumento` | `document_type` | código canónico FLIT (CC, NIT, CE, PAS, TI…), sin transformación |
 | `compradores[].numeroDocumento / nombreCompleto / celular / correo` | `document_number` / `full_name` / `phone` / `email` | PII: enmascarar sin scope `pii.read` (`9****0000`, `c***@dominio`) |
 | `compradores[].direccion / ciudad` | `metadata->>'direccion'` / `metadata->>'ciudad'` | jsonb camelCase (`ActorMetadataReader`) |
-| `factura.{adjuntoId,nombreArchivo,cargadaEn}` | `procedure_instance_attachments` | `tipo='factura'`, más reciente (la tabla no tiene `deleted_at`) |
+| `factura.{adjuntoId,nombreArchivo,cargadaEn}` | `procedure_instance_attachments` | `tipo='factura'`, más reciente por `uploaded_at` (la tabla no tiene `deleted_at` ni `created_at`); `cargadaEn` = `uploaded_at` |
 | `companiaGestora.{tenantId,nit,nombre}` | `identity.tenants.{id,tax_id,legal_name}` | vía `procedure_instances.tenant_id` |
 
 ## 7. Archivos a crear / modificar
