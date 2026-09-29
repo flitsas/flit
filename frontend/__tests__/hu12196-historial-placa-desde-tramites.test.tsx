@@ -247,7 +247,7 @@ describe('HU #12196 — el módulo recibe la placa precargada', () => {
     await waitFor(() => expect(mocks.listPlateHistory).toHaveBeenCalledTimes(1));
     const args = mocks.listPlateHistory.mock.calls[0][0] as Record<string, unknown>;
     // Normalizada en el cliente y con la paginación del módulo; nada más.
-    expect(args).toEqual({ placa: 'ABC123', skip: 0, take: 20 });
+    expect(args).toEqual({ placa: 'ABC123', skip: 0, take: 10 });
     expect(Object.keys(args).sort()).toEqual(['placa', 'skip', 'take']);
     // Ni siquiera para el SuperAdmin, que es quien podría "ayudar" mandando el tenant de la fila.
     expect(JSON.stringify(args).toLowerCase()).not.toContain('tenant');

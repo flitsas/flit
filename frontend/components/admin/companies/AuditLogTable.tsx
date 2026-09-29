@@ -1,7 +1,13 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { AuditLogEntry } from "@/lib/api/types";
+import { Pagination } from "@/components/atom/Pagination";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 
 import { formatFechaHora } from "@/lib/format/date";
 // Tabla del historial de auditoría (HU #10194, AC5). Columnas: Fecha, Campo
@@ -14,50 +20,62 @@ export interface AuditLogTableProps {
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  /** Filas por página (Bug #13055). */
+  onPageSizeChange?: (pageSize: number) => void;
 }
 
-export function AuditLogTable({ entries, totalCount, page, pageSize, onPageChange }: AuditLogTableProps) {
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-
+export function AuditLogTable({
+  entries,
+  totalCount,
+  page,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: AuditLogTableProps) {
   return (
     <div className="flex flex-col">
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-xs">
+      {/* Bug #13055 — tabla homologada con el modelo de trámites */}
+      <table
+        aria-label="Historial de auditoría"
+        className="min-w-[640px] text-xs"
+        style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+      >
         <thead>
-          <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-            <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+          <tr>
+            <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Fecha
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Campo modificado
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Valor anterior
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Valor nuevo
             </th>
-            <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Operador
             </th>
           </tr>
         </thead>
         <tbody>
           {entries.map((entry, i) => (
-            <tr key={`${entry.changedAt}-${i}`} className="bg-white dark:bg-[#0B0F14]">
-              <td className="rounded-l-xl border-y border-l px-4 py-3 opacity-80">
+            <tr key={`${entry.changedAt}-${i}`} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+              <td className="rounded-l-xl border-y border-l px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
                 {formatDateTime(entry.changedAt)}
               </td>
-              <td className="border-y px-4 py-3 font-medium">
+              <td className="border-y px-4 py-3 font-medium" style={{ borderColor: "#DFE5ED" }}>
                 {formatField(entry)}
               </td>
-              <td className="border-y px-4 py-3 font-mono opacity-70">
+              <td className="border-y px-4 py-3 font-mono opacity-70" style={{ borderColor: "#DFE5ED" }}>
                 {formatValue(entry.oldValue)}
               </td>
-              <td className="border-y px-4 py-3 font-mono opacity-70">
+              <td className="border-y px-4 py-3 font-mono opacity-70" style={{ borderColor: "#DFE5ED" }}>
                 {formatValue(entry.newValue)}
               </td>
-              <td className="rounded-r-xl border-y border-r px-4 py-3 font-mono opacity-70">
+              <td className="rounded-r-xl border-y border-r px-4 py-3 font-mono opacity-70" style={{ borderColor: "#DFE5ED" }}>
                 {formatOperator(entry.changedBy)}
               </td>
             </tr>
@@ -66,32 +84,14 @@ export function AuditLogTable({ entries, totalCount, page, pageSize, onPageChang
       </table>
       </div>
 
-      <div className="mt-2 flex items-center justify-between pt-1 text-[11px]">
-        <p className="opacity-60">{totalCount} registros</p>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Página anterior"
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-            className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" /> Anterior
-          </button>
-          <span className="font-semibold" style={{ color: "#557EFF" }}>
-            {page} / {totalPages}
-          </span>
-          <button
-            type="button"
-            aria-label="Página siguiente"
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(page + 1)}
-            className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-          >
-            Siguiente <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        totalCount={totalCount}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        noun="registros"
+      />
     </div>
   );
 }

@@ -31,6 +31,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "El botón central flotante (FAB) «Inicio FLIT» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
           "Arriba encontrarás un carrusel: un slide de bienvenida fijo y, detrás, los banners que la plataforma tenga activos para tu compañía (novedades, avisos, campañas). Tú no los administras; si no hay ninguno activo, el carrusel solo muestra el slide de bienvenida.",
           "Debajo verás el resumen operativo de tu compañía: volumen de trámites, distribución por estado y seguimiento operativo. No aparece como píldora del dock inferior; siempre está disponible desde el FAB.",
+          "El volumen se resume en cinco tarjetas: Total trámites, Matrículas, Traspasos, Otros Trámites (cualquier trámite que no sea matrícula ni traspaso) y Completados.",
         ],
         media: [
           {
@@ -863,6 +864,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Suspender: bloquea el acceso temporalmente; puedes reactivarlo cuando corresponda.",
           "Desactivar: bloquea el acceso de forma indefinida.",
           "Último ingreso: te dice quién no ha vuelto a entrar.",
+          "En la tabla, «Perfil» dice a qué tipo de cuenta pertenece la persona (Gestor, OT o FLIT) y «Rol» qué puede hacer. El administrador se distingue con «Gestor · Admin» (u «OT · Admin» en un organismo); «Fecha» es el día en que se creó el usuario.",
         ],
       },
       {

@@ -16,7 +16,16 @@ import { UserAuditHistoryDrawer } from "./users/UserAuditHistoryDrawer";
 import { ResetPasswordDialog } from "./users/ResetPasswordDialog";
 import { ModuleTitle } from "./ModuleTitle";
 import { COPY } from "@/lib/copy/copy-catalog";
-import { ICON_BUTTON_HIT_AREA, type RowAction } from "@/components/atom/RowActions";
+import { RowActions, type RowAction } from "@/components/atom/RowActions";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ICT_CLIENTS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
 import { IctClientsPanel } from "./users/IctClientsPanel";
@@ -64,6 +73,8 @@ export function Usuarios() {
   // Ver eliminados / restaurar siguen exclusivos de SuperAdmin.
   const canManageUserLifecycle = isSuperAdmin || isAdminCompany;
   const [open, setOpen] = useState(false);
+  const pgEliminados = usePaginacion();
+  const pgRoles = usePaginacion();
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -421,61 +432,85 @@ export function Usuarios() {
         // HU #10624 (AC3) — GET /api/v1/security/users?onlyDeleted=true: usuarios eliminados
         // (soft-delete) de CUALQUIER tenant, exclusivo de SuperAdmin. Restaurar (1 clic de
         // confirmación en RestoreUserDialog) deshace el soft-delete vía restoreUser().
-        <div className="flex flex-col overflow-x-auto">
-          <div
-            className="grid min-w-[560px] px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
-            style={{ gridTemplateColumns: "3fr 2fr 2fr 40px", background: "#DFE5ED", color: "#162744" }}
-          >
-            <div>Usuario</div>
-            <div>Empresa</div>
-            <div>Eliminado el</div>
-            <div />
-          </div>
-
-          <div className="space-y-2 pt-2">
-            {deletedLoading && (
-              <div role="status" className="py-12 text-center text-sm opacity-60">Cargando usuarios eliminados…</div>
-            )}
-            {!deletedLoading && deletedError && (
-              <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{deletedError}</div>
-            )}
-            {!deletedLoading && !deletedError && deletedUsers.length === 0 && (
-              <div className="py-12 text-center text-sm opacity-60">
-                No hay usuarios eliminados de ninguna compañía u organismo.
-              </div>
-            )}
-            {!deletedLoading && !deletedError && deletedUsers.map((u) => (
-              <div
-                // Mismo criterio que la tabla de "Usuarios": u.id + u.roleId evita colisión de
-                // key cuando el JOIN produce N filas por usuario con N roles.
-                key={`${u.id}-${u.roleId ?? "sin-rol"}`}
-                className="grid min-w-[560px] items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
-                style={{ gridTemplateColumns: "3fr 2fr 2fr 40px" }}
-              >
-                <div>
-                  <p className="font-semibold">{u.fullName}</p>
-                  <p className="text-[10px] opacity-60">{u.email}</p>
-                </div>
-                <div className="opacity-70 truncate">{u.tenantName ?? "—"}</div>
-                <div className="opacity-70">{formatDateTime(u.deletedAt)}</div>
-                <div className="flex justify-end">
-                  <button
-                    title="Restaurar usuario"
-                    aria-label={`Restaurar usuario ${u.fullName}`}
-                    onClick={() => setRestoreTarget(u)}
-                    className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50`}
-                    style={{ color: "#557EFF" }}
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+        // Bug #13055 — tabla homologada con el modelo de trámites: `<table>` semántica, RowActions,
+        // loader del carrito y paginación en cliente con «Filas por página».
+        <div className="flex flex-col gap-3">
+          {deletedLoading && <CarLoaderModal label="Cargando usuarios eliminados…" />}
+          {!deletedLoading && deletedError && (
+            <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{deletedError}</div>
+          )}
+          {!deletedLoading && !deletedError && deletedUsers.length === 0 && (
+            <div className="py-12 text-center text-sm opacity-60">
+              No hay usuarios eliminados de ninguna compañía u organismo.
+            </div>
+          )}
           {!deletedLoading && !deletedError && deletedUsers.length > 0 && (
-            <p className="text-[10px] opacity-60 text-right pt-2 shrink-0">
-              Mostrando {deletedUsers.length} usuario{deletedUsers.length !== 1 ? "s" : ""} eliminado{deletedUsers.length !== 1 ? "s" : ""}
-            </p>
+            <>
+              <div className="overflow-x-auto">
+                <table
+                  aria-label="Usuarios eliminados"
+                  style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 560 }}
+                  className="text-xs"
+                >
+                  <thead>
+                    <tr>
+                      {["Usuario", "Empresa", "Eliminado el", "Acciones"].map((col, i, arr) => (
+                        <th
+                          key={col}
+                          scope="col"
+                          className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? "rounded-l-xl" : ""} ${i === arr.length - 1 ? "rounded-r-xl text-right" : ""}`}
+                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                        >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pgEliminados.paginar(deletedUsers).map((u) => (
+                      <tr
+                        // Mismo criterio que la tabla de "Usuarios": u.id + u.roleId evita colisión de
+                        // key cuando el JOIN produce N filas por usuario con N roles.
+                        key={`${u.id}-${u.roleId ?? "sin-rol"}`}
+                        className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                      >
+                        <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          <p className="font-semibold">{u.fullName}</p>
+                          <p className="text-[10px] opacity-60">{u.email}</p>
+                        </td>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          <span className="block truncate opacity-70">{u.tenantName ?? "—"}</span>
+                        </td>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          <span className="opacity-70">{formatDateTime(u.deletedAt)}</span>
+                        </td>
+                        <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          <RowActions
+                            actions={[
+                              {
+                                icon: RotateCcw,
+                                label: `Restaurar usuario ${u.fullName}`,
+                                tone: "primary",
+                                onClick: () => setRestoreTarget(u),
+                              },
+                            ]}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                page={pgEliminados.page}
+                pageSize={pgEliminados.pageSize}
+                totalCount={deletedUsers.length}
+                onPageChange={pgEliminados.setPage}
+                onPageSizeChange={pgEliminados.setPageSize}
+                noun="usuarios eliminados"
+                ariaLabel="Paginación de usuarios eliminados"
+              />
+            </>
           )}
         </div>
       )}
@@ -512,30 +547,55 @@ export function Usuarios() {
             Roles disponibles para tu empresa. Solo el Super Admin puede crear, editar o desactivar roles.
           </p>
           {rolesLoading ? (
-            <div className="py-12 text-center text-sm opacity-60">Cargando roles…</div>
+            <CarLoaderModal label="Cargando roles…" />
           ) : roles.length === 0 ? (
             <div className="py-12 text-center text-sm opacity-60">
               No hay roles configurados para este tenant. Contacta al Super Admin.
             </div>
           ) : (
-            <div className="flex flex-col overflow-x-auto">
-              <div className="grid grid-cols-12 min-w-[560px] px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0" style={{ background: "#DFE5ED", color: "#162744" }}>
-                <div className="col-span-2">Código</div>
-                <div className="col-span-4">Nombre</div>
-                <div className="col-span-4">Descripción</div>
-                <div className="col-span-2 text-center">Permisos</div>
+            <>
+              <div className="overflow-x-auto">
+                <table
+                  aria-label="Roles disponibles"
+                  style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 560 }}
+                  className="text-xs"
+                >
+                  <thead>
+                    <tr>
+                      {["Código", "Nombre", "Descripción", "Permisos"].map((col, i, arr) => (
+                        <th
+                          key={col}
+                          scope="col"
+                          className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? "rounded-l-xl" : ""} ${i === arr.length - 1 ? "rounded-r-xl text-center" : ""}`}
+                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                        >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pgRoles.paginar(roles).map((r) => (
+                      <tr key={r.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                        <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono opacity-80" style={{ borderColor: "#DFE5ED" }}>{r.code}</td>
+                        <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>{r.name}</td>
+                        <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>{r.description ?? "—"}</td>
+                        <td className="rounded-r-xl border-y border-r px-4 py-3 text-center font-bold" style={{ borderColor: "#DFE5ED", color: "#557EFF" }}>{r.permissionCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="space-y-2 pt-2">
-                {roles.map((r) => (
-                  <div key={r.id} className="grid grid-cols-12 min-w-[560px] items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs">
-                    <div className="col-span-2 font-mono opacity-80">{r.code}</div>
-                    <div className="col-span-4 font-semibold">{r.name}</div>
-                    <div className="col-span-4 opacity-70">{r.description ?? "—"}</div>
-                    <div className="col-span-2 text-center font-bold" style={{ color: "#557EFF" }}>{r.permissionCount}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
+              <Pagination
+                page={pgRoles.page}
+                pageSize={pgRoles.pageSize}
+                totalCount={roles.length}
+                onPageChange={pgRoles.setPage}
+                onPageSizeChange={pgRoles.setPageSize}
+                noun="roles"
+                ariaLabel="Paginación de roles"
+              />
+            </>
           )}
         </div>
       )}

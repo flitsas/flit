@@ -57,7 +57,7 @@ describe("HistorialSection — filtros (CF-18)", () => {
 
     await waitFor(() => expect(mocks.fetchStandaloneDocuments).toHaveBeenCalled());
     const [params] = mocks.fetchStandaloneDocuments.mock.calls[0];
-    expect(params).toMatchObject({ page: 1, pageSize: 20 });
+    expect(params).toMatchObject({ page: 1, pageSize: 10 });
     expect(params.documentType).toBeUndefined();
     expect(params.status).toBeUndefined();
     expect(params.dateFrom).toBeUndefined();

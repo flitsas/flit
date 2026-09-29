@@ -20,6 +20,7 @@ import {
   FileText,
   CheckCircle,
   Car,
+  Layers,
 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -445,6 +446,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   }, [slides.length]);
   const matriculas = categories.find((c) => c.category === "matriculas")?.total ?? 0;
   const traspasos = categories.find((c) => c.category === "traspasos")?.total ?? 0;
+  const otros = categories.find((c) => c.category === "otros")?.total ?? 0;
   const completados = countCompleted(categories);
 
   // Distribución consolidada por estado de TODAS las categorías (no solo traspasos).
@@ -656,11 +658,15 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           {/* KPIs de Trámites — solo visibles si el módulo está habilitado para el tenant
               (AC1: `true` por defecto mientras carga, evita ocultar la sección con parpadeo). */}
           {tramitesModuleEnabled !== false && (
-            <div className="grid grid-cols-2 gap-3 flex-1" data-testid="dashboard-kpi-grid">
+            // Bug #13055 — vuelve la tarjeta «Otros Trámites» (la decisión D3 de absorberla en el
+            // Total se revierte a pedido de QA/producto): 5 tarjetas en 3 columnas; la última fila
+            // queda incompleta y alineada a la izquierda.
+            <div className="grid grid-cols-3 gap-3 flex-1" data-testid="dashboard-kpi-grid">
               {[
                 { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, icon: FileText, color: "#557EFF" },
                 { label: "Matrículas", value: matriculas, icon: Car, color: "#00DBD5" },
                 { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00" },
+                { label: "Otros Trámites", value: otros, icon: Layers, color: "#162744" },
                 { label: "Completados", value: completados, icon: CheckCircle, color: "#8CC63F" },
               ].map((k) => {
                 const Icon = k.icon;

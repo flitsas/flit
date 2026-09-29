@@ -47,7 +47,7 @@ describe("ImprontaHistorialSection — HU #10470", () => {
     expect(screen.getAllByText("Ana Operadora").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/Mostrando 1–1 de 1/)).toBeInTheDocument();
     expect(fetchImprontasHistorial).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1, pageSize: 20 }),
+      expect.objectContaining({ page: 1, pageSize: 10 }),
       expect.anything(),
     );
   });
@@ -135,6 +135,6 @@ describe("ImprontaHistorialSection — HU #10470", () => {
         expect.anything(),
       ),
     );
-    expect(await screen.findByText("2 / 2")).toBeInTheDocument();
+    expect(await screen.findByText(/Mostrando 11–20 de 40/)).toBeInTheDocument();
   });
 });

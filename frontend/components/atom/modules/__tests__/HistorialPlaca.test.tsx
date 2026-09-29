@@ -97,7 +97,7 @@ describe("HistorialPlaca — estados de UI", () => {
     render(<HistorialPlaca />);
     await consultar("ABC123");
 
-    expect(await screen.findByTestId("ui-loading")).toBeInTheDocument();
+    expect(await screen.findByText("Cargando historial de la placa…")).toBeInTheDocument();
 
     resolver({ items: [fila()], total: 1 });
     await waitFor(() => expect(screen.getByTestId("historial-placa-table")).toBeInTheDocument());
@@ -143,7 +143,7 @@ describe("HistorialPlaca — estados de UI", () => {
     await consultar("  abc123 ");
 
     expect(await screen.findByTestId("historial-placa-table")).toBeInTheDocument();
-    expect(mocks.listPlateHistory).toHaveBeenCalledWith({ placa: "ABC123", skip: 0, take: 20 });
+    expect(mocks.listPlateHistory).toHaveBeenCalledWith({ placa: "ABC123", skip: 0, take: 10 });
 
     const tabla = screen.getByRole("table", {
       name: "Historial de trámites de la placa ABC123",

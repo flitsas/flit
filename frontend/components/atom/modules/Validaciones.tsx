@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -46,7 +45,14 @@ import {
 } from '@/lib/identidad/validaciones-filtros';
 import { FiltrosChipsTira, rangoDePeriodo } from '@/components/operacion/TramitesFiltrosBar';
 import { controlCls } from '@/components/operacion/tramites-control-styles';
-import { PageNav } from '@/components/atom/PageNav';
+import { Pagination } from '@/components/atom/Pagination';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from '@/components/atom/table-styles';
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
 import { SearchableSelect } from '@/components/atom/SearchableSelect';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
@@ -934,7 +940,6 @@ export function Validaciones() {
   const isEmpty = persons !== null && persons.length === 0;
   // "Sin resultados" (AC2) vs "Aún no hay validaciones" se decide por los filtros EFECTIVAMENTE aplicados.
   const filtersActive = hasActiveValidacionesFilters(applied);
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   // Compañía concreta que está mirando el admin FLIT (undefined = «Todas»).
   const empresaVista = isFlitAdmin && companyId !== '' ? companiesById.get(companyId) : undefined;
   const companyLabel = (tenantId: string | undefined, tenantName: string | null | undefined) => {
@@ -1129,7 +1134,8 @@ export function Validaciones() {
         </div>
       )}
 
-      {initialLoading && <ValidacionesSkeleton />}
+      {/* Bug #13055 — carga con el loader del carrito (antes, esqueleto animate-pulse). */}
+      {initialLoading && <CarLoaderModal label="Cargando validaciones de identidad…" />}
 
       {isEmpty && (
         <div
@@ -1205,37 +1211,17 @@ export function Validaciones() {
             }}
           />
 
-          {/* HU #12707 (AC9) — pie de Trámites: «Filas por página» + navegación numerada. */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <label className="flex items-center gap-2 pt-3 text-xs opacity-70">
-              Filas por página
-              <select
-                value={pageSize}
-                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                disabled={fetching}
-                className={controlCls(false)}
-                aria-label="Filas por página"
-              >
-                {TAMANOS_DE_PAGINA.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <PageNav
-              page={page}
-              totalPages={totalPages}
-              resumen={
-                total === 0
-                  ? 'Sin validaciones que mostrar'
-                  : `Mostrando ${(page - 1) * pageSize + 1}–${(page - 1) * pageSize + persons.length} de ${total}`
-              }
-              ariaLabel="Paginación de validaciones"
-              onPageChange={handlePageChange}
-              className="flex-1"
-            />
-          </div>
+          {/* HU #12707 (AC9) — pie de Trámites: «Filas por página» + navegación numerada. Bug #13055:
+              ahora con la `Pagination` estándar (el tamaño se sigue recordando en la sesión). */}
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalCount={total}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            noun="validaciones"
+            ariaLabel="Paginación de validaciones"
+          />
         </div>
       )}
 
@@ -1910,36 +1896,21 @@ function StatsCards({
   );
 }
 
-/** Estado de carga (AC8): placeholder accesible mientras llega la primera respuesta. */
-function ValidacionesSkeleton() {
-  return (
-    <div
-      className="flex-1 min-h-0 space-y-2 pt-2"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-    >
-      <span className="sr-only">Cargando validaciones de identidad…</span>
-      {[0, 1, 2, 3].map((i) => (
-        <div
-          key={i}
-          className="h-12 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5"
-          aria-hidden="true"
-        />
-      ))}
-    </div>
-  );
-}
-
 /**
- * Plantilla de columnas compartida por cabecera y filas, calculada desde las columnas visibles (HU #12707).
- * minmax(0,..) permite truncar el contenido dentro de cada celda del grid.
+ * Anchos relativos de las columnas visibles (HU #12707), en porcentaje para un `<colgroup>`.
+ * Bug #13055 — antes eran `fr` de una grilla de div; con `table-fixed` se conservan las proporciones y
+ * el contenido puede truncarse dentro de cada celda.
  */
-function gridColsFor(columns: readonly IdentidadColumnKey[]): string {
-  const widths = columns.map((key) =>
-    key === 'compania' ? COMPANIA_COLUMN.width : (IDENTIDAD_COLUMNS.find((c) => c.key === key)?.width ?? 'minmax(0,1fr)'),
-  );
-  return [...widths, ACCIONES_WIDTH].join(' ');
+function anchosColumnas(columns: readonly IdentidadColumnKey[]): string[] {
+  const fr = (w: string) => Number(/([\d.]+)fr/.exec(w)?.[1] ?? 1);
+  const pesos = [
+    ...columns.map((key) =>
+      fr(key === 'compania' ? COMPANIA_COLUMN.width : (IDENTIDAD_COLUMNS.find((c) => c.key === key)?.width ?? 'minmax(0,1fr)')),
+    ),
+    fr(ACCIONES_WIDTH),
+  ];
+  const total = pesos.reduce((a, b) => a + b, 0);
+  return pesos.map((w) => `${((w / total) * 100).toFixed(2)}%`);
 }
 
 function columnLabel(key: IdentidadColumnKey): string {
@@ -2074,30 +2045,50 @@ function ValidacionesTable({
   canAdminReenviar: boolean;
   onAdminReenviarClick: (row: TenantBiometricValidation) => void;
 }) {
-  const gridCols = gridColsFor(columns);
+  const anchos = anchosColumnas(columns);
   // Ancho mínimo proporcional a las columnas visibles: con pocas no fuerza scroll horizontal.
   const minWidth = Math.max(640, 100 * (columns.length + 1));
   return (
     <div className="overflow-x-auto shrink-0">
-      <div style={{ minWidth: `${minWidth}px` }}>
-        <div
-          className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
-          style={{ background: '#DDE5F0', color: '#162744', gridTemplateColumns: gridCols }}
-          aria-hidden="true"
-        >
-          {columns.map((key) => (
-            <div key={key}>{columnLabel(key)}</div>
+      {/* Bug #13055 — tabla homologada con el modelo de trámites: `<table>` semántica (antes grilla de
+          div), cabecera #DFE5ED fija y filas-tarjeta con sombra azul al pasar el puntero. */}
+      <table
+        aria-label="Validaciones de identidad"
+        className="text-xs"
+        style={{
+          width: '100%',
+          borderCollapse: 'separate',
+          borderSpacing: '0 8px',
+          tableLayout: 'fixed',
+          minWidth: `${minWidth}px`,
+        }}
+      >
+        <colgroup>
+          {anchos.map((w, i) => (
+            <col key={i} style={{ width: w }} />
           ))}
-          <div>Acciones</div>
-        </div>
-        <ul className="space-y-2 pt-2" aria-label="Validaciones de identidad">
+        </colgroup>
+        <thead>
+          <tr>
+            {[...columns.map((key) => columnLabel(key)), 'Acciones'].map((label, i, arr) => (
+              <th
+                key={label}
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? 'rounded-l-xl' : ''} ${i === arr.length - 1 ? 'rounded-r-xl' : ''}`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
+                {label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
           {rows.map((r) => (
             <ValidacionRow
               key={r.id}
               row={r}
               columns={columns}
               soloConsulta={esSoloConsulta(r.tenantId)}
-              gridCols={gridCols}
               companyLabel={companyLabel}
               now={now}
               resendMeta={resendMeta[r.id] ?? { count: 0, cooldownUntil: null }}
@@ -2111,8 +2102,8 @@ function ValidacionesTable({
               onAdminReenviarClick={onAdminReenviarClick}
             />
           ))}
-        </ul>
-      </div>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -2121,7 +2112,6 @@ function ValidacionRow({
   row: r,
   columns,
   soloConsulta,
-  gridCols,
   companyLabel,
   now,
   resendMeta,
@@ -2138,7 +2128,6 @@ function ValidacionRow({
   columns: readonly IdentidadColumnKey[];
   /** HU #12709 (AC3) — fila de una compañía hija: solo «Ver proceso», con el distintivo visible. */
   soloConsulta: boolean;
-  gridCols: string;
   companyLabel: CompanyLabelFn;
   now: number;
   resendMeta: ResendMeta;
@@ -2438,42 +2427,41 @@ function ValidacionRow({
   // AC3 — fila de una hija: ni reenviar, ni editar, ni simular, ni iniciar, ni reintentar. Solo verla.
   const menuItems = soloConsulta ? actionItems.filter((i) => i.key === 'proceso') : actionItems;
 
-  const rowContent = (
-    <div
-      className="grid gap-2 items-center px-4 py-3 text-xs"
-      style={{ gridTemplateColumns: gridCols }}
-    >
-      {columns.map((key) => (
-        <Fragment key={key}>{cells[key]}</Fragment>
-      ))}
-      <div className="flex min-w-0 flex-col items-end gap-0.5">
-        {soloConsulta ? (
-          <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel={ETIQUETA_SOLO_CONSULTA} />
-        ) : null}
-        <ActionsMenu
-          ariaLabel={`Acciones de validación de ${r.name}`}
-          items={menuItems}
-          className="bg-white dark:bg-[#0B0F14]"
-        />
-        {!isTramite && admiteReenvio && resendDisabledReason && (
-          <span className="text-[10px] opacity-60">{resendDisabledReason}</span>
-        )}
-        {copied && (
-          <span className="text-[10px] font-semibold" style={{ color: '#4F74C9' }} role="status" aria-live="polite">
-            Enlace copiado
-          </span>
-        )}
-      </div>
-    </div>
-  );
+  const celdaCls = 'border-y px-4 py-3 align-middle';
+  const celdaStyle = { borderColor: '#DFE5ED' };
 
   return (
-    <li
-      className="relative rounded-xl bg-white dark:bg-[#0B0F14] border hover:border-[#4F74C9] transition"
-      aria-label={ariaLabel}
-    >
-      {/* Fila no navegable: el detalle/proceso se abre solo desde Acciones → Ver proceso. */}
-      {rowContent}
-    </li>
+    // Fila no navegable: el detalle/proceso se abre solo desde Acciones → Ver proceso.
+    <tr aria-label={ariaLabel} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+      {columns.map((key, i) => (
+        <td
+          key={key}
+          className={`${celdaCls} ${i === 0 ? 'rounded-l-xl border-l' : ''}`}
+          style={celdaStyle}
+        >
+          {cells[key]}
+        </td>
+      ))}
+      <td className={`${celdaCls} rounded-r-xl border-r`} style={celdaStyle}>
+        <div className="flex min-w-0 flex-col items-end gap-0.5">
+          {soloConsulta ? (
+            <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel={ETIQUETA_SOLO_CONSULTA} />
+          ) : null}
+          <ActionsMenu
+            ariaLabel={`Acciones de validación de ${r.name}`}
+            items={menuItems}
+            className="bg-white dark:bg-[#0B0F14]"
+          />
+          {!isTramite && admiteReenvio && resendDisabledReason && (
+            <span className="text-[10px] opacity-60">{resendDisabledReason}</span>
+          )}
+          {copied && (
+            <span className="text-[10px] font-semibold" style={{ color: '#4F74C9' }} role="status" aria-live="polite">
+              Enlace copiado
+            </span>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }

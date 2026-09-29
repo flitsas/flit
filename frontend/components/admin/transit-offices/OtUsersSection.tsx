@@ -37,6 +37,8 @@ import { isInvitationRow } from "@/lib/users/invitationRow";
 import { UserAuditHistoryDrawer } from "@/components/atom/modules/users/UserAuditHistoryDrawer";
 // HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { ICON_BUTTON_HIT_AREA, RowActions, type RowAction } from "@/components/atom/RowActions";
 import { assignRole, getRoles, type TenantRole } from "@/lib/api/security";
 import { superadminClient } from "@/lib/api/superadmin-client";
@@ -733,6 +735,8 @@ function DeletedUsersTable({
   onRetry: () => void;
   onRestore: (user: OtUserItem) => void;
 }) {
+  // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
+  const pg = usePaginacion();
   const columns: DataTableColumn<OtUserItem>[] = useMemo(
     () => [
       {
@@ -773,6 +777,8 @@ function DeletedUsersTable({
     [onRestore],
   );
 
+  if (status === "loading") return <CarLoaderModal label="Cargando usuarios eliminados…" />;
+
   return (
     <UiStateBoundary
       status={status}
@@ -782,10 +788,17 @@ function DeletedUsersTable({
     >
       <DataTable
         columns={columns}
-        rows={users}
+        rows={pg.paginar(users)}
         getRowKey={(u) => u.id}
         ariaLabel="Usuarios eliminados del organismo de tránsito"
         minWidth={640}
+        pagination={{
+          page: pg.page,
+          pageSize: pg.pageSize,
+          totalCount: users.length,
+          onPageChange: pg.setPage,
+          onPageSizeChange: pg.setPageSize,
+        }}
       />
     </UiStateBoundary>
   );

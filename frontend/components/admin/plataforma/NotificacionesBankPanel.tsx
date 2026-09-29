@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, Info, Mail, Send } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { RowActions } from "@/components/atom/RowActions";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   getTestMailbox,
   listNotificationTemplates,
@@ -144,6 +146,8 @@ export function NotificacionesBankPanel() {
     [templates],
   );
 
+  const pg = usePaginacion();
+
   const senderText = (row: BankRow): string => {
     if (row.kind === "kyverum") {
       return "Kyverum Verify (proveedor externo)";
@@ -157,75 +161,56 @@ export function NotificacionesBankPanel() {
   /** Correos de cuenta (Security): solo acciones FLIT — no se muestran botones Renting. */
   const showRentingActions = (row: BankRow): boolean => row.module !== "Security";
 
-  const actionButtonClass =
-    "inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold text-[#162244] transition-colors hover:bg-[#F4F7FC] dark:border-white/10 dark:text-white dark:hover:bg-white/5";
-
-  const actionStackClass = "flex flex-col items-stretch gap-1.5";
-
+  // Bug #13055 — tabla homologada con el modelo de trámites: acciones por fila con RowActions
+  // (iconos con nombre accesible) en vez de botones de texto.
   const renderPlantillaActions = (row: BankRow) => {
     const rentingVisible = showRentingActions(row);
     return (
       <div
-        className="inline-flex flex-row items-start justify-end gap-3"
+        className="inline-flex flex-row items-center justify-end gap-3"
         data-testid={`notificaciones-acciones-${row.id}`}
       >
-        <div className={actionStackClass} data-testid={`notificaciones-acciones-flit-${row.id}`}>
-          <button
-            type="button"
-            onClick={() => setPreviewTarget({ row, channel: "FLIT_SMTP", formatLabel: "FLIT" })}
-            aria-label={`Preview FLIT de ${row.name}`}
-            className={actionButtonClass}
-          >
-            <Eye className="h-3 w-3" aria-hidden="true" />
-            Preview FLIT
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              setSendTarget({
-                row,
-                channel: "FLIT_SMTP",
-                channelLabel: "Colas FLIT",
-              })
-            }
-            aria-label={`Enviar FLIT de ${row.name}`}
-            className={actionButtonClass}
-          >
-            <Send className="h-3 w-3" aria-hidden="true" />
-            Enviar FLIT
-          </button>
+        <div data-testid={`notificaciones-acciones-flit-${row.id}`}>
+          <RowActions
+            actions={[
+              {
+                icon: Eye,
+                label: `Preview FLIT de ${row.name}`,
+                tone: "primary",
+                onClick: () => setPreviewTarget({ row, channel: "FLIT_SMTP", formatLabel: "FLIT" }),
+              },
+              {
+                icon: Send,
+                label: `Enviar FLIT de ${row.name}`,
+                tone: "primary",
+                onClick: () =>
+                  setSendTarget({ row, channel: "FLIT_SMTP", channelLabel: "Colas FLIT" }),
+              },
+            ]}
+          />
         </div>
         {rentingVisible ? (
-          <div
-            className={actionStackClass}
-            data-testid={`notificaciones-acciones-renting-${row.id}`}
-          >
-            <button
-              type="button"
-              onClick={() =>
-                setPreviewTarget({ row, channel: "TENANT_API", formatLabel: "Renting" })
-              }
-              aria-label={`Preview Renting de ${row.name}`}
-              className={actionButtonClass}
-            >
-              <Eye className="h-3 w-3" aria-hidden="true" />
-              Preview Renting
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setSendTarget({
-                  row,
-                  channel: "TENANT_API",
-                  channelLabel: "API Renting cliente",
-                })
-              }
-              aria-label={`Enviar Renting de ${row.name}`}
-              className={actionButtonClass}
-            >
-              <Send className="h-3 w-3" aria-hidden="true" />
-              Enviar Renting
-            </button>
+          <div data-testid={`notificaciones-acciones-renting-${row.id}`}>
+            <RowActions
+              actions={[
+                {
+                  icon: Eye,
+                  label: `Preview Renting de ${row.name}`,
+                  onClick: () =>
+                    setPreviewTarget({ row, channel: "TENANT_API", formatLabel: "Renting" }),
+                },
+                {
+                  icon: Send,
+                  label: `Enviar Renting de ${row.name}`,
+                  onClick: () =>
+                    setSendTarget({
+                      row,
+                      channel: "TENANT_API",
+                      channelLabel: "API Renting cliente",
+                    }),
+                },
+              ]}
+            />
           </div>
         ) : null}
       </div>
@@ -321,7 +306,7 @@ export function NotificacionesBankPanel() {
         </div>
         <DataTable
           columns={columns}
-          rows={rows}
+          rows={pg.paginar(rows)}
           getRowKey={(row) => row.id}
           status={status === "loading" ? "loading" : status === "error" ? "error" : undefined}
           onRetry={() => void load()}
@@ -329,6 +314,13 @@ export function NotificacionesBankPanel() {
           ariaLabel="Banco de pruebas de notificaciones"
           emptyMessage="No hay plantillas disponibles."
           minWidth={980}
+          pagination={{
+            page: Math.min(pg.page, Math.max(1, Math.ceil(rows.length / pg.pageSize))),
+            pageSize: pg.pageSize,
+            totalCount: rows.length,
+            onPageChange: pg.setPage,
+            onPageSizeChange: pg.setPageSize,
+          }}
         />
       </section>
 

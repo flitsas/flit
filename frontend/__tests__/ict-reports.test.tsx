@@ -343,8 +343,8 @@ describe("IctReports — pestañas en vivo, Consultas y Programación (HU #11619
     render(<IctReports />);
 
     await waitFor(() => expect(mocks.fetchIctNovedadesReport).toHaveBeenCalled());
-    expect(mocks.fetchIctNovedadesReport.mock.calls[0][2]).toEqual({ page: 1, pageSize: 50 });
-    expect(await screen.findByText(/Mostrando 1–50 de 120/)).toBeInTheDocument();
+    expect(mocks.fetchIctNovedadesReport.mock.calls[0][2]).toEqual({ page: 1, pageSize: 10 });
+    expect(await screen.findByText(/Mostrando 1–10 de 120/)).toBeInTheDocument();
     // El encabezado usa el total del periodo, no el largo de la página.
     expect(screen.getByText("Detalle de novedades (120)")).toBeInTheDocument();
   });
@@ -368,7 +368,7 @@ describe("IctReports — pestañas en vivo, Consultas y Programación (HU #11619
     await user.click(screen.getByRole("button", { name: "Página siguiente" }));
 
     await waitFor(() =>
-      expect(mocks.fetchIctNovedadesReport.mock.calls.at(-1)?.[2]).toEqual({ page: 2, pageSize: 50 }),
+      expect(mocks.fetchIctNovedadesReport.mock.calls.at(-1)?.[2]).toEqual({ page: 2, pageSize: 10 }),
     );
   });
 

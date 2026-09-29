@@ -84,7 +84,7 @@ describe("OtUsersSection — refactor adminOT", () => {
   it("estado cargando: muestra el skeleton", () => {
     vi.mocked(fetchOtUsers).mockReturnValue(new Promise(() => {}));
     renderSection();
-    expect(screen.getByTestId("ui-loading")).toBeInTheDocument();
+    expect(screen.getByText(/Cargando usuarios/)).toBeInTheDocument();
   });
 
   it("estado vacío: sin usuarios muestra CTA de invitar", async () => {
@@ -110,8 +110,8 @@ describe("OtUsersSection — refactor adminOT", () => {
     renderSection();
     // El chip se busca DENTRO de la fila: los mismos labels existen también como opciones
     // del filtro de estado de la barra superior.
-    const activa = (await screen.findByText("Laura García")).closest("div.grid") as HTMLElement;
-    const bloqueada = screen.getByText("Carlos Pérez").closest("div.grid") as HTMLElement;
+    const activa = (await screen.findByText("Laura García")).closest("tr") as HTMLElement;
+    const bloqueada = screen.getByText("Carlos Pérez").closest("tr") as HTMLElement;
     expect(within(activa).getByText("Activo")).toBeInTheDocument();
     expect(within(bloqueada).getByText("Bloqueado")).toBeInTheDocument();
   });
@@ -122,12 +122,12 @@ describe("OtUsersSection — refactor adminOT", () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
     renderSection();
 
-    const fila = (await screen.findByText("Laura García")).closest("div.grid") as HTMLElement;
-    const encabezado = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    const fila = (await screen.findByText("Laura García")).closest("tr") as HTMLElement;
+    const encabezado = screen.getByText("Usuario").closest("tr") as HTMLElement;
     expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
     expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
     // Esta sección vive dentro de un organismo: el perfil de fila es siempre OT.
-    expect(within(fila).getByText("OT")).toBeInTheDocument();
+    expect(within(fila).getByText("OT · Admin")).toBeInTheDocument();
     expect(within(fila).getByText("Admin OT")).toBeInTheDocument();
     expect(
       within(fila).getByRole("button", { name: /editar usuario laura garcía/i }),

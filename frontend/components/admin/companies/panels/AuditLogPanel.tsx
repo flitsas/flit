@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { AuditLogTable } from "@/components/admin/companies/AuditLogTable";
 import { fetchAuditLog } from "@/lib/api/admin-companies";
 import type { AuditLogPageResponse } from "@/lib/api/types";
-
-const PAGE_SIZE = 20;
 
 // Slot del historial de auditoría (HU #10194, AC5). Se monta al abrir la pestaña
 // "Historial de Cambios" → carga diferida. Paginación server-side.
@@ -17,7 +17,8 @@ export function AuditLogPanel({
   tenantId: string;
   networkHeadId?: string | null;
 }) {
-  const [page, setPage] = useState(1);
+  // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [result, setResult] = useState<AuditLogPageResponse | null>(null);
 
@@ -25,7 +26,7 @@ export function AuditLogPanel({
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const data = await fetchAuditLog(tenantId, page, PAGE_SIZE, signal, networkHeadId);
+        const data = await fetchAuditLog(tenantId, page, pageSize, signal, networkHeadId);
         if (signal?.aborted) {
           return;
         }
@@ -37,7 +38,7 @@ export function AuditLogPanel({
         }
       }
     },
-    [tenantId, page, networkHeadId],
+    [tenantId, page, pageSize, networkHeadId],
   );
 
   useEffect(() => {
@@ -47,6 +48,10 @@ export function AuditLogPanel({
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  if (status === "loading") {
+    return <CarLoaderModal label="Cargando historial de cambios…" />;
+  }
 
   return (
     <UiStateBoundary
@@ -62,6 +67,7 @@ export function AuditLogPanel({
           page={result.page}
           pageSize={result.pageSize}
           onPageChange={setPage}
+          onPageSizeChange={setPageSize}
         />
       )}
     </UiStateBoundary>

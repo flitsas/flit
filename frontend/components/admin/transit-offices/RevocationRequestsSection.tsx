@@ -10,7 +10,7 @@ import {
 } from "@/components/operacion/RevocationRequestsFiltersBar";
 import { RevocationRequestsTable } from "@/components/operacion/RevocationRequestsTable";
 
-const TAKE = 20;
+
 
 const FILTROS_VACIOS: RevocationRequestsFiltersValue = {
   requestedFrom: "",
@@ -34,6 +34,8 @@ const FILTROS_VACIOS: RevocationRequestsFiltersValue = {
 export function RevocationRequestsSection({ transitOfficeId }: { transitOfficeId?: string }) {
   const [filtros, setFiltros] = useState<RevocationRequestsFiltersValue>(FILTROS_VACIOS);
   const [skip, setSkip] = useState(0);
+  // Bug #13055 — «Filas por página» como en trámites: el tamaño es estado y arranca en 10.
+  const [take, setTake] = useState(10);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [items, setItems] = useState<OtRevocationRequestListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -48,7 +50,7 @@ export function RevocationRequestsSection({ transitOfficeId }: { transitOfficeId
           requestedFrom: filtros.requestedFrom || undefined,
           requestedTo: filtros.requestedTo || undefined,
           skip,
-          take: TAKE,
+          take,
         },
         signal,
         { transitOfficeId },
@@ -64,7 +66,7 @@ export function RevocationRequestsSection({ transitOfficeId }: { transitOfficeId
           setStatus("error");
         });
     },
-    [filtros, skip, transitOfficeId],
+    [filtros, skip, transitOfficeId, take],
   );
 
   useEffect(() => {
@@ -99,7 +101,11 @@ export function RevocationRequestsSection({ transitOfficeId }: { transitOfficeId
           items={items}
           total={total}
           skip={skip}
-          take={TAKE}
+          take={take}
+          onTakeChange={(t) => {
+            setTake(t);
+            setSkip(0);
+          }}
           onPageChange={setSkip}
         />
       </UiStateBoundary>

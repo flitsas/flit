@@ -7,6 +7,12 @@ import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
 import { Pagination } from "@/components/atom/Pagination";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 
 import { formatFechaHora } from "@/lib/format/date";
 // Tabla paginada de compañías (HU #10194, AC1). Columnas: NIT, Razón Social,
@@ -19,6 +25,8 @@ export interface CompanyListTableProps {
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  /** Filas por página (Bug #13055). */
+  onPageSizeChange?: (pageSize: number) => void;
   onConfigure: (tenantId: string) => void;
   /** Solicita editar los datos de la compañía (el contenedor abre el modal de edición). */
   onEdit: (company: CompanyListItem) => void;
@@ -32,6 +40,7 @@ export function CompanyListTable({
   page,
   pageSize,
   onPageChange,
+  onPageSizeChange,
   onConfigure,
   onEdit,
   onToggleStatus,
@@ -39,25 +48,30 @@ export function CompanyListTable({
   return (
     <div className="flex flex-1 flex-col">
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] border-separate border-spacing-y-2 text-xs">
+      {/* Bug #13055 — tabla homologada con el modelo de trámites */}
+      <table
+        aria-label="Compañías"
+        className="min-w-[640px] text-xs"
+        style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+      >
         <thead>
-          <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-            <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+          <tr>
+            <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               NIT
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Razón Social
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Tipo
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Estado
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Fecha creación
             </th>
-            <th className="rounded-r-xl px-4 py-2.5 text-right" style={{ background: "#DFE5ED" }}>
+            <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Acciones
             </th>
           </tr>
@@ -68,14 +82,14 @@ export function CompanyListTable({
             // heredado (sistema / organismos de tránsito) se muestran solo-lectura.
             const editable = isB2BTenantType(c.tenantType) && !c.isTransitOffice;
             return (
-            <tr key={c.id} className="bg-white dark:bg-[#0B0F14]">
-              <td className="border-y border-l px-4 py-3 font-mono rounded-l-xl">
+            <tr key={c.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+              <td className="border-y border-l px-4 py-3 font-mono rounded-l-xl" style={{ borderColor: "#DFE5ED" }}>
                 {c.nit}
               </td>
-              <td className="border-y px-4 py-3 font-semibold">
+              <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>
                 {c.razonSocial}
               </td>
-              <td className="border-y px-4 py-3">
+              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                 {c.isTransitOffice ? (
                   <StatusBadge label="OT" tone="info" ariaLabel="Tipo: Organismo de Tránsito" />
                 ) : (
@@ -86,17 +100,17 @@ export function CompanyListTable({
                   />
                 )}
               </td>
-              <td className="border-y px-4 py-3">
+              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                 {c.estadoActivo ? (
                   <StatusBadge label="Activa" tone="success" />
                 ) : (
                   <StatusBadge label="Inactiva" tone="danger" />
                 )}
               </td>
-              <td className="border-y px-4 py-3 opacity-70">
+              <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>
                 {formatDate(c.fechaCreacion)}
               </td>
-              <td className="border-y border-r px-4 py-3 text-right rounded-r-xl">
+              <td className="border-y border-r px-4 py-3 text-right rounded-r-xl" style={{ borderColor: "#DFE5ED" }}>
                 <div className="flex items-center justify-end gap-1">
                   <RowActions
                     actions={[
@@ -140,6 +154,7 @@ export function CompanyListTable({
         pageSize={pageSize}
         totalCount={totalCount}
         onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
         className="mt-auto"
       />
     </div>

@@ -46,6 +46,18 @@ export function isSuperAdminRole(roleCode: string | null | undefined): boolean {
   return (roleCode ?? "").trim().toLowerCase() === SUPER_ADMIN_ROLE_CODE;
 }
 
+/** Roles de sistema que administran su compañía u organismo (`security.roles.code`). */
+const ADMIN_ROLE_CODES = new Set(["admincompany", "ot_admin"]);
+
+/**
+ * Bug #13055 — ¿el rol es el administrador de su compañía/organismo? Todo usuario de una compañía
+ * es perfil Gestor (HU #11551), así que el chip solo no distinguía al administrador y parecía que
+ * todos tenían el mismo rol.
+ */
+export function isAdminRole(roleCode: string | null | undefined): boolean {
+  return ADMIN_ROLE_CODES.has((roleCode ?? "").trim().toLowerCase());
+}
+
 /**
  * Roles que se le pueden ofrecer a un usuario de este perfil.
  *
