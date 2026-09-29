@@ -153,7 +153,7 @@ límite de tasa) en un documento del repositorio que Flito puede copiar al suyo.
 - El tipo de documento se entrega en el código canónico de FLIT; la fecha de aprobación corresponde a
   la última transición a «aprobado» del historial.
 - Se entregan los trámites radicados al menos una vez; los que nunca salieron de borrador o preparado
-  no se entregan.
+  no se entregan, ni los migrados desde FLIT 1, que ya llegan a Flito por esa fuente.
 - Se entregan todos los compradores del trámite (copropiedad, hasta 4) con orden y porcentaje; sin
   ninguno, la lista va vacía y el trámite se entrega igual.
 - Un trámite ya entregado que retrocede a borrador o preparado sigue entregándose, como un cambio de
@@ -462,5 +462,7 @@ Sustituye al Anexo E donde se contradicen; el Anexo E se conserva por el rastro 
 - **Copropiedad:** el comprador pasa a ser una lista `compradores` con orden y porcentaje de
   participación (hasta 4, ADR-0053). Nunca nula; puede llegar vacía en un trámite radicado (retroceso,
   subsanación o tipos sin comprador) y el consumidor la guarda sin rechazar el trámite.
+- **Trámites migrados de FLIT 1: fuera del feed** (decisión del PO, 2026-09-29). Ya llegan a Flito por
+  FLIT 1; entregarlos por FLIT 2 duplicaría el trámite con otro radicado.
 - **Mejora no requerida:** sellar en la asignación inicial la fecha real de último cambio de cada
   trámite, para que una fecha de inicio anterior a la migración signifique lo que dice.
