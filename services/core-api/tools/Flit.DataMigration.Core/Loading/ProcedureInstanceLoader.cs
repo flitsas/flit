@@ -143,6 +143,9 @@ public sealed class ProcedureInstanceLoader(
             {
                 db.ProcedureInstanceCommercials.Add(mapped.Commercial);
             }
+            // Prenda (HU #13072): vive en su propia tabla, fuera del trigger de inmutabilidad, pero va
+            // en la misma transacción para que el trámite no quede migrado sin su gravamen.
+            db.ProcedureInstancePrendas.AddRange(mapped.Prendas);
             await db.SaveChangesAsync(cancellationToken);
 
             // Los triggers *_denorm de V2 (DDL 47) copian placa/VIN y vendedor/comprador a la
