@@ -27,10 +27,8 @@ public sealed class CreateMandateSignerCommand
     public IReadOnlyList<Guid>? TransitOfficeIds { get; init; }
 
     /// <summary>
-    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
-    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
-    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
-    /// electrónicamente ante otro.
+    /// HU #13131 (ADR-0061) — OBSOLETO E IGNORADO. La firma física ya no es una forma de firma: el campo se
+    /// acepta por compatibilidad con clientes anteriores, pero no se valida ni se persiste como exención.
     /// </summary>
     public IReadOnlyList<Guid>? PhysicalSignatureOfficeIds { get; init; }
 

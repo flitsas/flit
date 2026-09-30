@@ -237,6 +237,8 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IMandateSignerRepository, MandateSignerRepository>();
         // Ajuste HU #13123 — identidad aprobada y vigente en el tenant de la compañía (alta desde el OT).
         services.AddScoped<IMandateSignerBiometricApprovalReader, DbMandateSignerBiometricApprovalReader>();
+        // HU #13131 - reporte de migracion de la firma fisica (solo Super Admin).
+        services.AddScoped<IPhysicalSignatureMigrationReader, DbPhysicalSignatureMigrationReader>();
 
         // HU #10642 (ADR-0025) — baúl de firmas: custodia de firmas precargadas tenant-scoped.
         services.AddScoped<ISignatureVaultReader, DbSignatureVaultReader>();

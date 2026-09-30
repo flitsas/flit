@@ -15,10 +15,8 @@ public sealed record CompanyMandateSignerRequest(
     string? DocumentType = null,
     string? Email = null,
     /// <summary>
-    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
-    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
-    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
-    /// electrónicamente ante otro.
+    /// HU #13131 (ADR-0061) — OBSOLETO E IGNORADO. La firma física ya no es una forma de firma: el campo se
+    /// acepta por compatibilidad con clientes anteriores, pero no se valida ni se persiste como exención.
     /// </summary>
     IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
     /// <summary>
@@ -113,7 +111,6 @@ public sealed class CreateCompanyMandateSignerHandler
         var sinFirmaError = profile.IsNatural
             ? MandateSignerSigningCapability.Validate(
                 offices,
-                request.PhysicalSignatureOfficeIds,
                 request.SignatureVaultId,
                 existente: null,
                 profile.SignatureMethod)
@@ -133,7 +130,6 @@ public sealed class CreateCompanyMandateSignerHandler
                 DocumentType = request.DocumentType ?? "CC",
                 Email = request.Email,
                 TransitOfficeIds = offices,
-                PhysicalSignatureOfficeIds = request.PhysicalSignatureOfficeIds,
                 SignatureVaultId = request.SignatureVaultId,
                 OfficeCompanies = request.OfficeCompanies,
                 SignerModel = request.SignerModel,
@@ -312,14 +308,10 @@ public sealed class UpdateCompanyMandateSignerHandler
 
         // HU #13122 AC4 + HU #13129 — se valida TODA la lista de organismos, no solo los nuevos. La forma
         // de firma baúl exige la firma elegida (este configurador gestiona la firma: su null la quita);
-        // la biometría no exige validación aprobada al guardar. La excepción transitoria de firma física
-        // (hasta #13131) se respeta: si el formulario no manda la lista (null), rigen los organismos que
-        // ya tenía a mano.
-        var fisicos = request.PhysicalSignatureOfficeIds ?? signer.PhysicalSignatureOfficeIds;
+        // la biometría no exige validación aprobada al guardar. La firma física ya no exime (HU #13131).
         var sinFirmaError = profile.IsNatural
             ? MandateSignerSigningCapability.Validate(
                 offices,
-                fisicos,
                 request.SignatureVaultId,
                 existente: null,
                 profile.SignatureMethod)
@@ -344,7 +336,6 @@ public sealed class UpdateCompanyMandateSignerHandler
                 DocumentType = request.DocumentType ?? "CC",
                 Email = request.Email,
                 TransitOfficeIds = offices,
-                PhysicalSignatureOfficeIds = request.PhysicalSignatureOfficeIds,
                 SignatureVaultId = request.SignatureVaultId,
                 OfficeCompanies = request.OfficeCompanies,
                 SignerModel = request.SignerModel,

@@ -65,10 +65,8 @@ public sealed record CreateMandateSignerData(
     /// </summary>
     IReadOnlyList<Guid>? TransitOfficeIds = null,
     /// <summary>
-    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
-    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
-    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
-    /// electrónicamente ante otro.
+    /// HU #13131 (ADR-0061) — OBSOLETO E IGNORADO por el repositorio: la firma física ya no se persiste
+    /// como exención. Las filas históricas con <c>signs_physically</c> se conservan sin cambios.
     /// </summary>
     IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
     /// <summary>
@@ -108,10 +106,8 @@ public sealed record UpdateMandateSignerData(
     /// </summary>
     IReadOnlyList<Guid>? TransitOfficeIds = null,
     /// <summary>
-    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
-    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
-    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
-    /// electrónicamente ante otro.
+    /// HU #13131 (ADR-0061) — OBSOLETO E IGNORADO por el repositorio: la firma física ya no se persiste
+    /// como exención. Las filas históricas con <c>signs_physically</c> se conservan sin cambios.
     /// </summary>
     IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
     /// <summary>

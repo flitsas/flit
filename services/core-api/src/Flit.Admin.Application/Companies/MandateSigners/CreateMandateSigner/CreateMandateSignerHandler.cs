@@ -184,7 +184,7 @@ public sealed class CreateMandateSignerHandler
                 email,
                 command.UserId,
                 command.TransitOfficeIds,
-                command.PhysicalSignatureOfficeIds,
+                null, // HU #13131: la firma física ya no se persiste como exención.
                 signatureVaultId,
                 command.OfficeCompanies,
                 profile.Model,

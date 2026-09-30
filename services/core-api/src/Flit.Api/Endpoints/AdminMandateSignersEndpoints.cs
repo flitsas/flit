@@ -4,6 +4,7 @@ using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerSignatureI
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
+using Flit.Admin.Application.Companies.MandateSigners.PhysicalSignatureMigration;
 using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Api.Authorization;
@@ -95,7 +96,43 @@ public static class AdminMandateSignersEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        // HU #13131 (ADR-0061) — reporte de migración de la firma física. SOLO Super Admin (403 al resto):
+        // cruza compañías y organismos, y un ot_admin no debe ver datos de otros tenants.
+        app.MapGroup("/api/v1/admin/mandate-signers")
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Mandatarios")
+            .MapGet("/physical-signature-migration-report", PhysicalSignatureMigrationReportAsync)
+            .WithName("AdminMandateSignersPhysicalSignatureMigrationReport")
+            .WithSummary("Mandatarios activos que dependen solo de la firma física (filtrable por organismo, exportable a CSV)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         return app;
+    }
+
+    /// <summary>
+    /// HU #13131 — <c>?transitOfficeId=</c> filtra por organismo; <c>?format=csv</c> exporta. La respuesta no
+    /// incluye documento ni correo del mandatario (Ley 1581) y nada de esto se escribe en logs.
+    /// </summary>
+    private static async Task<IResult> PhysicalSignatureMigrationReportAsync(
+        [FromQuery] Guid? transitOfficeId,
+        [FromQuery] string? format,
+        [FromServices] GetPhysicalSignatureMigrationReportHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var rows = await handler.HandleAsync(transitOfficeId, cancellationToken).ConfigureAwait(false);
+
+        if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
+        {
+            var csv = PhysicalSignatureMigrationCsv.Build(rows);
+            return Results.File(
+                System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(csv)).ToArray(),
+                "text/csv; charset=utf-8",
+                PhysicalSignatureMigrationCsv.FileName);
+        }
+
+        return Results.Ok(new { data = rows, total = rows.Count });
     }
 
     private static async Task<IResult> ListAsync(

@@ -153,12 +153,11 @@ public sealed class CompanyMandateSignerHandlerTests
 
     /// <summary>
     /// Desde la HU #13122 el correo ya NO habilita a firmar: para no exigir baúl en cada prueba, el alta base
-    /// usa la excepción TRANSITORIA de firma física (se retira en la Feature F2) en todos sus organismos.
+    /// usa la forma de firma biometría (no exige validación aprobada al guardar; HU #13131 retiró la firma física).
     /// </summary>
     private static CompanyMandateSignerRequest Alta(params Guid[] organismos) =>
         new("Ana Restrepo", "1020304050", organismos, "CC", "ana@x.com",
-            PhysicalSignatureOfficeIds: organismos,
-            SignatureMethod: "baul");
+            SignatureMethod: "biometria");
 
     // ── AC1 — alta desde la compañía ──────────────────────────────────────────
 
@@ -243,8 +242,7 @@ public sealed class CompanyMandateSignerHandlerTests
             Compania,
             new CompanyMandateSignerRequest(
                 "Carlos Pérez", "9080706050", [OtEnvigado], "CC", "carlos@x.com",
-                PhysicalSignatureOfficeIds: [OtEnvigado],
-                SignatureMethod: "baul"),
+                SignatureMethod: "biometria"),
             null,
             ct);
 
@@ -286,7 +284,7 @@ public sealed class CompanyMandateSignerHandlerTests
         var (create, list) = Handlers(ctx, firmaId);
 
         var result = await create.HandleAsync(
-            Compania, Alta(OtMedellin) with { SignatureVaultId = firmaId }, null, ct);
+            Compania, Alta(OtMedellin) with { SignatureVaultId = firmaId, SignatureMethod = "baul" }, null, ct);
 
         result.IsValid.Should().BeTrue();
         ctx.ChangeTracker.Clear();
@@ -307,7 +305,7 @@ public sealed class CompanyMandateSignerHandlerTests
         var (create, _) = Handlers(ctx, firmaAjena);
 
         var result = await create.HandleAsync(
-            Compania, Alta(OtMedellin) with { SignatureVaultId = firmaAjena }, null, ct);
+            Compania, Alta(OtMedellin) with { SignatureVaultId = firmaAjena, SignatureMethod = "baul" }, null, ct);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.Field == "signatureVaultId");
@@ -322,7 +320,7 @@ public sealed class CompanyMandateSignerHandlerTests
         var (create, _) = Handlers(ctx, Guid.NewGuid());
 
         var result = await create.HandleAsync(
-            Compania, Alta(OtMedellin) with { SignatureVaultId = Guid.NewGuid() }, null, ct);
+            Compania, Alta(OtMedellin) with { SignatureVaultId = Guid.NewGuid(), SignatureMethod = "baul" }, null, ct);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.Field == "signatureVaultId");
@@ -340,7 +338,7 @@ public sealed class CompanyMandateSignerHandlerTests
         await SeedAsync(ctx, ct);
         var firmaId = await SeedFirmaAsync(ctx, "1020304050", ct);
         var (create, list) = Handlers(ctx, firmaId);
-        await create.HandleAsync(Compania, Alta(OtMedellin) with { SignatureVaultId = firmaId }, null, ct);
+        await create.HandleAsync(Compania, Alta(OtMedellin) with { SignatureVaultId = firmaId, SignatureMethod = "baul" }, null, ct);
         var id = await IdDelUnicoAsync(list, ct);
 
         // Edición que NO gestiona la firma (ActualizaFirma queda en false por defecto).
@@ -374,8 +372,7 @@ public sealed class CompanyMandateSignerHandlerTests
         // Envigado primero: distinto del primario (Medellín), que es como lo manda el multiselect.
         var result = await Editor(ctx).HandleAsync(
             Compania, id, new CompanyMandateSignerRequest(
-                "Ana Restrepo", "1020304050", [OtEnvigado, OtMedellin], "CC", "ana@x.com",
-                PhysicalSignatureOfficeIds: [OtEnvigado, OtMedellin]),
+                "Ana Restrepo", "1020304050", [OtEnvigado, OtMedellin], "CC", "ana@x.com"),
             null, ct);
 
         result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
@@ -476,10 +473,10 @@ public sealed class CompanyMandateSignerHandlerTests
     }
 
     [Fact]
-    public async Task Alta_SinMedioDeFirma_PeroConFirmaFisica_SeAcepta()
+    public async Task HU13131_Alta_ConFirmaFisicaEnLaPeticion_NoEximeYSeRechazaSinFirmaDelBaul()
     {
         var ct = TestContext.Current.CancellationToken;
-        // El gestor eligió que ante ese organismo se firme a mano: la línea en blanco es correcta.
+        // La firma física ya no es una forma de firma: el campo se ignora y no sustituye a la firma del baúl.
         await using var ctx = NewContext();
         await SeedAsync(ctx, ct);
         var (create, list) = Handlers(ctx);
@@ -493,8 +490,31 @@ public sealed class CompanyMandateSignerHandlerTests
             null,
             ct);
 
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Field.Should().Be("signatureVaultId");
+        (await list.HandleAsync(Compania, ct)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HU13131_Alta_ConFirmaFisicaEnLaPeticion_NoLaPersisteComoExencion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+
+        var result = await create.HandleAsync(
+            Compania,
+            new CompanyMandateSignerRequest(
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null,
+                PhysicalSignatureOfficeIds: [OtMedellin],
+                SignatureMethod: "biometria"),
+            null,
+            ct);
+
         result.IsValid.Should().BeTrue();
-        (await list.HandleAsync(Compania, ct)).Should().ContainSingle();
+        (await list.HandleAsync(Compania, ct)).Single().PhysicalSignatureOfficeIds.Should().BeNullOrEmpty();
+        ctx.MandateSignerTransitOffices.Should().OnlyContain(o => !o.SignsPhysically);
     }
 
     [Fact]
@@ -508,8 +528,7 @@ public sealed class CompanyMandateSignerHandlerTests
             Compania,
             new CompanyMandateSignerRequest(
                 "Ana Restrepo", "1020304050", [OtMedellin], "CC", null,
-                PhysicalSignatureOfficeIds: [OtMedellin],
-                SignatureMethod: "baul"),
+                SignatureMethod: "biometria"),
             null,
             ct);
         var id = await IdDelUnicoAsync(list, ct);
@@ -518,7 +537,7 @@ public sealed class CompanyMandateSignerHandlerTests
             Compania, id,
             new CompanyMandateSignerRequest(
                 "Ana Restrepo", "1020304050", [OtMedellin, OtEnvigado], "CC", null,
-                PhysicalSignatureOfficeIds: [OtMedellin]),
+                SignatureMethod: "baul"),
             null, ct);
 
         result.Outcome.Should().Be(UpdateMandateSignerOutcome.ValidationFailed);
@@ -537,8 +556,7 @@ public sealed class CompanyMandateSignerHandlerTests
             Compania,
             new CompanyMandateSignerRequest(
                 "Ana Restrepo", "1020304050", [OtMedellin], "CC", null,
-                PhysicalSignatureOfficeIds: [OtMedellin],
-                SignatureMethod: "baul"),
+                SignatureMethod: "biometria"),
             null,
             ct);
         var id = await IdDelUnicoAsync(list, ct);

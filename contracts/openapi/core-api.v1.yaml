@@ -429,6 +429,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/mandate-signers/physical-signature-migration-report:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersPhysicalSignatureMigrationReport
+      summary: Reporte de migración de la firma física (HU #13131)
+      description: >
+        Mandatarios Persona natural activos que dependen SOLO de la firma física (`signs_physically`
+        verdadero), sin firma del baúl y sin validación biométrica aprobada y vigente (regla de 30 días del
+        módulo Identidad). Cada fila trae compañía, organismo, forma de firma actual, forma declarada y el
+        dato que le falta. Un mandatario al que se le vincula una firma del baúl o se le aprueba la validación
+        sale del reporte en la siguiente consulta. NO incluye documento ni correo (Ley 1581). Solo SuperAdmin.
+        Con `format=csv` se exporta como `text/csv`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filtra por organismo de tránsito.
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [json, csv], default: json }
+      responses:
+        "200":
+          description: Filas del reporte.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  total: { type: integer }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PhysicalSignatureMigrationRow"
+            text/csv:
+              schema:
+                type: string
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin (no se entregan datos de otros tenants).
+
   /api/v1/admin/ict/job-settings:
     get:
       tags: [Admin · ICT · Jobs]
@@ -11681,6 +11727,30 @@ components:
           nullable: true
           enum: [mandatario_fuera_de_vigencia, mandatario_inactivo, biometria_vencida, sin_validacion_aprobada]
           description: "Motivo cuando `firmaValida` es false."
+    PhysicalSignatureMigrationRow:
+      type: object
+      description: >
+        Mandatario que depende solo de la firma física ante un organismo (HU #13131). Sin documento ni correo.
+      required: [mandateSignerId, fullName, transitOfficeId, transitOfficeCode, transitOfficeName, currentSignatureForm, missingData]
+      properties:
+        mandateSignerId: { type: string, format: uuid }
+        fullName: { type: string }
+        companyTenantId: { type: string, format: uuid, nullable: true }
+        companyName: { type: string, nullable: true }
+        transitOfficeId: { type: string, format: uuid }
+        transitOfficeCode: { type: string }
+        transitOfficeName: { type: string }
+        currentSignatureForm:
+          type: string
+          enum: [firma_fisica]
+        declaredSignatureMethod:
+          type: string
+          nullable: true
+          enum: [baul, biometria]
+          description: "Forma de firma declarada en la ficha; null si no la declaró."
+        missingData:
+          type: string
+          enum: [firma_baul_o_validacion_biometrica, firma_baul, validacion_biometrica, validacion_biometrica_vigente]
     MandateSignerSelectionResponse:
       type: object
       required: [opciones, elegidoId, editable]

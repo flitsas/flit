@@ -53,7 +53,6 @@ public sealed class UpdateMandateSignerHandler
         IReadOnlyList<Guid> companyIds = command.CompanyTenantIds ?? [];
         var companiesToValidate = companyIds;
         var transitOfficeIds = command.TransitOfficeIds;
-        var physicalSignatureOfficeIds = command.PhysicalSignatureOfficeIds;
 
         // Bug #12912 (2ª vuelta review PR #442) — la edición desde el organismo solo gestiona SU fila,
         // leyendo el estado persistido (no el cuerpo, que al OT le llega recortado):
@@ -72,7 +71,6 @@ public sealed class UpdateMandateSignerHandler
             companiesToValidate = [.. companyIds.Where(id => !persistidas.Contains(id)).Distinct()];
             companyIds = [.. companyIds.Union(persistidas.Where(id => !visibles.Contains(id)))];
             transitOfficeIds = null;
-            physicalSignatureOfficeIds = null;
         }
 
         var otStatus = await _otStatus
@@ -111,7 +109,6 @@ public sealed class UpdateMandateSignerHandler
                 : (signer.TransitOfficeIds.Count > 0 ? signer.TransitOfficeIds : [command.TransitOfficeId]);
             var baulError = MandateSignerSigningCapability.Validate(
                 offices,
-                physicalSignatureOfficeIds ?? signer.PhysicalSignatureOfficeIds,
                 efectiveVaultId,
                 existente: null,
                 MandateSignatureMethods.Baul);
@@ -168,7 +165,7 @@ public sealed class UpdateMandateSignerHandler
                 email,
                 command.UserId,
                 transitOfficeIds,
-                physicalSignatureOfficeIds,
+                null, // HU #13131: no se toca la marca histórica de firma física (se conserva tal cual).
                 vaultId,
                 command.OfficeCompanies,
                 actualizaFirma,

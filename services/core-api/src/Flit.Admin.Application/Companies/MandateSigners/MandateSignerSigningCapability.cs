@@ -15,14 +15,12 @@ namespace Flit.Admin.Application.Companies.MandateSigners;
 /// activa del baúl ni validación biométrica válida o en curso, el mandatario no puede firmar. El
 /// correo es solo un dato de contacto.</para>
 ///
-/// <para><b>Excepción transitoria: la firma física.</b> Un organismo marcado en
-/// <c>PhysicalSignatureOfficeIds</c> no exige baúl ni identidad al parametrizar (se puede dejar
-/// línea en blanco). Si el mandatario ya tiene imagen o sello, el contrato las estampa igual:
-/// el modelo a mano no las oculta.</para>
+/// <para><b>Sin excepción de firma física (HU #13131, ADR-0061).</b> La firma física ya no es una forma
+/// de firma: todo organismo exige baúl o biometría. Las filas históricas con <c>signs_physically</c> no se
+/// borran ni cambian el resolver de trámites (F4), pero ya no eximen de esta comprobación.</para>
 ///
 /// <para><b>La identidad en curso cuenta.</b> Basta con que la validación biométrica esté en camino
-/// (<c>pending</c>) para no bloquear al mandatario mientras Kyverum resuelve. La firma física la retira
-/// la Feature F2; hasta entonces se conserva la excepción.</para>
+/// (<c>pending</c>) para no bloquear al mandatario mientras Kyverum resuelve.</para>
 /// </summary>
 public static class MandateSignerSigningCapability
 {
@@ -49,7 +47,6 @@ public static class MandateSignerSigningCapability
     /// Vacío ⇒ se puede habilitar en todos.
     /// </summary>
     /// <param name="offices">Organismos que el formulario quiere dejar habilitados.</param>
-    /// <param name="physicalSignatureOfficeIds">Los que se firman a mano (exentos).</param>
     /// <param name="signatureVaultId">Firma del baúl elegida en la petición.</param>
     /// <param name="existente">
     /// Mandatario ya registrado, en la edición. <c>null</c> en el alta. Aporta la firma y la identidad
@@ -57,7 +54,6 @@ public static class MandateSignerSigningCapability
     /// </param>
     public static IReadOnlyList<Guid> OrganismosSinMedioDeFirma(
         IReadOnlyList<Guid> offices,
-        IReadOnlyList<Guid>? physicalSignatureOfficeIds,
         Guid? signatureVaultId,
         MandateSignerItem? existente = null,
         string? signatureMethod = null)
@@ -84,11 +80,7 @@ public static class MandateSignerSigningCapability
             return [];
         }
 
-        var fisicos = physicalSignatureOfficeIds is null
-            ? []
-            : new HashSet<Guid>(physicalSignatureOfficeIds);
-
-        return [.. offices.Where(o => !fisicos.Contains(o))];
+        return [.. offices];
     }
 
     /// <summary>
@@ -97,13 +89,11 @@ public static class MandateSignerSigningCapability
     /// </summary>
     public static MandateSignerValidationError? Validate(
         IReadOnlyList<Guid> offices,
-        IReadOnlyList<Guid>? physicalSignatureOfficeIds,
         Guid? signatureVaultId,
         MandateSignerItem? existente = null,
         string? signatureMethod = null)
     {
-        var sinFirma = OrganismosSinMedioDeFirma(
-            offices, physicalSignatureOfficeIds, signatureVaultId, existente, signatureMethod);
+        var sinFirma = OrganismosSinMedioDeFirma(offices, signatureVaultId, existente, signatureMethod);
 
         if (sinFirma.Count == 0)
         {
