@@ -145,6 +145,57 @@ export async function fetchMandateSigners(
   return result.data;
 }
 
+/** HU #13178 — compañía asociable a un mandatario: solo id de tenant, nombre y NIT (Ley 1581). */
+export interface AssociableCompany {
+  id: string;
+  name: string;
+  nit: string;
+}
+
+export interface AssociableCompaniesQuery {
+  /** Nombre o NIT; el servidor exige mínimo 2 caracteres (422 si trae menos). */
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface AssociableCompaniesPage {
+  items: AssociableCompany[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** Verdadero si quien consulta no tiene red: no hay lista y el mandatario aplica solo a su compañía. */
+  aplicaSoloASuCompania: boolean;
+}
+
+function normalizarAsociables(r: Partial<AssociableCompaniesPage> | null | undefined): AssociableCompaniesPage {
+  const items = Array.isArray(r?.items) ? r!.items : [];
+  return {
+    items,
+    total: r?.total ?? items.length,
+    page: r?.page ?? 1,
+    pageSize: r?.pageSize ?? items.length,
+    aplicaSoloASuCompania: r?.aplicaSoloASuCompania === true,
+  };
+}
+
+/**
+ * GET /associable-companies — HU #13178/#13182: todas las compañías gestoras activas (sin duplicados
+ * por NIT), con búsqueda por nombre y NIT y paginación de servidor. Solo OT admin y SuperAdmin (403
+ * al resto). No altera la visibilidad de la bandeja de trámites.
+ */
+export async function fetchOtAssociableCompanies(
+  transitOfficeId: string,
+  query: AssociableCompaniesQuery = {},
+  signal?: AbortSignal,
+): Promise<AssociableCompaniesPage> {
+  const r = await apiFetch<AssociableCompaniesPage>(`${base(transitOfficeId)}/associable-companies`, {
+    query: { search: query.search, page: query.page, pageSize: query.pageSize },
+    signal,
+  });
+  return normalizarAsociables(r);
+}
+
 /** GET /companies — compañías del OT con sus mandatarios asignados (RF34 + multiselect). */
 export async function fetchOtCompanies(
   transitOfficeId: string,

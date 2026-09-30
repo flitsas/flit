@@ -61,6 +61,11 @@ export interface MandatoOtConfigFormProps {
    * catálogo sigue listando todas las que radican en el OT.
    */
   lockToCompanyId?: string | null;
+  /**
+   * HU #13182 — compañía activa elegida en la lista del hub que aún no tiene regla en este OT (p. ej.
+   * nunca le radicó): el panel la muestra sin mandatario definido en vez de quedar vacío.
+   */
+  lockedCompany?: { id: string; name: string; nit: string } | null;
   /** Abre el alta de mandatario de esa empresa (hub OT). */
   onRegisterSigner?: (companyTenantId: string) => void;
   /** Tras un alta, recarga el listado de mandatarios del OT sin cerrar el panel. */
@@ -76,6 +81,7 @@ export function MandatoOtConfigForm({
   mode,
   highlightCompanyId,
   lockToCompanyId,
+  lockedCompany,
   onRegisterSigner,
   signersRevision = 0,
   lastCreatedSignerId,
@@ -148,7 +154,33 @@ export function MandatoOtConfigForm({
         listCompanyOtMandateRules(office.officeId),
         fetchMandateSigners(office.officeId).catch(() => [] as MandateSigner[]),
       ]);
-      setCompanyRules(items);
+      const sinRegla =
+        lockedCompany && !items.some((row) => row.companyTenantId === lockedCompany.id);
+      setCompanyRules(
+        sinRegla
+          ? [
+              ...items,
+              {
+                companyTenantId: lockedCompany.id,
+                companyName: lockedCompany.name,
+                companyTaxId: lockedCompany.nit,
+                companyCode: null,
+                assignmentMode: "open",
+                mandataryFamily: "individuo",
+                institutionalMandataryName: null,
+                institutionalMandataryNit: null,
+                chamberCity: null,
+                mandatarySigla: null,
+                hasExplicitRule: false,
+                defaultMandateSignerId: null,
+                defaultMandateSignerName: null,
+                defaultMandateSignerDocumentType: null,
+                defaultMandateSignerDocumentNumber: null,
+                defaultMandateSignerIntegrityHash: null,
+              } as CompanyOtMandateRuleView,
+            ]
+          : items,
+      );
       setOtSigners(signers.filter((s) => s.isActive));
       if (highlightCompanyId) {
         const focused = items.find((row) => row.companyTenantId === highlightCompanyId);
@@ -173,7 +205,7 @@ export function MandatoOtConfigForm({
         setError("No se pudieron cargar las compañías. Reintentar.");
       }
     }
-  }, [office.officeId, highlightCompanyId]);
+  }, [office.officeId, highlightCompanyId, lockedCompany]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API
