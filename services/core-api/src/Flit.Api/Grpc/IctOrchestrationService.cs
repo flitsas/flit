@@ -56,16 +56,31 @@ public sealed class IctOrchestrationService(
             var existing = await db.Set<ProcedureInstance>()
                 .AsNoTracking()
                 .Where(p => p.TenantId == tenantId && p.ExternalRef == externalRef && p.DeletedAt == null)
-                .Select(p => new { p.Id, p.ReferenceNumber, p.Status })
+                .Select(p => new { p.Id, p.ReferenceNumber, p.Status, p.SubsanacionActiva })
                 .FirstOrDefaultAsync(context.CancellationToken);
             if (existing is not null)
             {
-                return new DraftReply
+                var existingReply = new DraftReply
                 {
                     ProcedureInstanceId = existing.Id.ToString(),
                     ReferenceNumber = existing.ReferenceNumber,
                     Status = existing.Status,
                 };
+
+                // Bug #13109 — si el intento previo creó el borrador pero perdió los adjuntos (se cayó en
+                // HandleBatchAsync), el reintento los completa aquí: sin esto el master quedaba en BORRADOR
+                // con 0 adjuntos para siempre. Mismo criterio de edición que HandleBatchAsync; la dedup
+                // por sha256 evita duplicar los que sí alcanzaron a quedar.
+                if (request.Attachments.Count > 0
+                    && TramiteEstado.PermiteEdicionDatos(existing.Status, existing.SubsanacionActiva))
+                {
+                    var retryCreatedBy = await ResolveIctCreatorAsync(
+                        request.CreatedByUserId, tenantId, context.CancellationToken);
+                    await RegistrarAdjuntosAsync(
+                        existingReply, existing.Id, tenantId, request, retryCreatedBy, context.CancellationToken);
+                }
+
+                return existingReply;
             }
         }
 
@@ -220,24 +235,8 @@ public sealed class IctOrchestrationService(
         // borrador ya existe y el gestor puede completarlo; se reporta como warning acumulado.
         if (request.Attachments.Count > 0)
         {
-            // Todos los adjuntos en UNA unidad de trabajo (un solo SaveChanges): registrarlos uno por uno
-            // reventaría por el token de concurrencia de la instancia al reincidir el AutoMark. Ver
-            // RegisterIntegrationAttachmentHandler.HandleBatchAsync.
-            var attachmentInputs = request.Attachments
-                .Select(att => new RegisterAttachmentInput(
-                    Tipo: att.DocumentType,
-                    Filename: att.Filename,
-                    Mimetype: att.MimeType,
-                    SizeBytes: att.SizeBytes,
-                    Sha256: att.Sha256,
-                    StoragePath: att.StoragePath))
-                .ToList();
-            var (_, attachmentWarnings) = await attachmentsHandler.HandleBatchAsync(
-                summary.Id, tenantId, attachmentInputs, createdBy, context.CancellationToken);
-            if (attachmentWarnings.Count > 0)
-            {
-                AppendWarning(reply, "attachments_warning:" + string.Join(",", attachmentWarnings));
-            }
+            RefrescarRastreo();
+            await RegistrarAdjuntosAsync(reply, summary.Id, tenantId, request, createdBy, context.CancellationToken);
         }
 
         // Preflight — PARIDAD con "Consultar RUNT del vehículo" (paso 1 del wizard manual). Un solo
@@ -253,6 +252,7 @@ public sealed class IctOrchestrationService(
             && !string.IsNullOrWhiteSpace(f.ValueText));
         if (tieneVehiculo)
         {
+            RefrescarRastreo();
             try
             {
                 var (_, preflightError, _, _) = await preflightHandler.HandleAsync(
@@ -313,6 +313,55 @@ public sealed class IctOrchestrationService(
 
         return reply;
     }
+
+    /// <summary>
+    /// Registra los adjuntos ICT por REFERENCIA en UNA unidad de trabajo (un solo SaveChanges): uno por
+    /// uno reventaría por el token de concurrencia de la instancia al reincidir el AutoMark (ver
+    /// RegisterIntegrationAttachmentHandler.HandleBatchAsync). Fallo NO fatal: el borrador ya existe, así
+    /// que una excepción se reporta como warning y no sale como gRPC Unknown (Bug #13109).
+    /// </summary>
+    private async Task RegistrarAdjuntosAsync(
+        DraftReply reply,
+        Guid instanceId,
+        Guid tenantId,
+        CreateDraftFromIctRequest request,
+        Guid createdBy,
+        CancellationToken ct)
+    {
+        var attachmentInputs = request.Attachments
+            .Select(att => new RegisterAttachmentInput(
+                Tipo: att.DocumentType,
+                Filename: att.Filename,
+                Mimetype: att.MimeType,
+                SizeBytes: att.SizeBytes,
+                Sha256: att.Sha256,
+                StoragePath: att.StoragePath))
+            .ToList();
+        try
+        {
+            var (_, attachmentWarnings) = await attachmentsHandler.HandleBatchAsync(
+                instanceId, tenantId, attachmentInputs, createdBy, ct);
+            if (attachmentWarnings.Count > 0)
+            {
+                AppendWarning(reply, "attachments_warning:" + string.Join(",", attachmentWarnings));
+            }
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            AppendWarning(reply, "attachments_warning:exception");
+        }
+    }
+
+    /// <summary>
+    /// Bug #13109 — descarta el grafo trackeado por los pasos previos antes de que el siguiente handler
+    /// recargue la instancia. <c>row_version</c> es solo token de concurrencia y lo sube el trigger
+    /// <c>tr_procedure_instances_row_version</c>: EF no lo relee, y por identity resolution la recarga
+    /// devolvería la MISMA entidad con el token viejo → el UPDATE (AutoMark del checklist, preflight)
+    /// afectaría 0 filas → DbUpdateConcurrencyException. Todos los pasos previos ya hicieron su
+    /// SaveChanges, así que no se pierde nada. Mismo patrón que ConsolidadoCommand.ReloadAsync
+    /// (repo.ResetTracking()).
+    /// </summary>
+    private void RefrescarRastreo() => db.ChangeTracker.Clear();
 
     /// <summary>
     /// Acumula un warning NO fatal en <c>reply.ErrorCode</c> sin pisar los previos (separados por ';').
