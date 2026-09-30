@@ -12,7 +12,8 @@ vi.mock("@/lib/api/admin-mandate-signers", () => ({
   fetchCompanyTransitOffices: vi
     .fn()
     .mockResolvedValue([{ transitOfficeId: "ot-1", code: "05001000", name: "Tránsito de Medellín" }]),
-  fetchRepresentedCompanies: vi.fn().mockResolvedValue([]),
+  fetchCompanyAssociableCompanies: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100, aplicaSoloASuCompania: true }),
+  fetchOtAssociableCompanies: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, aplicaSoloASuCompania: false }),
   createCompanyMandateSigner: vi.fn(),
   updateCompanyMandateSigner: vi.fn(),
   inactivateCompanyMandateSigner: vi.fn(),

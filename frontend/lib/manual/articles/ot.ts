@@ -581,6 +581,7 @@ export const OT_ARTICLES: ManualArticle[] = [
           "Desde «Compañías», o desde el panel del mandatario general, pulsa «Registrar mandatario». Si eliges el general y hay varias empresas, indica cuál empresa registra a la persona.",
           "Elige el modelo: Persona natural (nombre completo, tipo y número de documento, correo opcional, forma de firma y vigencia), Persona jurídica (nombre y NIT de la entidad) o Formato en blanco (sin datos: el sistema solo entrega el PDF sin firma). El organismo queda fijo: es el tuyo.",
           "En Persona natural elige la forma de firma: Baúl de firmas (se usa la firma vigente que la persona tenga en el baúl de la empresa) o Validación de identidad. Luego la vigencia: Fija, o Rango de fechas con inicio y fin (el fin no puede ser anterior al inicio).",
+          "Compañías asociadas (opcional): busca por nombre o NIT (mínimo 2 caracteres), marca las compañías de FLIT a las que también aplica el mandatario y revisa las marcadas debajo de la lista; puedes marcar varias y quitarlas con la «x». Solo se muestran nombre y NIT. Sin marcar ninguna, el mandatario aplica solo a la compañía elegida. Si una compañía no se puede asociar (por ejemplo, está inactiva), el formulario te dice el motivo junto a ella y conservas lo escrito.",
           "Pulsa «Guardar». Verás el aviso «Mandatario registrado» y la persona queda lista para elegirla como general o como default de la empresa.",
         ],
         callouts: [

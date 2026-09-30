@@ -307,6 +307,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
           editing={null}
           initialOfficeIds={[transitOfficeId]}
           restrictToOfficeIds={[transitOfficeId]}
+          ownerCompanyIds={[signerCompanyId]}
           overlayClassName="z-[80]"
           onCancel={() => setSignerCompanyId(null)}
           onSubmit={async (input: CompanyMandateSignerInput) => {
@@ -323,6 +324,8 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
               validityKind: input.validityKind,
               validFrom: input.validFrom,
               validTo: input.validTo,
+              // HU #13181 — compañías asociadas elegidas en el formulario.
+              officeCompanies: input.officeCompanies,
             });
             setSignerCompanyId(null);
             setLastCreatedSignerId(saved.id);

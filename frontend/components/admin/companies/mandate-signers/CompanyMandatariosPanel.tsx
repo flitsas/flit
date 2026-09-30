@@ -18,15 +18,15 @@ import {
   createCompanyMandateSigner,
   fetchCompanyMandateSigners,
   fetchCompanyTransitOffices,
-  fetchRepresentedCompanies,
   inactivateCompanyMandateSigner,
   reactivateCompanyMandateSigner,
   updateCompanyMandateSigner,
   type CompanyMandateSignerInput,
   type CompanyTransitOfficeOption,
-  type RepresentedCompanyOption,
   type MandateSigner,
 } from "@/lib/api/admin-mandate-signers";
+import { getToken } from "@/lib/api/client";
+import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { formatDocumentWithType } from "@/lib/display/document-number";
 import {
   motivoSinFirma,
@@ -35,6 +35,7 @@ import {
 import { etiquetaModelo, modeloDe } from "@/lib/plataforma/mandatario-vigencia";
 import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "../legal-representatives/rl-flit-styles";
 import { CompanyMandatarioForm } from "./CompanyMandatarioForm";
+import type { FuenteAsociadas } from "./MandatarioCompaniasAsociadas";
 import { MandatarioVigenciaBadge } from "./MandatarioVigenciaBadge";
 
 /**
@@ -57,7 +58,6 @@ export function CompanyMandatariosPanel({
   const pg = usePaginacion();
   const [signers, setSigners] = useState<MandateSigner[]>([]);
   const [offices, setOffices] = useState<CompanyTransitOfficeOption[]>([]);
-  const [companies, setCompanies] = useState<RepresentedCompanyOption[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<MandateSigner | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -66,19 +66,15 @@ export function CompanyMandatariosPanel({
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const [signerList, officeList, companyList] = await Promise.all([
+        const [signerList, officeList] = await Promise.all([
           fetchCompanyMandateSigners(tenantId, signal, networkHeadId),
           fetchCompanyTransitOffices(tenantId, signal, networkHeadId),
-          // Best-effort: sin empresas el formulario sigue funcionando y el mandatario aplica a todas,
-          // que es el comportamiento por defecto.
-          fetchRepresentedCompanies(tenantId, signal, networkHeadId).catch(() => []),
         ]);
         if (signal?.aborted) {
           return;
         }
         setSigners(signerList);
         setOffices(officeList);
-        setCompanies(companyList);
         setStatus(signerList.length === 0 ? "empty" : "ready");
       } catch {
         if (!signal?.aborted) {
@@ -146,6 +142,14 @@ export function CompanyMandatariosPanel({
       : [];
 
   const sinOrganismos = offices.length === 0;
+
+  // HU #13181 — lista de compañías asociables según el perfil: el Super Admin busca entre todas (por
+  // la ruta del organismo); el Admin de Compañía ve solo sus hijas.
+  const [esSuperAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  const asociadas: FuenteAsociadas | undefined =
+    esSuperAdmin && offices[0]
+      ? { modo: "ot", transitOfficeId: offices[0].transitOfficeId }
+      : undefined;
 
   return (
     <div className="space-y-4">
@@ -324,7 +328,8 @@ export function CompanyMandatariosPanel({
           tenantId={tenantId}
           networkHeadId={networkHeadId}
           offices={offices}
-          companies={companies}
+          asociadas={asociadas}
+          ownerCompanyIds={[tenantId]}
           editing={editing}
           onCancel={() => {
             setFormOpen(false);
