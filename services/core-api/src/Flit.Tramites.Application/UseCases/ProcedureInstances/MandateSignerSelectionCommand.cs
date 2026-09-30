@@ -26,7 +26,12 @@ public sealed record MandateSignerOptionDto(
     /// Firma A MANO ante el organismo del trámite. Quien firma a mano no necesita ninguna de las dos
     /// vías anteriores: el documento le deja la línea.
     /// </summary>
-    bool FirmaFisica = false);
+    bool FirmaFisica = false,
+    /// <summary>HU #13130 — firma válida: vigencia propia activa Y, con biometría, validación biométrica vigente (30 días).</summary>
+    bool FirmaValida = true,
+    /// <summary>HU #13130 — motivo cuando <c>FirmaValida</c> es falso (mandatario_fuera_de_vigencia, mandatario_inactivo,
+    /// biometria_vencida, sin_validacion_aprobada).</summary>
+    string? MotivoSinFirma = null);
 
 /// <summary>
 /// Mandatarios disponibles para el trámite y cuál está elegido. <see cref="Editable"/> es falso fuera
@@ -106,7 +111,7 @@ public sealed class ListMandateSignerOptionsHandler(
 
             opciones.Add(new MandateSignerOptionDto(
                 c.Id, c.Nombre, tipoDoc, c.Documento, c.IdentityVigente, c.IdentityValidUntil, conBaul,
-                c.FirmaFisica));
+                c.FirmaFisica, c.FirmaValida, c.MotivoSinFirma));
         }
 
         // Prioridad: ya elegido en el trámite (solo fuera de borrador) → default cliente×OT →

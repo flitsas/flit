@@ -1,10 +1,13 @@
+using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Admin.Domain.Identity;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.Integration;
+using Flit.Queries.Domain.Time;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.OtRules;
@@ -29,8 +32,11 @@ namespace Flit.Infrastructure.OtRules;
 /// </summary>
 internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 {
-    /// <summary>Identidad aprobada y vigente de un mandatario: su certificado y hasta cuándo vale.</summary>
-    private sealed record IdentidadVigente(string? Certificado, DateTimeOffset? ValidUntil);
+    /// <summary>Identidad de un mandatario: su estado (ADR-0050), certificado y hasta cuándo vale.</summary>
+    private sealed record IdentidadResuelta(string Status, string? Certificado, DateTimeOffset? ValidUntil)
+    {
+        public bool Vigente => Status == IdentityVigenciaEstados.AprobadaVigente;
+    }
 
     private readonly FlitDbContext _context;
     private readonly ITransitOfficeOperationalStatusReader _otStatus;
@@ -67,7 +73,11 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                 && c.IsActive
                 && s.IsActive
                 && s.DeletedAt == null
-            select new { s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType, s.SignerModel })
+            select new
+            {
+                s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType, s.SignerModel,
+                s.SignatureMethod, s.ValidityKind, s.ValidFrom, s.ValidTo, s.IsActive,
+            })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -76,12 +86,13 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             return [];
         }
 
-        var vigentes = await LoadVigentIdentitiesAsync(
+        var identidades = await LoadIdentitiesAsync(
             transitOfficeId,
             // HU #13129 — Persona jurídica y Formato en blanco no tienen identidad que resolver.
             signers.Where(s => s.SignerModel == "natural" && !string.IsNullOrWhiteSpace(s.DocumentNumber))
                 .Select(s => (s.Id, s.DocumentType, s.DocumentNumber!)).ToList(),
             cancellationToken).ConfigureAwait(false);
+        var vigentes = identidades.Where(kv => kv.Value.Vigente).ToDictionary(kv => kv.Key, kv => kv.Value);
 
         // Quién firma a mano ANTE ESTE organismo: es una propiedad del vínculo, no de la persona.
         var fisicos = await _context.MandateSignerTransitOffices.AsNoTracking()
@@ -95,13 +106,22 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             transitOfficeId, nitMandante, [.. signers.Select(s => s.Id)], cancellationToken)
             .ConfigureAwait(false);
 
+        var today = ColombiaTime.Today(TimeProvider.System);
+
         return
         [
-            .. signers.Where(s => admitidos.Contains(s.Id)).Select(s => new MandateSignerCandidate(
-                s.Id, s.FullName, s.DocumentNumber ?? string.Empty, s.UserId, vigentes.ContainsKey(s.Id),
-                s.SignatureVaultId, s.DocumentType, vigentes.GetValueOrDefault(s.Id)?.Certificado,
-                vigentes.GetValueOrDefault(s.Id)?.ValidUntil,
-                firmanAMano.Contains(s.Id))),
+            .. signers.Where(s => admitidos.Contains(s.Id)).Select(s =>
+            {
+                var firma = EvaluarFirma(
+                    s.SignerModel, s.SignatureMethod, s.IsActive, s.ValidityKind, s.ValidFrom, s.ValidTo,
+                    s.SignatureVaultId, identidades.GetValueOrDefault(s.Id), today);
+                return new MandateSignerCandidate(
+                    s.Id, s.FullName, s.DocumentNumber ?? string.Empty, s.UserId, vigentes.ContainsKey(s.Id),
+                    s.SignatureVaultId, s.DocumentType, vigentes.GetValueOrDefault(s.Id)?.Certificado,
+                    vigentes.GetValueOrDefault(s.Id)?.ValidUntil,
+                    firmanAMano.Contains(s.Id),
+                    firma?.Valida ?? true, firma?.Motivo);
+            }),
         ];
     }
 
@@ -118,7 +138,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             .Select(s => new
             {
                 s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType,
-                s.TransitOfficeId, s.SignerModel,
+                s.TransitOfficeId, s.SignerModel, s.SignatureMethod, s.ValidityKind, s.ValidFrom, s.ValidTo,
+                s.IsActive,
             })
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -130,30 +151,56 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
         // Sin OT (registro huérfano) no hay tenant contra el que resolver identidad: se devuelve el
         // candidato sin vigencia, igual que antes cuando no había fila admin.
-        var vigentes = await LoadVigentIdentitiesAsync(
+        var identidades = await LoadIdentitiesAsync(
             signer.TransitOfficeId,
             signer.SignerModel == "natural" && !string.IsNullOrWhiteSpace(signer.DocumentNumber)
                 ? [(signer.Id, signer.DocumentType, signer.DocumentNumber)]
                 : [],
             cancellationToken).ConfigureAwait(false);
 
+        var identidad = identidades.GetValueOrDefault(signer.Id);
+        var vigente = identidad?.Vigente == true ? identidad : null;
+        var firma = EvaluarFirma(
+            signer.SignerModel, signer.SignatureMethod, signer.IsActive, signer.ValidityKind, signer.ValidFrom,
+            signer.ValidTo, signer.SignatureVaultId, identidad, ColombiaTime.Today(TimeProvider.System));
+
         return new MandateSignerCandidate(
-            signer.Id, signer.FullName, signer.DocumentNumber ?? string.Empty, signer.UserId, vigentes.ContainsKey(signer.Id),
-            signer.SignatureVaultId, signer.DocumentType, vigentes.GetValueOrDefault(signer.Id)?.Certificado,
-            vigentes.GetValueOrDefault(signer.Id)?.ValidUntil);
+            signer.Id, signer.FullName, signer.DocumentNumber ?? string.Empty, signer.UserId, vigente is not null,
+            signer.SignatureVaultId, signer.DocumentType, vigente?.Certificado, vigente?.ValidUntil,
+            FirmaFisica: false, FirmaValida: firma?.Valida ?? true, MotivoSinFirma: firma?.Motivo);
     }
 
     /// <summary>
-    /// Identidades APROBADAS y VIGENTES (HU #11752, ADR-0050) de los mandatarios indicados, resueltas
+    /// HU #13130 — firma válida del mandatario: vigencia propia activa Y (si firma con biometría) validación
+    /// biométrica vigente. <c>null</c> cuando el modelo no es Persona natural (no hay firma personal).
+    /// </summary>
+    private static MandateSignerFirmaValidez.Resultado? EvaluarFirma(
+        string signerModel, string? signatureMethod, bool isActive, string validityKind,
+        DateOnly? validFrom, DateOnly? validTo, Guid? signatureVaultId, IdentidadResuelta? identidad, DateOnly today)
+    {
+        var vigencia = MandateValidityStatus.Compute(isActive, validityKind, validFrom, validTo, today);
+        var identidadLegacy = identidad?.Status switch
+        {
+            IdentityVigenciaEstados.AprobadaVigente => AdminIdentityVigencia.Valid,
+            IdentityVigenciaEstados.EnCurso => AdminIdentityVigencia.Pending,
+            IdentityVigenciaEstados.Vencida => AdminIdentityVigencia.Expired,
+            _ => AdminIdentityVigencia.None,
+        };
+        return MandateSignerFirmaValidez.Evaluar(
+            signerModel, signatureMethod, vigencia, identidadLegacy, signatureVaultId is not null);
+    }
+
+    /// <summary>
+    /// Identidades de los mandatarios indicados (HU #11752, ADR-0050; ahora con su estado para HU #13130), resueltas
     /// contra el módulo Identidad en el tenant de la(s) COMPAÑÍA(S) que registró al mandatario (HU #13121;
     /// vigente en alguna de sus compañías vinculadas). El tenant del OT solo es respaldo si no tiene compañías.
     /// </summary>
-    private async Task<Dictionary<Guid, IdentidadVigente>> LoadVigentIdentitiesAsync(
+    private async Task<Dictionary<Guid, IdentidadResuelta>> LoadIdentitiesAsync(
         Guid transitOfficeId,
         List<(Guid Id, string DocumentType, string DocumentNumber)> signers,
         CancellationToken cancellationToken)
     {
-        var map = new Dictionary<Guid, IdentidadVigente>();
+        var map = new Dictionary<Guid, IdentidadResuelta>();
         if (signers.Count == 0 || transitOfficeId == Guid.Empty)
         {
             return map;
@@ -170,10 +217,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
         foreach (var (signerId, result) in resueltos)
         {
-            if (result.Status == IdentityVigenciaEstados.AprobadaVigente)
-            {
-                map[signerId] = new IdentidadVigente(result.CertificateHash, result.ValidUntil);
-            }
+            map[signerId] = new IdentidadResuelta(result.Status, result.CertificateHash, result.ValidUntil);
         }
 
         return map;

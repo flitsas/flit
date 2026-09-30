@@ -20,7 +20,8 @@ namespace Flit.Tramites.Application.Documents;
 public static class MandatarioFirmaResolver
 {
     /// <summary>Firma resuelta: imagen del baúl, o sello de texto, o ninguna de las dos.</summary>
-    public readonly record struct Resultado(byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos);
+    public readonly record struct Resultado(
+        byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos, string? MotivoSinFirma = null);
 
     public static async Task<Resultado> ResolveAsync(
         ISignatureVaultPolicy vaultPolicy,
@@ -33,6 +34,14 @@ public static class MandatarioFirmaResolver
         ArgumentNullException.ThrowIfNull(vaultPolicy);
         ArgumentNullException.ThrowIfNull(storage);
         ArgumentNullException.ThrowIfNull(signer);
+
+        // HU #13130 — las dos vigencias conviven: mandatario fuera de vigencia o con la biometría vencida
+        // (o sin validación aprobada) NO estampa firma ni sello, aunque tenga imagen en el baúl. La línea
+        // queda en blanco y el motivo viaja en el resultado.
+        if (!signer.FirmaValida)
+        {
+            return new Resultado(null, null, null, signer.MotivoSinFirma);
+        }
 
         var tipoDoc = string.IsNullOrWhiteSpace(signer.TipoDocumento) ? "CC" : signer.TipoDocumento!.Trim();
 

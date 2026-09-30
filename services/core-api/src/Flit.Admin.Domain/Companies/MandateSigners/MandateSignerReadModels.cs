@@ -65,6 +65,14 @@ public sealed class MandateSignerItem
     public string ValidityStatusOn(DateOnly today) =>
         MandateValidityStatus.Compute(IsActive, ValidityKind, ValidFrom, ValidTo, today);
 
+    /// <summary>
+    /// HU #13130 — firma válida para <paramref name="today"/>: vigencia propia activa Y (con biometría)
+    /// validación biométrica vigente. <c>null</c> si el modelo no es Persona natural.
+    /// </summary>
+    public MandateSignerFirmaValidez.Resultado? FirmaValidezOn(DateOnly today) =>
+        MandateSignerFirmaValidez.Evaluar(
+            SignerModel, SignatureMethod, ValidityStatusOn(today), IdentityStatus, SignatureVaultId is not null);
+
     /// <summary>Compañías (tenants gestores) actualmente asignadas al mandatario.</summary>
     public IReadOnlyList<Guid> CompanyTenantIds { get; init; } = [];
 

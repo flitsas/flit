@@ -49,7 +49,9 @@ public sealed class ListMandateSignersHandler
                 s.ValidityKind,
                 s.ValidFrom,
                 s.ValidTo,
-                s.ValidityStatusOn(today))),
+                s.ValidityStatusOn(today),
+                s.FirmaValidezOn(today)?.Valida,
+                s.FirmaValidezOn(today)?.Motivo)),
         ];
     }
 }

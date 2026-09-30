@@ -1026,7 +1026,7 @@ public sealed class GenerarFurHandler(
     {
         // La precedencia vive en MandatarioFirmaResolver: el simulador de mandatos la comparte para
         // mostrar el documento tal como saldría del trámite (Feature #11702).
-        var (firma, sello, metadatos) = await MandatarioFirmaResolver
+        var (firma, sello, metadatos, _) = await MandatarioFirmaResolver
             .ResolveAsync(
                 _vaultPolicy,
                 storage,

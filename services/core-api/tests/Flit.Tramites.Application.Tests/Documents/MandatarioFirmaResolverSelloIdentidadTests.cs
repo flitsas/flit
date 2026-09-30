@@ -95,4 +95,58 @@ public sealed class MandatarioFirmaResolverSelloIdentidadTests
 
         resultado.Sello.Should().BeNull();
     }
+    [Theory]
+    [InlineData("biometria_vencida")]
+    [InlineData("mandatario_fuera_de_vigencia")]
+    [InlineData("sin_validacion_aprobada")]
+    public async Task HU13130_SinFirmaValida_NoEstampaSelloAunqueLaIdentidadSeaVigente(string motivo)
+    {
+        // Las dos vigencias conviven: la identidad vigente no basta si el mandatario está fuera de su
+        // propia vigencia; y a la inversa. Sin firma válida la línea queda en blanco y el motivo viaja.
+        var ct = TestContext.Current.CancellationToken;
+        var candidato = Candidato(identityVigente: true, certificado: "hash-mandatario-abc")
+            with { FirmaValida = false, MotivoSinFirma = motivo };
+
+        var resultado = await MandatarioFirmaResolver.ResolveAsync(
+            NullSignatureVaultPolicy.Instance,
+            Substitute.For<IAttachmentStorage>(),
+            TenantId,
+            candidato,
+            cancellationToken: ct);
+
+        resultado.Firma.Should().BeNull();
+        resultado.Sello.Should().BeNull();
+        resultado.Metadatos.Should().BeNull();
+        resultado.MotivoSinFirma.Should().Be(motivo);
+    }
+
+    [Fact]
+    public async Task HU13130_SinFirmaValida_NoConsultaNiEstampaLaImagenDelBaul()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var vault = Substitute.For<ISignatureVaultPolicy>();
+        var candidato = Candidato(identityVigente: false, certificado: null)
+            with { FirmaValida = false, MotivoSinFirma = "mandatario_fuera_de_vigencia" };
+
+        var resultado = await MandatarioFirmaResolver.ResolveAsync(
+            vault, Substitute.For<IAttachmentStorage>(), TenantId, candidato, cancellationToken: ct);
+
+        resultado.Firma.Should().BeNull();
+        await vault.DidNotReceiveWithAnyArgs().ResolveMandatarioAsync(default, default!, default!, ct);
+    }
+
+    [Fact]
+    public async Task HU13130_FirmaValida_ConservaElSelloDeSiempre()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var candidato = Candidato(identityVigente: true, certificado: "hash-mandatario-abc")
+            with { FirmaValida = true };
+
+        var resultado = await MandatarioFirmaResolver.ResolveAsync(
+            NullSignatureVaultPolicy.Instance, Substitute.For<IAttachmentStorage>(), TenantId, candidato,
+            cancellationToken: ct);
+
+        resultado.Sello.Should().Be("Validación de identidad\nFirma hash-mandatario-abc");
+        resultado.MotivoSinFirma.Should().BeNull();
+    }
 }

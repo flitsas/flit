@@ -11670,6 +11670,17 @@ components:
             de la compañía gestora, igual que hace el generador del mandato:
             `mandate_signers.signature_vault_id` no se escribe, así que esa referencia no sirve para
             saberlo.
+        firmaValida:
+          type: boolean
+          description: >
+            Firma válida del mandatario (HU #13130): su vigencia propia está activa Y, si firma con
+            biometría, su validación biométrica está vigente (regla de 30 días del módulo Identidad).
+            Las dos vigencias conviven. Si es false no se estampa firma ni sello.
+        motivoSinFirma:
+          type: string
+          nullable: true
+          enum: [mandatario_fuera_de_vigencia, mandatario_inactivo, biometria_vencida, sin_validacion_aprobada]
+          description: "Motivo cuando `firmaValida` es false."
     MandateSignerSelectionResponse:
       type: object
       required: [opciones, elegidoId, editable]

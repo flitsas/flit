@@ -28,7 +28,17 @@ public sealed record MandateSignerCandidate(
     /// <para>Es una propiedad del vínculo (mandatario × organismo), así que solo tiene sentido cuando la
     /// consulta trae organismo: <c>GetByIdAsync</c> no lo sabe y devuelve <c>false</c>.</para>
     /// </summary>
-    bool FirmaFisica = false);
+    bool FirmaFisica = false,
+    /// <summary>
+    /// HU #13130 (ADR-0061) — el mandatario tiene FIRMA VÁLIDA: su vigencia propia está activa Y, si firma
+    /// con biometría, su validación biométrica está vigente (regla de 30 días del módulo Identidad). Las
+    /// dos vigencias conviven. Si es <c>false</c> no se estampa firma ni sello y
+    /// <see cref="MotivoSinFirma"/> dice por qué. Por defecto <c>true</c>: sin dato, el comportamiento no cambia.
+    /// </summary>
+    bool FirmaValida = true,
+    /// <summary>Motivo de <c>FirmaValida == false</c>: <c>mandatario_fuera_de_vigencia</c>, <c>mandatario_inactivo</c>,
+    /// <c>biometria_vencida</c> o <c>sin_validacion_aprobada</c>.</summary>
+    string? MotivoSinFirma = null);
 
 /// <summary>
 /// Puerto para consultar los mandatarios registrados por el OT para una compañía gestora (ADR-0036,
