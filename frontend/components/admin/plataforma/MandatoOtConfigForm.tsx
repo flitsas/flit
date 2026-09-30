@@ -117,9 +117,11 @@ export function MandatoOtConfigForm({
   // Redacción que se emite hoy: con "auto" elegido, la del sistema para este organismo.
   const effectiveTemplate = view.templateCode || "generico";
   const terceroAjeno = terceroAjenoEnPlantilla(templateCode, office.code);
+  // HU #13152 — sigue la redacción SELECCIONADA (antes de guardar); con "auto" usa la efectiva.
+  const selectedTemplate = templateCode === "auto" ? effectiveTemplate : templateCode;
   const showInstitutionalMeta =
-    effectiveTemplate === "sabaneta" ||
-    effectiveTemplate === "bello" ||
+    selectedTemplate === "sabaneta" ||
+    selectedTemplate === "bello" ||
     family === "organismo_transito";
 
   const filteredCompanyRules = useMemo(() => {
@@ -217,15 +219,15 @@ export function MandatoOtConfigForm({
     ),
     institutionalMandataryName: showInstitutionalMeta ? instName || null : null,
     institutionalMandataryNit: showInstitutionalMeta ? instNit || null : null,
-    chamberCity: chamberCity || null,
-    mandatarySigla: sigla || null,
+    chamberCity: showInstitutionalMeta ? chamberCity || null : null,
+    mandatarySigla: showInstitutionalMeta ? sigla || null : null,
     rowVersion,
   });
 
   const handleSaveMeta = async () => {
     setError(null);
     if (showInstitutionalMeta && !instName.trim()) {
-      setError("El nombre del mandatario institucional (texto de plantilla) es obligatorio.");
+      setError("El nombre del mandatario institucional es obligatorio.");
       return;
     }
     setSaving(true);

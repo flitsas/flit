@@ -66,7 +66,7 @@ export const MANDATO_TIPOS: readonly {
     value: "abierto",
     label: "Mandato abierto",
     summary:
-      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas (___) dentro del recuadro. Conserva la plantilla del organismo. No es el modo con el que nace un OT (nace como Persona natural).",
+      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas (___) dentro del recuadro. Conserva la plantilla del organismo. No es el tipo por defecto: un organismo nuevo nace como Persona natural.",
   },
 ] as const;
 
