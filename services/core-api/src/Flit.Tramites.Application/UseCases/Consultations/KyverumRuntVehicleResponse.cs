@@ -48,14 +48,16 @@ public sealed class KyverumRuntVehicleData
     /// <c>vehiculo.prendas</c> es <c>SI</c> suele traer al menos un ítem; vacío si no hay.
     /// </summary>
     [JsonPropertyName("garantias")]
-    public List<KyverumRuntGarantia>? Garantias { get; set; }
+    public List<RuntGarantiaMobiliaria>? Garantias { get; set; }
 
     /// <summary>
-    /// Variante adicional de prendas que Kyverum a veces envía aparte de <see cref="Garantias"/>.
-    /// Misma forma de ítem; el mapper las une al hidratar <c>runt_gravamenes</c>.
+    /// Garantías mobiliarias registradas en el RNGM, que Kyverum envía aparte de <see cref="Garantias"/>
+    /// con el vocabulario de garantías (<c>entidad</c>, <c>numeroDocumentoEntidad</c>,
+    /// <c>fechaRegistro</c>, <c>estado</c>) y a veces con las banderas en «NO» (Bug #13203). El mapper
+    /// las une al hidratar <c>runt_gravamenes</c>.
     /// </summary>
     [JsonPropertyName("garantiasPrendas")]
-    public List<KyverumRuntGarantia>? GarantiasPrendas { get; set; }
+    public List<RuntGarantiaMobiliaria>? GarantiasPrendas { get; set; }
 
     /// <summary>
     /// Historial de solicitudes del vehículo ante el RUNT (Feature #12276). Es la señal con la que
@@ -87,35 +89,6 @@ public sealed class KyverumRuntSolicitud
 
     [JsonPropertyName("entidad")]
     public string? Entidad { get; set; }
-}
-
-/// <summary>
-/// Ítem de garantía/prenda en la respuesta Kyverum RUNT. El nombre del acreedor llega como
-/// <c>acreedor</c> (no <c>nombreAcreedor</c> como en Intempo); el mapper normaliza al contrato
-/// común de <c>runt_gravamenes</c>.
-/// </summary>
-public sealed class KyverumRuntGarantia
-{
-    [JsonPropertyName("tipoDocumentoAcreedor")]
-    public string? TipoDocumentoAcreedor { get; set; }
-
-    [JsonPropertyName("numeroDocumentoAcreedor")]
-    public string? NumeroDocumentoAcreedor { get; set; }
-
-    [JsonPropertyName("acreedor")]
-    public string? Acreedor { get; set; }
-
-    [JsonPropertyName("nombreAcreedor")]
-    public string? NombreAcreedor { get; set; }
-
-    [JsonPropertyName("fechaInscripcion")]
-    public string? FechaInscripcion { get; set; }
-
-    [JsonPropertyName("idPrenda")]
-    public long? IdPrenda { get; set; }
-
-    [JsonPropertyName("estadoPrenda")]
-    public string? EstadoPrenda { get; set; }
 }
 
 public sealed class KyverumRuntVehiculo
