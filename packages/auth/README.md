@@ -51,7 +51,7 @@ const { user, status } = useSession(); // de "@flit/auth/client"
 
 | Variable | Para qué | Por defecto |
 |---|---|---|
-| `FLIT_HUB_URL` | URL pública del hub (emisor) | `http://localhost:4040` |
+| `FLIT_HUB_URL` | URL pública del hub (emisor) | `http://127.0.0.1:4040` (en local, `127.0.0.1` y no `localhost`: ver `docs/suite/local.md`) |
 | `FLIT_OIDC_INTERNAL_URL` | Canje y renovación por la red interna | `FLIT_HUB_URL` |
 | `CORE_API_ORIGIN` | Destino del proxy `/api/v1/*` | `http://localhost:4002` |
 | `FLIT_SESSION_SECRET` | Cifra la cookie; obligatoria en producción (≥ 32 caracteres) | en `next dev`, una fija de desarrollo |

@@ -21,7 +21,8 @@ using Xunit;
 namespace Flit.Admin.Tests.Identity;
 
 /// <summary>
-/// HU #12992 (FLIT Suite A-07) — token por producto (contrato §2): roles y permisos solo del producto, sin token si
+/// HU #12992 (FLIT Suite A-07) — token por producto (contrato §2): roles y permisos del producto (más los de plataforma
+/// hasta B-12), sin token si
 /// el producto está apagado o el usuario no tiene rol, refresh rotado que se relee de la base, SuperAdmin con bypass,
 /// y core-api aceptando el token del hub.
 /// </summary>
@@ -67,7 +68,7 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
-    public async Task TokenDeTramites_SoloRolesYPermisosDeTramites_ConLosClaimsDeSiempre()
+    public async Task TokenDeTramites_RolesYPermisosDeTramites_MasLosDePlataforma_ConLosClaimsDeSiempre()
     {
         var ct = TestContext.Current.CancellationToken;
         var tokens = await OidcServerTests.CodeFlowAsync(await LoggedInAsync(ct), "tramites", ct);
@@ -80,14 +81,16 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         payload.GetProperty("tenant_type").GetString().Should().Be("RENTING");
         payload.GetProperty("is_group_parent").ValueKind.Should().Be(JsonValueKind.False);
         payload.GetProperty("dom").GetString().Should().Be("flit");
-        payload.GetProperty("role").GetString().Should().Be($"OidcTram-{_suffix}");
-        payload.GetProperty("role_id").GetString().Should().Be(_tramitesRoleId.ToString());
 
-        // Arrays explícitos aunque tengan un elemento (el frontend espera siempre un array).
+        // Primero el rol del producto; luego, mientras la administración de plataforma viva en Trámites (hasta B-12),
+        // el de plataforma, para que el administrador de la empresa conserve esas pantallas con la sesión nueva.
         payload.GetProperty("roles").ValueKind.Should().Be(JsonValueKind.Array);
-        payload.GetProperty("roles").EnumerateArray().Select(r => r.GetProperty("code").GetString()).Should().Equal($"OidcTram-{_suffix}");
+        payload.GetProperty("roles").EnumerateArray().Select(r => r.GetProperty("code").GetString())
+            .Should().Equal($"OidcTram-{_suffix}", $"OidcPlat-{_suffix}");
+        payload.GetProperty("role_id").EnumerateArray().Select(r => r.GetString())
+            .Should().Equal(_tramitesRoleId.ToString(), _platformRoleId.ToString());
         payload.GetProperty("permissions").ValueKind.Should().Be(JsonValueKind.Array);
-        payload.GetProperty("permissions").EnumerateArray().Select(p => p.GetString()).Should().Equal(TramitesSlug);
+        payload.GetProperty("permissions").EnumerateArray().Select(p => p.GetString()).Should().Equal(TramitesSlug, PlatformSlug);
     }
 
     [Fact]

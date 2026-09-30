@@ -20,7 +20,8 @@ public sealed record OidcGrant(ClaimsPrincipal? Principal, string? DeniedCode)
 /// <para>
 /// HU #12992 (FLIT Suite A-07) — token por producto según el contrato §2: se relee el usuario de la base en CADA
 /// emisión, también en cada refresh, así un cambio de roles, una suspensión o un producto apagado se aplican a más
-/// tardar en el siguiente refresh (15 minutos). Roles y permisos son solo los del producto (<see cref="IProductAccessResolver"/>);
+/// tardar en el siguiente refresh (15 minutos). Roles y permisos son los del producto (<see cref="IProductAccessResolver"/>) más,
+/// mientras la administración de plataforma viva en Trámites (hasta B-12), los de plataforma;
 /// el SuperAdmin entra a cualquier producto con <c>SuperAdmin</c> en <c>roles</c>, <c>role</c> y <c>role_code</c> (§2.1).
 /// Se conservan los nombres y formatos de claims del JWT de siempre (<c>RsaJwtTokenIssuer</c>).
 /// </para>
@@ -74,6 +75,17 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
 
             roles = grant.Roles;
             permissions = grant.Permissions;
+
+            // Transitorio hasta B-12: la administración de plataforma (compañía, usuarios, roles) todavía vive en las
+            // pantallas de Trámites, así que el token de un producto lleva también los roles y permisos de plataforma
+            // del usuario (AdminCompany). Sin esto, el administrador de la empresa pierde esas pantallas con la sesión
+            // nueva. Cuando esas pantallas vivan en el hub, este bloque se retira.
+            if (product != ProductCodes.Plataforma)
+            {
+                var platform = await access.ResolveAsync(user.UserId, user.TenantId, ProductCodes.Plataforma, ct).ConfigureAwait(false);
+                roles = roles.Concat(platform.Roles.Where(p => roles.All(r => r.Id != p.Id))).ToList();
+                permissions = permissions.Union(platform.Permissions, StringComparer.Ordinal).ToList();
+            }
         }
 
         var identity = NewIdentity();

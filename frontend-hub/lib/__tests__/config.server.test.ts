@@ -10,7 +10,7 @@ describe("hubConfig", () => {
       apiOrigin: "http://localhost:4002",
       internalApiKey: undefined,
       loginUrl: "/auth/login",
-      tramitesUrl: "http://localhost:3000",
+      tramitesUrl: "http://127.0.0.1:3000",
     });
   });
 

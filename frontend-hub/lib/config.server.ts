@@ -22,7 +22,7 @@ export function hubConfig(env: NodeJS.ProcessEnv = process.env): HubConfig {
     apiOrigin: trimSlash(env.CORE_API_ORIGIN || "http://localhost:4002"),
     internalApiKey: env.FLIT_INTERNAL_API_KEY || undefined,
     loginUrl: env.HUB_LOGIN_URL || "/auth/login",
-    tramitesUrl: trimSlash(env.TRAMITES_URL || "http://localhost:3000"),
+    tramitesUrl: trimSlash(env.TRAMITES_URL || "http://127.0.0.1:3000"),
   };
 }
 
