@@ -43,7 +43,7 @@ namespace Flit.DataMigration.Tests.Loading;
 /// Postgres no debería ver rojo por eso.
 /// </para>
 /// </summary>
-public sealed class ProcedureInstanceLoaderDbTests
+public sealed partial class ProcedureInstanceLoaderDbTests
 {
     /// <summary>
     /// <c>ConnectionStrings__Core</c> es la que ya inyecta el workflow del CI. La segunda es para
