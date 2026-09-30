@@ -66,6 +66,9 @@ public sealed class AttachmentLoader(
     string batchId,
     bool keepIdentityImages = false)
 {
+    private readonly AttachmentCopier copier = new(
+        db, attachmentMap, source, target, mode, systemUserId, batchId);
+
     public async Task<AttachmentLoadResult> LoadAsync(
         V1SourceRecord record,
         bool dryRun,
@@ -175,7 +178,7 @@ public sealed class AttachmentLoader(
 
                 try
                 {
-                    var one = await CopyOneAsync(record, targetRef, column, tipo, sourceId, dryRun, cancellationToken);
+                    var one = await copier.CopyAsync(record, targetRef, column, tipo, sourceId, dryRun, cancellationToken);
                     if (one is null)
                     {
                         warnings.Add($"{column}: el file-manager origen no conoce el id {sourceId} (¿ambiente apagado o binario purgado?).");
@@ -226,96 +229,5 @@ public sealed class AttachmentLoader(
             Redundant = redundant,
             Warnings = warnings,
         };
-    }
-
-    /// <summary>Un adjunto copiado con éxito; <c>Warning</c> no nulo si hubo un aviso no fatal.</summary>
-    private readonly record struct CopyOutcome(string? Warning);
-
-    /// <summary>Copia (o referencia) un adjunto. Devuelve <c>null</c> si el origen no conoce el id.</summary>
-    private async Task<CopyOutcome?> CopyOneAsync(
-        V1SourceRecord record,
-        TramiteTarget targetRef,
-        string column,
-        string tipo,
-        string sourceId,
-        bool dryRun,
-        CancellationToken cancellationToken)
-    {
-        var head = await source.HeadAsync(sourceId, cancellationToken);
-        if (head is null)
-        {
-            return null;
-        }
-
-        var bytes = await source.DownloadAsync(head.DownloadUrl, cancellationToken);
-        var sha256 = FileManagerClient.Sha256Hex(bytes);
-
-        string? warning = null;
-        if (!string.IsNullOrWhiteSpace(head.Sha256)
-            && !string.Equals(head.Sha256, sha256, StringComparison.OrdinalIgnoreCase))
-        {
-            warning = $"{column}: el sha256 de la metadata ({head.Sha256}) no coincide con el del binario ({sha256}); se usa el calculado.";
-        }
-
-        // storage_path: destino nuevo (copia) o el mismo id de V1 (referencia). En dry-run NO se sube
-        // (una subida real no la revierte el rollback de la BD): se simula y se marca.
-        string storagePath;
-        if (mode == CopyMode.Reference)
-        {
-            storagePath = sourceId;
-        }
-        else if (dryRun)
-        {
-            storagePath = $"(dry-run: no subido; origen {sourceId})";
-        }
-        else
-        {
-            var uploaded = await target!.UploadAsync(
-                targetRef.V2Id, tipo, head.Filename, bytes, sha256, cancellationToken);
-            storagePath = uploaded.Id;
-        }
-
-        var attachmentId = DeterministicGuid.ForV1Child(record.SourceTable, record.Id, $"attach:{column}");
-        var mimetype = FileManagerClient.GuessMimetype(head.Filename);
-
-        db.Set<ProcedureInstanceAttachment>().Add(new ProcedureInstanceAttachment
-        {
-            Id = attachmentId,
-            TenantId = targetRef.TenantId,
-            ProcedureInstanceId = targetRef.V2Id,
-            Tipo = tipo,
-            Filename = head.Filename,
-            Mimetype = mimetype,
-            SizeBytes = bytes.LongLength,
-            Sha256 = sha256,
-            StoragePath = storagePath,
-            Source = "migration",
-            UploadedAt = DateTimeOffset.UtcNow,
-            UploadedBy = systemUserId,
-        });
-        await db.SaveChangesAsync(cancellationToken);
-
-        await attachmentMap.RecordAsync(
-            new AttachmentMapEntry
-            {
-                V1Table = record.SourceTable,
-                V1Id = record.Id,
-                V1Column = column,
-                SourceFileId = sourceId,
-                V2AttachmentId = attachmentId,
-                V2ProcedureInstanceId = targetRef.V2Id,
-                TenantId = targetRef.TenantId,
-                Tipo = tipo,
-                Mode = mode.ToString(),
-                StoragePath = storagePath,
-                Sha256 = sha256,
-                SizeBytes = bytes.LongLength,
-                Filename = head.Filename,
-                Mimetype = mimetype,
-            },
-            batchId,
-            cancellationToken);
-
-        return new CopyOutcome(warning);
     }
 }
