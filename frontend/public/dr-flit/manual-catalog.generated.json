@@ -592,6 +592,7 @@
           "title": "4. Quién firmará el mandato",
           "paragraphs": [
             "En el último paso del asistente (Resumen) ves, en solo lectura, quién firmará el contrato de mandato: «Firmará: nombre / forma de firma» (Firma del baúl o Biometría). Tú no eliges al mandatario: lo define el organismo de tránsito, o el Administrador de tu compañía desde su pestaña «Mandatarios».",
+            "Si tu compañía no tiene mandatario propio pero hay uno asociado a ella desde otra compañía, verás «Firmará: nombre / forma de firma» con la nota «Mandatario asociado». Solo se muestra quién firma: nunca el nombre de la otra compañía ni su documento de identidad.",
             "Si no hay un mandatario válido, el Resumen te lo avisa con el motivo (por ejemplo, sin mandatario registrado, fuera de vigencia o con la firma o biometría vencida) y a quién pedirle que lo configure."
           ],
           "bullets": [

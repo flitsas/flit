@@ -2569,12 +2569,25 @@ export type MandateSignerPrevistoEstado =
   | 'pendiente_organismo'
   | 'pendiente_eleccion_ot';
 
+export type MandateSignerNivel =
+  | 'explicita'
+  | 'ot_para_compania'
+  | 'propio_de_compania'
+  | 'asociado_de_otra_compania'
+  | 'default_del_ot';
+
 export interface MandateSignerPrevisto {
   estado: MandateSignerPrevistoEstado;
   /** Solo con `estado = valido`. */
   nombre?: string | null;
   /** Solo con `estado = valido`. */
   formaFirma?: 'baul' | 'biometria' | null;
+  /**
+   * HU #13180/#13183 — nivel de la prelación que eligió al mandatario (solo con `estado = valido`):
+   * `explicita`, `ot_para_compania`, `propio_de_compania`, `asociado_de_otra_compania` o
+   * `default_del_ot`. Nunca trae la compañía de origen.
+   */
+  nivel?: MandateSignerNivel | null;
   /** Vocabulario estable de ADR-0066 (p. ej. `biometria_vencida`). */
   motivo?: string | null;
   /** Modo vigente de la validación al radicar. */
