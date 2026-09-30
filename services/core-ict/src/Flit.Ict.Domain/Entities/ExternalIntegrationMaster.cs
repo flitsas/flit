@@ -53,6 +53,14 @@ public sealed class ExternalIntegrationMaster : AuditableEntity
     /// </summary>
     public string? RuntTransitOfficeName { get; set; }
 
+    /// <summary>
+    /// Organismo de tránsito resuelto por el <see cref="TrafficSecretaryCode"/> del cliente (Bug #13109).
+    /// Lo escribe <c>sp_processor_validation_business</c> cuando el código existe, está activo y tiene
+    /// grant habilitado para el tenant. Cuando existe, el borrador nace con este id y el nombre del RUNT
+    /// no se usa: el código que viajó en la transacción gana. Null si no hay código o no se resolvió.
+    /// </summary>
+    public Guid? TransitOfficeId { get; set; }
+
     public string UrlWebHook { get; set; } = string.Empty;
 
     public bool ClosedDocument { get; set; }

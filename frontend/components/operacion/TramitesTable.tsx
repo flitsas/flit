@@ -1030,6 +1030,16 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     [items, selectedIds, currentTenantId],
   );
 
+  /**
+   * Bug #13109 (punto 3) — como el menú por fila, la barra ofrece una sola acción según el estado
+   * de los propios seleccionados: todos pausados → Reanudar; ninguno → Pausar; mezcla → ninguna.
+   */
+  const pausadosSeleccionados = seleccionPorAlcance.propios.filter((it) => it.isPaused).length;
+  const ofrecePausar = seleccionPorAlcance.propios.length > 0 && pausadosSeleccionados === 0;
+  const ofreceReanudar =
+    seleccionPorAlcance.propios.length > 0 &&
+    pausadosSeleccionados === seleccionPorAlcance.propios.length;
+
   const handleBulkPause = useCallback(
     async (paused: boolean) => {
       if (selectedIds.size === 0) return;
@@ -1379,23 +1389,23 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             </span>
             {/* HU #12362 (AC6) — las acciones solo existen si hay trámites PROPIOS en la selección;
                 los de la red se cuentan aparte, con su motivo, para que la exclusión no sea muda. */}
-            {seleccionPorAlcance.propios.length > 0 ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void handleBulkPause(true)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
-                >
-                  <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleBulkPause(false)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-                >
-                  <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
-                </button>
-              </>
+            {ofrecePausar ? (
+              <button
+                type="button"
+                onClick={() => void handleBulkPause(true)}
+                className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
+              >
+                <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
+              </button>
+            ) : null}
+            {ofreceReanudar ? (
+              <button
+                type="button"
+                onClick={() => void handleBulkPause(false)}
+                className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+              >
+                <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
+              </button>
             ) : null}
             {seleccionPorAlcance.excluidos > 0 ? (
               <span

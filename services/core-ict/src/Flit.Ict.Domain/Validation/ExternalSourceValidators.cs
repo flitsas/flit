@@ -19,9 +19,9 @@ public static class ExternalSourceValidators
     /// <summary>
     /// Validaciones BLOQUEANTES: si alguna falla, el pre-trámite queda con novedades (ps=4) y NO pasa a
     /// borrador. Vehículo existente en RUNT (solo traspaso), SOAT (vigente), RTM (según antigüedad; traspaso
-    /// unilateral tipo 4 solo advierte) y RNMC (sanciones/medidas correctivas activas). El paz y salvo del
-    /// conductor (DRIVER) NO va aquí: en v1 es informativo (validateDriverRequest retorna el response con la
-    /// novedad registrada, no un error) — ver <see cref="Warnings"/>.
+    /// unilateral tipo 4 solo advierte), RNMC (sanciones/medidas correctivas activas) y, desde el Bug #13109
+    /// (punto 9), el paz y salvo del conductor (DRIVER) cuando la fuente responde explícitamente que no.
+    /// Sin dato de paz y salvo (null) no se bloquea.
     /// </summary>
     /// <param name="queryType">
     /// Tipo de la consulta que produjo <paramref name="result"/> ('VEHICLE'/'VIN'/'RNMC'/'DRIVER'). El
@@ -71,13 +71,23 @@ public static class ExternalSourceValidators
             issues.Add("El actor tiene sanciones o medidas correctivas activas (RNMC)");
         }
 
+        // Paz y salvo (Bug #13109, punto 9): regla de producto de FLIT 2.0, distinta de v1 (donde era
+        // informativo). Solo la consulta de conductor (DRIVER) y solo con un «no» explícito: sin dato no se
+        // bloquea, y las demás consultas (p. ej. RUES) siguen como estaban, en Warnings. El orquestador marca
+        // la novedad (ps=4) y SendToCoreApiJob no materializa el borrador.
+        if (string.Equals(queryType, "DRIVER", StringComparison.OrdinalIgnoreCase) && result.PazYSalvo == false)
+        {
+            issues.Add("Actor sin paz y salvo: presenta multas pendientes con los organismos de tránsito");
+        }
+
         return issues;
     }
 
     /// <summary>
     /// Advertencias INFORMATIVAS: se registran para que el gestor/OT las vean, pero NO bloquean el paso a
-    /// borrador (fiel a v1). Hoy: paz y salvo del conductor (DRIVER). Si el actor tiene multas pendientes se
-    /// deja la observación (visible en el estado) pero el trámite avanza — el OT decidirá.
+    /// borrador. El orquestador solo las registra cuando <see cref="Validate"/> no encontró novedades, así que
+    /// para la consulta DRIVER (que desde el Bug #13109 bloquea en <see cref="Validate"/>) esta advertencia
+    /// ya no se escribe; queda para el paz y salvo que llegue por otras consultas.
     /// </summary>
     public static IReadOnlyList<string> Warnings(ConsultationResult result)
     {

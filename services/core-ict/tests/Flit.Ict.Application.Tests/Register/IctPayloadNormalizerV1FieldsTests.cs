@@ -156,7 +156,8 @@ public sealed class IctPayloadNormalizerV1FieldsTests
         master.StartsProcedureInPaused.Should().BeTrue();
         master.ObservationWhenPaused.Should().Be("En espera de liquidación");
         master.SendAutomaticTrafficSecretary.Should().BeFalse();
-        master.PlateAssignmentType.Should().Be(3);
+        // Bug #13109 punto 6: en traspaso (3, 4) el campo se ignora y se persiste en 0.
+        master.PlateAssignmentType.Should().Be(0);
         master.RelatedCompanyDocument.Should().Be("890903938");
         master.RelatedCompanyName.Should().Be("Transportes del Sur SAS");
         master.LimitationsOperationType.Should().Be(2);
@@ -236,5 +237,35 @@ public sealed class IctPayloadNormalizerV1FieldsTests
         master.SendAutomaticTrafficSecretary.Should().BeTrue();
         master.StartsProcedureInPaused.Should().BeFalse();
         master.Priority.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(3, (short)3)]
+    [InlineData(3, (short)2)]
+    [InlineData(4, null)]
+    public void Bug13109_P6_Traspaso_persiste_plate_assignment_type_en_cero(int tipo, short? assignment)
+    {
+        var row = new RegisterRowInput(
+            TransactionType: tipo,
+            TransactionOperation: 1,
+            Plate: "IWL38D",
+            PlateAssignmentType: assignment);
+
+        IctPayloadNormalizer.ToMaster(row, Tenant).PlateAssignmentType.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(1, (short)2)]
+    [InlineData(2, (short)4)]
+    [InlineData(1, null)]
+    public void Bug13109_P6_Matricula_conserva_plate_assignment_type(int tipo, short? assignment)
+    {
+        var row = new RegisterRowInput(
+            TransactionType: tipo,
+            TransactionOperation: 1,
+            Plate: "",
+            PlateAssignmentType: assignment);
+
+        IctPayloadNormalizer.ToMaster(row, Tenant).PlateAssignmentType.Should().Be(assignment);
     }
 }
