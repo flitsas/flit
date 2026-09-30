@@ -8,6 +8,8 @@ namespace Flit.Api.Authorization;
 /// <c>uq_mandate_signer_companies_one_per_origin</c> (un segundo vínculo activo para la misma compañía,
 /// organismo y grupo de origen). Se aplica a los grupos de rutas que crean, editan o reactivan mandatarios,
 /// para que ninguna ruta de escritura quede con un 500. El cuerpo no lleva datos personales.
+/// HU #13179: también traduce a <b>403</b> <c>compania_asociada_fuera_de_alcance</c> la compañía asociada fuera
+/// del alcance del Admin de Compañía.
 /// </summary>
 public sealed class MandateSignerLinkConflictFilter : IEndpointFilter
 {
@@ -29,6 +31,13 @@ public sealed class MandateSignerLinkConflictFilter : IEndpointFilter
             return Results.Json(
                 new { code = ErrorCode, error = ex.Message },
                 statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (AssociatedCompanyOutOfScopeException ex)
+        {
+            // HU #13179 (AC2) — el Admin de Compañía envió una compañía asociada que no es su hija: no se guardó nada.
+            return Results.Json(
+                new { code = AssociatedCompanyOutOfScopeException.Code, error = ex.Message },
+                statusCode: StatusCodes.Status403Forbidden);
         }
     }
 }

@@ -88,3 +88,29 @@ public interface IManagingCompanyDirectory
     /// <summary>Todas las compañías gestoras (activas e inactivas: el servicio distingue el motivo de rechazo).</summary>
     Task<IReadOnlyList<ManagingCompanyRow>> ListAsync(CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// HU #13179 (AC2) — un Admin de Compañía envió una compañía asociada que no es su hija: la API responde
+/// 403 <c>compania_asociada_fuera_de_alcance</c> y no guarda nada. El mensaje no lleva datos de la compañía ajena.
+/// </summary>
+public sealed class AssociatedCompanyOutOfScopeException : Exception
+{
+    public const string Code = "compania_asociada_fuera_de_alcance";
+
+    public const string DefaultMessage = "Solo puede asociar compañías de su propia red.";
+
+    public AssociatedCompanyOutOfScopeException()
+        : base(DefaultMessage)
+    {
+    }
+
+    public AssociatedCompanyOutOfScopeException(string message)
+        : base(message)
+    {
+    }
+
+    public AssociatedCompanyOutOfScopeException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}

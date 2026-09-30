@@ -146,7 +146,9 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             [
                 .. s.OfficeCompanies
                     .Where(o => o.TransitOfficeId == transitOfficeId)
-                    .Select(o => o with { RepresentedCompanyIds = [.. o.RepresentedCompanyIds.Where(visibles.Contains)] }),
+                    // HU #13179 — las asociadas son compañías de FLIT que el OT ya ve por nombre y NIT en la sección de
+                    // mandatarios; no se recortan por la visibilidad de la bandeja.
+                    .Select(o => o),
             ],
         };
 
@@ -513,7 +515,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     }
 
     /// <summary>Organismos ACTIVOS de cada mandatario, para pintarlos en la consola de gestión.</summary>
-    /// <summary>Empresas representadas por (mandatario, organismo).</summary>
+    /// <summary>HU #13179 — compañías asociadas (por tenant) por (mandatario, organismo).</summary>
     private async Task<Dictionary<Guid, List<MandateSignerOfficeCompanies>>> LoadOfficeCompaniesAsync(
         List<Guid> signerIds,
         CancellationToken cancellationToken)
@@ -523,10 +525,10 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             return [];
         }
 
-        var rows = await _context.MandateSignerRepresentedCompanies
+        var rows = await _context.MandateSignerAssociatedCompanies
             .AsNoTracking()
             .Where(x => signerIds.Contains(x.MandateSignerId) && x.IsActive)
-            .Select(x => new { x.MandateSignerId, x.TransitOfficeId, x.RepresentedCompanyId })
+            .Select(x => new { x.MandateSignerId, x.TransitOfficeId, x.AssociatedCompanyTenantId })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -536,7 +538,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 g => g.Key,
                 g => g.GroupBy(r => r.TransitOfficeId)
                     .Select(o => new MandateSignerOfficeCompanies(
-                        o.Key, [.. o.Select(r => r.RepresentedCompanyId)]))
+                        o.Key, [.. o.Select(r => r.AssociatedCompanyTenantId).Distinct()]))
                     .ToList());
     }
 

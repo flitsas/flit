@@ -12042,6 +12042,21 @@ components:
         aplicaSoloASuCompania:
           type: boolean
           description: "Verdadero si la compañía que consulta no tiene red: no hay lista y el mandatario aplica solo a ella."
+    MandateSignerOfficeCompanies:
+      type: object
+      description: >
+        HU #13179 — compañías de FLIT (por tenant) a las que se asocia un mandatario en un organismo
+        (`officeCompanies` del alta y la edición de mandatarios; reemplaza a `representedCompanyIds`). Lista vacía
+        o ausente ⇒ el mandatario aplica solo a su propia compañía. En la edición, `officeCompanies` ausente no
+        toca nada y cada organismo presente reemplaza su conjunto. Errores: 403 `compania_asociada_fuera_de_alcance`
+        (el Admin de Compañía envía una que no es su hija; no se guarda nada) y 422 por elemento (propia, inactiva,
+        inexistente o, para el OT, que no opera en el organismo).
+      required: [transitOfficeId, associatedCompanyTenantIds]
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        associatedCompanyTenantIds:
+          type: array
+          items: { type: string, format: uuid }
     MandateSignerSelectionResponse:
       type: object
       required: [opciones, elegidoId, editable]

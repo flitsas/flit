@@ -43,7 +43,6 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
     {
         group.MapGet("", ListMandateSignersAsync);
         group.MapGet("/transit-offices", ListChildTransitOfficesAsync);
-        group.MapGet("/represented-companies", ListChildRepresentedCompaniesAsync);
         group.MapGet("/associable-companies", ListChildAssociableCompaniesAsync);
         group.MapPost("", CreateMandateSignerAsync);
         group.MapPut("/{mandateSignerId:guid}", UpdateMandateSignerAsync);
@@ -631,27 +630,6 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
 
         return AssociableCompaniesHttp.ToResult(
             await service.ListForCompanyAsync(childTenantId, search, page ?? 1, pageSize ?? 0, ct).ConfigureAwait(false));
-    }
-
-    private static async Task<IResult> ListChildRepresentedCompaniesAsync(
-        Guid headTenantId,
-        Guid childTenantId,
-        ClaimsPrincipal user,
-        [FromServices] ICompanyHierarchyRepository hierarchy,
-        [FromServices] ILegalRepresentativeReader reader,
-        CancellationToken ct)
-    {
-        var forbid = await GuardAsync(user, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
-        if (forbid is not null)
-        {
-            return forbid;
-        }
-
-        var empresas = await reader.ListRepresentedCompaniesAsync(childTenantId, ct).ConfigureAwait(false);
-        return Results.Ok(new
-        {
-            items = empresas.Select(e => new { id = e.Id, documentNumber = e.DocumentNumber, name = e.Name }),
-        });
     }
 
     private static async Task<IResult> InactivateChildMandateSignerAsync(

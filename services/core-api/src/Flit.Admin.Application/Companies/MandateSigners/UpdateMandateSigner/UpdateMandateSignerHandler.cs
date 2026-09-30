@@ -20,12 +20,15 @@ public sealed class UpdateMandateSignerHandler
     private readonly ITransitOfficeOperationalStatusReader _otStatus;
     private readonly IMandateSignerReader _reader;
     private readonly IMandateSignerRepository _repository;
+    private readonly IMandatarioAssociableCompanies? _associable;
 
     public UpdateMandateSignerHandler(
         ITransitOfficeOperationalStatusReader otStatus,
         IMandateSignerReader reader,
-        IMandateSignerRepository repository)
+        IMandateSignerRepository repository,
+        IMandatarioAssociableCompanies? associable = null)
     {
+        _associable = associable;
         _otStatus = otStatus ?? throw new ArgumentNullException(nameof(otStatus));
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
@@ -73,6 +76,17 @@ public sealed class UpdateMandateSignerHandler
             transitOfficeIds = null;
         }
 
+        // HU #13179 — compañías asociadas (403 fuera de alcance; 422 por elemento; RF33 para el OT). Los
+        // organismos del mandatario son los que quedan tras la edición, o los persistidos si no se tocan.
+        var mandatarioOffices = (transitOfficeIds is { Count: > 0 }
+                ? transitOfficeIds
+                : [.. signer.TransitOfficeIds, signer.TransitOfficeId, command.TransitOfficeId])
+            .ToHashSet();
+        var associationErrors = await MandateSignerAssociationRules.ValidateAsync(
+                _associable, _reader, command.OfficeCompanies, companyIds, mandatarioOffices,
+                command.ConfiguredByScope, cancellationToken)
+            .ConfigureAwait(false);
+
         var otStatus = await _otStatus
             .GetByIdAsync(command.TransitOfficeId, cancellationToken).ConfigureAwait(false);
 
@@ -98,6 +112,7 @@ public sealed class UpdateMandateSignerHandler
             companyIds,
             documentRequired: profile.Model != MandateSignerModels.FormatoBlanco);
         errors.AddRange(profileErrors);
+        errors.AddRange(associationErrors);
 
         // Forma de firma baúl: la firma elegida (o la ya guardada, si el llamante no gestiona la firma).
         var efectiveVaultId = command.ActualizaFirma ? command.SignatureVaultId : signer.SignatureVaultId;
@@ -126,7 +141,6 @@ public sealed class UpdateMandateSignerHandler
                     command.TransitOfficeId,
                     companiesToValidate,
                     transitOfficeIds,
-                    command.OfficeCompanies,
                     command.MandateSignerId,
                     command.CompanyVisibility,
                     cancellationToken)

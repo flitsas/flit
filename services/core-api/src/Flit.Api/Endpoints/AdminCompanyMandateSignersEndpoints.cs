@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.MandateSigners;
-using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
@@ -93,27 +92,9 @@ public static class AdminCompanyMandateSignersEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status422UnprocessableEntity);
 
-        // Empresas representadas de la compañía: las que se dan de alta dentro del formulario del
-        // representante legal. Son la lista que el formulario del mandatario ofrece para acotar para
-        // quién firma en cada organismo. Ya vienen únicas por (tenant, NIT).
-        group.MapGet("/represented-companies", async (
-                Guid tenantId,
-                [FromServices] ILegalRepresentativeReader reader,
-                CancellationToken ct) =>
-            {
-                var empresas = await reader.ListRepresentedCompaniesAsync(tenantId, ct).ConfigureAwait(false);
-                return Results.Ok(new
-                {
-                    items = empresas.Select(e => new
-                    {
-                        id = e.Id,
-                        documentNumber = e.DocumentNumber,
-                        name = e.Name,
-                    }),
-                });
-            })
-            .WithName("AdminCompanyMandateSignerRepresentedCompanies")
-            .WithSummary("Empresas representadas de la compañía, para acotar para quién firma el mandatario");
+        // HU #13179 — la ruta represented-companies de mandatarios se RETIRA: la lista del formulario ya no sale de las
+        // fichas de Representantes Legales sino de associable-companies (HU #13178). ListRepresentedCompaniesAsync
+        // se conserva: lo usa el flujo de escrituras (admin-deeds).
 
         // HU #11758 (ADR-0050) — las tres rutas de identidad del mandatario desde el configurador de la
         // COMPAÑÍA (send/resend/link) se RETIRAN: el módulo Identidad es la única fuente que puede

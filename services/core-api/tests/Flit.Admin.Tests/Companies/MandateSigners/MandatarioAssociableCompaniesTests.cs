@@ -215,7 +215,7 @@ public sealed class MandatarioAssociableCompaniesTests : IClassFixture<WebApplic
     }
 
     [Fact]
-    public async Task AC5_Rechazos_AdminCompania_UnaQueNoEsHijaEsFueraDeAlcance()
+    public async Task AC5_Rechazos_AdminCompania_NoHijaEsFueraDeAlcance_HijaInactivaEsInactiva()
     {
         var hija = Child("Hija", "800000001-1");
         var hijaInactiva = Child("Hija inactiva", "800000002-2", active: false);
@@ -232,8 +232,8 @@ public sealed class MandatarioAssociableCompaniesTests : IClassFixture<WebApplic
 
         r.Should().NotContainKey(hija.Id);
         r[ajena.Id].Should().Be(AssociableCompanyRejections.FueraDeAlcance);
-        r[hijaInactiva.Id].Should().Be(AssociableCompanyRejections.FueraDeAlcance,
-            "una hija inactiva tampoco figura entre sus hijas activas: la lista nunca la ofrece");
+        r[hijaInactiva.Id].Should().Be(AssociableCompanyRejections.CompaniaInactiva,
+            "es su hija pero está inactiva: 422 por inactiva, no 403");
         r[scope].Should().Be(AssociableCompanyRejections.CompaniaPropia);
     }
 

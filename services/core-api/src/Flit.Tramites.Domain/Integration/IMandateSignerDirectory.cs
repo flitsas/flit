@@ -93,12 +93,10 @@ public interface IMandateSignerDirectory
     /// Lista vacía si el OT/compañía no tiene mandatarios configurados.
     /// </summary>
     /// <param name="nitMandante">
-    /// NIT de la empresa que otorga el mandato. Cuando viene, la lista se acota a los mandatarios
-    /// asociados a ESA empresa en ese organismo, más los que no tienen ninguna asociada.
-    ///
-    /// <para>La ausencia de asociación significa "aplica a todas" a propósito: los mandatarios
-    /// registrados antes de esta acotación no tienen ninguna, y sin esa regla desaparecerían de todos
-    /// los trámites al desplegar.</para>
+    /// OBSOLETO E IGNORADO (HU #13179, Feature #13119): la resolución ya no compara el NIT del mandante ni
+    /// consulta <c>mandate_signer_represented_companies</c>. El candidato de la compañía propietaria se incluye
+    /// siempre; la asociación entre compañías va por tenant (HU #13180). Se conserva el parámetro para no
+    /// romper a los llamadores.
     /// </param>
     Task<IReadOnlyList<MandateSignerCandidate>> GetCandidatesAsync(
         Guid transitOfficeId,

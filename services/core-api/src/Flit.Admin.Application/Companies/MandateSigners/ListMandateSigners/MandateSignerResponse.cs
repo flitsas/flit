@@ -32,8 +32,8 @@ public sealed record MandateSignerResponse(
     /// </summary>
     IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
     /// <summary>
-    /// Empresas representadas por organismo. Lo necesita el formulario para precargar la selección al
-    /// editar; vacío para un organismo significa "aplica a todas allí".
+    /// HU #13179 — compañías asociadas (por tenant) por organismo. Lo necesita el formulario para precargar la
+    /// selección al editar; vacío para un organismo significa «solo su propia compañía».
     /// </summary>
     IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null,
     /// <summary>HU #13129 — modelo: <c>natural</c> | <c>juridica</c> | <c>formato_blanco</c>.</summary>

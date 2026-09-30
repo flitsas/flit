@@ -75,8 +75,8 @@ public sealed record CreateMandateSignerData(
     /// </summary>
     Guid? SignatureVaultId = null,
     /// <summary>
-    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
-    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// HU #13179 — compañías asociadas (por tenant) POR ORGANISMO. Vacío o ausente ⇒ solo aplica a su propia
+    /// compañía. En la edición, <c>null</c> no toca nada y cada organismo de la lista reemplaza su conjunto.
     /// </summary>
     IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null,
     /// <summary>HU #13129 — modelo, forma de firma y vigencia propia, ya normalizados y validados.</summary>
@@ -118,8 +118,8 @@ public sealed record UpdateMandateSignerData(
     /// </summary>
     Guid? SignatureVaultId = null,
     /// <summary>
-    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
-    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// HU #13179 — compañías asociadas (por tenant) POR ORGANISMO. Vacío o ausente ⇒ solo aplica a su propia
+    /// compañía. En la edición, <c>null</c> no toca nada y cada organismo de la lista reemplaza su conjunto.
     /// </summary>
     IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null,
     /// <summary>
@@ -148,12 +148,13 @@ public sealed record UpdateMandateSignerData(
     string ConfiguredByScope = "organismo");
 
 /// <summary>
-/// Empresas representadas que un mandatario atiende en un organismo. La lista vacía significa "todas":
-/// no hay forma de decir "ninguna", porque un mandatario sin empresas no podría firmar nada.
+/// HU #13179 (Feature #13119 F7) — compañías de FLIT (por tenant) a las que el mandatario se asocia en un
+/// organismo (nivel 3 de la prelación). Reemplaza a las empresas representadas por Representante Legal. La lista
+/// vacía significa «sin asociaciones»: el mandatario aplica solo a su propia compañía.
 /// </summary>
 public sealed record MandateSignerOfficeCompanies(
     Guid TransitOfficeId,
-    IReadOnlyList<Guid> RepresentedCompanyIds);
+    IReadOnlyList<Guid> AssociatedCompanyTenantIds);
 
 /// <summary>Datos de inactivación.</summary>
 public sealed record InactivateMandateSignerData(

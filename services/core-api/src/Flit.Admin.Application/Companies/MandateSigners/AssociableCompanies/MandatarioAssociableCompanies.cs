@@ -76,8 +76,10 @@ public sealed class MandatarioAssociableCompanies : IMandatarioAssociableCompani
         }
 
         var all = (await _directory.ListAsync(cancellationToken).ConfigureAwait(false)).ToDictionary(c => c.Id);
-        var activeChildren = scopeCompanyTenantId is { } scope
-            ? (await ActiveChildrenAsync(scope, cancellationToken).ConfigureAwait(false)).Select(c => c.Id).ToHashSet()
+        // El alcance del Admin de Compañía son sus hijas directas (activas o no): una hija inactiva se rechaza por
+        // inactiva (422); solo lo que no es hija es «fuera de alcance» (403).
+        var children = scopeCompanyTenantId is { } scope
+            ? (await _hierarchy.ListChildrenAsync(scope, cancellationToken).ConfigureAwait(false)).Select(c => c.Id).ToHashSet()
             : null;
 
         foreach (var id in candidateTenantIds.Distinct())
@@ -90,9 +92,9 @@ public sealed class MandatarioAssociableCompanies : IMandatarioAssociableCompani
             {
                 result[id] = AssociableCompanyRejections.CompaniaPropia;
             }
-            else if (activeChildren is not null && !activeChildren.Contains(id))
+            else if (children is not null && !children.Contains(id))
             {
-                // Existe (activa o no) pero no es hija directa activa: el Admin de Compañía no puede asociarla.
+                // Existe pero no es hija directa: el Admin de Compañía no puede asociarla.
                 result[id] = AssociableCompanyRejections.FueraDeAlcance;
             }
             else if (!company.IsActive)

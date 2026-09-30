@@ -21,4 +21,9 @@ public sealed record UpdateMandateSignerRequest(
     string? SignatureMethod = null,
     string? ValidityKind = null,
     DateOnly? ValidFrom = null,
-    DateOnly? ValidTo = null);
+    DateOnly? ValidTo = null,
+    /// <summary>
+    /// HU #13179 — compañías asociadas por organismo. Ausente ⇒ no se tocan; cada organismo presente
+    /// reemplaza su conjunto (lista vacía las retira).
+    /// </summary>
+    IReadOnlyList<Flit.Admin.Domain.Companies.MandateSigners.MandateSignerOfficeCompanies>? OfficeCompanies = null);

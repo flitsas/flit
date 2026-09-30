@@ -89,8 +89,8 @@ public sealed class MandateSignerItem
     public IReadOnlyList<Guid> PhysicalSignatureOfficeIds { get; init; } = [];
 
     /// <summary>
-    /// Empresas representadas para las que firma, POR ORGANISMO. Lista vacía para un organismo ⇒ aplica
-    /// a todas las empresas allí. Lo necesita el formulario para precargar la selección al editar.
+    /// HU #13179 — compañías asociadas (por tenant) POR ORGANISMO. Lista vacía ⇒ solo su propia compañía.
+    /// Lo necesita el formulario para precargar la selección al editar.
     /// </summary>
     public IReadOnlyList<MandateSignerOfficeCompanies> OfficeCompanies { get; init; } = [];
 }

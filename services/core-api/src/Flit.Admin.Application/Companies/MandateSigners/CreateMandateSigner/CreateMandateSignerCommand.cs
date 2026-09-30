@@ -39,8 +39,9 @@ public sealed class CreateMandateSignerCommand
     public Guid? SignatureVaultId { get; init; }
 
     /// <summary>
-    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
-    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// HU #13179 — compañías de FLIT (por tenant) a las que se asocia, POR ORGANISMO. Vacío o ausente ⇒
+    /// solo aplica a su propia compañía. En la edición, <c>null</c> no toca nada y cada organismo de la
+    /// lista reemplaza su conjunto.
     /// </summary>
     public IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies { get; init; }
 

@@ -308,7 +308,8 @@ public static class AdminMandateSignersEndpoints
         [FromServices] CreateMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
-        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(httpContext.User, transitOfficeId, request.TransitOfficeIds))
+        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(
+                httpContext.User, transitOfficeId, OficinasDelCuerpo(request.TransitOfficeIds, request.OfficeCompanies)))
         {
             return TransitOfficeScopeFilter.Forbidden();
         }
@@ -333,6 +334,8 @@ public static class AdminMandateSignersEndpoints
             ValidFrom = request.ValidFrom,
             ValidTo = request.ValidTo,
             ValidateSigningMeans = true,
+            // HU #13179 — compañías de FLIT a las que se asocia el mandatario, por organismo.
+            OfficeCompanies = request.OfficeCompanies,
             CreatedBy = ResolveUserId(httpContext.User),
             // HU #13195 — origen del vínculo: Super Admin → super_admin; ot_admin → organismo.
             ConfiguredByScope = OrigenDelActor(httpContext.User),
@@ -366,7 +369,8 @@ public static class AdminMandateSignersEndpoints
         [FromServices] UpdateMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
-        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(httpContext.User, transitOfficeId, request.TransitOfficeIds))
+        if (TransitOfficeScopeFilter.BodyOfficesOutOfScope(
+                httpContext.User, transitOfficeId, OficinasDelCuerpo(request.TransitOfficeIds, request.OfficeCompanies)))
         {
             return TransitOfficeScopeFilter.Forbidden();
         }
@@ -388,6 +392,8 @@ public static class AdminMandateSignersEndpoints
             ValidityKind = request.ValidityKind,
             ValidFrom = request.ValidFrom,
             ValidTo = request.ValidTo,
+            // HU #13179 — ausente ⇒ no se tocan; cada organismo presente reemplaza su conjunto.
+            OfficeCompanies = request.OfficeCompanies,
             UpdatedBy = ResolveUserId(httpContext.User),
             ConfiguredByScope = OrigenDelActor(httpContext.User),
             CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),
@@ -473,6 +479,17 @@ public static class AdminMandateSignersEndpoints
         Results.Json(
             new { errors = errors.Select(e => new { field = e.Field, message = e.Message, value = e.Value }) },
             statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    /// <summary>
+    /// HU #13179 — organismos que nombra el cuerpo: los de <c>transitOfficeIds</c> y los de las compañías asociadas.
+    /// Un ot_admin no puede escribir sobre organismos distintos al de su ruta.
+    /// </summary>
+    private static IReadOnlyList<Guid>? OficinasDelCuerpo(
+        IReadOnlyList<Guid>? transitOfficeIds,
+        IReadOnlyList<Flit.Admin.Domain.Companies.MandateSigners.MandateSignerOfficeCompanies>? officeCompanies) =>
+        officeCompanies is null
+            ? transitOfficeIds
+            : [.. (transitOfficeIds ?? []), .. officeCompanies.Select(o => o.TransitOfficeId)];
 
     /// <summary>HU #13195 — origen de configuración según quien actúa en la ruta del OT.</summary>
     private static string OrigenDelActor(ClaimsPrincipal user) =>
