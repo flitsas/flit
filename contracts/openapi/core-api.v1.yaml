@@ -12107,6 +12107,15 @@ components:
           type: string
           enum: [block, warn, off]
           description: "Modo vigente de `TramiteValidations:MandatarioRequerido`."
+        nivel:
+          type: string
+          nullable: true
+          enum: [explicita, ot_para_compania, propio_de_compania, asociado_de_otra_compania, default_del_ot]
+          description: >
+            HU #13180. Nivel de la prelación en el que se resolvió el firmante; solo con `estado = valido`. El
+            indicador «Firmará» lo usa para mostrar si viene del OT, de la compañía, de otra compañía asociada o
+            del default del OT. Prelación: explícita, OT para la compañía, propio de la compañía, asociado de otra
+            compañía, default del OT, bloqueo.
     # ── Preferencias de UI ─────────────────────────────────────────────────────
     UserUiPreferenceResponse:
       type: object

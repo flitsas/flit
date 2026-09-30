@@ -360,7 +360,7 @@ public sealed class MandateSignerDefaultResolverTests
         r.Signer!.Id.Should().Be(IdOt);
     }
 
-    // Nivel 3 — punto de extensión (F7).
+    // Nivel 3 — asociado de otra compañía (HU #13180).
     [Fact]
     public void Asociado_Unico_SeResuelveEntreCompaniaYDefaultDelOt()
     {
@@ -396,10 +396,128 @@ public sealed class MandateSignerDefaultResolverTests
     }
 
     [Fact]
-    public void EnF4_SinAsociados_ElNivelTresSeSalta()
+    public void SinAsociados_ElNivelTresSeSalta()
     {
         var r = MandateSignerDefaultResolver.Resolve([], Cand(IdDefaultOt), null, null);
 
         r.Level.Should().Be(MandateSignerLevel.DefaultDelOt);
+    }
+
+    // HU #13180 AC2 — el propio de B prevalece sobre el asociado de A.
+    [Fact]
+    public void Hu13180_Ac2_ElPropioVigentePrevaleceSobreElAsociado()
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [Cand(IdOtro, MandateSignerOrigins.Asociado), Cand(IdCompania, MandateSignerOrigins.Compania)],
+            null, null, null);
+
+        r.Signer!.Id.Should().Be(IdCompania);
+        r.Level.Should().Be(MandateSignerLevel.PropioDeCompania);
+    }
+
+    // HU #13180 AC3 — el configurado por el OT prevalece sobre todos.
+    [Fact]
+    public void Hu13180_Ac3_ElConfiguradoPorElOtPrevaleceSobreTodos()
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [
+                Cand(IdOtro, MandateSignerOrigins.Asociado), Cand(IdCompania, MandateSignerOrigins.Compania),
+                Cand(IdOt, MandateSignerOrigins.Organismo),
+            ],
+            Cand(IdDefaultOt), null, null);
+
+        r.Signer!.Id.Should().Be(IdOt);
+        r.Level.Should().Be(MandateSignerLevel.OtParaCompania);
+    }
+
+    // HU #13180 AC4 — el asociado prevalece sobre el default del OT; vencido, inactivo o eliminado se descarta.
+    [Fact]
+    public void Hu13180_Ac4_ElAsociadoPrevaleceSobreElDefaultDelOt()
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [Cand(IdOtro, MandateSignerOrigins.Asociado)], Cand(IdDefaultOt), null, null);
+
+        r.Signer!.Id.Should().Be(IdOtro);
+    }
+
+    [Theory]
+    [InlineData("mandatario_fuera_de_vigencia")]
+    [InlineData("mandatario_inactivo")]
+    public void Hu13180_Ac4_ElAsociadoVencidoOInactivo_SeDescartaYGanaElDefaultDelOt(string motivo)
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [Cand(IdOtro, MandateSignerOrigins.Asociado, firmaValida: false, motivo: motivo)],
+            Cand(IdDefaultOt), null, null);
+
+        r.Signer!.Id.Should().Be(IdDefaultOt);
+        r.Level.Should().Be(MandateSignerLevel.DefaultDelOt);
+        r.Descartados.Should().ContainSingle(d => d.SignerId == IdOtro && d.Motivo == motivo
+            && d.Level == MandateSignerLevel.AsociadoDeOtraCompania);
+    }
+
+    [Fact]
+    public void Hu13180_Ac4_ElAsociadoConBajaLogica_SeDescartaComoEliminado()
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [Cand(IdOtro, MandateSignerOrigins.Asociado, eliminado: true)], Cand(IdDefaultOt), null, null);
+
+        r.Signer!.Id.Should().Be(IdDefaultOt);
+        r.Descartados.Should().ContainSingle(d => d.Motivo == MandateSignerDiscardReasons.Eliminado);
+    }
+
+    // HU #13180 — un propio vencido, inactivo o eliminado cuenta como inexistente y deja pasar al nivel 3.
+    [Theory]
+    [InlineData("mandatario_fuera_de_vigencia", false)]
+    [InlineData("mandatario_inactivo", false)]
+    [InlineData(null, true)]
+    public void Hu13180_ElPropioNoVigente_CuentaComoInexistente_YFirmaElAsociado(string? motivo, bool eliminado)
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [
+                Cand(IdCompania, MandateSignerOrigins.Compania, firmaValida: motivo is null, motivo: motivo, eliminado: eliminado),
+                Cand(IdOtro, MandateSignerOrigins.Asociado),
+            ],
+            Cand(IdDefaultOt), null, null);
+
+        r.Signer!.Id.Should().Be(IdOtro);
+        r.Level.Should().Be(MandateSignerLevel.AsociadoDeOtraCompania);
+    }
+
+    // HU #13180 AC5 — con varios asociados no se elige uno arbitrariamente y ambos quedan como candidatos del OT.
+    [Fact]
+    public void Hu13180_Ac5_VariosAsociados_NoSeEligeUno_YAmbosSonValidosParaElOt()
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [Cand(IdOtro, MandateSignerOrigins.Asociado), Cand(IdAsociado2, MandateSignerOrigins.Asociado)],
+            null, null, null);
+
+        r.Signer.Should().BeNull();
+        r.Ambiguo.Should().BeTrue();
+        r.Validos.Select(v => v.Id).Should().BeEquivalentTo([IdOtro, IdAsociado2]);
+    }
+
+    // HU #13180 AC5 — el OT puede elegir entre ambos asociados al aprobar.
+    [Fact]
+    public void Hu13180_Ac5_ElOtElige_EntreLosDosAsociados()
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [Cand(IdOtro, MandateSignerOrigins.Asociado), Cand(IdAsociado2, MandateSignerOrigins.Asociado)],
+            null, eleccionOt: IdAsociado2, null);
+
+        r.Signer!.Id.Should().Be(IdAsociado2);
+        r.Level.Should().Be(MandateSignerLevel.Explicita);
+    }
+
+    // HU #13180 AC7 — Persona jurídica y Formato en blanco asociados no exigen firma personal.
+    [Theory]
+    [InlineData(MandateSignerOrigins.ModeloJuridica)]
+    [InlineData(MandateSignerOrigins.ModeloFormatoBlanco)]
+    public void Hu13180_Ac7_ElAsociadoSinFirmaPersonal_CuentaEnElNivelTres(string modelo)
+    {
+        var r = MandateSignerDefaultResolver.Resolve(
+            [Cand(IdOtro, MandateSignerOrigins.Asociado, modelo: modelo, metodo: null)], null, null, null);
+
+        r.Signer!.Id.Should().Be(IdOtro);
+        r.Level.Should().Be(MandateSignerLevel.AsociadoDeOtraCompania);
     }
 }

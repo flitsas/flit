@@ -15,7 +15,7 @@ public enum MandateSignerLevel
     /// <summary>Mandatario propio de la compañía en ese organismo.</summary>
     PropioDeCompania,
 
-    /// <summary>Asociado de otra compañía. Punto de extensión: lo llena F7 (#13180); en F4 llega vacío.</summary>
+    /// <summary>Mandatario de OTRA compañía asociado a la del trámite (HU #13180). Solo cuenta si ningún nivel superior resuelve.</summary>
     AsociadoDeOtraCompania,
 
     /// <summary>Default del OT, aunque no esté vinculado a la compañía gestora.</summary>
@@ -76,11 +76,11 @@ public sealed record MandateSignerPrelacion(
 /// Resuelve el mandatario que firma el mandato (ADR-0066, enmienda parcial de ADR-0036). Función PURA y única:
 /// la pantalla, el PDF, la aprobación y el gate de radicación la usan, así que el firmante es el mismo en los
 /// cuatro sitios. Niveles: Explícita → OT para la compañía → propio de la compañía → asociado de otra compañía
-/// (extensión F7) → default del OT → Ninguno.
+/// (HU #13180) → default del OT → Ninguno.
 /// </summary>
 public static class MandateSignerDefaultResolver
 {
-    /// <param name="candidatos">Vínculos de la compañía en el organismo (con origen) y, en F7, los asociados.</param>
+    /// <param name="candidatos">Vínculos de la compañía en el organismo (con origen) y los asociados de otras compañías.</param>
     /// <param name="defaultDelOt">Default del OT (vía <c>GetByIdAsync</c>), aunque no esté vinculado a la compañía.</param>
     /// <param name="eleccionOt">Elección explícita del OT al aprobar.</param>
     /// <param name="guardado">Firmante ya guardado en el trámite; si no es válido se ignora.</param>

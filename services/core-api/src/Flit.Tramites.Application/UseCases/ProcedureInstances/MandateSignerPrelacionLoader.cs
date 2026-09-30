@@ -112,8 +112,9 @@ internal static class MandateSignerPrelacionLoader
                 && !string.IsNullOrWhiteSpace(c.Documento))
             {
                 var tipoDoc = string.IsNullOrWhiteSpace(c.TipoDocumento) ? "CC" : c.TipoDocumento.Trim();
+                // HU #13180 — el asociado de otra compañía tiene su firma en el baúl de SU compañía.
                 var match = await policy
-                    .ResolveMandatarioAsync(tenantId, tipoDoc, c.Documento.Trim(), ct)
+                    .ResolveMandatarioAsync(c.VaultTenantId(tenantId), tipoDoc, c.Documento.Trim(), ct)
                     .ConfigureAwait(false);
                 resultado.Add(c with { BaulVigente = match is not null });
             }

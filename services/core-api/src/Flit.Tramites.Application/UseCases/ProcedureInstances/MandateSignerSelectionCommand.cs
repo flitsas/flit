@@ -109,7 +109,7 @@ public sealed class ListMandateSignerOptionsHandler(
             var conBaul = !c.FirmaFisica
                 && !string.IsNullOrWhiteSpace(c.Documento)
                 && await _vaultPolicy
-                    .ResolveMandatarioAsync(tenantId, tipoDoc, c.Documento.Trim(), ct)
+                    .ResolveMandatarioAsync(c.VaultTenantId(tenantId), tipoDoc, c.Documento.Trim(), ct)
                     .ConfigureAwait(false) is not null;
 
             opciones.Add(new MandateSignerOptionDto(

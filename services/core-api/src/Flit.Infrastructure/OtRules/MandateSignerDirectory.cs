@@ -32,6 +32,25 @@ namespace Flit.Infrastructure.OtRules;
 /// </summary>
 internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 {
+    /// <summary>Fila de un mandatario candidato (propio o asociado) antes de resolver identidad y firma.</summary>
+    private sealed class SignerRow
+    {
+        public Guid Id { get; init; }
+        public string FullName { get; init; } = string.Empty;
+        public string? DocumentNumber { get; init; }
+        public Guid? UserId { get; init; }
+        public Guid? SignatureVaultId { get; init; }
+        public string DocumentType { get; init; } = string.Empty;
+        public string SignerModel { get; init; } = string.Empty;
+        public string? SignatureMethod { get; init; }
+        public string ValidityKind { get; init; } = string.Empty;
+        public DateOnly? ValidFrom { get; init; }
+        public DateOnly? ValidTo { get; init; }
+        public bool IsActive { get; init; }
+        public string Origen { get; init; } = string.Empty;
+        public Guid? OwnerTenantId { get; init; }
+    }
+
     /// <summary>Identidad de un mandatario: su estado (ADR-0050), certificado y hasta cuándo vale.</summary>
     private sealed record IdentidadResuelta(string Status, string? Certificado, DateTimeOffset? ValidUntil)
     {
@@ -65,7 +84,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
         // Solo el tenant del trámite: la cabeza de red no presta mandatarios a las hijas
         // (Epic #12235). Cada compañía firma con su propio directorio.
-        var signers = await (
+        var propios = await (
             from s in _context.MandateSigners.AsNoTracking()
             join c in _context.MandateSignerCompanies.AsNoTracking() on s.Id equals c.MandateSignerId
             where c.TransitOfficeId == transitOfficeId
@@ -73,15 +92,53 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                 && c.IsActive
                 && s.IsActive
                 && s.DeletedAt == null
-            select new
+            select new SignerRow
             {
-                s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType, s.SignerModel,
-                s.SignatureMethod, s.ValidityKind, s.ValidFrom, s.ValidTo, s.IsActive,
+                Id = s.Id, FullName = s.FullName, DocumentNumber = s.DocumentNumber, UserId = s.UserId,
+                SignatureVaultId = s.SignatureVaultId, DocumentType = s.DocumentType, SignerModel = s.SignerModel,
+                SignatureMethod = s.SignatureMethod, ValidityKind = s.ValidityKind, ValidFrom = s.ValidFrom,
+                ValidTo = s.ValidTo, IsActive = s.IsActive,
                 // HU #13142 — el origen del vínculo decide el nivel de la prelación (ADR-0066).
                 Origen = c.ConfiguredByScope,
             })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        // HU #13180 — nivel 3: mandatarios de OTRAS compañías asociados (por tenant) a la del trámite en este
+        // organismo. Solo asociaciones activas de mandatarios activos, sin baja lógica y aplicables aquí (vínculo
+        // propio activo en el organismo). Si el mandatario ya es propio de esta compañía manda su vínculo.
+        var asociados = await (
+            from a in _context.MandateSignerAssociatedCompanies.AsNoTracking()
+            join s in _context.MandateSigners.AsNoTracking() on a.MandateSignerId equals s.Id
+            join c in _context.MandateSignerCompanies.AsNoTracking() on s.Id equals c.MandateSignerId
+            where a.TransitOfficeId == transitOfficeId
+                && a.AssociatedCompanyTenantId == companyTenantId
+                && a.IsActive
+                && c.TransitOfficeId == transitOfficeId
+                && c.IsActive
+                && c.CompanyTenantId != companyTenantId
+                && s.IsActive
+                && s.DeletedAt == null
+                && !_context.MandateSignerCompanies.Any(x =>
+                    x.MandateSignerId == s.Id
+                    && x.TransitOfficeId == transitOfficeId
+                    && x.CompanyTenantId == companyTenantId
+                    && x.IsActive)
+            select new SignerRow
+            {
+                Id = s.Id, FullName = s.FullName, DocumentNumber = s.DocumentNumber, UserId = s.UserId,
+                SignatureVaultId = s.SignatureVaultId, DocumentType = s.DocumentType, SignerModel = s.SignerModel,
+                SignatureMethod = s.SignatureMethod, ValidityKind = s.ValidityKind, ValidFrom = s.ValidFrom,
+                ValidTo = s.ValidTo, IsActive = s.IsActive,
+                Origen = MandateSignerOrigins.Asociado,
+                OwnerTenantId = c.CompanyTenantId,
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var signers = propios
+            .Concat(asociados.DistinctBy(x => x.Id))
+            .ToList();
 
         if (signers.Count == 0)
         {
@@ -120,7 +177,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                     vigentes.GetValueOrDefault(s.Id)?.ValidUntil,
                     firmanAMano.Contains(s.Id),
                     firma?.Valida ?? true, firma?.Motivo,
-                    s.Origen, s.SignerModel, MetodoEfectivo(s.SignerModel, s.SignatureMethod, s.SignatureVaultId));
+                    s.Origen, s.SignerModel, MetodoEfectivo(s.SignerModel, s.SignatureMethod, s.SignatureVaultId),
+                    OwnerTenantId: s.OwnerTenantId);
             }),
         ];
     }

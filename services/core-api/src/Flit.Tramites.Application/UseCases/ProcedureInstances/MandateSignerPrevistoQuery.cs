@@ -26,7 +26,13 @@ public sealed record MandateSignerPrevistoDto(
     string? Nombre,
     string? FormaFirma,
     string? Motivo,
-    string Modo);
+    string Modo,
+    /// <summary>
+    /// HU #13180 — nivel de la prelación en el que se resolvió el firmante (<c>explicita</c>, <c>ot_para_compania</c>,
+    /// <c>propio_de_compania</c>, <c>asociado_de_otra_compania</c>, <c>default_del_ot</c>); solo viene con
+    /// <c>valido</c>. El indicador «Firmará» lo usa para decir de dónde viene el firmante.
+    /// </summary>
+    string? Nivel = null);
 
 /// <summary>
 /// HU #13145 — consulta del firmante previsto. Reutiliza el evaluador único del gate (HU #13144) para que la
@@ -59,7 +65,8 @@ public sealed class GetMandateSignerPrevistoHandler(
             valido ? evaluacion.Signer?.Nombre : null,
             valido ? evaluacion.FormaFirma : null,
             evaluacion.Motivo,
-            ModoCode(_policy.MandatarioRequerido)), null);
+            ModoCode(_policy.MandatarioRequerido),
+            valido ? MandateSignerLevelCodes.ToCode(evaluacion.Nivel) : null), null);
     }
 
     private static string ModoCode(TramiteValidationMode modo) => modo switch

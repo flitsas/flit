@@ -41,7 +41,7 @@ public sealed record MandateSignerCandidate(
     string? MotivoSinFirma = null,
     /// <summary>
     /// HU #13142 (ADR-0066) — origen del vínculo con la compañía gestora: <c>organismo</c> | <c>super_admin</c> |
-    /// <c>compania</c> | <c>asociado</c> (este último lo llena F7 #13180). Decide el nivel de la prelación.
+    /// <c>compania</c> | <c>asociado</c> (el mandatario de otra compañía asociado a la del trámite, HU #13180). Decide el nivel de la prelación.
     /// El default <c>organismo</c> es el de la columna <c>configured_by_scope</c>.
     /// </summary>
     string Origen = MandateSignerOrigins.Organismo,
@@ -61,7 +61,17 @@ public sealed record MandateSignerCandidate(
     bool BaulVigente = false,
     /// <summary>HU #13142 — baja lógica (<c>deleted_at</c>). Solo llega en <c>true</c> al pedir la referencia
     /// de un trámite ya firmado con <c>incluirEliminados</c>; la prelación lo descarta.</summary>
-    bool Eliminado = false);
+    bool Eliminado = false,
+    /// <summary>
+    /// HU #13180 (Feature #13119) — compañía PROPIETARIA del mandatario cuando entra como <c>asociado</c> de otra
+    /// compañía (nivel 3): su firma del baúl y su validación biométrica viven en el tenant de ESA compañía, no en el
+    /// de la compañía del trámite. Nulo en los demás orígenes (se usa el tenant del trámite).
+    /// </summary>
+    Guid? OwnerTenantId = null)
+{
+    /// <summary>Tenant contra el que se resuelve su firma del baúl: el propietario si es asociado; si no, el del trámite.</summary>
+    public Guid VaultTenantId(Guid tenantDelTramite) => OwnerTenantId ?? tenantDelTramite;
+}
 
 /// <summary>Valores del origen y del modelo del mandatario que usa la prelación (ADR-0066, ADR-0061).</summary>
 public static class MandateSignerOrigins
