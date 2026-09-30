@@ -1207,6 +1207,53 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("mandate_signers", "admin");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerAssociatedCompany", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<Guid>("AssociatedCompanyTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("associated_company_tenant_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<Guid>("MandateSignerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mandate_signer_id");
+
+                    b.Property<Guid>("TransitOfficeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transit_office_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_mandate_signer_associated_companies");
+
+                    b.HasIndex("MandateSignerId", "TransitOfficeId", "AssociatedCompanyTenantId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_msac_activa")
+                        .HasFilter("is_active");
+
+                    b.HasIndex("TransitOfficeId", "AssociatedCompanyTenantId", "IsActive")
+                        .HasDatabaseName("ix_msac_office_company");
+
+                    b.ToTable("mandate_signer_associated_companies", "admin", t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerCompany", b =>
                 {
                     b.Property<Guid>("Id")
@@ -11189,6 +11236,16 @@ namespace Flit.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_lrc_represented_company");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerAssociatedCompany", b =>
+                {
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Admin.MandateSigner", null)
+                        .WithMany()
+                        .HasForeignKey("MandateSignerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mandate_signer_associated_companies_mandate_signers_mandat");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.MandateSignerCompany", b =>
