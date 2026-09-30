@@ -280,7 +280,7 @@ Este ADR no toca código. Referencia para el equipo, por HU:
 - [ADR-0052-resolucion-mandato-ot-abierto-y-cliente-generico] — `assignment_mode` y Mandato abierto.
 - [ADR-0025-baul-firmas-custodia-y-consumo] — baúl de firmas.
 - [ADR-0033-representantes-legales-y-escrituras-por-compania] — concepto distinto (representante legal).
-- ADR de prelación y gate de F4 (#13116, por crear): consumirá el origen y el modelo definidos aquí.
+- [ADR-0066-prelacion-del-mandatario-y-gate-de-radicacion] — prelación y gate de F4 (#13116, Propuesto): consume el origen y el modelo definidos aquí y resuelve la duda D-4.
 
 ## Notas para agentes
 
