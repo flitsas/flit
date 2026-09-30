@@ -49,7 +49,7 @@ public sealed class RegisterIctBatchHandlerTests
 
         result.Should().BeNull();
         error.Should().Be("batch_limit_exceeded");
-        await _repository.DidNotReceive().AddAsync(Arg.Any<Domain.Entities.ExternalIntegrationMaster>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _repository.DidNotReceive().AddIfNoActiveDuplicateAsync(Arg.Any<Domain.Entities.ExternalIntegrationMaster>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -120,11 +120,11 @@ public sealed class RegisterIctBatchHandlerTests
         // derivado del payload. Un cliente ICT solo registra pre-trámites de su propia compañía.
         Domain.Entities.ExternalIntegrationMaster? captured = null;
         _repository
-            .AddAsync(
+            .AddIfNoActiveDuplicateAsync(
                 Arg.Do<Domain.Entities.ExternalIntegrationMaster>(m => captured = m),
                 Arg.Any<Guid>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Guid.NewGuid());
+            .Returns(PreTramiteAlta.Registrado);
 
         var (result, error) = await CreateHandler().HandleAsync(
             new RegisterBatchCommand([ValidTraspaso("TEN001")]), Ct);
@@ -147,7 +147,7 @@ public sealed class RegisterIctBatchHandlerTests
         result!.TotalRowsProcessed.Should().Be(0);
         result.Detail[0].Status.Should().Be(2);
         result.Detail[0].Message.Should().Contain("company_manager_document");
-        await _repository.DidNotReceive().AddAsync(
+        await _repository.DidNotReceive().AddIfNoActiveDuplicateAsync(
             Arg.Any<Domain.Entities.ExternalIntegrationMaster>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
@@ -158,11 +158,11 @@ public sealed class RegisterIctBatchHandlerTests
         // simula esa asignación en el mock del repositorio para verificar que /register lo devuelve como
         // TransactionFlit (número), no el manager_id_transaction del gestor.
         _repository
-            .AddAsync(Arg.Any<Domain.Entities.ExternalIntegrationMaster>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .AddIfNoActiveDuplicateAsync(Arg.Any<Domain.Entities.ExternalIntegrationMaster>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 ((Domain.Entities.ExternalIntegrationMaster)callInfo[0]!).TransactionNumber = 12345;
-                return Guid.NewGuid();
+                return PreTramiteAlta.Registrado;
             });
 
         var (result, error) = await CreateHandler().HandleAsync(
@@ -171,5 +171,45 @@ public sealed class RegisterIctBatchHandlerTests
         error.Should().BeNull();
         result!.Detail[0].Status.Should().Be(1);
         result.Detail[0].TransactionFlit.Should().Be("12345");
+    }
+
+    // ===== Bug #13109 punto 7: doble register contra lo ya guardado =====
+    [Fact]
+    public async Task Bug13109_P7_Row_with_active_duplicate_already_saved_is_flagged_and_not_counted()
+    {
+        _repository
+            .AddIfNoActiveDuplicateAsync(
+                Arg.Any<Domain.Entities.ExternalIntegrationMaster>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(PreTramiteAlta.DuplicadoActivo);
+
+        var (result, error) = await CreateHandler().HandleAsync(
+            new RegisterBatchCommand([ValidTraspaso("DBL001")]), Ct);
+
+        error.Should().BeNull("el lote sigue respondiendo 200");
+        result!.TotalRows.Should().Be(1);
+        result.TotalRowsProcessed.Should().Be(0);
+        result.Detail[0].Status.Should().Be(2);
+        result.Detail[0].Message.Should().Contain("duplicado");
+        result.Detail[0].Plate.Should().Be("DBL001");
+    }
+
+    [Fact]
+    public async Task Bug13109_P7_Only_the_row_duplicated_in_db_is_rejected()
+    {
+        _repository
+            .AddIfNoActiveDuplicateAsync(
+                Arg.Is<Domain.Entities.ExternalIntegrationMaster>(m => m.Plate == "DBL002"),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(PreTramiteAlta.DuplicadoActivo);
+
+        var (result, _) = await CreateHandler().HandleAsync(
+            new RegisterBatchCommand([ValidTraspaso("DBL002"), ValidTraspaso("NEW003")]), Ct);
+
+        result!.TotalRowsProcessed.Should().Be(1);
+        result.Detail[0].Status.Should().Be(2);
+        result.Detail[1].Status.Should().Be(1);
+        await _repository.Received(2).AddIfNoActiveDuplicateAsync(
+            Arg.Any<Domain.Entities.ExternalIntegrationMaster>(), _tenant.TenantId!.Value, Arg.Any<CancellationToken>());
     }
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using Flit.Ict.Application.Register;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
+using Flit.Ict.Infrastructure.Jobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -19,30 +20,49 @@ public sealed class PreTramiteRepository(IctDbContext db, IOptions<IctIngestOpti
     // Lever B (default OFF): relajar la durabilidad del commit SOLO en el camino de ingesta del registro.
     private readonly bool _relaxRegisterDurability = ingestOptions.Value.RelaxRegisterCommitDurability;
 
-    public Task<Guid> AddAsync(ExternalIntegrationMaster master, Guid tenantId, CancellationToken ct = default)
+    public Task<PreTramiteAlta> AddIfNoActiveDuplicateAsync(
+        ExternalIntegrationMaster master, Guid tenantId, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(master);
+        var lockScope = IctAdvisoryLock.RegisterScope(
+            tenantId, PreTramiteClave.Texto(master.TransactionType, master.Plate, master.Vin));
         return InTenantTransactionAsync(tenantId, async () =>
         {
-            db.Masters.Add(master);
-            await db.SaveChangesAsync(ct);
+            // Advisory lock TRANSACCIONAL por (tenant, clave): dos register simultáneos de la misma placa/VIN
+            // se serializan aquí y el segundo ve la fila del primero. Se libera solo con el commit/rollback.
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtextextended({lockScope}, 0))", ct);
 
-            // Primer estado del histórico = Registrado (1), como en v1 (statusProcess[]). El registrador
-            // colapsa sub-pasos por estado; la fila Registrado de v1 va con rol vacío (observation='' rol='').
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
-                SELECT ict.record_process_status({master.Id}, {tenantId}, 1, 'REGISTRADO',
-                    {master.ManagerUser}, {master.ManagerMail}, {master.CompanyManagerDocument}, '', '')
-                """, ct);
+            if (await db.Masters.AsNoTracking().AnyAsync(PreTramiteClave.EnProcesoConLaMismaClave(master), ct))
+            {
+                return PreTramiteAlta.DuplicadoActivo;
+            }
 
-            // Timeline de negocio: pre-trámite recibido (detail por allowlist, sin PII).
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
-                SELECT ict.record_pretramite_event({master.Id}, {tenantId}, 'recibido', 'ok',
-                    jsonb_build_object('transaction_type', {master.TransactionType},
-                                       'manager_id_transaction', {master.ManagerIdTransaction},
-                                       'traffic_secretary_code', {master.TrafficSecretaryCode}))
-                """, ct);
-            return master.Id;
+            await InsertAsync(master, tenantId, ct);
+            return PreTramiteAlta.Registrado;
         }, ct, relaxedDurability: _relaxRegisterDurability);
+    }
+
+    /// <summary>Inserta el master con sus actores y registra su primer estado y evento. Va dentro de la transacción del llamador.</summary>
+    private async Task InsertAsync(ExternalIntegrationMaster master, Guid tenantId, CancellationToken ct)
+    {
+        db.Masters.Add(master);
+        await db.SaveChangesAsync(ct);
+
+        // Primer estado del histórico = Registrado (1), como en v1 (statusProcess[]). El registrador
+        // colapsa sub-pasos por estado; la fila Registrado de v1 va con rol vacío (observation='' rol='').
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT ict.record_process_status({master.Id}, {tenantId}, 1, 'REGISTRADO',
+                {master.ManagerUser}, {master.ManagerMail}, {master.CompanyManagerDocument}, '', '')
+            """, ct);
+
+        // Timeline de negocio: pre-trámite recibido (detail por allowlist, sin PII).
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT ict.record_pretramite_event({master.Id}, {tenantId}, 'recibido', 'ok',
+                jsonb_build_object('transaction_type', {master.TransactionType},
+                                   'manager_id_transaction', {master.ManagerIdTransaction},
+                                   'traffic_secretary_code', {master.TrafficSecretaryCode}))
+            """, ct);
     }
 
     public Task<ExternalIntegrationMaster?> GetAsync(Guid id, Guid tenantId, CancellationToken ct = default) =>
