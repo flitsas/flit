@@ -134,7 +134,7 @@ public sealed class MandateSignerSelectionTests
     // ── AC3 — uno solo queda por defecto ──────────────────────────────────────
 
     [Fact]
-    public async Task AC3_SinDefaultParametrizado_UnUnicoCandidatoNoQuedaElegidoSolo()
+    public async Task AC3_SinDefaultParametrizado_UnUnicoCandidatoDeLaCompania_QuedaElegidoPorPrelacion()
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Instancia();
@@ -142,7 +142,8 @@ public sealed class MandateSignerSelectionTests
 
         var (result, _) = await handler.HandleAsync(instance.Id, Tenant, ct);
 
-        result!.ElegidoId.Should().BeNull();
+        // ADR-0066 (HU #13142): con un solo vínculo activo por origen, el único válido ES el firmante del nivel.
+        result!.ElegidoId.Should().Be(Ana);
     }
 
     [Fact]
@@ -175,6 +176,39 @@ public sealed class MandateSignerSelectionTests
 
         error.Should().BeNull();
         result!.Opciones.Select(o => o.Id).Should().BeEquivalentTo([Ana, Carlos]);
+        // El de la compañía pesa más que el default del OT (nivel 2 antes que el 4): ADR-0066.
+        result.ElegidoId.Should().Be(Ana);
+    }
+
+    [Fact]
+    public async Task DefaultOt_SinMandatariosDeLaCompania_SeOfreceYSePreselecciona()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instancia();
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "transit_office_code",
+            ValueText = "05001",
+            Source = "user",
+        });
+
+        var policy = Substitute.For<IMandateRequirementPolicy>();
+        policy.ResolveAsync("05001", Tenant, Arg.Any<CancellationToken>())
+            .Returns(new MandateOtConfig(
+                Ot, "generico", RequiresForNaturalPerson: false, null, null,
+                AssignmentMode: "signer",
+                OtDefaultMandateSignerId: Carlos));
+
+        var dir = Substitute.For<IMandateSignerDirectory>();
+        dir.GetCandidatesAsync(Ot, Tenant, Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns([]);
+        dir.GetByIdAsync(Carlos, Arg.Any<CancellationToken>())
+            .Returns(Candidato(Carlos, "Carlos Pérez"));
+
+        var handler = new ListMandateSignerOptionsHandler(_repo, dir, mandatePolicy: policy);
+        var (result, error) = await handler.HandleAsync(instance.Id, Tenant, ct);
+
+        error.Should().BeNull();
+        result!.Opciones.Select(o => o.Id).Should().BeEquivalentTo([Carlos]);
         result.ElegidoId.Should().Be(Carlos);
     }
 

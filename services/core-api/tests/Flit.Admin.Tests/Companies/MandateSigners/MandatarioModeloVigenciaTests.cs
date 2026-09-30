@@ -639,10 +639,15 @@ public sealed class MandatarioModeloVigenciaTests
 
         (await directorio.GetCandidatesAsync(Office, CompanyA, null, Ct)).Should().BeEmpty();
 
-        // El trámite ya firmado conserva su referencia: la búsqueda por id sigue resolviendo al eliminado.
-        var historico = await directorio.GetByIdAsync(id, Ct);
+        // HU #13142 (ADR-0066): por defecto la búsqueda por id ya NO devuelve al eliminado (no puede ser el
+        // default del OT de nadie nuevo)...
+        (await directorio.GetByIdAsync(id, Ct)).Should().BeNull();
+
+        // ...pero el trámite ya firmado conserva su referencia pidiéndola de forma explícita.
+        var historico = await directorio.GetByIdAsync(id, incluirEliminados: true, Ct);
         historico.Should().NotBeNull();
         historico!.Nombre.Should().Be("Ana Restrepo");
+        historico.Eliminado.Should().BeTrue();
     }
 
     // ── Compatibilidad de lectura: legados ────────────────────────────────────

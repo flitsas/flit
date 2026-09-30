@@ -304,22 +304,14 @@ public sealed class TramiteLifecycleService(
         if (instance.TransitOfficeId is not { } transitOfficeId)
             return null;
 
-        var candidates = await _mandateDirectory
-            .GetCandidatesAsync(
-                transitOfficeId, instance.TenantId,
-                MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
-            .ConfigureAwait(false);
-        candidates = await MandateSignerSelectionResolver
-            .WithOtDefaultAsync(candidates, config?.OtDefaultMandateSignerId, _mandateDirectory, ct)
+        var (prelacion, _) = await MandateSignerPrelacionLoader
+            .ResolveAsync(
+                _mandateDirectory, _vaultPolicy, transitOfficeId, instance.TenantId,
+                MandateSignerSelectionResolver.ResolveNitMandante(instance), config,
+                command.MandateSignerId, instance.MandateSignerId, ct)
             .ConfigureAwait(false);
 
-        var elegido = MandateSignerDefaultResolver.Resolve(
-            candidates.Select(c => c.Id).ToList(),
-            command.MandateSignerId ?? instance.MandateSignerId,
-            config?.OtDefaultMandateSignerId,
-            config?.DefaultMandateSignerId);
-
-        var resolution = MandateSignerSelector.Resolve(candidates, command.ChangedByUserId, elegido);
+        var resolution = MandateSignerPrelacionLoader.Decidir(prelacion, command.ChangedByUserId);
 
         switch (resolution.Status)
         {

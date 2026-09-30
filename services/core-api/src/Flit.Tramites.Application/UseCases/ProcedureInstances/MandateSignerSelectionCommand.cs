@@ -44,8 +44,8 @@ public sealed record MandateSignerSelectionDto(
 
 /// <summary>
 /// HU #11203 — mandatarios habilitados para el organismo del trámite en la compañía gestora.
-/// Se muestra en el wizard (paso FUR / radicación) para que el gestor pueda elegir quién firma
-/// el mandato junto a los documentos del expediente. No es obligatorio elegir.
+/// Se muestra en el wizard (paso FUR / radicación) junto a los documentos del expediente. El firmante
+/// sugerido sale de la prelación única de ADR-0066 (HU #13142).
 /// Institucional / abierto (regla compañía×OT): no se ofrecen candidatos persona.
 /// </summary>
 public sealed class ListMandateSignerOptionsHandler(
@@ -88,11 +88,14 @@ public sealed class ListMandateSignerOptionsHandler(
                 return (new MandateSignerSelectionDto([], null, editable), null);
         }
 
-        var candidatos = await directory
-            .GetCandidatesAsync(officeId, tenantId, MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
-            .ConfigureAwait(false);
-        candidatos = await MandateSignerSelectionResolver
-            .WithOtDefaultAsync(candidatos, mandateConfig?.OtDefaultMandateSignerId, directory, ct)
+        // Prelación única (ADR-0066): la misma función que usan el PDF, la aprobación y el gate. En borrador se
+        // ignora el MandateSignerId auto-congelado para que un cambio en Mandatos se vea al reimprimir.
+        var eleccionCongelada = editable ? null : instance.MandateSignerId;
+        var (prelacion, candidatos) = await MandateSignerPrelacionLoader
+            .ResolveAsync(
+                directory, _vaultPolicy, officeId, tenantId,
+                MandateSignerSelectionResolver.ResolveNitMandante(instance), mandateConfig,
+                eleccionOt: null, guardado: eleccionCongelada, ct)
             .ConfigureAwait(false);
 
         // La firma del baúl del mandatario se resuelve por documento contra el tenant de la gestora,
@@ -114,15 +117,9 @@ public sealed class ListMandateSignerOptionsHandler(
                 c.FirmaFisica, c.FirmaValida, c.MotivoSinFirma));
         }
 
-        // Prioridad: ya elegido en el trámite (solo fuera de borrador) → default cliente×OT →
-        // default OT → vacío. En borrador se ignora MandateSignerId auto-congelado para que un
-        // cambio en Mandatos se vea al reimprimir.
-        var eleccionCongelada = editable ? null : instance.MandateSignerId;
-        var elegido = MandateSignerDefaultResolver.Resolve(
-            opciones.ConvertAll(o => o.Id),
-            eleccionCongelada,
-            mandateConfig?.OtDefaultMandateSignerId,
-            mandateConfig?.DefaultMandateSignerId);
+        // Sugerido: el firmante guardado (fuera de borrador) o el de la prelación OT para la compañía →
+        // propio de la compañía → default del OT. Con un nivel ambiguo no se sugiere a nadie.
+        var elegido = prelacion.Signer?.Id;
 
         return (new MandateSignerSelectionDto(opciones, elegido, editable), null);
     }
@@ -233,26 +230,5 @@ internal static class MandateSignerSelectionResolver
             string.Equals(f.FieldKey, "transit_office_id", StringComparison.OrdinalIgnoreCase))?.ValueText;
 
         return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
-    }
-
-    /// <summary>
-    /// HU-L8 — el default del OT entra al conjunto aunque no esté en mandate_signer_companies de la gestora.
-    /// </summary>
-    public static async Task<IReadOnlyList<MandateSignerCandidate>> WithOtDefaultAsync(
-        IReadOnlyList<MandateSignerCandidate> candidates,
-        Guid? otDefaultId,
-        IMandateSignerDirectory directory,
-        CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(candidates);
-        ArgumentNullException.ThrowIfNull(directory);
-
-        if (otDefaultId is not { } id || id == Guid.Empty)
-            return candidates;
-        if (candidates.Any(c => c.Id == id))
-            return candidates;
-
-        var extra = await directory.GetByIdAsync(id, ct).ConfigureAwait(false);
-        return extra is null ? candidates : [.. candidates, extra];
     }
 }

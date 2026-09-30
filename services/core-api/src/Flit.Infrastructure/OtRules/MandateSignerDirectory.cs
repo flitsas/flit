@@ -77,6 +77,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             {
                 s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType, s.SignerModel,
                 s.SignatureMethod, s.ValidityKind, s.ValidFrom, s.ValidTo, s.IsActive,
+                // HU #13142 — el origen del vínculo decide el nivel de la prelación (ADR-0066).
+                Origen = c.ConfiguredByScope,
             })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -90,6 +92,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             transitOfficeId,
             // HU #13129 — Persona jurídica y Formato en blanco no tienen identidad que resolver.
             signers.Where(s => s.SignerModel == "natural" && !string.IsNullOrWhiteSpace(s.DocumentNumber))
+                .DistinctBy(s => s.Id)
                 .Select(s => (s.Id, s.DocumentType, s.DocumentNumber!)).ToList(),
             cancellationToken).ConfigureAwait(false);
         var vigentes = identidades.Where(kv => kv.Value.Vigente).ToDictionary(kv => kv.Key, kv => kv.Value);
@@ -120,13 +123,24 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                     s.SignatureVaultId, s.DocumentType, vigentes.GetValueOrDefault(s.Id)?.Certificado,
                     vigentes.GetValueOrDefault(s.Id)?.ValidUntil,
                     firmanAMano.Contains(s.Id),
-                    firma?.Valida ?? true, firma?.Motivo);
+                    firma?.Valida ?? true, firma?.Motivo,
+                    s.Origen, s.SignerModel, MetodoEfectivo(s.SignerModel, s.SignatureMethod, s.SignatureVaultId));
             }),
         ];
     }
 
+    public Task<MandateSignerCandidate?> GetByIdAsync(
+        Guid mandateSignerId, CancellationToken cancellationToken = default) =>
+        GetByIdAsync(mandateSignerId, incluirEliminados: false, cancellationToken);
+
+    /// <summary>
+    /// HU #13142 (AC4) — por defecto NO devuelve mandatarios con baja lógica (<c>deleted_at</c>): un eliminado
+    /// no puede ser el default del OT ni firmar trámites nuevos. Con <paramref name="incluirEliminados"/> se
+    /// conserva la referencia (marcada <see cref="MandateSignerCandidate.Eliminado"/>) para los trámites ya
+    /// firmados, cuyo PDF sigue mostrando a quien firmó.
+    /// </summary>
     public async Task<MandateSignerCandidate?> GetByIdAsync(
-        Guid mandateSignerId, CancellationToken cancellationToken = default)
+        Guid mandateSignerId, bool incluirEliminados, CancellationToken cancellationToken = default)
     {
         if (mandateSignerId == Guid.Empty)
         {
@@ -134,12 +148,12 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         }
 
         var signer = await _context.MandateSigners.AsNoTracking()
-            .Where(s => s.Id == mandateSignerId && s.IsActive)
+            .Where(s => s.Id == mandateSignerId && s.IsActive && (incluirEliminados || s.DeletedAt == null))
             .Select(s => new
             {
                 s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType,
                 s.TransitOfficeId, s.SignerModel, s.SignatureMethod, s.ValidityKind, s.ValidFrom, s.ValidTo,
-                s.IsActive,
+                s.IsActive, Eliminado = s.DeletedAt != null,
             })
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -167,8 +181,24 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         return new MandateSignerCandidate(
             signer.Id, signer.FullName, signer.DocumentNumber ?? string.Empty, signer.UserId, vigente is not null,
             signer.SignatureVaultId, signer.DocumentType, vigente?.Certificado, vigente?.ValidUntil,
-            FirmaFisica: false, FirmaValida: firma?.Valida ?? true, MotivoSinFirma: firma?.Motivo);
+            FirmaFisica: false, FirmaValida: firma?.Valida ?? true, MotivoSinFirma: firma?.Motivo,
+            // El default del OT no viene de un vínculo con la compañía: su origen es el del organismo.
+            Origen: MandateSignerOrigins.Organismo, SignerModel: signer.SignerModel,
+            SignatureMethod: MetodoEfectivo(signer.SignerModel, signer.SignatureMethod, signer.SignatureVaultId),
+            Eliminado: signer.Eliminado);
     }
+
+    /// <summary>
+    /// Forma de firma efectiva (HU #13142): nula en Persona jurídica y Formato en blanco; en una Persona natural
+    /// legado sin forma, baúl si tiene firma vinculada y biometría si no (misma inferencia que
+    /// <see cref="MandateSignerFirmaValidez"/>).
+    /// </summary>
+    private static string? MetodoEfectivo(string signerModel, string? signatureMethod, Guid? signatureVaultId) =>
+        signerModel != MandateSignerModels.Natural
+            ? null
+            : signatureMethod ?? (signatureVaultId is not null
+                ? MandateSignatureMethods.Baul
+                : MandateSignatureMethods.Biometria);
 
     /// <summary>
     /// HU #13130 — firma válida del mandatario: vigencia propia activa Y (si firma con biometría) validación

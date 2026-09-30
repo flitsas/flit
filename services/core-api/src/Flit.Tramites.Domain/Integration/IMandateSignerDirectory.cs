@@ -38,7 +38,46 @@ public sealed record MandateSignerCandidate(
     bool FirmaValida = true,
     /// <summary>Motivo de <c>FirmaValida == false</c>: <c>mandatario_fuera_de_vigencia</c>, <c>mandatario_inactivo</c>,
     /// <c>biometria_vencida</c> o <c>sin_validacion_aprobada</c>.</summary>
-    string? MotivoSinFirma = null);
+    string? MotivoSinFirma = null,
+    /// <summary>
+    /// HU #13142 (ADR-0066) — origen del vínculo con la compañía gestora: <c>organismo</c> | <c>super_admin</c> |
+    /// <c>compania</c> | <c>asociado</c> (este último lo llena F7 #13180). Decide el nivel de la prelación.
+    /// El default <c>organismo</c> es el de la columna <c>configured_by_scope</c>.
+    /// </summary>
+    string Origen = MandateSignerOrigins.Organismo,
+    /// <summary>HU #13142 — modelo del mandatario: <c>natural</c> | <c>juridica</c> | <c>formato_blanco</c>.</summary>
+    string SignerModel = MandateSignerOrigins.ModeloNatural,
+    /// <summary>
+    /// HU #13142 — forma de firma EFECTIVA: <c>baul</c> | <c>biometria</c>; nula en <c>juridica</c> y
+    /// <c>formato_blanco</c>. En un natural legado sin forma se infiere (baúl si tiene firma vinculada).
+    /// Nula con natural = sin dato: no se exige baúl.
+    /// </summary>
+    string? SignatureMethod = null,
+    /// <summary>
+    /// HU #13142 — la firma del baúl del mandatario está vigente hoy. La completa la capa de aplicación con
+    /// <see cref="ISignatureVaultPolicy"/> (el directorio no consulta el baúl); solo se exige con
+    /// <c>SignatureMethod = baul</c>.
+    /// </summary>
+    bool BaulVigente = false,
+    /// <summary>HU #13142 — baja lógica (<c>deleted_at</c>). Solo llega en <c>true</c> al pedir la referencia
+    /// de un trámite ya firmado con <c>incluirEliminados</c>; la prelación lo descarta.</summary>
+    bool Eliminado = false);
+
+/// <summary>Valores del origen y del modelo del mandatario que usa la prelación (ADR-0066, ADR-0061).</summary>
+public static class MandateSignerOrigins
+{
+    public const string Organismo = "organismo";
+    public const string SuperAdmin = "super_admin";
+    public const string Compania = "compania";
+    public const string Asociado = "asociado";
+
+    public const string ModeloNatural = "natural";
+    public const string ModeloJuridica = "juridica";
+    public const string ModeloFormatoBlanco = "formato_blanco";
+
+    public const string FormaBaul = "baul";
+    public const string FormaBiometria = "biometria";
+}
 
 /// <summary>
 /// Puerto para consultar los mandatarios registrados por el OT para una compañía gestora (ADR-0036,
@@ -67,8 +106,21 @@ public interface IMandateSignerDirectory
         string? nitMandante = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>El mandatario por su id (para rellenar el PDF al regenerar), o <c>null</c> si no existe/inactivo.</summary>
+    /// <summary>
+    /// El mandatario por su id (default del OT, relleno del PDF), o <c>null</c> si no existe, está inactivo o
+    /// tiene baja lógica (HU #13142, ADR-0066: un eliminado no puede ser firmante de nadie nuevo).
+    /// </summary>
     Task<MandateSignerCandidate?> GetByIdAsync(Guid mandateSignerId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #13142 (AC4) — igual que <see cref="GetByIdAsync(Guid, CancellationToken)"/> pero, con
+    /// <paramref name="incluirEliminados"/>, conserva la referencia a un mandatario con baja lógica marcándolo
+    /// <see cref="MandateSignerCandidate.Eliminado"/>: el trámite ya firmado sigue apuntando a quien firmó.
+    /// La implementación por defecto delega en la consulta sin eliminados.
+    /// </summary>
+    Task<MandateSignerCandidate?> GetByIdAsync(
+        Guid mandateSignerId, bool incluirEliminados, CancellationToken cancellationToken = default) =>
+        GetByIdAsync(mandateSignerId, cancellationToken);
 }
 
 /// <summary>Directorio seguro que NUNCA resuelve mandatarios (para dominio/tests que no lo ejercitan).</summary>

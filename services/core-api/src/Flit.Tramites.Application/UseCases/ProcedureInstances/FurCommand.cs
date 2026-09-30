@@ -1276,8 +1276,8 @@ public sealed class GenerarFurHandler(
             .ConfigureAwait(false);
         // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
 
-        // HU-L8 — elección del trámite → default cliente×OT de la compañía (si está entre sus candidatos) →
-        // default general del OT (aunque no esté en la compañía) → vacío.
+        // HU-L8 / HU #13142 — firmante por la prelación de ADR-0066 (OT para la compañía → propio de la compañía →
+        // default del OT → vacío).
         // Sin esos, Mandatario queda null (cuerpo ___ / recuadro Sin firmar). Ya no se espera a aprobar
         // para pintar nombre y cédula cuando hay default.
         var assignmentMode = config?.AssignmentMode;
@@ -1290,33 +1290,38 @@ public sealed class GenerarFurHandler(
         {
             if (transitOfficeId is { } officeId)
             {
-                var candidatos = await _mandateDirectory
-                    .GetCandidatesAsync(
-                        officeId, data.TenantIdParaFirmas,
-                        MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
-                    .ConfigureAwait(false);
-                candidatos = await MandateSignerSelectionResolver
-                    .WithOtDefaultAsync(candidatos, config?.OtDefaultMandateSignerId, _mandateDirectory, ct)
-                    .ConfigureAwait(false);
-
-                // En borrador/subsanación el firmante se recalcula SIEMPRE contra la config vigente
-                // (cliente×OT → OT → vacío). Congelar instance.MandateSignerId en la primera generación
-                // dejaba el PDF con un Hugo/Carlos viejo después de cambiar el default en Mandatos.
-                // Fuera de borrador (expediente ya radicado) sí manda lo guardado: es documento legal.
+                // En borrador/subsanación el firmante se recalcula SIEMPRE con la prelación única de ADR-0066
+                // (OT para la compañía → propio → asociado → default del OT) contra la config vigente.
+                // Congelar instance.MandateSignerId en la primera generación dejaba el PDF con un firmante
+                // viejo después de cambiar la configuración en Mandatos.
+                // Fuera de borrador (expediente ya radicado) manda lo guardado aunque hoy ya no sea válido
+                // (baja lógica, vencimiento): es documento legal y se conserva la referencia (HU #13142 AC4).
                 var enBorrador = TramiteEstado.PermiteEdicionDatos(
                     instance.Status, instance.SubsanacionActiva);
-                var eleccionCongelada = enBorrador ? null : instance.MandateSignerId;
 
-                resolvedSignerId = MandateSignerDefaultResolver.Resolve(
-                    candidatos.Select(c => c.Id).ToList(),
-                    eleccionCongelada,
-                    config?.OtDefaultMandateSignerId,
-                    config?.DefaultMandateSignerId);
+                MandateSignerCandidate? signer = null;
+                if (!enBorrador && instance.MandateSignerId is { } guardadoId)
+                {
+                    resolvedSignerId = guardadoId;
+                    signer = await _mandateDirectory
+                        .GetByIdAsync(guardadoId, incluirEliminados: true, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    var (prelacion, _) = await MandateSignerPrelacionLoader
+                        .ResolveAsync(
+                            _mandateDirectory, _vaultPolicy, officeId, data.TenantIdParaFirmas,
+                            MandateSignerSelectionResolver.ResolveNitMandante(instance), config,
+                            eleccionOt: null, guardado: null, ct)
+                        .ConfigureAwait(false);
+                    // Un nivel ambiguo no sugiere a nadie (el OT elige al aprobar); quien firma a mano
+                    // sigue saliendo en el PDF (P4).
+                    signer = prelacion.Signer ?? prelacion.FirmaFisicaPendiente;
+                    resolvedSignerId = signer?.Id;
+                }
 
                 if (resolvedSignerId is { } signerId)
                 {
-                    var signer = candidatos.FirstOrDefault(c => c.Id == signerId)
-                        ?? await _mandateDirectory.GetByIdAsync(signerId, ct).ConfigureAwait(false);
                     if (signer is not null)
                     {
                         // HU #11030 — la firma del mandatario no se pintaba nunca: el contrato salía con

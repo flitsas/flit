@@ -34,7 +34,7 @@ public sealed record MandatoApprovalDecision(MandatoApprovalOutcome Outcome, Gui
 /// esta comprobación (read-only) en Trámites. El mandato APLICA sii ya existe su adjunto <c>mandato</c>
 /// (generado en preparado cuando <c>ExigeMandato</c>): así no se exige firmante a trámites que no lo
 /// requieren aunque el OT tenga mandatarios. Los candidatos salen del <see cref="IMandateSignerDirectory"/>
-/// (tablas admin, sin RLS) y la regla es la pura <see cref="MandateSignerSelector"/>.
+/// (tablas admin, sin RLS) y la regla es la prelación pura <see cref="MandateSignerDefaultResolver"/> (ADR-0066).
 /// </summary>
 public sealed class MandatoApprovalHandler(
     IProcedureInstanceRepository repo,
@@ -51,7 +51,6 @@ public sealed class MandatoApprovalHandler(
         Guid? explicitSignerId,
         CancellationToken ct = default)
     {
-        _ = vaultPolicy;
         var instance = await repo.GetByIdWithFurGraphAsync(instanceId, clientTenantId, ct).ConfigureAwait(false);
         if (instance is null)
             return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
@@ -86,22 +85,16 @@ public sealed class MandatoApprovalHandler(
             return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
         }
 
-        var candidates = await directory
-            .GetCandidatesAsync(
-                transitOfficeId, instance.TenantId,
-                MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
-            .ConfigureAwait(false);
-        candidates = await MandateSignerSelectionResolver
-            .WithOtDefaultAsync(candidates, mandateConfig?.OtDefaultMandateSignerId, directory, ct)
+        // Prelación única (ADR-0066): OT para la compañía → propio → asociado → default del OT. La elección
+        // del OT manda si es válida; el cotejo por la cuenta que aprueba solo desempata un nivel ambiguo.
+        var (prelacion, _) = await MandateSignerPrelacionLoader
+            .ResolveAsync(
+                directory, vaultPolicy, transitOfficeId, instance.TenantId,
+                MandateSignerSelectionResolver.ResolveNitMandante(instance), mandateConfig,
+                explicitSignerId, instance.MandateSignerId, ct)
             .ConfigureAwait(false);
 
-        var elegido = MandateSignerDefaultResolver.Resolve(
-            candidates.Select(c => c.Id).ToList(),
-            explicitSignerId ?? instance.MandateSignerId,
-            mandateConfig?.OtDefaultMandateSignerId,
-            mandateConfig?.DefaultMandateSignerId);
-
-        var resolution = MandateSignerSelector.Resolve(candidates, approvingUserId, elegido);
+        var resolution = MandateSignerPrelacionLoader.Decidir(prelacion, approvingUserId);
 
         // El OT puede emitir el mandato en blanco (sin identidad, baúl ni firma a mano).
         // Quién firma sigue resolviéndose; cómo firma no bloquea la aceptación.
