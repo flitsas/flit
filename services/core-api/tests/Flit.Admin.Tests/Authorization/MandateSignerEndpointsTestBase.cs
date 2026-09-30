@@ -277,7 +277,7 @@ public abstract class MandateSignerEndpointsTestBase
         });
     }
 
-    public void Dispose()
+    public virtual void Dispose()
     {
         using var db = NewDb();
         var users = new[] { _otAdminUser, _superAdminUser, _companyAUser, _companyBUser, _headUser, _gestorUser };

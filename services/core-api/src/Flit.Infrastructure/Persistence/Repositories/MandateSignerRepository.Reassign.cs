@@ -3,12 +3,16 @@ using Flit.Admin.Domain.Companies.MandateSigners;
 namespace Flit.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// Punto de extensión de la reasignación de trámites al dar de baja (HU #13137): por ahora no toca trámites.
+/// HU #13137 (Feature #13115, ADR-0066 P8) — al dar de baja a un mandatario, los trámites radicados sin aprobar que
+/// apuntaban a él se reasignan con la prelación del OT (<see cref="IMandateSignerProcedureReassigner"/>) DENTRO de la
+/// misma transacción de la baja: si la reasignación falla, se revierte todo y el mandatario sigue activo.
 /// </summary>
 internal sealed partial class MandateSignerRepository
 {
-    private static Task<MandateSignerReassignmentResult> ReassignProceduresAsync(
+    private async Task<MandateSignerReassignmentResult> ReassignProceduresAsync(
         Guid mandateSignerId,
         CancellationToken cancellationToken) =>
-        Task.FromResult(MandateSignerReassignmentResult.None);
+        _reassigner is null
+            ? MandateSignerReassignmentResult.None
+            : await _reassigner.ReassignAsync(mandateSignerId, cancellationToken).ConfigureAwait(false);
 }

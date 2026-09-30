@@ -9,6 +9,11 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// <see cref="DbSignatureVaultReader"/>. En proveedor InMemory (tests) delega directo, sin
 /// transacción ni set_config. Extraído para no duplicar el bloque en los repos/readers del
 /// directorio de representantes legales (HU #10900).
+///
+/// <para>HU #13137 — si el contexto YA tiene una transacción abierta (p. ej. la baja de un mandatario, que
+/// reasigna trámites evaluando el mandatario con lectores tenant-scoped dentro de su propia transacción) no se abre
+/// otra —EF lanza «already in a transaction»—: se fija el tenant con <c>set_config(..., is_local := true)</c> durante
+/// la operación y se restaura el valor anterior al terminar.</para>
 /// </summary>
 internal static class TenantRlsScope
 {
@@ -21,6 +26,27 @@ internal static class TenantRlsScope
         if (!context.Database.IsRelational())
         {
             return await operation().ConfigureAwait(false);
+        }
+
+        if (context.Database.CurrentTransaction is not null)
+        {
+            var previous = await context.Database
+                .SqlQuery<string>($"SELECT COALESCE(current_setting('app.current_tenant_id', true), '') AS \"Value\"")
+                .SingleAsync(cancellationToken).ConfigureAwait(false);
+
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)",
+                cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await operation().ConfigureAwait(false);
+            }
+            finally
+            {
+                await context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT set_config('app.current_tenant_id', {previous}, true)",
+                    CancellationToken.None).ConfigureAwait(false);
+            }
         }
 
         var strategy = context.Database.CreateExecutionStrategy();
