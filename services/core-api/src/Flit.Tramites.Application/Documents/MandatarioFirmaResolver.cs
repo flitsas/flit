@@ -47,8 +47,8 @@ public static class MandatarioFirmaResolver
 
         try
         {
-            var match = await vaultPolicy
-                .ResolveMandatarioAsync(signer.VaultTenantId(tenantId), tipoDoc, signer.Documento.Trim(), cancellationToken)
+            // HU #13180b — la firma puede vivir en el baúl de la compañía del mandatario, no en el del trámite.
+            var match = await MandatarioBaulLookup.ResolveAsync(vaultPolicy, signer, tenantId, cancellationToken)
                 .ConfigureAwait(false);
 
             if (match is not null && !string.IsNullOrWhiteSpace(match.StoragePath))

@@ -48,7 +48,6 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         public DateOnly? ValidTo { get; init; }
         public bool IsActive { get; init; }
         public string Origen { get; init; } = string.Empty;
-        public Guid? OwnerTenantId { get; init; }
     }
 
     /// <summary>Identidad de un mandatario: su estado (ADR-0050), certificado y hasta cuándo vale.</summary>
@@ -131,7 +130,6 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                 SignatureMethod = s.SignatureMethod, ValidityKind = s.ValidityKind, ValidFrom = s.ValidFrom,
                 ValidTo = s.ValidTo, IsActive = s.IsActive,
                 Origen = MandateSignerOrigins.Asociado,
-                OwnerTenantId = c.CompanyTenantId,
             })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -144,6 +142,11 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         {
             return [];
         }
+
+        // HU #13180b — compañías vinculadas de cada mandatario: ahí puede vivir su firma del baúl (asociado de
+        // otra compañía, default del OT), que no siempre está en el tenant de la compañía del trámite.
+        var tenantsVinculados = await LoadLinkedTenantsAsync(
+            [.. signers.Select(s => s.Id).Distinct()], cancellationToken).ConfigureAwait(false);
 
         var identidades = await LoadIdentitiesAsync(
             transitOfficeId,
@@ -178,7 +181,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                     firmanAMano.Contains(s.Id),
                     firma?.Valida ?? true, firma?.Motivo,
                     s.Origen, s.SignerModel, MetodoEfectivo(s.SignerModel, s.SignatureMethod, s.SignatureVaultId),
-                    OwnerTenantId: s.OwnerTenantId);
+                    VaultTenantIds: tenantsVinculados.GetValueOrDefault(s.Id));
             }),
         ];
     }
@@ -239,7 +242,33 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             // El default del OT no viene de un vínculo con la compañía: su origen es el del organismo.
             Origen: MandateSignerOrigins.Organismo, SignerModel: signer.SignerModel,
             SignatureMethod: MetodoEfectivo(signer.SignerModel, signer.SignatureMethod, signer.SignatureVaultId),
-            Eliminado: signer.Eliminado);
+            Eliminado: signer.Eliminado,
+            // HU #13180b — el default del OT no está vinculado a la compañía del trámite: su baúl vive en sus propias compañías.
+            VaultTenantIds: (await LoadLinkedTenantsAsync([signer.Id], cancellationToken).ConfigureAwait(false))
+                .GetValueOrDefault(signer.Id));
+    }
+
+    /// <summary>
+    /// HU #13180b — tenants de las compañías con vínculo ACTIVO de cada mandatario (en cualquier organismo): mismo
+    /// criterio de compañías que usa <see cref="MandateSignerIdentityTenantResolver"/> para su identidad.
+    /// </summary>
+    private async Task<Dictionary<Guid, IReadOnlyList<Guid>>> LoadLinkedTenantsAsync(
+        List<Guid> signerIds, CancellationToken cancellationToken)
+    {
+        if (signerIds.Count == 0)
+        {
+            return [];
+        }
+
+        var links = await _context.MandateSignerCompanies.AsNoTracking()
+            .Where(c => signerIds.Contains(c.MandateSignerId) && c.IsActive)
+            .Select(c => new { c.MandateSignerId, c.CompanyTenantId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return links
+            .GroupBy(l => l.MandateSignerId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)[.. g.Select(l => l.CompanyTenantId).Distinct()]);
     }
 
     /// <summary>

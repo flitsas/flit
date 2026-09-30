@@ -17,7 +17,7 @@ namespace Flit.Admin.Tests.Companies.MandateSigners;
 /// de OTRAS compañías asociados (<c>mandate_signer_associated_companies</c>) a la compañía del trámite en el
 /// organismo, respetando asociación activa, baja lógica, mandatario activo y vínculo propio activo en el organismo.
 /// <para>Uso de ejemplo: el mandatario de A asociado a B sale de <c>GetCandidatesAsync(ot, B)</c> con
-/// <c>Origen = "asociado"</c> y <c>OwnerTenantId = A</c>.</para>
+/// <c>Origen = "asociado"</c> y <c>VaultTenantIds = [A]</c>.</para>
 /// </summary>
 public sealed class MandateSignerDirectoryAsociadosTests
 {
@@ -41,7 +41,7 @@ public sealed class MandateSignerDirectoryAsociadosTests
         var c = candidatos.Should().ContainSingle().Subject;
         c.Id.Should().Be(deA);
         c.Origen.Should().Be(MandateSignerOrigins.Asociado);
-        c.OwnerTenantId.Should().Be(A, "su baúl y su biometría viven en el tenant de su compañía");
+        c.VaultTenantIds.Should().Equal([A], "su baúl y su biometría viven en el tenant de su compañía");
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public sealed class MandateSignerDirectoryAsociadosTests
 
         candidatos.Should().HaveCount(2);
         candidatos.Single(x => x.Id == deB).Origen.Should().Be(MandateSignerOrigins.Compania);
-        candidatos.Single(x => x.Id == deB).OwnerTenantId.Should().BeNull();
+        candidatos.Single(x => x.Id == deB).VaultTenantIds.Should().Equal([B]);
         candidatos.Single(x => x.Id == deA).Origen.Should().Be(MandateSignerOrigins.Asociado);
     }
 
@@ -129,6 +129,40 @@ public sealed class MandateSignerDirectoryAsociadosTests
 
         candidatos.Select(c => c.Id).Should().BeEquivalentTo([deA, deC]);
         candidatos.Should().OnlyContain(c => c.Origen == MandateSignerOrigins.Asociado);
+    }
+
+    // ── HU #13180b — el baúl del default del OT y de cualquier candidato se busca en sus compañías vinculadas ──
+
+    [Fact]
+    public async Task Hu13180b_ElDefaultDelOt_TraeLosTenantsDeSusCompaniasVinculadas()
+    {
+        await using var ctx = NewContext();
+        var defaultOt = await SeedSignerAsync(ctx, "Default del OT", owner: A);
+        ctx.MandateSignerCompanies.Add(new MandateSignerCompany
+        {
+            Id = Guid.NewGuid(), MandateSignerId = defaultOt, TransitOfficeId = OtroOt, CompanyTenantId = C,
+            IsActive = true, ConfiguredByScope = "organismo", CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        var candidato = await Directorio(ctx).GetByIdAsync(defaultOt, Ct);
+
+        candidato!.VaultTenantIds.Should().BeEquivalentTo([A, C]);
+    }
+
+    [Fact]
+    public async Task Hu13180b_UnVinculoInactivo_NoCuentaComoCompaniaDelBaul()
+    {
+        await using var ctx = NewContext();
+        var id = await SeedSignerAsync(ctx, "Ana", owner: A);
+        ctx.MandateSignerCompanies.Add(new MandateSignerCompany
+        {
+            Id = Guid.NewGuid(), MandateSignerId = id, TransitOfficeId = Ot, CompanyTenantId = C,
+            IsActive = false, ConfiguredByScope = "organismo", CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        (await Directorio(ctx).GetByIdAsync(id, Ct))!.VaultTenantIds.Should().Equal([A]);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────

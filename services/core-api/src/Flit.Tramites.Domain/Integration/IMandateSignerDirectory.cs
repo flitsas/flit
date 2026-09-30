@@ -63,14 +63,19 @@ public sealed record MandateSignerCandidate(
     /// de un trámite ya firmado con <c>incluirEliminados</c>; la prelación lo descarta.</summary>
     bool Eliminado = false,
     /// <summary>
-    /// HU #13180 (Feature #13119) — compañía PROPIETARIA del mandatario cuando entra como <c>asociado</c> de otra
-    /// compañía (nivel 3): su firma del baúl y su validación biométrica viven en el tenant de ESA compañía, no en el
-    /// de la compañía del trámite. Nulo en los demás orígenes (se usa el tenant del trámite).
+    /// HU #13180b (Feature #13119) — tenants de las compañías a las que el mandatario está vinculado (vínculos
+    /// activos): ahí pueden vivir su firma del baúl y su validación biométrica, que NO siempre están en el tenant de
+    /// la compañía del trámite (un asociado de otra compañía, o el default del OT). Nulo o vacío ⇒ solo se busca en
+    /// el tenant del trámite. Ver <see cref="VaultTenants"/>.
     /// </summary>
-    Guid? OwnerTenantId = null)
+    IReadOnlyList<Guid>? VaultTenantIds = null)
 {
-    /// <summary>Tenant contra el que se resuelve su firma del baúl: el propietario si es asociado; si no, el del trámite.</summary>
-    public Guid VaultTenantId(Guid tenantDelTramite) => OwnerTenantId ?? tenantDelTramite;
+    /// <summary>
+    /// Tenants donde buscar su firma del baúl, en orden: primero el de la compañía del trámite (comportamiento
+    /// histórico) y luego los de sus compañías vinculadas. Sin repetidos.
+    /// </summary>
+    public IReadOnlyList<Guid> VaultTenants(Guid tenantDelTramite) =>
+        [tenantDelTramite, .. (VaultTenantIds ?? []).Where(t => t != tenantDelTramite && t != Guid.Empty).Distinct()];
 }
 
 /// <summary>Valores del origen y del modelo del mandatario que usa la prelación (ADR-0066, ADR-0061).</summary>

@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Documents;
+using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -108,9 +109,7 @@ public sealed class ListMandateSignerOptionsHandler(
             // Quien firma a mano no necesita el baúl: ni se consulta.
             var conBaul = !c.FirmaFisica
                 && !string.IsNullOrWhiteSpace(c.Documento)
-                && await _vaultPolicy
-                    .ResolveMandatarioAsync(c.VaultTenantId(tenantId), tipoDoc, c.Documento.Trim(), ct)
-                    .ConfigureAwait(false) is not null;
+                && await MandatarioBaulLookup.ResolveAsync(_vaultPolicy, c, tenantId, ct).ConfigureAwait(false) is not null;
 
             opciones.Add(new MandateSignerOptionDto(
                 c.Id, c.Nombre, tipoDoc, c.Documento, c.IdentityVigente, c.IdentityValidUntil, conBaul,

@@ -66,7 +66,7 @@ public sealed class MandatarioAsociadoPrelacionTests
         new(Guid.NewGuid(), nombre, DocumentoPii, null, true, SignatureVaultId: Guid.NewGuid(),
             FirmaValida: firmaValida, MotivoSinFirma: firmaValida ? null : MandateSignerDiscardReasons.FueraDeVigencia,
             Origen: MandateSignerOrigins.Asociado, SignerModel: modelo, SignatureMethod: metodo,
-            OwnerTenantId: TenantA);
+            VaultTenantIds: [TenantA]);
 
     private static MandateSignerCandidate Propio(string nombre = "Beto de B", bool firmaValida = true) =>
         new(Guid.NewGuid(), nombre, "555", null, true,
@@ -114,10 +114,10 @@ public sealed class MandatarioAsociadoPrelacionTests
     }
 
     [Fact]
-    public async Task Ac6_ElBaulDelAsociadoSeBuscaEnSuCompania_NoEnLaDelTramite()
+    public async Task Ac6_ElAsociadoSinFirmaEnElBaulDeSuCompaniaNiEnElDelTramite_EsBaulSinFirmaVigente()
     {
         var i = Seed();
-        VaultOnlyFor(TenantB); // solo B tiene firma: el asociado es de A, así que su baúl NO está en B
+        VaultOnlyFor(Guid.NewGuid()); // la firma está en un tercer tenant sin relación con A ni con B
         Candidates(Asociado());
 
         var dto = await Consultar(i);
@@ -209,8 +209,8 @@ public sealed class MandatarioAsociadoPrelacionTests
         MandateSignerLevelCodes.ToCode(MandateSignerLevel.DefaultDelOt).Should().Be("default_del_ot");
         MandateSignerLevelCodes.ToCode(MandateSignerLevel.Explicita).Should().Be("explicita");
         MandateSignerLevelCodes.ToCode(MandateSignerLevel.Ninguno).Should().Be("ninguno");
-        new MandateSignerCandidate(Guid.NewGuid(), "x", "1", null, OwnerTenantId: TenantA)
-            .VaultTenantId(TenantB).Should().Be(TenantA);
-        new MandateSignerCandidate(Guid.NewGuid(), "x", "1", null).VaultTenantId(TenantB).Should().Be(TenantB);
+        new MandateSignerCandidate(Guid.NewGuid(), "x", "1", null, VaultTenantIds: [TenantA])
+            .VaultTenants(TenantB).Should().Equal(TenantB, TenantA);
+        new MandateSignerCandidate(Guid.NewGuid(), "x", "1", null).VaultTenants(TenantB).Should().Equal(TenantB);
     }
 }
