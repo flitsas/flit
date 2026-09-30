@@ -142,6 +142,7 @@ public sealed class ProcedureSyncItemsTests(PostgresDatabaseFixture fixture) : P
             await HistorialAsync(await TramiteAsync(n), "entregado");
         }
 
+        await ProcedureSyncTestWait.EsperarFeedEstableAsync(Fixture);
         var repo = new ProcedureSyncReadRepository(NewContext());
         var cambios = await repo.ReadChangesAsync(new(null, null, 2, SinVentana), TestContext.Current.CancellationToken);
         var items = await LeerAsync(2);
@@ -151,9 +152,12 @@ public sealed class ProcedureSyncItemsTests(PostgresDatabaseFixture fixture) : P
 
     // ── Siembra y utilidades ────────────────────────────────────────────────
 
-    private async Task<IReadOnlyList<ProcedureSyncEntry>> LeerAsync(int pagina = 100) =>
-        await new ProcedureSyncReadRepository(NewContext())
+    private async Task<IReadOnlyList<ProcedureSyncEntry>> LeerAsync(int pagina = 100)
+    {
+        await ProcedureSyncTestWait.EsperarFeedEstableAsync(Fixture);
+        return await new ProcedureSyncReadRepository(NewContext())
             .ReadItemsAsync(new(null, null, pagina, SinVentana), TestContext.Current.CancellationToken);
+    }
 
     private async Task SembrarAsync()
     {

@@ -128,7 +128,8 @@ public sealed class ProcedureSyncReadRepositoryTests(PostgresDatabaseFixture fix
 
         // Con la larga abierta, el cambio corto (versión mayor, ya confirmado) todavía NO se entrega:
         // un cursor solo por versión lo habría entregado y habría dejado atrás al largo para siempre.
-        (await LeerAsync(ProcedureSyncPageRequest.FromCursor(cursor, 100, SinVentana))).Should().BeEmpty();
+        // Sin esperar a la estabilidad: la propia transacción larga la retiene.
+        (await LeerSinEsperarAsync(ProcedureSyncPageRequest.FromCursor(cursor, 100, SinVentana))).Should().BeEmpty();
 
         await txLarga.CommitAsync(TestContext.Current.CancellationToken);
 
@@ -166,7 +167,13 @@ public sealed class ProcedureSyncReadRepositoryTests(PostgresDatabaseFixture fix
 
     // ── Siembra y utilidades ────────────────────────────────────────────────
 
-    private Task<IReadOnlyList<ProcedureSyncChange>> LeerAsync(ProcedureSyncPageRequest request) =>
+    private async Task<IReadOnlyList<ProcedureSyncChange>> LeerAsync(ProcedureSyncPageRequest request)
+    {
+        await ProcedureSyncTestWait.EsperarFeedEstableAsync(Fixture);
+        return await LeerSinEsperarAsync(request);
+    }
+
+    private Task<IReadOnlyList<ProcedureSyncChange>> LeerSinEsperarAsync(ProcedureSyncPageRequest request) =>
         new ProcedureSyncReadRepository(NewContext()).ReadChangesAsync(request, TestContext.Current.CancellationToken);
 
     private async Task SembrarCompaniasAsync()
