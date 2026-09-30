@@ -4,6 +4,9 @@
 > Estado: **Acordado** (2026-09-29) · Épica ADO: [#12737](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/12737) · Sin implementar.
 > Todos los ejemplos usan datos ficticios. Este documento puede copiarse al repositorio del consumidor.
 >
+> **Aclaración (2026-09-30, HU #13077):** el endpoint de URL de adjunto entrega **solo facturas** (cualquier
+> otro adjunto responde 404) y suma `503 storage_unavailable` si el almacenamiento no responde (§3).
+>
 > **Cambios de v3 → v3.1** (2026-09-29): los trámites **migrados desde FLIT 1** a FLIT 2 no se entregan
 > nunca, ni como cambio ni como tombstone. Al consumidor ya le llegan por FLIT 1; entregarlos también por
 > aquí duplicaría el trámite con otro radicado.
@@ -99,7 +102,7 @@ Reglas:
 
 ### `GET /api/v1/external/tramites/{id}/adjuntos/{adjuntoId}/url`
 
-Devuelve una URL firmada de corta vida para descargar un adjunto del trámite (uso previsto: la factura).
+Devuelve una URL firmada de corta vida para descargar **la factura** del trámite (`adjuntoId` = `factura.adjuntoId` del ítem, o el de una factura anterior del mismo trámite). Solo se entregan adjuntos de tipo factura: los demás pueden llevar datos personales (documentos de identidad, poderes).
 
 ```json
 { "url": "https://.../firmada?...", "expiraEn": "2026-09-21T10:30:00-05:00", "nombreArchivo": "factura.pdf", "contentType": "application/pdf" }
@@ -107,7 +110,8 @@ Devuelve una URL firmada de corta vida para descargar un adjunto del trámite (u
 
 - Vigencia de la URL: **10 minutos** (mismo mecanismo y mismo tope que el resto de la plataforma; el ADR-0029 exige ≤ 15 min).
 - `expiraEn` es **informativo**: el TTL real lo firma el servicio de almacenamiento y puede no devolverlo. El consumidor debe tratar la URL como de un solo uso inmediato y volver a pedirla si falla, en vez de confiar en `expiraEn`.
-- `404 attachment_not_found` si el trámite o el adjunto no existen, el adjunto no pertenece al trámite, o el trámite está fuera de alcance (nunca radicado o migrado desde FLIT 1). Nunca 410.
+- `404 attachment_not_found` si el trámite o el adjunto no existen, el adjunto no pertenece al trámite, **no es una factura**, el trámite está fuera de alcance (nunca radicado, migrado desde FLIT 1 o eliminado) o el almacenamiento ya no tiene el archivo. Nunca 410.
+- `503 storage_unavailable` si el servicio de almacenamiento no responde: es transitorio, reintentar más tarde con la misma petición.
 - Exige `external.tramites.read`. Queda en la bitácora de acceso.
 
 ## 4. Ítem de trámite
