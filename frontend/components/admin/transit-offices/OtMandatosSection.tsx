@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Eye, Pencil } from "lucide-react";
+import { AlertTriangle, Eye, Pencil, RotateCcw, Trash2, UserX } from "lucide-react";
 import { CompanyMandatarioForm } from "@/components/admin/companies/mandate-signers/CompanyMandatarioForm";
 import { MandatoOtConfigForm, type MandatoOtConfigPanelMode } from "@/components/admin/plataforma/MandatoOtConfigForm";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
@@ -19,7 +19,11 @@ import {
 } from "@/lib/api/admin-plataforma-mandatos";
 import {
   createMandateSigner,
+  deleteMandateSigner,
+  fetchMandateSignerImpact,
   fetchMandateSigners,
+  inactivateMandateSigner,
+  reactivateMandateSigner,
   updateMandateSigner,
   type CompanyMandateSignerInput,
   type MandateSigner,
@@ -34,7 +38,14 @@ import {
 import { etiquetaModelo, modeloDe } from "@/lib/plataforma/mandatario-vigencia";
 import { MandatarioCandado } from "@/components/admin/companies/mandate-signers/MandatarioCandado";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { puedeEditarMandatario } from "@/lib/plataforma/mandatario-permisos";
+import { MandatarioBajaDialog } from "@/components/admin/companies/mandate-signers/MandatarioBajaDialog";
+import { puedeEditarMandatario, puedeEliminarMandatario } from "@/lib/plataforma/mandatario-permisos";
+import {
+  mensajeErrorAccion,
+  mensajeResultadoBaja,
+  mensajeResultadoReactivar,
+  type AccionBaja,
+} from "@/lib/plataforma/mandatario-baja";
 import { MandatarioVigenciaBadge } from "@/components/admin/companies/mandate-signers/MandatarioVigenciaBadge";
 
 
@@ -67,6 +78,9 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
   const [signerCompanyId, setSignerCompanyId] = useState<string | null>(null);
   // HU #13139 — edición del mandatario desde la lista (solo si el servidor lo permite por rol y origen).
   const [editingSigner, setEditingSigner] = useState<MandateSigner | null>(null);
+  // HU #13140 — confirmación previa de desactivar o eliminar; reactivar es directo.
+  const [baja, setBaja] = useState<{ signer: MandateSigner; accion: AccionBaja } | null>(null);
+  const [busySignerId, setBusySignerId] = useState<string | null>(null);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) {
@@ -247,6 +261,30 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     },
   ];
 
+  const reactivar = async (signer: MandateSigner) => {
+    setBusySignerId(signer.id);
+    try {
+      const result = await reactivateMandateSigner(transitOfficeId, signer.id);
+      show(mensajeResultadoReactivar(signer.fullName, result), "success");
+      await load({ silent: true });
+    } catch (err) {
+      show(mensajeErrorAccion(err), "error");
+    } finally {
+      setBusySignerId(null);
+    }
+  };
+
+  const ejecutarBaja = async (signer: MandateSigner, accion: AccionBaja, confirmarImpacto: boolean) => {
+    const outcome =
+      accion === "eliminar"
+        ? await deleteMandateSigner(transitOfficeId, signer.id, confirmarImpacto)
+        : await inactivateMandateSigner(transitOfficeId, signer.id);
+    show(mensajeResultadoBaja(signer.fullName, accion, outcome), "success");
+    await load({ silent: true });
+  };
+
+  const companyNameById = new Map(companies.map((c) => [c.companyTenantId, c.companyName]));
+
   const signerColumns: DataTableColumn<MandateSigner>[] = [
     {
       key: "name",
@@ -301,6 +339,35 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
                   label: `Editar mandatario ${row.fullName}`,
                   tone: "primary" as const,
                   onClick: () => setEditingSigner(row),
+                },
+              ]
+            : []),
+          ...(canRegisterSigner && puedeEditarMandatario(row)
+            ? [
+                row.isActive
+                  ? {
+                      icon: UserX,
+                      label: `Desactivar mandatario ${row.fullName}`,
+                      tone: "danger" as const,
+                      disabled: busySignerId === row.id,
+                      onClick: () => setBaja({ signer: row, accion: "desactivar" }),
+                    }
+                  : {
+                      icon: RotateCcw,
+                      label: `Reactivar mandatario ${row.fullName}`,
+                      disabled: busySignerId === row.id,
+                      onClick: () => void reactivar(row),
+                    },
+              ]
+            : []),
+          ...(canRegisterSigner && puedeEliminarMandatario(row)
+            ? [
+                {
+                  icon: Trash2,
+                  label: `Eliminar mandatario ${row.fullName}`,
+                  tone: "danger" as const,
+                  disabled: busySignerId === row.id,
+                  onClick: () => setBaja({ signer: row, accion: "eliminar" }),
                 },
               ]
             : []),
@@ -493,6 +560,18 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
             void load();
             return saved;
           }}
+        />
+      ) : null}
+
+      {baja ? (
+        <MandatarioBajaDialog
+          signer={baja.signer}
+          accion={baja.accion}
+          loadImpact={(signal) => fetchMandateSignerImpact(transitOfficeId, baja.signer.id, signal)}
+          onConfirm={(confirmar) => ejecutarBaja(baja.signer, baja.accion, confirmar)}
+          onClose={() => setBaja(null)}
+          officeLabel={(id) => (id === transitOfficeId ? office.name : "otro organismo")}
+          companyLabel={(id) => companyNameById.get(id) ?? "Otra compañía"}
         />
       ) : null}
 
