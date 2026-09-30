@@ -1599,6 +1599,58 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
     expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['m1', 'm2'], true, null, undefined);
   });
+
+  // Bug #13109 (punto 3) — la barra ofrece la acción que corresponde al estado de la selección,
+  // igual que el menú por fila: nada pausado → Pausar; todo pausado → Reanudar; mezcla → ninguna.
+  async function seleccionarTodas(placa: string) {
+    await screen.findByText(placa);
+    for (const check of screen.getAllByRole('checkbox')) await userEvent.click(check);
+    return screen.getByRole('region', { name: 'Acciones masivas de pausa' });
+  }
+
+  it('Bug #13109 — sin ninguna fila pausada la barra solo ofrece "Pausar"', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'n1', placa: 'NOP001', origin: 'ict', estado: 'borrador', isPaused: false },
+      { ...b, id: 'n2', placa: 'NOP002', origin: 'ict', estado: 'borrador', isPaused: false },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    const barra = await seleccionarTodas('NOP001');
+    expect(within(barra).getByRole('button', { name: 'Pausar' })).toBeInTheDocument();
+    expect(within(barra).queryByRole('button', { name: 'Reanudar' })).not.toBeInTheDocument();
+  });
+
+  it('Bug #13109 — con todas las filas pausadas la barra solo ofrece "Reanudar" y reanuda en lote', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'p1', placa: 'PAU001', origin: 'ict', estado: 'borrador', isPaused: true },
+      { ...b, id: 'p2', placa: 'PAU002', origin: 'ict', estado: 'borrador', isPaused: true },
+    ]);
+    mocks.pauseInstancesMassive.mockResolvedValue({ total: 2, processed: 2, detail: [] });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    const barra = await seleccionarTodas('PAU001');
+    expect(within(barra).queryByRole('button', { name: 'Pausar' })).not.toBeInTheDocument();
+    await userEvent.click(within(barra).getByRole('button', { name: 'Reanudar' }));
+    expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['p1', 'p2'], false, null, undefined);
+  });
+
+  it('Bug #13109 — con una mezcla de pausadas y no pausadas la barra no ofrece ninguna de las dos', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'x1', placa: 'MIX001', origin: 'ict', estado: 'borrador', isPaused: true },
+      { ...b, id: 'x2', placa: 'MIX002', origin: 'ict', estado: 'borrador', isPaused: false },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    const barra = await seleccionarTodas('MIX001');
+    expect(within(barra).getByText('2 seleccionados')).toBeInTheDocument();
+    expect(within(barra).queryByRole('button', { name: 'Pausar' })).not.toBeInTheDocument();
+    expect(within(barra).queryByRole('button', { name: 'Reanudar' })).not.toBeInTheDocument();
+    // «Limpiar» sigue disponible para salir de la selección.
+    expect(within(barra).getByRole('button', { name: 'Limpiar' })).toBeInTheDocument();
+  });
 });
 
 describe('TramitesTable — filtros y ordenamiento server-side', () => {
