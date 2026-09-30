@@ -381,6 +381,12 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
               email: input.email,
               companyTenantIds: [signerCompanyId],
               transitOfficeIds: [transitOfficeId],
+              // HU #13132 — modelo, forma de firma y vigencia (el baúl lo resuelve el servidor).
+              signerModel: input.signerModel,
+              signatureMethod: input.signatureMethod,
+              validityKind: input.validityKind,
+              validFrom: input.validFrom,
+              validTo: input.validTo,
             });
             setSignerCompanyId(null);
             setLastCreatedSignerId(saved.id);

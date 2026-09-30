@@ -176,6 +176,8 @@ describe("OtMandatosSection", () => {
   async function diligenciar(user: ReturnType<typeof userEvent.setup>) {
     await user.type(screen.getByLabelText("Nombre completo"), "Ana Mandataria");
     await user.type(screen.getByLabelText("Número de documento"), "52123456");
+    // HU #13132: la Persona natural exige forma de firma.
+    await user.click(screen.getByRole("radio", { name: "Validación de identidad" }));
   }
 
   it("AC1/AC2/AC3/AC6 ot_admin registra solo contra el endpoint del OT, sin baúl ni empresas representadas", async () => {
@@ -203,6 +205,9 @@ describe("OtMandatosSection", () => {
         documentNumber: "52123456",
         companyTenantIds: ["cia-1"],
         transitOfficeIds: ["ot-1"],
+        signerModel: "natural",
+        signatureMethod: "biometria",
+        validityKind: "fixed",
       }),
     );
     expect(await screen.findByText(/mandatario registrado/i)).toBeInTheDocument();

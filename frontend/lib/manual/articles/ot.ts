@@ -577,13 +577,14 @@ export const OT_ARTICLES: ManualArticle[] = [
         ],
         bullets: [
           "Desde «Empresas que radican», o desde el panel del mandatario general, pulsa «Registrar mandatario». Si eliges el general y hay varias empresas, indica cuál empresa registra a la persona.",
-          "Diligencia nombre completo, tipo y número de documento, y el correo si lo tienes. El organismo queda fijo: es el tuyo.",
+          "Elige el modelo: Persona natural (nombre completo, tipo y número de documento, correo opcional, forma de firma y vigencia), Persona jurídica (nombre y NIT de la entidad) o Formato en blanco (sin datos: el sistema solo entrega el PDF sin firma). El organismo queda fijo: es el tuyo.",
+          "En Persona natural elige la forma de firma: Baúl de firmas (se usa la firma vigente que la persona tenga en el baúl de la empresa) o Validación de identidad. Luego la vigencia: Fija, o Rango de fechas con inicio y fin (el fin no puede ser anterior al inicio).",
           "Pulsa «Guardar». Verás el aviso «Mandatario registrado» y la persona queda lista para elegirla como general o como default de la empresa.",
         ],
         callouts: [
           {
             variant: "info",
-            text: "Desde el organismo no se ve el baúl de firmas de la empresa. Para poder firmar, la persona debe tener su firma en el baúl o una validación biométrica hecha en el módulo Identidad; si no, el sistema te lo indica al guardar.",
+            text: "Desde el organismo no se ve el baúl de firmas de la empresa, por eso no hay selector de firma. Si eliges Baúl de firmas y la persona no tiene firma vigente allí, o si eliges Validación de identidad, el sistema te lo indica al guardar; el mensaje aparece junto al campo y conservas lo escrito.",
           },
           {
             variant: "info",

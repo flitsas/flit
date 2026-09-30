@@ -5,6 +5,15 @@ import { apiFetch, API_BASE_URL, getToken, friendlyErrorMessage } from "./client
 import { companyScopedPath } from "./company-scoped-path";
 import { ApiError } from "./types";
 
+/** HU #13132 (ADR-0061) — modelo del mandatario. */
+export type SignerModel = "natural" | "juridica" | "formato_blanco";
+/** Forma de firma de la Persona natural. */
+export type SignatureMethod = "baul" | "biometria";
+/** Vigencia propia: fija o por rango de fechas. */
+export type ValidityKind = "fixed" | "range";
+/** Estado de vigencia calculado en el servidor. */
+export type ValidityStatus = "inactivo" | "vencido" | "no_vigente" | "por_vencer" | "vigente";
+
 /** Un mandatario asignado a una compañía (ADR-0036: multiplicidad ⇒ una compañía puede tener varios). */
 export interface AssignedSigner {
   mandateSignerId: string;
@@ -19,7 +28,8 @@ export interface MandateSigner {
   fullName: string;
   /** Tipo de documento (ADR-0036). Por defecto "CC". */
   documentType: string;
-  documentNumber: string;
+  /** `null` en Formato en blanco (HU #13129). */
+  documentNumber: string | null;
   integrityHash: string;
   /** Correo para la validación de identidad (ADR-0036, HU #10911). PII. `null` si no se capturó. */
   email: string | null;
@@ -51,6 +61,27 @@ export interface MandateSigner {
   physicalSignatureOfficeIds?: string[];
   /** Empresas representadas por organismo; vacío para un organismo ⇒ aplica a todas allí. */
   officeCompanies?: MandateSignerOfficeCompanies[];
+  /** HU #13129 — ausente en respuestas anteriores al cambio ⇒ Persona natural. */
+  signerModel?: SignerModel;
+  /** Forma de firma; `null` fuera de natural y en mandatarios anteriores al cambio. */
+  signatureMethod?: SignatureMethod | null;
+  validityKind?: ValidityKind;
+  /** `yyyy-MM-dd`; solo con vigencia por rango. */
+  validFrom?: string | null;
+  validTo?: string | null;
+  validityStatus?: ValidityStatus;
+}
+
+/** Campos de modelo, forma de firma y vigencia que viajan en el alta y la edición (HU #13132). */
+export interface MandateSignerProfileFields {
+  /** Ausente ⇒ el servidor asume `natural`. */
+  signerModel?: SignerModel;
+  /** Obligatoria en `natural`; con otros modelos no debe enviarse (422). */
+  signatureMethod?: SignatureMethod;
+  validityKind?: ValidityKind;
+  /** `yyyy-MM-dd`; obligatoria con `range`. */
+  validFrom?: string;
+  validTo?: string;
 }
 
 /**
@@ -65,10 +96,11 @@ export interface OtCompany {
   assignedSigners: AssignedSigner[];
 }
 
-export interface MandateSignerInput {
+export interface MandateSignerInput extends MandateSignerProfileFields {
   fullName: string;
   documentType: string;
-  documentNumber: string;
+  /** `null` en Formato en blanco: el servidor deja el documento nulo. */
+  documentNumber: string | null;
   /** Correo para la validación de identidad; `null` si no se captura. */
   email: string | null;
   /** Cuenta de usuario de OT a vincular (§D9); `null` si no se asigna. */
@@ -207,16 +239,18 @@ export interface CompanyTransitOfficeOption {
 }
 
 /** Datos que la compañía captura de un mandatario. */
-export interface CompanyMandateSignerInput {
+export interface CompanyMandateSignerInput extends MandateSignerProfileFields {
   fullName: string;
   documentType: string;
-  documentNumber: string;
+  /** `null` en Formato en blanco. */
+  documentNumber: string | null;
   email: string | null;
   /** Organismos donde aplica. Al editar, REEMPLAZA a los anteriores: quitar uno lo retira. */
   transitOfficeIds: string[];
   /**
    * Subconjunto de los anteriores donde el mandatario firma A MANO: el contrato deja la línea con sus
    * datos debajo y no estampa firma del baúl ni sello de identidad.
+   * @deprecated HU #13132: el formulario ya no lo ofrece (la firma física se retira, HU #13131).
    */
   physicalSignatureOfficeIds?: string[];
   /**

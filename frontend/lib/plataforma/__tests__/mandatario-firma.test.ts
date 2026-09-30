@@ -25,9 +25,12 @@ describe("mandatario-firma (HU #11716/#11717)", () => {
   });
 
   it("la identidad en camino basta", () => {
-    // Un mandatario nuevo nunca tiene identidad vigente todavía; se le envía al registrarlo.
     expect(organismosSinMedioDeFirma([FUNZA], [], { identityStatus: "pending" })).toEqual([]);
-    expect(organismosSinMedioDeFirma([FUNZA], [], { email: "x@y.com" })).toEqual([]);
+  });
+
+  it("HU #13132: el correo ya no cuenta como medio de firma", () => {
+    expect(puedeFirmarElectronicamente({ email: "x@y.com" })).toBe(false);
+    expect(organismosSinMedioDeFirma([FUNZA], [], { email: "x@y.com" })).toEqual([FUNZA]);
   });
 
   it("una identidad vencida no alcanza", () => {

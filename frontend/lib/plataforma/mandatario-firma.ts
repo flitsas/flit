@@ -13,7 +13,7 @@ export type MandatarioIdentityStatus = "valid" | "expired" | "pending" | "none";
 export interface MedioDeFirma {
   /** Firma del baúl elegida para el mandatario. */
   signatureVaultId?: string | null;
-  /** Correo al que se envía la validación de identidad al registrarlo. */
+  /** Correo de contacto (ya no es medio de firma, HU #13132). */
   email?: string | null;
   identityStatus?: MandatarioIdentityStatus | null;
 }
@@ -28,13 +28,11 @@ const IDENTIDAD_RESUELTA_O_EN_CURSO: readonly string[] = ["valid", "pending"];
  * Si el mandatario puede firmar electrónicamente: con firma del baúl, o con una validación de
  * identidad vigente o en camino.
  *
- * <p>El correo cuenta porque un mandatario nuevo todavía no tiene identidad vigente —se le envía al
- * registrarlo—, y exigir `valid` haría imposible dar de alta a nadie que no tuviera ya firma en el
- * baúl.</p>
+ * <p>HU #13132 (HU #13122 en el backend): el correo YA NO cuenta como medio de firma. Es solo un dato
+ * de contacto; la biometría la origina y vigila el módulo Identidad.</p>
  */
 export function puedeFirmarElectronicamente(medio: MedioDeFirma): boolean {
   if (medio.signatureVaultId) return true;
-  if (medio.email && medio.email.trim() !== "") return true;
   return IDENTIDAD_RESUELTA_O_EN_CURSO.includes(medio.identityStatus ?? "none");
 }
 

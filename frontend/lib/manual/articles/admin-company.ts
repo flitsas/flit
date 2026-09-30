@@ -134,14 +134,15 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
           "El mandatario recibe el poder del mandante (vendedor o radicador) y gestiona ante el organismo por cuenta de tu compañía. Para aparecer como opción en un trámite debe estar activo, habilitado en el organismo del trámite y aplicar a la empresa que otorga el mandato.",
         ],
         bullets: [
-          "Registrar / Editar mandatario: nombre, documento, correo (queda como dato de contacto; no dispara ningún envío) y firma del baúl opcional. Al editar ves el mismo bloque de identidad de solo consulta que en representantes legales: si necesita una validación de identidad, se gestiona desde el módulo Identidad, no desde este formulario.",
-          "Organismos donde aplica: solo se ofrecen los habilitados para tu compañía. Dentro de cada organismo puedes acotar las empresas para las que firma y marcar «firma de forma física» (el contrato deja la línea para firmar a mano).",
+          "Registrar / Editar mandatario: primero eliges el modelo. Persona natural: nombre, documento, correo (solo dato de contacto; no dispara ningún envío), forma de firma (Baúl de firmas o Validación de identidad) y vigencia (Fija o Rango de fechas con inicio y fin). Con Baúl de firmas aparece el selector de la firma del baúl. Persona jurídica: nombre y NIT de la entidad, sin firma personal. Formato en blanco: no se piden datos; el sistema solo entrega el PDF sin firma.",
+          "Al editar ves el mismo bloque de identidad de solo consulta que en representantes legales (solo en Persona natural): si necesita una validación de identidad, se gestiona desde el módulo Identidad, no desde este formulario. Los mandatarios anteriores aparecen como Persona natural y conservan su firma del baúl.",
+          "Organismos donde aplica: solo se ofrecen los habilitados para tu compañía. Dentro de cada organismo puedes acotar las empresas para las que firma. La firma de forma física ya no se ofrece.",
           "Regla que conviene saber: si dentro de un organismo no marcas ninguna empresa, el mandatario firma para TODAS las empresas de ese organismo; al marcar una, queda restringido a esas.",
         ],
         callouts: [
           {
             variant: "warning",
-            text: "Si la persona queda sin ninguna forma de firmar en alguno de los organismos marcados, el formulario te avisa: captúrale la firma del baúl, consíguele una validación de identidad vigente desde el módulo Identidad, o marca ese organismo como de firma física.",
+            text: "Si falta la forma de firma, eliges Baúl de firmas sin escoger una firma, o el rango no tiene fechas o el fin es anterior al inicio, el error aparece junto al campo y no se guarda hasta corregirlo. Si cambias una Persona natural a Persona jurídica o Formato en blanco, el formulario te avisa que se descartan la forma de firma y la vigencia.",
           },
         ],
       },
