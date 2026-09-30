@@ -129,7 +129,8 @@ public sealed class RuntGarantiasMobiliariasBug13203Tests
             JsonSerializer.Deserialize<KyverumRuntVehicleResponse>(KyverumJson(garantiasPrendas: "[{}]"), WebJsonOptions)!);
 
         Check(result).Status.Should().Be("ok");
-        result.HydratedFields.Should().NotContain(f => f.FieldKey == "runt_gravamenes");
+        // Revisión PR #504 (B1): la clave va siempre, vacía, para pisar la consulta anterior.
+        result.HydratedFields.Single(f => f.FieldKey == "runt_gravamenes").ValueJson.Should().Be("[]");
     }
 
     // ── Caso B: Verifik, tieneGravamenes SI + 1 garantía cruda ───────────────────────────────────
@@ -173,7 +174,8 @@ public sealed class RuntGarantiasMobiliariasBug13203Tests
             JsonSerializer.Deserialize<VerifikVehicleResponse>(VerifikJson(tieneGravamenes: null, prendas: null, garantias: "[]"), WebJsonOptions)!);
 
         Check(result).Status.Should().Be("unknown");
-        result.HydratedFields.Should().NotContain(f => f.FieldKey == "runt_gravamenes");
+        // Revisión PR #504 (B1): la clave va siempre, vacía, para pisar la consulta anterior.
+        result.HydratedFields.Single(f => f.FieldKey == "runt_gravamenes").ValueJson.Should().Be("[]");
     }
 
     [Fact]

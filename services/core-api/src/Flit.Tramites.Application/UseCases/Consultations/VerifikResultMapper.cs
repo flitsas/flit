@@ -242,11 +242,11 @@ public static class VerifikResultMapper
             fields.Add(new HydratedField("vehicle_registration_date", info.FechaMatricula, null));
 
         // Señal RUNT de prenda/gravamen para el paso Prenda (desplegable junto a la alerta).
-        AddSiHay(fields, "runt_tiene_gravamenes", info.TieneGravamenes);
-        AddSiHay(fields, "runt_tiene_prendas", info.Prendas);
         // Bug #13203 — antes se guardaba el crudo (entidad, numeroDocumentoEntidad…) y el asistente no
-        // reconocía al acreedor; ahora sale el contrato normalizado + runt_nombre_acreedor, igual que Kyverum.
-        RuntGarantiasMobiliarias.AddHydratedFields(fields, garantias);
+        // reconocía al acreedor; ahora sale el contrato normalizado + runt_nombre_acreedor, igual que
+        // Kyverum. Las cuatro claves van SIEMPRE (vacías si no hay dato): con AddSiHay una bandera «SI»
+        // o un detalle de una consulta anterior sobrevivía a la re-consulta.
+        RuntGarantiasMobiliarias.AddSignalFields(fields, info.TieneGravamenes, info.Prendas, garantias);
 
         // SOAT: tomar el vigente; si no, el primero disponible.
         var soat = data?.Soat?.FirstOrDefault(s =>

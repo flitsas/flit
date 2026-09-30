@@ -10,7 +10,7 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 ///
 /// <para>Hay gravamen si alguna bandera es afirmativa (<c>runt_tiene_prendas</c> /
 /// <c>runt_tiene_gravamenes</c>) O si el detalle <c>runt_gravamenes</c> es un array JSON con al menos
-/// un elemento. Lo segundo cubre el caso real del bug: el RUNT contesta «NO»/«NO» y aun así trae una
+/// un elemento con datos. Lo segundo cubre el caso real del bug: el RUNT contesta «NO»/«NO» y aun así trae una
 /// garantía mobiliaria registrada en el RNGM. Un dato ausente, vacío o ilegible NO inventa gravamen —
 /// eso convertiría cada consulta fallida en un bloqueo—, pero tampoco se oculta cuando sí vino.</para>
 /// </summary>
@@ -24,7 +24,21 @@ public static class RuntGravamenSignal
     public static bool EsAfirmativo(string? valor) =>
         valor?.Trim().ToUpperInvariant() is "SI" or "SÍ" or "S" or "TRUE" or "1";
 
-    /// <summary>Elementos del array JSON de garantías; 0 si es null, vacío, no es array o no parsea.</summary>
+    // Mismos campos con los que el normalizador de consultas decide que un ítem tiene datos
+    // (RuntGarantiasMobiliarias.Normalize): nombre, documento, idPrenda o fecha, en cualquiera de sus alias.
+    private static readonly string[] CamposConDato =
+    [
+        "acreedor", "nombreAcreedor", "entidad",
+        "numeroDocumentoAcreedor", "numeroDocumentoEntidad",
+        "idPrenda",
+        "fechaInscripcion", "fechaRegistro",
+    ];
+
+    /// <summary>
+    /// Garantías con datos en el array JSON: cuenta los objetos que traen nombre, documento, idPrenda o
+    /// fecha con valor (revisión PR #504, O3), igual que el normalizador. null, escalares, <c>{}</c> y
+    /// objetos sin esos valores no cuentan. 0 si el JSON es null, vacío, no es array o no parsea.
+    /// </summary>
     public static int ContarGarantias(string? detalleJson)
     {
         if (string.IsNullOrWhiteSpace(detalleJson))
@@ -33,13 +47,27 @@ public static class RuntGravamenSignal
         try
         {
             using var doc = JsonDocument.Parse(detalleJson);
-            return doc.RootElement.ValueKind == JsonValueKind.Array ? doc.RootElement.GetArrayLength() : 0;
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return 0;
+
+            return doc.RootElement.EnumerateArray().Count(TieneDato);
         }
         catch (JsonException)
         {
             return 0;
         }
     }
+
+    private static bool TieneDato(JsonElement item) =>
+        item.ValueKind == JsonValueKind.Object
+        && item.EnumerateObject().Any(p =>
+            CamposConDato.Contains(p.Name, StringComparer.OrdinalIgnoreCase)
+            && p.Value.ValueKind switch
+            {
+                JsonValueKind.String => !string.IsNullOrWhiteSpace(p.Value.GetString()),
+                JsonValueKind.Number => true,
+                _ => false,
+            });
 
     public static bool Reporta(string? prendas, string? gravamenes, string? detalleJson) =>
         EsAfirmativo(prendas) || EsAfirmativo(gravamenes) || ContarGarantias(detalleJson) > 0;

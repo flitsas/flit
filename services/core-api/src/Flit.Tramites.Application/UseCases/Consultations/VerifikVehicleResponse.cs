@@ -32,6 +32,7 @@ public sealed class VerifikVehicleData
     // acreedor (entidad, numeroDocumentoEntidad…) y como segunda señal de gravamen: el RUNT puede
     // traer una garantía del RNGM con las banderas de informacionGeneral en «NO».
     [JsonPropertyName("garantiasMobiliarias")]
+    [JsonConverter(typeof(RuntGarantiaListConverter))]
     public List<RuntGarantiaMobiliaria>? GarantiasMobiliarias { get; set; }
 
     /// <summary>
