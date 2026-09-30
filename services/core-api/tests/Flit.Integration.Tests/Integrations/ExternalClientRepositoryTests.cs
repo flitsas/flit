@@ -18,7 +18,7 @@ namespace Flit.Integration.Tests.Integrations;
 public sealed class ExternalClientRepositoryTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
     // Secreto de prueba generado para esta prueba; no es una credencial real.
-    private const string Secreto = "it13084-secreto-de-prueba-9f2c7a";
+    private const string Secreto = "it13084-secreto-de-prueba-9f2c7a"; // gitleaks:allow — valor de prueba
     private static readonly Argon2PasswordHasher Hasher = new();
 
     private static NewExternalClient Nuevo(string clientId, string? hash = null) => new(

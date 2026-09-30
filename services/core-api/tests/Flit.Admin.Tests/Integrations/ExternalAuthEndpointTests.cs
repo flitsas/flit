@@ -33,7 +33,7 @@ public sealed class ExternalAuthEndpointTests : IClassFixture<ExternalAuthEndpoi
 {
     private const string TokenUrl = "/api/v1/external/auth/token";
     private const string PlatformUrl = "/api/v1/admin/rejection-reasons";
-    private const string Secreto = "secreto-de-prueba-0123456789";
+    private const string Secreto = "secreto-de-prueba-0123456789"; // gitleaks:allow — valor de prueba
 
     private readonly Factory _factory;
 
@@ -118,7 +118,7 @@ public sealed class ExternalAuthEndpointTests : IClassFixture<ExternalAuthEndpoi
     [Fact]
     public async Task AC4_TrasRotar_ElSecretoAnteriorSigueValiendoEnLaVentana()
     {
-        var clientId = _factory.Alta(secret: "secreto-nuevo-0123456789", previousSecret: Secreto,
+        var clientId = _factory.Alta(secret: "secreto-nuevo-0123456789", previousSecret: Secreto, // gitleaks:allow — valor de prueba
             rotatedAt: DateTimeOffset.UtcNow.AddHours(-1));
 
         (await PedirPase(clientId, Secreto)).StatusCode.Should().Be(HttpStatusCode.OK);
