@@ -1,3 +1,4 @@
+using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
 
 namespace Flit.Ict.Application.Register;
@@ -135,17 +136,14 @@ public static class IctPayloadNormalizer
     }
 
     /// <summary>Clave de deduplicación intra-lote por tipo de trámite (v1 findDuplicatesInBatch, extendida a 5-16).</summary>
+    /// <remarks>
+    /// Delega en <see cref="PreTramiteClave.Texto"/>: el duplicado contra lo ya guardado (Bug #13109, punto 7)
+    /// usa la misma clave, así las dos barreras no pueden divergir.
+    /// </remarks>
     public static string DedupKey(RegisterRowInput row)
     {
         ArgumentNullException.ThrowIfNull(row);
-        var plate = row.Plate?.Trim().ToUpperInvariant() ?? string.Empty;
-        var vin = row.Vin?.Trim().ToUpperInvariant() ?? string.Empty;
-        return row.TransactionType switch
-        {
-            1 or 2 => $"vin:{vin}",
-            3 or 4 => $"plate:{plate}",
-            _ => $"plate+type:{plate}:{row.TransactionType}",
-        };
+        return PreTramiteClave.Texto(row.TransactionType, row.Plate, row.Vin);
     }
 
     private static void AddActors(
