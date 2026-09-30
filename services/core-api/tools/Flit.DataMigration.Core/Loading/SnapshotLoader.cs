@@ -70,8 +70,12 @@ public sealed class SnapshotLoader(
     V1SnapshotClient snapshotClient,
     FileManagerClient target,
     Guid systemUserId,
-    string batchId)
+    string batchId,
+    AttachmentCopier? consolidadoCopier = null)
 {
+    /// <summary>Columna de V1 donde vive el consolidado guardado; la misma que copia la instancia 2.</summary>
+    private const string ConsolidadoColumn = "id_attachment_pdf_prepared";
+
     /// <summary>
     /// Origen que queda en <c>procedure_instance_attachments.source</c>. Se distingue de
     /// <c>migration</c> (adjuntos copiados tal cual) porque estas piezas no existían como archivo:
@@ -195,6 +199,13 @@ public sealed class SnapshotLoader(
         var failed = 0;
         var duplicated = 0;
 
+        // Columnas que ya copió la instancia 2. Se leen SIEMPRE, también con --force: --force
+        // reprocesa el snapshot, no lo que trajo la instancia 2, y el consolidado que se rescata aquí
+        // escribe la misma fila que ella escribiría.
+        var columnasCopiadas = force
+            ? (HashSet<string>)await attachmentMap.MigratedColumnsAsync(record.SourceTable, record.Id, cancellationToken)
+            : already;
+
         // sha256 de cada pieza, para que el sembrado de identidades pueda anclar su evidencia a la
         // carta selfie. Se llena tanto con lo que se materializa ahora como con lo que ya estaba: al
         // re-correr la instancia, la carta sigue siendo la evidencia aunque no se vuelva a subir.
@@ -209,6 +220,19 @@ public sealed class SnapshotLoader(
                 "SELECT set_config('app.current_tenant_id', {0}, true)",
                 [targetRef.TenantId.ToString()],
                 cancellationToken);
+
+            var rescate = await RescatarConsolidadoAsync(
+                record, targetRef, snapshot, consolidatedOverride, columnasCopiadas, yaCopiados, dryRun,
+                cancellationToken);
+            if (rescate.Aviso is not null)
+            {
+                warnings.Add(rescate.Aviso);
+            }
+
+            if (rescate.Fallo)
+            {
+                failed++;
+            }
 
             foreach (var piece in snapshot.Pieces)
             {
@@ -315,6 +339,87 @@ public sealed class SnapshotLoader(
             Issues = issues,
             Warnings = warnings,
         };
+    }
+
+    /// <summary>Resultado del rescate del consolidado guardado: un aviso para el reporte y si falló.</summary>
+    private readonly record struct RescateConsolidado(string? Aviso, bool Fallo)
+    {
+        public static readonly RescateConsolidado Nada = new(null, false);
+    }
+
+    /// <summary>
+    /// HU #13163 — trae el consolidado que V1 tiene GUARDADO cuando la instancia 2 no lo copió.
+    /// <para>
+    /// Las dos instancias miran fuentes distintas: la 2 lee <c>id_attachment_pdf_prepared</c> de la
+    /// COPIA de la base de V1, y este snapshot se le pide al V1 EN VIVO. Si la copia se tomó antes de
+    /// que V1 guardara el consolidado, la 2 lo ve vacío y no copia nada, y V1 en vivo —con
+    /// <c>consolidated=auto</c>— tampoco lo arma porque ya tiene uno. El expediente se queda sin
+    /// consolidado por las dos vías. Pasó en PDN el 2026-09-29 con los traspasos 35525 y 35526.
+    /// </para>
+    /// <para>
+    /// El snapshot trae el id de ese archivo (<c>persistedConsolidated.preparedFileId</c>), así que se
+    /// copia el ORIGINAL del file-manager de V1, con sus fechas y firmas. No se pide
+    /// <c>consolidated=always</c>: eso traería uno regenerado con la fecha de hoy.
+    /// </para>
+    /// </summary>
+    private async Task<RescateConsolidado> RescatarConsolidadoAsync(
+        V1SourceRecord record,
+        TramiteTarget targetRef,
+        V1Snapshot snapshot,
+        string? consolidatedOverride,
+        HashSet<string> columnasCopiadas,
+        IReadOnlySet<string> yaCopiados,
+        bool dryRun,
+        CancellationToken cancellationToken)
+    {
+        var preparedFileId = snapshot.PersistedConsolidated?.PreparedFileId;
+        if (string.IsNullOrWhiteSpace(preparedFileId)
+            // Borrador: se pidió `never` a propósito, su consolidado se regenera en V2.
+            || consolidatedOverride is not null
+            || columnasCopiadas.Contains(ConsolidadoColumn)
+            || yaCopiados.Contains(preparedFileId)
+            || kind.AttachmentMap.Resolve(ConsolidadoColumn, out var tipo) != V1AttachmentMap.Resolution.Mapped)
+        {
+            return RescateConsolidado.Nada;
+        }
+
+        if (consolidadoCopier is null)
+        {
+            return new RescateConsolidado(
+                $"V1 tiene el consolidado guardado ({preparedFileId}) pero la copia de la base no lo "
+                + "tenía, así que no está en V2. No se pudo traer: falta configurar el file-manager de "
+                + "origen (SourceFileManager).",
+                true);
+        }
+
+        try
+        {
+            var copia = await consolidadoCopier.CopyAsync(
+                record, targetRef, ConsolidadoColumn, tipo, preparedFileId, dryRun, cancellationToken);
+
+            if (copia is null)
+            {
+                return new RescateConsolidado(
+                    $"{ConsolidadoColumn}: V1 dice tener el consolidado guardado ({preparedFileId}), pero su "
+                    + "file-manager no conoce ese id.",
+                    true);
+            }
+
+            var aviso = $"{ConsolidadoColumn}: consolidado guardado en V1 {(dryRun ? "se traería" : "traído")} "
+                + $"({preparedFileId}) — la copia de la base de V1 no lo tenía.";
+            return new RescateConsolidado(
+                copia.Value.Warning is null ? aviso : $"{aviso} {copia.Value.Warning}",
+                false);
+        }
+#pragma warning disable CA1031 // Como cualquier pieza: un fallo se reporta y el resto sigue.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            return new RescateConsolidado(
+                $"{ConsolidadoColumn}: no se pudo traer el consolidado guardado en V1 ({preparedFileId}): "
+                + Describe(ex),
+                true);
+        }
     }
 
     /// <summary>
