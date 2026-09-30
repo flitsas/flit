@@ -75,12 +75,13 @@ Usuarios de las semillas (`DevelopmentAuthSeeder.cs`): `demo@flit.local` (SuperA
 |---|---|---|
 | 1 | Abrir `127.0.0.1:4040` sin sesión | Portada breve con «Iniciar sesión» |
 | 2 | Iniciar sesión en el hub con un usuario de un solo producto | Entra directo a Trámites |
-| 3 | Menú ▦ → Inicio (o `127.0.0.1:4040/?inicio=1`) | Inicio del hub con sus productos y accesos de administración |
+| 3 | Menú ▦ → Inicio (o `127.0.0.1:4040/?inicio=1`) | Inicio del hub con sus productos y accesos de administración, sin volver a hacer clic en «Iniciar sesión» (entra en silencio con la sesión del hub) |
 | 4 | Abrir `127.0.0.1:3000` en otra pestaña, sin haber iniciado sesión en ningún lado | Va al login del hub y, al entrar, vuelve a Trámites |
 | 5 | Con sesión en el hub, abrir `127.0.0.1:3000` | Entra sin pedir contraseña (inicio de sesión único) |
 | 6 | Apagar Trámites para la empresa (SuperAdmin, configuración de la compañía) y abrir `127.0.0.1:3000` | «Tu empresa no tiene Trámites» con «Ir a mis productos» |
 | 7 | AdminCompany en Trámites | Ve «Administración» y «Usuarios» como con el login de siempre |
-| 8 | Cerrar sesión en Trámites | También se cierra en el hub: abrir el hub pide login otra vez |
+| 8 | Cerrar sesión en Trámites (o en el hub) | Se cierra en toda la suite al instante: el hub vuelve a la portada y Trámites pide login en su siguiente página |
+| 9 | Iniciar sesión en el hub con el SuperAdmin (tiene todos los productos) | Inicio del hub con una tarjeta por producto; la de Trámites entra sin pedir contraseña |
 
 ## Problemas conocidos
 
