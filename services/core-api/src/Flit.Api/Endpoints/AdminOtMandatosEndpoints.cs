@@ -169,7 +169,7 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var status = await service
-            .DeleteCompanyRuleAsync(officeId, companyTenantId, OtCompanyVisibilityPolicy.For(user), rowVersion, ct)
+            .DeleteCompanyRuleAsync(officeId, companyTenantId, OtCompanyVisibilityPolicy.For(user), rowVersion, ct: ct)
             .ConfigureAwait(false);
         return status switch
         {

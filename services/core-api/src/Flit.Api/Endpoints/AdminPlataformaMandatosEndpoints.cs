@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Plataforma.Mandatos;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Admin.Application.Auditing;
 using Flit.Api.Authorization;
+using Flit.Api.Endpoints.Auditing;
 using Flit.Infrastructure.Documents;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
@@ -431,13 +433,31 @@ public static class AdminPlataformaMandatosEndpoints
         Guid officeId,
         Guid companyTenantId,
         [FromBody] UpsertCompanyOtMandateRuleRequest request,
+        HttpContext http,
         ClaimsPrincipal user,
         [FromServices] IMandateConfigAdminService service,
         CancellationToken ct)
     {
+        var change = new MandateRuleTypeChange();
         var (status, view) = await service
-            .UpsertCompanyRuleAsync(officeId, companyTenantId, request, ResolveUserId(user), ct)
+            .UpsertCompanyRuleAsync(officeId, companyTenantId, request, ResolveUserId(user), change, ct)
             .ConfigureAwait(false);
+
+        // HU #13149 — bitácora del cambio de tipo (éxito con cambio real) o del intento fallido (con su código).
+        if (status == MandateConfigWriteStatus.Ok)
+        {
+            await MandateRuleTypeAudit
+                .WriteSuccessAsync(http, AuditVocabulary.Operations.Update, officeId, companyTenantId, change)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await MandateRuleTypeAudit
+                .WriteFailureAsync(
+                    http, AuditVocabulary.Operations.Update, officeId, companyTenantId,
+                    CompanyRuleErrorCode(status), request.AssignmentMode)
+                .ConfigureAwait(false);
+        }
 
         return status switch
         {
@@ -458,6 +478,18 @@ public static class AdminPlataformaMandatosEndpoints
             _ => Results.BadRequest(),
         };
     }
+
+    /// <summary>Código de error estable de la bitácora (el mismo que el cuerpo de la respuesta, sin datos sensibles).</summary>
+    private static string CompanyRuleErrorCode(MandateConfigWriteStatus status) => status switch
+    {
+        MandateConfigWriteStatus.OfficeNotFound or MandateConfigWriteStatus.CompanyNotFound => "not_found",
+        MandateConfigWriteStatus.InvalidAssignmentMode => "assignment_mode_invalido",
+        MandateConfigWriteStatus.InvalidFamily => "mandatary_family_invalida",
+        MandateConfigWriteStatus.InstitutionalRequired => "mandatario_institucional_requerido",
+        MandateConfigWriteStatus.InvalidDefaultSigner => "mandatario_default_invalido",
+        MandateConfigWriteStatus.Conflict => "row_version_conflict",
+        _ => "bad_request",
+    };
 
     private static async Task<IResult> SetCompanyDefaultSignerAsync(
         Guid officeId,
@@ -489,11 +521,30 @@ public static class AdminPlataformaMandatosEndpoints
         Guid officeId,
         Guid companyTenantId,
         [FromQuery] long? rowVersion,
+        HttpContext http,
         [FromServices] IMandateConfigAdminService service,
         CancellationToken ct)
     {
+        var change = new MandateRuleTypeChange();
         var status = await service.DeleteCompanyRuleAsync(
-            officeId, companyTenantId, OtCompanyVisibility.WholeNetwork, rowVersion, ct).ConfigureAwait(false);
+            officeId, companyTenantId, OtCompanyVisibility.WholeNetwork, rowVersion, change, ct).ConfigureAwait(false);
+
+        // HU #13149 — restablecer al default queda en la bitácora con el tipo anterior.
+        if (status == MandateConfigWriteStatus.Ok)
+        {
+            await MandateRuleTypeAudit
+                .WriteSuccessAsync(http, AuditVocabulary.Operations.Delete, officeId, companyTenantId, change)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await MandateRuleTypeAudit
+                .WriteFailureAsync(
+                    http, AuditVocabulary.Operations.Delete, officeId, companyTenantId,
+                    CompanyRuleErrorCode(status), attemptedMode: null)
+                .ConfigureAwait(false);
+        }
+
         return status switch
         {
             MandateConfigWriteStatus.Ok => Results.NoContent(),

@@ -506,6 +506,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         Guid companyTenantId,
         UpsertCompanyOtMandateRuleRequest request,
         Guid? userId,
+        MandateRuleTypeChange? change = null,
         CancellationToken ct = default)
     {
         if (_catalog.GetById(officeId) is null)
@@ -567,6 +568,16 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         if (entity is null ? request.RowVersion is not null : request.RowVersion != entity.RowVersion)
             return (MandateConfigWriteStatus.Conflict, null);
 
+        // HU #13149 — tipo vigente ANTES de escribir (propio, o el heredado del OT si aún no hay regla).
+        if (change is not null)
+        {
+            change.HadExplicitRule = entity is not null;
+            change.PreviousMode = entity is not null
+                ? MandatoAssignmentModeCodes.Resolve(entity.AssignmentMode)
+                : await ResolveInheritedModeAsync(officeId, ct).ConfigureAwait(false);
+            change.NewMode = mode;
+        }
+
         if (entity is null)
         {
             entity = new CompanyOtMandateRuleEntity
@@ -610,6 +621,9 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             // Dos altas simultáneas de la primera regla: la segunda pierde la carrera (uq_company_ot_mandate_rules).
             return (MandateConfigWriteStatus.Conflict, null);
         }
+
+        if (change is not null)
+            change.Applied = true;
 
         // El trigger incrementa row_version en BD; hay que refrescar o el cliente reenvía un token viejo: 409.
         await _db.Entry(entity).ReloadAsync(ct).ConfigureAwait(false);
@@ -868,6 +882,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         Guid companyTenantId,
         OtCompanyVisibility visibility,
         long? expectedRowVersion = null,
+        MandateRuleTypeChange? change = null,
         CancellationToken ct = default)
     {
         if (_catalog.GetById(officeId) is null)
@@ -893,6 +908,13 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         if (expectedRowVersion is { } expected && entity.RowVersion != expected)
             return MandateConfigWriteStatus.Conflict;
 
+        if (change is not null)
+        {
+            change.HadExplicitRule = true;
+            change.PreviousMode = MandatoAssignmentModeCodes.Resolve(entity.AssignmentMode);
+            change.NewMode = await ResolveInheritedModeAsync(officeId, ct).ConfigureAwait(false);
+        }
+
         _db.CompanyOtMandateRules.Remove(entity);
         try
         {
@@ -902,6 +924,9 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         {
             return MandateConfigWriteStatus.Conflict;
         }
+
+        if (change is not null)
+            change.Applied = true;
 
         return MandateConfigWriteStatus.Ok;
     }
@@ -1208,6 +1233,18 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             snapshot?.DocumentNumber,
             snapshot?.IntegrityHash,
             hasExplicitRule ? rowVersion : null);
+
+    /// <summary>Tipo que hereda una compañía sin regla propia: el del OT (o el de nacimiento si no hay fila).</summary>
+    private async Task<string> ResolveInheritedModeAsync(Guid officeId, CancellationToken ct)
+    {
+        var otCfg = await _db.TransitOfficeMandateConfigs.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.TransitOfficeId == officeId, ct)
+            .ConfigureAwait(false);
+        return MandatoAssignmentModeCodes.ResolveEffective(
+            companyRuleMode: null,
+            otConfigMode: otCfg?.AssignmentMode,
+            otConfigExists: otCfg is not null);
+    }
 
     /// <summary>Violación de unicidad (SQLSTATE 23505) de Npgsql, sin referenciar el proveedor.</summary>
     private static bool IsUniqueViolation(Exception ex)

@@ -127,6 +127,31 @@ public sealed record UpsertCompanyOtMandateRuleRequest(
     Guid? DefaultMandateSignerId = null,
     long? RowVersion = null);
 
+/// <summary>
+/// HU #13149 — recogida ATÓMICA del tipo de mandato antes y después de escribir la regla compañía×OT, para la
+/// bitácora. El servicio la llena con el estado que leyó al escribir (no con una lectura previa aparte), así que
+/// el «tipo anterior» es el que de verdad se reemplazó. Solo guarda tipos (<c>signer</c> | <c>institutional</c> |
+/// <c>open</c>): ningún dato de personas ni de la entidad.
+/// </summary>
+public sealed class MandateRuleTypeChange
+{
+    /// <summary>Tipo vigente antes de escribir (el propio de la regla o el heredado del OT si no había regla).</summary>
+    public string? PreviousMode { get; set; }
+
+    /// <summary>Tipo vigente después de escribir (el enviado, o el heredado del OT tras restablecer).</summary>
+    public string? NewMode { get; set; }
+
+    /// <summary>La compañía ya tenía regla propia antes de la escritura.</summary>
+    public bool HadExplicitRule { get; set; }
+
+    /// <summary>La escritura se confirmó en base de datos.</summary>
+    public bool Applied { get; set; }
+
+    /// <summary>Hubo cambio real de tipo (no cuenta repetir el tipo vigente).</summary>
+    public bool TypeChanged =>
+        Applied && !string.Equals(PreviousMode, NewMode, StringComparison.Ordinal);
+}
+
 public interface IMandateConfigAdminService
 {
     /// <summary>
@@ -194,6 +219,7 @@ public interface IMandateConfigAdminService
         Guid companyTenantId,
         UpsertCompanyOtMandateRuleRequest request,
         Guid? userId,
+        MandateRuleTypeChange? change = null,
         CancellationToken ct = default);
 
     /// <summary>
@@ -221,5 +247,6 @@ public interface IMandateConfigAdminService
         Guid companyTenantId,
         OtCompanyVisibility visibility,
         long? expectedRowVersion = null,
+        MandateRuleTypeChange? change = null,
         CancellationToken ct = default);
 }
