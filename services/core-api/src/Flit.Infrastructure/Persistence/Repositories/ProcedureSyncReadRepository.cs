@@ -28,7 +28,11 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class ProcedureSyncReadRepository(FlitDbContext context) : IProcedureSyncReadRepository
 {
-    public const int MaxPageSize = 1000;
+    /// <summary>
+    /// Tope del contrato (1000) más una fila: el endpoint pide una de más para saber si hay otra página
+    /// (<c>hasMore</c>) sin una segunda consulta.
+    /// </summary>
+    public const int MaxPageSize = 1001;
 
     private const string Select = """
         SELECT pi.id,
