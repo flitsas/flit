@@ -57,7 +57,7 @@ public sealed class SpProcessorValidationBusinessSqlTests
     public void Hu12518_Ac1_PlacaEnAnuladoOAprobado_NoCuentaComoTramiteActivo()
     {
         var plateBlock = PlateDuplicityBlock();
-        plateBlock.Should().Contain("NOT IN ('anulado', 'rechazado', 'aprobado')");
+        EstadosEnProcesoDelSp().Should().NotContain(["anulado", "aprobado"]);
         plateBlock.Should().Contain(PlateNovedad);
     }
 
@@ -66,9 +66,63 @@ public sealed class SpProcessorValidationBusinessSqlTests
     {
         var plateBlock = PlateDuplicityBlock();
         plateBlock.Should().Contain(PlateNovedad);
-        plateBlock.Should().Contain("NOT IN ('anulado', 'rechazado', 'aprobado')");
+        EstadosEnProcesoDelSp().Should().Contain(["borrador", "preparado", "entregado"]);
         Sql.Should().Contain("process_status_id = 4");
         Sql.Should().Contain("con_novedades");
+    }
+
+    /// <summary>
+    /// Bug #13109 punto 2: el SP replica <c>TramiteEstado.EstaEnProceso</c> de core-api (CF-01), que es la
+    /// regla con la que core-api bloquea el wizard. Los casos son los de esa función.
+    /// </summary>
+    [Theory]
+    [InlineData("borrador", false, true)]
+    [InlineData("preparado", false, true)]
+    [InlineData("preasignacion", false, true)]
+    [InlineData("asignado", false, true)]
+    [InlineData("entregado", false, true)]
+    [InlineData("subsanacion", false, true)]
+    [InlineData("rechazado", true, true)]
+    [InlineData("rechazado", false, false)]
+    [InlineData("aprobado", false, false)]
+    [InlineData("anulado", false, false)]
+    [InlineData("revocado", false, false)]
+    public void Bug13109_P2_PlacaDeTraspaso_BloqueaSoloSiElTramiteEstaEnProceso(
+        string estado, bool subsanacionActiva, bool bloquea)
+    {
+        var enProceso = EstadosEnProcesoDelSp();
+        var rechazadoConSubsanacion = PlateDuplicityBlock()
+            .Contains("(lower(pi.status) = 'rechazado' AND pi.subsanacion_activa = true)", StringComparison.Ordinal);
+
+        var bloqueaSegunSp = enProceso.Contains(estado)
+            || (estado == "rechazado" && subsanacionActiva && rechazadoConSubsanacion);
+
+        bloqueaSegunSp.Should().Be(bloquea);
+    }
+
+    [Fact]
+    public void Bug13109_P2_ElEstadoSeComparaSinDistinguirMayusculas()
+    {
+        PlateDuplicityBlock().Should().Contain("lower(pi.status) IN (");
+    }
+
+    /// <summary>Lista literal de estados «en proceso» del bloque de placa (<c>lower(pi.status) IN (...)</c>).</summary>
+    private static List<string> EstadosEnProcesoDelSp()
+    {
+        var block = PlateDuplicityBlock();
+        const string marker = "lower(pi.status) IN (";
+        var start = block.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return [];
+        }
+
+        start += marker.Length;
+        var end = block.IndexOf(')', start);
+        return block[start..end]
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim('\''))
+            .ToList();
     }
 
     [Fact]

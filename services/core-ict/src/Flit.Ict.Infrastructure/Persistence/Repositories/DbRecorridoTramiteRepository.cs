@@ -58,7 +58,15 @@ public sealed class DbRecorridoTramiteRepository(IctDbContext db) : IRecorridoTr
                              NULLIF(m.external_comments_validation, ''),
                              NULLIF(m.business_comments_validation, '')) AS mensaje_novedad,
                     m.procedure_instance_id, m.traffic_secretary_code, m.runt_transit_office_name,
-                    now() AS ahora
+                    now() AS ahora,
+                    -- Bug #13109: el SP de negocio dejó la nota de documentos pendientes y el master sigue sin
+                    -- cierre ni waiver. La calculadora solo la muestra si las fuentes aún no corrieron.
+                    (m.closed_document = false AND m.process_without_attached_documents = false
+                     AND EXISTS (
+                        SELECT 1 FROM ict.pretramite_events e
+                        WHERE e.master_id = m.id
+                          AND e.stage = 'en_validacion_negocio'
+                          AND e.outcome = @outcomeDocs)) AS esperando_documentos
                 FROM ict.external_integration_master m
                 LEFT JOIN ict.external_integration_procedure_type pt ON pt.id = m.transaction_type
                 LEFT JOIN ict.external_integration_operation_type ot ON ot.id = m.transaction_operation
@@ -94,6 +102,7 @@ public sealed class DbRecorridoTramiteRepository(IctDbContext db) : IRecorridoTr
                 """;
             AddParam(cmd, "numero", numero);
             AddParam(cmd, "tenant", (object?)tenantId ?? DBNull.Value);
+            AddParam(cmd, "outcomeDocs", NotasRecorrido.OutcomeDocumentosPendientes);
 
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct))
@@ -117,7 +126,8 @@ public sealed class DbRecorridoTramiteRepository(IctDbContext db) : IRecorridoTr
                 MensajeNovedad: mensajeNovedad,
                 // La hora la pone el motor y no el proceso: así los deltas y las marcas se miden con el
                 // mismo reloj aunque la aplicación y la base estén en máquinas distintas.
-                Ahora: reader.GetDateTime(19));
+                Ahora: reader.GetDateTime(19),
+                EsperandoDocumentos: reader.GetBoolean(20));
 
             var (hitos, tiempos) = CalculadoraDeRecorrido.Construir(marcas);
 

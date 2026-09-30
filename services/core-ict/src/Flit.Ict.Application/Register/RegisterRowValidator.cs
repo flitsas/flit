@@ -82,11 +82,19 @@ public sealed class RegisterRowValidator : AbstractValidator<RegisterRowInput>
             .When(r => !string.IsNullOrEmpty(r.Vin))
             .WithMessage("vin debe tener entre 11 y 18 caracteres");
 
-        // plate + plate_assignment_type (constraint combinada de v1 IsPlateValidConstraint).
+        // Traspaso (3, 4) — Bug #13109 punto 6: el vehículo ya tiene placa, así que plate_assignment_type no
+        // participa (se ignora y se persiste en 0) y la placa se valida siempre como placa completa.
+        RuleFor(r => r.Plate).Must(p => p is not null && p.Length is >= 6 and <= 15)
+            .When(r => IsTraspaso(r.TransactionType))
+            .WithMessage("plate debe tener entre 6 y 15 caracteres en traspaso");
+
+        // plate + plate_assignment_type (constraint combinada de v1 IsPlateValidConstraint), fuera de traspaso.
         RuleFor(r => r.Plate).Must((row, _) => IsPlateValid(row))
+            .When(r => !IsTraspaso(r.TransactionType))
             .WithMessage("plate no es válido para el plate_assignment_type indicado "
                 + "(tipo 2: vacío o un dígito 0-9; tipo 3/4 o sin tipo: 6 a 15 caracteres)");
         RuleFor(r => r.PlateAssignmentType).Must(v => v is null or 2 or 3 or 4)
+            .When(r => !IsTraspaso(r.TransactionType))
             .WithMessage("plate_assignment_type debe ser 2, 3 o 4");
         RuleFor(r => r.PlateAssignmentType).NotNull()
             .When(r => r.TransactionType is 1 or 2 && (r.Plate?.Length ?? 0) < 6)
@@ -177,6 +185,9 @@ public sealed class RegisterRowValidator : AbstractValidator<RegisterRowInput>
 
         return false;
     }
+
+    /// <summary>Traspaso bilateral (3) o unilateral (4): el vehículo ya existe y tiene placa.</summary>
+    internal static bool IsTraspaso(int transactionType) => transactionType is 3 or 4;
 
     internal static bool IsNit(string? documentType) =>
         string.Equals(documentType?.Trim(), Nit, StringComparison.OrdinalIgnoreCase);
