@@ -28,6 +28,16 @@ public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareR
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(authorizeResult);
 
+        // HU #13081 — rutas externas (esquema ExternalClient): el pase es válido pero no trae el permiso.
+        // Mismo formato que el resto de errores externos (problem+json con code), contrato v3.1 §3.
+        if (authorizeResult.Forbidden && !context.Response.HasStarted
+            && policy.AuthenticationSchemes.Contains(ExternalClientAuthorization.Scheme))
+        {
+            await ExternalProblem.WriteAsync(context, StatusCodes.Status403Forbidden, "insufficient_scope",
+                "El pase no tiene el permiso que exige este recurso.", context.RequestAborted).ConfigureAwait(false);
+            return;
+        }
+
         if (authorizeResult.Forbidden && !context.Response.HasStarted)
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
