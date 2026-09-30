@@ -53,6 +53,17 @@ public sealed class ExternalValidationJob(
     IIctJobSettingsProvider settings,
     ILogger<ExternalValidationJob> logger) : IctPollingJob(scopeFactory, options, settings, logger)
 {
+    /// <summary>
+    /// ¿Queda algún pre-trámite listo para identificar fuentes? Corta al primer match. Bug #13109: excluye los
+    /// que esperan documentos (mismo corte que el SP externo); si no, el bucle de lotes seguiría girando
+    /// hasta MaxBatchesPerCycle por filas que el SP nunca toma.
+    /// </summary>
+    internal const string PendingExternalSql =
+        "SELECT EXISTS(SELECT 1 FROM ict.external_integration_master " +
+        "WHERE external_validation = 0 AND process_status_id = 2 AND business_validation = 2 " +
+        "AND deleted_at IS NULL " +
+        "AND (closed_document = true OR process_without_attached_documents = true))";
+
     protected override TimeSpan PollInterval => TimeSpan.FromSeconds(JobSettings.ExternalPollSeconds);
 
     protected override string JobName => "external-validation";
@@ -72,10 +83,7 @@ public sealed class ExternalValidationJob(
 
                 await using var remaining = connection.CreateCommand();
                 // Solo importa si QUEDA algo pendiente (no cuántos): EXISTS corta al primer match.
-                remaining.CommandText =
-                    "SELECT EXISTS(SELECT 1 FROM ict.external_integration_master " +
-                    "WHERE external_validation = 0 AND process_status_id = 2 AND business_validation = 2 " +
-                    "AND deleted_at IS NULL)";
+                remaining.CommandText = PendingExternalSql;
                 if (!(bool)(await remaining.ExecuteScalarAsync(ct))!)
                 {
                     break; // backlog drenado
