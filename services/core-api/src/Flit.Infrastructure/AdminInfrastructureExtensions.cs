@@ -338,9 +338,10 @@ public static class AdminInfrastructureExtensions
         // la única fuente que puede originar una validación). Se fueron IAdminIdentityValidationService/
         // Provider/Repository/SubjectLinker/PersonIdentityLookup y sus implementaciones
         // (AdminIdentityValidationRepository, AdminIdentitySubjectLinker, PersonIdentityLookup,
-        // KyverumAdminIdentityValidationProvider). La tabla admin.admin_identity_validations y su
-        // lectura de vigencia (AdminIdentityVigencia, vía EF directo) NO se tocan: siguen alimentando el
-        // estado de identidad que muestra la consola.
+        // KyverumAdminIdentityValidationProvider). La tabla admin.admin_identity_validations queda sin
+        // lectores de identidad: el estado que muestra la consola (ficha de mandatarios y representantes)
+        // sale del módulo Identidad (IdentityVigenciaPorDocumentoResolver, HU #11765), en el tenant de la
+        // compañía que registró a la persona (HU #13121).
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();

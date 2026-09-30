@@ -1276,7 +1276,8 @@ public sealed class GenerarFurHandler(
             .ConfigureAwait(false);
         // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
 
-        // HU-L8 — elección del trámite → default OT (aunque no esté en la compañía) → default compañía.
+        // HU-L8 — elección del trámite → default cliente×OT de la compañía (si está entre sus candidatos) →
+        // default general del OT (aunque no esté en la compañía) → vacío.
         // Sin esos, Mandatario queda null (cuerpo ___ / recuadro Sin firmar). Ya no se espera a aprobar
         // para pintar nombre y cédula cuando hay default.
         var assignmentMode = config?.AssignmentMode;

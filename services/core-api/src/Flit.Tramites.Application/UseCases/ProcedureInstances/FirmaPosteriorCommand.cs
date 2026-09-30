@@ -157,9 +157,10 @@ public sealed class MarcarFirmaPosteriorHandler(
     ///
     /// <para>Hay dos formas distintas de firmante. Las partes del trámite (comprador/vendedor) firman por
     /// su representante legal cuando son personas jurídicas. El <b>mandatario</b> no es un actor del
-    /// trámite sino el firmante del mandato elegido para él, y su identidad vive en las validaciones de
-    /// Admin —no en las biométricas del trámite—, así que su vigencia se devuelve aparte
-    /// (<c>IdentidadAdmin</c>) en vez de buscarla donde no está.</para>
+    /// trámite sino el firmante del mandato elegido para él: su identidad NO es la de las partes del
+    /// trámite sino la validación biométrica de la persona en el módulo Identidad (tenant de la compañía
+    /// que lo registró, HU #13121), así que su vigencia se devuelve aparte (<c>IdentidadAdmin</c>) en vez
+    /// de buscarla entre las validaciones del propio trámite.</para>
     /// </summary>
     private async Task<(ProcedureInstanceActor? Actor, IdentitySubject? Subject, bool IdentidadAdmin, string? Error)>
         ResolverSujetoAsync(ProcedureInstance instance, string parte, string? documento, CancellationToken ct)

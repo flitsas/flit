@@ -44,8 +44,10 @@ public sealed class TransitOfficeMandateConfigEntity
     public string AssignmentMode { get; set; } = "open";
 
     /// <summary>
-    /// HU-L8 — mandatario persona por defecto de este OT. Gana al default de la compañía aunque no
-    /// esté vinculado a esa gestora. Nulo al nacer el OT.
+    /// HU-L8 — mandatario persona por defecto GENERAL de este OT. Hoy pesa MENOS que el default
+    /// cliente×OT de la compañía (si este está entre sus candidatos) y solo entra cuando el trámite no trae
+    /// elección ni default de la compañía válido; en ese caso aplica aunque no esté vinculado a la gestora.
+    /// Nulo al nacer el OT. La prelación la reescribe la Feature F4 del Epic #13090.
     /// </summary>
     public Guid? DefaultMandateSignerId { get; set; }
 

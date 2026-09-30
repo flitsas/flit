@@ -507,6 +507,9 @@ public static class AdminPlataformaMandatosEndpoints
                 Results.BadRequest(new { error = "plantilla_pdf_invalida" }),
             MandateConfigWriteStatus.InvalidEditorBody =>
                 Results.BadRequest(new { error = "editor_cuerpo_invalido" }),
+            // HU #13126 — mismo código que la ruta del OT (MapCompanyWrite): el default no es válido.
+            MandateConfigWriteStatus.InvalidDefaultSigner =>
+                Results.BadRequest(new { error = "mandatario_default_invalido" }),
             _ => Results.BadRequest(),
         };
 
