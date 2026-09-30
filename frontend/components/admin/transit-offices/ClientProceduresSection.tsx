@@ -34,7 +34,11 @@ import type {
   RejectionReason,
 } from "@/lib/api/types-ot";
 import { fetchRejectionReasons } from "@/lib/api/ot-metrics";
-import { fetchMandateSigners, type MandateSigner } from "@/lib/api/admin-mandate-signers";
+import {
+  candidatosDeRespuesta,
+  formaFirmaLabel,
+  type MandatarioCandidato,
+} from "@/lib/plataforma/mandatario-candidatos";
 import { ApiError } from "@/lib/api/types";
 import { getToken } from "@/lib/api/client";
 import { COPY } from "@/lib/copy/copy-catalog";
@@ -82,7 +86,6 @@ import {
 import { BusquedaRapidaAcordeon } from "@/components/operacion/BusquedaRapidaAcordeon";
 import { AvisoHayCambios } from "@/components/operacion/AvisoHayCambios";
 import { useSondeoDeConteos } from "@/hooks/useSondeoDeConteos";
-import { formatDocumentWithType } from "@/lib/display/document-number";
 import { ColumnSelector } from "@/components/atom/ColumnSelector";
 import { useUiPreferences } from "@/hooks/useUiPreferences";
 import {
@@ -501,7 +504,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // ADR-0036 §D9 (HU #10916) — cuando la aprobación devuelve 409 mandatario_requerido, se elige el
   // mandatario que firma el mandato y se reintenta la aprobación con él.
   const [mandatarioTarget, setMandatarioTarget] = useState<OtClientProcedure | null>(null);
-  const [mandatarioOptions, setMandatarioOptions] = useState<MandateSigner[]>([]);
+  const [mandatarioOptions, setMandatarioOptions] = useState<MandatarioCandidato[]>([]);
   const [mandatarioChoice, setMandatarioChoice] = useState("");
   // Feature #10587 — asignar placa (preasignado) / revocar preasignación.
   // HU #12852 (Feature #12846) — el modal ya no ofrece modo en-rango/fuera-de-rango: un único
@@ -1068,9 +1071,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     setPage(1);
   };
 
-  // OT sobre el que se listan los mandatarios (SuperAdmin: prop de la ruta; ot_admin: su perfil).
-  const otIdForSigners = transitOfficeId ?? profile?.transitOfficeId ?? null;
-
   /**
    * Aprueba el trámite (opcionalmente con el mandatario elegido) y, si se adjuntó, sube la LT.
    * ADR-0036 §D9 (HU #10916): un 409 `mandatario_requerido` abre el diálogo de selección de mandatario
@@ -1140,22 +1140,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         return;
       }
 
-      // ADR-0036 §D9 — hay varios mandatarios y ninguno cotejó: pedir que el OT elija uno.
-      const needsMandatario = errorCode === "mandatario_requerido";
-      const otId = target.transitOfficeId ?? otIdForSigners;
-      if (needsMandatario && otId) {
-        try {
-          const signers = await fetchMandateSigners(otId);
-          const options = signers.filter(
-            (s) => s.isActive && s.companyTenantIds.includes(target.clientTenantId),
-          );
-          setMandatarioOptions(options);
-          setMandatarioChoice(options[0]?.id ?? "");
+      // ADR-0036 §D9 / HU #13147 (ADR-0066) — el OT debe elegir al firmante: el diálogo lista
+      // EXACTAMENTE los candidatos válidos que devuelve el backend en el 409 (sin consultar la lista
+      // del organismo ni filtrar en el cliente, que ignoraba la vigencia y el scope del Super Admin).
+      // Un 409 sin `candidatos` no abre un diálogo vacío: cae al mensaje de error de aprobación.
+      if (errorCode === "mandatario_requerido") {
+        const candidatos = candidatosDeRespuesta((err as ApiError).body);
+        if (candidatos) {
+          setMandatarioOptions(candidatos);
+          setMandatarioChoice(candidatos[0]?.id ?? "");
           setApproveTarget(null);
           setMandatarioTarget(target);
           return;
-        } catch {
-          // cae al mensaje genérico
         }
       }
       show("No se pudo aprobar el trámite.", "error");
@@ -1892,17 +1888,22 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl border">
             <h2 className="text-lg font-semibold text-foreground">Elige el mandatario que firma</h2>
-            <p className="mt-2 text-sm opacity-80">
-              Este trámite requiere contrato de mandato y la compañía tiene varios mandatarios. Elige quién
-              firma para aprobar.
-            </p>
+            {mandatarioOptions.length > 0 && (
+              <p className="mt-2 text-sm opacity-80">
+                Este trámite requiere contrato de mandato y hay varios mandatarios válidos. Elige quién firma
+                para aprobar.
+              </p>
+            )}
             <p className="mt-1 text-xs opacity-60">{mandatarioTarget.referenceNumber}</p>
 
             {mandatarioOptions.length === 0 ? (
-              <p className="mt-4 rounded-xl border p-3 text-center text-xs opacity-70">
-                No hay mandatarios activos para esta compañía en el organismo. Ahora los registra la
-                propia compañía, desde la pestaña «Mandatarios» de su configuración, marcando en qué
-                organismos aplican.
+              <p
+                role="alert"
+                data-testid="mandatario-sin-candidatos"
+                className="mt-4 rounded-xl border p-3 text-center text-xs opacity-70"
+              >
+                No hay mandatarios válidos para aprobar este trámite. Registra uno en «Mandatos y
+                mandatarios» del organismo (lo hace el Admin OT) y vuelve a aprobar.
               </p>
             ) : (
               <fieldset className="mt-4 space-y-2" data-testid="mandatario-options">
@@ -1921,9 +1922,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                       className="h-4 w-4 accent-[#557EFF]"
                     />
                     <span className="flex-1">
-                      <span className="font-semibold">{s.fullName}</span>
-                      <span className="ml-2 font-mono text-xs opacity-60">
-                        {formatDocumentWithType(s.documentType, s.documentNumber)}
+                      <span className="font-semibold">{s.nombre}</span>
+                      <span className="ml-2 text-xs opacity-60">
+                        {formaFirmaLabel(s.formaFirma)}
                       </span>
                     </span>
                   </label>

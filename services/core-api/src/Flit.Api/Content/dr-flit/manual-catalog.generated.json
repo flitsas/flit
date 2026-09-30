@@ -1508,7 +1508,7 @@
             "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio."
           ],
           "bullets": [
-            "Aprobar: opcionalmente adjunta la Licencia de Tránsito (PDF). El sistema la analiza con OCR y te dice si parece una LT y si la placa/VIN leídos coinciden con el trámite; el análisis nunca bloquea. Si hay varios mandatarios posibles, eliges uno. La LT también se puede adjuntar después desde la fila aprobada («Adjuntar LT»).",
+            "Aprobar: opcionalmente adjunta la Licencia de Tránsito (PDF). El sistema la analiza con OCR y te dice si parece una LT y si la placa/VIN leídos coinciden con el trámite; el análisis nunca bloquea. Si hay varios mandatarios válidos, eliges uno de los que te muestra el sistema. La LT también se puede adjuntar después desde la fila aprobada («Adjuntar LT»).",
             "Rechazar: marca las causales del catálogo que apliquen (dependen de la familia: matrícula o traspaso) y describe qué debe corregirse. El gestor podrá subsanar y reenviar sin volver a borrador.",
             "Decidir revocatoria: solo en aprobados con solicitud activa (ver «Decidir solicitudes de revocatoria»)."
           ],
@@ -1902,7 +1902,9 @@
           "id": "aprobacion",
           "title": "4. Al aprobar un trámite",
           "paragraphs": [
-            "Si hay varios mandatarios posibles y el sistema no puede decidir solo, al aprobar verás «Elegir mandatario del mandato». El mandatario debe tener validación de identidad vigente antes de firmar; si no la tiene, la compañía se la envía desde su pestaña «Mandatarios»."
+            "Si hay varios mandatarios posibles y el sistema no puede decidir solo, al aprobar verás «Elegir mandatario del mandato». La lista muestra únicamente a los mandatarios válidos para ese trámite, con su nombre y su forma de firma (Baúl de firmas o Validación de identidad): activos, dentro de su vigencia y con la firma o la validación de identidad al día. Quienes no cumplen no aparecen. Elige uno y pulsa «Aprobar con este mandatario».",
+            "Si no hay ningún mandatario válido, el diálogo te lo explica («No hay mandatarios válidos para aprobar este trámite») y no te deja aprobar. Registra uno en «Mandatos y mandatarios» del organismo (lo hace el Admin OT) o renueva la firma o la validación de identidad del existente, y vuelve a aprobar.",
+            "Si el mandatario elegido necesita una validación de identidad vigente o su firma en el baúl para firmar, el aviso te lo indica; la validación se gestiona desde el módulo Identidad."
           ],
           "bullets": [],
           "callouts": []
