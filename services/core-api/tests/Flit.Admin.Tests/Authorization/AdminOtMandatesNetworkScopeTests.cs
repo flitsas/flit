@@ -527,6 +527,32 @@ public sealed class AdminOtMandatesNetworkScopeTests
     }
 
     [Fact]
+    public async Task HU13123_ajuste_sin_signatureVaultId_resuelve_la_firma_del_baul_y_no_expone_el_vault()
+    {
+        AuthenticateOtUser();
+        var firma = await SeedFirmaAsync(_head);
+
+        var response = await PostAltaAsync(_officeA, _head, null);
+
+        var texto = await response.Content.ReadAsStringAsync(Ct);
+        response.StatusCode.Should().Be(HttpStatusCode.Created, texto);
+        JsonDocument.Parse(texto).RootElement.GetProperty("signingMeans").GetString().Should().Be("baul");
+        texto.Should().NotContain(firma.ToString()).And.NotContain("signatureVaultId")
+            .And.NotContain("storagePath").And.NotContain("vault/f.png");
+    }
+
+    [Fact]
+    public async Task HU13123_ajuste_sin_vault_con_firma_solo_en_otro_tenant_es_422()
+    {
+        AuthenticateOtUser();
+        await SeedFirmaAsync(_child);
+
+        var response = await PostAltaAsync(_officeA, _head, null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
     public async Task HU13123_AC6_ninguna_ruta_del_grupo_expone_la_lista_del_baul()
     {
         var rutas = _factory.Services.GetRequiredService<EndpointDataSource>().Endpoints

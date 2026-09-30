@@ -176,6 +176,9 @@ public static class AdminMandateSignersEndpoints
                     // HU #11000 — desenlace de la validación de identidad disparada por el alta, para que
                     // el aviso al usuario sea veraz ("enviada" / "ya validada" / "no se pudo enviar").
                     identity = result.Identity.ToString().ToLowerInvariant(),
+                    // Ajuste HU #13123 — solo el NOMBRE del medio resuelto ("baul"/"biometria"); el OT
+                    // nunca recibe id de firma, imagen ni metadatos del baúl.
+                    signingMeans = result.SigningMeans,
                 })
             : ValidationProblem(result.Errors);
     }

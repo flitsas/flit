@@ -2,6 +2,7 @@ using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 
@@ -22,14 +23,29 @@ public sealed class CreateMandateSignerHandler
     private readonly IMandateSignerReader _reader;
     private readonly IMandateSignerRepository _repository;
     private readonly ISignatureVaultReader? _vaultReader;
+    private readonly IMandateSignerBiometricApprovalReader? _biometricReader;
+
+    /// <summary>Medio de firma resuelto en el alta desde el OT (solo el nombre, sin datos del baúl).</summary>
+    public const string MeansVault = "baul";
+
+    public const string MeansBiometric = "biometria";
+
+    public const string SinMedioParaOtMessage =
+        "El mandatario no está en condiciones de firmar: la persona necesita una firma vigente en el baúl "
+        + "de su compañía o una validación biométrica aprobada y vigente.";
+
+    public const string VariasCompaniasSinBaulMessage =
+        "Sin indicar la firma del baúl, el mandatario solo puede registrarse para una compañía a la vez.";
 
     public CreateMandateSignerHandler(
         ITransitOfficeOperationalStatusReader otStatus,
         IMandateSignerReader reader,
         IMandateSignerRepository repository,
-        ISignatureVaultReader? vaultReader = null)
+        ISignatureVaultReader? vaultReader = null,
+        IMandateSignerBiometricApprovalReader? biometricReader = null)
     {
         _vaultReader = vaultReader;
+        _biometricReader = biometricReader;
         _otStatus = otStatus ?? throw new ArgumentNullException(nameof(otStatus));
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
@@ -64,13 +80,20 @@ public sealed class CreateMandateSignerHandler
                 .ConfigureAwait(false);
         }
 
+        Guid? signatureVaultId = command.SignatureVaultId;
+        string? signingMeans = null;
         if (errors.Count == 0 && command.ValidateSigningMeans)
         {
-            var signingError = await ValidateSigningMeansAsync(command, companyIds, cancellationToken)
+            var signing = await ResolveSigningMeansAsync(command, companyIds, cancellationToken)
                 .ConfigureAwait(false);
-            if (signingError is not null)
+            if (signing.Error is not null)
             {
-                errors.Add(signingError);
+                errors.Add(signing.Error);
+            }
+            else
+            {
+                signatureVaultId = signing.SignatureVaultId;
+                signingMeans = signing.Means;
             }
         }
 
@@ -102,7 +125,7 @@ public sealed class CreateMandateSignerHandler
                 command.UserId,
                 command.TransitOfficeIds,
                 command.PhysicalSignatureOfficeIds,
-                command.SignatureVaultId,
+                signatureVaultId,
                 command.OfficeCompanies),
             cancellationToken).ConfigureAwait(false);
 
@@ -111,16 +134,28 @@ public sealed class CreateMandateSignerHandler
         // `email` se sigue capturando y persistiendo (dato de contacto del mandatario), solo se retiró
         // el disparo. El desenlace siempre es `NotAttempted` — se conserva el campo en la respuesta por
         // compatibilidad con el cliente, que ya lo tipa como uno de los cuatro valores del enum.
-        return CreateMandateSignerResult.Success(signerId, integrityHash);
+        return CreateMandateSignerResult.Success(
+            signerId, integrityHash, MandateSignerIdentityOutcome.NotAttempted, signingMeans);
     }
 
+
+    private sealed record SigningResolution(
+        MandateSignerValidationError? Error, Guid? SignatureVaultId, string? Means);
+
     /// <summary>
-    /// HU #13123 — mismas reglas que el alta de la compañía: la firma del baúl se valida contra el tenant
-    /// de la compañía (existe, es de esa persona, activa y vigente) y el mandatario debe tener un medio de
-    /// firma (baúl; el correo NO cuenta, HU #13122). El OT nunca recibe el baúl completo: solo el id de la
-    /// firma que envía se valida aquí, en backend.
+    /// HU #13123 — mismas reglas que el alta de la compañía. Con <c>SignatureVaultId</c> en el request se
+    /// valida esa firma contra el tenant de la compañía (existe, es de esa persona, activa y vigente).
+    /// <para>
+    /// <b>Ajuste:</b> el OT no ve el baúl ni lo envía, así que SIN <c>SignatureVaultId</c> el backend
+    /// resuelve el medio de firma de la persona (tipo + número) dentro del tenant de la compañía destino:
+    /// 1) firma vigente en el baúl de esa compañía (se vincula al mandatario) o 2) validación biométrica
+    /// APROBADA y vigente en ese mismo tenant (criterio de HU #13121). En curso/vencida y el correo no
+    /// cuentan; la firma física transitoria no aplica al alta del OT. Sin ninguno ⇒ 422. Con varias
+    /// compañías y sin vault ⇒ 422 (la resolución es por una compañía). Solo se devuelve el nombre del
+    /// medio, nunca datos del baúl.
+    /// </para>
     /// </summary>
-    private async Task<MandateSignerValidationError?> ValidateSigningMeansAsync(
+    private async Task<SigningResolution> ResolveSigningMeansAsync(
         CreateMandateSignerCommand command,
         IReadOnlyList<Guid> companyIds,
         CancellationToken cancellationToken)
@@ -128,15 +163,18 @@ public sealed class CreateMandateSignerHandler
         var offices = command.TransitOfficeIds is { Count: > 0 }
             ? command.TransitOfficeIds.Distinct().ToList()
             : [command.TransitOfficeId];
+        var distinctCompanies = companyIds.Distinct().ToList();
 
         if (command.SignatureVaultId is { } vaultId && vaultId != Guid.Empty)
         {
-            var distinctCompanies = companyIds.Distinct().ToList();
             if (distinctCompanies.Count != 1)
             {
-                return new MandateSignerValidationError(
-                    "signatureVaultId",
-                    "La firma del baúl solo puede indicarse cuando el mandatario se registra para una compañía.",
+                return new SigningResolution(
+                    new MandateSignerValidationError(
+                        "signatureVaultId",
+                        "La firma del baúl solo puede indicarse cuando el mandatario se registra para una compañía.",
+                        null),
+                    null,
                     null);
             }
 
@@ -153,14 +191,50 @@ public sealed class CreateMandateSignerHandler
                 cancellationToken).ConfigureAwait(false);
             if (firmaError is not null)
             {
-                return firmaError;
+                return new SigningResolution(firmaError, null, null);
+            }
+
+            var explicitError = MandateSignerSigningCapability.Validate(
+                offices, command.PhysicalSignatureOfficeIds, vaultId);
+            return new SigningResolution(explicitError, vaultId, explicitError is null ? MeansVault : null);
+        }
+
+        if (distinctCompanies.Count != 1)
+        {
+            return new SigningResolution(
+                new MandateSignerValidationError("companyTenantIds", VariasCompaniasSinBaulMessage, null),
+                null,
+                null);
+        }
+
+        var companyTenant = distinctCompanies[0];
+        var documentType = string.IsNullOrWhiteSpace(command.DocumentType) ? "CC" : command.DocumentType.Trim();
+        var documentNumber = command.DocumentNumber.Trim();
+
+        if (_vaultReader is not null)
+        {
+            var firma = await _vaultReader
+                .FindActiveByDocumentAsync(companyTenant, documentType, documentNumber, cancellationToken)
+                .ConfigureAwait(false);
+            var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaTime.Offset).Date);
+            if (firma is not null && firma.EstaVigente(hoy))
+            {
+                return new SigningResolution(null, firma.Id, MeansVault);
             }
         }
 
-        return MandateSignerSigningCapability.Validate(
-            offices,
-            command.PhysicalSignatureOfficeIds,
-            command.SignatureVaultId);
+        if (_biometricReader is not null
+            && await _biometricReader
+                .HasApprovedValidAsync(companyTenant, documentType, documentNumber, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return new SigningResolution(null, null, MeansBiometric);
+        }
+
+        return new SigningResolution(
+            new MandateSignerValidationError(MandateSignerSigningCapability.Field, SinMedioParaOtMessage, null),
+            null,
+            null);
     }
 
     internal static async Task AddExclusiveSlotErrorsAsync(

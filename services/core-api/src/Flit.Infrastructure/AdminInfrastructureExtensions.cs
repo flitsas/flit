@@ -235,6 +235,8 @@ public static class AdminInfrastructureExtensions
         // escritura con auditoría atómica (RF22–RF28).
         services.AddScoped<IMandateSignerReader, DbMandateSignerReader>();
         services.AddScoped<IMandateSignerRepository, MandateSignerRepository>();
+        // Ajuste HU #13123 — identidad aprobada y vigente en el tenant de la compañía (alta desde el OT).
+        services.AddScoped<IMandateSignerBiometricApprovalReader, DbMandateSignerBiometricApprovalReader>();
 
         // HU #10642 (ADR-0025) — baúl de firmas: custodia de firmas precargadas tenant-scoped.
         services.AddScoped<ISignatureVaultReader, DbSignatureVaultReader>();

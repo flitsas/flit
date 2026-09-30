@@ -8,8 +8,10 @@ public sealed class CreateMandateSignerResult
         Guid? mandateSignerId,
         string? integrityHash,
         IReadOnlyList<MandateSignerValidationError> errors,
-        MandateSignerIdentityOutcome identity = MandateSignerIdentityOutcome.NotAttempted)
+        MandateSignerIdentityOutcome identity = MandateSignerIdentityOutcome.NotAttempted,
+        string? signingMeans = null)
     {
+        SigningMeans = signingMeans;
         IsValid = isValid;
         MandateSignerId = mandateSignerId;
         IntegrityHash = integrityHash;
@@ -28,11 +30,18 @@ public sealed class CreateMandateSignerResult
     /// </summary>
     public MandateSignerIdentityOutcome Identity { get; }
 
+    /// <summary>
+    /// Ajuste HU #13123 — medio de firma resuelto en el alta desde el OT: <c>baul</c> o <c>biometria</c>;
+    /// <c>null</c> si no se evaluó. Solo el nombre del medio: nunca datos del baúl.
+    /// </summary>
+    public string? SigningMeans { get; }
+
     public static CreateMandateSignerResult Success(
         Guid mandateSignerId,
         string integrityHash,
-        MandateSignerIdentityOutcome identity = MandateSignerIdentityOutcome.NotAttempted) =>
-        new(true, mandateSignerId, integrityHash, [], identity);
+        MandateSignerIdentityOutcome identity = MandateSignerIdentityOutcome.NotAttempted,
+        string? signingMeans = null) =>
+        new(true, mandateSignerId, integrityHash, [], identity, signingMeans);
 
     public static CreateMandateSignerResult Invalid(IReadOnlyList<MandateSignerValidationError> errors) =>
         new(false, null, null, errors);
