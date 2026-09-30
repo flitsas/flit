@@ -9,7 +9,8 @@ import { TOKEN_COOKIE } from "@/lib/auth/jwt";
 // - /empresa/* → gate AdminCompany. AdminCompany y SuperAdmin acceden.
 //
 // A-10 (HU #13001) — con FLIT_SESSION_MODE=oidc la sesión es la de @flit/auth: /api/v1/* va al BFF (Bearer desde el
-// servidor), /login lleva al login del hub y los gates leen los claims de la sesión cifrada. Con la sesión antigua
+// servidor), /login lleva al login del hub, las páginas protegidas exigen la sesión del servidor y los gates leen los
+// claims de la sesión cifrada. Con la sesión antigua
 // (por defecto) todo sigue exactamente igual.
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -22,7 +23,14 @@ export async function middleware(request: NextRequest) {
       const returnTo = request.nextUrl.searchParams.get("returnUrl") ?? "/";
       return NextResponse.redirect(new URL(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`, request.url));
     }
-    return gate(pathname, await claimsTokenFromCookieHeader(request.headers.get("cookie"), "tramites"), request);
+    const claims = await claimsTokenFromCookieHeader(request.headers.get("cookie"), "tramites");
+    // La sesión real es la cookie cifrada del servidor, no los claims que el navegador guardó en localStorage: pueden
+    // haber quedado de una sesión cerrada o vencida. Sin sesión, al login del hub y de vuelta a donde iba.
+    if (!claims && isProtectedPage(pathname)) {
+      const returnTo = `${pathname}${search}`;
+      return NextResponse.redirect(new URL(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`, request.url));
+    }
+    return gate(pathname, claims, request);
   }
 
   if (pathname.startsWith("/api/v1/")) {
@@ -38,6 +46,14 @@ export async function middleware(request: NextRequest) {
   }
 
   return gate(pathname, token, request);
+}
+
+/** Páginas que exigen sesión (las que montan `useAuthGate`). Las públicas (portal, biometría, invitación, manual, 403,
+ *  /auth/*) quedan fuera. */
+const PROTECTED_PREFIXES = ["/tramites", "/admin", "/empresa", "/profile", "/log-qx"];
+
+function isProtectedPage(pathname: string): boolean {
+  return pathname === "/" || PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 function gate(pathname: string, token: string | null | undefined, request: NextRequest) {
@@ -61,5 +77,7 @@ function gate(pathname: string, token: string | null | undefined, request: NextR
 export const config = {
   // Node y no Edge: FLIT_SESSION_MODE y FLIT_SESSION_SECRET se leen en runtime (una imagen para los tres ambientes).
   runtime: "nodejs",
-  matcher: ["/admin/:path*", "/empresa/:path*", "/login", "/api/v1/:path*"],
+  // `/`, /tramites, /profile y /log-qx solo hacen algo con la sesión de la suite (exigen sesión real); con la sesión
+  // antigua pasan de largo.
+  matcher: ["/", "/tramites/:path*", "/profile/:path*", "/log-qx/:path*", "/admin/:path*", "/empresa/:path*", "/login", "/api/v1/:path*"],
 };

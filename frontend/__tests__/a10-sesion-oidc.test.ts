@@ -57,6 +57,23 @@ describe("middleware", () => {
     expect(response.headers.get("location")).toBe("https://dev.flitsas.online/auth/login?returnTo=%2Ftramites");
   });
 
+  it("con la sesión de @flit/auth y sin sesión, las páginas protegidas van al login del hub y vuelven a donde iban", async () => {
+    vi.stubEnv("FLIT_SESSION_MODE", "oidc");
+    vi.stubEnv("FLIT_SESSION_SECRET", "s".repeat(40));
+
+    // Aunque el navegador tenga claims viejos en localStorage: la sesión real es la cookie del servidor.
+    const tramites = await middleware(request("/tramites/abc?tab=2"));
+    expect(tramites.headers.get("location")).toBe("https://dev.flitsas.online/auth/login?returnTo=%2Ftramites%2Fabc%3Ftab%3D2");
+    const home = await middleware(request("/?m=reportes"));
+    expect(home.headers.get("location")).toBe("https://dev.flitsas.online/auth/login?returnTo=%2F%3Fm%3Dreportes");
+  });
+
+  it("con la sesión antigua, las páginas protegidas no cambian (su guardia es la de siempre)", async () => {
+    const tramites = await middleware(request("/tramites"));
+    expect(tramites.headers.get("location")).toBeNull();
+    expect(tramites.headers.get("x-middleware-rewrite")).toBeNull();
+  });
+
   it("con la sesión de @flit/auth y sin sesión, /admin no deja pasar", async () => {
     vi.stubEnv("FLIT_SESSION_MODE", "oidc");
     vi.stubEnv("FLIT_SESSION_SECRET", "s".repeat(40));

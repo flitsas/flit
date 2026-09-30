@@ -1,7 +1,7 @@
 // Proxy /api/v1/* de una app hacia el gateway con el Bearer de la sesión (contrato §8, createApiProxy). El navegador
 // llama a su propio host; el token lo pone el servidor y se renueva aquí si está por vencer.
 import { authConfig, type AuthConfig } from "./config";
-import { freshSession } from "./store";
+import { clearSessionCookies, freshSession } from "./store";
 
 const DROPPED_REQUEST = new Set([
   "host", "connection", "keep-alive", "transfer-encoding", "upgrade", "content-length",
@@ -63,7 +63,10 @@ export function createApiProxy(options: ApiProxyOptions): (request: Request, pat
     upstream.headers.forEach((value, name) => {
       if (!DROPPED_RESPONSE.has(name.toLowerCase())) responseHeaders.append(name, value);
     });
-    return withCookies(new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers: responseHeaders }), setCookies);
+    // La API rechazó el token de la sesión (cerrada en otro producto o en el hub, usuario suspendido): la sesión de esta
+    // app ya no sirve y se borra, así la siguiente página va al login en lugar de mostrarse con una sesión muerta.
+    const dead = session && upstream.status === 401 ? clearSessionCookies(request, cfg) : [];
+    return withCookies(new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers: responseHeaders }), [...setCookies, ...dead]);
   };
 }
 

@@ -226,6 +226,32 @@ public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<
         me.StatusCode.Should().Be(HttpStatusCode.OK, await me.Content.ReadAsStringAsync(ct));
     }
 
+    [Fact]
+    public async Task CerrarSesion_ElTokenDeAccesoYaEmitidoDejaDeServir_EnOtroDispositivoSigue()
+    {
+        // Cierre de sesión en toda la suite: un producto abierto en este navegador pierde la sesión en su siguiente
+        // llamada, sin esperar a que venza su token de 15 minutos.
+        var ct = TestContext.Current.CancellationToken;
+        var browser = await LoggedInAsync(ct);
+        var otherDevice = await LoggedInAsync(ct);
+        var tokenHere = (await OidcServerTests.CodeFlowAsync(browser, "tramites", ct)).GetProperty("access_token").GetString()!;
+        var tokenThere = (await OidcServerTests.CodeFlowAsync(otherDevice, "tramites", ct)).GetProperty("access_token").GetString()!;
+
+        async Task<HttpResponseMessage> MeAsync(string token)
+        {
+            var api = NewClient();
+            api.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            return await api.GetAsync("/api/v1/auth/me", ct);
+        }
+        // Sin consultar antes con este token: la validez de la sesión se guarda 15 segundos por autorización.
+        await browser.GetAsync($"/connect/logout?client_id=tramites&post_logout_redirect_uri={Uri.EscapeDataString("https://dev.tramites.flitsas.online/")}", ct);
+
+        var after = await MeAsync(tokenHere);
+        after.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await after.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("code").GetString().Should().Be("SESSION_EXPIRED");
+        (await MeAsync(tokenThere)).StatusCode.Should().Be(HttpStatusCode.OK, "otro dispositivo conserva su sesión");
+    }
+
     private static async Task<(string? Error, string? Description)> AuthorizeErrorAsync(HttpClient client, string clientId, CancellationToken ct)
     {
         var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes("verificador-de-prueba-suficientemente-largo-123"))).TrimEnd('=').Replace('+', '-').Replace('/', '_');

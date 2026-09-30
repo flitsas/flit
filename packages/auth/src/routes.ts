@@ -13,6 +13,8 @@ interface Transaction {
   state: string;
   verifier: string;
   returnTo: string;
+  /** Intento silencioso (`prompt=none`): si el hub no tiene sesión, se vuelve a `returnTo` con `sso=0`, sin error. */
+  silent?: boolean;
 }
 
 export interface AuthRoutesOptions {
@@ -31,11 +33,15 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
   const config = options.config ?? (() => authConfig(options.productCode));
 
   return {
-    /** GET /auth/login?returnTo=/ruta → authorize del hub. */
+    /**
+     * GET /auth/login?returnTo=/ruta → authorize del hub. Con `prompt=none` es un intento silencioso: entra si el hub
+     * ya tiene sesión y, si no, vuelve a `returnTo` con `sso=0` (la página decide qué mostrar sin volver a intentar).
+     */
     async login(request) {
       const cfg = config();
       const url = new URL(request.url);
-      const tx: Transaction = { state: randomToken(), verifier: randomToken(), returnTo: safeReturnTo(url.searchParams.get("returnTo")) };
+      const silent = url.searchParams.get("prompt") === "none";
+      const tx: Transaction = { state: randomToken(), verifier: randomToken(), returnTo: safeReturnTo(url.searchParams.get("returnTo")), silent };
       const authorize = new URL(`${cfg.hubUrl}/connect/authorize`);
       authorize.search = new URLSearchParams({
         client_id: cfg.productCode,
@@ -45,6 +51,7 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
         code_challenge: await pkceChallenge(tx.verifier),
         code_challenge_method: "S256",
         state: tx.state,
+        ...(silent ? { prompt: "none" } : {}),
       }).toString();
 
       return redirect(authorize.toString(), [
@@ -67,6 +74,11 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
       }
 
       const denied = url.searchParams.get("error");
+      if (denied && tx.silent) {
+        // El hub no tiene sesión (login_required) o no da acceso: la página vuelve a su estado sin sesión.
+        // La sesión local que hubiera quedado tampoco sirve: el hub ya no la respalda.
+        return redirect(withParam(tx.returnTo, "sso", "0"), [clearTx, ...clearSessionCookies(request, cfg)]);
+      }
       if (denied) {
         const code = url.searchParams.get("error_description") || denied;
         return redirect(`${errorPath}?code=${encodeURIComponent(code)}`, [clearTx]);
@@ -124,6 +136,12 @@ export function createAuthRoutes(options: AuthRoutesOptions): Record<"login" | "
 export function claimsToken(accessToken: string): string {
   const [header, payload] = accessToken.split(".");
   return `${header}.${payload}.`;
+}
+
+function withParam(path: string, key: string, value: string): string {
+  const url = new URL(path, "http://app.local");
+  url.searchParams.set(key, value);
+  return `${url.pathname}${url.search}`;
 }
 
 /** Solo rutas relativas de esta misma app (evita un redireccionamiento abierto). */

@@ -69,6 +69,8 @@ builder.Services.PostConfigure<JwtBearerOptions>(
     JwtBearerDefaults.AuthenticationScheme,
     options => options.Events = new JwtBearerEvents
     {
+        // Cierre de sesión en toda la suite: un token OIDC de una sesión ya cerrada se rechaza (SESSION_EXPIRED).
+        OnTokenValidated = Flit.Api.Identity.OidcSessionCheck.ValidateAsync,
         // HU #12896: la respuesta SESSION_EXPIRED la escribe SOLO OnChallenge. Antes también la escribía
         // OnAuthenticationFailed y el segundo intento reventaba («the response has already started»); nunca
         // se había visto porque sin validar el vencimiento ningún token llegaba aquí como vencido.

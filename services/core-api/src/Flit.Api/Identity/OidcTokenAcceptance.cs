@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using OpenIddict.Abstractions;
+using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace Flit.Api.Identity;
 
@@ -78,5 +80,39 @@ internal sealed class OidcIssuerRegistry(IServiceProvider services, IMemoryCache
         var list = ListAsync(provider.GetRequiredService<IProductHosts>(), provider.GetRequiredService<ITenantDomainRepository>(), scheme, CancellationToken.None)
             .GetAwaiter().GetResult();
         return new HashSet<string>(list, StringComparer.Ordinal);
+    }
+}
+
+/// <summary>
+/// Cierre de sesión en toda la suite (simulador de la suite, ejemplo 2): un token del servidor OIDC lleva la autorización
+/// de la sesión del hub (<c>oi_au_id</c>). Al cerrar sesión (A-13) esa autorización se revoca; desde entonces sus
+/// tokens de acceso se rechazan aunque no hayan vencido, así los productos y el hub abiertos en este navegador pierden
+/// la sesión en su siguiente llamada y no hasta 15 minutos después. La consulta se guarda 15 segundos por autorización.
+/// </summary>
+internal static class OidcSessionCheck
+{
+    private const string AuthorizationIdClaim = "oi_au_id";
+    private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(15);
+
+    public static async Task ValidateAsync(TokenValidatedContext context)
+    {
+        var id = context.Principal?.FindFirst(AuthorizationIdClaim)?.Value;
+        if (string.IsNullOrEmpty(id))
+            return; // JWT de siempre, token de servicio o servidor OIDC apagado.
+
+        var services = context.HttpContext.RequestServices;
+        if (services.GetService<IOpenIddictAuthorizationManager>() is not { } authorizations)
+            return;
+
+        var ct = context.HttpContext.RequestAborted;
+        var valid = await services.GetRequiredService<IMemoryCache>().GetOrCreateAsync($"oidc:authz:{id}", async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = Ttl;
+            var authorization = await authorizations.FindByIdAsync(id, ct).ConfigureAwait(false);
+            return authorization is not null && await authorizations.HasStatusAsync(authorization, Statuses.Valid, ct).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+        if (!valid)
+            context.Fail(new SecurityTokenException("La sesión de la suite se cerró."));
     }
 }

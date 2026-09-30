@@ -143,6 +143,25 @@ describe("login y callback", () => {
 
     expect(response.headers.get("location")).toBe("/403?code=PRODUCT_ROLE_REQUIRED");
   });
+
+  // Simulador de la suite: quien ya inició sesión en el hub (por ejemplo, al entrar a Trámites) no ve la portada.
+  it("con prompt=none pide al hub un inicio silencioso; si no hay sesión, vuelve con sso=0 y sin error", async () => {
+    const login = await routes.login(new Request(`${APP}/auth/login?prompt=none&returnTo=%2F%3Finicio%3D1`));
+    const location = new URL(login.headers.get("location")!);
+    expect(location.searchParams.get("prompt")).toBe("none");
+
+    const response = await routes.callback(new Request(`${APP}/auth/callback?error=login_required&state=${location.searchParams.get("state")}`, {
+      headers: { cookie: cookieHeader(login.headers.getSetCookie()) },
+    }));
+
+    expect(response.headers.get("location")).toBe("/?inicio=1&sso=0");
+    expect(response.headers.getSetCookie().find((c) => c.startsWith(`${SESSION}=`))).toContain("Max-Age=0");
+  });
+
+  it("un login normal no pide inicio silencioso", async () => {
+    const login = await routes.login(new Request(`${APP}/auth/login`));
+    expect(new URL(login.headers.get("location")!).searchParams.has("prompt")).toBe(false);
+  });
 });
 
 describe("renovación y proxy", () => {
@@ -163,6 +182,19 @@ describe("renovación y proxy", () => {
     expect(headers.get("authorization")).toBe(`Bearer ${accessToken}`);
     expect(headers.get("x-flit-domain")).toBe("dev.tramites.flitsas.online");
     expect(headers.has("cookie")).toBe(false);
+  });
+
+  it("si la API rechaza el token (sesión cerrada en otro producto), borra la sesión de esta app", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ code: "SESSION_EXPIRED" }, { status: 401 })));
+    const proxy = createApiProxy({ productCode: "tramites", config: () => config });
+
+    const response = await proxy(new Request(`${APP}/api/v1/x`, {
+      headers: { host: "dev.tramites.flitsas.online", cookie: await sessionCookieHeader({ accessToken: jwt({ exp: now() + 900 }), refreshToken: "r1", expiresAt: now() + 900 }) },
+    }), ["x"]);
+
+    expect(response.status).toBe(401);
+    const cleared = response.headers.getSetCookie().find((c) => c.startsWith(`${SESSION}=`));
+    expect(cleared).toContain("Max-Age=0");
   });
 
   it("con el token por vencer lo renueva, lo usa y guarda la sesión nueva", async () => {
