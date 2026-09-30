@@ -38,6 +38,7 @@ internal sealed class CompanyOtMandateRuleConfiguration
         builder.Property(x => x.MandatarySigla).HasColumnName("mandatary_sigla").HasMaxLength(40);
         builder.Property(x => x.DefaultMandateSignerId).HasColumnName("default_mandate_signer_id");
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
+        builder.Property(x => x.ConfiguredByScope).HasColumnName("configured_by_scope").HasMaxLength(20).IsRequired().HasDefaultValue("organismo");
         builder.Property(x => x.CreatedBy).HasColumnName("created_by");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
         builder.Property(x => x.UpdatedBy).HasColumnName("updated_by");

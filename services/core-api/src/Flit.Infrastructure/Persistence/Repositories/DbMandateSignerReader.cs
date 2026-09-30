@@ -185,7 +185,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     PhysicalSignatureOfficeIds = physicalBySigner.GetValueOrDefault(signer.Id, []),
                     FullName = signer.FullName,
                     DocumentType = signer.DocumentType,
-                    DocumentNumber = signer.DocumentNumber,
+                    DocumentNumber = signer.DocumentNumber ?? string.Empty,
                     IntegrityHash = signer.IntegrityHash,
                     Email = signer.Email,
                     SignatureVaultId = signer.SignatureVaultId,
@@ -590,7 +590,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             TransitOfficeId = signer.TransitOfficeId,
             FullName = signer.FullName,
             DocumentType = signer.DocumentType,
-            DocumentNumber = signer.DocumentNumber,
+            DocumentNumber = signer.DocumentNumber ?? string.Empty,
             IntegrityHash = signer.IntegrityHash,
             Email = signer.Email,
             SignatureVaultId = signer.SignatureVaultId,
@@ -654,7 +654,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             _context,
             _otStatus,
             [.. signers.Select(s => new MandateSignerIdentityTenantResolver.SignerRef(
-                s.Id, s.TransitOfficeId, s.DocumentType, s.DocumentNumber))],
+                s.Id, s.TransitOfficeId, s.DocumentType, s.DocumentNumber ?? string.Empty))],
             (tenantId, documentos, ct) => _identityResolver.ResolveManyBatchedAsync(tenantId, documentos, now, ct),
             cancellationToken).ConfigureAwait(false);
 

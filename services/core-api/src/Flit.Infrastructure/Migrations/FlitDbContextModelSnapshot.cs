@@ -659,6 +659,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("company_tenant_id");
 
+                    b.Property<string>("ConfiguredByScope")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("organismo")
+                        .HasColumnName("configured_by_scope");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1083,8 +1091,15 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
                     b.Property<string>("DocumentNumber")
-                        .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("document_number");
@@ -1128,9 +1143,22 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("registered_at");
 
+                    b.Property<string>("SignatureMethod")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("signature_method");
+
                     b.Property<Guid?>("SignatureVaultId")
                         .HasColumnType("uuid")
                         .HasColumnName("signature_vault_id");
+
+                    b.Property<string>("SignerModel")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("natural")
+                        .HasColumnName("signer_model");
 
                     b.Property<Guid>("TransitOfficeId")
                         .HasColumnType("uuid")
@@ -1147,6 +1175,22 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<Guid?>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
+
+                    b.Property<DateOnly?>("ValidFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_from");
+
+                    b.Property<DateOnly?>("ValidTo")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_to");
+
+                    b.Property<string>("ValidityKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("fixed")
+                        .HasColumnName("validity_kind");
 
                     b.HasKey("Id")
                         .HasName("pk_mandate_signers");
@@ -1174,6 +1218,14 @@ namespace Flit.Infrastructure.Migrations
                     b.Property<Guid>("CompanyTenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("company_tenant_id");
+
+                    b.Property<string>("ConfiguredByScope")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("organismo")
+                        .HasColumnName("configured_by_scope");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -3551,6 +3603,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
                         .HasColumnName("chamber_city");
+
+                    b.Property<string>("ConfiguredByScope")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("organismo")
+                        .HasColumnName("configured_by_scope");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")

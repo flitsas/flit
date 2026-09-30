@@ -15,7 +15,11 @@ public sealed class MandateSigner
     /// <summary>Tipo de documento del mandatario (por defecto CC). ADR-0036.</summary>
     public string DocumentType { get; set; } = "CC";
 
-    public string DocumentNumber { get; set; } = string.Empty;
+    /// <summary>
+    /// Número de documento (PII). Nulo solo cuando <see cref="SignerModel"/> es <c>formato_blanco</c>
+    /// (HU #13128 AC8); el CHECK <c>ck_mandate_signers_document_required</c> lo exige para los demás modelos.
+    /// </summary>
+    public string? DocumentNumber { get; set; } = string.Empty;
     public string IntegrityHash { get; set; } = string.Empty;
 
     /// <summary>Correo del mandatario para la validación de identidad (ADR-0036, HU #10911). PII.</summary>
@@ -40,8 +44,31 @@ public sealed class MandateSigner
     /// <summary>Insumo del hash; se fija en el registro y no cambia al editar.</summary>
     public DateTimeOffset RegisteredAt { get; set; }
 
-    /// <summary>Baja lógica (soft-delete): al inactivar se liberan las compañías del mandatario.</summary>
+    /// <summary>Inactivación (reversible): al inactivar se liberan las compañías del mandatario. No es «Eliminar».</summary>
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// HU #13128 (ADR-0061) — modelo del mandatario: <c>natural</c> | <c>juridica</c> | <c>formato_blanco</c>.
+    /// Distinto del tipo de mandato (<c>assignment_mode</c>: signer, institutional, open).
+    /// </summary>
+    public string SignerModel { get; set; } = "natural";
+
+    /// <summary>
+    /// Forma de firma: <c>baul</c> | <c>biometria</c>; nulo permitido en BD (legados, juridica, formato_blanco).
+    /// Que <c>natural</c> la tenga lo exige la API, no la BD.
+    /// </summary>
+    public string? SignatureMethod { get; set; }
+
+    /// <summary>Vigencia propia: <c>fixed</c> (sin fechas) | <c>range</c> (<see cref="ValidFrom"/> y <see cref="ValidTo"/>).</summary>
+    public string ValidityKind { get; set; } = "fixed";
+
+    public DateOnly? ValidFrom { get; set; }
+    public DateOnly? ValidTo { get; set; }
+
+    /// <summary>Baja lógica de «Eliminar»: oculta de listas y selectores sin borrar historial. Distinta de <see cref="IsActive"/>.</summary>
+    public DateTimeOffset? DeletedAt { get; set; }
+
+    public Guid? DeletedBy { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public Guid? CreatedBy { get; set; }

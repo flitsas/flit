@@ -129,11 +129,11 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         // candidato sin vigencia, igual que antes cuando no había fila admin.
         var vigentes = await LoadVigentIdentitiesAsync(
             signer.TransitOfficeId,
-            [(signer.Id, signer.DocumentType, signer.DocumentNumber)],
+            [(signer.Id, signer.DocumentType, signer.DocumentNumber ?? string.Empty)],
             cancellationToken).ConfigureAwait(false);
 
         return new MandateSignerCandidate(
-            signer.Id, signer.FullName, signer.DocumentNumber, signer.UserId, vigentes.ContainsKey(signer.Id),
+            signer.Id, signer.FullName, signer.DocumentNumber ?? string.Empty, signer.UserId, vigentes.ContainsKey(signer.Id),
             signer.SignatureVaultId, signer.DocumentType, vigentes.GetValueOrDefault(signer.Id)?.Certificado,
             vigentes.GetValueOrDefault(signer.Id)?.ValidUntil);
     }

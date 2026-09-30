@@ -64,6 +64,11 @@ public sealed class TransitOfficeMandateConfigEntity
     /// <summary>Manifest de coordenadas overlay (JSON); opcional.</summary>
     public string? CustomFieldManifest { get; set; }
 
+    /// <summary>
+    /// HU #13128 (ADR-0061) — origen de la configuración: <c>organismo</c> | <c>compania</c> | <c>super_admin</c>.
+    /// </summary>
+    public string ConfiguredByScope { get; set; } = "organismo";
+
     public long RowVersion { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public Guid? CreatedBy { get; set; }

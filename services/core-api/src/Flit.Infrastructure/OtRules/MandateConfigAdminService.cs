@@ -462,7 +462,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                     signers = await _db.MandateSigners.AsNoTracking()
                         .Where(s => signerIds.Contains(s.Id))
                         .Select(s => new MandateSignerSnapshot(
-                            s.Id, s.FullName, s.DocumentType, s.DocumentNumber, s.IntegrityHash))
+                            s.Id, s.FullName, s.DocumentType, s.DocumentNumber ?? string.Empty, s.IntegrityHash))
                         .ToDictionaryAsync(s => s.Id, ct)
                         .ConfigureAwait(false);
                 }
@@ -600,7 +600,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                 () => _db.MandateSigners.AsNoTracking()
                     .Where(s => s.Id == savedSigner)
                     .Select(s => new MandateSignerSnapshot(
-                        s.Id, s.FullName, s.DocumentType, s.DocumentNumber, s.IntegrityHash))
+                        s.Id, s.FullName, s.DocumentType, s.DocumentNumber ?? string.Empty, s.IntegrityHash))
                     .FirstOrDefaultAsync(ct),
                 ct).ConfigureAwait(false);
         }
@@ -733,7 +733,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             () => _db.MandateSigners.AsNoTracking()
                 .Where(s => s.Id == defaultSignerId)
                 .Select(s => new MandateSignerSnapshot(
-                    s.Id, s.FullName, s.DocumentType, s.DocumentNumber, s.IntegrityHash))
+                    s.Id, s.FullName, s.DocumentType, s.DocumentNumber ?? string.Empty, s.IntegrityHash))
                 .FirstOrDefaultAsync(ct),
             ct).ConfigureAwait(false);
 
@@ -1099,7 +1099,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             () => _db.MandateSigners.AsNoTracking()
                 .Where(s => s.Id == id)
                 .Select(s => new MandateSignerSnapshot(
-                    s.Id, s.FullName, s.DocumentType, s.DocumentNumber, s.IntegrityHash))
+                    s.Id, s.FullName, s.DocumentType, s.DocumentNumber ?? string.Empty, s.IntegrityHash))
                 .FirstOrDefaultAsync(ct),
             ct).ConfigureAwait(false);
 
