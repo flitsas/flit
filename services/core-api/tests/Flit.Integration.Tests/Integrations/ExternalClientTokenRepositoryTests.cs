@@ -17,8 +17,8 @@ namespace Flit.Integration.Tests.Integrations;
 public sealed class ExternalClientTokenRepositoryTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
     // Secretos de prueba generados para esta prueba; no son credenciales reales.
-    private const string Secreto = "it13087-secreto-de-prueba-4b1e0d";
-    private const string SecretoNuevo = "it13087-secreto-nuevo-7c3a9f";
+    private const string Secreto = "it13087-secreto-de-prueba-4b1e0d"; // gitleaks:allow — valor de prueba
+    private const string SecretoNuevo = "it13087-secreto-nuevo-7c3a9f"; // gitleaks:allow — valor de prueba
     private static readonly Argon2PasswordHasher Hasher = new();
     private static readonly TimeSpan Bloqueo = TimeSpan.FromMinutes(15);
 

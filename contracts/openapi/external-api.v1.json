@@ -75,7 +75,7 @@
                   "$ref": "#/components/schemas/TokenResponse"
                 },
                 "example": {
-                  "accessToken": "eyJhbGciOiJSUzI1NiJ9.ejemplo.firma",
+                  "accessToken": "<pase JWT de ejemplo>",
                   "tokenType": "Bearer",
                   "expiresIn": 1800,
                   "scope": [
