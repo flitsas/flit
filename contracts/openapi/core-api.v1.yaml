@@ -475,6 +475,91 @@ paths:
         "403":
           description: Autenticado pero sin rol SuperAdmin (no se entregan datos de otros tenants).
 
+  /api/v1/admin/mandate-signers/represented-associations/impact-report:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersRepresentedAssociationImpactReport
+      summary: Mandatarios impactados por el retiro de las asociaciones por Representante Legal (HU #13176)
+      description: >
+        Mandatarios activos con asociaciones activas en `mandate_signer_represented_companies`. Por compañía y
+        organismo: nombre de la compañía, organismo, nombre del mandatario, cantidad de empresas asociadas y sus
+        NIT. NO incluye documento de identidad ni ruta de firma (Ley 1581). Solo SuperAdmin. Con `format=csv`
+        se descarga como `text/csv` para el aviso a los clientes. Orden de despliegue: reporte, aviso, retiro.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [json, csv], default: json }
+      responses:
+        "200":
+          description: Filas del reporte (vacío si no hay asociaciones activas).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  total: { type: integer }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RepresentedAssociationImpactRow"
+            text/csv:
+              schema:
+                type: string
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+
+  /api/v1/admin/mandate-signers/represented-associations/retire:
+    post:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersRepresentedAssociationRetire
+      summary: Retira las asociaciones por Representante Legal con aviso previo (HU #13176)
+      description: >
+        Elimina las filas activas de asociación por Representante Legal; los mandatarios afectados pasan a
+        aplicar a toda su compañía en el organismo. Solo se ejecuta con `confirmaAvisoEnviado` verdadero
+        (dato del request, no un estado guardado); si falta o es falso responde 409 `aviso_no_confirmado` y no
+        modifica nada. Repetirlo responde 200 con `filasRetiradas` 0. Deja auditoría con cantidad, fecha y rol,
+        sin nombres personales. Solo SuperAdmin.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                confirmaAvisoEnviado: { type: boolean }
+      responses:
+        "200":
+          description: Retiro ejecutado (o sin filas que retirar).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [filasRetiradas, fecha]
+                properties:
+                  filasRetiradas: { type: integer }
+                  fecha: { type: string, format: date-time }
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+        "409":
+          description: El aviso a los clientes no fue confirmado (`aviso_no_confirmado`).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, example: aviso_no_confirmado }
+                  error: { type: string }
+
   /api/v1/admin/ict/job-settings:
     get:
       tags: [Admin · ICT · Jobs]
@@ -11786,6 +11871,23 @@ components:
         missingData:
           type: string
           enum: [firma_baul_o_validacion_biometrica, firma_baul, validacion_biometrica, validacion_biometrica_vigente]
+    RepresentedAssociationImpactRow:
+      type: object
+      description: >
+        Mandatario que depende de una asociación por Representante Legal (HU #13176). Sin documento de identidad
+        ni ruta de firma.
+      required: [companyTenantId, companyName, transitOfficeId, transitOfficeName, mandateSignerId, mandateSignerName, associatedCount, associatedNits]
+      properties:
+        companyTenantId: { type: string, format: uuid }
+        companyName: { type: string }
+        transitOfficeId: { type: string, format: uuid }
+        transitOfficeName: { type: string }
+        mandateSignerId: { type: string, format: uuid }
+        mandateSignerName: { type: string }
+        associatedCount: { type: integer }
+        associatedNits:
+          type: array
+          items: { type: string }
     MandateSignerSelectionResponse:
       type: object
       required: [opciones, elegidoId, editable]

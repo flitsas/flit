@@ -6,7 +6,9 @@ using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
 using Flit.Admin.Application.Companies.MandateSigners.PhysicalSignatureMigration;
 using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.RepresentedAssociations;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
+using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -122,6 +124,28 @@ public static class AdminMandateSignersEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // HU #13176 (Feature #13119 F7) — reporte de mandatarios impactados por el retiro de las asociaciones por
+        // Representante Legal y retiro controlado. SOLO Super Admin (403 al resto). Orden de despliegue por
+        // ambiente: reporte, aviso a los clientes, retiro.
+        var representedGroup = app.MapGroup("/api/v1/admin/mandate-signers/represented-associations")
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Mandatarios");
+
+        representedGroup.MapGet("/impact-report", RepresentedAssociationImpactReportAsync)
+            .WithName("AdminMandateSignersRepresentedAssociationImpactReport")
+            .WithSummary("Mandatarios que dependen de una asociación por Representante Legal (JSON o ?format=csv)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        representedGroup.MapPost("/retire", RetireRepresentedAssociationsAsync)
+            .WithName("AdminMandateSignersRepresentedAssociationRetire")
+            .WithSummary("Retira las asociaciones por Representante Legal; exige confirmaAvisoEnviado=true (409 aviso_no_confirmado)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status409Conflict);
+
         return app;
     }
 
@@ -147,6 +171,54 @@ public static class AdminMandateSignersEndpoints
         }
 
         return Results.Ok(new { data = rows, total = rows.Count });
+    }
+
+    /// <summary>
+    /// HU #13176 — reporte de impactados; <c>?format=csv</c> descarga el archivo para el aviso a los clientes.
+    /// Sin documento ni ruta de firma; nada de esto se escribe en logs.
+    /// </summary>
+    private static async Task<IResult> RepresentedAssociationImpactReportAsync(
+        [FromQuery] string? format,
+        [FromServices] GetRepresentedAssociationImpactReportHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var rows = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+
+        if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
+        {
+            var csv = RepresentedAssociationImpactCsv.Build(rows);
+            return Results.File(
+                System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(csv)).ToArray(),
+                "text/csv; charset=utf-8",
+                RepresentedAssociationImpactCsv.FileName);
+        }
+
+        return Results.Ok(new { data = rows, total = rows.Count });
+    }
+
+    /// <summary>HU #13176 — el cuerpo puede faltar: sin <c>confirmaAvisoEnviado</c> verdadero responde 409.</summary>
+    private static async Task<IResult> RetireRepresentedAssociationsAsync(
+        HttpContext httpContext,
+        [FromBody] RetireRepresentedAssociationsRequest? request,
+        [FromServices] RetireRepresentedAssociationsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await handler.HandleAsync(
+                request?.ConfirmaAvisoEnviado == true,
+                ResolveUserId(httpContext.User),
+                httpContext.User.FindFirst("role")?.Value ?? AdminAuthorization.SuperAdminRole,
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.Ok(new { filasRetiradas = result.RetiredRows, fecha = result.ExecutedAt });
+        }
+        catch (RepresentedAssociationNoticeNotConfirmedException ex)
+        {
+            return Results.Json(
+                new { code = RepresentedAssociationNoticeNotConfirmedException.Code, error = ex.Message },
+                statusCode: StatusCodes.Status409Conflict);
+        }
     }
 
     /// <summary>HU #13195 — <c>?transitOfficeId=</c> filtra por organismo. No modifica datos.</summary>
@@ -384,3 +456,7 @@ public static class AdminMandateSignersEndpoints
         return Guid.TryParse(raw, out var id) ? id : null;
     }
 }
+
+/// <summary>HU #13176 — cuerpo del retiro. El aviso a los clientes lo envía el PO o soporte; aquí solo se confirma.</summary>
+/// <param name="ConfirmaAvisoEnviado">Verdadero solo si el aviso a los clientes ya salió.</param>
+public sealed record RetireRepresentedAssociationsRequest(bool? ConfirmaAvisoEnviado);

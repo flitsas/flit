@@ -207,6 +207,8 @@ public static class DependencyInjection
         services.AddScoped<ListMandateSignersHandler>();
         services.AddScoped<Companies.MandateSigners.PhysicalSignatureMigration.GetPhysicalSignatureMigrationReportHandler>();
         services.AddScoped<Companies.MandateSigners.PhysicalSignatureMigration.GetMandateLinkCollapseReportHandler>();
+        services.AddScoped<Companies.MandateSigners.RepresentedAssociations.GetRepresentedAssociationImpactReportHandler>();
+        services.AddScoped<Companies.MandateSigners.RepresentedAssociations.RetireRepresentedAssociationsHandler>();
         services.AddScoped<GetMandateSignerSignatureImageHandler>();
         services.AddScoped<ListOtCompaniesHandler>();
 
