@@ -84,10 +84,15 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(
                     [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
 
+                var originBySigner = await LoadOriginsAsync(
+                    [.. signers.Select(s => s.Id)], transitOfficeId, null, cancellationToken).ConfigureAwait(false);
+
                 IReadOnlyList<MandateSignerItem> items =
                 [
                     .. signers.Select(s =>
-                        Project(s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner)),
+                        Project(
+                            s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner,
+                            origins: originBySigner)),
                 ];
 
                 if (visibility != OtCompanyVisibility.DirectOrWithReceivedProcedures)
@@ -134,6 +139,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             UserId = s.UserId,
             RegisteredAt = s.RegisteredAt,
             IsActive = s.IsActive,
+            Origin = s.Origin,
             SignerModel = s.SignerModel,
             SignatureMethod = s.SignatureMethod,
             ValidityKind = s.ValidityKind,
@@ -182,8 +188,12 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(
                     [signer.Id], cancellationToken).ConfigureAwait(false);
 
+                var originBySigner = await LoadOriginsAsync([signer.Id], null, null, cancellationToken)
+                    .ConfigureAwait(false);
+
                 return new MandateSignerItem
                 {
+                    Origin = originBySigner.GetValueOrDefault(signer.Id, MandateSignerOriginRules.Organismo),
                     Id = signer.Id,
                     TransitOfficeId = signer.TransitOfficeId,
                     TransitOfficeIds = officesBySigner.GetValueOrDefault(signer.Id, []),
@@ -255,11 +265,14 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 var companiesByOffice = await LoadOfficeCompaniesAsync(signerIds, cancellationToken)
                     .ConfigureAwait(false);
 
+                var originBySigner = await LoadOriginsAsync(signerIds, null, companyTenantId, cancellationToken)
+                    .ConfigureAwait(false);
+
                 IReadOnlyList<MandateSignerItem> items =
                 [
                     .. signers.Select(s => Project(
                         s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner,
-                        companiesByOffice)),
+                        companiesByOffice, originBySigner)),
                 ];
                 return items;
             },
@@ -458,6 +471,72 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             },
             cancellationToken);
 
+    public Task<string?> GetOriginForCompanyAsync(
+        Guid mandateSignerId,
+        Guid companyTenantId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCrossTenantReadAsync(
+            async () =>
+            {
+                var vivo = await _context.MandateSigners
+                    .AsNoTracking()
+                    .AnyAsync(s => s.Id == mandateSignerId && s.DeletedAt == null, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!vivo)
+                {
+                    return null;
+                }
+
+                // Vínculos activos o no: el origen lo fijó quien configuró el vínculo, y una baja no lo cambia.
+                var scopes = await _context.MandateSignerCompanies
+                    .AsNoTracking()
+                    .Where(c => c.MandateSignerId == mandateSignerId && c.CompanyTenantId == companyTenantId)
+                    .Select(c => c.ConfiguredByScope)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                return scopes.Count == 0 ? null : MandateSignerOriginRules.OriginOf(scopes);
+            },
+            cancellationToken);
+
+    /// <summary>
+    /// HU #13134 — origen por mandatario a partir de los vínculos (activos o no) dentro del alcance de la lista:
+    /// un organismo, una compañía o ninguno (todos los vínculos).
+    /// </summary>
+    private async Task<Dictionary<Guid, string>> LoadOriginsAsync(
+        List<Guid> signerIds,
+        Guid? transitOfficeId,
+        Guid? companyTenantId,
+        CancellationToken cancellationToken)
+    {
+        if (signerIds.Count == 0)
+        {
+            return [];
+        }
+
+        var query = _context.MandateSignerCompanies
+            .AsNoTracking()
+            .Where(c => signerIds.Contains(c.MandateSignerId));
+        if (transitOfficeId is { } officeId)
+        {
+            query = query.Where(c => c.TransitOfficeId == officeId);
+        }
+
+        if (companyTenantId is { } companyId)
+        {
+            query = query.Where(c => c.CompanyTenantId == companyId);
+        }
+
+        var rows = await query
+            .Select(c => new { c.MandateSignerId, c.ConfiguredByScope })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.MandateSignerId)
+            .ToDictionary(g => g.Key, g => MandateSignerOriginRules.OriginOf(g.Select(r => r.ConfiguredByScope)));
+    }
+
     private async Task<Dictionary<Guid, List<Guid>>> LoadActiveCompanyIdsBySignerAsync(
         Guid transitOfficeId,
         CancellationToken cancellationToken)
@@ -589,7 +668,8 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         Dictionary<Guid, List<Guid>> officesBySigner,
         Dictionary<Guid, AdminIdentityVigencia.Resultado> vigenciaBySigner,
         Dictionary<Guid, List<Guid>>? physicalBySigner = null,
-        Dictionary<Guid, List<MandateSignerOfficeCompanies>>? companiesByOffice = null)
+        Dictionary<Guid, List<MandateSignerOfficeCompanies>>? companiesByOffice = null,
+        Dictionary<Guid, string>? origins = null)
     {
         var vigencia = vigenciaBySigner.GetValueOrDefault(
             signer.Id, new AdminIdentityVigencia.Resultado(AdminIdentityVigencia.None, null));
@@ -610,6 +690,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             UserId = signer.UserId,
             RegisteredAt = signer.RegisteredAt,
             IsActive = signer.IsActive,
+            Origin = origins?.GetValueOrDefault(signer.Id) ?? MandateSignerOriginRules.Organismo,
             SignerModel = signer.SignerModel,
             SignatureMethod = signer.SignatureMethod,
             ValidityKind = signer.ValidityKind,

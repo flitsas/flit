@@ -10,6 +10,7 @@ using Flit.Admin.Application.Companies.LegalRepresentatives.DeleteLegalRepresent
 using Flit.Admin.Application.Companies.LegalRepresentatives.GetLegalRepresentative;
 using Flit.Admin.Application.Companies.LegalRepresentatives.ListLegalRepresentatives;
 using Flit.Admin.Application.Companies.LegalRepresentatives.UpdateLegalRepresentative;
+using Flit.Admin.Application.Companies.MandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
@@ -124,7 +125,10 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
             return forbid;
         }
 
-        var result = await handler.HandleAsync(childTenantId, ct).ConfigureAwait(false);
+        // HU #13134 — origen y banderas por rol (la cabeza de red actúa como Admin de Compañía).
+        var result = await handler
+            .HandleAsync(childTenantId, MandateSignerActors.ForCompany(user), ct)
+            .ConfigureAwait(false);
         return Results.Ok(new { data = result });
     }
 
@@ -163,6 +167,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         CompanyMandateSignerRequest request,
         ClaimsPrincipal user,
         [FromServices] ICompanyHierarchyRepository hierarchy,
+        [FromServices] MandateSignerAccessGuard accessGuard,
         [FromServices] UpdateCompanyMandateSignerHandler handler,
         CancellationToken ct)
     {
@@ -170,6 +175,14 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         if (forbid is not null)
         {
             return forbid;
+        }
+
+        // HU #13134 — candado: lo configurado por el organismo no lo edita la cabeza de red (403).
+        var denied = await MandateSignerActors
+            .CheckCompanyWriteAsync(accessGuard, user, childTenantId, mandateSignerId, ct).ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return denied;
         }
 
         var result = await handler
@@ -637,6 +650,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         Guid mandateSignerId,
         ClaimsPrincipal user,
         [FromServices] ICompanyHierarchyRepository hierarchy,
+        [FromServices] MandateSignerAccessGuard accessGuard,
         [FromServices] ListCompanyMandateSignersHandler listHandler,
         [FromServices] InactivateMandateSignerHandler handler,
         CancellationToken ct)
@@ -645,6 +659,14 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         if (forbid is not null)
         {
             return forbid;
+        }
+
+        // HU #13134 — candado por origen y rol (403) antes de tocar nada.
+        var denied = await MandateSignerActors
+            .CheckCompanyWriteAsync(accessGuard, user, childTenantId, mandateSignerId, ct).ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return denied;
         }
 
         var transitOfficeId = await ResolverOrganismoPrimarioAsync(listHandler, childTenantId, mandateSignerId, ct)
@@ -674,6 +696,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         Guid mandateSignerId,
         ClaimsPrincipal user,
         [FromServices] ICompanyHierarchyRepository hierarchy,
+        [FromServices] MandateSignerAccessGuard accessGuard,
         [FromServices] ListCompanyMandateSignersHandler listHandler,
         [FromServices] ReactivateMandateSignerHandler handler,
         CancellationToken ct)
@@ -682,6 +705,14 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         if (forbid is not null)
         {
             return forbid;
+        }
+
+        // HU #13134 — candado por origen y rol (403) antes de tocar nada.
+        var denied = await MandateSignerActors
+            .CheckCompanyWriteAsync(accessGuard, user, childTenantId, mandateSignerId, ct).ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return denied;
         }
 
         var transitOfficeId = await ResolverOrganismoPrimarioAsync(listHandler, childTenantId, mandateSignerId, ct)

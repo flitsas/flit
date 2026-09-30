@@ -175,6 +175,8 @@ public static class AdminMandateSignersEndpoints
         {
             TransitOfficeId = transitOfficeId,
             Visibility = OtCompanyVisibilityPolicy.For(httpContext.User),
+            // HU #13134 — origen y banderas puedeEditar/puedeEliminar según el rol de quien consulta.
+            ActorKind = MandateSignerActors.ForHub(httpContext.User),
         };
         var result = await handler.HandleAsync(query, cancellationToken).ConfigureAwait(false);
 

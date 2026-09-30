@@ -120,10 +120,14 @@ public static class AdminCompanyMandateSignersEndpoints
 
     private static async Task<IResult> ListAsync(
         Guid tenantId,
+        HttpContext httpContext,
         [FromServices] ListCompanyMandateSignersHandler handler,
         CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        // HU #13134 — origen y banderas puedeEditar/puedeEliminar calculadas con el rol de quien consulta.
+        var result = await handler
+            .HandleAsync(tenantId, MandateSignerActors.ForCompany(httpContext.User), cancellationToken)
+            .ConfigureAwait(false);
         // HU #11764 (ADR-0050) — se retira `mockIdentityEnabled`: el botón "Simular validación" ya no
         // existe (su ruta responde 410 Gone) y el flag no tenía otro consumidor.
         return Results.Ok(new { data = result });
@@ -166,9 +170,19 @@ public static class AdminCompanyMandateSignersEndpoints
         Guid mandateSignerId,
         CompanyMandateSignerRequest request,
         HttpContext httpContext,
+        [FromServices] MandateSignerAccessGuard guard,
         [FromServices] UpdateCompanyMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
+        // HU #13134 — candado: la compañía no edita lo que configuró el organismo de tránsito (403).
+        var denied = await MandateSignerActors
+            .CheckCompanyWriteAsync(guard, httpContext.User, tenantId, mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
         var result = await handler
             .HandleAsync(tenantId, mandateSignerId, request, ResolveUserId(httpContext.User), cancellationToken)
             .ConfigureAwait(false);
@@ -186,10 +200,20 @@ public static class AdminCompanyMandateSignersEndpoints
         Guid tenantId,
         Guid mandateSignerId,
         HttpContext httpContext,
+        [FromServices] MandateSignerAccessGuard guard,
         [FromServices] ListCompanyMandateSignersHandler listHandler,
         [FromServices] InactivateMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
+        // HU #13134 — candado por origen y rol (403) antes de tocar nada.
+        var denied = await MandateSignerActors
+            .CheckCompanyWriteAsync(guard, httpContext.User, tenantId, mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
         var transitOfficeId = await ResolverOrganismoPrimarioAsync(
             listHandler, tenantId, mandateSignerId, cancellationToken).ConfigureAwait(false);
         if (transitOfficeId is null)
@@ -215,10 +239,20 @@ public static class AdminCompanyMandateSignersEndpoints
         Guid tenantId,
         Guid mandateSignerId,
         HttpContext httpContext,
+        [FromServices] MandateSignerAccessGuard guard,
         [FromServices] ListCompanyMandateSignersHandler listHandler,
         [FromServices] ReactivateMandateSignerHandler handler,
         CancellationToken cancellationToken)
     {
+        // HU #13134 — candado por origen y rol (403) antes de tocar nada.
+        var denied = await MandateSignerActors
+            .CheckCompanyWriteAsync(guard, httpContext.User, tenantId, mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
         var transitOfficeId = await ResolverOrganismoPrimarioAsync(
             listHandler, tenantId, mandateSignerId, cancellationToken).ConfigureAwait(false);
         if (transitOfficeId is null)

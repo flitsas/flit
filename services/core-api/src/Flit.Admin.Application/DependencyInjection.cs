@@ -204,6 +204,8 @@ public static class DependencyInjection
         services.AddScoped<UpdateMandateSignerHandler>();
         services.AddScoped<InactivateMandateSignerHandler>();
         services.AddScoped<ReactivateMandateSignerHandler>();
+        // HU #13134 — permisos de escritura por origen del mandatario y rol del actor (candado del organismo).
+        services.AddScoped<Companies.MandateSigners.MandateSignerAccessGuard>();
         services.AddScoped<ListMandateSignersHandler>();
         services.AddScoped<Companies.MandateSigners.PhysicalSignatureMigration.GetPhysicalSignatureMigrationReportHandler>();
         services.AddScoped<Companies.MandateSigners.PhysicalSignatureMigration.GetMandateLinkCollapseReportHandler>();
