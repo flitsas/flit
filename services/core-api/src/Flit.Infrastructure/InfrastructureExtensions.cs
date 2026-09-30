@@ -235,7 +235,9 @@ public static class InfrastructureExtensions
             TramiteValidationLog.PolicyResolved(
                 logger,
                 policy.DuplicateActiveProcedure,
-                policy.VehicleRegistrationState);
+                policy.VehicleRegistrationState,
+                policy.VehicleBodyTypeRequired,
+                policy.MandatarioRequerido);
             return policy;
         });
 
