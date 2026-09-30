@@ -14,59 +14,71 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// mobiliarias del RNGM (<c>entidad</c>, <c>numeroDocumentoEntidad</c>, <c>fechaRegistro</c>,
 /// <c>estado</c>)— y el modelo solo declaraba el primero: el acreedor se perdía en silencio. Cada
 /// alias es una propiedad separada; <see cref="RuntGarantiasMobiliarias.Normalize"/> las une.
-/// Los ids llegan como string o como número según la fuente: <see cref="RuntFlexibleIdConverter"/>
-/// los acepta sin depender de las opciones del cliente HTTP.
+/// Todas las propiedades pasan por <see cref="RuntTolerantStringConverter"/>: un número llega como
+/// string y cualquier otro tipo queda en null, sin tumbar la deserialización de la consulta entera
+/// (revisión PR #504, L1) y sin depender de las opciones del cliente HTTP.
 /// </summary>
 public sealed class RuntGarantiaMobiliaria
 {
     [JsonPropertyName("idPrenda")]
-    [JsonConverter(typeof(RuntFlexibleIdConverter))]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? IdPrenda { get; set; }
 
     [JsonPropertyName("idVehiculoPrenda")]
-    [JsonConverter(typeof(RuntFlexibleIdConverter))]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? IdVehiculoPrenda { get; set; }
 
     [JsonPropertyName("acreedor")]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? Acreedor { get; set; }
 
     [JsonPropertyName("nombreAcreedor")]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? NombreAcreedor { get; set; }
 
     [JsonPropertyName("entidad")]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? Entidad { get; set; }
 
     [JsonPropertyName("numeroDocumentoAcreedor")]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? NumeroDocumentoAcreedor { get; set; }
 
     [JsonPropertyName("numeroDocumentoEntidad")]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? NumeroDocumentoEntidad { get; set; }
 
     [JsonPropertyName("tipoDocumentoAcreedor")]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? TipoDocumentoAcreedor { get; set; }
 
     [JsonPropertyName("tipoDocumentoEntidad")]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? TipoDocumentoEntidad { get; set; }
 
     [JsonPropertyName("fechaInscripcion")]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? FechaInscripcion { get; set; }
 
     [JsonPropertyName("fechaRegistro")]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? FechaRegistro { get; set; }
 
     [JsonPropertyName("estadoPrenda")]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? EstadoPrenda { get; set; }
 
     [JsonPropertyName("estado")]
+    [JsonConverter(typeof(RuntTolerantStringConverter))]
     public string? Estado { get; set; }
 }
 
 /// <summary>
-/// Lee un identificador que puede venir como string (<c>"2693079"</c>) o como número
-/// (<c>2693079</c>) y lo expone como string. Cualquier otro tipo de token se descarta (null) en vez de
-/// romper la deserialización de toda la respuesta.
+/// Lee un escalar del RUNT que puede venir como string (<c>"2693079"</c>) o como número
+/// (<c>2693079</c>) y lo expone como string. Cualquier otro tipo de token (bool, objeto, array) se
+/// descarta (null) en vez de romper la deserialización de toda la respuesta.
 /// </summary>
-public sealed class RuntFlexibleIdConverter : JsonConverter<string?>
+public sealed class RuntTolerantStringConverter : JsonConverter<string?>
 {
     public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
@@ -96,6 +108,59 @@ public sealed class RuntFlexibleIdConverter : JsonConverter<string?>
 }
 
 /// <summary>
+/// Lista de garantías tolerante (revisión PR #504, L1): los ítems que no son objeto se descartan y un
+/// valor que no es array (objeto, escalar) deja la lista en null. El proveedor ya cambió una vez
+/// array-vs-objeto en este mismo campo y eso tumbaba la consulta Verifik completa.
+/// </summary>
+public sealed class RuntGarantiaListConverter : JsonConverter<List<RuntGarantiaMobiliaria>?>
+{
+    public override List<RuntGarantiaMobiliaria>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+            return null;
+
+        if (reader.TokenType != JsonTokenType.StartArray)
+        {
+            reader.Skip();
+            return null;
+        }
+
+        var list = new List<RuntGarantiaMobiliaria>();
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.EndArray)
+                return list;
+
+            if (reader.TokenType == JsonTokenType.StartObject)
+            {
+                if (JsonSerializer.Deserialize<RuntGarantiaMobiliaria>(ref reader, options) is { } item)
+                    list.Add(item);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+
+        throw new JsonException("Array de garantías sin cerrar.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, List<RuntGarantiaMobiliaria>? value, JsonSerializerOptions options)
+    {
+        if (value is null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
+        writer.WriteStartArray();
+        foreach (var item in value)
+            JsonSerializer.Serialize(writer, item, options);
+        writer.WriteEndArray();
+    }
+}
+
+/// <summary>
 /// Normalizador y semáforo comunes de garantías RUNT para Kyverum y Verifik (Bug #13203). Salida:
 /// el contrato de <c>runt_gravamenes</c> que ya parsea el asistente (<c>idPrenda</c>,
 /// <c>tipoDocumentoAcreedor</c>, <c>numeroDocumentoAcreedor</c>, <c>nombreAcreedor</c>,
@@ -105,6 +170,17 @@ public static class RuntGarantiasMobiliarias
 {
     private const string CheckKey = "gravamenes";
     private const string CheckLabel = "Gravámenes y limitaciones";
+
+    // Mismos literales de estado que declaran los mappers (Ok/Warn/Unknown): contrato con el frontend.
+    private const string Ok = "ok";
+    private const string Warn = "warn";
+    private const string Unknown = "unknown";
+
+    /// <summary>Clave del primer acreedor con nombre.</summary>
+    public const string NombreAcreedorKey = "runt_nombre_acreedor";
+
+    /// <summary>Valor de <c>runt_gravamenes</c> cuando el proveedor respondió sin garantías.</summary>
+    public const string SinGarantiasJson = "[]";
 
     private static readonly JsonSerializerOptions GravamenJsonOptions = new()
     {
@@ -142,22 +218,32 @@ public static class RuntGarantiasMobiliarias
     }
 
     /// <summary>
-    /// Hidrata <c>runt_nombre_acreedor</c> (primer acreedor con nombre) y <c>runt_gravamenes</c> (JSON
-    /// normalizado). Sin garantías no escribe nada.
+    /// Hidrata las CUATRO claves de la señal de gravamen, siempre que el proveedor respondió
+    /// (revisión PR #504, B1): <c>runt_tiene_gravamenes</c>/<c>runt_tiene_prendas</c> con su valor o
+    /// null, <c>runt_nombre_acreedor</c> con el primer acreedor o null, y <c>runt_gravamenes</c> con el
+    /// JSON normalizado o <c>"[]"</c>. El upsert de la consulta solo inserta o actualiza: sin escribir la
+    /// clave, el detalle de una consulta anterior sobrevivía y <see cref="RuntGravamenSignal"/> lo seguía
+    /// contando aunque el RUNT ya no reportara nada.
     /// </summary>
-    public static void AddHydratedFields(List<HydratedField> fields, IReadOnlyList<NormalizedRuntGravamen> garantias)
+    public static void AddSignalFields(
+        List<HydratedField> fields,
+        string? gravamenes,
+        string? prendas,
+        IReadOnlyList<NormalizedRuntGravamen> garantias)
     {
-        if (garantias.Count == 0)
-            return;
+        ArgumentNullException.ThrowIfNull(fields);
+        ArgumentNullException.ThrowIfNull(garantias);
+
+        fields.Add(new HydratedField(RuntGravamenSignal.GravamenesKey, Blank(gravamenes), null));
+        fields.Add(new HydratedField(RuntGravamenSignal.PrendasKey, Blank(prendas), null));
 
         var primerAcreedor = garantias.Select(g => g.NombreAcreedor).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
-        if (primerAcreedor is not null)
-            fields.Add(new HydratedField("runt_nombre_acreedor", primerAcreedor, null));
+        fields.Add(new HydratedField(NombreAcreedorKey, primerAcreedor, null));
 
         fields.Add(new HydratedField(
             RuntGravamenSignal.DetalleKey,
             null,
-            JsonSerializer.Serialize(garantias, GravamenJsonOptions)));
+            garantias.Count == 0 ? SinGarantiasJson : JsonSerializer.Serialize(garantias, GravamenJsonOptions)));
     }
 
     /// <summary>
@@ -169,24 +255,28 @@ public static class RuntGarantiasMobiliarias
         if (RuntGravamenSignal.EsAfirmativo(gravamenes) || RuntGravamenSignal.EsAfirmativo(prendas))
         {
             return new ConsultationCheck(
-                CheckKey, CheckLabel, "warn", provider,
+                CheckKey, CheckLabel, Warn, provider,
                 $"El vehículo tiene gravámenes o prendas (gravámenes: {NormSiNo(gravamenes)} · prendas: {NormSiNo(prendas)})");
         }
 
         if (garantias > 0)
         {
             return new ConsultationCheck(
-                CheckKey, CheckLabel, "warn", provider,
+                CheckKey, CheckLabel, Warn, provider,
                 $"El RUNT registra {garantias} garantía(s) mobiliaria(s) (gravámenes: {NormSiNo(gravamenes)} · prendas: {NormSiNo(prendas)})");
         }
 
         if (string.IsNullOrWhiteSpace(gravamenes) && string.IsNullOrWhiteSpace(prendas))
-            return new ConsultationCheck(CheckKey, CheckLabel, "unknown", provider, "Sin información de gravámenes");
+            return new ConsultationCheck(CheckKey, CheckLabel, Unknown, provider, "Sin información de gravámenes");
 
         return new ConsultationCheck(
-            CheckKey, CheckLabel, "ok", provider,
+            CheckKey, CheckLabel, Ok, provider,
             "Sin gravámenes ni prendas registradas en el RUNT");
     }
+
+    /// <summary>Texto recortado, o null si viene vacío.</summary>
+    public static string? Blank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string NormSiNo(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "—" : value.Trim().ToUpperInvariant();
@@ -196,6 +286,15 @@ public static class RuntGarantiasMobiliarias
 }
 
 /// <summary>Contrato normalizado de un ítem de <c>runt_gravamenes</c>.</summary>
+/// <param name="IdPrenda">Id de la prenda/garantía en el RUNT.</param>
+/// <param name="TipoDocumentoAcreedor">Tipo de documento del acreedor (NIT, CC…).</param>
+/// <param name="NumeroDocumentoAcreedor">
+/// Documento del acreedor. PII (@pii:medium, ADR-0055, igual que <c>acreedor_documento</c>): no loguear.
+/// </param>
+/// <param name="NombreAcreedor">Nombre o razón social del acreedor.</param>
+/// <param name="FechaInscripcion">Fecha de inscripción/registro, tal como la envía el RUNT.</param>
+/// <param name="EstadoPrenda">Estado de la prenda/garantía.</param>
+/// <param name="IdVehiculoPrenda">Id del vínculo vehículo-prenda en el RUNT.</param>
 public sealed record NormalizedRuntGravamen(
     string? IdPrenda,
     string? TipoDocumentoAcreedor,

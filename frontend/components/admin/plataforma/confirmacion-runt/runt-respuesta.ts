@@ -150,11 +150,22 @@ function solicitudesDe(data: Json): RuntSolicitudVista[] {
   }));
 }
 
+/**
+ * Claves actuales primero; como respaldo, el shape del RNGM que entregan Kyverum y Verifik
+ * (`entidad`, `tipoDocumentoEntidad`, `numeroDocumentoEntidad`, `fechaRegistro` — Bug #13203),
+ * mismo criterio que `parseRuntGravamenesJson` en PrendaForm.
+ */
 function garantiasDe(data: Json, key: string): RuntGarantiaVista[] {
   return arr(data, key).map((g) => ({
-    acreedor: str(g, "acreedor") ?? "—",
-    documento: [str(g, "tipoDocumentoAcreedor"), str(g, "numeroDocumentoAcreedor")].filter(Boolean).join(" ") || "—",
-    fechaInscripcion: diaDe(str(g, "fechaInscripcion")),
+    acreedor: str(g, "acreedor") ?? str(g, "nombreAcreedor") ?? str(g, "entidad") ?? "—",
+    documento:
+      [
+        str(g, "tipoDocumentoAcreedor") ?? str(g, "tipoDocumentoEntidad"),
+        str(g, "numeroDocumentoAcreedor") ?? str(g, "numeroDocumentoEntidad"),
+      ]
+        .filter(Boolean)
+        .join(" ") || "—",
+    fechaInscripcion: diaDe(str(g, "fechaInscripcion") ?? str(g, "fechaRegistro")),
   }));
 }
 

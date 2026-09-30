@@ -48,6 +48,7 @@ public sealed class KyverumRuntVehicleData
     /// <c>vehiculo.prendas</c> es <c>SI</c> suele traer al menos un ítem; vacío si no hay.
     /// </summary>
     [JsonPropertyName("garantias")]
+    [JsonConverter(typeof(RuntGarantiaListConverter))]
     public List<RuntGarantiaMobiliaria>? Garantias { get; set; }
 
     /// <summary>
@@ -57,6 +58,7 @@ public sealed class KyverumRuntVehicleData
     /// las une al hidratar <c>runt_gravamenes</c>.
     /// </summary>
     [JsonPropertyName("garantiasPrendas")]
+    [JsonConverter(typeof(RuntGarantiaListConverter))]
     public List<RuntGarantiaMobiliaria>? GarantiasPrendas { get; set; }
 
     /// <summary>

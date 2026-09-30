@@ -68,8 +68,22 @@ public sealed class RuntGravamenSignalTests
     [Fact]
     public void ContarGarantias_CuentaElementosDelArray()
     {
-        RuntGravamenSignal.ContarGarantias("""[{"a":1},{"b":2}]""").Should().Be(2);
+        RuntGravamenSignal.ContarGarantias("""[{"entidad":"BANCO DE PRUEBA S.A."},{"idPrenda":1000001}]""").Should().Be(2);
         RuntGravamenSignal.ContarGarantias("{roto").Should().Be(0);
         RuntGravamenSignal.ContarGarantias(null).Should().Be(0);
+    }
+
+    // Revisión PR #504 (O3) — cuenta lo mismo que el normalizador: solo objetos con nombre, documento,
+    // idPrenda o fecha (en cualquiera de sus alias). null, escalares, {} y objetos sin valor no cuentan.
+    [Fact]
+    public void ContarGarantias_IgnoraNullNoObjetosYObjetosSinValor()
+    {
+        const string json = """
+            [ null, 5, "x", [], {}, { "estado": "Registro" }, { "idPrenda": "", "entidad": "  " },
+              { "entidad": "BANCO DE PRUEBA S.A." }, { "IdPrenda": 1000001 }, { "fechaRegistro": "30/09/2026" } ]
+            """;
+
+        RuntGravamenSignal.ContarGarantias(json).Should().Be(3);
+        RuntGravamenSignal.Reporta(BanderasNo(Fv("runt_gravamenes", json: "[{}]"))).Should().BeFalse();
     }
 }

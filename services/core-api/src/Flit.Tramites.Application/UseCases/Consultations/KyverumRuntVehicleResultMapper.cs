@@ -275,14 +275,11 @@ public static class KyverumRuntVehicleResultMapper
         Add(fields, "vehicle_tires", data?.DatosTecnicos?.NoLlantas);
         Add(fields, "vehicle_traction", data?.DatosTecnicos?.Rodaje);
 
-        // Señal RUNT de prenda/gravamen para el paso Prenda (desplegable junto a la alerta).
-        Add(fields, "runt_tiene_gravamenes", v.Gravamenes);
-        Add(fields, "runt_tiene_prendas", v.Prendas);
-
-        // Detalle de acreedores: Kyverum lo trae en data.garantias (+ garantiasPrendas). Sin esto
-        // el wizard solo veía SI/NO aunque el RUNT ya devolvía Bancolombia, NIT y fecha. Bug #13203:
-        // normalizador común con Verifik, que reconoce también el vocabulario del RNGM (entidad…).
-        RuntGarantiasMobiliarias.AddHydratedFields(fields, garantias);
+        // Señal RUNT de prenda/gravamen para el paso Prenda (desplegable junto a la alerta) + detalle
+        // de acreedores de data.garantias (+ garantiasPrendas). Bug #13203: normalizador común con
+        // Verifik (reconoce el vocabulario del RNGM) y las cuatro claves se escriben SIEMPRE, vacías
+        // si no hay dato, para que una re-consulta pise lo que dejó la anterior.
+        RuntGarantiasMobiliarias.AddSignalFields(fields, v.Gravamenes, v.Prendas, garantias);
 
         // Fecha de matrícula (HU #11303): Kyverum la manda en `fechaRegistro`; `fechaMatricula` llega
         // null en las tres capturas. Sin esta llave, la regla de antigüedad de la RTM no puede
