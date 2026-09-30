@@ -40,7 +40,11 @@ public static class IctPayloadNormalizer
             StartsProcedureInPaused = row.StartsProcedureInPaused,
             ObservationWhenPaused = Clean(row.ObservationWhenPaused),
             SendAutomaticTrafficSecretary = row.SendAutomaticTrafficSecretary,
-            PlateAssignmentType = row.PlateAssignmentType,
+            // Bug #13109 punto 6: en traspaso (3, 4) el campo no aplica (el vehículo ya tiene placa): se
+            // ignora lo que envíe el cliente y se persiste 0. En matrícula se conserva.
+            PlateAssignmentType = RegisterRowValidator.IsTraspaso(row.TransactionType)
+                ? (short)0
+                : row.PlateAssignmentType,
 
             // Compañía relacionada (servicio público).
             RelatedCompanyDocument = Clean(row.RelatedCompanyDocument),
