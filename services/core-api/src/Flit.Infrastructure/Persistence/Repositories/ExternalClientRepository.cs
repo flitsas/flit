@@ -119,6 +119,84 @@ internal sealed class ExternalClientRepository(FlitDbContext context) : IExterna
             .ConfigureAwait(false);
     }
 
+    // HU #13088 — las escrituras de administración son un UPDATE directo (ExecuteUpdate), no una entidad
+    // rastreada: el login cuenta fallos con su propio UPDATE y el row_version (token de concurrencia) cambiaría
+    // entre la lectura y el guardado. Aquí gana la última escritura, que es lo esperado en un cambio de admin.
+    public async Task<ExternalClientView?> UpdateAsync(
+        Guid id, ExternalClientChanges changes, Guid? actor, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        var scopesJson = changes.Scopes is null ? null : JsonSerializer.Serialize(changes.Scopes);
+
+        var rows = await Vigentes(id).ExecuteUpdateAsync(s =>
+        {
+            if (changes.DisplayName is not null)
+            {
+                s.SetProperty(c => c.DisplayName, changes.DisplayName);
+            }
+
+            if (changes.Purpose is not null)
+            {
+                s.SetProperty(c => c.Purpose, changes.Purpose);
+            }
+
+            if (scopesJson is not null)
+            {
+                s.SetProperty(c => c.Scopes, scopesJson);
+            }
+
+            if (changes.IsActive is { } isActive)
+            {
+                s.SetProperty(c => c.IsActive, isActive);
+            }
+
+            if (changes.MustRotate is { } mustRotate)
+            {
+                s.SetProperty(c => c.MustRotate, mustRotate);
+            }
+
+            s.SetProperty(c => c.UpdatedAt, now);
+            s.SetProperty(c => c.UpdatedBy, actor);
+        }, cancellationToken).ConfigureAwait(false);
+
+        return rows == 0 ? null : await GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ExternalClientView?> ReplaceSecretAsync(
+        Guid id, string newSecretHash, bool revokePrevious, Guid? actor, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newSecretHash);
+
+        var rows = await Vigentes(id).ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.PreviousSecretHash, c => revokePrevious ? null : c.SecretHash)
+            .SetProperty(c => c.SecretHash, newSecretHash)
+            .SetProperty(c => c.SecretRotatedAt, now)
+            .SetProperty(c => c.MustRotate, false)
+            .SetProperty(c => c.FailedAttempts, 0)
+            .SetProperty(c => c.LockedUntil, (DateTimeOffset?)null)
+            .SetProperty(c => c.UpdatedAt, now)
+            .SetProperty(c => c.UpdatedBy, actor), cancellationToken).ConfigureAwait(false);
+
+        return rows == 0 ? null : await GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ExternalClientView?> UnlockAsync(
+        Guid id, Guid? actor, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        var rows = await Vigentes(id).ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.FailedAttempts, 0)
+            .SetProperty(c => c.LockedUntil, (DateTimeOffset?)null)
+            .SetProperty(c => c.UpdatedAt, now)
+            .SetProperty(c => c.UpdatedBy, actor), cancellationToken).ConfigureAwait(false);
+
+        return rows == 0 ? null : await GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+    }
+
+    private IQueryable<ExternalClient> Vigentes(Guid id) =>
+        context.ExternalClients.Where(c => c.Id == id && c.DeletedAt == null);
+
     private static ExternalClientView ToView(ExternalClient entity) => new(
         entity.Id,
         entity.ClientId,

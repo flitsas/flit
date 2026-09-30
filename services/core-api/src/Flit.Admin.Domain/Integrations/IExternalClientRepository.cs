@@ -29,4 +29,24 @@ public interface IExternalClientRepository
 
     /// <summary>HU #13087 — pase emitido: limpia intentos y bloqueo y sella <c>last_token_at</c>.</summary>
     Task RegisterTokenIssuedAsync(Guid id, DateTimeOffset now, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #13088 — aplica los campos no nulos de <paramref name="changes"/> y sella <c>updated_by</c> (la
+    /// auditoría guarda la fila completa: así queda quién hizo el cambio). <c>null</c> si no existe.
+    /// </summary>
+    Task<ExternalClientView?> UpdateAsync(
+        Guid id, ExternalClientChanges changes, Guid? actor, DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #13088 — sustituye el secreto por <paramref name="newSecretHash"/>. El hash vigente pasa a ser el
+    /// anterior (ventana de gracia) salvo con <paramref name="revokePrevious"/>, que lo anula al instante.
+    /// Limpia rotación obligatoria, intentos y bloqueo. <c>null</c> si no existe.
+    /// </summary>
+    Task<ExternalClientView?> ReplaceSecretAsync(
+        Guid id, string newSecretHash, bool revokePrevious, Guid? actor, DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>HU #13088 — pone a cero los intentos y quita el bloqueo. <c>null</c> si no existe.</summary>
+    Task<ExternalClientView?> UnlockAsync(Guid id, Guid? actor, DateTimeOffset now, CancellationToken cancellationToken = default);
 }
