@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.UseCases.Certifications;
 using Flit.Tramites.Domain.Certifications;
@@ -36,16 +35,18 @@ public static class VerifikResultMapper
     public static ConsultationResult MapVehicle(VerifikVehicleResponse response, DateOnly today)
     {
         var info = response.Data?.InformacionGeneral;
+        var garantias = RuntGarantiasMobiliarias.Normalize(response.Data?.GarantiasMobiliarias);
 
         var checks = new List<ConsultationCheck>
         {
             MapEstadoVehiculo(info),
             MapSoat(response.Data?.Soat),
             MapTecnomecanica(response.Data?.TecnoMecanica),
-            MapGravamenes(info),
+            // Bug #13203 — banderas de informacionGeneral + garantías mobiliarias normalizadas.
+            RuntGarantiasMobiliarias.BuildCheck(Provider, info?.TieneGravamenes, info?.Prendas, garantias.Count),
         };
 
-        var hydrated = MapHydratedFields(response.Data);
+        var hydrated = MapHydratedFields(response.Data, garantias);
         var overall = ComputeOverall(checks);
         var certifications = MapCertifications(response.Data, today);
 
@@ -162,38 +163,8 @@ public static class VerifikResultMapper
         return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Unknown, Provider, "Sin información de tecnomecánica");
     }
 
-    private static ConsultationCheck MapGravamenes(VerifikInformacionGeneral? info)
-    {
-        // RUNT real: la señal de gravámenes vive en informacionGeneral.tieneGravamenes/prendas
-        // (strings "SI"/"NO"), no en el array garantiasMobiliarias.
-        if (info is null || (string.IsNullOrWhiteSpace(info.TieneGravamenes) && string.IsNullOrWhiteSpace(info.Prendas)))
-            return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Unknown, Provider, "Sin información de gravámenes");
-
-        var sinGravamenes = !IsSi(info.TieneGravamenes);
-        var sinPrendas = !IsSi(info.Prendas);
-
-        if (sinGravamenes && sinPrendas)
-        {
-            return new ConsultationCheck(
-                "gravamenes", "Gravámenes y limitaciones", Ok, Provider,
-                "Sin gravámenes ni prendas registradas en el RUNT");
-        }
-
-        return new ConsultationCheck(
-            "gravamenes",
-            "Gravámenes y limitaciones",
-            Warn,
-            Provider,
-            $"El vehículo tiene gravámenes o prendas (gravámenes: {NormSiNo(info.TieneGravamenes)} · prendas: {NormSiNo(info.Prendas)})");
-    }
-
-    private static string NormSiNo(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? "—" : value.Trim().ToUpperInvariant();
-
-    private static bool IsSi(string? value) =>
-        string.Equals(value, "SI", StringComparison.OrdinalIgnoreCase);
-
-    private static List<HydratedField> MapHydratedFields(VerifikVehicleData? data)
+    private static List<HydratedField> MapHydratedFields(
+        VerifikVehicleData? data, IReadOnlyList<NormalizedRuntGravamen> garantias)
     {
         var info = data?.InformacionGeneral;
         if (info is null)
@@ -273,13 +244,9 @@ public static class VerifikResultMapper
         // Señal RUNT de prenda/gravamen para el paso Prenda (desplegable junto a la alerta).
         AddSiHay(fields, "runt_tiene_gravamenes", info.TieneGravamenes);
         AddSiHay(fields, "runt_tiene_prendas", info.Prendas);
-        if (data?.GarantiasMobiliarias is { Count: > 0 } garantias)
-        {
-            fields.Add(new HydratedField(
-                "runt_gravamenes",
-                null,
-                JsonSerializer.Serialize(garantias)));
-        }
+        // Bug #13203 — antes se guardaba el crudo (entidad, numeroDocumentoEntidad…) y el asistente no
+        // reconocía al acreedor; ahora sale el contrato normalizado + runt_nombre_acreedor, igual que Kyverum.
+        RuntGarantiasMobiliarias.AddHydratedFields(fields, garantias);
 
         // SOAT: tomar el vigente; si no, el primero disponible.
         var soat = data?.Soat?.FirstOrDefault(s =>
