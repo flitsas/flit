@@ -1,5 +1,6 @@
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
@@ -16,12 +17,12 @@ namespace Flit.Infrastructure.OtRules;
 /// EXCLUSIVAMENTE contra el módulo Identidad (HU #11752, ADR-0050): fuente única de verdad, ya no
 /// <c>admin.admin_identity_validations</c> (ADR-0034, superada).
 ///
-/// <para><b>Qué tenant se consulta.</b> Las validaciones de identidad del mandatario viven en el tenant
-/// PROPIO del organismo de tránsito (mismo criterio que el disparo admin ya retirado: la identidad de un
-/// mandatario se ancla al OT donde está registrado, no a la compañía gestora que en cada llamada puede
-/// variar). Se resuelve con <see cref="ITransitOfficeOperationalStatusReader"/> — MISMO mecanismo que
-/// usaba <c>AdminMandateSignerIdentityEndpoints.BuildDescriptorAsync</c> antes de esta HU.</para>
-///
+/// <para><b>Qué tenant se consulta (HU #13121).</b> La validación biométrica del mandatario se registra en
+/// el tenant de la COMPAÑÍA que lo registró (el módulo Identidad devuelve 403 a los usuarios de un OT, así
+/// que nunca nace en el tenant del organismo). Se resuelve en cada compañía vinculada (regla única: vigente
+/// en alguna) con <see cref="MandateSignerIdentityTenantResolver"/>; el tenant del OT solo es respaldo para
+/// mandatarios sin compañías vinculadas.</para>
+
 /// <para><b>Reutiliza, no duplica.</b> La consulta y clasificación de vigencia vive en
 /// <see cref="IdentityVigenciaPorDocumentoResolver"/> (HU #11751, capa Application): este directorio NO
 /// tiene su propia query contra <c>tramites.procedure_instance_biometric_validations</c>.</para>
@@ -139,9 +140,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
     /// <summary>
     /// Identidades APROBADAS y VIGENTES (HU #11752, ADR-0050) de los mandatarios indicados, resueltas
-    /// contra el módulo Identidad en el tenant PROPIO del organismo <paramref name="transitOfficeId"/>.
-    /// Devuelve <c>{}</c> sin consultar si el OT no tiene tenant dado de alta — un mandatario sin OT
-    /// operativo no puede tener identidad vigente que apalancar.
+    /// contra el módulo Identidad en el tenant de la(s) COMPAÑÍA(S) que registró al mandatario (HU #13121;
+    /// vigente en alguna de sus compañías vinculadas). El tenant del OT solo es respaldo si no tiene compañías.
     /// </summary>
     private async Task<Dictionary<Guid, IdentidadVigente>> LoadVigentIdentitiesAsync(
         Guid transitOfficeId,
@@ -154,26 +154,20 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             return map;
         }
 
-        var status = await _otStatus.GetByIdAsync(transitOfficeId, cancellationToken).ConfigureAwait(false);
-        if (status is null || !status.HasTenant || status.TenantId is not { } otTenantId)
-        {
-            return map;
-        }
+        var now = DateTimeOffset.UtcNow;
+        var resueltos = await MandateSignerIdentityTenantResolver.ResolveAsync(
+            _context,
+            _otStatus,
+            [.. signers.Select(s => new MandateSignerIdentityTenantResolver.SignerRef(
+                s.Id, transitOfficeId, s.DocumentType, s.DocumentNumber))],
+            (tenantId, documentos, ct) => _identityResolver.ResolveManyAsync(tenantId, documentos, now, ct),
+            cancellationToken).ConfigureAwait(false);
 
-        var documents = signers
-            .Select(s => (s.DocumentType, s.DocumentNumber))
-            .ToList();
-        var resolved = await _identityResolver
-            .ResolveManyAsync(otTenantId, documents, DateTimeOffset.UtcNow, cancellationToken)
-            .ConfigureAwait(false);
-
-        foreach (var s in signers)
+        foreach (var (signerId, result) in resueltos)
         {
-            var key = DocumentCanonicalNormalization.IdentidadKey(otTenantId, s.DocumentType, s.DocumentNumber);
-            if (resolved.TryGetValue(key, out var result)
-                && result.Status == IdentityVigenciaEstados.AprobadaVigente)
+            if (result.Status == IdentityVigenciaEstados.AprobadaVigente)
             {
-                map[s.Id] = new IdentidadVigente(result.CertificateHash, result.ValidUntil);
+                map[signerId] = new IdentidadVigente(result.CertificateHash, result.ValidUntil);
             }
         }
 

@@ -229,7 +229,13 @@ public sealed class MandateSimulatorServiceTests
         otStatusReader
             .GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((Flit.Admin.Domain.Companies.TransitOffices.TransitOfficeOperationalStatusItem?)null);
-        var identityResolver = new IdentityVigenciaPorDocumentoResolver(Substitute.For<IProcedureInstanceRepository>());
+        // HU #13121: la identidad se busca en el tenant de las compañías vinculadas; aquí no se ejercita.
+        var identityRepo = Substitute.For<IProcedureInstanceRepository>();
+        identityRepo.ListBiometricValidationsByPersonAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns((Array.Empty<Flit.Tramites.Domain.Entities.ProcedureInstanceBiometricValidation>(), 0, false));
+        var identityResolver = new IdentityVigenciaPorDocumentoResolver(identityRepo);
         var service = new MandateSimulatorService(
             db,
             new FakeCatalog(),

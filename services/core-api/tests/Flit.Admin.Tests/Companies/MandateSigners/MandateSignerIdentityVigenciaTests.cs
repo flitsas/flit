@@ -139,6 +139,90 @@ public sealed class MandateSignerIdentityVigenciaTests
             Arg.Any<CancellationToken>());
     }
 
+    private static readonly Guid Compania = Guid.NewGuid();
+
+    private static async Task VincularCompaniaAsync(FlitDbContext ctx, Guid companyTenantId)
+    {
+        ctx.MandateSignerCompanies.Add(new MandateSignerCompany
+        {
+            Id = Guid.NewGuid(),
+            MandateSignerId = Signer,
+            TransitOfficeId = Ot,
+            CompanyTenantId = companyTenantId,
+            IsActive = true,
+            CreatedAt = Now,
+        });
+        await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private static ProcedureInstanceBiometricValidation Aprobada(Guid tenantId) => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = tenantId,
+        DocumentType = "CC",
+        DocumentNumber = Documento,
+        Status = BiometricEstados.Aprobado,
+        Provider = BiometricProviders.Kyverum,
+        TokenHash = "hash",
+        ExpiresAt = Now.AddHours(1),
+        ValidatedAt = Now.AddDays(-1),
+        ValidUntil = Now.AddDays(29),
+        CreatedAt = Now.AddDays(-1),
+    };
+
+    [Fact]
+    public async Task GetByIdAsync_ValidacionRegistradaEnElTenantDeLaCompania_MarcaValidAunqueElOtTengaOtroTenant()
+    {
+        // HU #13121 AC2: la validación vive en el tenant de la compañía (el OT no puede registrar en Identidad).
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
+        await VincularCompaniaAsync(ctx, Compania);
+        ctx.ProcedureInstanceBiometricValidations.Add(Aprobada(Compania));
+        await ctx.SaveChangesAsync(ct);
+
+        var reader = new DbMandateSignerReader(ctx, ReaderConTenant(Ot, OtTenant));
+        var item = await reader.GetByIdAsync(Signer, ct);
+
+        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
+        item.IdentityValidUntil.Should().Be(Now.AddDays(29));
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ValidacionSoloEnUnTenantNoRelacionado_QuedaSinValidar()
+    {
+        // HU #13121 AC3: existe una aprobada, pero en un tenant que ni es de su compañía ni del OT vinculado.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
+        await VincularCompaniaAsync(ctx, Compania);
+        ctx.ProcedureInstanceBiometricValidations.Add(Aprobada(Guid.NewGuid()));
+        // Incluso una en el tenant del OT se ignora: con compañías vinculadas manda el tenant de la compañía.
+        ctx.ProcedureInstanceBiometricValidations.Add(Aprobada(OtTenant));
+        await ctx.SaveChangesAsync(ct);
+
+        var reader = new DbMandateSignerReader(ctx, ReaderConTenant(Ot, OtTenant));
+        var item = await reader.GetByIdAsync(Signer, ct);
+
+        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.None);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_DosCompaniasConValidacionSoloEnUna_MarcaValid()
+    {
+        // HU #13121 AC4: regla única — vigente en alguna de sus compañías vinculadas; no depende del OT.
+        var ct = TestContext.Current.CancellationToken;
+        var otraCompania = Guid.NewGuid();
+        await using var ctx = await SeedAsync();
+        await VincularCompaniaAsync(ctx, Compania);
+        await VincularCompaniaAsync(ctx, otraCompania);
+        ctx.ProcedureInstanceBiometricValidations.Add(Aprobada(otraCompania));
+        await ctx.SaveChangesAsync(ct);
+
+        var reader = new DbMandateSignerReader(ctx, ReaderConTenant(Ot, null));
+        var item = await reader.GetByIdAsync(Signer, ct);
+
+        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
+    }
+
     [Fact]
     public async Task ListByOtAsync_DosMandatariosDelMismoOrganismo_ResuelveEnUnaSolaConsultaBatch()
     {

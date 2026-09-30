@@ -616,11 +616,10 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     /// había migrado, pero la ficha admin (esta clase) seguía leyendo la tabla vieja y su rótulo no se
     /// movía al prevalidar desde Identidad.
     /// <para>
-    /// <b>Tenant.</b> La identidad de un mandatario vive en el tenant PROPIO del organismo donde está
-    /// registrado (<c>signer.TransitOfficeId</c>), NO en la compañía gestora que consulta la ficha —
-    /// mismo mecanismo que <c>MandateSignerDirectory.LoadVigentIdentitiesAsync</c> (HU #11752), resuelto
-    /// con <see cref="ITransitOfficeOperationalStatusReader"/>. Se agrupa por organismo para resolver el
-    /// tenant una sola vez por OT y no repetir la consulta de perfil por cada mandatario.
+    /// <b>Tenant (HU #13121).</b> La validación biométrica se registra en el tenant de la COMPAÑÍA que
+    /// registró al mandatario (el módulo Identidad devuelve 403 a los usuarios de un OT), no en el del
+    /// organismo. Ver <see cref="MandateSignerIdentityTenantResolver"/> (vigente en alguna de sus
+    /// compañías vinculadas; respaldo al tenant del OT solo si no tiene compañías).
     /// </para>
     /// <para>
     /// <b>Lote.</b> Dentro de cada grupo por organismo, UNA sola consulta SQL para todos sus documentos
@@ -650,31 +649,18 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
         var now = DateTimeOffset.UtcNow;
 
-        foreach (var group in signers.GroupBy(s => s.TransitOfficeId))
+        // HU #13121 — el tenant es el de la(s) compañía(s) que registró al mandatario, no el del OT.
+        var resueltos = await MandateSignerIdentityTenantResolver.ResolveAsync(
+            _context,
+            _otStatus,
+            [.. signers.Select(s => new MandateSignerIdentityTenantResolver.SignerRef(
+                s.Id, s.TransitOfficeId, s.DocumentType, s.DocumentNumber))],
+            (tenantId, documentos, ct) => _identityResolver.ResolveManyBatchedAsync(tenantId, documentos, now, ct),
+            cancellationToken).ConfigureAwait(false);
+
+        foreach (var (signerId, resultado) in resueltos)
         {
-            var status = await _otStatus.GetByIdAsync(group.Key, cancellationToken).ConfigureAwait(false);
-            if (status is null || !status.HasTenant || status.TenantId is not { } otTenantId)
-            {
-                // Sin tenant operativo del OT no hay contra qué resolver identidad (igual que antes:
-                // sin fila ⇒ None). El resolver de Identidad NO se invoca para este grupo.
-                continue;
-            }
-
-            var documentos = group
-                .Select(s => (s.DocumentType, s.DocumentNumber))
-                .Distinct()
-                .ToList();
-
-            var resueltos = await _identityResolver
-                .ResolveManyBatchedAsync(otTenantId, documentos, now, cancellationToken)
-                .ConfigureAwait(false);
-
-            foreach (var s in group)
-            {
-                var key = DocumentCanonicalNormalization.IdentidadKey(otTenantId, s.DocumentType, s.DocumentNumber);
-                var resultado = resueltos.GetValueOrDefault(key, IdentityVigenciaResult.SinValidacion);
-                result[s.Id] = IdentityVigenciaLegacyMapper.ToLegacyResultado(resultado);
-            }
+            result[signerId] = IdentityVigenciaLegacyMapper.ToLegacyResultado(resultado);
         }
 
         return result;

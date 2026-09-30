@@ -80,19 +80,85 @@ public sealed class MandateSignerDirectoryIdentityVigenciaTests
         return reader;
     }
 
-    private static IProcedureInstanceRepository RepoStub(ProcedureInstanceBiometricValidation? latest)
+    /// <summary>La validación vive en el tenant indicado (por defecto el de la compañía gestora, HU #13121).</summary>
+    private static IProcedureInstanceRepository RepoStub(
+        ProcedureInstanceBiometricValidation? latest, Guid? tenant = null)
     {
         IReadOnlyList<ProcedureInstanceBiometricValidation> rows =
             latest is null ? [] : [latest];
         var repo = Substitute.For<IProcedureInstanceRepository>();
         repo.ListBiometricValidationsByPersonAsync(
-                OtTenant, "CC", Documento, 0, 1, Arg.Any<CancellationToken>())
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns((Array.Empty<ProcedureInstanceBiometricValidation>(), 0, false));
+        repo.ListBiometricValidationsByPersonAsync(
+                tenant ?? Gestora, "CC", Documento, 0, 1, Arg.Any<CancellationToken>())
             .Returns((rows, rows.Count, false));
         return repo;
     }
 
+    private static ProcedureInstanceBiometricValidation Aprobada() => new()
+    {
+        Status = BiometricEstados.Aprobado,
+        DocumentType = "CC",
+        DocumentNumber = Documento,
+        ValidatedAt = Now.AddDays(-1),
+        ValidUntil = Now.AddDays(29),
+        CertificateHash = "hash-mandatario",
+    };
+
     [Fact]
-    public async Task GetCandidatesAsync_ConIdentidadAprobadaVigenteEnElTenantDelOt_MarcaVigente()
+    public async Task GetCandidatesAsync_ValidacionSoloEnElTenantDelOt_NoHaySello()
+    {
+        // HU #13121 AC3: la validación existe, pero en un tenant que no es el de la compañía del mandatario
+        // (aquí el del OT): no se estampa sello y no hay error.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
+        var directorio = new MandateSignerDirectory(
+            ctx, ReaderConTenant(OtTenant),
+            new IdentityVigenciaPorDocumentoResolver(RepoStub(Aprobada(), tenant: OtTenant)));
+
+        var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
+
+        var candidato = candidatos.Should().ContainSingle().Subject;
+        candidato.IdentityVigente.Should().BeFalse();
+        candidato.CertificadoIdentidad.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetCandidatesAsync_ValidacionVigenteEnOtraCompaniaVinculada_MarcaVigente()
+    {
+        // HU #13121 AC4: vinculado a dos compañías con validación vigente solo en la otra: una única regla
+        // (vigente en alguna de sus compañías) y no depende del tenant del OT.
+        var ct = TestContext.Current.CancellationToken;
+        var otraCompania = Guid.NewGuid();
+        await using var ctx = await SeedAsync();
+        ctx.MandateSignerCompanies.Add(new MandateSignerCompany
+        {
+            Id = Guid.NewGuid(),
+            MandateSignerId = Signer,
+            TransitOfficeId = Ot,
+            CompanyTenantId = otraCompania,
+            IsActive = true,
+            CreatedAt = Now,
+        });
+        await ctx.SaveChangesAsync(ct);
+        var repo = RepoStub(null);
+        repo.ListBiometricValidationsByPersonAsync(
+                otraCompania, "CC", Documento, 0, 1, Arg.Any<CancellationToken>())
+            .Returns((new[] { Aprobada() } as IReadOnlyList<ProcedureInstanceBiometricValidation>, 1, false));
+        var directorio = new MandateSignerDirectory(
+            ctx, ReaderConTenant(null), new IdentityVigenciaPorDocumentoResolver(repo));
+
+        var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
+
+        var candidato = candidatos.Should().ContainSingle().Subject;
+        candidato.IdentityVigente.Should().BeTrue();
+        candidato.CertificadoIdentidad.Should().Be("hash-mandatario");
+    }
+
+    [Fact]
+    public async Task GetCandidatesAsync_ConIdentidadAprobadaVigenteEnElTenantDeLaCompania_MarcaVigente()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
@@ -160,36 +226,31 @@ public sealed class MandateSignerDirectoryIdentityVigenciaTests
     [Fact]
     public async Task GetCandidatesAsync_OtSinTenant_NoConsultaIdentidad_YQuedaSinVigencia()
     {
-        // Sin tenant del OT no hay contra qué resolver identidad: se degrada a "sin vigencia" sin
-        // lanzar, y el resolver de Identidad NUNCA se invoca (repo.DidNotReceive).
+        // Mandatario SIN compañías vinculadas y OT sin tenant: no hay contra qué resolver identidad, se
+        // degrada a "sin vigencia" sin lanzar y el resolver de Identidad NUNCA se invoca (repo.DidNotReceive).
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
+        ctx.MandateSignerCompanies.RemoveRange(ctx.MandateSignerCompanies);
+        await ctx.SaveChangesAsync(ct);
         var repo = Substitute.For<IProcedureInstanceRepository>();
         var directorio = new MandateSignerDirectory(
             ctx, ReaderConTenant(null), new IdentityVigenciaPorDocumentoResolver(repo));
 
-        var candidatos = await directorio.GetCandidatesAsync(Ot, Gestora, null, ct);
+        var candidato = await directorio.GetByIdAsync(Signer, ct);
 
-        candidatos.Should().ContainSingle().Which.IdentityVigente.Should().BeFalse();
+        candidato.Should().NotBeNull();
+        candidato!.IdentityVigente.Should().BeFalse();
         await repo.DidNotReceive().ListBiometricValidationsByPersonAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task GetByIdAsync_ResuelveIdentidadPorElTenantDelOtDelMandatario()
+    public async Task GetByIdAsync_ResuelveIdentidadPorElTenantDeLaCompaniaDelMandatario()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
-        var aprobada = new ProcedureInstanceBiometricValidation
-        {
-            Status = BiometricEstados.Aprobado,
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            ValidatedAt = Now.AddDays(-1),
-            ValidUntil = Now.AddDays(29),
-            CertificateHash = "hash-mandatario",
-        };
+        var aprobada = Aprobada();
         var directorio = new MandateSignerDirectory(
             ctx, ReaderConTenant(OtTenant),
             new IdentityVigenciaPorDocumentoResolver(RepoStub(aprobada)));

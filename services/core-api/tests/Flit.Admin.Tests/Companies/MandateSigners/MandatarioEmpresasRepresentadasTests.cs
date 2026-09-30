@@ -279,7 +279,14 @@ public sealed class MandatarioEmpresasRepresentadasTests
         otStatusReader
             .GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((TransitOfficeOperationalStatusItem?)null);
-        var identityResolver = new IdentityVigenciaPorDocumentoResolver(Substitute.For<IProcedureInstanceRepository>());
+        // HU #13121: la identidad se busca en el tenant de las compañías vinculadas; esta suite no la ejercita,
+        // así que el módulo Identidad responde "sin validaciones".
+        var identityRepo = Substitute.For<IProcedureInstanceRepository>();
+        identityRepo.ListBiometricValidationsByPersonAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns((Array.Empty<Flit.Tramites.Domain.Entities.ProcedureInstanceBiometricValidation>(), 0, false));
+        var identityResolver = new IdentityVigenciaPorDocumentoResolver(identityRepo);
         return new MandateSignerDirectory(ctx, otStatusReader, identityResolver);
     }
 }
