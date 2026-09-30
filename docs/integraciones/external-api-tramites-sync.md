@@ -61,6 +61,8 @@ Content-Type: application/json
 
 Todos los errores de `/api/v1/external/*` son `application/problem+json`; el código estable va en la extensión `code` (p. ej. `{"type":"about:blank","title":"invalid_client","status":401,"detail":"…","code":"invalid_client"}`). Además: `429 rate_limited` con `Retry-After` (10 solicitudes de token/min por IP) y `503 external_auth_unavailable` si el ambiente no tiene llave de emisión. `423` incluye `Retry-After` en segundos. La respuesta 200 lleva `Cache-Control: no-store`. Tras una rotación, el secreto anterior sigue siendo válido 24 h.
 
+En los endpoints protegidos, un pase ausente, caducado o de otro emisor recibe `401 invalid_token` (problem+json, con cabecera `WWW-Authenticate: Bearer`); un pase válido sin el permiso requerido, `403 insufficient_scope`.
+
 Todos los demás endpoints exigen `Authorization: Bearer <jwt>`.
 
 ## 3. Sincronización
@@ -230,8 +232,11 @@ Devuelve una URL firmada de corta vida para descargar un adjunto del trámite (u
 | `factura` | object \| null | Adjunto de tipo factura más reciente. Descarga vía §3. | |
 | `companiaGestora.{tenantId,nit,nombre}` | | Compañía que radicó el trámite. | |
 
-Sin el scope `external.tramites.pii.read`, los campos marcados PII llegan enmascarados
-(`"9****0000"`, `"c***@ejemplo.test"`), nunca ausentes.
+Sin el scope `external.tramites.pii.read`, los campos marcados PII llegan enmascarados, nunca
+ausentes; un `null` sigue siendo `null`. Reglas: `numeroDocumento` primer carácter y últimos 4
+(`"9****0000"`); `correo` primera letra y dominio (`"c***@ejemplo.test"`); `celular` últimos 4
+(`"******0000"`); `nombreCompleto` inicial de cada palabra (`"P*** E***"`); `direccion` oculta
+(`"***"`).
 
 **Bloques en `null`.** Todo trámite entregado ha superado el control de completitud de la radicación,
 así que los bloques principales vienen poblados. Aun así, un campo sin dato llega siempre como `null`
