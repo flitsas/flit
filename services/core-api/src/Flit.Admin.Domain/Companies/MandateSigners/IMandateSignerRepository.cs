@@ -22,20 +22,32 @@ public interface IMandateSignerRepository
     Task<bool> UpdateAsync(UpdateMandateSignerData data, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Baja lógica del mandatario (soft-delete): marca inactivo y libera sus compañías para
-    /// reasignación. <c>false</c> si no existe o ya estaba inactivo (idempotente).
+    /// Inactivación (reversible): marca inactivo, libera sus compañías, retira los defaults que apunten a él y
+    /// reasigna los trámites radicados sin aprobar (HU #13135/#13137), todo en una transacción con su bitácora
+    /// (HU #13138). Deja traza de los vínculos y defaults retirados para restaurarlos al reactivar (HU #13136).
+    /// <see cref="MandateSignerLifecycleResult.Applied"/> es <c>false</c> si no existe o ya estaba inactivo.
     /// </summary>
-    Task<bool> InactivateAsync(
+    Task<MandateSignerLifecycleResult> InactivateAsync(
         InactivateMandateSignerData data,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Reactiva un mandatario inactivado: vuelve a marcarlo activo <b>sin</b> restaurar
-    /// compañías (se liberaron al inactivar y deben reasignarse). <c>false</c> si no existe o
-    /// ya estaba activo (idempotente).
+    /// Reactiva un mandatario inactivado restaurando sus vínculos con compañías y organismos (los que retiró la
+    /// baja) sin desplazar al default vigente; un vínculo que chocaría con otro mandatario activo del mismo origen
+    /// se restaura inactivo y se informa (HU #13136). <c>Applied = false</c> si no existe, está eliminado o ya
+    /// estaba activo, o si TODOS los vínculos chocan (<see cref="MandateSignerLifecycleResult.AllLinksConflict"/>).
     /// </summary>
-    Task<bool> ReactivateAsync(
+    Task<MandateSignerLifecycleResult> ReactivateAsync(
         ReactivateMandateSignerData data,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Eliminación (baja lógica <c>deleted_at</c>/<c>deleted_by</c>, HU #13135): oculta al mandatario de listas y
+    /// candidatos sin borrar historial. Mismos efectos colaterales que la inactivación.
+    /// <c>Applied = false</c> si no existe o ya estaba eliminado.
+    /// </summary>
+    Task<MandateSignerLifecycleResult> DeleteAsync(
+        DeleteMandateSignerData data,
         CancellationToken cancellationToken = default);
 }
 
@@ -155,16 +167,26 @@ public sealed record MandateSignerOfficeCompanies(
     Guid TransitOfficeId,
     IReadOnlyList<Guid> RepresentedCompanyIds);
 
-/// <summary>Datos de inactivación.</summary>
+/// <summary>Datos de inactivación. <c>ActorKind</c> alimenta la bitácora (rol y módulo, HU #13138).</summary>
 public sealed record InactivateMandateSignerData(
     Guid MandateSignerId,
     Guid OtTenantId,
     Guid? ChangedBy,
-    Guid? CorrelationId);
+    Guid? CorrelationId,
+    MandateSignerActorKind ActorKind = MandateSignerActorKind.None);
 
 /// <summary>Datos de reactivación.</summary>
 public sealed record ReactivateMandateSignerData(
     Guid MandateSignerId,
     Guid OtTenantId,
     Guid? ChangedBy,
-    Guid? CorrelationId);
+    Guid? CorrelationId,
+    MandateSignerActorKind ActorKind = MandateSignerActorKind.None);
+
+/// <summary>Datos de eliminación (baja lógica).</summary>
+public sealed record DeleteMandateSignerData(
+    Guid MandateSignerId,
+    Guid OtTenantId,
+    Guid? ChangedBy,
+    Guid? CorrelationId,
+    MandateSignerActorKind ActorKind = MandateSignerActorKind.None);

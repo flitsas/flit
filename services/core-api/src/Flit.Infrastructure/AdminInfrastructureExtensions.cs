@@ -235,6 +235,8 @@ public static class AdminInfrastructureExtensions
         // escritura con auditoría atómica (RF22–RF28).
         services.AddScoped<IMandateSignerReader, DbMandateSignerReader>();
         services.AddScoped<IMandateSignerRepository, MandateSignerRepository>();
+        // HU #13135 — impacto de dar de baja a un mandatario (solo lectura).
+        services.AddScoped<IMandateSignerImpactReader, DbMandateSignerImpactReader>();
         // Ajuste HU #13123 — identidad aprobada y vigente en el tenant de la compañía (alta desde el OT).
         services.AddScoped<IMandateSignerBiometricApprovalReader, DbMandateSignerBiometricApprovalReader>();
         // HU #13131 - reporte de migracion de la firma fisica (solo Super Admin).
