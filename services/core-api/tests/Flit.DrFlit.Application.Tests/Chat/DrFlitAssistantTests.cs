@@ -68,7 +68,8 @@ public sealed class DrFlitAssistantTests
         result.MessagesUsedToday.Should().Be(7);
         result.DailyLimit.Should().Be(30);
         await _counter.Received(1).TryConsumeAsync(TenantA, User, 30, TestContext.Current.CancellationToken);
-        await _model.Received(1).CompleteAsync(Catalog.SystemPrompt, Arg.Any<IReadOnlyList<DrFlitTurn>>(), TestContext.Current.CancellationToken);
+        await _model.Received(1).CompleteAsync(
+            Catalog.GetSystemPrompt(DrFlitManualProfile.Gestor), Arg.Any<IReadOnlyList<DrFlitTurn>>(), TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -219,7 +220,98 @@ public sealed class DrFlitAssistantTests
         ]);
 
         catalog.BySlug.Should().ContainKey("a").WhoseValue.Title.Should().Be("A");
-        catalog.SystemPrompt.Should().BeSameAs(catalog.SystemPrompt);
-        catalog.SystemPrompt.Instructions.Should().Be(DrFlitPromptBuilder.Instructions);
+        // HU #13023 AC2 — misma instancia por perfil: el bloque idéntico entre llamadas es lo que hace
+        // que la caché de Anthropic registre cache_read en la segunda llamada de la variante.
+        catalog.GetSystemPrompt(DrFlitManualProfile.Gestor).Should().BeSameAs(catalog.GetSystemPrompt(DrFlitManualProfile.Gestor));
+        catalog.GetSystemPrompt(DrFlitManualProfile.Gestor).Instructions.Should().Be(DrFlitPromptBuilder.Instructions);
+    }
+
+    // ── HU #13023 — manual acotado a la audiencia del perfil ─────────────────────────────
+
+    private static readonly DrFlitManualCatalog CatalogoPorAudiencia = new(
+    [
+        new DrFlitManualArticle("comun", "Común", "/manual/comun", "para todos", Audience: "Todos"),
+        new DrFlitManualArticle("solo-gestor", "Solo gestor", "/manual/solo-gestor", "wizard", Audience: "Gestor"),
+        new DrFlitManualArticle("solo-ot", "Solo OT", "/manual/solo-ot", "bandeja", Audience: "Organismo de Tránsito"),
+        new DrFlitManualArticle("solo-admin", "Solo admin", "/manual/solo-admin", "consola", Audience: "Admin de Compañía"),
+        new DrFlitManualArticle("solo-sa", "Solo SA", "/manual/solo-sa", "plataforma", Audience: "Super Admin"),
+    ]);
+
+    [Fact]
+    public void HU13023_AC1_VarianteGestor_SoloLlevaGestorYTodos()
+    {
+        var manual = CatalogoPorAudiencia.GetSystemPrompt(DrFlitManualProfile.Gestor).ManualBlock;
+
+        manual.Should().Contain("slug: comun").And.Contain("slug: solo-gestor");
+        manual.Should().NotContain("slug: solo-ot").And.NotContain("slug: solo-admin").And.NotContain("slug: solo-sa");
+    }
+
+    [Fact]
+    public void HU13023_AC1_VarianteOt_NoVeElFlujoDelGestor()
+    {
+        var manual = CatalogoPorAudiencia.GetSystemPrompt(DrFlitManualProfile.OtAdmin).ManualBlock;
+
+        manual.Should().Contain("slug: comun").And.Contain("slug: solo-ot");
+        manual.Should().NotContain("slug: solo-gestor");
+    }
+
+    [Fact]
+    public void HU13023_SuperAdmin_VeTodasLasAudiencias()
+    {
+        var manual = CatalogoPorAudiencia.GetSystemPrompt(DrFlitManualProfile.SuperAdmin).ManualBlock;
+
+        manual.Should().Contain("slug: comun").And.Contain("slug: solo-gestor")
+            .And.Contain("slug: solo-ot").And.Contain("slug: solo-admin").And.Contain("slug: solo-sa");
+    }
+
+    [Fact]
+    public async Task HU13023_AC3_CitaDeOtraAudiencia_NoFalla_SeValidaContraElCatalogoCompleto()
+    {
+        // El modelo (variante OT) cita un slug que existe en el catálogo completo pero es de audiencia
+        // Gestor: la respuesta NO degrada por eso.
+        _catalog.GetCatalog().Returns(CatalogoPorAudiencia);
+        _model.CompleteAsync(default!, default!, TestContext.Current.CancellationToken)
+            .ReturnsForAnyArgs(new DrFlitModelCallResult(
+                DrFlitModelCallStatus.Ok,
+                """{"intent":"duda","reply":"ok","citedSlugs":["solo-gestor"]}""",
+                new DrFlitTokenUsage(1, 2, 3, 4)));
+        CounterAllows(usedAfter: 1);
+
+        var request = new DrFlitChatRequest(TenantA, User, "¿cómo?", [], DrFlitManualProfile.OtAdmin);
+        var result = await Assistant().AskAsync(request, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(DrFlitChatStatus.Ok);
+        result.Citations.Select(c => c.Slug).Should().Equal("solo-gestor");
+        await _model.Received(1).CompleteAsync(
+            CatalogoPorAudiencia.GetSystemPrompt(DrFlitManualProfile.OtAdmin),
+            Arg.Any<IReadOnlyList<DrFlitTurn>>(),
+            TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public void HU13023_AC4_PerfilSinArticulosPropios_LlevaAlMenosTodos()
+    {
+        var catalog = new DrFlitManualCatalog(
+        [
+            new DrFlitManualArticle("comun", "Común", "/manual/comun", "para todos", Audience: "Todos"),
+            new DrFlitManualArticle("solo-gestor", "Solo gestor", "/manual/solo-gestor", "wizard", Audience: "Gestor"),
+        ]);
+
+        var manual = catalog.GetSystemPrompt(DrFlitManualProfile.OtAdmin).ManualBlock;
+
+        manual.Should().Contain("slug: comun", "un perfil sin artículos propios conserva los de Todos y el chat sigue operativo");
+        manual.Should().NotContain("slug: solo-gestor");
+    }
+
+    [Fact]
+    public void HU13023_ArticuloSinAudiencia_EsVisibleParaTodosLosPerfiles()
+    {
+        var catalog = new DrFlitManualCatalog(
+        [
+            new DrFlitManualArticle("legado", "Legado", "/manual/legado", "sin audiencia declarada"),
+        ]);
+
+        foreach (var perfil in Enum.GetValues<DrFlitManualProfile>())
+            catalog.GetSystemPrompt(perfil).ManualBlock.Should().Contain("slug: legado");
     }
 }

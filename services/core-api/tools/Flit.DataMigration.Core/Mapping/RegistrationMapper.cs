@@ -99,6 +99,7 @@ public static class RegistrationMapper
             FieldValues = MapFieldValues(record, context, instanceId, createdAt, warnings),
             // Matrícula inicial no es una compraventa: no hay valor de venta ni causal que mapear.
             Commercial = null,
+            Prendas = V1MapperShared.MapPrendas(record, context.TenantId, instanceId, context.SystemUserId, createdAt),
             StatusHistory = history,
             FinalStatus = finalStatus,
             Warnings = warnings,
@@ -330,6 +331,12 @@ public static class RegistrationMapper
         var transitOffice = V1MapperShared.TransitOfficeFields(record, context, warnings);
         var overridden = transitOffice.Select(t => t.FieldKey).ToHashSet(StringComparer.Ordinal);
 
+        // HU #13072 — con transformación, el dato de V1 pasa a ser el del RUNT y el nuevo el efectivo.
+        var transformaciones = V1MapperShared.Transformaciones(record);
+        var valoresNuevos = transformaciones
+            .Where(t => t.ClaveVehiculo is not null && t.ValorNuevo is not null)
+            .ToDictionary(t => t.ClaveVehiculo!, t => t.ValorNuevo!, StringComparer.Ordinal);
+
         foreach (var (column, fieldKey) in RegistrationFieldMap.FieldKeys)
         {
             if (overridden.Contains(fieldKey))
@@ -343,12 +350,23 @@ public static class RegistrationMapper
                 value = DecodeFieldValue(fieldKey, value, warnings);
             }
 
+            if (valoresNuevos.TryGetValue(fieldKey, out var nuevo))
+            {
+                Add($"{fieldKey}_runt", value);
+                value = nuevo;
+            }
+
             Add(fieldKey, value);
         }
 
         foreach (var (fieldKey, value) in transitOffice)
         {
             Add(fieldKey, value);
+        }
+
+        foreach (var transformacion in transformaciones)
+        {
+            Add(transformacion.ClaveBandera, "true");
         }
 
         // --- Trazabilidad del origen: permite auditar y recalcular sin volver a V1.

@@ -11,10 +11,12 @@ namespace Flit.DrFlit.Application.Manual;
 /// <param name="Text">Contenido del artículo en texto plano (resumen + bloques), ya aplanado.</param>
 /// <param name="SourceHref">Primera fuente de respaldo (norma, anexo), si la tiene.</param>
 /// <param name="PrimarySource">True si el artículo es la norma que avala la plataforma.</param>
+/// <param name="Audience">Audiencia del artículo tal como viene en el artefacto (HU #13023); <c>null</c> = visible para todos.</param>
 public sealed record DrFlitManualArticle(
     string Slug,
     string Title,
     string Href,
     string Text,
     string? SourceHref = null,
-    bool PrimarySource = false);
+    bool PrimarySource = false,
+    string? Audience = null);

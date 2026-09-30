@@ -23,6 +23,13 @@ public sealed class MappedProcedure
     public ProcedureInstanceCommercial? Commercial { get; init; }
 
     /// <summary>
+    /// Decisiones de prenda vigentes (HU #13072). La marca «Con prenda» de V2 sale de esta tabla y
+    /// no de <c>field_values</c>, así que sin ellas un trámite con gravamen se lee como «sin prenda».
+    /// Vacía cuando V1 no registró prenda, levantamiento ni acreedor.
+    /// </summary>
+    public IReadOnlyList<ProcedureInstancePrenda> Prendas { get; init; } = [];
+
+    /// <summary>
     /// Estado FINAL que debe quedar en V2. Se guarda aparte porque la instancia se inserta
     /// en <c>borrador</c> (lo exige el trigger de inmutabilidad) y solo al final se sube
     /// a su estado real.
