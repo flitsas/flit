@@ -44,6 +44,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         group.MapGet("", ListMandateSignersAsync);
         group.MapGet("/transit-offices", ListChildTransitOfficesAsync);
         group.MapGet("/represented-companies", ListChildRepresentedCompaniesAsync);
+        group.MapGet("/associable-companies", ListChildAssociableCompaniesAsync);
         group.MapPost("", CreateMandateSignerAsync);
         group.MapPut("/{mandateSignerId:guid}", UpdateMandateSignerAsync);
         group.MapPost("/{mandateSignerId:guid}/inactivate", InactivateChildMandateSignerAsync);
@@ -608,6 +609,28 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
 
         var result = await handler.HandleAsync(childTenantId, ct).ConfigureAwait(false);
         return Results.Ok(new { data = result });
+    }
+
+    /// <summary>HU #13178 — hijas del cliente hijo (por jerarquía no tiene: lista vacía y aplica solo a su compañía).</summary>
+    private static async Task<IResult> ListChildAssociableCompaniesAsync(
+        Guid headTenantId,
+        Guid childTenantId,
+        ClaimsPrincipal user,
+        [FromQuery] string? search,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        [FromServices] ICompanyHierarchyRepository hierarchy,
+        [FromServices] Flit.Admin.Domain.Companies.MandateSigners.IMandatarioAssociableCompanies service,
+        CancellationToken ct)
+    {
+        var forbid = await GuardAsync(user, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
+        if (forbid is not null)
+        {
+            return forbid;
+        }
+
+        return AssociableCompaniesHttp.ToResult(
+            await service.ListForCompanyAsync(childTenantId, search, page ?? 1, pageSize ?? 0, ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> ListChildRepresentedCompaniesAsync(

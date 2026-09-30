@@ -75,6 +75,24 @@ public static class AdminCompanyMandateSignersEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
 
+        // HU #13178 — compañías a las que el Admin de Compañía puede asociar su mandatario: solo sus hijas directas
+        // activas. Sin red: lista vacía y aplicaSoloASuCompania verdadero. La lista completa NUNCA sale por aquí.
+        group.MapGet("/associable-companies", async (
+                Guid tenantId,
+                [FromQuery] string? search,
+                [FromQuery] int? page,
+                [FromQuery] int? pageSize,
+                [FromServices] Flit.Admin.Domain.Companies.MandateSigners.IMandatarioAssociableCompanies service,
+                CancellationToken ct) =>
+                AssociableCompaniesHttp.ToResult(
+                    await service.ListForCompanyAsync(tenantId, search, page ?? 1, pageSize ?? 0, ct)
+                        .ConfigureAwait(false)))
+            .WithName("AdminCompanyMandateSignersAssociableCompanies")
+            .WithSummary("Compañías hijas a las que el Admin de Compañía puede asociar su mandatario")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
         // Empresas representadas de la compañía: las que se dan de alta dentro del formulario del
         // representante legal. Son la lista que el formulario del mandatario ofrece para acotar para
         // quién firma en cada organismo. Ya vienen únicas por (tenant, NIT).

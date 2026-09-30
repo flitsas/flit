@@ -100,6 +100,21 @@ public static class AdminMandateSignersEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        // HU #13178 (Feature #13119 F7) — directorio de compañías asociables para el OT y el Super Admin: TODAS las
+        // compañías gestoras activas (búsqueda por nombre y NIT), solo id, nombre y NIT. Política más estricta que
+        // OtModule: un Gestor del OT recibe 403. No toca la visibilidad de la bandeja (Bug #12912).
+        app.MapGroup("/api/v1/admin/transit-offices/{transitOfficeId:guid}/mandate-signers")
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
+            .AddEndpointFilter<TransitOfficeScopeFilter>()
+            .WithTags("Admin · Mandatarios")
+            .MapGet("/associable-companies", AssociableCompaniesAsync)
+            .WithName("AdminMandateSignersAssociableCompanies")
+            .WithSummary("Compañías gestoras activas a las que se puede asociar un mandatario (OT y Super Admin)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
         // HU #13131 (ADR-0061) — reporte de migración de la firma física. SOLO Super Admin (403 al resto):
         // cruza compañías y organismos, y un ot_admin no debe ver datos de otros tenants.
         app.MapGroup("/api/v1/admin/mandate-signers")
@@ -171,6 +186,20 @@ public static class AdminMandateSignersEndpoints
         }
 
         return Results.Ok(new { data = rows, total = rows.Count });
+    }
+
+    /// <summary>HU #13178 — <c>?search=</c> (mínimo 2 caracteres), <c>?page=</c>, <c>?pageSize=</c>.</summary>
+    private static async Task<IResult> AssociableCompaniesAsync(
+        [FromQuery] string? search,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        [FromServices] IMandatarioAssociableCompanies service,
+        CancellationToken cancellationToken)
+    {
+        var result = await service
+            .ListForOtAsync(search, page ?? 1, pageSize ?? 0, cancellationToken)
+            .ConfigureAwait(false);
+        return AssociableCompaniesHttp.ToResult(result);
     }
 
     /// <summary>

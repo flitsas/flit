@@ -560,6 +560,140 @@ paths:
                   code: { type: string, example: aviso_no_confirmado }
                   error: { type: string }
 
+  /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/associable-companies:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersAssociableCompanies
+      summary: Compañías gestoras asociables al mandatario, vista OT y Super Admin (HU #13178)
+      description: >
+        Todas las compañías gestoras ACTIVAS de FLIT, sin duplicados por NIT, con búsqueda por nombre y NIT. Solo id,
+        nombre y NIT (Ley 1581). Un OT ve compañías que nunca le han radicado. Solo SuperAdmin u ot_admin del propio
+        organismo (403 a Gestor y a otros perfiles). No modifica la visibilidad de la bandeja de trámites (Bug #12912).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          required: false
+          schema: { type: string, minLength: 2 }
+          description: >
+            Texto literal por nombre o NIT (mínimo 2 caracteres; el NIT ignora puntos y guion de verificación).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página de compañías asociables (solo id, nombre y NIT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssociableCompaniesPage"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Perfil o tenant fuera de alcance.
+        "422":
+          description: Búsqueda de menos de 2 caracteres.
+
+  /api/v1/admin/companies/{tenantId}/mandate-signers/associable-companies:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyMandateSignersAssociableCompanies
+      summary: Compañías hijas asociables al mandatario, vista Admin de Compañía (HU #13178)
+      description: >
+        Solo las hijas directas activas de la compañía (`identity.tenants.parent_tenant_id`). Sin red:
+        `items` vacío y `aplicaSoloASuCompania` verdadero. La lista completa nunca sale por esta ruta.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          required: false
+          schema: { type: string, minLength: 2 }
+          description: >
+            Texto literal por nombre o NIT (mínimo 2 caracteres; el NIT ignora puntos y guion de verificación).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página de compañías asociables (solo id, nombre y NIT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssociableCompaniesPage"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Perfil o tenant fuera de alcance.
+        "422":
+          description: Búsqueda de menos de 2 caracteres.
+
+  /api/v1/admin/companies/{headTenantId}/children/{childTenantId}/mandate-signers/associable-companies:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyChildMandateSignersAssociableCompanies
+      summary: Compañías asociables al mandatario de un cliente hijo (HU #13178)
+      description: >
+        Hijas directas activas del cliente hijo (por jerarquía de profundidad máxima 2 no tiene: lista vacía y
+        `aplicaSoloASuCompania` verdadero). Mismo contrato que la ruta de la compañía.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: headTenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: childTenantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          required: false
+          schema: { type: string, minLength: 2 }
+          description: >
+            Texto literal por nombre o NIT (mínimo 2 caracteres; el NIT ignora puntos y guion de verificación).
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Página de compañías asociables (solo id, nombre y NIT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssociableCompaniesPage"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Perfil o tenant fuera de alcance.
+        "422":
+          description: Búsqueda de menos de 2 caracteres.
+
   /api/v1/admin/ict/job-settings:
     get:
       tags: [Admin · ICT · Jobs]
@@ -11888,6 +12022,26 @@ components:
         associatedNits:
           type: array
           items: { type: string }
+    AssociableCompaniesPage:
+      type: object
+      description: Compañías a las que se puede asociar un mandatario (HU #13178). Solo id, nombre y NIT por elemento.
+      required: [items, total, page, pageSize, aplicaSoloASuCompania]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, name, nit]
+            properties:
+              id: { type: string, format: uuid, description: "Tenant de la compañía." }
+              name: { type: string }
+              nit: { type: string }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        aplicaSoloASuCompania:
+          type: boolean
+          description: "Verdadero si la compañía que consulta no tiene red: no hay lista y el mandatario aplica solo a ella."
     MandateSignerSelectionResponse:
       type: object
       required: [opciones, elegidoId, editable]
