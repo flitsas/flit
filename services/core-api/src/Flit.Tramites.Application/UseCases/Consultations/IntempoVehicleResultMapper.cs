@@ -204,18 +204,19 @@ public static class IntempoVehicleResultMapper
         if (!string.IsNullOrWhiteSpace(r.FechaMatricula))
             fields.Add(new HydratedField("vehicle_registration_date", r.FechaMatricula, null));
 
-        // Señal RUNT de prenda/gravamen (+ detalle de acreedores cuando Intempo lo trae).
-        Add(fields, "runt_tiene_gravamenes", r.TieneGravamenes);
-        Add(fields, "runt_tiene_prendas", r.Prendas);
+        // Señal RUNT de prenda/gravamen (+ detalle de acreedores cuando Intempo lo trae). Bug #13203
+        // (revisión PR #504): las claves de la señal se escriben SIEMPRE, vacías si no hay dato, para
+        // que una re-consulta pise lo que dejó la anterior (el upsert no borra). El check no cambia.
+        fields.Add(new HydratedField(RuntGravamenSignal.GravamenesKey, RuntGarantiasMobiliarias.Blank(r.TieneGravamenes), null));
+        fields.Add(new HydratedField(RuntGravamenSignal.PrendasKey, RuntGarantiasMobiliarias.Blank(r.Prendas), null));
         Add(fields, "runt_prendario", r.Prendario);
-        Add(fields, "runt_nombre_acreedor", r.NombreAcreedor);
-        if (r.Gravamenes is { Count: > 0 } detalle)
-        {
-            fields.Add(new HydratedField(
-                "runt_gravamenes",
-                null,
-                System.Text.Json.JsonSerializer.Serialize(detalle)));
-        }
+        fields.Add(new HydratedField(RuntGarantiasMobiliarias.NombreAcreedorKey, RuntGarantiasMobiliarias.Blank(r.NombreAcreedor), null));
+        fields.Add(new HydratedField(
+            RuntGravamenSignal.DetalleKey,
+            null,
+            r.Gravamenes is { Count: > 0 } detalle
+                ? System.Text.Json.JsonSerializer.Serialize(detalle)
+                : RuntGarantiasMobiliarias.SinGarantiasJson));
 
         // HU #11137 — SOAT. Este mapper producía una verificación de estado y NINGÚN campo, así que un
         // trámite consultado por Intempo emitía la tabla certificadora del SOAT entera en blanco. El
