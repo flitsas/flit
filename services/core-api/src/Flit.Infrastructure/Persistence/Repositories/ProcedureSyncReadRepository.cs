@@ -166,6 +166,26 @@ internal sealed class ProcedureSyncReadRepository(FlitDbContext context) : IProc
          ORDER BY p.sync_xact_order, p.sync_version
         """;
 
+    /// <summary>
+    /// HU #13077 — la factura de un trámite del feed. Mismo alcance que <see cref="Select"/> (radicado alguna
+    /// vez, no migrado) y además sin borrado lógico: el tombstone llega con <c>factura: null</c>. Solo
+    /// adjuntos de tipo factura (decisión del PO: los demás pueden llevar datos personales).
+    /// </summary>
+    private const string InvoiceSql = """
+        SELECT x.storage_path, x.filename, x.mimetype
+          FROM tramites.procedure_instance_attachments x
+          JOIN tramites.procedure_instances pi ON pi.id = x.procedure_instance_id
+         WHERE x.id = @attachment_id
+           AND x.procedure_instance_id = @procedure_id
+           AND x.tipo = 'factura'
+           AND pi.is_migrated = false
+           AND pi.deleted_at IS NULL
+           AND EXISTS (SELECT 1
+                         FROM tramites.procedure_instance_status_history h
+                        WHERE h.procedure_instance_id = pi.id
+                          AND h.to_status IN ('preasignacion', 'entregado'))
+        """;
+
     public Task<IReadOnlyList<ProcedureSyncChange>> ReadChangesAsync(
         ProcedureSyncPageRequest request, CancellationToken cancellationToken = default)
     {
@@ -185,6 +205,26 @@ internal sealed class ProcedureSyncReadRepository(FlitDbContext context) : IProc
         Validate(request);
         return new ExternalSyncReadScope(context).ExecuteAsync(
             (conn, tx) => ReadItemsAsync(conn, tx, request, cancellationToken), cancellationToken);
+    }
+
+    public Task<ProcedureSyncInvoiceFile?> FindInvoiceAsync(
+        Guid procedureId, Guid attachmentId, CancellationToken cancellationToken = default) =>
+        new ExternalSyncReadScope(context).ExecuteAsync(
+            (conn, tx) => FindInvoiceAsync(conn, tx, procedureId, attachmentId, cancellationToken), cancellationToken);
+
+    private static async Task<ProcedureSyncInvoiceFile?> FindInvoiceAsync(
+        DbConnection conn, DbTransaction tx, Guid procedureId, Guid attachmentId, CancellationToken cancellationToken)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = InvoiceSql;
+        AddParam(cmd, "procedure_id", DbType.Guid, procedureId);
+        AddParam(cmd, "attachment_id", DbType.Guid, attachmentId);
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+            ? new ProcedureSyncInvoiceFile(reader.GetString(0), reader.GetString(1), reader.GetString(2))
+            : null;
     }
 
     private static void Validate(ProcedureSyncPageRequest request)
