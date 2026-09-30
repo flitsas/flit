@@ -6,7 +6,7 @@ import {
   motivoSinFirma,
   organismosSinMedioDeFirma,
 } from "@/lib/plataforma/mandatario-firma";
-import { ApiValidationError } from "@/lib/api/types";
+import { ApiError, ApiValidationError } from "@/lib/api/types";
 import { SignatureVaultSelector } from "@/components/admin/companies/legal-representatives/SignatureVaultSelector";
 import { MandatarioIdentidadBlock } from "./MandatarioIdentidadBlock";
 import type { RepresentedCompanyOption } from "@/lib/api/admin-mandate-signers";
@@ -25,6 +25,7 @@ const DOC_TYPES = ["CC", "CE", "PAS", "NIT"];
  * un destino donde no puede radicar.
  */
 export function CompanyMandatarioForm({
+  variant = "company",
   tenantId,
   networkHeadId,
   offices,
@@ -36,7 +37,13 @@ export function CompanyMandatarioForm({
   onCancel,
   onSubmit,
 }: {
-  tenantId: string;
+  /**
+   * `hub` (HU #13124): alta desde el hub del organismo. No lee rutas de la compañía (baúl ni empresas
+   * representadas), no ofrece firma física y el organismo queda fijo; las reglas de firma las valida
+   * el backend y el formulario muestra su mensaje.
+   */
+  variant?: "company" | "hub";
+  tenantId?: string;
   networkHeadId?: string | null;
   offices: CompanyTransitOfficeOption[];
   /** Empresas representadas de la compañía, para acotar para quién firma en cada organismo. */
@@ -91,6 +98,7 @@ export function CompanyMandatarioForm({
       return next;
     });
   };
+  const isHub = variant === "hub";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,11 +132,13 @@ export function CompanyMandatarioForm({
 
   // HU #11716 — organismos en los que el mandatario quedaría sin poder firmar. La regla la impone el
   // backend; esto la explica antes de que el guardado falle, y ofrece los dos caminos para resolverla.
-  const sinFirma = organismosSinMedioDeFirma(selected, fisicos, {
-    signatureVaultId,
-    email,
-    identityStatus: editing?.identityStatus,
-  });
+  const sinFirma = isHub
+    ? []
+    : organismosSinMedioDeFirma(selected, fisicos, {
+        signatureVaultId,
+        email,
+        identityStatus: editing?.identityStatus,
+      });
   const nombresSinFirma = visibleOffices
     .filter((o) => sinFirma.includes(o.transitOfficeId))
     .map((o) => o.name);
@@ -152,9 +162,11 @@ export function CompanyMandatarioForm({
         documentNumber: documentNumber.trim(),
         email: email.trim() === "" ? null : email.trim(),
         transitOfficeIds: selected,
-        physicalSignatureOfficeIds: fisicos,
-        signatureVaultId,
-        officeCompanies: Object.entries(empresasPorOt)
+        physicalSignatureOfficeIds: isHub ? undefined : fisicos,
+        signatureVaultId: isHub ? undefined : signatureVaultId,
+        officeCompanies: isHub
+          ? undefined
+          : Object.entries(empresasPorOt)
           // Solo de los organismos que siguen elegidos: retirar uno se lleva su acotación.
           .filter(([officeId]) => selected.includes(officeId))
           .map(([transitOfficeId, representedCompanyIds]) => ({
@@ -163,11 +175,7 @@ export function CompanyMandatarioForm({
           })),
       });
     } catch (err) {
-      setError(
-        err instanceof ApiValidationError
-          ? err.errors.map((e) => e.message).join(" ")
-          : "No se pudo guardar el mandatario.",
-      );
+      setError(mensajeDeError(err, isHub));
     } finally {
       setSaving(false);
     }
@@ -261,12 +269,18 @@ export function CompanyMandatarioForm({
 
           {/* Igual que en el panel del representante legal, pero sin escrituras: el mandatario no las
               necesita. Sirve para elegir su firma o capturarla ahí mismo si aún no tiene. */}
+          {isHub ? (
+            <p className="text-[11px] leading-tight opacity-70" data-testid="mandatario-hub-firma-nota">
+              Para firmar, la persona necesita firma en el baúl de la empresa o una validación
+              biométrica hecha en el módulo Identidad.
+            </p>
+          ) : (
           <div>
             <label htmlFor="lr-sig-vault" className="mb-1.5 block text-xs font-semibold">
               Firma del baúl <span className="font-normal opacity-60">(opcional)</span>
             </label>
             <SignatureVaultSelector
-              tenantId={tenantId}
+              tenantId={tenantId ?? ""}
               networkHeadId={networkHeadId}
               documentType={documentType}
               documentNumber={documentNumber}
@@ -279,6 +293,7 @@ export function CompanyMandatarioForm({
               validación de identidad, y sin ninguna de las dos queda la línea para firmar a mano.
             </p>
           </div>
+          )}
 
           <fieldset>
             <legend className="mb-1.5 block text-xs font-semibold">
@@ -301,7 +316,8 @@ export function CompanyMandatarioForm({
                   </label>
                   {/* Acotación por empresa, solo donde el mandatario aplica. Sin ninguna marcada
                       firma para TODAS las empresas de ese organismo. */}
-                  {selected.includes(o.transitOfficeId) &&
+                  {!isHub &&
+                  selected.includes(o.transitOfficeId) &&
                   companies.length > 0 &&
                   !restrictToOfficeIds ? (
                     <div className="mt-1 ml-6">
@@ -333,7 +349,7 @@ export function CompanyMandatarioForm({
                   ) : null}
 
                   {/* Solo tiene sentido marcar la firma a mano donde el mandatario aplica. */}
-                  {selected.includes(o.transitOfficeId) && (
+                  {!isHub && selected.includes(o.transitOfficeId) && (
                     <label className="mt-1 ml-6 flex items-center gap-2 text-[11px] opacity-80">
                       <input
                         type="checkbox"
@@ -348,12 +364,18 @@ export function CompanyMandatarioForm({
               ))}
             </div>
             <p className="mt-1 text-[11px] leading-tight opacity-70">
-              Solo se listan los organismos habilitados para esta compañía. Al editar, quitar uno
-              retira al mandatario de ese organismo y lo deja en los demás.
-              <br />
-              Con «firma de forma física», el contrato de mandato de ese organismo deja la línea con sus
-              datos debajo para firmarla a mano, en vez de estampar su firma del baúl o su sello de
-              identidad.
+              {isHub ? (
+                "El mandatario se registra en este organismo."
+              ) : (
+                <>
+                  Solo se listan los organismos habilitados para esta compañía. Al editar, quitar uno
+                  retira al mandatario de ese organismo y lo deja en los demás.
+                  <br />
+                  Con «firma de forma física», el contrato de mandato de ese organismo deja la línea
+                  con sus datos debajo para firmarla a mano, en vez de estampar su firma del baúl o su
+                  sello de identidad.
+                </>
+              )}
             </p>
 
             {sinFirma.length > 0 && (
@@ -413,4 +435,21 @@ export function CompanyMandatarioForm({
       </div>
     </div>
   );
+}
+
+/** Mensaje legible para el usuario: sin códigos ni detalles técnicos. */
+function mensajeDeError(err: unknown, isHub: boolean): string {
+  if (err instanceof ApiValidationError) {
+    const msg = err.errors.map((e) => e.message).join(" ").trim();
+    return msg || "No se pudo guardar el mandatario. Revisa los datos e intenta de nuevo.";
+  }
+  if (err instanceof ApiError) {
+    if (err.status === 403) {
+      return "No tienes permiso para registrar mandatarios. Solo el administrador del organismo puede hacerlo.";
+    }
+    if (err.status === 422 && err.message.trim()) return err.message;
+  }
+  return isHub
+    ? "No se pudo registrar el mandatario. Intenta de nuevo."
+    : "No se pudo guardar el mandatario.";
 }

@@ -18,15 +18,13 @@ import {
   type MandateOtConfigView,
 } from "@/lib/api/admin-plataforma-mandatos";
 import {
-  createCompanyMandateSigner,
-  fetchCompanyTransitOffices,
+  createMandateSigner,
   fetchMandateSigners,
-  fetchRepresentedCompanies,
   type CompanyMandateSignerInput,
-  type CompanyTransitOfficeOption,
   type MandateSigner,
-  type RepresentedCompanyOption,
 } from "@/lib/api/admin-mandate-signers";
+import { getToken } from "@/lib/api/client";
+import { decodeJwtPayload, isOtAdmin, isSuperAdmin } from "@/lib/auth/jwt";
 import { ApiError } from "@/lib/api/types";
 import {
   etiquetaTipoFirma,
@@ -54,11 +52,13 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
   } | null>(null);
   const [signerEpoch, setSignerEpoch] = useState(0);
   const [lastCreatedSignerId, setLastCreatedSignerId] = useState<string | null>(null);
-  const [signerForm, setSignerForm] = useState<{
-    companyId: string;
-    offices: CompanyTransitOfficeOption[];
-    companies: RepresentedCompanyOption[];
-  } | null>(null);
+  // HU #13124 — el alta se hace contra la ruta del OT: solo ot_admin y SuperAdmin pueden escribir
+  // (HU #13123). Al Operador OT (gestor_tramites_ot) no se le ofrece registrar mandatarios.
+  const [canRegisterSigner] = useState(() => {
+    const payload = decodeJwtPayload(getToken());
+    return isSuperAdmin(payload) || isOtAdmin(payload);
+  });
+  const [signerCompanyId, setSignerCompanyId] = useState<string | null>(null);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) {
@@ -83,26 +83,6 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
       setError(err instanceof ApiError ? err.message : "No se pudo cargar la configuración de mandatos.");
     }
   }, [transitOfficeId]);
-
-  const openSignerForm = useCallback(
-    async (companyId: string) => {
-      try {
-        const [offices, represented] = await Promise.all([
-          fetchCompanyTransitOffices(companyId),
-          fetchRepresentedCompanies(companyId).catch(() => []),
-        ]);
-        setSignerForm({ companyId, offices, companies: represented });
-      } catch (err) {
-        show(
-          err instanceof ApiError
-            ? err.message
-            : "No se pudieron cargar los organismos de esa empresa.",
-          "error",
-        );
-      }
-    },
-    [show],
-  );
 
   useEffect(() => {
     // Carga inicial: status loading/ready vive en este módulo.
@@ -371,7 +351,7 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
           lockToCompanyId={panel.companyId}
           signersRevision={signerEpoch}
           lastCreatedSignerId={lastCreatedSignerId}
-          onRegisterSigner={(companyId) => void openSignerForm(companyId)}
+          onRegisterSigner={canRegisterSigner ? (companyId) => setSignerCompanyId(companyId) : undefined}
           onClose={() => {
             setPanel(null);
             void load({ silent: true });
@@ -384,19 +364,25 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
         />
       ) : null}
 
-      {signerForm ? (
+      {signerCompanyId ? (
         <CompanyMandatarioForm
-          tenantId={signerForm.companyId}
-          offices={signerForm.offices}
-          companies={signerForm.companies}
+          variant="hub"
+          offices={[{ transitOfficeId, code: office.code, name: office.name }]}
           editing={null}
           initialOfficeIds={[transitOfficeId]}
           restrictToOfficeIds={[transitOfficeId]}
           overlayClassName="z-[80]"
-          onCancel={() => setSignerForm(null)}
+          onCancel={() => setSignerCompanyId(null)}
           onSubmit={async (input: CompanyMandateSignerInput) => {
-            const saved = await createCompanyMandateSigner(signerForm.companyId, input);
-            setSignerForm(null);
+            const saved = await createMandateSigner(transitOfficeId, {
+              fullName: input.fullName,
+              documentType: input.documentType,
+              documentNumber: input.documentNumber,
+              email: input.email,
+              companyTenantIds: [signerCompanyId],
+              transitOfficeIds: [transitOfficeId],
+            });
+            setSignerCompanyId(null);
             setLastCreatedSignerId(saved.id);
             setSignerEpoch((n) => n + 1);
             show(

@@ -4,12 +4,33 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OtMandatosSection } from "@/components/admin/transit-offices/OtMandatosSection";
 import { ToastProvider } from "@/components/admin/Toast";
 import type { CompanyOtMandateRuleView } from "@/lib/api/admin-plataforma-mandatos";
+import { ApiError, ApiValidationError } from "@/lib/api/types";
+import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+
+function makeToken(payload: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${header}.${body}.`;
+}
+
+function loginAs(roleCode: string) {
+  window.localStorage.setItem(
+    TOKEN_STORAGE_KEY,
+    makeToken({
+      sub: "u-1",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      roles: [{ id: "r-1", code: roleCode }],
+      role: roleCode,
+      entity_type: "TRANSIT_OFFICE",
+    }),
+  );
+}
 
 const fetchMandateOtConfig = vi.fn();
 const listCompanyOtMandateRules = vi.fn();
 const fetchCompanyTransitOffices = vi.fn();
 const fetchRepresentedCompanies = vi.fn();
-const createCompanyMandateSigner = vi.fn();
+const createMandateSigner = vi.fn();
 const fetchMandateSigners = vi.fn();
 const fetchMandateSignerSignatureImage = vi.fn();
 
@@ -29,7 +50,7 @@ vi.mock("@/lib/api/admin-mandate-signers", () => ({
   fetchMandateSignerSignatureImage: (...a: unknown[]) => fetchMandateSignerSignatureImage(...a),
   fetchCompanyTransitOffices: (...a: unknown[]) => fetchCompanyTransitOffices(...a),
   fetchRepresentedCompanies: (...a: unknown[]) => fetchRepresentedCompanies(...a),
-  createCompanyMandateSigner: (...a: unknown[]) => createCompanyMandateSigner(...a),
+  createMandateSigner: (...a: unknown[]) => createMandateSigner(...a),
 }));
 
 vi.mock("@/lib/api/admin-signature-vault", () => ({
@@ -91,6 +112,11 @@ describe("OtMandatosSection", () => {
     listCompanyOtMandateRules.mockReset();
     fetchMandateSigners.mockReset();
     fetchMandateSignerSignatureImage.mockReset();
+    fetchCompanyTransitOffices.mockReset();
+    fetchRepresentedCompanies.mockReset();
+    createMandateSigner.mockReset();
+    window.localStorage.clear();
+    loginAs("ot_admin");
     listCompanyOtMandateRules.mockResolvedValue([]);
     fetchMandateSigners.mockResolvedValue([]);
     fetchMandateSignerSignatureImage.mockResolvedValue(new Blob(["png"], { type: "image/png" }));
@@ -141,7 +167,94 @@ describe("OtMandatosSection", () => {
     expect(await screen.findByTestId("ot-mandatos-general-signer")).toHaveTextContent("Sin definir");
   });
 
-  it("ofrece registrar el mandatario default desde Configurar mandato del OT", async () => {
+  async function abrirFormularioGeneral(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: /editar mandatario general del organismo/i }));
+    await user.click(await screen.findByTestId("mandato-ot-register-signer"));
+    return screen.findByRole("dialog", { name: /registrar mandatario/i });
+  }
+
+  async function diligenciar(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText("Nombre completo"), "Ana Mandataria");
+    await user.type(screen.getByLabelText("Número de documento"), "52123456");
+  }
+
+  it("AC1/AC2/AC3/AC6 ot_admin registra solo contra el endpoint del OT, sin baúl ni empresas representadas", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    listCompanyOtMandateRules.mockResolvedValue([companyRow()]);
+    createMandateSigner.mockResolvedValue({ id: "ms-9", integrityHash: "h" });
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    expect(await abrirFormularioGeneral(user)).toBeInTheDocument();
+    // AC6: sin selector del baúl ni bloque de empresas representadas.
+    expect(screen.queryByLabelText(/firma del baúl/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/firma solo para/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/firma de forma física/i)).not.toBeInTheDocument();
+    await diligenciar(user);
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(createMandateSigner).toHaveBeenCalledTimes(1));
+    expect(createMandateSigner).toHaveBeenCalledWith(
+      "ot-1",
+      expect.objectContaining({
+        fullName: "Ana Mandataria",
+        documentNumber: "52123456",
+        companyTenantIds: ["cia-1"],
+        transitOfficeIds: ["ot-1"],
+      }),
+    );
+    expect(await screen.findByText(/mandatario registrado/i)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /registrar mandatario/i })).not.toBeInTheDocument();
+    // AC3: ninguna lectura de rutas de la compañía.
+    expect(fetchCompanyTransitOffices).not.toHaveBeenCalled();
+    expect(fetchRepresentedCompanies).not.toHaveBeenCalled();
+  });
+
+  it("AC4 muestra el mensaje del 422 en lenguaje claro y deja el formulario abierto", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    listCompanyOtMandateRules.mockResolvedValue([companyRow()]);
+    createMandateSigner.mockRejectedValue(
+      new ApiValidationError(
+        [{ field: "transitOfficeIds", message: "Ya existe un mandatario para esta empresa en este organismo." }],
+        422,
+      ),
+    );
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    await abrirFormularioGeneral(user);
+    await diligenciar(user);
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ya existe un mandatario para esta empresa en este organismo.",
+    );
+    expect(screen.getByRole("dialog", { name: /registrar mandatario/i })).toBeInTheDocument();
+  });
+
+  it("AC5 muestra falta de permiso ante 403 y no cierra el formulario", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    listCompanyOtMandateRules.mockResolvedValue([companyRow()]);
+    createMandateSigner.mockRejectedValue(new ApiError(403, "Forbidden"));
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    await abrirFormularioGeneral(user);
+    await diligenciar(user);
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no tienes permiso/i);
+    expect(screen.getByRole("dialog", { name: /registrar mandatario/i })).toBeInTheDocument();
+  });
+
+  it("un Operador OT (gestor_tramites_ot) no ve «Registrar mandatario»", async () => {
+    loginAs("gestor_tramites_ot");
     fetchMandateOtConfig.mockResolvedValue(office);
     listCompanyOtMandateRules.mockResolvedValue([companyRow()]);
     const user = userEvent.setup();
@@ -151,9 +264,9 @@ describe("OtMandatosSection", () => {
       </ToastProvider>,
     );
     await user.click(await screen.findByRole("button", { name: /editar mandatario general del organismo/i }));
-    expect(await screen.findByTestId("mandato-ot-register-signer")).toBeInTheDocument();
-    await user.click(screen.getByTestId("mandato-ot-register-signer"));
-    expect(await screen.findByRole("dialog", { name: /registrar mandatario/i })).toBeInTheDocument();
+    await screen.findByTestId("mandato-ot-config-form");
+    expect(screen.queryByTestId("mandato-ot-register-signer")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^registrar mandatario$/i })).not.toBeInTheDocument();
   });
 
   it("abre la configuración de mandatario de la empresa", async () => {

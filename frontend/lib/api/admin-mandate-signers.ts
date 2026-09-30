@@ -72,8 +72,12 @@ export interface MandateSignerInput {
   /** Correo para la validación de identidad; `null` si no se captura. */
   email: string | null;
   /** Cuenta de usuario de OT a vincular (§D9); `null` si no se asigna. */
-  userId: string | null;
+  userId?: string | null;
   companyTenantIds: string[];
+  /** HU #13124 — organismos donde aplica; ausente ⇒ solo el de la ruta. */
+  transitOfficeIds?: string[];
+  /** HU #13123 — id de la firma del baúl; el OT no lista el baúl, solo enviaría el id. */
+  signatureVaultId?: string | null;
 }
 
 export interface MandateSignerSaved {
@@ -110,7 +114,10 @@ export async function fetchOtCompanies(
   return result.data;
 }
 
-/** POST — alta de mandatario (RF22). Lanza ApiValidationError en 422 (RF33). */
+/**
+ * POST — alta de mandatario (RF22) desde el hub del OT. Solo ot_admin o SuperAdmin (403 para el
+ * resto, HU #13123). Lanza ApiValidationError en 422 (RF33).
+ */
 export function createMandateSigner(
   transitOfficeId: string,
   body: MandateSignerInput,

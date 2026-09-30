@@ -542,6 +542,7 @@ export const OT_ARTICLES: ManualArticle[] = [
       "empresas que radican",
       "ver firma",
       "vista previa de la firma",
+      "registrar mandatario",
     ],
     summary: "Quién firma el contrato de mandato ante tu organismo y cómo se configura desde el hub.",
     blocks: [
@@ -557,7 +558,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "2. Pestaña Mandatos del hub",
         paragraphs: ["Administración → Mandatos muestra tres bloques:"],
         bullets: [
-          "Mandatario general del organismo: el firmante por defecto cuando la compañía no tiene uno propio. Puedes registrarlo y editarlo aquí (nombre, tipo y número de documento, tipo de firma).",
+          "Mandatario general del organismo: el firmante por defecto cuando la compañía no tiene uno propio. Puedes registrarlo y editarlo aquí (nombre, tipo y número de documento, tipo de firma); registrar personas nuevas es solo del Admin OT.",
           "Mandatarios del organismo: todas las personas habilitadas para firmar mandatos ante tu OT, con su tipo de firma (estampada desde el baúl o física). El botón «Ver firma» de cada fila abre una vista previa de la firma registrada en el baúl, para comprobar cuál quedará estampada antes de usarla en un mandato.",
           "Empresas que radican en este organismo: busca por razón social o NIT y revisa qué mandatario aplica por defecto a cada una.",
         ],
@@ -569,8 +570,30 @@ export const OT_ARTICLES: ManualArticle[] = [
         ],
       },
       {
+        id: "registrar",
+        title: "3. Registrar un mandatario",
+        paragraphs: [
+          "Solo el administrador del organismo (Admin OT) puede registrar mandatarios; el Operador OT no ve el botón.",
+        ],
+        bullets: [
+          "Desde «Empresas que radican», o desde el panel del mandatario general, pulsa «Registrar mandatario». Si eliges el general y hay varias empresas, indica cuál empresa registra a la persona.",
+          "Diligencia nombre completo, tipo y número de documento, y el correo si lo tienes. El organismo queda fijo: es el tuyo.",
+          "Pulsa «Guardar». Verás el aviso «Mandatario registrado» y la persona queda lista para elegirla como general o como default de la empresa.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Desde el organismo no se ve el baúl de firmas de la empresa. Para poder firmar, la persona debe tener su firma en el baúl o una validación biométrica hecha en el módulo Identidad; si no, el sistema te lo indica al guardar.",
+          },
+          {
+            variant: "info",
+            text: "Si la empresa ya tiene un mandatario en tu organismo, el formulario te lo avisa y no guarda un segundo. Si te aparece un mensaje de falta de permiso, tu rol no puede registrar mandatarios: pídeselo al Admin OT.",
+          },
+        ],
+      },
+      {
         id: "aprobacion",
-        title: "3. Al aprobar un trámite",
+        title: "4. Al aprobar un trámite",
         paragraphs: [
           "Si hay varios mandatarios posibles y el sistema no puede decidir solo, al aprobar verás «Elegir mandatario del mandato». El mandatario debe tener validación de identidad vigente antes de firmar; si no la tiene, la compañía se la envía desde su pestaña «Mandatarios».",
         ],
