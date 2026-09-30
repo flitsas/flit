@@ -94,14 +94,14 @@ Aquí se define, **para cada compañía que trabaja con ese organismo**, qué ti
 
 | Columna | Opciones |
 |---|---|
-| **Tipo de mandato** | Persona o RL · Institucional (OT / UT) · Abierto (sin asumir) |
-| **Mandatario por defecto** | Lista de mandatarios habilitados. Solo aplica cuando el tipo es «Persona o RL»; en los otros dos muestra «No aplica» |
+| **Tipo de mandato** | Persona natural · Persona jurídica · Mandato abierto |
+| **Mandatario por defecto** | Lista de mandatarios habilitados. Solo aplica cuando el tipo es «Persona natural»; en los otros dos muestra «No aplica» |
 
 Qué significa cada tipo:
 
-- **Persona o RL** — Es el default. Una persona natural registrada firma como mandatario. Al aprobar, el sistema exige que haya un mandatario resuelto.
-- **Institucional (OT / UT)** — El organismo o la unión temporal actúa como mandatario. Normalmente solo firma el mandante. **No se exige firmante persona al aprobar.**
-- **Abierto (sin asumir)** — El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash quedan en líneas abiertas para llenar a mano. **Tampoco se exige firmante al aprobar.**
+- **Persona natural** — Es el default. Una persona natural registrada firma como mandatario. Al aprobar, el sistema exige que haya un mandatario resuelto.
+- **Persona jurídica** — El organismo o la unión temporal actúa como mandatario. Normalmente solo firma el mandante. **No se exige firmante persona al aprobar.**
+- **Mandato abierto** — El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash quedan en líneas abiertas para llenar a mano. **Tampoco se exige firmante al aprobar.**
 
 Esta configuración por compañía **manda sobre** la del organismo cuando ambas existen.
 
@@ -148,7 +148,7 @@ Resumen de desenlaces al aprobar:
 | Un solo candidato | Se asigna automáticamente |
 | Varios, coincide la cuenta del aprobador | Se asigna automáticamente |
 | Varios, sin coincidencia clara | Error `mandatario_requerido` — hay que elegir |
-| Tipo Institucional o Abierto | No aplica: aprueba sin firmante persona |
+| Tipo Persona jurídica o Mandato abierto | No aplica: aprueba sin firmante persona |
 | Mandato personalizado de la compañía | No aplica: aprueba sin firmante persona |
 
 ---
@@ -163,7 +163,7 @@ En los tres casos los datos del mandatario siguen apareciendo en el **cuerpo** d
 |---|---|---|
 | **Estampada** | La firma o el sello del mandatario impresos sobre la línea | Es el caso normal |
 | **Manual** | Línea de guiones con sus datos debajo, sin estampa | Marcar «Firma de forma física» en ese organismo, o que el mandatario sea el propio organismo |
-| **Sin bloque** | El recuadro solo lleva al mandante | Convenio comercial entre la compañía y el organismo, o tipo Institucional |
+| **Sin bloque** | El recuadro solo lleva al mandante | Convenio comercial entre la compañía y el organismo, o tipo Persona jurídica |
 
 ### Las tres formas de tener con qué firmar
 
@@ -191,7 +191,7 @@ La opción **no se ofrece** a quien firma a mano, porque no tiene nada que esper
 | Aparece un mandatario pero no el esperado | Las empresas marcadas dentro de ese organismo en su ficha (puede estar acotado por NIT) |
 | Error `mandatario_requerido` al aprobar | Hay varios candidatos y ninguno resuelve solo: elegir en el diálogo o definir un mandatario por defecto en Plataforma → Mandatos |
 | Error `mandatario_identidad_requerida` | La persona no tiene firma del baúl, ni identidad vigente, ni está marcada como firma física en ese organismo |
-| El mandato sale sin firma del mandatario | Revisar si hay convenio comercial con ese organismo, o si el tipo es Institucional |
+| El mandato sale sin firma del mandatario | Revisar si hay convenio comercial con ese organismo, o si el tipo es Persona jurídica |
 | El contrato nombra a un municipio o una UT que no corresponde | Se aplicó al organismo una redacción de otro (Sabaneta o Bello). Cambiar a «Automática» o a la genérica |
 | No se puede guardar el mandatario | La alerta roja indica en qué organismos queda sin poder firmar. Asignarle firma, correo de identidad, o marcarlo como firma física |
 

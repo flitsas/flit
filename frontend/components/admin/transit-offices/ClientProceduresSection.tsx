@@ -1133,8 +1133,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         setApproveTarget(null);
         setMandatarioTarget(null);
         show(
-          "El mandatario debe validar su identidad (vigente) antes de firmar el mandato. " +
-            "La compañía se la envía desde la pestaña «Mandatarios» de su configuración.",
+          "El mandatario necesita una validación biométrica aprobada y vigente, o su firma en el baúl, " +
+            "para firmar el mandato.",
           "error",
         );
         return;

@@ -219,7 +219,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         id: "mandatos",
         title: "2. Mandatos",
         paragraphs: [
-          "Plantillas de Contrato Privado de Mandato por organismo. «Configurar mandato» fija la redacción que aplica el OT (plantilla, mandatario institucional / unión temporal, NIT, ciudad de cámara, sigla). «Configurar mandatario» define por compañía el tipo de mandato (Persona o RL · Institucional · Abierto) y el mandatario por defecto. Incluye simulador del contrato.",
+          "Plantillas de Contrato Privado de Mandato por organismo. «Configurar mandato» fija la redacción que aplica el OT (plantilla, mandatario institucional / unión temporal, NIT, ciudad de cámara, sigla). «Configurar mandatario» define por compañía el tipo de mandato (Persona natural · Persona jurídica · Mandato abierto) y el mandatario por defecto. Incluye simulador del contrato.",
         ],
       },
       {

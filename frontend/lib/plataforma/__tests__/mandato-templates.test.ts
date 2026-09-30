@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MANDATO_TIPOS,
   assignmentModeFromTemplateCode,
   resolveAssignmentMode,
   resolveTipoNegocio,
@@ -30,7 +31,7 @@ describe("mandato-templates tipos de negocio", () => {
     expect(suggestedFamilyForTipo("abierto", "sabaneta")).toBe("individuo");
   });
 
-  it("el modo persistido sale de la plantilla: Sabaneta institucional, el resto Persona o RL", () => {
+  it("el modo persistido sale de la plantilla: Sabaneta institucional, el resto Persona natural", () => {
     expect(assignmentModeFromTemplateCode("sabaneta")).toBe("institutional");
     expect(assignmentModeFromTemplateCode("generico")).toBe("signer");
     expect(assignmentModeFromTemplateCode("bello")).toBe("signer");
@@ -39,9 +40,11 @@ describe("mandato-templates tipos de negocio", () => {
   });
 
   it("expone labels de producto", () => {
-    expect(tipoNegocioLabel("persona_rl")).toMatch(/persona/i);
-    expect(tipoNegocioLabel("institucional")).toMatch(/institucional/i);
-    expect(tipoNegocioLabel("abierto")).toMatch(/abierto/i);
+    expect(MANDATO_TIPOS.map((t) => t.label).join(" ")).not.toMatch(/persona o rl|institucional|sin asumir/i);
+    expect(MANDATO_TIPOS.find((t) => t.value === "abierto")?.summary).not.toMatch(/default de modo/i);
+    expect(tipoNegocioLabel("persona_rl")).toBe("Persona natural");
+    expect(tipoNegocioLabel("institucional")).toBe("Persona jurídica");
+    expect(tipoNegocioLabel("abierto")).toBe("Mandato abierto");
   });
 
   it("etiqueta la redacción del sistema para el badge", () => {

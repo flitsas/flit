@@ -37,7 +37,7 @@ public static class MandatoFamiliaCodes
 /// </summary>
 public static class MandatoAssignmentModeCodes
 {
-    /// <summary>Persona o RL firma el bloque del mandatario (default).</summary>
+    /// <summary>Persona natural firma el bloque del mandatario (default).</summary>
     public const string Signer = "signer";
 
     /// <summary>El OT / unión temporal actúa como mandatario (sin firmante persona).</summary>
@@ -183,7 +183,7 @@ public static class MandatoTemplateResolver
 
     /// <summary>
     /// Modo de asignación que nace de la redacción: Sabaneta es institucional;
-    /// el resto (incluido genérico) es Persona o RL. El modo abierto ya no es default.
+    /// el resto (incluido genérico) es Persona natural. El modo abierto ya no es default.
     /// </summary>
     public static string AssignmentModeForTemplate(string? templateCode) =>
         Resolve(templateCode) == MandatoVariante.Sabaneta
@@ -332,7 +332,7 @@ public static class MandatoSystemOfficeTemplates
 }
 
 /// <summary>
-/// Valores con los que nace un OT al activarse: Persona o RL, salvo que la plantilla
+/// Valores con los que nace un OT al activarse: Persona natural, salvo que la plantilla
 /// del organismo implique otro modo (hoy: Sabaneta → institucional).
 /// La plantilla es la del organismo si tiene builtin (Sabaneta, Bello, Envigado, Funza, Medellín);
 /// el resto nace en genérico.

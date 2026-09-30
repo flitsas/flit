@@ -52,21 +52,21 @@ export const MANDATO_TIPOS: readonly {
 }[] = [
   {
     value: "persona_rl",
-    label: "Persona o RL",
+    label: "Persona natural",
     summary:
       "Una persona natural (mandatario de la empresa que radica) firma como mandatario. Mandato cliente: plantilla genérica. Si el OT configura firmante persona sin regla de cliente, se conserva la plantilla del organismo.",
   },
   {
     value: "institucional",
-    label: "Institucional (OT / UT)",
+    label: "Persona jurídica",
     summary:
       "El organismo o unión temporal actúa como mandatario. Suele firmar solo el mandante (p. ej. Sabaneta UT-SETSA).",
   },
   {
     value: "abierto",
-    label: "Abierto (sin asumir)",
+    label: "Mandato abierto",
     summary:
-      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas (___) dentro del recuadro. Conserva la plantilla del organismo. Es el default de modo al nacer un OT.",
+      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas (___) dentro del recuadro. Conserva la plantilla del organismo. No es el modo con el que nace un OT (nace como Persona natural).",
   },
 ] as const;
 
@@ -105,7 +105,7 @@ export function tipoNegocioLabel(tipo: MandatoTipoNegocio): string {
   return MANDATO_TIPOS.find((t) => t.value === tipo)?.label ?? tipo;
 }
 
-/** Modo persistido según la redacción: Sabaneta → institucional; el resto → Persona o RL. */
+/** Modo persistido según la redacción: Sabaneta → institucional; el resto → Persona natural. */
 export function assignmentModeFromTemplateCode(
   templateCode: string | null | undefined,
 ): MandateAssignmentMode {
@@ -148,7 +148,7 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
     code: "generico",
     label: "Genérico",
     summary:
-      "Plantilla por defecto del sistema. Aplica a cualquier organismo que no tenga una plantilla propia. Firman mandante y mandatario (Persona o RL).",
+      "Plantilla por defecto del sistema. Aplica a cualquier organismo que no tenga una plantilla propia. Firman mandante y mandatario (Persona natural).",
     familia: "individuo",
     familiaLabel: "Individuo",
     tipoTipico: "persona_rl",

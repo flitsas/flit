@@ -201,6 +201,21 @@ describe("ClientProceduresSection — HU #10220", () => {
     await waitFor(() => expect(screen.queryByText("RAD-2026-101")).not.toBeInTheDocument());
   });
 
+  it("HU13125: 409 mandatario_identidad_requerida pide validación biométrica vigente o firma en el baúl", async () => {
+    const user = userEvent.setup();
+    vi.mocked(approveOtClientProcedure).mockRejectedValueOnce(
+      new ApiError(409, "mandatario_identidad_requerida", { error: "mandatario_identidad_requerida" }),
+    );
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: /Acciones del trámite/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Aprobar/i }));
+    await user.click(screen.getByRole("button", { name: /Confirmar$/i }));
+
+    const aviso = await screen.findByText(/validación biométrica aprobada y vigente, o su firma en el baúl/i);
+    expect(aviso).toBeInTheDocument();
+    expect(aviso.textContent).not.toMatch(/pestaña|Mandatarios/i);
+  });
+
   it("AC3 rechazar deshabilita confirmar sin motivo", async () => {
     const user = userEvent.setup();
     renderSection();
