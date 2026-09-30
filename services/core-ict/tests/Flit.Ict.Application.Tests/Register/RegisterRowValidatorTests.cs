@@ -38,7 +38,8 @@ public sealed class RegisterRowValidatorTests
 
     private static RegisterRowInput MatriculaLeasing() => MatriculaInicial() with
     {
-        TransactionType = 2, Lessee = new[] { NaturalActor("333") },
+        TransactionType = 2,
+        Lessee = new[] { NaturalActor("333") },
     };
 
     private static bool ErrorOn(RegisterRowInput row, string needle) =>
@@ -96,6 +97,53 @@ public sealed class RegisterRowValidatorTests
 
     [Fact] public void Assignment_type_invalido_falla() => ErrorOn(MatriculaInicial() with { PlateAssignmentType = 5 }, "plate_assignment_type").Should().BeTrue();
     [Fact] public void Traspaso_placa_corta_falla() => ErrorOn(Bilateral() with { Plate = "AB12" }, "plate").Should().BeTrue();
+
+    // ===== Bug #13109 punto 6: plate_assignment_type no participa en traspaso (3, 4) =====
+    [Theory]
+    [InlineData(3, (short)2)]
+    [InlineData(3, (short)7)]
+    [InlineData(4, (short)2)]
+    [InlineData(4, (short)0)]
+    public void Bug13109_P6_Traspaso_ignora_plate_assignment_type(int tipo, short assignment)
+    {
+        var row = Bilateral() with { TransactionType = tipo, PlateAssignmentType = assignment };
+
+        Validator.Validate(row).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(3, "AB12")]
+    [InlineData(4, "")]
+    [InlineData(3, "ABCDEFGHIJKLMNOP")]
+    public void Bug13109_P6_Traspaso_exige_placa_completa_aunque_traiga_assignment_type_2(int tipo, string plate)
+    {
+        var row = Bilateral() with { TransactionType = tipo, Plate = plate, PlateAssignmentType = 2 };
+
+        ErrorOn(row, "plate").Should().BeTrue();
+    }
+
+    [Fact]
+    public void Bug13109_P6_Body_de_matricula_como_tipo_3_solo_falla_por_lo_propio_del_traspaso()
+    {
+        // Reproducción del hallazgo: el body de matrícula (con plate_assignment_type 3 y placa real) enviado
+        // como tipo 3. plate_assignment_type no es el motivo del rechazo; lo son el comprador y la
+        // compraventa, que siguen siendo obligatorios en traspaso bilateral.
+        var row = MatriculaInicial() with { TransactionType = 3, PlateAssignmentType = 3 };
+
+        var errores = Validator.Validate(row).Errors.Select(e => e.ErrorMessage).ToList();
+
+        errores.Should().NotContain(e => e.Contains("plate", StringComparison.OrdinalIgnoreCase));
+        errores.Should().Contain(e => e.Contains("buyer"));
+        errores.Should().Contain(e => e.Contains("selling_date"));
+        errores.Should().Contain(e => e.Contains("selling_price"));
+    }
+
+    [Fact]
+    public void Bug13109_P6_Matricula_sigue_validando_plate_assignment_type()
+    {
+        ErrorOn(MatriculaInicial() with { PlateAssignmentType = 7 }, "plate_assignment_type").Should().BeTrue();
+        ErrorOn(MatriculaInicial() with { Plate = "ABC123", PlateAssignmentType = 2 }, "plate").Should().BeTrue();
+    }
 
     // ===== Actores: forma y condicionales NIT/mandante =====
     [Fact] public void Seller_nit_sin_representante_legal_falla() => ErrorOn(Bilateral() with { Seller = new[] { NitActor(null) } }, "legal_representative").Should().BeTrue();

@@ -66,8 +66,9 @@ public sealed class DraftRequestPorCapacidadesTests
     }
 
     [Fact]
-    public async Task SinLaCapacidad_ElGestorAsignaElOrganismo()
+    public async Task SinLaCapacidadNiCodigoResuelto_ElGestorAsignaElOrganismo()
     {
+        // Bug #13109: el organismo vacío solo queda cuando el SP de negocio no resolvió el código.
         var tipo = new DraftProcedureType(
             "MATRICULA_LEASING", "MATRICULAS",
             RequiresCommercialValue: false, ResolvesTransitOfficeFromRunt: false);
@@ -76,6 +77,61 @@ public sealed class DraftRequestPorCapacidadesTests
             Master(2), tipo, SinAdjuntos(), log: null, TestContext.Current.CancellationToken);
 
         request.TransitOfficeName.Should().BeEmpty();
+        request.TransitOfficeId.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Bug13109_MatriculaConCodigoResuelto_ElBorradorNaceConElOrganismo()
+    {
+        var organismo = Guid.NewGuid();
+        var master = Master(1);
+        master.TrafficSecretaryCode = "11001000";
+        master.TransitOfficeId = organismo;
+        var tipo = new DraftProcedureType(
+            "MATRICULA_NUEVA", "MATRICULAS",
+            RequiresCommercialValue: false, ResolvesTransitOfficeFromRunt: false);
+
+        var request = await IctGrpcProcedureDraftClient.BuildRequestAsync(
+            master, tipo, SinAdjuntos(), log: null, TestContext.Current.CancellationToken);
+
+        request.TransitOfficeId.Should().Be(organismo.ToString());
+        request.TransitOfficeName.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Bug13109_TraspasoConCodigoResuelto_ElCodigoGanaSobreElNombreDelRunt()
+    {
+        var organismo = Guid.NewGuid();
+        var master = Master(3);
+        master.TransitOfficeId = organismo;
+        var tipo = new DraftProcedureType(
+            "TRASPASO_STANDARD", "TRASPASO",
+            RequiresCommercialValue: true, ResolvesTransitOfficeFromRunt: true);
+
+        var request = await IctGrpcProcedureDraftClient.BuildRequestAsync(
+            master, tipo, SinAdjuntos(), log: null, TestContext.Current.CancellationToken);
+
+        request.TransitOfficeId.Should().Be(organismo.ToString());
+        request.TransitOfficeName.Should().BeEmpty("con el id resuelto no se pide a core-api resolver por nombre");
+    }
+
+    [Fact]
+    public async Task Bug13109_TraspasoSinCodigo_SigueUsandoElNombreDelRunt()
+    {
+        // Intento de reproducir «traspaso con documentos=false pierde el organismo»: el armado del
+        // request no depende de closed_document ni de process_without_attached_documents.
+        var master = Master(3);
+        master.ClosedDocument = false;
+        master.ProcessWithoutAttachedDocuments = false;
+        var tipo = new DraftProcedureType(
+            "TRASPASO_STANDARD", "TRASPASO",
+            RequiresCommercialValue: true, ResolvesTransitOfficeFromRunt: true);
+
+        var request = await IctGrpcProcedureDraftClient.BuildRequestAsync(
+            master, tipo, SinAdjuntos(), log: null, TestContext.Current.CancellationToken);
+
+        request.TransitOfficeId.Should().BeEmpty();
+        request.TransitOfficeName.Should().Be("SECRETARÍA DE MOVILIDAD DE BOGOTÁ");
     }
 
     [Fact]
