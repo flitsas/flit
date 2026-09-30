@@ -191,7 +191,8 @@ public sealed class CreateMandateSignerHandler
                 profile.SignatureMethod,
                 profile.ValidityKind,
                 profile.ValidFrom,
-                profile.ValidTo),
+                profile.ValidTo,
+                command.ConfiguredByScope),
             cancellationToken).ConfigureAwait(false);
 
         // HU #11757 (ADR-0050) — el alta de un mandatario NO genera fila de validación ni correo,

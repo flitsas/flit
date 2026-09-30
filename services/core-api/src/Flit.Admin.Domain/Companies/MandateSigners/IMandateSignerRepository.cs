@@ -84,7 +84,9 @@ public sealed record CreateMandateSignerData(
     string? SignatureMethod = null,
     string ValidityKind = MandateValidityKinds.Fixed,
     DateOnly? ValidFrom = null,
-    DateOnly? ValidTo = null);
+    DateOnly? ValidTo = null,
+    /// <summary>HU #13195 — origen de los vínculos mandatario-compañía nuevos o reactivados: organismo | compania | super_admin.</summary>
+    string ConfiguredByScope = "organismo");
 
 /// <summary>Datos de edición. La huella ya viene recalculada con la fecha de registro original.</summary>
 public sealed record UpdateMandateSignerData(
@@ -141,7 +143,9 @@ public sealed record UpdateMandateSignerData(
     string? SignatureMethod = null,
     string ValidityKind = MandateValidityKinds.Fixed,
     DateOnly? ValidFrom = null,
-    DateOnly? ValidTo = null);
+    DateOnly? ValidTo = null,
+    /// <summary>HU #13195 — origen de los vínculos mandatario-compañía nuevos o reactivados: organismo | compania | super_admin.</summary>
+    string ConfiguredByScope = "organismo");
 
 /// <summary>
 /// Empresas representadas que un mandatario atiende en un organismo. La lista vacía significa "todas":

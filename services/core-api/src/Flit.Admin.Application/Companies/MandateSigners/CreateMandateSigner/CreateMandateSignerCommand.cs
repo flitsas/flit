@@ -59,6 +59,12 @@ public sealed class CreateMandateSignerCommand
     public DateOnly? ValidFrom { get; init; }
     public DateOnly? ValidTo { get; init; }
 
+    /// <summary>
+    /// HU #13195 — origen del vínculo mandatario-compañía que se escribe: <c>organismo</c> (por defecto, ruta del
+    /// OT), <c>super_admin</c> o <c>compania</c> (ruta de la compañía). Ver <c>MandateSignerOrigins</c>.
+    /// </summary>
+    public string ConfiguredByScope { get; init; } = "organismo";
+
     public Guid? CreatedBy { get; init; }
     public Guid? CorrelationId { get; init; }
 

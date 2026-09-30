@@ -138,6 +138,8 @@ public sealed class CreateCompanyMandateSignerHandler
                 ValidFrom = request.ValidFrom,
                 ValidTo = request.ValidTo,
                 CreatedBy = createdBy,
+                // HU #13195 — la compañía configura: su vínculo es del grupo de origen «compania».
+                ConfiguredByScope = "compania",
                 // La compañía configura sus propios mandatarios: ve toda la red (Bug #12912).
                 CompanyVisibility = OtCompanyVisibility.WholeNetwork,
             },
@@ -346,6 +348,7 @@ public sealed class UpdateCompanyMandateSignerHandler
                 // El configurador de la compañía SÍ gestiona la firma: su null significa "quítala".
                 ActualizaFirma = true,
                 UpdatedBy = updatedBy,
+                ConfiguredByScope = "compania",
                 // La compañía configura sus propios mandatarios: ve toda la red (Bug #12912).
                 CompanyVisibility = OtCompanyVisibility.WholeNetwork,
             },

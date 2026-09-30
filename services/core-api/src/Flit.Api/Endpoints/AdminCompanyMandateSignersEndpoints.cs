@@ -28,6 +28,8 @@ public static class AdminCompanyMandateSignersEndpoints
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/mandate-signers")
             .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
+            // HU #13195 — el índice «un activo por origen» responde 409, no 500.
+            .AddEndpointFilter<MandateSignerLinkConflictFilter>()
             .WithTags("Admin · Mandatarios de la compañía");
 
         group.MapGet("", ListAsync)

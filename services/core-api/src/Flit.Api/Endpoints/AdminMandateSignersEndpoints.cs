@@ -28,6 +28,8 @@ public static class AdminMandateSignersEndpoints
             .RequireAuthorization(AdminAuthorization.OtModulePolicy)
             // Bug #12912 (IDOR) — solo el organismo del perfil del usuario; SuperAdmin libre.
             .AddEndpointFilter<TransitOfficeScopeFilter>()
+            // HU #13195 — el índice «un activo por origen» responde 409, no 500.
+            .AddEndpointFilter<MandateSignerLinkConflictFilter>()
             .WithTags("Admin · Mandatarios");
 
         // GET — mandatarios activos del OT con sus compañías (RF27).
@@ -108,6 +110,18 @@ public static class AdminMandateSignersEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // HU #13195 (ADR-0066 D1) — reporte PREVIO de solo lectura del colapso de vínculos (un activo por origen).
+        // SOLO Super Admin (403 al resto); sin datos personales: ids, organismo, compañía y qué se conserva.
+        app.MapGroup("/api/v1/admin/mandate-signers")
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Mandatarios")
+            .MapGet("/link-collapse-report", LinkCollapseReportAsync)
+            .WithName("AdminMandateSignersLinkCollapseReport")
+            .WithSummary("Reporte previo (solo lectura) de los vínculos mandatario-compañía que el colapso inactivaría")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         return app;
     }
 
@@ -133,6 +147,21 @@ public static class AdminMandateSignersEndpoints
         }
 
         return Results.Ok(new { data = rows, total = rows.Count });
+    }
+
+    /// <summary>HU #13195 — <c>?transitOfficeId=</c> filtra por organismo. No modifica datos.</summary>
+    private static async Task<IResult> LinkCollapseReportAsync(
+        [FromQuery] Guid? transitOfficeId,
+        [FromServices] GetMandateLinkCollapseReportHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var rows = await handler.HandleAsync(transitOfficeId, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(new
+        {
+            data = rows,
+            total = rows.Count,
+            toInactivate = rows.Count(r => r.Action == Flit.Admin.Domain.Companies.MandateSigners.MandateLinkCollapseActions.Inactivar),
+        });
     }
 
     private static async Task<IResult> ListAsync(
@@ -204,6 +233,8 @@ public static class AdminMandateSignersEndpoints
             ValidTo = request.ValidTo,
             ValidateSigningMeans = true,
             CreatedBy = ResolveUserId(httpContext.User),
+            // HU #13195 — origen del vínculo: Super Admin → super_admin; ot_admin → organismo.
+            ConfiguredByScope = OrigenDelActor(httpContext.User),
             CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),
         };
 
@@ -257,6 +288,7 @@ public static class AdminMandateSignersEndpoints
             ValidFrom = request.ValidFrom,
             ValidTo = request.ValidTo,
             UpdatedBy = ResolveUserId(httpContext.User),
+            ConfiguredByScope = OrigenDelActor(httpContext.User),
             CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),
         };
 
@@ -340,6 +372,10 @@ public static class AdminMandateSignersEndpoints
         Results.Json(
             new { errors = errors.Select(e => new { field = e.Field, message = e.Message, value = e.Value }) },
             statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    /// <summary>HU #13195 — origen de configuración según quien actúa en la ruta del OT.</summary>
+    private static string OrigenDelActor(ClaimsPrincipal user) =>
+        user.IsInRole(AdminAuthorization.SuperAdminRole) ? "super_admin" : "organismo";
 
     private static Guid? ResolveUserId(ClaimsPrincipal user)
     {

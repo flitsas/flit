@@ -2,6 +2,7 @@ using System.Text.Json;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -19,6 +20,7 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class MandateSignerRepository : IMandateSignerRepository
 {
     private const string EntityName = "mandate_signer";
+    private const string OnePerOriginIndex = "uq_mandate_signer_companies_one_per_origin";
 
     private readonly FlitDbContext _context;
 
@@ -116,7 +118,7 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         {
             foreach (var companyId in Distinct(data.CompanyTenantIds))
             {
-                _context.MandateSignerCompanies.Add(NewAssignment(signerId, officeId, companyId, now));
+                _context.MandateSignerCompanies.Add(NewAssignment(signerId, officeId, companyId, now, data.ConfiguredByScope));
             }
         }
 
@@ -131,7 +133,7 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             changedBy: data.CreatedBy,
             correlationId: data.CorrelationId);
 
-        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveConTraduccionDeUnicidadAsync(cancellationToken).ConfigureAwait(false);
         return signerId;
     }
 
@@ -219,7 +221,14 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
 
         foreach (var assignment in currentAssignments)
         {
-            assignment.IsActive = deseadas.Contains((assignment.TransitOfficeId, assignment.CompanyTenantId));
+            var quedaActivo = deseadas.Contains((assignment.TransitOfficeId, assignment.CompanyTenantId));
+            // HU #13195 — un vínculo que se reactiva toma el origen de quien actúa; los que no se tocan lo conservan.
+            if (quedaActivo && !assignment.IsActive)
+            {
+                assignment.ConfiguredByScope = data.ConfiguredByScope;
+            }
+
+            assignment.IsActive = quedaActivo;
         }
 
         var yaExistentes = currentAssignments
@@ -228,7 +237,7 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
 
         foreach (var (officeId, companyId) in deseadas.Where(p => !yaExistentes.Contains(p)))
         {
-            _context.MandateSignerCompanies.Add(NewAssignment(signer.Id, officeId, companyId, now));
+            _context.MandateSignerCompanies.Add(NewAssignment(signer.Id, officeId, companyId, now, data.ConfiguredByScope));
         }
 
         await ReemplazarEmpresasRepresentadasAsync(
@@ -243,7 +252,7 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             changedBy: data.UpdatedBy,
             correlationId: data.CorrelationId);
 
-        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await SaveConTraduccionDeUnicidadAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -341,6 +350,29 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
 
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>
+    /// HU #13195 (ADR-0066 D1) — guarda y traduce el rechazo del índice único parcial
+    /// <c>uq_mandate_signer_companies_one_per_origin</c> (un solo vínculo activo por organismo, compañía y
+    /// grupo de origen) a <see cref="MandateSignerActiveLinkConflictException"/>, que la API responde como 409.
+    /// </summary>
+    private async Task SaveConTraduccionDeUnicidadAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (
+            ex.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: OnePerOriginIndex,
+            })
+        {
+            throw new MandateSignerActiveLinkConflictException(
+                MandateSignerActiveLinkConflictException.DefaultMessage, ex);
+        }
     }
 
     private void AddAudit(
@@ -531,7 +563,7 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         };
 
     private static MandateSignerCompany NewAssignment(
-        Guid signerId, Guid transitOfficeId, Guid companyTenantId, DateTimeOffset now) =>
+        Guid signerId, Guid transitOfficeId, Guid companyTenantId, DateTimeOffset now, string configuredByScope) =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -539,6 +571,7 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             TransitOfficeId = transitOfficeId,
             CompanyTenantId = companyTenantId,
             IsActive = true,
+            ConfiguredByScope = configuredByScope,
             CreatedAt = now,
         };
 

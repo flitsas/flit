@@ -177,7 +177,8 @@ public sealed class UpdateMandateSignerHandler
                 SignatureMethod: profile.SignatureMethod,
                 ValidityKind: profile.ValidityKind,
                 ValidFrom: profile.ValidFrom,
-                ValidTo: profile.ValidTo),
+                ValidTo: profile.ValidTo,
+                ConfiguredByScope: command.ConfiguredByScope),
             cancellationToken).ConfigureAwait(false);
 
         return updated

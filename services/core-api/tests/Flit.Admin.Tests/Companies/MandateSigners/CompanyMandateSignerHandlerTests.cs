@@ -179,6 +179,76 @@ public sealed class CompanyMandateSignerHandlerTests
         mandatarios[0].TransitOfficeIds.Should().BeEquivalentTo([OtMedellin, OtEnvigado]);
     }
 
+    // ── HU #13195 — el origen del vínculo lo escribe quien actúa ─────────────
+
+    private static Task<List<string>> ScopesAsync(FlitDbContext ctx, CancellationToken ct) =>
+        ctx.MandateSignerCompanies.AsNoTracking().OrderBy(c => c.CreatedAt).Select(c => c.ConfiguredByScope).ToListAsync(ct);
+
+    [Fact]
+    public async Task HU13195_LaAltaDeLaCompania_GuardaElVinculoConOrigenCompania()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, _) = Handlers(ctx);
+
+        (await create.HandleAsync(Compania, Alta(OtMedellin, OtEnvigado), null, ct)).IsValid.Should().BeTrue();
+
+        (await ScopesAsync(ctx, ct)).Should().Equal("compania", "compania");
+    }
+
+    [Theory]
+    [InlineData(null, "organismo")]
+    [InlineData("organismo", "organismo")]
+    [InlineData("super_admin", "super_admin")]
+    public async Task HU13195_LaAltaDelOt_GuardaSuOrigen(string? origen, string esperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var inner = new CreateMandateSignerHandler(OtOperable(), new DbMandateSignerReader(ctx), new MandateSignerRepository(ctx));
+
+        var result = await inner.HandleAsync(
+            new CreateMandateSignerCommand
+            {
+                TransitOfficeId = OtMedellin,
+                FullName = "Ana Restrepo",
+                DocumentNumber = "1020304050",
+                CompanyTenantIds = [Compania],
+                SignatureMethod = "biometria",
+                ValidateSigningMeans = false,
+                CompanyVisibility = OtCompanyVisibility.WholeNetwork,
+                ConfiguredByScope = origen ?? "organismo",
+            },
+            ct);
+
+        result.IsValid.Should().BeTrue();
+        (await ScopesAsync(ctx, ct)).Should().Equal(esperado);
+    }
+
+    [Fact]
+    public async Task HU13195_EditarDesdeLaCompania_ReactivaConSuOrigen_YNoTocaLosQueNoCambian()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+        (await create.HandleAsync(Compania, Alta(OtMedellin), null, ct)).IsValid.Should().BeTrue();
+        var id = await IdDelUnicoAsync(list, ct);
+        // El vínculo nació del OT: la edición de la compañía que lo deja como está NO cambia su origen.
+        var vinculo = await ctx.MandateSignerCompanies.SingleAsync(ct);
+        vinculo.ConfiguredByScope = "super_admin";
+        await ctx.SaveChangesAsync(ct);
+
+        var result = await Editor(ctx).HandleAsync(Compania, id, Alta(OtMedellin, OtEnvigado), null, ct);
+
+        result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
+        var porOrganismo = await ctx.MandateSignerCompanies.AsNoTracking()
+            .ToDictionaryAsync(c => c.TransitOfficeId, c => c.ConfiguredByScope, ct);
+        porOrganismo[OtMedellin].Should().Be("super_admin", "el vínculo existente conserva su origen");
+        porOrganismo[OtEnvigado].Should().Be("compania", "el vínculo nuevo toma el origen de quien edita");
+    }
+
     // ── AC2 — solo organismos de esa compañía ─────────────────────────────────
 
     [Fact]
