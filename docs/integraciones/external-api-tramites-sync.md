@@ -88,7 +88,7 @@ Respuesta `200`:
 ```
 
 Reglas:
-- Ítems ordenados por `syncVersion` ascendente. `nextCursor` **siempre** presente (aunque `hasMore=false`): el consumidor lo persiste y continúa desde ahí en la siguiente corrida.
+- Ítems en el orden del cursor. Normalmente coincide con `syncVersion` ascendente, pero no está garantizado entre trámites distintos (tras una transacción larga puede llegar antes una versión menor). La regla de upsert por `id` descartando `syncVersion` ≤ al guardado sigue siendo la que decide. `nextCursor` **siempre** presente (aunque `hasMore=false`): el consumidor lo persiste y continúa desde ahí en la siguiente corrida.
 - Sin resultados → `200` con `items: []` (nunca 404).
 - Un trámite puede repetirse entre páginas o corridas si cambió entre medias: el consumidor hace **upsert por `id`** y descarta si `syncVersion` recibido ≤ el guardado.
 - **Alcance: se entrega todo trámite RADICADO al menos una vez**, es decir, que alguna vez ha llegado al organismo de tránsito. Un trámite que nunca se radicó —en `borrador` o `preparado`— no se entrega: es trabajo en curso interno de la empresa. **Tampoco se entregan los trámites migrados desde FLIT 1** (históricos importados a FLIT 2 como foto de solo lectura): el consumidor ya los recibe por FLIT 1. La exclusión es permanente; no generan cambios ni tombstone.
