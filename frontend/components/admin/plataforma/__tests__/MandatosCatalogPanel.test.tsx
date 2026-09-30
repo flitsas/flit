@@ -139,21 +139,91 @@ describe("MandatosCatalogPanel configurador", () => {
     expect(screen.getByRole("heading", { name: /configurar mandatario/i })).toBeInTheDocument();
   });
 
-  it("restablece default con DELETE desde Acciones", async () => {
+  async function abrirRestablecer(user: ReturnType<typeof userEvent.setup>) {
+    await screen.findByText("Sabaneta");
+    await user.click(screen.getByRole("button", { name: /acciones de mandato para sabaneta/i }));
+    await user.click(screen.getByRole("menuitem", { name: /restablecer default/i }));
+    return screen.findByTestId("mandatos-reset-dialog");
+  }
+
+  it("HU #13153: lista lo que se perderá y confirma con DELETE", async () => {
     const user = userEvent.setup();
     deleteMandateOtConfig.mockResolvedValue(undefined);
     listMandateOtConfigs
-      .mockResolvedValueOnce(sampleRows)
+      .mockResolvedValueOnce([
+        {
+          ...sampleRows[0],
+          configuredTemplateCode: "sabaneta",
+          hasCustomTemplate: true,
+          defaultMandateSignerId: "s1",
+          defaultMandateSignerName: "Ana Pérez",
+        },
+        sampleRows[1],
+      ])
       .mockResolvedValueOnce([
         { ...sampleRows[0], hasExplicitConfig: false, templateCode: "generico", rowVersion: null },
         sampleRows[1],
       ]);
 
     renderPanel();
-    await screen.findByText("Sabaneta");
-    await user.click(screen.getByRole("button", { name: /acciones de mandato para sabaneta/i }));
-    await user.click(screen.getByRole("menuitem", { name: /restablecer default/i }));
+    const dlg = await abrirRestablecer(user);
+    expect(within(dlg).getByText(/redacción elegida/i)).toBeInTheDocument();
+    expect(within(dlg).getByText(/mandatario general del OT \(Ana Pérez\)/i)).toBeInTheDocument();
+    expect(within(dlg).getByText(/plantilla propia/i)).toBeInTheDocument();
+    expect(within(dlg).getByText(/reglas por compañía no se eliminan/i)).toBeInTheDocument();
+    expect(deleteMandateOtConfig).not.toHaveBeenCalled();
+    await user.click(within(dlg).getByRole("button", { name: /^restablecer$/i }));
     await waitFor(() => expect(deleteMandateOtConfig).toHaveBeenCalledWith("o1"));
+    expect(await screen.findByText(/se restableció el default/i)).toBeInTheDocument();
+    expect(listMandateOtConfigs).toHaveBeenCalledTimes(2);
+  });
+
+  it("HU #13153: solo lista lo que existe", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const dlg = await abrirRestablecer(user);
+    const items = within(dlg).getAllByRole("listitem");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent(/redacción elegida/i);
+    expect(within(dlg).queryByText(/plantilla propia/i)).not.toBeInTheDocument();
+    expect(within(dlg).queryByText(/mandatario general/i)).not.toBeInTheDocument();
+  });
+
+  it("HU #13153: cancelar no envía ninguna petición", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const dlg = await abrirRestablecer(user);
+    await user.click(within(dlg).getByRole("button", { name: /cancelar/i }));
+    expect(screen.queryByTestId("mandatos-reset-dialog")).not.toBeInTheDocument();
+    expect(deleteMandateOtConfig).not.toHaveBeenCalled();
+  });
+
+  it("HU #13153: error del API muestra el aviso y conserva la fila", async () => {
+    const user = userEvent.setup();
+    deleteMandateOtConfig.mockRejectedValue(new Error("500"));
+    renderPanel();
+    const dlg = await abrirRestablecer(user);
+    await user.click(within(dlg).getByRole("button", { name: /^restablecer$/i }));
+    expect(await screen.findByText(/no se pudo restablecer la configuración/i)).toBeInTheDocument();
+    expect(listMandateOtConfigs).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText("Sabaneta").length).toBeGreaterThan(0);
+  });
+
+  it("HU #13153: organismo en default no ofrece Restablecer", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await screen.findByText("Sabaneta");
+    await user.click(screen.getByRole("button", { name: /acciones de mandato para medellín/i }));
+    expect(screen.queryByRole("menuitem", { name: /restablecer default/i })).not.toBeInTheDocument();
+  });
+
+  it("HU #13152: la ayuda dice que el tipo por defecto es Persona natural y nadie afirma que Mandato abierto lo es", async () => {
+    renderPanel();
+    await screen.findByText("Sabaneta");
+    expect(
+      screen.getByText(/tipo por defecto de un organismo nuevo es persona natural/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/abierto[^.]*es el (default|tipo por defecto)/i)).not.toBeInTheDocument();
   });
 
   it("abre preview de plantilla genérica", async () => {

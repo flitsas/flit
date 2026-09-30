@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, FileText, RotateCcw, Search, Users } from "lucide-react";
+import { AlertTriangle, Eye, FileText, RotateCcw, Search, Users } from "lucide-react";
+import { Modal } from "@/components/atom/Modal";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -39,6 +40,8 @@ export function MandatosCatalogPanel() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [previewing, setPreviewing] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
+  // HU #13153 — confirmación detallada antes de restablecer.
+  const [resetTarget, setResetTarget] = useState<MandateOtConfigView | null>(null);
   const [editing, setEditing] = useState<{
     office: MandateOtConfigView;
     mode: MandatoOtConfigPanelMode;
@@ -93,9 +96,11 @@ export function MandatosCatalogPanel() {
     setActingId(row.officeId);
     try {
       await deleteMandateOtConfig(row.officeId);
+      setResetTarget(null);
       await load();
       showToast(`Se restableció el default implícito (genérico) para ${row.name}.`, "success");
     } catch {
+      setResetTarget(null);
       showToast("No se pudo restablecer la configuración.", "error");
     } finally {
       setActingId(null);
@@ -176,7 +181,7 @@ export function MandatosCatalogPanel() {
                     key: "default",
                     label: "Restablecer default",
                     icon: RotateCcw,
-                    onSelect: () => void handleReset(row),
+                    onSelect: () => setResetTarget(row),
                     disabled: actingId !== null,
                     disabledReason: "Hay otra acción en curso.",
                   },
@@ -199,8 +204,8 @@ export function MandatosCatalogPanel() {
             Plantillas del sistema ({MANDATO_TEMPLATES.length})
           </h2>
           <p className="text-xs text-[#59677D] dark:text-white/65">
-            Texto del contrato que FLIT genera por organismo. El Genérico es el respaldo y el
-            default al nacer un OT (Persona natural). Persona jurídica y Mandato abierto solo aplican si la
+            Texto del contrato que FLIT genera por organismo. El Genérico es el respaldo. El tipo
+            por defecto de un organismo nuevo es Persona natural. Persona jurídica y Mandato abierto solo aplican si la
             plantilla del organismo lo implica (p. ej. Sabaneta). Esta pantalla convive con el hub
             del organismo → Mandatos: es la misma configuración.
           </p>
@@ -268,6 +273,15 @@ export function MandatosCatalogPanel() {
 
       <MandatoSimuladorPanel offices={rows} />
 
+      {resetTarget ? (
+        <ResetConfirmDialog
+          row={resetTarget}
+          busy={actingId !== null}
+          onConfirm={() => void handleReset(resetTarget)}
+          onCancel={() => setResetTarget(null)}
+        />
+      ) : null}
+
       {editing ? (
         <MandatoOtConfigForm
           office={editing.office}
@@ -286,6 +300,81 @@ export function MandatosCatalogPanel() {
         />
       ) : null}
     </div>
+  );
+}
+
+function ResetConfirmDialog({
+  row,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  row: MandateOtConfigView;
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const loses: string[] = [
+    `La redacción elegida (${
+      !row.configuredTemplateCode || row.configuredTemplateCode === "auto"
+        ? "Automática"
+        : systemTemplateLabel(row.configuredTemplateCode)
+    }).`,
+  ];
+  if (row.defaultMandateSignerId) {
+    loses.push(
+      `El mandatario general del OT${row.defaultMandateSignerName ? ` (${row.defaultMandateSignerName})` : ""}.`,
+    );
+  }
+  if (row.hasCustomTemplate) loses.push("La plantilla propia del organismo.");
+  return (
+    <Modal
+      open
+      onClose={onCancel}
+      busy={busy}
+      icon={AlertTriangle}
+      iconBg="#F9AC00"
+      title="Restablecer configuración"
+      titleClassName="text-base font-bold text-[#162744]"
+      size="md"
+    >
+      <div className="space-y-3 text-xs" data-testid="mandatos-reset-dialog">
+        <p>
+          Vas a restablecer <strong>{row.name}</strong> al default. Se perderá:
+        </p>
+        <ul className="list-disc space-y-1 pl-5" data-testid="mandatos-reset-lista">
+          {loses.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
+        <p
+          className="rounded-xl border px-3 py-2 leading-relaxed"
+          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          role="note"
+        >
+          Las reglas por compañía no se eliminan.
+        </p>
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          >
+            {busy ? "Restableciendo…" : "Restablecer"}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
