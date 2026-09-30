@@ -321,7 +321,7 @@ public sealed class MandateSimulatorServiceTests
 
         public Task<MandateConfigWriteStatus> DeleteCompanyRuleAsync(
             Guid officeId, Guid companyTenantId, OtCompanyVisibility visibility,
-            CancellationToken ct = default) =>
+            long? expectedRowVersion = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 

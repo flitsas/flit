@@ -55,8 +55,12 @@ public sealed record SetOtDefaultSignerRequest(
     Guid? DefaultMandateSignerId,
     long? RowVersion = null);
 
-/// <summary>Solo el firmante por defecto de la llave cliente×OT. No toca plantilla del OT.</summary>
-public sealed record SetCompanyDefaultSignerRequest(Guid? DefaultMandateSignerId);
+/// <summary>
+/// Solo el firmante por defecto de la llave cliente×OT. No toca plantilla del OT.
+/// HU #13148 — <paramref name="RowVersion"/> es opcional aquí (el hub del OT no lo envía): si llega y no coincide
+/// con el vigente, el servicio responde <see cref="MandateConfigWriteStatus.Conflict"/>.
+/// </summary>
+public sealed record SetCompanyDefaultSignerRequest(Guid? DefaultMandateSignerId, long? RowVersion = null);
 
 public sealed record SaveMandateEditorBodyRequest(
     string Body,
@@ -104,8 +108,15 @@ public sealed record CompanyOtMandateRuleView(
     string? DefaultMandateSignerName = null,
     string? DefaultMandateSignerDocumentType = null,
     string? DefaultMandateSignerDocumentNumber = null,
-    string? DefaultMandateSignerIntegrityHash = null);
+    string? DefaultMandateSignerIntegrityHash = null,
+    /// <summary>HU #13148 — versión vigente de la regla propia; <c>null</c> cuando la compañía hereda (sin regla).</summary>
+    long? RowVersion = null);
 
+/// <summary>
+/// Alta o cambio del tipo de mandato de una compañía en un organismo (Super Admin). HU #13148 —
+/// <paramref name="RowVersion"/>: sin regla propia se omite (alta); con regla propia es obligatorio y debe ser el
+/// vigente, o el servicio responde <see cref="MandateConfigWriteStatus.Conflict"/> y no cambia nada.
+/// </summary>
 public sealed record UpsertCompanyOtMandateRuleRequest(
     string AssignmentMode,
     string MandataryFamily = "individuo",
@@ -113,7 +124,8 @@ public sealed record UpsertCompanyOtMandateRuleRequest(
     string? InstitutionalMandataryNit = null,
     string? ChamberCity = null,
     string? MandatarySigla = null,
-    Guid? DefaultMandateSignerId = null);
+    Guid? DefaultMandateSignerId = null,
+    long? RowVersion = null);
 
 public interface IMandateConfigAdminService
 {
@@ -200,9 +212,14 @@ public interface IMandateConfigAdminService
     /// Bug #12912 — con <see cref="OtCompanyVisibility.DirectOrWithReceivedProcedures"/>, una compañía
     /// que el organismo no puede ver devuelve <see cref="MandateConfigWriteStatus.CompanyNotFound"/>.
     /// </summary>
+    /// <remarks>
+    /// HU #13148 — <paramref name="expectedRowVersion"/> opcional: si llega y la regla ya cambió, devuelve
+    /// <see cref="MandateConfigWriteStatus.Conflict"/> y no borra. Sin regla propia es idempotente (<c>Ok</c>).
+    /// </remarks>
     Task<MandateConfigWriteStatus> DeleteCompanyRuleAsync(
         Guid officeId,
         Guid companyTenantId,
         OtCompanyVisibility visibility,
+        long? expectedRowVersion = null,
         CancellationToken ct = default);
 }

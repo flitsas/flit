@@ -483,7 +483,8 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                                 rule.MandatarySigla,
                                 hasExplicitRule: true,
                                 rule.DefaultMandateSignerId,
-                                snapshot);
+                                snapshot,
+                                rule.RowVersion);
                         }
 
                         return MapCompanyRule(
@@ -561,6 +562,11 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                 ct)
             .ConfigureAwait(false);
 
+        // HU #13148 — alta: sin versión (si llega una, la regla ya no existe: otro usuario la restableció).
+        // Cambio: la versión es obligatoria y debe ser la vigente; si no, nada se escribe.
+        if (entity is null ? request.RowVersion is not null : request.RowVersion != entity.RowVersion)
+            return (MandateConfigWriteStatus.Conflict, null);
+
         if (entity is null)
         {
             entity = new CompanyOtMandateRuleEntity
@@ -591,7 +597,22 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         entity.MandatarySigla = NullIfEmpty(request.MandatarySigla);
         entity.DefaultMandateSignerId = defaultSignerId;
 
-        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return (MandateConfigWriteStatus.Conflict, null);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // Dos altas simultáneas de la primera regla: la segunda pierde la carrera (uq_company_ot_mandate_rules).
+            return (MandateConfigWriteStatus.Conflict, null);
+        }
+
+        // El trigger incrementa row_version en BD; hay que refrescar o el cliente reenvía un token viejo: 409.
+        await _db.Entry(entity).ReloadAsync(ct).ConfigureAwait(false);
 
         MandateSignerSnapshot? snapshot = null;
         if (entity.DefaultMandateSignerId is { } savedSigner && savedSigner != Guid.Empty)
@@ -618,7 +639,8 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             entity.MandatarySigla,
             hasExplicitRule: true,
             entity.DefaultMandateSignerId,
-            snapshot));
+            snapshot,
+            entity.RowVersion));
     }
 
     public async Task<(MandateConfigWriteStatus Status, CompanyOtMandateRuleView? View)> SetCompanyDefaultSignerAsync(
@@ -666,12 +688,23 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                 ct)
             .ConfigureAwait(false);
 
+        // HU #13148 — opcional aquí (el hub del OT no lo envía): si llega y no es el vigente, 409 sin escribir.
+        if (request.RowVersion is { } expected && (entity is null || entity.RowVersion != expected))
+            return (MandateConfigWriteStatus.Conflict, null);
+
         if (defaultSignerId is null)
         {
             if (entity is not null)
             {
                 _db.CompanyOtMandateRules.Remove(entity);
-                await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    return (MandateConfigWriteStatus.Conflict, null);
+                }
             }
 
             var otCfg = await _db.TransitOfficeMandateConfigs.AsNoTracking()
@@ -727,7 +760,20 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         }
 
         entity.DefaultMandateSignerId = defaultSignerId;
-        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return (MandateConfigWriteStatus.Conflict, null);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            return (MandateConfigWriteStatus.Conflict, null);
+        }
+
+        await _db.Entry(entity).ReloadAsync(ct).ConfigureAwait(false);
 
         MandateSignerSnapshot? snapshot = await ExecuteCrossTenantReadAsync(
             () => _db.MandateSigners.AsNoTracking()
@@ -750,7 +796,8 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             entity.MandatarySigla,
             hasExplicitRule: true,
             entity.DefaultMandateSignerId,
-            snapshot));
+            snapshot,
+            entity.RowVersion));
     }
 
     private async Task<bool> IsValidOtDefaultSignerAsync(
@@ -820,6 +867,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         Guid officeId,
         Guid companyTenantId,
         OtCompanyVisibility visibility,
+        long? expectedRowVersion = null,
         CancellationToken ct = default)
     {
         if (_catalog.GetById(officeId) is null)
@@ -841,8 +889,20 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         if (entity is null)
             return MandateConfigWriteStatus.Ok;
 
+        // HU #13148 — opcional: si llega y la regla ya cambió, 409 y no se borra.
+        if (expectedRowVersion is { } expected && entity.RowVersion != expected)
+            return MandateConfigWriteStatus.Conflict;
+
         _db.CompanyOtMandateRules.Remove(entity);
-        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return MandateConfigWriteStatus.Conflict;
+        }
+
         return MandateConfigWriteStatus.Ok;
     }
 
@@ -1128,7 +1188,8 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         string? sigla,
         bool hasExplicitRule,
         Guid? defaultSignerId,
-        MandateSignerSnapshot? snapshot) =>
+        MandateSignerSnapshot? snapshot,
+        long? rowVersion = null) =>
         new(
             companyTenantId,
             companyName,
@@ -1145,7 +1206,20 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             snapshot?.FullName,
             snapshot?.DocumentType,
             snapshot?.DocumentNumber,
-            snapshot?.IntegrityHash);
+            snapshot?.IntegrityHash,
+            hasExplicitRule ? rowVersion : null);
+
+    /// <summary>Violación de unicidad (SQLSTATE 23505) de Npgsql, sin referenciar el proveedor.</summary>
+    private static bool IsUniqueViolation(Exception ex)
+    {
+        for (var e = ex; e is not null; e = e.InnerException!)
+        {
+            if (e.GetType().GetProperty("SqlState")?.GetValue(e) as string == "23505")
+                return true;
+        }
+
+        return false;
+    }
 
     private static string? NullIfEmpty(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

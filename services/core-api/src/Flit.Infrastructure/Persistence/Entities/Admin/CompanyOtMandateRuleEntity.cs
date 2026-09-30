@@ -30,6 +30,12 @@ public sealed class CompanyOtMandateRuleEntity
     /// </summary>
     public string ConfiguredByScope { get; set; } = "organismo";
 
+    /// <summary>
+    /// HU #13148 — token de concurrencia optimista; lo incrementa el trigger
+    /// <c>tr_company_ot_mandate_rules_row_version</c> en cada UPDATE (DDL 123).
+    /// </summary>
+    public long RowVersion { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public Guid? CreatedBy { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }

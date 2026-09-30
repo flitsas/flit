@@ -147,6 +147,9 @@ public static class AdminOtMandatosEndpoints
                 Results.NotFound(),
             MandateConfigWriteStatus.InvalidDefaultSigner =>
                 Results.BadRequest(new { error = "mandatario_default_invalido" }),
+            // HU #13148 — rowVersion opcional en el hub: solo choca si el cliente lo envía y ya cambió.
+            MandateConfigWriteStatus.Conflict =>
+                Results.Conflict(new { error = "row_version_conflict" }),
             _ => Results.BadRequest(),
         };
     }
@@ -154,6 +157,7 @@ public static class AdminOtMandatosEndpoints
     private static async Task<IResult> DeleteCompanyRuleAsync(
         Guid officeId,
         Guid companyTenantId,
+        [FromQuery] long? rowVersion,
         ClaimsPrincipal user,
         IOtProfileRepository profiles,
         IMandateConfigAdminService service,
@@ -165,9 +169,14 @@ public static class AdminOtMandatosEndpoints
             return forbidden;
 
         var status = await service
-            .DeleteCompanyRuleAsync(officeId, companyTenantId, OtCompanyVisibilityPolicy.For(user), ct)
+            .DeleteCompanyRuleAsync(officeId, companyTenantId, OtCompanyVisibilityPolicy.For(user), rowVersion, ct)
             .ConfigureAwait(false);
-        return status == MandateConfigWriteStatus.Ok ? Results.NoContent() : Results.NotFound();
+        return status switch
+        {
+            MandateConfigWriteStatus.Ok => Results.NoContent(),
+            MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
+            _ => Results.NotFound(),
+        };
     }
 
     private static async Task<IResult> PreviewTemplateAsync(

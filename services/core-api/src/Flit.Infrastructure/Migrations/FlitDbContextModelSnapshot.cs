@@ -702,6 +702,13 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("mandatary_sigla");
 
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
                     b.Property<Guid>("TransitOfficeId")
                         .HasColumnType("uuid")
                         .HasColumnName("transit_office_id");
@@ -724,6 +731,8 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("company_ot_mandate_rules", "admin", t =>
                         {
                             t.ExcludeFromMigrations();
+
+                            t.HasTrigger("tr_company_ot_mandate_rules_row_version");
                         });
                 });
 

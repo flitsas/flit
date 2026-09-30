@@ -127,18 +127,21 @@ public static class AdminPlataformaMandatosEndpoints
             .WithName("AdminPlataformaMandatosUpsertCompanyRule")
             .Produces<CompanyOtMandateRuleView>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         group.MapPatch("/ot/{officeId:guid}/company-rules/{companyTenantId:guid}/default-signer", SetCompanyDefaultSignerAsync)
             .WithName("AdminPlataformaMandatosSetCompanyDefaultSigner")
             .Produces<CompanyOtMandateRuleView>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         group.MapDelete("/ot/{officeId:guid}/company-rules/{companyTenantId:guid}", DeleteCompanyRuleAsync)
             .WithName("AdminPlataformaMandatosDeleteCompanyRule")
             .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         return app;
     }
@@ -449,6 +452,9 @@ public static class AdminPlataformaMandatosEndpoints
                 Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
             MandateConfigWriteStatus.InvalidDefaultSigner =>
                 Results.BadRequest(new { error = "mandatario_default_invalido" }),
+            // HU #13148 — otra persona cambió la regla (o falta la versión de una regla existente).
+            MandateConfigWriteStatus.Conflict =>
+                Results.Conflict(new { error = "row_version_conflict" }),
             _ => Results.BadRequest(),
         };
     }
@@ -473,6 +479,8 @@ public static class AdminPlataformaMandatosEndpoints
                 Results.NotFound(),
             MandateConfigWriteStatus.InvalidDefaultSigner =>
                 Results.BadRequest(new { error = "mandatario_default_invalido" }),
+            MandateConfigWriteStatus.Conflict =>
+                Results.Conflict(new { error = "row_version_conflict" }),
             _ => Results.BadRequest(),
         };
     }
@@ -480,14 +488,18 @@ public static class AdminPlataformaMandatosEndpoints
     private static async Task<IResult> DeleteCompanyRuleAsync(
         Guid officeId,
         Guid companyTenantId,
+        [FromQuery] long? rowVersion,
         [FromServices] IMandateConfigAdminService service,
         CancellationToken ct)
     {
         var status = await service.DeleteCompanyRuleAsync(
-            officeId, companyTenantId, OtCompanyVisibility.WholeNetwork, ct).ConfigureAwait(false);
-        return status == MandateConfigWriteStatus.Ok
-            ? Results.NoContent()
-            : Results.NotFound();
+            officeId, companyTenantId, OtCompanyVisibility.WholeNetwork, rowVersion, ct).ConfigureAwait(false);
+        return status switch
+        {
+            MandateConfigWriteStatus.Ok => Results.NoContent(),
+            MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
+            _ => Results.NotFound(),
+        };
     }
 
     private static IResult MapWrite(MandateConfigWriteStatus status, MandateOtConfigView? view) =>

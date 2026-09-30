@@ -11,7 +11,13 @@ internal sealed class CompanyOtMandateRuleConfiguration
     public void Configure(EntityTypeBuilder<CompanyOtMandateRuleEntity> builder)
     {
         builder.ToTable(
-            "company_ot_mandate_rules", SchemaNames.Admin, t => t.ExcludeFromMigrations());
+            "company_ot_mandate_rules",
+            SchemaNames.Admin,
+            t =>
+            {
+                t.ExcludeFromMigrations();
+                t.HasTrigger("tr_company_ot_mandate_rules_row_version");
+            });
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
@@ -37,6 +43,7 @@ internal sealed class CompanyOtMandateRuleConfiguration
         builder.Property(x => x.ChamberCity).HasColumnName("chamber_city").HasMaxLength(120);
         builder.Property(x => x.MandatarySigla).HasColumnName("mandatary_sigla").HasMaxLength(40);
         builder.Property(x => x.DefaultMandateSignerId).HasColumnName("default_mandate_signer_id");
+        builder.Property(x => x.RowVersion).HasColumnName("row_version").HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.ConfiguredByScope).HasColumnName("configured_by_scope").HasMaxLength(20).IsRequired().HasDefaultValue("organismo");
         builder.Property(x => x.CreatedBy).HasColumnName("created_by");
