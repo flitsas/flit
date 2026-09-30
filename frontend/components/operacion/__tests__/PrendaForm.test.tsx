@@ -1749,3 +1749,122 @@ describe('HU #13112 — Omitir prenda', () => {
     expect(screen.queryByLabelText('Entidad ante la que se levantó', { exact: false })).not.toBeInTheDocument();
   });
 });
+
+/**
+ * Bug #13203 — el RUNT real (Kyverum y Verifik) entrega cada garantía mobiliaria con claves
+ * `entidad`/`numeroDocumentoEntidad`/`tipoDocumentoEntidad`/`fechaRegistro`. Con Verifik ese array
+ * se guardó crudo en `runt_gravamenes`: los trámites ya guardados conservan ese shape y el acreedor
+ * no se precargaba ni se pintaba en el panel RUNT.
+ *
+ * Uso de ejemplo: parseRuntGravamenesJson('[{"entidad":"BANCO DE PRUEBA S.A.", ...}]')
+ *   → [{ acreedor: 'BANCO DE PRUEBA S.A.', documentoAcreedor: '900000001', ... }]
+ */
+describe('Bug #13203 — garantía mobiliaria con shape crudo del RUNT (entidad/fechaRegistro)', () => {
+  const RAW_GARANTIA = {
+    idPrenda: '1000001',
+    idVehiculoPrenda: '1000002',
+    fechaRegistro: '30/09/2026',
+    tipoDocumentoEntidad: 'NIT',
+    numeroDocumentoEntidad: '900000001',
+    entidad: 'BANCO DE PRUEBA S.A.',
+    estado: 'Registro de la garantía en el RNGM por parte de RUNT',
+  };
+
+  const gravamenesField = (items: unknown[]): FieldValue => ({
+    formFieldId: '',
+    fieldKey: 'runt_gravamenes',
+    valueText: null,
+    valueJson: JSON.stringify(items),
+    source: 'consultation',
+  });
+
+  beforeEach(() => {
+    client.getPrenda.mockClear();
+    client.getInstance.mockClear();
+    client.putPrenda.mockClear();
+    client.getPrenda.mockResolvedValue([] as never);
+    client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
+  });
+
+  it('a) parseRuntGravamenesJson devuelve acreedor, documento, tipo, fecha y estado del shape crudo', () => {
+    const items = parseRuntGravamenesJson(JSON.stringify([RAW_GARANTIA]));
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual({
+      idPrenda: '1000001',
+      acreedor: 'BANCO DE PRUEBA S.A.',
+      documentoAcreedor: '900000001',
+      tipoDocumentoAcreedor: 'NIT',
+      fechaInscripcion: '30/09/2026',
+      estado: 'Registro de la garantía en el RNGM por parte de RUNT',
+    });
+  });
+
+  it('a2) los alias normalizados siguen ganando a los crudos cuando vienen ambos', () => {
+    const items = parseRuntGravamenesJson(
+      JSON.stringify([
+        { ...RAW_GARANTIA, nombreAcreedor: 'NORMALIZADO', numeroDocumentoAcreedor: '800000002', fechaInscripcion: '01/01/2026' },
+      ]),
+    );
+    expect(items[0].acreedor).toBe('NORMALIZADO');
+    expect(items[0].documentoAcreedor).toBe('800000002');
+    expect(items[0].fechaInscripcion).toBe('01/01/2026');
+  });
+
+  it('a3) variantes PascalCase del shape crudo', () => {
+    const items = parseRuntGravamenesJson(
+      JSON.stringify([
+        {
+          Entidad: 'BANCO DE PRUEBA S.A.',
+          NumeroDocumentoEntidad: '900000001',
+          TipoDocumentoEntidad: 'NIT',
+          FechaRegistro: '30/09/2026',
+        },
+      ]),
+    );
+    expect(items[0].acreedor).toBe('BANCO DE PRUEBA S.A.');
+    expect(items[0].documentoAcreedor).toBe('900000001');
+    expect(items[0].tipoDocumentoAcreedor).toBe('NIT');
+    expect(items[0].fechaInscripcion).toBe('30/09/2026');
+  });
+
+  it('b) matrícula con runt_gravamenes crudo: sugiere «registrar» y precarga nombre y NIT del acreedor', async () => {
+    client.getInstance.mockResolvedValue({ fieldValues: [gravamenesField([RAW_GARANTIA])] } as never);
+
+    render(<PrendaForm instanceId="abc" runtHasGravamen />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Registrar prenda' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toHaveValue(
+        'BANCO DE PRUEBA S.A.',
+      ),
+    );
+    expect(screen.getByLabelText('NIT / documento del acreedor', { exact: false })).toHaveValue('900000001');
+  });
+
+  it('c) diagnóstico — matrícula con runtHasGravamen=false y runt_gravamenes solo con idPrenda', async () => {
+    client.getInstance.mockResolvedValue({
+      fieldValues: [gravamenesField([{ idPrenda: 1000001 }])],
+    } as never);
+
+    render(<PrendaForm instanceId="abc" runtHasGravamen={false} />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    // Comportamiento REAL observado en el componente aislado: un ítem con solo `idPrenda` cuenta como
+    // detalle de acreedor (`hasRuntAcreedorDetail` → items.length > 0) y la decisión sugerida es
+    // «registrar», aunque runtHasGravamen sea false. Sin acreedor que precargar.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Registrar prenda' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+    });
+    expect(screen.getByRole('button', { name: 'Sin prenda' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toHaveValue('');
+  });
+});
