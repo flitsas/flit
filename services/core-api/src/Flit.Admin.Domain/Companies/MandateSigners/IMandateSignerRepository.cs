@@ -154,7 +154,12 @@ public sealed record UpdateMandateSignerData(
 /// </summary>
 public sealed record MandateSignerOfficeCompanies(
     Guid TransitOfficeId,
-    IReadOnlyList<Guid> AssociatedCompanyTenantIds);
+    IReadOnlyList<Guid> AssociatedCompanyTenantIds,
+    /// <summary>
+    /// Solo LECTURA: id, nombre y NIT de cada compañía asociada (nada más, Ley 1581), para que el formulario las
+    /// muestre al editar sin pedir cada una por separado. Lo completa la capa de aplicación; se ignora al guardar.
+    /// </summary>
+    IReadOnlyList<Flit.Admin.Domain.Companies.MandateSigners.AssociableCompany>? AssociatedCompanies = null);
 
 /// <summary>Datos de inactivación.</summary>
 public sealed record InactivateMandateSignerData(

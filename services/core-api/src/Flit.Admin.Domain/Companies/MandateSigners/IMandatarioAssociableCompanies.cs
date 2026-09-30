@@ -87,6 +87,13 @@ public interface IManagingCompanyDirectory
 {
     /// <summary>Todas las compañías gestoras (activas e inactivas: el servicio distingue el motivo de rechazo).</summary>
     Task<IReadOnlyList<ManagingCompanyRow>> ListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Solo las compañías indicadas, en UNA consulta (sin N+1): lo usa la lectura del mandatario para mostrar nombre y
+    /// NIT de sus compañías asociadas. Los ids que no son compañías gestoras no aparecen.
+    /// </summary>
+    Task<IReadOnlyList<ManagingCompanyRow>> ListByIdsAsync(
+        IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

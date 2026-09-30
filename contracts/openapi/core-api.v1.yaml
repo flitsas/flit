@@ -12057,6 +12057,21 @@ components:
         associatedCompanyTenantIds:
           type: array
           items: { type: string, format: uuid }
+        associatedCompanies:
+          type: array
+          nullable: true
+          description: >
+            HU #13179b. Solo en LECTURA (se ignora al guardar): id, nombre y NIT de cada compañía asociada, para
+            que el formulario del OT, del Super Admin y de la compañía las muestre sin pedirlas una a una. Solo
+            esos tres datos (Ley 1581). Un id que ya no es compañía gestora queda únicamente en
+            `associatedCompanyTenantIds`.
+          items:
+            type: object
+            required: [id, name, nit]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              nit: { type: string }
     MandateSignerSelectionResponse:
       type: object
       required: [opciones, elegidoId, editable]

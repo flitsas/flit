@@ -32,4 +32,26 @@ internal sealed class ManagingCompanyDirectory : IManagingCompanyDirectory
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false),
             cancellationToken);
+
+    public Task<IReadOnlyList<ManagingCompanyRow>> ListByIdsAsync(
+        IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (ids.Count == 0)
+        {
+            return Task.FromResult<IReadOnlyList<ManagingCompanyRow>>([]);
+        }
+
+        var wanted = ids.Distinct().ToList();
+        return CrossTenantRead.ExecuteAsync<IReadOnlyList<ManagingCompanyRow>>(
+            _context,
+            async () => await _context.Tenants.AsNoTracking()
+                .Where(t => wanted.Contains(t.Id)
+                    && t.TenantType != PlatformTenantType
+                    && !_context.TransitOfficeProfiles.Any(p => p.TenantId == t.Id))
+                .Select(t => new ManagingCompanyRow(t.Id, t.LegalName, t.TaxId, t.CreatedAt, t.IsActive))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false),
+            cancellationToken);
+    }
 }

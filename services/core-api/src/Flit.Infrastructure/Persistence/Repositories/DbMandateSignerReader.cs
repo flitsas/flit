@@ -84,10 +84,14 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(
                     [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
 
+                // HU #13179b — el OT necesita las compañías asociadas (por organismo) para precargar el formulario.
+                var companiesByOffice = await LoadOfficeCompaniesAsync(
+                    [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
+
                 IReadOnlyList<MandateSignerItem> items =
                 [
                     .. signers.Select(s =>
-                        Project(s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner)),
+                        Project(s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner, companiesByOffice)),
                 ];
 
                 if (visibility != OtCompanyVisibility.DirectOrWithReceivedProcedures)
