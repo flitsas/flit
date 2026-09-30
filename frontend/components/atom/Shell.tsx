@@ -213,6 +213,9 @@ export function Shell({
           routeScope={`${pathname}|${activeModule}`}
           historialPlacaEnabled={hasModule("historial-placa")}
           canSearchValidaciones={hasModule("validaciones")}
+          // Épica #12718 — al caso de soporte solo va un nombre real: `displayName` es null si el token no lo trae
+          // (no cae al correo); sin nombre, la persona lo escribe.
+          supportContact={{ name: currentUser?.displayName ?? null, email: currentUser?.email || null }}
         />
       }
       footer={

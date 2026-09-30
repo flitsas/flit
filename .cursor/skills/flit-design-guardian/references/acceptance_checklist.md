@@ -40,6 +40,8 @@ Este checklist es bloqueante. Debe usarse antes de entregar cualquier diseño, i
 | ¿Los formularios usan inputs blancos con iconos, bordes claros y `<label>` real? | Sí |
 | ¿Los modales tienen fondo desenfocado, contenedor claro y rol de diálogo? | Sí |
 | ¿Las tablas son `<table>` con cabecera `#DFE5ED` y acciones compactas? | Sí |
+| ¿La tabla sigue el modelo único de trámites (`table-styles`, sin tarjeta blanca envolvente, `RowActions`)? | Sí |
+| ¿El listado pagina con `Pagination` + «Filas por página» y navegación numerada (no «Anterior / Siguiente»)? | Sí |
 | ¿El wizard conserva círculos numerados y la secuencia vigente? | Sí |
 
 ## Auditoría UX

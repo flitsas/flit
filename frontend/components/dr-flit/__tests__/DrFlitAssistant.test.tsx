@@ -17,6 +17,18 @@ vi.mock("../dr-flit-search", async () => {
   };
 });
 
+// HU #12931 — consentimiento aceptado: estas pruebas son del menú y del panel, no de la autorización.
+vi.mock("@/lib/api/dr-flit-client", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/dr-flit-client")>("@/lib/api/dr-flit-client");
+  return {
+    ...actual,
+    postDrFlitChat: vi.fn(),
+    getDrFlitConsent: vi.fn().mockResolvedValue({ version: "2026-09-25", accepted: true }),
+  };
+});
+
+import { postDrFlitChat } from "@/lib/api/dr-flit-client";
+
 import { searchTramites, searchValidaciones } from "../dr-flit-search";
 
 import { DR_FLIT_SUPPORT_CASE_URL } from "../dr-flit-intents";
@@ -84,8 +96,9 @@ describe("DrFlitAssistant", () => {
     // HU-F — sin NEXT_PUBLIC_DR_FLIT_SUPPORT_PHONE no se inventa una línea de atención.
     expect(screen.queryByText("Línea de atención")).not.toBeInTheDocument();
 
+    // Épica #12718 (HU #12930) — el formulario web oficial se conserva como alternativa visible.
     await user.click(
-      screen.getByRole("button", { name: /Generar un caso de soporte/i }),
+      screen.getByRole("button", { name: /O usa el formulario web de FLIT SAS/i }),
     );
     expect(window.open).toHaveBeenCalledWith(
       DR_FLIT_SUPPORT_CASE_URL,
@@ -93,6 +106,12 @@ describe("DrFlitAssistant", () => {
       "noopener,noreferrer",
     );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    // …y «Generar un caso de soporte» abre el formulario del caso dentro del chat.
+    await user.click(
+      screen.getByRole("button", { name: /Generar un caso de soporte/i }),
+    );
+    expect(screen.getByRole("form", { name: "Formulario del caso de soporte" })).toBeInTheDocument();
   });
 
   it("placa consulta API y muestra resultados", async () => {
@@ -118,7 +137,7 @@ describe("DrFlitAssistant", () => {
     await user.click(screen.getByRole("button", { name: "Abrir DR. FLIT" }));
     await user.click(screen.getByRole("button", { name: /Buscar por placa/i }));
     await user.type(
-      screen.getByPlaceholderText("Pregúntale a DR. FLIT..."),
+      screen.getByLabelText("Pregúntale a DR. FLIT"),
       "ABC123{Enter}",
     );
 
@@ -173,7 +192,7 @@ describe("DrFlitAssistant", () => {
     await user.click(screen.getByRole("button", { name: "Abrir DR. FLIT" }));
     await user.click(screen.getByRole("button", { name: /Buscar por placa/i }));
     await user.type(
-      screen.getByPlaceholderText("Pregúntale a DR. FLIT..."),
+      screen.getByLabelText("Pregúntale a DR. FLIT"),
       "ABC123{Enter}",
     );
 
@@ -298,7 +317,7 @@ describe("DrFlitAssistant", () => {
     await user.click(screen.getByRole("button", { name: "Abrir DR. FLIT" }));
     await user.click(screen.getByRole("button", { name: /Buscar por placa/i }));
     await user.type(
-      screen.getByPlaceholderText("Pregúntale a DR. FLIT..."),
+      screen.getByLabelText("Pregúntale a DR. FLIT"),
       "ABC123{Enter}",
     );
 
@@ -355,7 +374,7 @@ describe("DrFlitAssistant", () => {
       "noopener,noreferrer",
     );
     // La pregunta libre sigue abierta: el composer está habilitado.
-    expect(screen.getByPlaceholderText("Pregúntale a DR. FLIT...")).toBeEnabled();
+    expect(screen.getByLabelText("Pregúntale a DR. FLIT")).toBeEnabled();
   });
 
   it("HU-G — sin artículo para el lugar, pide la consulta como siempre", async () => {
@@ -368,19 +387,47 @@ describe("DrFlitAssistant", () => {
     expect(screen.queryByText(/Cómo crear un trámite/)).not.toBeInTheDocument();
   });
 
-  it("HU-F — sin JWT (perfil gestor) la ayuda no devuelve artículos del OT", async () => {
+  it("«Necesito ayuda» con el chat con IA: la pregunta va a la IA, no al buscador local", async () => {
+    vi.mocked(postDrFlitChat).mockResolvedValue({
+      status: "ok",
+      intent: "duda",
+      reply: "Para crear un traspaso entra a Trámites.",
+      citations: [],
+      suggestGestionIntent: null,
+      usage: { messagesUsedToday: 1, dailyLimit: 30 },
+    });
     const user = userEvent.setup();
     render(<DrFlitAssistant displayName="Juan" />);
     await user.click(screen.getByRole("button", { name: "Abrir DR. FLIT" }));
     await user.click(screen.getByRole("button", { name: /Necesito ayuda/i }));
-    await user.type(
-      screen.getByPlaceholderText("Pregúntale a DR. FLIT..."),
-      "reglas del organismo{Enter}",
+
+    const input = screen.getByLabelText("Pregúntale a DR. FLIT");
+    await waitFor(() => expect(input).toHaveFocus());
+    await user.type(input, "cómo creo un traspaso{Enter}");
+
+    expect(await screen.findByText("Para crear un traspaso entra a Trámites.")).toBeInTheDocument();
+    expect(vi.mocked(postDrFlitChat).mock.calls[0]![0].message).toBe("cómo creo un traspaso");
+  });
+
+  it("Gestión en chips compactos con el nombre completo de la acción y un ejemplo en la caja", async () => {
+    const user = userEvent.setup();
+    render(<DrFlitAssistant displayName="Juan" />);
+    await user.click(screen.getByRole("button", { name: "Abrir DR. FLIT" }));
+
+    const gestion = screen.getByLabelText("Gestión");
+    const chips = within(gestion).getAllByRole("button");
+    expect(chips.map((c) => c.textContent)).toEqual(["Placa", "VIN", "Trámite", "Cliente"]);
+    expect(within(gestion).getByRole("button", { name: "Buscar por placa" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Pregúntale a DR. FLIT")).toHaveAttribute(
+      "placeholder",
+      "Ej.: ¿cómo creo un traspaso?",
     );
 
-    await waitFor(() => {
-      expect(screen.getByText(/No encontré un artículo|Encontré/)).toBeInTheDocument();
-    });
-    expect(screen.queryByText("Reglas del Organismo")).not.toBeInTheDocument();
+    // Pidiendo un valor, el ejemplo de pregunta no aplica.
+    await user.click(within(gestion).getByRole("button", { name: "Buscar por placa" }));
+    expect(screen.getByLabelText("Pregúntale a DR. FLIT")).toHaveAttribute(
+      "placeholder",
+      "Pregúntale a DR. FLIT...",
+    );
   });
 });

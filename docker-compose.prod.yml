@@ -270,6 +270,16 @@ services:
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
       ANTHROPIC_TIMEOUT_SECONDS: ${ANTHROPIC_TIMEOUT_SECONDS:-60}
       ANTHROPIC_MAX_TOKENS: ${ANTHROPIC_MAX_TOKENS:-2000}
+      # DR. FLIT (Épica #12718, ADR-0060): chat con LLM sobre el manual, mismo cliente y API key del
+      # OCR. Env CRUDAS igual que arriba. DR_FLIT_DEPLOY_ENVIRONMENT (DEV|QA|PDN) va al campo
+      # Custom.Environment del caso de soporte: NO se infiere de ASPNETCORE_ENVIRONMENT (los 3 VPS
+      # corren Development) y por omisión es DEV, nunca PDN. DR_FLIT_ADO_PAT: PAT de la cuenta de
+      # servicio "Dr. FLIT" (Work Items R/W solo en FLIT - SOPORTE); vacío ⇒ los casos responden 502.
+      ANTHROPIC_DRFLIT_ENABLED: ${ANTHROPIC_DRFLIT_ENABLED:-true}
+      ANTHROPIC_DRFLIT_MODEL: ${ANTHROPIC_DRFLIT_MODEL:-claude-haiku-4-5}
+      ANTHROPIC_DRFLIT_DAILY_MESSAGE_LIMIT: ${ANTHROPIC_DRFLIT_DAILY_MESSAGE_LIMIT:-30}
+      DR_FLIT_DEPLOY_ENVIRONMENT: ${DR_FLIT_DEPLOY_ENVIRONMENT:-DEV}
+      DR_FLIT_ADO_PAT: ${DR_FLIT_ADO_PAT:-}
       # ── Integración con Terceros (ICT, Feature #10888) ──────────────────────
       # gRPC este-oeste dedicado (SOLO HTTP/2, puerto aparte del REST): core-ict llama la
       # orquestación/consulta aquí. Puerto interno (no publicado a host).

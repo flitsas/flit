@@ -196,6 +196,10 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // de arquitectura las cubre. Fuera de aquí ScopeFromItems sería null y la policy de cabeza
         // (GroupHeadReadFilter) respondería 403 siempre — un olvido produce «no ve», nunca una fuga.
         new("/api/v1/tramites/network", RouteMatch.Prefix),
+        // HU #12922 (Épica #12718, ADR-0060) — DR. FLIT: el tope diario del chat se cuenta por tenant y
+        // usuario. Si el tenant saliera del header crudo, un company-user conseguiría cupo nuevo cambiando
+        // X-Tenant-Id. Prefix para cubrir también los casos de soporte (/support-cases, Feature #12915).
+        new("/api/v1/dr-flit", RouteMatch.Prefix),
         // HU #12361 (Feature #12257) — el cliente HIJO consulta quién accedió a sus datos
         // (/network-access-audit/mine): el tenant sale de aquí (tramites.tenantId), nunca del caller.
         // Prefijo distinto de /network (StartsWithSegments compara segmentos completos): entrada propia.

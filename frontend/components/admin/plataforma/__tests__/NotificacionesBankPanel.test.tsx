@@ -116,10 +116,11 @@ describe("NotificacionesBankPanel", { timeout: 15_000 }, () => {
     );
 
     render(<NotificacionesBankPanel />);
-    expect(screen.getByTestId("ui-loading")).toBeInTheDocument();
+    // Bug #13055: el DataTable muestra el loader del carrito (CarLoaderModal).
+    expect(screen.getByText("Cargando…")).toBeInTheDocument();
 
     resolveTemplates(sampleTemplates);
-    await waitFor(() => expect(screen.queryByTestId("ui-loading")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Cargando…")).not.toBeInTheDocument());
   });
 
   it("muestra el estado de error y reintenta con éxito", async () => {

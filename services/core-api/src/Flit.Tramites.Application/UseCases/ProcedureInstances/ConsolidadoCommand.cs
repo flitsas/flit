@@ -204,7 +204,9 @@ public sealed class GenerarConsolidadoHandler(
         // Limitación asumida (AC4 del Bug #11612): un trámite antiguo con el consolidado vigente
         // conserva el guión en la portada hasta que se invalide por las vías normales (regenerar el
         // FUR, cambiar de estado, adjuntar documentos o forzar la regeneración).
-        if (!force && instance.ConsolidadoWizardVigente && consolidadoVigente is not null)
+        // Bug #13055 — salvo que el FUR sea anterior al último cambio del expediente (datos o placa).
+        var furDesactualizado = FurVigenciaExpediente.FurDesactualizado(instance);
+        if (!force && instance.ConsolidadoWizardVigente && consolidadoVigente is not null && !furDesactualizado)
         {
             var vigenteDto = new ConsolidadoDocumentDto(
                 consolidadoVigente.Id, consolidadoVigente.Tipo, consolidadoVigente.Filename, consolidadoVigente.Sha256);
@@ -237,7 +239,7 @@ public sealed class GenerarConsolidadoHandler(
         // entradas de `ExpedienteVisor` no. Arreglarlo en el llamador habría dejado el mismo defecto
         // latente para cualquier consumidor futuro; arreglarlo aquí cierra la clase, no la instancia.
         var faltaFur = !TieneFur(instance);
-        if (force || faltaFur || MandatoPendienteDeRegenerar(instance))
+        if (force || faltaFur || furDesactualizado || MandatoPendienteDeRegenerar(instance))
         {
             // Sin regenerador inyectado solo se puede fallar si además NO hay FUR: con el FUR en pie
             // se sigue adelante y se fusiona lo que hay, que es el comportamiento de siempre. (Cortar

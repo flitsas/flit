@@ -185,7 +185,7 @@ describe("HU #12197 — AC4: los cuatro estados con textos redactados", () => {
     render(<HistorialPlaca />);
     await consultar("ABC123");
 
-    expect(await screen.findByTestId("ui-loading")).toBeInTheDocument();
+    expect(await screen.findByText("Cargando historial de la placa…")).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId("historial-placa-anuncio")).toHaveTextContent(
         "Consultando el historial de la placa ABC123",
@@ -209,7 +209,7 @@ describe("HU #12197 — AC6: foco visible y navegación por teclado", () => {
     // Sin ratón: Enter sobre la CTA envía el formulario.
     await user.keyboard("{Enter}");
     await waitFor(() =>
-      expect(mocks.listPlateHistory).toHaveBeenCalledWith({ placa: "ABC123", skip: 0, take: 20 }),
+      expect(mocks.listPlateHistory).toHaveBeenCalledWith({ placa: "ABC123", skip: 0, take: 10 }),
     );
   });
 

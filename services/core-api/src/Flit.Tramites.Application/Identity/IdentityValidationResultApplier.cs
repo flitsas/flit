@@ -43,6 +43,11 @@ public sealed class IdentityValidationResultApplier(
         ArgumentNullException.ThrowIfNull(v);
         ArgumentNullException.ThrowIfNull(result);
 
+        // Bug #13055 — trámite anulado o revocado: la validación queda como estaba (tampoco se enriquece
+        // el hash de HU #11015) y no se emite evento. Cubre webhook, consulta, worker y botón manual.
+        if (v.CongeladaPorTramite)
+            return false;
+
         // Idempotencia: los estados terminales no se re-aplican ni re-emiten evento.
         // HU #11015 — EXCEPCIÓN: una validación ya APROBADA a la que le falta la serie del certificado
         // sí se enriquece cuando un resultado posterior la trae. Pasa cuando el webhook se pierde y

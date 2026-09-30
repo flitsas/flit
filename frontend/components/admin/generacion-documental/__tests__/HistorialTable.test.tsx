@@ -106,12 +106,12 @@ describe("HistorialTable", () => {
     expect(screen.queryByRole("button", { name: /^Descargar / })).not.toBeInTheDocument();
   });
 
-  it("no lanza con lista vacía y muestra el conteo en 0", () => {
+  it("no lanza con lista vacía y muestra «Sin registros que mostrar»", () => {
     expect(() => render(
       <HistorialTable rows={[]} totalCount={0} page={1} pageSize={20} onPageChange={vi.fn()} />,
     )).not.toThrow();
     const nav = screen.getByRole("navigation", { name: "Paginación" });
-    expect(within(nav).getByText(/de 0/)).toBeInTheDocument();
+    expect(within(nav).getByText(/Sin registros que mostrar/)).toBeInTheDocument();
   });
 
   it("tolera empresa y usuario nulos sin romper la fila", () => {

@@ -185,7 +185,7 @@ export function Table({
         <thead>
           <tr className={CARDLIST_HEAD_ROW}>
             {headers.map((h) => (
-              <th key={h} className={CARDLIST_TH}>
+              <th key={h} scope="col" className={CARDLIST_TH}>
                 {h}
               </th>
             ))}

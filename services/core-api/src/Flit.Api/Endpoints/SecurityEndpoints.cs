@@ -807,7 +807,7 @@ public static class SecurityEndpoints
                         r.Code,
                         a.RoleId,
                         u.Status == "active" ? "active" : "inactive",
-                        null,
+                        u.CreatedAt,
                         false,
                         t.Id.ToString(),
                         t.LegalName,
@@ -831,7 +831,7 @@ public static class SecurityEndpoints
                         null,
                         null,
                         u.Status == "active" ? "active" : "inactive",
-                        null,
+                        u.CreatedAt,
                         false,
                         t.Id.ToString(),
                         t.LegalName,
@@ -866,7 +866,7 @@ public static class SecurityEndpoints
                         r.Code,
                         a.RoleId,
                         u.Status == "active" ? "active" : "inactive",
-                        null,
+                        u.CreatedAt,
                         false,
                         t.Id.ToString(),
                         t.LegalName,
@@ -892,7 +892,7 @@ public static class SecurityEndpoints
                         null,
                         null,
                         u.Status == "active" ? "active" : "inactive",
-                        null,
+                        u.CreatedAt,
                         false,
                         t.Id.ToString(),
                         t.LegalName,
@@ -952,7 +952,7 @@ public static class SecurityEndpoints
                         r.Code,
                         a.RoleId,
                         u.Status == "active" ? "active" : "inactive",
-                        null,
+                        u.CreatedAt,
                         false,
                         t.Id.ToString(),
                         t.LegalName,
@@ -1018,7 +1018,7 @@ public static class SecurityEndpoints
                     r.Code,
                     a.RoleId,
                     u.Status == "active" ? "active" : "inactive",
-                    null,
+                    u.CreatedAt,
                     db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
                         && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)),
                     null,
@@ -1041,7 +1041,7 @@ public static class SecurityEndpoints
                     null,
                     null,
                     u.Status == "active" ? "active" : "inactive",
-                    null,
+                    u.CreatedAt,
                     db.UserTempSuspensions.Any(s => s.UserId == u.Id && s.TenantId == tenantId
                         && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)),
                     null,
@@ -1259,6 +1259,9 @@ public static class SecurityEndpoints
 
     // HU #10624 AC3 — DeletedAt opcional (default null): usado por la vista "Eliminados" de
     // SuperAdmin (?onlyDeleted=true); el listado normal no lo popula (siempre null).
+    //
+    // CreatedAt: fecha de creación del usuario (invitaciones: la de la invitación). Bug #13055 — las
+    // proyecciones de usuarios la enviaban en null y la columna Fecha salía vacía.
     //
     // TenantType/Profile: el perfil funcional (contexto-perfiles.md) lo resuelve el SERVIDOR, no
     // el frontend. Antes la UI lo infería del roleCode y cualquier rol personalizado de un tenant

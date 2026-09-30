@@ -3,13 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pagination } from "@/components/atom/Pagination";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { fetchStandaloneBatchItems } from "@/lib/api/admin-generacion-documental";
 import type { StandaloneBatchItem } from "@/lib/api/types-generacion-documental";
 import { generacionDocumentalTypeLabel } from "./generacion-documental-nav";
 import { standaloneDocumentStatusView } from "./status-labels";
-
-const PAGE_SIZE = 20;
 
 export interface BatchItemsTableProps {
   batchId: string;
@@ -39,15 +44,16 @@ export interface BatchItemsTableProps {
 export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProps) {
   const [rows, setRows] = useState<StandaloneBatchItem[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
-  const [page, setPage] = useState(1);
+  // Bug #13055: paginación estándar con «Filas por página» (10/25/50/100), de servidor.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [totalCount, setTotalCount] = useState(0);
 
   const load = useCallback(
-    async (targetPage: number, signal?: AbortSignal) => {
+    async (targetPage: number, size: number, signal?: AbortSignal) => {
       try {
         const result = await fetchStandaloneBatchItems(
           batchId,
-          { page: targetPage, pageSize: PAGE_SIZE },
+          { page: targetPage, pageSize: size },
           signal,
         );
         if (signal?.aborted) {
@@ -69,9 +75,9 @@ export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProp
   useEffect(() => {
     const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga al cambiar de página o al avanzar el lote
-    void load(page, controller.signal);
+    void load(page, pageSize, controller.signal);
     return () => controller.abort();
-  }, [load, page, refreshKey]);
+  }, [load, page, pageSize, refreshKey]);
 
   return (
     <section aria-labelledby="lote-items-titulo" className="flex flex-1 flex-col gap-3">
@@ -81,26 +87,46 @@ export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProp
 
       <UiStateBoundary
         status={status}
-        onRetry={() => void load(page)}
+        onRetry={() => void load(page, pageSize)}
         skeletonRows={5}
         emptyMessage="Todavía no hay filas procesadas de este lote."
         errorMessage="No se pudieron cargar las filas del lote. Intenta nuevamente."
       >
+        {/* Bug #13055 — tabla homologada con el modelo de trámites. */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-xs">
+          <table
+            className="min-w-[720px] text-xs"
+            style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+          >
             <caption className="sr-only">Filas del lote con su resultado y el detalle del error</caption>
             <thead>
-              <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-                <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
+              <tr>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
                   Fila
                 </th>
-                <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
                   Tipo
                 </th>
-                <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
                   Estado
                 </th>
-                <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
                   Detalle del error
                 </th>
               </tr>
@@ -110,18 +136,18 @@ export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProp
                 const vista = standaloneDocumentStatusView(row.status);
                 const errores = row.validationErrors ?? [];
                 return (
-                  <tr key={row.id} className="bg-white dark:bg-[#0B0F14]">
-                    <td className="rounded-l-xl border-y border-l px-4 py-3 font-medium">
+                  <tr key={row.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                    <td className="rounded-l-xl border-y border-l px-4 py-3 font-medium" style={{ borderColor: "#DFE5ED" }}>
                       {row.rowNumber ?? "—"}
                     </td>
-                    <td className="border-y px-4 py-3 opacity-80">
+                    <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
                       {generacionDocumentalTypeLabel(row.documentType)}
                       {row.scenario ? ` · ${row.scenario}` : ""}
                     </td>
-                    <td className="border-y px-4 py-3">
+                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                       <StatusBadge label={vista.label} tone={vista.tone} />
                     </td>
-                    <td className="rounded-r-xl border-y border-r px-4 py-3">
+                    <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                       {errores.length > 0 ? (
                         <ul className="space-y-1">
                           {errores.map((error, index) => (
@@ -151,9 +177,10 @@ export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProp
 
         <Pagination
           page={page}
-          pageSize={PAGE_SIZE}
+          pageSize={pageSize}
           totalCount={totalCount}
           onPageChange={setPage}
+          onPageSizeChange={setPageSize}
         />
       </UiStateBoundary>
     </section>

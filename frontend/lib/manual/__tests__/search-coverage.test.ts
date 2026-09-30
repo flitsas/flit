@@ -42,7 +42,8 @@ const CASOS: { pregunta: string; perfil: ManualProfile; slug: string }[] = [
   { pregunta: "zona horaria", perfil: "ot_admin", slug: "0-introduccion/4-fechas-y-horas" },
   { pregunta: "cómo navegar el manual", perfil: "ot_admin", slug: "0-introduccion/2-como-navegar" },
   // OT
-  { pregunta: "requisitos documentales", perfil: "ot_admin", slug: "2-ot/7-requisitos" },
+  // Épica #12751/#12755: Requisitos y Configuración del hub OT son hoy exclusivas de Super Admin.
+  { pregunta: "requisitos documentales", perfil: "superadmin", slug: "2-ot/7-requisitos" },
   { pregunta: "asignar placa a un trámite", perfil: "ot_admin", slug: "2-ot/1-tramites-bandeja" },
   { pregunta: "liberar placa", perfil: "ot_admin", slug: "2-ot/1-tramites-bandeja" },
   { pregunta: "adjuntar licencia de tránsito al aprobar", perfil: "ot_admin", slug: "2-ot/1-tramites-bandeja" },
@@ -53,8 +54,8 @@ const CASOS: { pregunta: string; perfil: ManualProfile; slug: string }[] = [
   { pregunta: "contrato de mandato", perfil: "ot_admin", slug: "2-ot/10-mandatos" },
   { pregunta: "validar impronta", perfil: "ot_admin", slug: "2-ot/11-validar-impronta" },
   { pregunta: "verificar firma digital de la impronta", perfil: "ot_admin", slug: "2-ot/11-validar-impronta" },
-  { pregunta: "ventana de revocatoria días hábiles", perfil: "ot_admin", slug: "2-ot/12-configuracion" },
-  { pregunta: "consola en solo lectura quipux", perfil: "ot_admin", slug: "2-ot/12-configuracion" },
+  { pregunta: "ventana de revocatoria días hábiles", perfil: "superadmin", slug: "2-ot/12-configuracion" },
+  { pregunta: "consola en solo lectura quipux", perfil: "superadmin", slug: "2-ot/12-configuracion" },
   { pregunta: "buscar radicado en dr flit", perfil: "ot_admin", slug: "2-ot/8-ayuda-dr-flit" },
   // Admin de Compañía
   { pregunta: "configuración de la empresa", perfil: "admin_company", slug: "3-admin-company/1-consola" },

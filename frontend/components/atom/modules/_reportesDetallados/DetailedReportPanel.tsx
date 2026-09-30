@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
@@ -47,7 +48,8 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
 
   const [filters, setFilters] = useState<DetailedReportFiltersState>(() => defaultDetailedFilters());
   const [applied, setApplied] = useState<DetailedReportFiltersState>(() => defaultDetailedFilters());
-  const [page, setPage] = useState(1);
+  // Bug #13055 — paginación estándar con «Filas por página» (10/25/50/100), de servidor.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [data, setData] = useState<DetailedReportPage | NetworkDetailedReportPage | null>(null);
   const [uiStatus, setUiStatus] = useState<UiStatus>("empty");
   const [errorMessage, setErrorMessage] = useState<string>();
@@ -125,10 +127,10 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
       try {
         const res = networkActive
           ? await fetchNetworkDetailedReport(
-              toNetworkDetailedReportFilters(toQueryParams(applied, page, 20), networkChildTenantId),
+              toNetworkDetailedReportFilters(toQueryParams(applied, page, pageSize), networkChildTenantId),
               controller.signal,
             )
-          : await fetchDetailedReport(toQueryParams(applied, page, 20), controller.signal);
+          : await fetchDetailedReport(toQueryParams(applied, page, pageSize), controller.signal);
         if (controller.signal.aborted) return;
         setData(res);
         setUiStatus(res.items.length === 0 ? "empty" : "ready");
@@ -143,7 +145,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
     void load();
     return () => controller.abort();
     // reloadKey fuerza recarga manual (botón reintentar).
-  }, [applied, page, reloadKey, isSuper, networkActive, networkChildTenantId, networkReady]);
+  }, [applied, page, pageSize, reloadKey, isSuper, networkActive, networkChildTenantId, networkReady]);
 
   function handleSearch() {
     setApplied(filters);
@@ -246,7 +248,9 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
         }
         onRetry={() => setReloadKey((k) => k + 1)}
         page={page}
+        pageSize={pageSize}
         onPageChange={setPage}
+        onPageSizeChange={setPageSize}
         networkScope={networkActive}
       />
     </div>

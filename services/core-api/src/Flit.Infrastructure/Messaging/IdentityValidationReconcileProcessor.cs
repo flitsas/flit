@@ -118,7 +118,10 @@ internal sealed class IdentityValidationReconcileProcessor(
             return false;
         }
 
-        var v = await db.ProcedureInstanceBiometricValidations.FirstAsync(x => x.Id == claimedId.Value, ct);
+        // Bug #13055 — con el trámite cargado, el reconciliador reconoce una validación congelada.
+        var v = await db.ProcedureInstanceBiometricValidations
+            .Include(x => x.ProcedureInstance)
+            .FirstAsync(x => x.Id == claimedId.Value, ct);
 
         KyverumVerifyStatus? status = null;
         var updated = false;
@@ -206,13 +209,16 @@ internal sealed class IdentityValidationReconcileProcessor(
         cmd.Transaction = transaction;
         cmd.CommandText = """
             SELECT id
-            FROM tramites.procedure_instance_biometric_validations
+            FROM tramites.procedure_instance_biometric_validations v
             WHERE status = @status
               AND provider = @provider
               AND kyverum_verification_id IS NOT NULL
               AND expires_at > now()
               AND reconcile_poll_count < @maxPolls
               AND COALESCE(updated_at, created_at) < @cutoff
+              AND NOT EXISTS (
+                  SELECT 1 FROM tramites.procedure_instances pi
+                  WHERE pi.id = v.procedure_instance_id AND pi.status IN ('anulado', 'revocado'))
             ORDER BY created_at
             LIMIT 1
             FOR UPDATE SKIP LOCKED
@@ -240,10 +246,13 @@ internal sealed class IdentityValidationReconcileProcessor(
         cmd.Transaction = transaction;
         cmd.CommandText = """
             SELECT id
-            FROM tramites.procedure_instance_biometric_validations
+            FROM tramites.procedure_instance_biometric_validations v
             WHERE status = @status
               AND provider = @provider
               AND expires_at <= @now
+              AND NOT EXISTS (
+                  SELECT 1 FROM tramites.procedure_instances pi
+                  WHERE pi.id = v.procedure_instance_id AND pi.status IN ('anulado', 'revocado'))
             ORDER BY expires_at
             LIMIT 1
             FOR UPDATE SKIP LOCKED

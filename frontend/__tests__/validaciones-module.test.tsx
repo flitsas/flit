@@ -366,7 +366,7 @@ describe('Validaciones — AC8 estados de UI', () => {
     expect(screen.queryByText('Total validaciones')).not.toBeInTheDocument();
 
     // Badges de estado (dentro de la tabla; el toolbar también tiene chips con esos textos).
-    const list = screen.getByRole('list', { name: /validaciones de identidad/i });
+    const list = screen.getByRole('table', { name: /^validaciones de identidad$/i });
     expect(within(list).getByText('Aprobado')).toBeInTheDocument();
     expect(within(list).getByText('Rechazado')).toBeInTheDocument();
   });
@@ -1293,7 +1293,7 @@ describe('Validaciones — paginación', () => {
 
       expect(screen.getByText('Enlace vigente')).toBeInTheDocument();
       expect(screen.getAllByText('Acciones').length).toBeGreaterThan(0);
-      const grilla = screen.getByRole('list', { name: /validaciones de identidad/i });
+      const grilla = screen.getByRole('table', { name: /^validaciones de identidad$/i });
       expect(within(grilla).getByText('Sí')).toBeInTheDocument();
       expect(
         screen.getByRole('button', { name: /acciones de validación de carlos vendedor/i }),
@@ -1332,7 +1332,7 @@ describe('Validaciones — paginación', () => {
       renderValidaciones();
       await screen.findByText('TRM-2026-000003');
 
-      const fila = screen.getByRole('list', { name: /validaciones de identidad/i });
+      const fila = screen.getByRole('table', { name: /^validaciones de identidad$/i });
       expect(within(fila).getByText('Expirado')).toBeInTheDocument();
       expect(within(fila).queryByText('En proceso')).not.toBeInTheDocument();
     });

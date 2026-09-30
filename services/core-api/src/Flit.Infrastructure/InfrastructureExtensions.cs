@@ -1,9 +1,11 @@
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Analytics.Application.Abstractions;
+using Flit.DrFlit.Application.Abstractions;
 using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Consultations.Avaluos;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
+using Flit.Infrastructure.DrFlit;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Ict;
 using Flit.Infrastructure.Improntas;
@@ -305,6 +307,7 @@ public static class InfrastructureExtensions
         AddRues(services, configuration);
         AddRentingChannel(services, configuration);
         AddOcr(services, configuration);
+        AddDrFlit(services, configuration, environment);
         AddQuipux(services);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
@@ -1250,6 +1253,72 @@ public static class InfrastructureExtensions
         services.AddHostedService<QuipuxStatusPollProcessor>();
     }
 
+    /// <summary>
+    /// Épica #12718 (ADR-0060) — DR. FLIT. El LLM del chat reutiliza el <see cref="AnthropicMessagesClient"/>
+    /// y las opciones <c>Anthropic:DrFlit*</c> que registra <see cref="AddOcr"/>. Los casos de soporte (Feature #12915)
+    /// leen <c>DrFlit:AzureDevOps</c> y <c>DrFlit:SupportCase:*</c> con fallback a env <c>DR_FLIT_*</c>.
+    /// </summary>
+    private static void AddDrFlit(IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
+    {
+        services.AddScoped<IDrFlitChatModel, AnthropicDrFlitChatModel>();
+        services.AddScoped<IDrFlitUsageCounter>(sp => new DrFlitUsageCounterRepository(sp.GetRequiredService<FlitDbContext>()));
+        services.AddSingleton<IDrFlitChatSettings, DrFlitChatSettings>();
+
+        // HU #12921 — manual desde Content/dr-flit/ del content root. Singleton: se lee una vez. El
+        // entorno llega por parámetro (no se resuelve de DI) porque es el mismo que recibe el resto de
+        // la infraestructura y así el grafo valida también fuera del host web.
+        services.AddSingleton<IDrFlitManualCatalogProvider>(sp => new DrFlitManualCatalogProvider(
+            environment, sp.GetRequiredService<ILogger<DrFlitManualCatalogProvider>>()));
+        // HU #12923 — Bug en Azure DevOps (FLIT - SOPORTE). Env cruda primero (12-factor), como AddOcr.
+        // El PAT es de la cuenta de servicio "Dr. FLIT"; nunca se loguea.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        services.Configure<AzureDevOpsOptions>(o =>
+        {
+            o.OrganizationUrl = Cfg("DrFlit:AzureDevOps:OrganizationUrl", "DR_FLIT_ADO_ORG_URL") ?? o.OrganizationUrl;
+            o.Project = Cfg("DrFlit:AzureDevOps:Project", "DR_FLIT_ADO_PROJECT") ?? o.Project;
+            o.Pat = Cfg("DrFlit:AzureDevOps:Pat", "DR_FLIT_ADO_PAT") ?? string.Empty;
+            o.TimeoutSeconds = int.TryParse(Cfg("DrFlit:AzureDevOps:TimeoutSeconds", "DR_FLIT_ADO_TIMEOUT_SECONDS"), out var ts) ? ts : o.TimeoutSeconds;
+            o.TitlePrefix = configuration["DrFlit:AzureDevOps:TitlePrefix"] ?? o.TitlePrefix;
+            o.AssignedTo = Cfg("DrFlit:AzureDevOps:AssignedTo", "DR_FLIT_EMAIL") ?? o.AssignedTo;
+        });
+        services.Configure<DrFlitFieldMappingOptions>(o =>
+        {
+            var section = configuration.GetSection(DrFlitFieldMappingOptions.SectionName);
+            // Una lista configurada REEMPLAZA el allow-list por defecto: el binder de .NET agregaría al
+            // final en vez de sustituir, y así sería imposible quitar un módulo retirado del picklist.
+            var modules = section.GetSection(nameof(DrFlitFieldMappingOptions.AffectedModules)).Get<List<string>>();
+            section.Bind(o);
+            if (modules is { Count: > 0 })
+                o.AffectedModules = modules;
+        });
+        services.AddHttpClient<IDrFlitSupportCaseGateway, AzureDevOpsSupportCaseClient>(c =>
+            c.Timeout = TimeSpan.FromSeconds(60)); // cada llamada impone su propio deadline (TimeoutSeconds)
+
+        // HU #12924 — límites de los adjuntos previos y ambiente que se reporta en el caso.
+        services.Configure<DrFlitSupportCaseOptions>(o =>
+        {
+            var section = configuration.GetSection(DrFlitSupportCaseOptions.SectionName);
+            var mimes = section.GetSection(nameof(DrFlitSupportCaseOptions.AllowedMimeTypes)).Get<List<string>>();
+            section.Bind(o);
+            if (mimes is { Count: > 0 })
+                o.AllowedMimeTypes = mimes; // reemplaza, no agrega (mismo motivo que AffectedModules)
+            o.DeployEnvironment = Cfg("DrFlit:DeployEnvironment", "DR_FLIT_DEPLOY_ENVIRONMENT");
+        });
+        services.AddSingleton<IDrFlitSupportCaseSettings, DrFlitSupportCaseSettings>();
+        services.AddScoped<IDrFlitSupportAttachmentStore, DrFlitSupportAttachmentStore>();
+        services.AddScoped<IDrFlitSupportCaseRepository, DrFlitSupportCaseRepository>(); // HU #12925
+
+        // HU #12931 — consentimiento de tratamiento de datos para el chat con IA y los casos de soporte.
+        services.Configure<DrFlitConsentOptions>(configuration.GetSection(DrFlitConsentOptions.SectionName));
+        services.AddSingleton<IDrFlitConsentSettings, DrFlitConsentSettings>();
+        services.AddScoped<IDrFlitConsentStore, DrFlitConsentStore>();
+    }
+
     private static void AddOcr(IServiceCollection services, IConfiguration configuration)
     {
         // OCR semántico de documentos de trámites. Env var CRUDA primero (override 12-factor),
@@ -1271,16 +1340,24 @@ public static class InfrastructureExtensions
             o.ClassifierModel = Cfg("Anthropic:ClassifierModel", "ANTHROPIC_CLASSIFIER_MODEL") ?? "claude-sonnet-5";
             o.ClassifierMaxTokens = int.TryParse(Cfg("Anthropic:ClassifierMaxTokens", "ANTHROPIC_CLASSIFIER_MAX_TOKENS"), out var cm) ? cm : 8000;
             o.ClassifierTimeoutSeconds = int.TryParse(Cfg("Anthropic:ClassifierTimeoutSeconds", "ANTHROPIC_CLASSIFIER_TIMEOUT_SECONDS"), out var ctd) ? ctd : 180;
+
+            // Épica #12718 (ADR-0060) — chat de DR. FLIT sobre el mismo cliente y la misma API key.
+            o.DrFlitModel = Cfg("Anthropic:DrFlitModel", "ANTHROPIC_DRFLIT_MODEL") ?? "claude-haiku-4-5";
+            o.DrFlitMaxTokens = int.TryParse(Cfg("Anthropic:DrFlitMaxTokens", "ANTHROPIC_DRFLIT_MAX_TOKENS"), out var dm) ? dm : 600;
+            o.DrFlitTimeoutSeconds = int.TryParse(Cfg("Anthropic:DrFlitTimeoutSeconds", "ANTHROPIC_DRFLIT_TIMEOUT_SECONDS"), out var dt) ? dt : 20;
+            o.DrFlitDailyMessageLimit = int.TryParse(Cfg("Anthropic:DrFlitDailyMessageLimit", "ANTHROPIC_DRFLIT_DAILY_MESSAGE_LIMIT"), out var dl) ? dl : 30;
+            o.DrFlitEnabled = !string.Equals(Cfg("Anthropic:DrFlitEnabled", "ANTHROPIC_DRFLIT_ENABLED"), "false", StringComparison.OrdinalIgnoreCase);
         });
 
         // Typed HttpClient (compatible con PublishAot, como Verifik/Kyverum). El timeout del cliente es
-        // el MAYOR de los dos deadlines (analizador y clasificador); cada llamada impone el suyo con un
-        // CTS enlazado, así el analizador conserva sus 60s y el clasificador dispone de los suyos.
+        // el MAYOR de los deadlines (analizador, clasificador y chat de DR. FLIT); cada llamada impone
+        // el suyo con un CTS enlazado, así el analizador conserva sus 60s y el clasificador los suyos.
         services.AddHttpClient<AnthropicMessagesClient>((sp, c) =>
         {
             var o = sp.GetRequiredService<IOptions<AnthropicOptions>>().Value;
             c.BaseAddress = new Uri(o.BaseUrl);
-            c.Timeout = TimeSpan.FromSeconds(Math.Max(o.TimeoutSeconds, o.ClassifierTimeoutSeconds));
+            c.Timeout = TimeSpan.FromSeconds(
+                Math.Max(Math.Max(o.TimeoutSeconds, o.ClassifierTimeoutSeconds), o.DrFlitTimeoutSeconds));
         });
         services.AddScoped<AnthropicDocumentOcrAnalyzer>();
         services.AddScoped<AnthropicDocumentBatchClassifier>();

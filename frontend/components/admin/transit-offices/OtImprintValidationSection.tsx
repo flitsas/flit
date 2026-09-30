@@ -6,6 +6,9 @@ import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { Modal } from "@/components/atom/Modal";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { RowActions } from "@/components/atom/RowActions";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   fetchImprintSignaturePreviewUrl,
@@ -60,6 +63,10 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
     Record<string, { result: ImprintSignatureValidationResultKind; failureReason: string | null }>
   >({});
   const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
+  // Bug #13055 — tablas homologadas con el modelo de trámites: paginación en cliente con filas por página.
+  const pgRows = usePaginacion();
+  const pgHistory = usePaginacion();
+  const { setPage: setHistoryPage } = pgHistory;
 
   const [modalRow, setModalRow] = useState<ImprintSignatureDto | null>(null);
   const [signatureInput, setSignatureInput] = useState("");
@@ -123,6 +130,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
       setHistoryPhase("loading");
       setHistoryError(null);
       setHistoryRows([]);
+      setHistoryPage(1);
       try {
         const data = await fetchImprintSignatureValidations(row.id, undefined, { transitOfficeId });
         setHistoryRows(data);
@@ -134,7 +142,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         );
       }
     },
-    [transitOfficeId],
+    [transitOfficeId, setHistoryPage],
   );
 
   const closeHistoryModal = () => {
@@ -312,43 +320,32 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
           const canViewPdf = imprintHasPdf(row);
           const opening = openingPdfId === row.id;
           return (
-            <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold text-[#162244] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:text-white"
-                aria-label={
-                  canViewPdf
+            <RowActions
+              actions={[
+                {
+                  icon: FileText,
+                  label: canViewPdf
                     ? `Ver PDF de impronta ${row.placa}`
-                    : `PDF no disponible para impronta ${row.placa}`
-                }
-                disabled={!canViewPdf || openingPdfId !== null}
-                onClick={() => void handleViewPdf(row)}
-                data-testid={`ot-imprint-view-pdf-${row.id}`}
-              >
-                <FileText className="h-3.5 w-3.5" aria-hidden />
-                {opening ? "Abriendo…" : "Ver PDF"}
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold text-[#162244] dark:border-white/15 dark:text-white"
-                aria-label={`Ver bitácora de impronta ${row.placa}`}
-                onClick={() => void openHistoryModal(row)}
-                data-testid={`ot-imprint-history-${row.id}`}
-              >
-                <History className="h-3.5 w-3.5" aria-hidden />
-                Historial
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
-                style={{ background: "#557EFF" }}
-                aria-label={`Validar firma de impronta ${row.placa}`}
-                onClick={() => openValidateModal(row)}
-              >
-                <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-                Validar firma
-              </button>
-            </div>
+                    : `PDF no disponible para impronta ${row.placa}`,
+                  disabled: !canViewPdf || openingPdfId !== null,
+                  disabledTitle: opening ? "Abriendo el PDF…" : undefined,
+                  onClick: () => void handleViewPdf(row),
+                  tone: "primary",
+                },
+                {
+                  icon: History,
+                  label: `Ver bitácora de impronta ${row.placa}`,
+                  onClick: () => void openHistoryModal(row),
+                  tone: "primary",
+                },
+                {
+                  icon: ShieldCheck,
+                  label: `Validar firma de impronta ${row.placa}`,
+                  onClick: () => openValidateModal(row),
+                  tone: "primary",
+                },
+              ]}
+            />
           );
         },
       },
@@ -477,6 +474,8 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
             emptyMessage="Ingrese una placa y pulse Consultar para ver las improntas firmadas."
           />
         </div>
+      ) : phase === "loading" ? (
+        <CarLoaderModal label="Consultando improntas firmadas…" />
       ) : (
         <UiStateBoundary
           status={boundaryStatus}
@@ -492,10 +491,17 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
           <div data-testid="ot-imprint-validation-table">
             <DataTable
               columns={columns}
-              rows={rows}
+              rows={pgRows.paginar(rows)}
               getRowKey={(row) => row.id}
               ariaLabel="Improntas firmadas por placa"
-              minWidth={1120}
+              minWidth={900}
+              pagination={{
+                page: pgRows.page,
+                pageSize: pgRows.pageSize,
+                totalCount: rows.length,
+                onPageChange: pgRows.setPage,
+                onPageSizeChange: pgRows.setPageSize,
+              }}
             />
           </div>
         </UiStateBoundary>
@@ -574,10 +580,17 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
           >
             <DataTable
               columns={historyColumns}
-              rows={historyRows}
+              rows={pgHistory.paginar(historyRows)}
               getRowKey={(row) => row.id}
               ariaLabel="Historial de validaciones de impronta"
               minWidth={640}
+              pagination={{
+                page: pgHistory.page,
+                pageSize: pgHistory.pageSize,
+                totalCount: historyRows.length,
+                onPageChange: pgHistory.setPage,
+                onPageSizeChange: pgHistory.setPageSize,
+              }}
             />
           </UiStateBoundary>
         </div>

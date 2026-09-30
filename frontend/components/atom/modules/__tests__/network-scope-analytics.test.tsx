@@ -295,7 +295,7 @@ describe("HU #12364 AC2 — reporte filtrado por cliente hijo o agregado", () =>
 
     await waitFor(() =>
       expect(mocks.fetchNetworkDetailedReport).toHaveBeenLastCalledWith(
-        expect.objectContaining({ childTenantId: HIJO, page: 1, pageSize: 20 }),
+        expect.objectContaining({ childTenantId: HIJO, page: 1, pageSize: 10 }),
         expect.anything(),
       ),
     );

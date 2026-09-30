@@ -43,7 +43,7 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
     renderTable();
     // La cabecera de la tabla vive en el mismo grid que "Usuario"/"Estado"/"Fecha"; el label
     // "Perfil" también existe en la barra de filtros, así que se acota al encabezado.
-    const encabezado = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    const encabezado = screen.getByText("Usuario").closest("tr") as HTMLElement;
     expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
     expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
     // Ya no existe la columna compuesta "Perfil / Rol".
@@ -54,8 +54,8 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
   // de Compañía, en celdas distintas y legibles (sin truncar por opacidad baja).
   it("AC1 — perfil Gestor y rol Administrador de Compañía en celdas separadas", () => {
     renderTable();
-    const fila = screen.getByText("Ana Torres").closest("div.grid") as HTMLElement;
-    expect(within(fila).getByText("Gestor")).toBeInTheDocument();
+    const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
+    expect(within(fila).getByText("Gestor · Admin")).toBeInTheDocument();
     const rol = within(fila).getByText("Administrador de Compañía");
     expect(rol).toBeInTheDocument();
     // La celda de rol ya no lleva la opacidad reducida que la hacía ilegible.
@@ -70,25 +70,25 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
         actionsFor={() => []}
       />,
     );
-    const fila = screen.getByText("Fer Ríos").closest("div.grid") as HTMLElement;
+    const fila = screen.getByText("Fer Ríos").closest("tr") as HTMLElement;
     expect(within(fila).getByText("Sin rol")).toBeInTheDocument();
   });
 
   // AC3 — un usuario FLIT y otro OT: cada uno con su perfil correcto y su rol respectivo.
   it("AC3 — perfiles FLIT y OT muestran cada uno su perfil y su rol", () => {
     renderTable();
-    const filaFlit = screen.getByText("Caro Díaz").closest("div.grid") as HTMLElement;
+    const filaFlit = screen.getByText("Caro Díaz").closest("tr") as HTMLElement;
     expect(within(filaFlit).getByText("FLIT")).toBeInTheDocument();
     expect(within(filaFlit).getByText("Super Administrador")).toBeInTheDocument();
 
-    const filaOt = screen.getByText("Beto Ruiz").closest("div.grid") as HTMLElement;
-    expect(within(filaOt).getByText("OT")).toBeInTheDocument();
+    const filaOt = screen.getByText("Beto Ruiz").closest("tr") as HTMLElement;
+    expect(within(filaOt).getByText("OT · Admin")).toBeInTheDocument();
     expect(within(filaOt).getByText("Administrador OT")).toBeInTheDocument();
   });
 
   it("usa el perfil del backend aunque el rol sea personalizado", () => {
     renderTable();
-    const fila = screen.getByText("Dani Soto").closest("div.grid") as HTMLElement;
+    const fila = screen.getByText("Dani Soto").closest("tr") as HTMLElement;
     expect(within(fila).getByText("OT")).toBeInTheDocument();
     expect(within(fila).getByText("Revisor documental")).toBeInTheDocument();
   });
@@ -182,12 +182,52 @@ describe("UsersTable — acciones", () => {
 describe("UsersTable — estados", () => {
   it("expone los mismos data-testid de estado que UiStateBoundary", () => {
     const { rerender } = render(<UsersTable rows={[]} loading actionsFor={() => []} />);
-    expect(screen.getByTestId("ui-loading")).toBeInTheDocument();
+    expect(screen.getByText("Cargando usuarios…")).toBeInTheDocument();
 
     rerender(<UsersTable rows={[]} actionsFor={() => []} />);
     expect(screen.getByTestId("ui-empty")).toBeInTheDocument();
 
     rerender(<UsersTable rows={[]} error="Falló" actionsFor={() => []} />);
     expect(screen.getByTestId("ui-error")).toBeInTheDocument();
+  });
+});
+
+// Bug #13055 — tabla homologada con el modelo de trámites: `<table>` semántica; la columna Acciones
+// se ajusta al contenido (ya no hay ancho fijo que desborde los botones) y la lista pagina.
+describe("UsersTable — tabla semántica y paginación (Bug #13055)", () => {
+  const cuatro = (r: UserRow) =>
+    ["Editar", "Restablecer", "Suspender", "Desactivar"].map((a) => ({
+      icon: Pencil,
+      label: `${a} ${r.fullName}`,
+      onClick: vi.fn(),
+    }));
+
+  it("es una <table> con cabeceras de columna y las 4 acciones dentro de la celda de Acciones", () => {
+    renderTable({ actionsFor: cuatro });
+    expect(screen.getByRole("table", { name: "Usuarios" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
+    const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
+    expect(within(fila).getAllByRole("button")).toHaveLength(4);
+    const celda = within(fila).getByRole("button", { name: "Editar Ana Torres" }).closest("td");
+    expect(celda?.className).toContain("whitespace-nowrap");
+  });
+
+  it("muestra la paginación estándar con «Filas por página»", () => {
+    renderTable();
+    expect(screen.getByRole("combobox", { name: "Filas por página" })).toBeInTheDocument();
+    expect(screen.getByText(/Mostrando 1–4 de 4/)).toBeInTheDocument();
+  });
+
+  it("pagina en cliente y vuelve a la página 1 al filtrar", async () => {
+    const user = userEvent.setup();
+    const muchos = Array.from({ length: 12 }, (_, i) =>
+      row({ id: `m${i}`, fullName: `Usuario ${String(i).padStart(2, "0")}`, role: "Rol X", roleCode: "x", profile: "OT" }),
+    );
+    render(<UsersTable rows={muchos} actionsFor={() => []} />);
+    expect(screen.getAllByRole("row")).toHaveLength(1 + 10);
+    await user.click(screen.getByRole("button", { name: /página 2|2/i }));
+    expect(screen.getAllByRole("row")).toHaveLength(1 + 2);
+    await user.type(screen.getByLabelText("Buscar usuarios"), "Usuario 0");
+    expect(screen.getByText(/Mostrando 1–10 de 10/)).toBeInTheDocument();
   });
 });

@@ -203,6 +203,13 @@ el usuario tenga que ir a leerla.
    `normativa.test.ts` verifica que el PDF exista y no esté vacío.
 6. **Alcance:** audiencia «Todos». La normativa no se filtra por rol; lo que se filtra es el
    contenido operativo.
+7. **Añadir o editar un artículo exige regenerar el artefacto del backend** (Épica #12718, HU #12920,
+   ADR-0060 §3). Desde que DR. FLIT responde con un LLM en core-api, el manual llega al backend como
+   `manual-catalog.generated.json`, commiteado en `frontend/public/dr-flit/` y en
+   `services/core-api/src/Flit.Api/Content/dr-flit/`. Tras tocar `lib/manual/`, correr
+   `pnpm manual:export` (desde `frontend/`) y commitear los dos archivos junto con el cambio.
+   `lib/manual/__tests__/generated-catalog-freshness.test.ts` falla en CI si el artefacto quedó viejo.
+   No editar los `.generated.json` a mano.
 
 ### 6.3 Ideas naturales para el siguiente tramo (no implementadas)
 

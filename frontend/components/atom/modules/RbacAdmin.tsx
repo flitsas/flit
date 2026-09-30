@@ -14,6 +14,7 @@ import { getAccessibleModules, type AccessibleModule } from "@/lib/api/security"
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { activeTone } from "@/components/atom/statusTones";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { ModuleTitle } from "./ModuleTitle";
@@ -34,6 +35,8 @@ export function RbacAdmin() {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [permissions, setPermissions] = useState<Record<string, RbacPermission[]>>({});
+  // Bug #13055 — tabla homologada con el modelo de trámites: pagina en cliente con «Filas por página».
+  const pgModules = usePaginacion();
   const [showCreateModule, setShowCreateModule] = useState(false);
   const [createPermissionForModule, setCreatePermissionForModule] = useState<RbacModule | null>(null);
 
@@ -253,8 +256,15 @@ export function RbacAdmin() {
       {activeTab === "modules" && (
         <DataTable
           columns={moduleColumns}
-          rows={modules}
+          rows={pgModules.paginar(modules)}
           getRowKey={(m) => m.id}
+          pagination={{
+            page: pgModules.page,
+            pageSize: pgModules.pageSize,
+            totalCount: modules.length,
+            onPageChange: pgModules.setPage,
+            onPageSizeChange: pgModules.setPageSize,
+          }}
           status={loading ? "loading" : error ? "error" : "ready"}
           errorMessage={error ?? undefined}
           emptyMessage="No hay módulos. Crea el primero."
@@ -316,6 +326,9 @@ function RolesTabContent() {
   const { show } = useToast();
   const [companyRoles, setCompanyRoles] = useState<RbacRole[]>([]);
   const [otRoles, setOtRoles] = useState<RbacRole[]>([]);
+  // Bug #13055 — cada tabla de roles pagina en cliente.
+  const pgCompany = usePaginacion();
+  const pgOt = usePaginacion();
   const [companyStatus, setCompanyStatus] = useState<"loading" | "error" | "ready">("loading");
   const [otStatus, setOtStatus] = useState<"loading" | "error" | "ready">("loading");
   const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
@@ -398,6 +411,7 @@ function RolesTabContent() {
 
       {ENTITY_TABLES.map(({ type, title, icon: Icon }) => {
         const roles = type === "COMPANY" ? companyRoles : otRoles;
+        const pgRoles = type === "COMPANY" ? pgCompany : pgOt;
         const status = type === "COMPANY" ? companyStatus : otStatus;
         const columns: DataTableColumn<RbacRole>[] = [
           {
@@ -469,8 +483,15 @@ function RolesTabContent() {
             </h3>
             <DataTable
               columns={columns}
-              rows={roles}
+              rows={pgRoles.paginar(roles)}
               getRowKey={(r) => r.id}
+              pagination={{
+                page: pgRoles.page,
+                pageSize: pgRoles.pageSize,
+                totalCount: roles.length,
+                onPageChange: pgRoles.setPage,
+                onPageSizeChange: pgRoles.setPageSize,
+              }}
               status={status}
               emptyMessage={`No hay roles ${type === "COMPANY" ? "de compañía" : "de organismo de tránsito"}. Crea el primero.`}
               minWidth={640}

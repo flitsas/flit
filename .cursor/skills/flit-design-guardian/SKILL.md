@@ -81,7 +81,7 @@ Aplicar estas reglas como compuertas bloqueantes.
 | App interna | Fondo azul claro, **dock inferior flotante**, topbar derecha, título en tarjeta blanca y contenido modular en cards. |
 | Autenticación | Pantalla partida con panel visual izquierdo y formulario derecho en tarjeta clara. |
 | Botones | CTA primario (avance/cierre) en pastilla degradada `#557EFF → #00DBD5`; cierre final en `#00DBD5 → #8CC63F`; «Anterior» en navy; cancelar/error en naranja-rojo. **Consulta** (Consultar RUNT/RUES, Buscar): `#557EFF` **sólido SIN degradado** + clase `bg-[#557EFF]` (PDF 20 ago). |
-| Tablas | `<table>` semántica, cabecera `#DFE5ED`, filas cómodas, badges tintados, progreso y acciones con iconos lineales. |
+| Tablas | **Modelo único = listado de trámites** (ver `prototype_rules.md` › «Modelo único de tabla»): `DataTable` o `<table>` con `table-styles`, sin tarjeta blanca envolvente, filas-tarjeta con sombra azul al pasar el mouse, acciones con `RowActions` y `Pagination` con «Filas por página» y navegación numerada. |
 | Wizards | Stepper horizontal con pasos circulares numerados y colores por estado. |
 | Modales | Blur de fondo, overlay azulado, contenedor claro, radio amplio, X superior, CTA degradado, `role="dialog"` y focus trap. |
 | OCR/carga | Upload boxes blancos con borde punteado azul, icono centrado y texto azul. |
@@ -116,6 +116,10 @@ Corregir antes de entregar si aparece alguno de estos:
 - `outline-none` sin foco sustituto
 - Modal sin `role="dialog"` y focus trap
 - Grilla de `div` sustituyendo una tabla de datos
+- Tabla envuelta en una tarjeta blanca (`rounded-2xl border bg-white` alrededor de la tabla)
+- Paginador «Anterior / Siguiente», paginador propio o listado sin «Filas por página»
+- Botones de texto como acciones de fila (usar `RowActions`)
+- Cabecera de tabla con clases propias en vez de `table-styles`
 - Badge sólido con texto blanco
 - Badge `success` con tint cian (`rgba(0,219,213,…)`): incorrecto — success = verde tintado (`#F3FBE8`/`#4F7A12`), el cian es acento tecnológico (PDF 20 ago)
 - Botón Consultar/Buscar con degradado: incorrecto — consulta = `#557EFF` sólido; el degradado es solo para CTA de avance/cierre (PDF 20 ago)

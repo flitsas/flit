@@ -36,6 +36,11 @@ public static class IdentityValidationReconciler
         ArgumentNullException.ThrowIfNull(v);
         ArgumentNullException.ThrowIfNull(status);
 
+        // Bug #13055 — trámite anulado o revocado: ni el refresco de "rechazado_intento" ni la expiración
+        // (que no pasan por el applier) tocan la validación.
+        if (v.CongeladaPorTramite)
+            return false;
+
         switch ((status.Status ?? string.Empty).Trim().ToLowerInvariant())
         {
             case "aprobado":

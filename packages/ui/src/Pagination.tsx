@@ -1,4 +1,7 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+"use client";
+
+import { PageNav } from "./PageNav";
+import { TAMANOS_DE_PAGINA } from "./usePaginacion";
 
 export interface PaginationProps {
   /** Página actual (1-based). */
@@ -8,17 +11,31 @@ export interface PaginationProps {
   onPageChange: (page: number) => void;
   className?: string;
   /**
-   * Tamaños de página que el usuario puede elegir («Filas por página», como en /tramites). Solo se
-   * muestra el selector si vienen las opciones y el manejador; el cambio debe volver a la página 1.
+   * Cambio de «Filas por página». Con este manejador se muestra el selector (el estándar: todas las
+   * tablas lo llevan, Bug #13055); el cambio debe volver a la página 1 — `usePaginacion` ya lo hace.
    */
-  pageSizeOptions?: readonly number[];
   onPageSizeChange?: (pageSize: number) => void;
+  /** Tamaños ofrecidos. Por defecto los de trámites: 10, 25, 50, 100. */
+  pageSizeOptions?: readonly number[];
+  /** Nombre accesible de la navegación; distingue varias paginaciones en una misma pantalla. */
+  ariaLabel?: string;
+  /** Qué se cuenta, para la línea vacía («Sin representantes que mostrar»). Default: «registros». */
+  noun?: string;
 }
 
+/** Mismo selector que el listado de trámites (control de 36 px, borde neutro). */
+const SELECT_CLS =
+  "inline-flex h-9 shrink-0 items-center rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs " +
+  "font-semibold text-[#1E293B] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 " +
+  "focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white";
+
 /**
- * Paginación unificada (HU #10495). Centrada respecto a la tabla (regla del
- * feedback de diseño), con el conteo "Mostrando X–Y de N". La usan las tablas
- * server-side y client-side por igual. Se oculta cuando todo cabe en una página.
+ * Paginación ESTÁNDAR de las tablas FLIT (Bug #13055): la misma del listado de trámites.
+ * «Filas por página» a la izquierda y, a la derecha, «Mostrando X–Y de N» con la navegación
+ * numerada ‹ 1 2 … N › ({@link PageNav}). Antes había dos paginaciones: esta solo ofrecía
+ * Anterior / Siguiente con «1 / 39», y la de trámites, numerada; cada módulo se veía distinto.
+ *
+ * El conteo se muestra siempre; los botones de página, solo si hay más de una.
  */
 export function Pagination({
   page,
@@ -26,64 +43,50 @@ export function Pagination({
   totalCount,
   onPageChange,
   className = "",
-  pageSizeOptions,
   onPageSizeChange,
+  pageSizeOptions = TAMANOS_DE_PAGINA,
+  ariaLabel = "Paginación",
+  noun = "registros",
 }: PaginationProps) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const from = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, totalCount);
+  const actual = Math.min(page, totalPages);
+  const from = totalCount === 0 ? 0 : (actual - 1) * pageSize + 1;
+  const to = Math.min(actual * pageSize, totalCount);
+  // Un tamaño que no está en la lista (una pantalla con tamaño propio) se ofrece igual, para que el
+  // selector no mienta sobre lo que se está mostrando.
+  const opciones = pageSizeOptions.includes(pageSize)
+    ? pageSizeOptions
+    : [...pageSizeOptions, pageSize].sort((a, b) => a - b);
 
   return (
-    <nav
-      className={`mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] ${className}`}
-      aria-label="Paginación"
-    >
-      {pageSizeOptions && onPageSizeChange && (
-        <label className="flex items-center gap-2 opacity-70">
+    <div className={`flex flex-wrap items-center justify-between gap-4 ${className}`}>
+      {onPageSizeChange ? (
+        <label className="flex items-center gap-2 pt-3 text-xs opacity-70">
           Filas por página
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            className={SELECT_CLS}
             aria-label="Filas por página"
-            className="rounded-lg border border-[#DFE5ED] bg-white px-2 py-1 text-[11px] text-[#162744] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
           >
-            {pageSizeOptions.map((n) => (
+            {opciones.map((n) => (
               <option key={n} value={n}>
                 {n}
               </option>
             ))}
           </select>
         </label>
+      ) : (
+        <span />
       )}
-      <p className="opacity-60" role="status" aria-live="polite">
-        Mostrando {from}–{to} de {totalCount}
-      </p>
-      {totalPages > 1 && (
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          aria-label="Página anterior"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-          className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium transition disabled:opacity-40"
-        >
-          <ChevronLeft className="h-3.5 w-3.5" /> Anterior
-        </button>
-        <span className="font-semibold tabular-nums" style={{ color: "#557EFF" }}>
-          {page} / {totalPages}
-        </span>
-        <button
-          type="button"
-          aria-label="Página siguiente"
-          disabled={page >= totalPages}
-          onClick={() => onPageChange(page + 1)}
-          className="flex items-center gap-1 rounded-lg border border-[#557EFF] px-2.5 py-1.5 font-medium transition disabled:opacity-40"
-          style={{ color: "#557EFF" }}
-        >
-          Siguiente <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      )}
-    </nav>
+      <PageNav
+        page={actual}
+        totalPages={totalPages}
+        resumen={totalCount === 0 ? `Sin ${noun} que mostrar` : `Mostrando ${from}–${to} de ${totalCount}`}
+        ariaLabel={ariaLabel}
+        onPageChange={onPageChange}
+        className="flex-1"
+      />
+    </div>
   );
 }

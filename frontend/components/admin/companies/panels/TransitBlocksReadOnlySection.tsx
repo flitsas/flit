@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ban } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { fetchTransitBlocks, fetchTransitOffices } from "@/lib/api/admin-companies";
 import type { TransitOffice } from "@/lib/api/types";
@@ -19,6 +21,8 @@ export function TransitBlocksReadOnlySection({
   legend?: string;
 }) {
   const [status, setStatus] = useState<UiStatus>("loading");
+  // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
+  const pg = usePaginacion();
   const [blockedOffices, setBlockedOffices] = useState<TransitOffice[]>([]);
 
   const load = useCallback(
@@ -82,6 +86,9 @@ export function TransitBlocksReadOnlySection({
       <p className="text-[10px] opacity-60" role="note">
         {legend}
       </p>
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando organismos bloqueados…" />
+      ) : (
       <UiStateBoundary
         status={status}
         onRetry={() => void load()}
@@ -91,12 +98,20 @@ export function TransitBlocksReadOnlySection({
       >
         <DataTable
           columns={columns}
-          rows={blockedOffices}
+          rows={pg.paginar(blockedOffices)}
           getRowKey={(office) => office.id}
           ariaLabel="Organismos bloqueados"
           minWidth={480}
+          pagination={{
+            page: Math.min(pg.page, Math.max(1, Math.ceil(blockedOffices.length / pg.pageSize))),
+            pageSize: pg.pageSize,
+            totalCount: blockedOffices.length,
+            onPageChange: pg.setPage,
+            onPageSizeChange: pg.setPageSize,
+          }}
         />
       </UiStateBoundary>
+      )}
     </section>
   );
 }

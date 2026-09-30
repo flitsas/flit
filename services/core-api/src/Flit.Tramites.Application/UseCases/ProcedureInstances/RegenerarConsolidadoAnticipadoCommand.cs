@@ -199,8 +199,9 @@ public sealed class RegenerarConsolidadoAnticipadoHandler(
             ? instance.ConsolidadoWizardVigente
             : instance.ConsolidadoMaestroVigente;
 
-        // Mismo criterio que el atajo de caché de ambos handlers: bandera arriba Y adjunto presente.
-        if (bandera && vigente is not null)
+        // Mismo criterio que el atajo de caché de ambos handlers: bandera arriba Y adjunto presente, y
+        // (Bug #13055) un FUR que ya refleja el último cambio del expediente.
+        if (bandera && vigente is not null && !FurVigenciaExpediente.FurDesactualizado(instance))
             return ResultadoRegeneracionAnticipada.OmitidoVigente;
 
         return null;

@@ -3,6 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarPlus, Pencil, Trash2 } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
+import { Pagination } from "@/components/atom/Pagination";
+import { RowActions } from "@/components/atom/RowActions";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   createReportSchedule,
@@ -80,6 +91,8 @@ export function SchedulesSection({
   const [creating, setCreating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<ReportSchedule | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Bug #13055 — los informes pueden crecer: paginación en cliente con «Filas por página».
+  const pg = usePaginacion();
   // Copia LOCAL del preset activo: la prop se limpia (onConsumePreset) apenas se lee, pero el
   // formulario sigue abierto y necesita seguir sabiendo con qué consulta se prellenó.
   const [activePreset, setActivePreset] = useState<SchedulePresetConsulta | null>(null);
@@ -233,34 +246,31 @@ export function SchedulesSection({
           onRetry={() => void load()}
           skeletonRows={3}
         >
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
-            <table className="w-full text-left text-sm">
+          {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
+          <div className={CARDLIST_SCROLL}>
+            <table className={CARDLIST_TABLE} aria-label="Informes programados">
               <thead>
-                <tr className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-                  <th className="px-3 py-2">Nombre</th>
-                  <th className="px-3 py-2">Tipo</th>
-                  <th className="px-3 py-2">Programación</th>
-                  <th className="px-3 py-2">Formato</th>
-                  <th className="px-3 py-2">Destinatarios</th>
-                  <th className="px-3 py-2">Último envío</th>
-                  <th className="px-3 py-2">Estado</th>
-                  <th className="px-3 py-2 text-right">Acciones</th>
+                <tr className={CARDLIST_HEAD_ROW}>
+                  <th scope="col" className={CARDLIST_TH}>Nombre</th>
+                  <th scope="col" className={CARDLIST_TH}>Tipo</th>
+                  <th scope="col" className={CARDLIST_TH}>Programación</th>
+                  <th scope="col" className={CARDLIST_TH}>Formato</th>
+                  <th scope="col" className={CARDLIST_TH}>Destinatarios</th>
+                  <th scope="col" className={CARDLIST_TH}>Último envío</th>
+                  <th scope="col" className={CARDLIST_TH}>Estado</th>
+                  <th scope="col" className={`${CARDLIST_TH} text-right`}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((s) => (
-                  <tr
-                    key={s.id}
-                    data-testid="schedule-row"
-                    className="border-b border-slate-100 dark:border-slate-800 last:border-0 text-[#162744] dark:text-slate-200"
-                  >
-                    <td className="px-3 py-2 font-medium">{s.name}</td>
-                    <td className="px-3 py-2">{REPORT_TYPE_LABELS[s.reportType]}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{describeWhen(s)}</td>
-                    <td className="px-3 py-2">{FORMAT_LABELS[s.format]}</td>
-                    <td className="px-3 py-2">{s.recipients.length}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(s.lastSentAt)}</td>
-                    <td className="px-3 py-2">
+                {pg.paginar(items).map((s) => (
+                  <tr key={s.id} data-testid="schedule-row" className={CARDLIST_ROW}>
+                    <td className={`${CARDLIST_CELL} font-medium`}>{s.name}</td>
+                    <td className={CARDLIST_CELL}>{REPORT_TYPE_LABELS[s.reportType]}</td>
+                    <td className={`${CARDLIST_CELL} whitespace-nowrap`}>{describeWhen(s)}</td>
+                    <td className={CARDLIST_CELL}>{FORMAT_LABELS[s.format]}</td>
+                    <td className={CARDLIST_CELL}>{s.recipients.length}</td>
+                    <td className={`${CARDLIST_CELL} whitespace-nowrap`}>{formatDateTime(s.lastSentAt)}</td>
+                    <td className={CARDLIST_CELL}>
                       <span
                         className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
                         style={
@@ -272,31 +282,28 @@ export function SchedulesSection({
                         {s.isActive ? "Activo" : "Inactivo"}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="flex justify-end gap-1">
-                        <button
-                          type="button"
-                          aria-label={`Editar ${s.name}`}
-                          onClick={() => setEditing(s)}
-                          className="rounded-lg border border-slate-200 dark:border-slate-700 p-1.5 hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Eliminar ${s.name}`}
-                          onClick={() => setConfirmDelete(s)}
-                          className="rounded-lg border border-slate-200 dark:border-slate-700 p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                      </div>
+                    <td className={CARDLIST_CELL}>
+                      <RowActions
+                        actions={[
+                          { icon: Pencil, label: `Editar ${s.name}`, tone: "primary", onClick: () => setEditing(s) },
+                          { icon: Trash2, label: `Eliminar ${s.name}`, tone: "danger", onClick: () => setConfirmDelete(s) },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={Math.min(pg.page, Math.max(1, Math.ceil(items.length / pg.pageSize)))}
+            pageSize={pg.pageSize}
+            totalCount={items.length}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+            ariaLabel="Paginación de informes programados"
+            noun="informes"
+          />
         </UiStateBoundary>
       )}
 

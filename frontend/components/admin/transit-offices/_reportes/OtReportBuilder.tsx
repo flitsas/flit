@@ -46,6 +46,9 @@ import {
   reportFileName,
 } from "./report-columns";
 import { XLSX_MIME } from "@/lib/xlsx";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { EstadoComposition, TimeHistogram, TrendChart, granularidadLabel } from "./report-visuals";
 import { CSV_EXPORT_VISIBLE, Empty, ErrorNotice, PrimaryButton, Section, Tile } from "./shared";
 import {
@@ -57,7 +60,6 @@ import {
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
 
-const PAGE_SIZE = 25;
 
 /** Tope de la exportación. Existe para no encadenar decenas de páginas; si se alcanza, se DICE. */
 const EXPORT_MAX_ROWS = 2000;
@@ -86,7 +88,8 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
 
   const [sortBy, setSortBy] = useState<OtReportSort>(OT_REPORT_SORT.radicado);
   const [desc, setDesc] = useState(true);
-  const [page, setPage] = useState(1);
+  // Bug #13055 — paginación de servidor con «Filas por página» (misma del modelo de trámites).
+  const { page, setPage, pageSize, setPageSize } = usePaginacion();
 
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultVisibleColumns);
   const [report, setReport] = useState<OtReport | null>(null);
@@ -153,7 +156,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
       setError(null);
       try {
         const data = await fetchOtReport(
-          { ...params, page, pageSize: PAGE_SIZE, sortBy, desc },
+          { ...params, page, pageSize, sortBy, desc },
           signal,
         );
         if (signal?.aborted) return;
@@ -165,7 +168,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
         if (!signal?.aborted) setBusy(false);
       }
     },
-    [params, page, sortBy, desc],
+    [params, page, pageSize, sortBy, desc],
   );
 
   useEffect(() => {
@@ -266,7 +269,6 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
 
   const resumen = report?.resumen;
   const columns = REPORT_COLUMNS.filter((c) => visibleColumns.includes(c.id));
-  const totalPages = report ? Math.max(1, Math.ceil(report.total / report.pageSize)) : 1;
   const presetActivo = activePresetId(visibleColumns);
   const exportDisabled = exportState.busy || !report || report.total === 0;
 
@@ -505,7 +507,9 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
           </p>
         )}
 
-        {!report || report.filas.length === 0 ? (
+        {busy && !report ? (
+          <CarLoaderModal label="Generando el informe…" />
+        ) : !report || report.filas.length === 0 ? (
           <Empty>
             {busy
               ? "Generando el informe…"
@@ -518,7 +522,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                 <thead>
                   <tr className={CARDLIST_HEAD_ROW}>
                     {columns.map((column) => (
-                      <th key={column.id} className={CARDLIST_TH}>
+                      <th key={column.id} scope="col" className={CARDLIST_TH}>
                         {column.sort ? (
                           <button
                             type="button"
@@ -562,29 +566,15 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
               </table>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-              <span className="text-[#6B7280] dark:text-white/50">
-                {plural(report.total, "trámite", "trámites")} · página {report.page} de {totalPages}
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={busy || report.page <= 1}
-                  className="rounded-lg border border-[#DFE5ED] px-3 py-1 font-semibold disabled:opacity-40 dark:border-white/10"
-                >
-                  Anterior
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={busy || report.page >= totalPages}
-                  className="rounded-lg border border-[#DFE5ED] px-3 py-1 font-semibold disabled:opacity-40 dark:border-white/10"
-                >
-                  Siguiente
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              totalCount={report.total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              ariaLabel="Paginación del informe"
+              noun="trámites"
+            />
           </>
         )}
       </Section>

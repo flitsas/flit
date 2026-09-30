@@ -1,0 +1,2523 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": "frontend/lib/manual (pnpm manual:export)",
+  "articleCount": 44,
+  "articles": [
+    {
+      "slug": "0-introduccion/1-bienvenida",
+      "title": "Centro de Ayuda FLIT",
+      "href": "/manual/0-introduccion/1-bienvenida",
+      "audience": "Todos",
+      "sectionId": "introduccion",
+      "summary": "Portal de documentación operativa de FLIT para Gestor, Organismo de tránsito, Administración de compañía y Super Admin.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "para-que",
+          "title": "1. ¿Para qué sirve este manual?",
+          "paragraphs": [
+            "Bienvenido al ecosistema de FLIT. Este portal está diseñado para que resuelvas dudas sobre el uso de la plataforma en segundos, sin depender de una llamada a soporte en cada paso.",
+            "Documenta las acciones del Gestor (empresa cliente que radica trámites vehiculares), del Gestor de Organismo de tránsito (OT), del Administrador de compañía (consola, red de clientes, marca) y del equipo FLIT (Super Admin: compañías, plataforma, integraciones, RBAC). Cada artículo indica «Aplica para» y DR. FLIT solo sugiere los de tu perfil."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "navegar",
+          "title": "2. Pasos rápidos para navegar",
+          "paragraphs": [],
+          "bullets": [
+            "Utiliza el menú lateral izquierdo para explorar Introducción, Normativa (la resolución que respalda a FLIT), Gestor, Organismo de tránsito, Administración de compañía y Super Admin.",
+            "Si buscas algo específico (ej. «cómo crear un trámite» o «preasignación de placas»), usa la barra de Búsqueda en la parte superior (⌘ K / Ctrl K).",
+            "Si el artículo es largo, usa la tabla de contenidos «En este artículo» a la derecha para saltar a la sección que necesitas."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "faq",
+          "title": "3. Lo que debes saber (FAQ)",
+          "paragraphs": [],
+          "bullets": [
+            "¿Por qué veo manuales de cosas a las que no tengo acceso? El manual es público para fomentar transparencia. En la aplicación real, el sistema restringe el acceso según tu rol. Por eso, al inicio de cada artículo verás la etiqueta «Aplica para».",
+            "¿Encontré un error en el manual? FLIT se actualiza constantemente. Si una pantalla se ve distinta a lo descrito, notifícalo a soporte@flitsas.com para que el equipo actualice el documento.",
+            "¿Puede ayudarme DR. FLIT? Sí. En el chat elige «Necesito ayuda»: si estás en un módulo con documentación te la sugiere de entrada; si describes tu duda, te ofrece los artículos que aplican a tu perfil. En Gestión busca trámites por placa, VIN, radicado o cliente."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "0-introduccion/2-como-navegar",
+      "title": "Cómo navegar el manual",
+      "href": "/manual/0-introduccion/2-como-navegar",
+      "audience": "Todos",
+      "sectionId": "introduccion",
+      "summary": "Menú lateral, búsqueda inteligente y tabla de contenidos.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "sidebar",
+          "title": "1. Menú lateral",
+          "paragraphs": [
+            "Las secciones agrupan artículos por audiencia. Introducción aplica a todos; Gestor documenta al operador de compañía; Organismo de tránsito documenta al perfil OT (rol ot_admin).",
+            "Puedes colapsar cada sección haciendo clic en su título. El artículo activo se resalta con fondo turquesa suave."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "search",
+          "title": "2. Búsqueda",
+          "paragraphs": [
+            "La barra superior indexa títulos, palabras clave y el cuerpo de los artículos. Escribe al menos dos caracteres para ver sugerencias.",
+            "Atajo de teclado: ⌘ K (macOS) o Ctrl K (Windows). Esc cierra el panel de resultados."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": "Consejo",
+              "text": "Usa verbos concretos: «crear trámite», «documentos matrícula», «preasignación placas»."
+            }
+          ]
+        },
+        {
+          "id": "toc",
+          "title": "3. Tabla de contenidos",
+          "paragraphs": [
+            "En pantallas anchas, la columna derecha lista las secciones del artículo actual. Cada enlace hace scroll suave al encabezado correspondiente."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "0-introduccion/3-perfiles-y-roles",
+      "title": "Perfiles: Gestor vs Organismo de tránsito",
+      "href": "/manual/0-introduccion/3-perfiles-y-roles",
+      "audience": "Todos",
+      "sectionId": "introduccion",
+      "summary": "Qué perfil usa cada tipo de usuario y qué módulos ve en el dock.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "gestor",
+          "title": "1. Perfil Gestor (empresa cliente)",
+          "paragraphs": [
+            "Corresponde a usuarios de una compañía que radica trámites vehiculares (concesionario, renting, gestoría). En el dock típico de un operador (rol Radicador) verás Inicio, Trámites y Ayuda.",
+            "Módulos adicionales (Identidad, Reportes, Usuarios) solo aparecen si tu rol custom tiene los permisos RBAC correspondientes."
+          ],
+          "bullets": [
+            "Ruta principal de trámites: /tramites",
+            "Wizard server-driven: el backend define pasos, bloqueos y cuándo puedes radicar.",
+            "No tiene acceso al hub del Organismo de tránsito ni a consolas /admin de plataforma."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "ot",
+          "title": "2. Perfil Organismo de tránsito",
+          "paragraphs": [
+            "Usuarios con rol ot_admin administran la operación de su organismo: bandeja de trámites de compañías, preasignación, reportes, usuarios OT y parametrización (Reglas, Documentos, Requisitos).",
+            "El menú del OT vive en el dock (no duplica módulos SPA homónimos). Las rutas del hub siguen el patrón /admin/transit-offices/{id}/…"
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "administracion",
+          "title": "3. Perfiles de administración",
+          "paragraphs": [
+            "Además de Gestor y Organismo hay dos perfiles de administración con secciones propias en este manual, visibles según tu rol:"
+          ],
+          "bullets": [
+            "Admin de Compañía: consola «Administración» de la compañía, usuarios, revocatorias y, si la compañía es cabeza de red (concesión o marca blanca), la red de clientes y la marca.",
+            "Super Admin (equipo FLIT): compañías, organismos, documental de plataforma, improntas, integraciones, RBAC, auditoría y procesos periódicos."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "El menú es UX: ocultar un ítem no sustituye la validación de permisos en la API."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "0-introduccion/4-fechas-y-horas",
+      "title": "Fechas, horas y formatos",
+      "href": "/manual/0-introduccion/4-fechas-y-horas",
+      "audience": "Todos",
+      "sectionId": "introduccion",
+      "summary": "Cómo se muestran fechas y horas en FLIT y por qué una vigencia no lleva hora.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "instantes",
+          "title": "1. Instantes: DD/MM/YYYY HH:mm en hora de Colombia",
+          "paragraphs": [
+            "Todo lo que representa un momento (radicación, cambio de estado, asignación de placa, firma, línea de tiempo, correos) se muestra como DD/MM/YYYY HH:mm en hora de Colombia, sin importar la zona horaria del navegador. Sin segundos: no aportan a la lectura operativa."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "calendario",
+          "title": "2. Fechas de calendario: sin hora",
+          "paragraphs": [
+            "Las vigencias (SOAT, RTM, identidad, escrituras, baúl de firmas) son fechas de calendario: se muestran como DD/MM/YYYY y no se convierten de zona horaria. Por eso una vigencia nunca aparece «un día antes»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "exportables",
+          "title": "3. Exportables y documentos",
+          "paragraphs": [
+            "Los archivos Excel y los documentos generados usan el mismo formato estándar que la interfaz. Los certificados del consolidado conservan la hora; el sello de tiempo de la impronta conserva los segundos por exigencia normativa."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "0-introduccion/5-cuenta-y-acceso",
+      "title": "Tu cuenta: acceso y contraseña",
+      "href": "/manual/0-introduccion/5-cuenta-y-acceso",
+      "audience": "Todos",
+      "sectionId": "introduccion",
+      "summary": "Cómo iniciar sesión, recuperar tu contraseña, activar una invitación y qué hacer ante avisos de sesión expirada o acceso denegado.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "iniciar-sesion",
+          "title": "1. Iniciar sesión",
+          "paragraphs": [
+            "Para entrar a FLIT necesitas dos datos: tu Usuario Corporativo (el correo con el que te crearon la cuenta) y tu Contraseña. Escríbelos en la pantalla de inicio y pulsa «Iniciar Sesión».",
+            "Si el usuario o la contraseña no coinciden, el sistema te avisa con el mensaje «Correo o contraseña incorrectos». Revisa que no tengas el bloqueo de mayúsculas activado y vuelve a intentar."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "olvido-contrasena",
+          "title": "2. ¿Olvidó su contraseña?",
+          "paragraphs": [
+            "Justo debajo del campo de contraseña encontrarás el enlace «¿Olvidó su contraseña?». Haz clic, escribe tu correo y pulsa «Enviar instrucciones».",
+            "Por seguridad, siempre verás el mismo mensaje de confirmación (algo como «si el correo está registrado, enviaremos instrucciones de recuperación»), sin importar si el correo existe o no en el sistema. Así nadie puede averiguar qué correos están registrados en FLIT.",
+            "Revisa tu bandeja de entrada y, si no llega en unos minutos, revisa la carpeta de correo no deseado (spam). El enlace que recibes te lleva a una pantalla para definir una nueva contraseña. Si el enlace ya venció, simplemente vuelve a pedir uno nuevo desde «¿Olvidó su contraseña?»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "activar-invitacion",
+          "title": "3. Activar una invitación",
+          "paragraphs": [
+            "Cuando el administrador de tu compañía (o el equipo FLIT) crea tu usuario, te llega un correo con un enlace de activación. Ese enlace te lleva a la pantalla «Activa tu cuenta», donde defines tu contraseña por primera vez.",
+            "Con eso queda lista tu cuenta y puedes iniciar sesión de inmediato con tu correo y la contraseña que acabas de definir."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "cambiar-contrasena",
+          "title": "4. Cambiar tu contraseña",
+          "paragraphs": [
+            "Ya con la sesión iniciada, puedes cambiar tu contraseña cuando quieras: abre el menú de tu cuenta (tu nombre, arriba a la derecha) y elige «Cambio de contraseña». Escribe tu contraseña actual y la nueva, y confirma."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "cerrar-sesion",
+          "title": "5. Cerrar sesión",
+          "paragraphs": [
+            "Desde el mismo menú de tu cuenta selecciona «Cerrar sesión» para cerrar tu sesión de forma segura, sobre todo si usas un computador compartido."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "sesion-expirada-acceso-denegado",
+          "title": "6. Sesión expirada y acceso denegado",
+          "paragraphs": [
+            "Si dejas la sesión inactiva por mucho tiempo, verás una ventana que dice «Tu sesión expiró. Por seguridad, tu sesión se cerró. Vuelve a iniciar sesión para continuar». Pulsa «Ir a iniciar sesión», escribe tus datos otra vez y FLIT te devuelve a donde estabas.",
+            "Si entras a una sección para la que no tienes permiso, verás la pantalla «Acceso restringido»: no significa que algo esté dañado, sino que tu perfil no incluye ese módulo. Pídele acceso al administrador de tu compañía o, si crees que es un error, escríbele al equipo FLIT."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "El acceso denegado también aparece marcado como «403» en algunos mensajes técnicos: es el mismo aviso de «no tienes permiso para esto»."
+            }
+          ]
+        },
+        {
+          "id": "casos-frecuentes",
+          "title": "7. Casos frecuentes",
+          "paragraphs": [],
+          "bullets": [
+            "No me llega el correo de recuperación o de invitación: revisa la carpeta de spam o correo no deseado antes de pedir uno nuevo.",
+            "El enlace de recuperación o de activación ya venció: pide uno nuevo (recuperación desde «¿Olvidó su contraseña?»; invitación, pídele al administrador que te la reenvíe).",
+            "Mi cuenta está bloqueada temporalmente: verás el aviso «Tu cuenta está bloqueada temporalmente». Contacta al administrador de tu compañía para que la reactive.",
+            "Mi usuario está suspendido: no podrás iniciar sesión aunque la contraseña sea correcta; solo el administrador de tu compañía puede reactivarlo."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "0-introduccion/6-portal-participantes",
+      "title": "El portal del comprador y el vendedor",
+      "href": "/manual/0-introduccion/6-portal-participantes",
+      "audience": "Todos",
+      "sectionId": "introduccion",
+      "summary": "Qué recibe el comprador o el vendedor en su correo, qué debe hacer en el portal y cómo acompañarlo si algo falla.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "el-enlace",
+          "title": "1. El enlace que llega al participante",
+          "paragraphs": [
+            "Cuando un trámite necesita que el comprador, el vendedor o cualquier otro participante haga algo (autorizar el uso de sus datos, subir un documento o firmar), FLIT le envía un correo con un enlace propio.",
+            "Ese enlace es personal e intransferible: la persona no necesita crear usuario ni contraseña, solo abrirlo desde su celular o computador. Si el participante te pregunta si necesita «una cuenta en FLIT», la respuesta es no."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "dentro-del-portal",
+          "title": "2. Qué encuentra dentro del portal",
+          "paragraphs": [
+            "Al abrir el enlace, el participante primero ve la autorización de tratamiento de datos personales (conforme a la Ley 1581 de 2012). Debe leerla, marcar la casilla de aceptación y pulsar «Aceptar y continuar» antes de ver el resto de pasos.",
+            "Después de aceptar, el portal le muestra sus pasos pendientes:"
+          ],
+          "bullets": [
+            "Documentos: subir los documentos que el gestor solicitó (en PDF, JPG, PNG o WEBP, hasta 20 MB). Los obligatorios llevan una etiqueta que lo indica; una marca de check confirma que ya se subieron.",
+            "Firma (solo en traspasos): si el trámite lo requiere, el participante encuentra un enlace para firmar la compraventa. Si aún no le aparece el enlace, es porque el gestor todavía no ha solicitado la firma.",
+            "Finalizar: cuando ya completó lo que le corresponde, pulsa «Finalizar mi parte». El portal confirma con un mensaje de «¡Listo!» y desde ahí puede cerrar la página."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "validacion-biometrica",
+          "title": "3. La validación biométrica (otro enlace)",
+          "paragraphs": [
+            "La validación de identidad no ocurre dentro del mismo portal: le llega al participante como un segundo enlace, en otro correo. Ahí le piden 3 fotos: una selfie de su rostro y las dos caras de su cédula (frente y reverso).",
+            "Para que la validación salga bien a la primera, coméntale al participante estos consejos:"
+          ],
+          "bullets": [
+            "Buscar un lugar con buena luz, de frente y sin sombras sobre la cara.",
+            "Quitarse gorra, gafas oscuras o cualquier accesorio que tape el rostro para la selfie.",
+            "Tener la cédula física a la mano y fotografiarla completa, sin brillos ni dedos que tapen los datos."
+          ],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": "Consejo para el gestor",
+              "text": "Si acompañas al participante por teléfono, pídele que primero revise que tenga buena señal y luz antes de tomar las fotos: así evitas que gaste sus intentos disponibles en fotos borrosas."
+            }
+          ]
+        },
+        {
+          "id": "casos-frecuentes",
+          "title": "4. Casos frecuentes",
+          "paragraphs": [],
+          "bullets": [
+            "El enlace del portal o de la biometría ya venció: el participante debe pedirle a la compañía que gestiona el trámite (tu equipo) que le reenvíe un enlace nuevo; el participante no puede generarlo por su cuenta.",
+            "Le rechazaron la foto en la validación biométrica: el sistema le indica el motivo y cuántos intentos le quedan. Repite la foto siguiendo los consejos de buena luz y rostro despejado.",
+            "El documento que subió se ve ilegible o incompleto: pídele que vuelva a fotografiarlo o escanearlo completo, sin brillos ni recortes, y que lo suba de nuevo con «Reemplazar».",
+            "El participante dice que no le ha llegado ningún correo: confírmale al gestor que el correo registrado en el trámite sea el correcto y, si es así, pídele al gestor que reenvíe el enlace desde el trámite."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "5-normativa/1-resolucion-20233040017145-2023",
+      "title": "Resolución 20233040017145 de 2023 (Ministerio de Transporte)",
+      "href": "/manual/5-normativa/1-resolucion-20233040017145-2023",
+      "audience": "Todos",
+      "sectionId": "normativa",
+      "summary": "La norma que habilita los trámites virtuales ante los organismos de tránsito y fija sus requisitos; es la fuente principal que respalda a FLIT.",
+      "primarySource": true,
+      "blocks": [
+        {
+          "id": "ficha",
+          "title": "1. Qué es y por qué respalda a FLIT",
+          "paragraphs": [
+            "Resolución 20233040017145 del 28 de abril de 2023 del Ministerio de Transporte, «por la cual se modifica la Resolución 20223040045295 de 2022 y se dictan disposiciones para la correcta y amplia implementación de la política de Simplificación y racionalización de Trámites». Publicada en el Diario Oficial 52386 del 5 de mayo de 2023; rige desde su publicación (art. 35).",
+            "Su núcleo para FLIT está en el Título 5 (Registro Nacional Automotor): los organismos de tránsito pueden adelantar sus trámites «en modalidad presencial o virtual, ésta última por medio de las plataformas tecnológicas con que cuentan», garantizando radicación por plataforma, liquidación y pago por pasarelas, entrega de documentos digitales, trazabilidad de etapas y «mecanismos de seguridad y confianza digital» (art. 5.1.1, parágrafo 1). Y ningún organismo puede exigir requisitos distintos a los del capítulo (art. 5.1.1)."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": "Fuente principal",
+              "text": "Ante cualquier duda sobre qué exige un trámite o qué puede pedir un organismo, esta resolución es la referencia. El texto completo está enlazado al final de este artículo y desde DR. FLIT → Ayuda → Normativa."
+            }
+          ]
+        },
+        {
+          "id": "identidad",
+          "title": "2. Inscripción y autenticación de identidad (RUNT)",
+          "paragraphs": [
+            "Toda persona natural o jurídica debe estar inscrita en el RUNT para tramitar (art. 5.1.2). La validación y autenticación de identidad «podrá ser realizada de manera virtual, mediante el sistema de autenticación digital dispuesto por el RUNT» conforme a la Registraduría y al Ministerio (art. 5.1.2 par. 2 y 5.1.3 par.). En trámite virtual el organismo «deberá garantizar que el usuario realice la autenticación de identidad a través del sistema RUNT» (art. 5.1.3).",
+            "Quien no pueda comparecer, los representantes legales y quienes residan fuera del país pueden inscribirse a través de un tercero «mediante contrato de mandato» (art. 5.1.2 par. 1). Los organismos que implementen trámites virtuales con identificación RUNT «deberán hacerlo a través de ventanillas virtuales» y el pago puede hacerse por consignación o PSE (art. 5.1.16)."
+          ],
+          "bullets": [
+            "En FLIT: validación biométrica de identidad de cada parte antes de firmar (módulo Identidad), contrato de mandato con mandatario configurado (Mandatos) y radicación por plataforma hacia el organismo."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "virtual",
+          "title": "3. Reglas de la virtualidad",
+          "paragraphs": [],
+          "bullets": [
+            "Reporte al interesado (art. 5.1.10): todo trámite se reporta «mediante correo electrónico o mensaje de datos» al contacto registrado en el RUNT; a personas jurídicas, a la dirección del RUES. En FLIT: correos por cambio de estado y por hito de revocatoria.",
+            "Carpeta digital (art. 5.1.14): en trámite virtual el usuario diligencia digitalmente y anexa los documentos «en el formato que lo requiera la plataforma», que deben archivarse en la carpeta digital del usuario. En FLIT: expediente por trámite con adjuntos y consolidado.",
+            "Errores de digitación (art. 5.1.12): se corrigen en el RUNT «sin que para ello deba mediar acto administrativo de revocatoria», siempre que no afecten la especie venal ni existan trámites posteriores.",
+            "Especies venales (art. 5.1.13): en trámite virtual el usuario decide si recoge la especie venal en el organismo o pide envío a domicilio a su cargo.",
+            "Certificados de tradición digitales y masivos (art. 5.1.11): los organismos deben poder expedirlos por medios electrónicos."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "matricula",
+          "title": "4. Matrícula inicial (art. 5.3.1.1)",
+          "paragraphs": [
+            "Documentos: Formato de Solicitud de Trámite, factura electrónica de venta, certificado individual de aduana y/o declaración de importación según el caso, y «la imagen del código QR; o certificación expedida por el fabricante, ensamblador o importador… o improntas, según corresponda». En trámite virtual el formato se diligencia digitalmente y los documentos se anexan en la plataforma del organismo.",
+            "Preasignación de placa: «Confrontada y validada la información, el sistema RUNT procede a preasignar una placa» de manera automática; luego el usuario paga el impuesto y adquiere el SOAT. «Si en el término de sesenta (60) días contados a partir de la fecha de la preasignación no se ha culminado el proceso de matrícula, el sistema RUNT libera la placa». No procede para remolques y semirremolques.",
+            "Validaciones del organismo: pago de impuestos con la entidad competente, SOAT vigente en el RUNT, paz y salvo por multas (SIMIT), certificado de emisiones cuando aplique y pago de derechos del trámite (numerales 3 a 5)."
+          ],
+          "bullets": [
+            "En FLIT: la ruta de placa (Preasignación → Asignado → «Enviar al OT» con SOAT e impuestos → Entregado) implementa este procedimiento; consulta «Matrícula inicial: ruta de placa»."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "traspaso",
+          "title": "5. Traspaso de propiedad (art. 5.3.2.1 y 5.3.2.14)",
+          "paragraphs": [
+            "Con vendedor y comprador inscritos en el RUNT: Formato de Solicitud de Trámite con el contrato de compraventa (o documento en que conste la transferencia) más QR, certificación del fabricante/ensamblador/importador o improntas; confrontación con el RUNT y con la licencia de tránsito; verificación de medidas judiciales o gravámenes (con levantamiento o autorización del acreedor si los hay); SOAT, revisión técnico-mecánica y paz y salvo SIMIT vigentes; pago de retención en la fuente, impuesto del vehículo y derechos del trámite.",
+            "Validados los requisitos, el organismo registra al nuevo propietario en el RUNT y «expide la nueva licencia de tránsito» (art. 5.3.2.14). Si el propietario es un establecimiento bancario o compañía de financiamiento, solo se valida el paz y salvo del locatario."
+          ],
+          "bullets": [
+            "En FLIT: actores del trámite, consultas RUNT/SIMIT, prenda (inscripción o levantamiento, sección 13), documento de transferencia y contrato de mandato; el organismo aprueba y adjunta la Licencia de Tránsito desde la bandeja."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "improntas",
+          "title": "6. Improntas y código QR",
+          "paragraphs": [
+            "En todos los trámites del Título 5 la identificación del vehículo se acredita con la imagen del código QR, la certificación del fabricante, ensamblador o importador, o las improntas de motor, serie, chasis o VIN. «Cuando el trámite se adelante de manera virtual, se podrá aceptar la imagen de las improntas, adhesivos, fotoimprontas o del código QR». Para vehículos con QR, la imagen se acepta «en lugar de la impronta»."
+          ],
+          "bullets": [
+            "En FLIT: el Certificado de Improntas Digitales que emite el Super Admin y la firma digital que verifica el organismo en «Validar impronta»."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "otros",
+          "title": "7. Otros trámites que la resolución regula",
+          "paragraphs": [
+            "Licencias de conducción (sección 2 del capítulo 2), traslado de matrícula (5.3.4), cancelación de matrícula (sección 5), cambio de características y conversión a gas (secciones 6 y 7), regrabación de guarismos, cambio de servicio, inscripción o levantamiento de limitación o gravamen a la propiedad (sección 13) y cambio de locatario en leasing (art. 5.1.15). Los tipos de trámite parametrizados en FLIT («Otros») siguen los requisitos de estas secciones."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Este artículo resume; el texto vinculante es el PDF enlazado abajo. Ante diferencias entre una pantalla de FLIT y la norma, prevalece la norma: repórtalo a soporte para corregir la plataforma."
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "title": "Resolución 20233040017145 de 2023 — texto completo (PDF, 57 páginas)",
+          "href": "/legal/resolucion-20233040017145-2023-mintransporte.pdf",
+          "kind": "pdf",
+          "ref": "Diario Oficial 52386 · 05/05/2023"
+        },
+        {
+          "title": "Publicación en el Régimen Legal de Bogotá (Secretaría Jurídica Distrital)",
+          "href": "https://www.alcaldiabogota.gov.co/sisjur/normas/Norma1.jsp?i=155039",
+          "kind": "web",
+          "ref": null
+        }
+      ]
+    },
+    {
+      "slug": "1-gestor/1-inicio",
+      "title": "Inicio (Dashboard)",
+      "href": "/manual/1-gestor/1-inicio",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Qué ves al entrar como Gestor, para qué sirve el Dashboard y cómo orientarte.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué es el Inicio",
+          "paragraphs": [
+            "El botón central flotante (FAB) «Inicio Trámites» abre el Dashboard. Es tu punto de partida después de iniciar sesión.",
+            "Arriba encontrarás un carrusel: un slide de bienvenida fijo y, detrás, los banners que la plataforma tenga activos para tu compañía (novedades, avisos, campañas). Tú no los administras; si no hay ninguno activo, el carrusel solo muestra el slide de bienvenida.",
+            "Debajo verás el resumen operativo de tu compañía: volumen de trámites, distribución por estado y seguimiento operativo. No aparece como píldora del dock inferior; siempre está disponible desde el FAB.",
+            "El volumen se resume en cinco tarjetas: Total trámites, Matrículas, Traspasos, Otros Trámites (cualquier trámite que no sea matrícula ni traspaso) y Completados."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "modulos-activos",
+          "title": "2. Tarjetas de módulo (Comparendos y Resoluciones)",
+          "paragraphs": [
+            "Si tu compañía activó los módulos Comparendos y/o Resoluciones (configuración de tu Administrador), verás una tarjeta por cada uno con su propio resumen. Si ninguno está activo, esas tarjetas no aparecen."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "cuando-usar",
+          "title": "3. Cuándo usarlo",
+          "paragraphs": [],
+          "bullets": [
+            "Antes de abrir Trámites, para tener contexto del día o la semana.",
+            "Para verificar que entraste con la compañía correcta (su nombre aparece en la barra superior).",
+            "Como atajo de regreso desde cualquier módulo: un clic en el FAB te devuelve al inicio."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "alcance-red",
+          "title": "4. Selector de alcance de red (solo cabezas de red)",
+          "paragraphs": [
+            "Si tu compañía es cabeza de una red (Concesión o Marca Blanca), verás un selector para elegir entre «Mi compañía» y «Toda la red» (o un cliente puntual). Con la red elegida, los indicadores del Inicio cambian a los agregados de tus clientes; tu preferencia se recuerda la próxima vez que entres."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "permisos",
+          "title": "5. Permisos y visibilidad",
+          "paragraphs": [
+            "Si tu rol no tiene permiso para ver el Inicio, el FAB sigue visible pero algunos widgets pueden estar vacíos o no cargar datos."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Si eres Radicador (operador típico), tu foco diario será Trámites; el Dashboard es complementario."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/2-crear-tramite",
+      "title": "Cómo crear un trámite",
+      "href": "/manual/1-gestor/2-crear-tramite",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Guía paso a paso para iniciar un trámite desde el módulo Trámites.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "antes",
+          "title": "1. Antes de empezar",
+          "paragraphs": [
+            "Confirma que tu compañía tiene habilitado el tipo de trámite (lo define su configuración operativa). Si la matrícula inicial está apagada, no verás esa modalidad al crear.",
+            "Necesitas permiso tramites.create además de tramites.read. Sin create solo puedes consultar trámites existentes."
+          ],
+          "bullets": [
+            "Ten a mano documentos de identidad de las partes (vendedor, comprador, mandante, etc.).",
+            "Para traspaso: placa del vehículo. Para matrícula: VIN.",
+            "Verifica conexión estable: consultas RUNT/SIMIT pueden bloquear pasos si fallan."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "pasos",
+          "title": "2. Pasos para crear",
+          "paragraphs": [],
+          "bullets": [
+            "Abre Trámites desde el dock inferior.",
+            "Pulsa «Nuevo trámite». Antes de continuar debes aceptar los Términos y Condiciones (casilla con enlace al documento vigente); la aceptación queda registrada con el trámite.",
+            "El sistema crea una instancia en estado Borrador y te lleva al asistente; el tipo de trámite se elige dentro del paso 1.",
+            "Completa cada paso que el servidor expone: actores, datos del vehículo, consultas externas (RUNT, SIMIT, RUES…), adjuntos, validación de identidad si aplica.",
+            "Revisa los bloqueos en la barra del asistente. Solo cuando estén resueltos podrás firmar o radicar."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": "Carga masiva",
+              "text": "Junto a «Exportar» hay un botón «Carga masiva» para crear varios trámites de una sola vez desde un Excel. Consulta el artículo «Carga masiva de trámites» para el paso a paso completo."
+            }
+          ]
+        },
+        {
+          "id": "wizard",
+          "title": "3. Cómo funciona el asistente",
+          "paragraphs": [
+            "Los pasos, campos y reglas que ves en el asistente los define el sistema según el tipo de trámite, el organismo de tránsito y lo que ya completaste; no son siempre los mismos ni algo que el gestor pueda reordenar.",
+            "Matrícula y traspaso difieren en actores, consultas y documentos. No asumas que un trámite anterior sirve como plantilla exacta."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": "Importante",
+              "text": "No cierres el navegador con datos sin guardar. Los campos se persisten por paso, pero un bloqueo de red puede dejar un paso incompleto."
+            }
+          ]
+        },
+        {
+          "id": "despues",
+          "title": "4. Después de radicar",
+          "paragraphs": [
+            "Un traspaso u otro trámite con placa pasa a Entregado (en revisión del organismo) y de ahí a Aprobado, Rechazado o En subsanación.",
+            "Una matrícula inicial puede tomar la ruta de placa: Preasignación → Asignado → Entregado. Consulta «Matrícula inicial: ruta de placa» para saber qué te corresponde en cada estado.",
+            "Haz seguimiento desde el listado (búsqueda por radicado, placa o VIN) o pregúntale a DR. FLIT."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/3-documentos-tramite",
+      "title": "Documentos que necesitas para un trámite",
+      "href": "/manual/1-gestor/3-documentos-tramite",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Cómo conocer los documentos exigidos, dónde cargarlos y buenas prácticas.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "donde",
+          "title": "1. Dónde se definen los requisitos",
+          "paragraphs": [
+            "Los documentos que te pide el sistema salen del catálogo del tipo de trámite y pueden tener ajustes propios de cada Organismo de Tránsito.",
+            "En el paso Documentos del asistente, la sección de adjuntos lista los obligatorios y opcionales antes de permitir radicación. Lo que no aparece ahí no debería pedírtelo el sistema para ese trámite."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "comunes",
+          "title": "2. Documentos frecuentes por contexto",
+          "paragraphs": [],
+          "bullets": [
+            "Identificación: cédula de ciudadanía o documento equivalente de propietario, comprador o apoderado.",
+            "Matrícula inicial: factura o documento de origen, SOAT si aplica en el paso, mandato cuando actúa un tercero.",
+            "Traspaso: contrato o soporte de compraventa, mandato de traspaso, documentos de prenda si hay gravamen.",
+            "FUR: el sistema puede generarlo; revisa casillas según Resolución Mintransporte (Anexo 46)."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "carga",
+          "title": "3. Cómo cargar adjuntos",
+          "paragraphs": [
+            "Usa el paso Documentos del asistente para subir cada archivo. Formatos típicos: PDF, JPG, PNG.",
+            "Un nombre descriptivo ayuda al revisor del organismo. Evita fotos borrosas o PDFs protegidos con contraseña."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Si el OT añadió un requisito específico en su hub, lo verás reflejado en la instancia aunque no esté en este manual genérico."
+            }
+          ]
+        },
+        {
+          "id": "errores",
+          "title": "4. Errores comunes",
+          "paragraphs": [],
+          "bullets": [
+            "Documento ilegible → vuelve a escanear o fotografiar con buena luz.",
+            "Persona equivocada en el mandato → verifica actores antes de adjuntar.",
+            "Falta un obligatorio → el asistente bloquea el avance hasta que lo completes."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/4-prevalidacion",
+      "title": "Cómo enviar una prevalidación",
+      "href": "/manual/1-gestor/4-prevalidacion",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Flujo de validación de identidad biométrica antes o durante la radicación.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué es la prevalidación",
+          "paragraphs": [
+            "Es la verificación de identidad de las partes del trámite (propietario, comprador, mandatario, etc.) mediante proveedor biométrico (Kyverum). Algunos tipos de trámite la exigen como puerta antes de radicar."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "flujo",
+          "title": "2. Flujo general",
+          "paragraphs": [],
+          "bullets": [
+            "Desde el wizard, en el paso de identidad, se invita a cada parte (enlace o QR según configuración).",
+            "La persona completa el flujo biométrico en el dispositivo indicado.",
+            "El estado vuelve al trámite: pendiente, aprobado, rechazado o vencido.",
+            "Con todas las identidades aprobadas, el wizard puede quitar el bloqueo correspondiente."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "estados",
+          "title": "3. Estados y qué hacer",
+          "paragraphs": [],
+          "bullets": [
+            "Pendiente: reenvía el enlace o espera a que la persona complete el proceso.",
+            "Aprobado: continúa con el wizard normalmente.",
+            "Rechazado: revisa el motivo; puede requerir nuevo intento o documentación soporte.",
+            "Vencido: genera una nueva invitación si el sistema lo permite."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "También puedes consultar validaciones desde el módulo Identidad (validaciones) si tu rol tiene permiso validaciones.read."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/5-seguimiento",
+      "title": "Seguimiento, búsqueda y estados del trámite",
+      "href": "/manual/1-gestor/5-seguimiento",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Cómo encontrar un trámite (radicado, placa, VIN, filtros), qué significa cada estado y qué hacer en cada uno.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "buscar",
+          "title": "1. Buscar en el listado",
+          "paragraphs": [
+            "En Trámites, la barra «Buscar radicado (FT1-0000012), placa, VIN...» busca en el servidor sobre todo el universo de tu compañía, no solo sobre la página visible. El radicado casa exacto (con o sin prefijo: FT1-0000012 o solo 12); placa, VIN, nombre o documento de las partes, organismo y compañía casan por texto parcial.",
+            "«Periodo» acota por fecha de radicación (Hoy, Últimos 7/30/90 días, Mes actual, Mes anterior o Rango propio). «+ Filtro» abre las Consultas: eliges un campo del catálogo, un operador («es», «no es», «contiene», «está vacío», «tiene dato») y los valores. Puedes pegar una columna de Excel con varias placas o radicados: un valor por línea."
+          ],
+          "bullets": [
+            "Las tarjetas por estado sobre la tabla filtran con un clic y cuentan el universo completo, no la página. Solo aparecen los estados de la pestaña activa: en Traspaso y Otros trámites no hay Preasignación ni Asignado.",
+            "«Búsqueda rápida», debajo de las tarjetas, trae consultas frecuentes con un clic: en subsanación, rechazados desde preasignación, más de 5 o 10 días en gestión, sin firmas, mis trámites (los que tienes a tu cargo hoy), faltantes por aprobar, sin documento y pausados. No cambia lo que tengas en «+ Filtro».",
+            "Los números de las tarjetas se actualizan solos cada minuto; la tabla no se mueve. Si cambió la tarjeta que estás viendo, aparece «Hay cambios — Actualizar».",
+            "La estrella marca un trámite como prioritario; el filtro «solo prioritarios» los aísla y, sin orden explícito, van primero.",
+            "«Exportar» genera un Excel con TODAS las filas que cumplen los filtros actuales, no solo las de pantalla.",
+            "El selector de columnas te deja elegir qué ver; la elección se guarda por usuario."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "estados",
+          "title": "2. Estados de negocio y qué hacer",
+          "paragraphs": [
+            "El chip de estado es el mismo en el listado, el detalle, la línea de tiempo y los correos."
+          ],
+          "bullets": [
+            "Borrador: editable; complétalo y radícalo desde el detalle. Puedes anularlo si no va a continuar.",
+            "Preparado: datos completos, listo para radicar.",
+            "Preasignación (solo matrícula inicial en ruta larga): radicado sin placa; el organismo debe asignarla. Aún no está en su cola de decisión.",
+            "Asignado: el organismo ya asignó la placa. Te toca gestionar SOAT e impuestos y pulsar «Enviar al OT» (acción de la fila).",
+            "Entregado: en revisión del organismo de tránsito.",
+            "En subsanación: el organismo pide correcciones; corrige lo indicado desde el detalle y reenvía.",
+            "Aprobado: decisión final favorable. Solo el Administrador de la compañía puede pedir revocatoria dentro de la ventana permitida.",
+            "Rechazado: decisión desfavorable; revisa el motivo en el detalle. El distintivo «Rechazado preasignación» indica que el organismo rechazó antes de asignar la placa.",
+            "Revocado: el organismo aprobó una solicitud de revocatoria; libera placa y VIN y deja histórica la documentación.",
+            "Anulado: cerrado por la compañía antes de la decisión del organismo."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Las acciones del menú de cada fila cambian con el estado: «Enviar al OT» solo aparece en Asignado; «Ver historial de la placa» solo si tienes el módulo Historial por placa."
+            }
+          ]
+        },
+        {
+          "id": "detalle",
+          "title": "3. El detalle del trámite",
+          "paragraphs": [
+            "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
+            "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "drflit",
+          "title": "4. Búsqueda con DR. FLIT",
+          "paragraphs": [
+            "Abre el chat flotante y elige buscar por placa, VIN, trámite (radicado) o cliente (nombre o documento). Cada resultado muestra radicado, fecha de radicación, estado con una pista de qué sigue, y abre el detalle. Al buscar por placa también te ofrece el historial completo de esa placa."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/6-ayuda-dr-flit",
+      "title": "Ayuda con DR. FLIT (Gestor)",
+      "href": "/manual/1-gestor/6-ayuda-dr-flit",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Escríbele con tus palabras: responde dudas citando este manual, busca trámites y radica casos de soporte sin salir de la plataforma.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "abrir",
+          "title": "1. Cómo abrir DR. FLIT y hablarle",
+          "paragraphs": [
+            "El botón flotante del asistente está disponible en toda la aplicación cuando estás autenticado. Al abrirlo verás un saludo que te invita a escribir tu duda con tus propias palabras — no necesitas elegir ningún menú: escribe «¿cómo creo un traspaso?» o «me sale un error al firmar» y DR. FLIT entiende qué necesitas.",
+            "Debajo del saludo tienes atajos: los chips de Gestión (Placa, VIN, Trámite, Cliente) para búsquedas directas, y la lista de Ayuda (Necesito ayuda, Normativa, Soporte).",
+            "La conversación se conserva al cambiar de módulo y al cerrar el panel con la X. Solo «Terminar chat» la borra."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "autorizacion",
+          "title": "2. Autorización de datos (una sola vez)",
+          "paragraphs": [
+            "La primera vez que uses el chat con inteligencia artificial o vayas a radicar un caso de soporte, DR. FLIT te pide autorizar el tratamiento de tus datos (Ley 1581 de 2012). Pulsa «Ver detalle» si quieres leer el texto completo y «Acepto y continuar» para seguir con lo que estabas haciendo."
+          ],
+          "bullets": [
+            "Si eliges «Ahora no», nada se envía y puedes seguir usando Gestión, Necesito ayuda y Normativa sin inteligencia artificial; la conversación no se borra.",
+            "Solo se pide una vez: aceptada la versión vigente, no vuelve a aparecer aunque termines el chat o entres desde otro navegador.",
+            "No escribas datos personales (cédulas, teléfonos) en el chat; para el caso de soporte hay un formulario aparte que los protege."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "dudas",
+          "title": "3. Dudas: respuestas con base en este manual",
+          "paragraphs": [
+            "Escribe tu pregunta y DR. FLIT responde con base en el manual funcional, citando al final los artículos de donde salió la respuesta — tarjetas con enlace directo para abrir la documentación completa. Si la pregunta no es clara, te hace una pregunta de seguimiento; si el manual no tiene la respuesta, te lo dice y te ofrece escalar a soporte."
+          ],
+          "bullets": [
+            "«cómo creo un trámite de traspaso»",
+            "«qué documentos necesito para matrícula»",
+            "«cómo envío prevalidación»",
+            "«qué significa asignado»"
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "El chat con inteligencia artificial tiene un tope diario de mensajes. DR. FLIT te avisa cuando te acercas y, si lo alcanzas, el menú completo sigue funcionando; al día siguiente el chat se reactiva solo."
+            },
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Si el asistente no está disponible, no te quedas sin ayuda: responde el buscador del manual con una «respuesta rápida» y los enlaces a los artículos."
+            }
+          ]
+        },
+        {
+          "id": "gestion",
+          "title": "4. Buscar trámites desde el chat",
+          "paragraphs": [
+            "Pídelo con tus palabras — «busca la placa ABC123», «muéstrame el trámite 12» — y DR. FLIT te lleva directo a la búsqueda de Gestión sin que repitas nada. También puedes usar los chips: Placa, VIN, Trámite (radicado con o sin prefijo) o Cliente (nombre o documento)."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "DR. FLIT busca dentro de tu alcance: tu compañía o, si eres cabeza de red y elegiste «Toda la red» en Trámites, también tus clientes. Y solo sugiere artículos que aplican a tu perfil."
+            }
+          ]
+        },
+        {
+          "id": "soporte",
+          "title": "5. Radicar un caso de soporte sin salir del chat",
+          "paragraphs": [
+            "Cuéntale el problema («me sale un error al firmar un trámite») y DR. FLIT abre el formulario del caso con tus datos ya precargados: correo, compañía y fecha. Tú completas el título, el detalle del error, el resultado que esperabas, con qué frecuencia pasa y la prioridad; si quieres, adjuntas imágenes o PDF."
+          ],
+          "bullets": [
+            "Antes de enviar verás un resumen completo; nada se radica hasta que pulses «Confirmar y radicar caso».",
+            "Al confirmar recibes tu número: «Tu caso #N quedó radicado». El equipo de soporte te responde al correo registrado.",
+            "Si el sistema de soporte no responde en ese momento, verás los canales de contacto (correo de soporte) y podrás «Reintentar» o «Editar el caso» sin perder nada de lo que escribiste."
+          ],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Para incidentes de producción o caídas de RUNT, el caso de soporte es el camino: llega directo al tablero del equipo FLIT con tu descripción y adjuntos."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/7-ruta-placa",
+      "title": "Matrícula inicial: ruta de placa (corta y larga)",
+      "href": "/manual/1-gestor/7-ruta-placa",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Quién decide la ruta de una matrícula inicial, qué estados atraviesa y qué te corresponde hacer en cada uno.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "quien-decide",
+          "title": "1. La ruta la decide el RUNT",
+          "paragraphs": [
+            "Al consultar el vehículo en el paso 1, FLIT lee el historial del RUNT. Si el vehículo ya tiene placa preasignada (registrado), el trámite va por Ruta Corta: la placa y el organismo vienen del RUNT y se muestran en solo lectura; no eliges secretaría ni dígito.",
+            "Si el vehículo no tiene placa, va por Ruta Larga: eliges la secretaría y debes indicar un dígito de preferencia de placa (0-9) o «sin preferencia». El dígito llega al organismo como guía; no garantiza la placa."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Si el organismo que trae el RUNT no está habilitado para tu compañía, el sistema lo indica con el nombre del organismo y no deja continuar hasta resolverlo con tu administrador."
+            }
+          ]
+        },
+        {
+          "id": "estados",
+          "title": "2. Estados de la ruta larga",
+          "paragraphs": [],
+          "bullets": [
+            "Preasignación: radicaste sin placa. El organismo tiene el trámite en su cola de «asignar placa». Tú esperas.",
+            "Asignado: el organismo asignó la placa (recibes correo). Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
+            "Entregado: ya está en la cola de decisión del organismo, como cualquier otro trámite.",
+            "Rechazado con distintivo «Rechazado preasignación»: el organismo rechazó antes de asignar placa; el motivo está en el detalle. Puedes filtrar estos casos con el atajo «Rechazado desde preasignación» de la búsqueda rápida."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "cambios",
+          "title": "3. Qué ya no se hace",
+          "paragraphs": [
+            "El gestor ya no elige placas del inventario del organismo en el paso de firma. Un borrador antiguo con placa elegida a mano la muestra y solo permite quitarla (vuelve a la Ruta Larga)."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/8-identidad",
+      "title": "Identidad: validaciones biométricas",
+      "href": "/manual/1-gestor/8-identidad",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Qué muestra el módulo Identidad, cómo buscar una persona, leer estados y vigencias y desatascar una validación.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué es",
+          "paragraphs": [
+            "El módulo Identidad (píldora «Identidad» del dock) lista todas las validaciones biométricas de tu compañía: las que nacen dentro de un trámite (por cada parte que firma) y las prevalidaciones sueltas que creaste sin trámite.",
+            "Cada fila muestra la persona, su documento completo (tipo y número), correo, estado, score, si el enlace de captura sigue vigente, la vigencia de la validación y el trámite asociado si lo hay."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "buscar",
+          "title": "2. Buscar y filtrar",
+          "paragraphs": [],
+          "bullets": [
+            "Busca por nombre completo o número de cédula.",
+            "Filtra por estado (Aprobadas, En proceso, Rechazadas) desde las tarjetas superiores.",
+            "«Vence en ≤ N días» encuentra validaciones cuya vigencia está por expirar: renuévalas antes de reutilizarlas en un trámite.",
+            "Desde DR. FLIT: Buscar por cliente → «Ver validación de identidad»."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "acciones",
+          "title": "3. Acciones",
+          "paragraphs": [],
+          "bullets": [
+            "«Nueva» crea una prevalidación de persona natural: se envía un enlace de captura al correo indicado y el resultado queda disponible para trámites posteriores.",
+            "Abre una fila para ver el detalle en un panel lateral (drawer): proceso ante el proveedor, reintentos y línea de tiempo del registro.",
+            "«Ver alertas de validación» abre el panel de validaciones atascadas (sin respuesta del proveedor), agrupadas por persona, con opción de reintentar todas de una vez o una por una."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Una validación aprobada tiene vigencia. Al acercarse la fecha, el sistema la marca; una validación vencida no sirve para firmar y hay que repetirla."
+            }
+          ]
+        },
+        {
+          "id": "red",
+          "title": "4. Si tu compañía es cabeza de red",
+          "paragraphs": [
+            "Con el selector de alcance en «Toda la red» o sobre un cliente puntual, ves también las validaciones de tus hijas: esas filas quedan en solo lectura (puedes abrir el detalle, pero no reenviar, editar ni reintentar desde ahí). Crear una prevalidación nueva solo aplica sobre tu propia compañía."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/9-historial-placa",
+      "title": "Historial por placa",
+      "href": "/manual/1-gestor/9-historial-placa",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Todos los trámites que ha tenido una placa dentro de FLIT, en orden cronológico.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Para qué sirve",
+          "paragraphs": [
+            "Responde «qué le ha pasado a esta placa dentro de FLIT»: escribe la placa y obtienes la lista de sus trámites, del más reciente al más antiguo, con tipo, estado, fechas, gestor, organismo, comprador y vendedor.",
+            "Para tu compañía ves solo tus trámites; el Super Admin ve la placa en todas las compañías."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "como-llegar",
+          "title": "2. Cómo llegar",
+          "paragraphs": [],
+          "bullets": [
+            "Dock → Trámites → «Historial por placa» (si tu rol tiene el módulo).",
+            "Desde una fila del listado de trámites: menú de acciones → «Ver historial de la placa».",
+            "Desde DR. FLIT: tras buscar por placa, pulsa «Ver historial completo de la placa»."
+          ],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Una placa sin trámites no es un error: la vista muestra un estado vacío con la placa consultada."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/10-revocatorias",
+      "title": "Solicitar la revocatoria de un trámite aprobado",
+      "href": "/manual/1-gestor/10-revocatorias",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Quién puede pedir la revocatoria de un trámite aprobado, con qué condiciones, cómo se solicita y cómo se sigue.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "quien",
+          "title": "1. Quién y cuándo",
+          "paragraphs": [
+            "Solo el Administrador de la compañía puede solicitar la revocatoria (el operador ve el botón pero no puede accionarlo). El trámite debe estar Aprobado, haber sido creado en FLIT y estar dentro de la ventana de revocatoria que configura cada organismo; vencida la ventana, el botón se deshabilita con ese motivo."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "como",
+          "title": "2. Cómo solicitarla",
+          "paragraphs": [],
+          "bullets": [
+            "En el detalle del trámite pulsa «Solicitar revocatoria».",
+            "Paso 1: lee la advertencia. La solicitud no se puede retirar una vez enviada.",
+            "Paso 2: explica el motivo, adjunta el documento de soporte en PDF y confirma las dos casillas (información correcta; entiendo que no se puede retirar).",
+            "«Enviar solicitud». El trámite sigue Aprobado, pero recibe el distintivo «Revocatoria solicitada»."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Esta acción no tiene reversa. Si el organismo la aprueba, el trámite pasa a Revocado: se liberan placa y VIN y la documentación queda histórica."
+            }
+          ]
+        },
+        {
+          "id": "seguimiento",
+          "title": "3. Seguimiento",
+          "paragraphs": [
+            "El sub-estado se ve como badge en el listado y el detalle: Revocatoria solicitada → Revocatoria en revisión → Revocatoria aprobada o rechazada. Cada hito envía correo a la compañía.",
+            "La vista «Revocatorias» agrupa todos los trámites de tu compañía con solicitud en cualquier sub-estado, con filtros por fecha, organismo y estado. Hoy se abre escribiendo la dirección /tramites/revocatorias directamente en el navegador; el listado de Trámites todavía no tiene un botón que te lleve ahí."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "despues",
+          "title": "4. Qué pasa después de enviarla",
+          "paragraphs": [
+            "La solicitud queda «En revisión» hasta que el organismo de tránsito la decide desde su propia bandeja: no hay una fecha fija de respuesta, depende de cada organismo."
+          ],
+          "bullets": [
+            "Si el organismo la aprueba: el trámite pasa a Revocado, se liberan la placa y el VIN para un trámite nuevo, y toda la documentación queda histórica (consultable, pero ya no editable).",
+            "Si el organismo la rechaza: el trámite vuelve a Aprobado tal como estaba; el motivo del rechazo queda visible en el detalle."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/11-reportes",
+      "title": "Reportes y analíticas",
+      "href": "/manual/1-gestor/11-reportes",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Qué responde cada pestaña de Reportes y cómo programar informes y alertas.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "reportes",
+          "title": "1. Reportes y Analíticas",
+          "paragraphs": [
+            "Píldora «Reportes» del dock. Elige el rango de fechas y navega por pestañas; cada una aparece solo si tu rol tiene el permiso correspondiente (algunas compañías no habilitan todas):"
+          ],
+          "bullets": [
+            "Resumen general: volumen por familia (Matrículas, Traspasos, Otros) y tiempos: el de tu equipo (creación → entrega) y el del organismo (entrega → decisión).",
+            "Operación / Trámites: trámites creados por mes y categoría, y embudo de estados.",
+            "Organismo de Tránsito: entregados por organismo y por tipo de trámite.",
+            "Uso del aplicativo: actividad de los usuarios en la plataforma.",
+            "Productividad: rendimiento por gestor.",
+            "Consultas personalizadas: arma tu propio cruce con la gramática de Consultas (campo, operador, valores) y guárdalo."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Si no ves ninguna pestaña, pide a tu Administrador que te asigne acceso a alguna de Reportes."
+            }
+          ]
+        },
+        {
+          "id": "programacion",
+          "title": "2. Programación y alertas",
+          "paragraphs": [
+            "El botón «Programación y alertas» (visible con el permiso correspondiente) abre un panel con dos secciones:"
+          ],
+          "bullets": [
+            "Informes programados: elige un tipo de reporte, la frecuencia (diaria, semanal o mensual), el formato (Excel o PDF) y hasta 10 correos destinatarios; el sistema te lo envía automáticamente.",
+            "Alertas: define una condición sobre un indicador (por ejemplo, tasa de rechazo o trámites atascados) y un umbral; cuando se cruza, se notifica a los correos que configures. La misma sección guarda el historial de disparos anteriores."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "detallados",
+          "title": "3. Reportes Detallados (otro módulo)",
+          "paragraphs": [
+            "«Reportes Detallados» es una píldora aparte del dock, no una pestaña de Reportes. Sirve para segmentar trámite a trámite por persona, transformación, leasing u organismo. Consulta el artículo «Reportes Detallados» para el detalle."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "alcance",
+          "title": "4. Alcance y exportación",
+          "paragraphs": [
+            "Los reportes miran tu compañía. Si eres Administrador de una cabeza de red (concesión o marca blanca) y eliges «Toda la red» o un cliente en el selector de alcance, la analítica cambia con él; algunas exportaciones están disponibles solo para la compañía propia.",
+            "Toda exportación a Excel usa el mismo formato de fecha de la interfaz (DD/MM/YYYY HH:mm, hora de Colombia)."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/12-usuarios",
+      "title": "Usuarios de la compañía",
+      "href": "/manual/1-gestor/12-usuarios",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Las pestañas del módulo Usuarios, cómo invitar y gestionar personas, y qué es Clientes ICT.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "pestanas",
+          "title": "1. Las pestañas del módulo",
+          "paragraphs": [
+            "Píldora «Usuarios» del dock (visible para el Administrador de la compañía). Según tu perfil y permisos verás hasta tres pestañas:"
+          ],
+          "bullets": [
+            "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
+            "Roles y permisos: consulta qué puede hacer cada rol. Para tu perfil es de solo lectura; los roles del sistema los crea y edita el equipo FLIT (Super Admin).",
+            "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 4)."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "invitar",
+          "title": "2. Invitar un usuario",
+          "paragraphs": [
+            "En la pestaña Usuarios, «Invitar usuario»: nombre, correo, perfil y roles que aplican a tu compañía. La persona recibe un enlace de activación por correo; hasta que lo use, la fila queda en «Onboarding» y puedes reenviar o cancelar la invitación."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "gestionar",
+          "title": "3. Gestionar usuarios existentes",
+          "paragraphs": [
+            "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT."
+          ],
+          "bullets": [
+            "Editar: cambia nombre, perfil o roles.",
+            "Restablecer contraseña: envía instrucciones de cambio al correo del usuario.",
+            "Suspender: bloquea el acceso temporalmente; puedes reactivarlo cuando corresponda.",
+            "Desactivar: bloquea el acceso de forma indefinida.",
+            "Último ingreso: te dice quién no ha vuelto a entrar.",
+            "En la tabla, «Perfil» dice a qué tipo de cuenta pertenece la persona (Gestor, OT o FLIT) y «Rol» qué puede hacer. El administrador se distingue con «Gestor · Admin» (u «OT · Admin» en un organismo); «Fecha» es el día en que se creó el usuario."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "roles",
+          "title": "4. Roles y permisos (solo lectura)",
+          "paragraphs": [
+            "Consulta los roles disponibles para tu compañía y qué incluye cada uno. Crear, editar o desactivar roles del sistema es exclusivo del Super Admin; si necesitas un ajuste, contáctalo."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "ict",
+          "title": "5. Clientes ICT (si tu compañía integra con terceros)",
+          "paragraphs": [
+            "Son credenciales que usan integraciones externas para registrar pre-trámites en tu nombre. Cada cliente tiene un usuario y un secreto que el sistema genera y muestra una sola vez (no se puede recuperar después); si lo pierdes, usa «Regenerar secreto»."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/13-carga-masiva",
+      "title": "Carga masiva de trámites",
+      "href": "/manual/1-gestor/13-carga-masiva",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Cómo crear varios trámites a la vez desde un Excel, leer el resultado y corregir errores.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "donde",
+          "title": "1. Dónde está",
+          "paragraphs": [
+            "En Trámites, junto al botón «Exportar», está «Carga masiva». Se abre un modal con dos pestañas: «Cargar archivo» y «Resultados» (para ver en qué quedó un lote que subiste antes)."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "El botón aparece deshabilitado con el motivo «La compañía tiene bloqueada la creación de trámites» si tu Administrador bloqueó la creación de trámites para la compañía. Mientras eso siga así, tampoco podrás crear trámites uno por uno."
+            }
+          ]
+        },
+        {
+          "id": "plantilla",
+          "title": "2. Descarga la plantilla",
+          "paragraphs": [],
+          "bullets": [
+            "Elige el tipo de trámite (Matrícula o Traspaso, según lo que ofrezca tu compañía) y pulsa «Descargar plantilla».",
+            "El Excel trae una hoja de instrucciones y listas desplegables para los campos que las necesitan.",
+            "No cambies ni muevas las columnas de la primera fila: son las que el sistema usa para validar el archivo al subirlo.",
+            "Puedes cargar hasta el máximo de filas por archivo que indica el propio modal."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "subir",
+          "title": "3. Diligencia y sube el archivo",
+          "paragraphs": [
+            "Completa una fila por trámite con los datos de vehículo y actores, y guarda el archivo en formato .xlsx (no cambies la extensión).",
+            "Selecciona el archivo y pulsa «Procesar archivo». No necesitas esperar en la pantalla: el sistema encola el lote y lo procesa en segundo plano, fila por fila (cada fila hace sus propias consultas, así que un lote grande tarda). Puedes cerrar la ventana y seguir trabajando; el resultado completo aparece luego en la pestaña Resultados."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "resultados",
+          "title": "4. Resultado por fila y cómo corregir",
+          "paragraphs": [
+            "En la pestaña Resultados eliges el lote (por tipo, fecha y nombre de archivo) y ves, mientras el lote sigue en proceso, cuántas filas van completadas del total.",
+            "Cuando termina, verás el conteo de creados y no creados, y una tabla con cada fila: el vehículo (placa o VIN), el resultado y, si no se creó, el motivo exacto (por ejemplo: datos de contacto incompletos, vehículo no encontrado en el RUNT, porcentajes de propiedad que no suman 100, o ya existe un trámite en proceso para ese vehículo en tu empresa).",
+            "Cada fila creada te lleva directo al trámite (Borrador) con un clic; ya puedes seguirlo desde ahí. Las filas con error no crean nada: corrige el dato en tu Excel y vuelve a cargar solo esas filas en un lote nuevo."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "casos",
+          "title": "5. Casos frecuentes",
+          "paragraphs": [],
+          "bullets": [
+            "Subiste un archivo con otra extensión (por ejemplo .xls o .csv): el sistema no lo acepta; guárdalo de nuevo como .xlsx.",
+            "Cambiaste el orden o el nombre de una columna: el archivo puede fallar por completo al subirlo. Descarga la plantilla otra vez y copia tus datos ahí.",
+            "Una fila de traspaso trae varios actores y el motivo dice a cuál de ellos le falta el dato (el detalle entre paréntesis identifica el documento de la persona).",
+            "El lote lleva mucho tiempo «en proceso»: no hace falta quedarte esperando; cierra la ventana y vuelve más tarde a la pestaña Resultados."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "1-gestor/14-reportes-detallados",
+      "title": "Reportes Detallados",
+      "href": "/manual/1-gestor/14-reportes-detallados",
+      "audience": "Gestor",
+      "sectionId": "gestor",
+      "summary": "Qué es Reportes Detallados, cuándo usarlo en vez de Reportes y cómo entrar.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué es",
+          "paragraphs": [
+            "Reportes Detallados es un módulo aparte (píldora propia del dock, no una pestaña de Reportes) para consultar tus trámites trámite a trámite, en una grilla filtrable y exportable, en vez de ver solo totales agregados.",
+            "Puedes segmentar por persona (documento o nombre), tipo y categoría de trámite, estado, radicado, organismo de tránsito, si el trámite tiene una transformación (por ejemplo, cambio de características del vehículo) y si es un trámite de leasing. Por defecto muestra los últimos 30 días."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Arriba de la grilla hay indicadores de cabecera con los totales del filtro aplicado."
+            }
+          ]
+        },
+        {
+          "id": "cuando-usar",
+          "title": "2. Cuándo usarlo frente a Reportes",
+          "paragraphs": [],
+          "bullets": [
+            "Usa Reportes cuando necesites tendencias, volúmenes y tiempos agregados (por mes, por organismo, por gestor).",
+            "Usa Reportes Detallados cuando necesites identificar trámites puntuales que cumplen una condición específica (por ejemplo, todos los trámites de leasing con transformación pendientes en un organismo) para exportarlos y trabajarlos fila por fila."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "entrar",
+          "title": "3. Cómo entrar",
+          "paragraphs": [
+            "Píldora «Reportes Detallados» del dock, visible si tu rol tiene el permiso correspondiente. Si eres Administrador de una cabeza de red, el mismo selector de alcance de Trámites te deja consultar «Toda la red» o un cliente puntual."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "consejos",
+          "title": "4. Consejos",
+          "paragraphs": [],
+          "bullets": [
+            "Acota primero el rango de fechas: la grilla puede crecer rápido si tu compañía maneja mucho volumen.",
+            "Exporta a Excel cuando necesites compartir el detalle fuera de la plataforma; usa el mismo permiso de exportación que el resto de reportes.",
+            "Si buscas una persona puntual, el filtro por documento es más preciso que el de nombre."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/13-inicio",
+      "title": "Inicio (Panel del Organismo)",
+      "href": "/manual/2-ot/13-inicio",
+      "audience": "Organismo de Tránsito",
+      "sectionId": "ot",
+      "summary": "Qué muestra el panel al entrar como organismo: la cola de trabajo, sus indicadores y cómo priorizar el día.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-ves",
+          "title": "1. Qué ves al entrar",
+          "paragraphs": [
+            "Con rol de organismo de tránsito, al iniciar sesión entras directo a «Tu cola de trabajo»: no es el panel del gestor, porque aquí no se mide producción de una empresa sino el trabajo pendiente del organismo.",
+            "Arriba rota un carrusel de mensajes: el primero siempre es fijo y resume tu cola en palabras («Tienes N trámites esperando tu decisión, M llevan más de 7 días esperando» y tu mediana de decisión de hoy); detrás pueden aparecer los banners activos que publique el equipo FLIT. Los datos son del día calendario de Bogotá."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "indicadores",
+          "title": "2. Los cuatro indicadores del panel",
+          "paragraphs": [
+            "Junto al carrusel, cuatro tarjetas resumen tu situación de un vistazo. Con más de cero trámites detrás, la tarjeta es un enlace: clic y ves la lista exacta que la compone."
+          ],
+          "bullets": [
+            "Esperan mi decisión: entregados que necesitan que tú apruebes o rechaces.",
+            "Pendientes en total: incluye también lo que está esperando a un tercero (placa, SOAT, impuestos o al cliente).",
+            "Entregados hoy: lo que te llegó en la jornada de hoy.",
+            "Tiempo mediano de decisión: de los últimos 30 días. Si aún no has decidido nada en la ventana, dice «Sin decisiones aún» en vez de mostrar un número que no existe."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "colas",
+          "title": "3. En qué está esperando cada trámite",
+          "paragraphs": [
+            "Debajo, «En qué está esperando cada trámite» reparte lo pendiente en tres colas. Solo una es tu turno; las otras dos dependen de alguien más:"
+          ],
+          "bullets": [
+            "Por revisar: espera tu decisión. Es la única de las tres donde el atraso es tuyo.",
+            "Esperando asignar placa: matrícula inicial en ruta larga, radicada sin placa. Esperas a que le asignes una (o a que el gestor la pida).",
+            "En espera del cliente: SOAT, impuestos o un trámite que la empresa pausó. No requiere que tú actúes; solo monitorea."
+          ],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Cada cola con trámites es clic-able: abre el detalle exacto de esos trámites, con los mismos filtros con los que se calculó la tarjeta."
+            }
+          ]
+        },
+        {
+          "id": "antiguedad",
+          "title": "4. Antigüedad de lo pendiente",
+          "paragraphs": [
+            "«Antigüedad de lo pendiente» reparte el mismo total en cuatro tramos: 0–1 día, 2–3 días, 4–7 días y más de 7 días. El último se resalta cuando tiene algo: es la señal de que algo se está estancando."
+          ],
+          "bullets": [
+            "Un tramo con trámites también abre su detalle al hacer clic.",
+            "Un tramo en cero no es un enlace: no hay lista vacía que mostrar."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "actividad",
+          "title": "5. Actividad reciente",
+          "paragraphs": [
+            "Debajo de la cola, dos tarjetas más miran los últimos 14 días: «Actividad» (radicados, aprobados y rechazados por día) y «En qué quedó lo recibido» (una dona con Aprobados, Rechazados —con o sin subsanación abierta—, Sin decisión —en revisión, esperando placa o esperando al cliente—, Revocados y Anulados). Es el pulso reciente, no la cola de ahora mismo."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "prioridad",
+          "title": "6. Cuándo mirarlo y cómo priorizar el día",
+          "paragraphs": [
+            "Entra aquí antes de abrir la bandeja: en un vistazo sabes si hay algo urgente antes de perder tiempo filtrando manualmente."
+          ],
+          "bullets": [
+            "Empieza por «Por revisar»: es la única cola que depende de ti.",
+            "Dentro de «Por revisar», prioriza lo que ya aparece en «Más de 7 días» en Antigüedad: es lo que más se está envejeciendo.",
+            "«Esperando asignar placa» y «En espera del cliente» no exigen acción inmediata, pero conviene revisarlas si llevan varios días sin moverse."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": "Si algo no carga",
+              "text": "Un fallo de carga se avisa con un mensaje y un botón «Reintentar»; el panel nunca muestra ceros para disimular un error, porque una cola con problemas no debe leerse como una cola sana."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/1-tramites-bandeja",
+      "title": "Bandeja de trámites (OT)",
+      "href": "/manual/2-ot/1-tramites-bandeja",
+      "audience": "Organismo de Tránsito",
+      "sectionId": "ot",
+      "summary": "Revisar, filtrar y decidir trámites radicados por compañías cliente; asignar, corregir y liberar placas.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "acceso",
+          "title": "1. Cómo entrar y qué muestra",
+          "paragraphs": [
+            "Con rol de administrador del organismo, «Trámites» en el dock abre la bandeja del hub. Solo ves trámites que las compañías ya te entregaron: Borrador, Preparado y Anulado no llegan aquí.",
+            "La cabecera cuenta el universo completo por clase de trabajo: Preasignación (radicados sin placa), Asignado (con placa; el gestor gestiona SOAT e impuestos), Entregado (esperando tu decisión), Aprobado, Solicitud de revocatoria, Rechazado (desde entregado o desde preasignación) y Revocado. Las pestañas Todos, Matrículas, Traspaso y Otros trámites acotan la tabla y las tarjetas a esa familia; en Traspaso y Otros no hay Preasignación ni Asignado. Pulsar una tarjeta filtra la tabla. La bandeja abre en Entregado: es tu trabajo pendiente."
+          ],
+          "bullets": [
+            "Búsqueda libre «Buscar radicado (FT1-0000012), placa, VIN...»: el radicado casa exacto; placa, VIN, nombre y documento de las partes y razón social de la compañía, por texto parcial.",
+            "«Búsqueda rápida»: los atajos «Por aprobar» (entregados a la espera de tu decisión), «Por preasignar» (radicados sin placa) y «Revocatorias» (aprobados con una solicitud de revocatoria activa) resaltan y filtran de una vez la tarjeta correspondiente, sin tener que ubicarla en la cabecera.",
+            "«Periodo» por fecha de radicación y «+ Filtro» con la gramática de Consultas (campo, operador, valores; admite pegar una columna de Excel).",
+            "«Exportar» genera un Excel con todas las filas que cumplen los filtros, no solo la página.",
+            "Columnas configurables; la elección se guarda por usuario."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "placa",
+          "title": "2. Cola de placa (matrícula inicial en ruta larga)",
+          "paragraphs": [],
+          "bullets": [
+            "Preasignación → «Asignar placa»: escribe la placa libre que le vas a dar al trámite. El dígito de preferencia que indicó el gestor aparece como guía, sin obligarte a nada. Al asignar, el trámite pasa a Asignado y la compañía recibe correo.",
+            "Asignado → «Corregir placa»: una única corrección dentro de la hora siguiente a la asignación. Vencida la hora, la acción se deshabilita.",
+            "Asignado → «Liberar placa» (con motivo): el trámite vuelve a Preasignación y la placa queda disponible. Queda en el historial.",
+            "El gestor, en Asignado, gestiona SOAT e impuestos y «Envía al OT»: el trámite entra a Entregado."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "decision",
+          "title": "3. Revisión y decisión",
+          "paragraphs": [
+            "Abre un trámite para ver el expediente, organizado en acordeones independientes que puedes tener abiertos a la vez: vehículo, propietario y actores; transformaciones declaradas (si el vehículo cambió color, combustible o carrocería frente a lo que dice RUNT, aquí ves el antes y el después); documentos del gestor («Ver documentos»), consolidado («Ver consolidado») y el historial. El panel «Pendientes antes de decidir» lista lo que falta (por ejemplo SOAT vigente cuando la regla aplica).",
+            "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio."
+          ],
+          "bullets": [
+            "Aprobar: opcionalmente adjunta la Licencia de Tránsito (PDF). El sistema la analiza con OCR y te dice si parece una LT y si la placa/VIN leídos coinciden con el trámite; el análisis nunca bloquea. Si hay varios mandatarios posibles, eliges uno. La LT también se puede adjuntar después desde la fila aprobada («Adjuntar LT»).",
+            "Rechazar: marca las causales del catálogo que apliquen (dependen de la familia: matrícula o traspaso) y describe qué debe corregirse. El gestor podrá subsanar y reenviar sin volver a borrador.",
+            "Decidir revocatoria: solo en aprobados con solicitud activa (ver «Decidir solicitudes de revocatoria»)."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": "Trazabilidad",
+              "text": "Toda decisión queda en el historial del trámite con fecha y hora, y dispara el correo correspondiente a la compañía. Si tu organismo opera en Quipux, la consola está en solo lectura: decides allí, no aquí."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/3-reportes",
+      "title": "Reportes del Organismo",
+      "href": "/manual/2-ot/3-reportes",
+      "audience": "Organismo de Tránsito",
+      "sectionId": "ot",
+      "summary": "Cinco pestañas para mirar tu operación como organismo: la cola de ahora, por qué rechazas, qué recibiste, qué hizo cada revisor y tu propia consulta.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "acceso",
+          "title": "1. Acceso",
+          "paragraphs": [
+            "Dock → Reportes abre la consola del hub, en /admin/transit-offices/{id}/reportes. Es distinta del módulo Reportes que ve un gestor: aquí el organismo mira hacia las empresas que le radican, no al revés."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "pestanas",
+          "title": "2. Las cinco pestañas",
+          "paragraphs": [
+            "Cada pestaña trae solo los filtros que necesita: la de «Ahora mismo» no tiene selector de fechas porque describe este momento, no un rango."
+          ],
+          "bullets": [
+            "Ahora mismo: qué tienes en la cola en este momento, sin fechas.",
+            "Análisis: por qué rechazas y qué calidad de radicación te llega, con rango de fechas.",
+            "Informe: qué recibiste en un periodo y en qué acabó, trámite a trámite.",
+            "Revisores: qué hizo cada persona del organismo en un periodo (aprobaciones, rechazos, tiempos).",
+            "Consultas personalizadas: arma tu propia búsqueda con la gramática de campo/operador/valor, guárdala y expórtala."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "programacion",
+          "title": "3. Programación y alertas",
+          "paragraphs": [
+            "El botón «Programación y alertas», junto a las pestañas, abre un panel con tres partes: Programaciones (envíos periódicos por correo), Alertas (avisos cuando una cifra cruza un umbral) e Historial de alertas. Puedes programar directamente una consulta guardada desde «Consultas personalizadas»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "uso",
+          "title": "4. Buenas prácticas",
+          "paragraphs": [
+            "Usa los mismos filtros de fecha que usarías en auditorías internas. Si un número no cuadra, cruza con la bandeja: los reportes se calculan con los mismos estados que ves ahí."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/4-usuarios",
+      "title": "Usuarios del Organismo",
+      "href": "/manual/2-ot/4-usuarios",
+      "audience": "Organismo de Tránsito",
+      "sectionId": "ot",
+      "summary": "Invitar y administrar cuentas del perfil OT. Solo el administrador del organismo entra aquí.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "alcance",
+          "title": "1. Alcance",
+          "paragraphs": [
+            "Usuarios, en el dock del hub, es exclusivo del administrador del organismo (rol ot_admin): invita, edita y cancela invitaciones de las cuentas de tu Organismo de Tránsito. Un operador que intente abrir esta pantalla recibe acceso denegado.",
+            "No administra usuarios de compañías cliente; eso corresponde al AdminCompany de cada tenant."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "invitar",
+          "title": "2. Invitar un usuario",
+          "paragraphs": [],
+          "bullets": [
+            "Dock → Usuarios (hub OT).",
+            "Completa correo y rol. El invitado recibe enlace para activar cuenta.",
+            "Verifica que el correo sea institucional del OT cuando la política lo exija.",
+            "Una invitación pendiente se puede cancelar o reenviar desde la misma fila."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "seguridad",
+          "title": "3. Seguridad",
+          "paragraphs": [
+            "Suspender temporalmente, desactivar indefinidamente, eliminar o restaurar una cuenta ya no lo hace el organismo: son acciones exclusivas del equipo FLIT (Super Admin). Tú, como administrador del organismo, invitas, editas datos y cancelas invitaciones pendientes; para lo demás, escala el caso a FLIT."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/5-reglas",
+      "title": "Reglas del Organismo",
+      "href": "/manual/2-ot/5-reglas",
+      "audience": "Super Admin",
+      "sectionId": "ot",
+      "summary": "Reglas operativas que gobiernan cómo un organismo procesa trámites. Hoy es una pantalla exclusiva del equipo FLIT.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-son",
+          "title": "1. Qué son las Reglas",
+          "paragraphs": [
+            "Esta configuración la administra el equipo FLIT (Super Admin); el organismo de tránsito no la edita, solo ve su efecto en su bandeja del hub. Si un usuario del organismo entra por URL directa a esta pantalla, recibe acceso denegado.",
+            "Reglas parametriza criterios de conformación, validaciones automáticas y comportamiento del hub frente a cada tipo de trámite, para el organismo cuyo hub estás administrando.",
+            "Impacta qué ve el revisor del organismo al abrir un expediente y qué acciones tiene permitidas: un ajuste aquí se nota allá, sin que el organismo toque nada."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "editar",
+          "title": "2. Cuándo editarlas",
+          "paragraphs": [],
+          "bullets": [
+            "Cambio normativo o de procedimiento interno del organismo.",
+            "Nuevo convenio con compañías que exige criterio distinto.",
+            "Corrección de falsos positivos en validaciones automáticas."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Cambios en Reglas pueden afectar trámites en curso del organismo. Coordina con el organismo antes de desplegar ajustes amplios."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/6-documentos",
+      "title": "Documentos del Organismo",
+      "href": "/manual/2-ot/6-documentos",
+      "audience": "Organismo de Tránsito",
+      "sectionId": "ot",
+      "summary": "Ordena los documentos del expediente. Exclusivo del administrador del organismo; un operador ve acceso denegado.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "uso",
+          "title": "1. Para qué sirve y quién entra",
+          "paragraphs": [
+            "Documentos, en el dock del hub, es exclusivo del administrador del organismo (rol ot_admin): un operador que intente abrirlo recibe acceso denegado.",
+            "Define el orden en que ves los soportes dentro del expediente de cada trámite: prelación, es decir, en qué página del consolidado va cada tipo de documento."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "prelacion",
+          "title": "2. Pestaña Prelación",
+          "paragraphs": [
+            "Elige el tipo de trámite y arrastra un documento —o usa las flechas y Enter— hasta la página que quieres que ocupe. El orden nuevo aplica a partir de la próxima generación del expediente; no reordena expedientes ya generados."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Etiquetas y el interruptor del documento de prenda por override ya no aparecen para el administrador del organismo: quedaron exclusivos del equipo FLIT (Super Admin). Tú, como organismo, solo ves y ajustas la Prelación."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/7-requisitos",
+      "title": "Requisitos documentales (OT)",
+      "href": "/manual/2-ot/7-requisitos",
+      "audience": "Super Admin",
+      "sectionId": "ot",
+      "summary": "Exigir, relajar u ordenar documentos por tipo de trámite para un organismo. Hoy es una pantalla exclusiva del equipo FLIT.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "concepto",
+          "title": "1. Catálogo vs override",
+          "paragraphs": [
+            "Esta configuración la administra el equipo FLIT (Super Admin); el organismo de tránsito no la edita, solo ve su efecto en su bandeja del hub. Un usuario del organismo que entre por URL directa recibe acceso denegado.",
+            "FLIT tiene requisitos base por tipo de trámite (catálogo global). Desde aquí aplicas overrides para el organismo cuyo hub administras: marcas un documento obligatorio u opcional solo para ese organismo."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "flujo",
+          "title": "2. Flujo de trabajo",
+          "paragraphs": [],
+          "bullets": [
+            "Abre Requisitos en el hub OT.",
+            "Selecciona tipo de trámite y documento del catálogo.",
+            "Define obligatoriedad, orden o excepciones según la UI disponible.",
+            "Valida con un trámite de prueba en DEV/QA antes de producción."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "impacto",
+          "title": "3. Impacto en el Gestor",
+          "paragraphs": [
+            "Los gestores de las compañías cliente verán los requisitos resultantes en el wizard al crear instancias contra ese organismo. Cambios retroactivos no suelen alterar instancias ya radicadas."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/8-ayuda-dr-flit",
+      "title": "Ayuda con DR. FLIT (OT)",
+      "href": "/manual/2-ot/8-ayuda-dr-flit",
+      "audience": "Organismo de Tránsito",
+      "sectionId": "ot",
+      "summary": "Escríbele con tus palabras: responde dudas del hub citando el manual, localiza trámites de tu bandeja y radica casos de soporte.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "escribir",
+          "title": "1. Escríbele con tus palabras",
+          "paragraphs": [
+            "Abre el asistente con el botón flotante y escribe directo: «¿cómo asigno una placa?», «¿cómo decido una revocatoria?». DR. FLIT responde con base en el manual del Organismo y cita al final los artículos de donde salió la respuesta, con enlace para abrirlos. Si tu pregunta no es clara, te pregunta de vuelta; si no tiene la respuesta, te lo dice y te ofrece escalar a soporte.",
+            "La primera vez te pedirá autorizar el tratamiento de datos (Ley 1581 de 2012): «Acepto y continuar» para usar la inteligencia artificial, o «Ahora no» para seguir con el menú clásico sin ella. Solo se pide una vez por versión del aviso."
+          ],
+          "bullets": [
+            "Solo verás artículos del Organismo y los transversales; la documentación del Gestor no aplica a tu perfil.",
+            "El chat con inteligencia artificial tiene un tope diario de mensajes; al alcanzarlo el menú sigue funcionando y al día siguiente se reactiva solo.",
+            "Si el asistente no está disponible, responde el buscador del manual con una «respuesta rápida» y los enlaces."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "busqueda",
+          "title": "2. Búsquedas operativas",
+          "paragraphs": [
+            "Pídelo en el chat («busca la placa ABC123», «muéstrame el radicado 12») o usa los chips de Gestión: Placa, VIN, Trámite o Cliente (nombre, documento o razón social). Los resultados salen de tu bandeja: solo trámites que las compañías ya te entregaron, con la compañía radicadora en cada tarjeta y una pista de qué sigue según el estado."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "normativa-soporte",
+          "title": "3. Normativa y soporte",
+          "paragraphs": [],
+          "bullets": [
+            "Ayuda → Normativa abre la Resolución 20233040017145 de 2023: los requisitos que puede exigir tu organismo son los del Título 5 y no otros (art. 5.1.1).",
+            "Para reportar un problema, cuéntaselo al chat o entra por Ayuda → Soporte: el formulario llega con tu correo, organismo y fecha precargados; completa el detalle, la frecuencia y la prioridad, adjunta evidencias si quieres, revisa el resumen y pulsa «Confirmar y radicar caso». Recibes tu número de caso al instante.",
+            "Si el sistema de soporte no responde en ese momento, verás los canales de contacto y podrás reintentar sin perder lo escrito."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/9-revocatorias",
+      "title": "Decidir solicitudes de revocatoria",
+      "href": "/manual/2-ot/9-revocatorias",
+      "audience": "Organismo de Tránsito",
+      "sectionId": "ot",
+      "summary": "Cómo ver, revisar y decidir las solicitudes de revocatoria que envían las compañías sobre trámites aprobados.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué es",
+          "paragraphs": [
+            "Una compañía puede pedir que revoques un trámite que ya aprobaste, dentro de la ventana que tú configuras. El trámite sigue Aprobado mientras decides; solo cambia si apruebas la solicitud. El organismo ya no revoca por su cuenta: la única vía es aprobar una solicitud del gestor."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "donde",
+          "title": "2. Dónde verlas",
+          "paragraphs": [],
+          "bullets": [
+            "Tarjeta «Solicitud de revocatoria» en la cabecera de la bandeja: cuenta los aprobados con una solicitud esperando decisión y filtra la tabla al pulsarla. El atajo «Revocatorias» de la búsqueda rápida hace lo mismo, sin buscar la tarjeta en la cabecera.",
+            "Distintivo «Revocatoria solicitada» / «Revocatoria en revisión» en la fila.",
+            "Vista «Revocatorias» del hub: listado de todas las solicitudes (activas y cerradas) con filtros por fecha y estado."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "decidir",
+          "title": "3. Decidir",
+          "paragraphs": [
+            "En la fila, «Decidir revocatoria» abre el cuadro con el motivo del gestor y su documento de soporte (PDF). Elige:"
+          ],
+          "bullets": [
+            "Aprobar revocatoria (motivo opcional): el trámite pasa a Revocado, se liberan placa y VIN y la documentación queda histórica.",
+            "Rechazar revocatoria (motivo obligatorio): el trámite permanece Aprobado y la solicitud queda cerrada como rechazada."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "La decisión es final y queda en el historial del trámite; la compañía recibe correo con el resultado. La ventana de revocatoria se ajusta en Administración → Configuración."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/10-mandatos",
+      "title": "Mandatos y mandatarios del organismo",
+      "href": "/manual/2-ot/10-mandatos",
+      "audience": "Organismo de Tránsito",
+      "sectionId": "ot",
+      "summary": "Quién firma el contrato de mandato ante tu organismo y cómo se configura desde el hub.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "concepto",
+          "title": "1. Mandante y mandatario",
+          "paragraphs": [
+            "En cada trámite el mandante (vendedor o radicador) otorga poder y el mandatario lo recibe para gestionar ante el organismo por cuenta de la compañía gestora. El mandante sale de los actores del trámite; el mandatario sí se configura."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "hub",
+          "title": "2. Pestaña Mandatos del hub",
+          "paragraphs": [
+            "Administración → Mandatos muestra tres bloques:"
+          ],
+          "bullets": [
+            "Mandatario general del organismo: el firmante por defecto cuando la compañía no tiene uno propio. Puedes registrarlo y editarlo aquí (nombre, tipo y número de documento, tipo de firma).",
+            "Mandatarios del organismo: todas las personas habilitadas para firmar mandatos ante tu OT, con su tipo de firma (estampada desde el baúl o física). El botón «Ver firma» de cada fila abre una vista previa de la firma registrada en el baúl, para comprobar cuál quedará estampada antes de usarla en un mandato.",
+            "Empresas que radican en este organismo: busca por razón social o NIT y revisa qué mandatario aplica por defecto a cada una."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "La redacción del contrato (plantilla, unión temporal, NIT, sigla) y el tipo de mandato por compañía los define el equipo FLIT en Plataforma → Mandatos; aquí ves y ajustas los firmantes."
+            }
+          ]
+        },
+        {
+          "id": "aprobacion",
+          "title": "3. Al aprobar un trámite",
+          "paragraphs": [
+            "Si hay varios mandatarios posibles y el sistema no puede decidir solo, al aprobar verás «Elegir mandatario del mandato». El mandatario debe tener validación de identidad vigente antes de firmar; si no la tiene, la compañía se la envía desde su pestaña «Mandatarios»."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/11-validar-impronta",
+      "title": "Validar impronta",
+      "href": "/manual/2-ot/11-validar-impronta",
+      "audience": "Organismo de Tránsito",
+      "sectionId": "ot",
+      "summary": "Consultar las improntas firmadas de una placa y verificar que una firma digital corresponde a la impronta.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "consultar",
+          "title": "1. Consultar improntas firmadas por placa",
+          "paragraphs": [
+            "Administración → Validar impronta. Escribe la placa y pulsa Consultar: verás las improntas firmadas digitalmente para esa placa, con su hash de documento, la fecha de firma y si fue reemplazada después de firmarse (en ese caso la firma que ves es la histórica). Desde cada fila puedes abrir el PDF de la impronta con «Ver PDF» o abrir «Historial» para ver la bitácora completa de validaciones hechas sobre esa impronta."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "validar",
+          "title": "2. Validar una firma digital",
+          "paragraphs": [
+            "Con «Validar firma» pega la firma digital (Base64) que te entregaron y pulsa «Validar firma digital». El resultado es inequívoco: «La firma corresponde a esta impronta» o «La firma no corresponde a esta impronta». Cada validación queda en la bitácora de la impronta, con resultado y fecha, visible después desde «Historial»."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "El sello de tiempo de la impronta conserva los segundos por exigencia normativa; es la única fecha de la plataforma que los muestra."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/12-configuracion",
+      "title": "Configuración del organismo",
+      "href": "/manual/2-ot/12-configuracion",
+      "audience": "Super Admin",
+      "sectionId": "ot",
+      "summary": "Modo de operación (FLIT o Quipux), ventana de revocatoria en días hábiles y llaves operativas de un organismo. Hoy es exclusiva del equipo FLIT.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "modo",
+          "title": "1. Modo de operación",
+          "paragraphs": [
+            "Esta configuración la administra el equipo FLIT (Super Admin); el organismo de tránsito no la edita, solo ve su efecto en su bandeja del hub. Un usuario del organismo que entre por URL directa a Configuración recibe acceso denegado.",
+            "Administración → Configuración, dentro del hub del organismo que administras. Un organismo puede operar su consola en FLIT (aprueba y rechaza en la bandeja) o en solo lectura porque decide dentro de Quipux: en modo Quipux, el organismo ve su bandeja pero no puede aprobar ni rechazar desde ahí. El modo Quipux no afecta la radicación de las compañías: solo dónde se toma la decisión. El cambio aplica en caliente, sin reinicio."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "ventana",
+          "title": "2. Ventana de revocatoria",
+          "paragraphs": [
+            "Días hábiles, contados desde la aprobación, durante los cuales una compañía puede solicitar la revocatoria de un trámite aprobado ante ese organismo. Déjala vacía para no limitar. Vencida la ventana, el botón «Solicitar revocatoria» del gestor se deshabilita con ese motivo."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "flags",
+          "title": "3. Llaves operativas del organismo",
+          "paragraphs": [
+            "Interruptores de comportamiento propios del organismo (por ejemplo, exigencias en la decisión). Se activan y desactivan aquí y quedan registrados; documenta el motivo antes de cambiar una llave que no reconozcas, porque el organismo la siente en su bandeja sin saber que cambió."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "3-admin-company/1-consola",
+      "title": "Consola de administración de la compañía",
+      "href": "/manual/3-admin-company/1-consola",
+      "audience": "Admin de Compañía",
+      "sectionId": "admin-company",
+      "summary": "Qué ves hoy en «Administración», qué gestiona directamente el equipo FLIT y cómo pedirle un cambio.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "entrar",
+          "title": "1. Qué ves al entrar",
+          "paragraphs": [
+            "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Documentos, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
+            "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "No es un permiso que te falte ni un error de la plataforma: la ficha completa quedó reservada al equipo FLIT. Sigue leyendo para saber qué puedes hacer tú y a quién pedirle el resto."
+            }
+          ]
+        },
+        {
+          "id": "tus-pestanas",
+          "title": "2. Lo que gestionas tú mismo",
+          "paragraphs": [],
+          "bullets": [
+            "Representantes legales: registra a quienes representan a tu compañía, sus escrituras y su firma del baúl. Ver «Representantes legales y mandatarios».",
+            "Mandatarios: registra quién firma el contrato de mandato ante cada organismo por cuenta de tu compañía. Ver «Representantes legales y mandatarios».",
+            "Usuarios de una hija de tu red (solo si la administras desde el panel de red): resetear contraseñas y suspender o desactivar sus usuarios.",
+            "Usuarios de tu propia compañía: no vive en esta ficha, es el módulo «Usuarios» del dock, con el mismo alcance de siempre (resetear contraseñas, suspender o desactivar; eliminar sigue siendo del equipo FLIT)."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "pide-a-flit",
+          "title": "3. Qué gestiona el equipo FLIT (y cómo pedir un cambio)",
+          "paragraphs": [
+            "Estas áreas ya no las editas desde tu consola. Para cualquier ajuste, escribe al equipo FLIT desde Ayuda → Soporte indicando el NIT de tu compañía y el cambio puntual que necesitas:"
+          ],
+          "bullets": [
+            "Trámites: qué familias puede radicar tu compañía (matrículas, traspasos, otros) y sus restricciones («Solo vehículos propios», validar SOAT ante el RUNT, etc.).",
+            "Configuración Empresa: proveedores de consulta y de avalúo, a quién avisar al aprobar o rechazar un trámite, la lista blanca de correos para invitaciones, y los organismos de tránsito habilitados para tu compañía.",
+            "Documentos: plantillas y documentos personalizados que se generan dentro de los trámites.",
+            "Placas preasignadas: consulta de las placas que los organismos te han asignado.",
+            "Historial de Cambios: quién cambió qué configuración de tu compañía y cuándo."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "otras-piezas",
+          "title": "4. Otras piezas de tu administración",
+          "paragraphs": [
+            "Estas no viven dentro de esta ficha, pero también son parte de tu administración:"
+          ],
+          "bullets": [
+            "Red de clientes: píldora aparte del dock, solo si tu compañía es cabeza de Concesión o Marca Blanca. Ver «Red de clientes».",
+            "Marca y dominio de la red: dentro del panel de Red de clientes, solo si tu compañía es cabeza Marca Blanca. Ver «Marca y dominio de la red».",
+            "Generación documental: píldora aparte del dock, solo si tu rol tiene habilitado ese módulo. Ver «Generación documental sin trámite»."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "3-admin-company/2-representantes-mandatarios",
+      "title": "Representantes legales y mandatarios",
+      "href": "/manual/3-admin-company/2-representantes-mandatarios",
+      "audience": "Admin de Compañía",
+      "sectionId": "admin-company",
+      "summary": "Cómo registrar representantes legales (con escrituras y firma) y mandatarios que firman el contrato de mandato ante cada organismo.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "representantes",
+          "title": "1. Representantes legales",
+          "paragraphs": [
+            "Pestaña «Representantes legales»: un directorio en acordeón, una fila por representante que despliega sus datos, las compañías que representa agrupadas por NIT (con la escritura asociada a cada una) y su firma del baúl. La firma se asocia desde la propia ficha del representante; ya no hay un baúl suelto por separado.",
+            "Cada ficha muestra siempre un bloque de «Validación de identidad» con dos etiquetas fijas —el estado de su Identidad y el de su Firma del baúl— solo para consultar. Ya no hay botones de enviar o reenviar validación desde aquí: si el representante necesita una identidad vigente, el bloque te lleva al módulo Identidad. Si la persona ya tiene una validación aprobada y vigente allí, se asocia sola al guardar."
+          ],
+          "bullets": [
+            "Registra la persona (tipo y número de documento, nombre; correo, dirección y ciudad opcionales).",
+            "Dentro de su ficha, asocia las empresas que representa: por cada NIT, adjunta la escritura de constitución o poder (PDF) que respalda esa representación en los documentos del trámite.",
+            "Asocia la firma del baúl para que los documentos la estampen automáticamente."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "mandatarios",
+          "title": "2. Mandatarios",
+          "paragraphs": [
+            "El mandatario recibe el poder del mandante (vendedor o radicador) y gestiona ante el organismo por cuenta de tu compañía. Para aparecer como opción en un trámite debe estar activo, habilitado en el organismo del trámite y aplicar a la empresa que otorga el mandato."
+          ],
+          "bullets": [
+            "Registrar / Editar mandatario: nombre, documento, correo (queda como dato de contacto; no dispara ningún envío) y firma del baúl opcional. Al editar ves el mismo bloque de identidad de solo consulta que en representantes legales: si necesita una validación de identidad, se gestiona desde el módulo Identidad, no desde este formulario.",
+            "Organismos donde aplica: solo se ofrecen los habilitados para tu compañía. Dentro de cada organismo puedes acotar las empresas para las que firma y marcar «firma de forma física» (el contrato deja la línea para firmar a mano).",
+            "Regla que conviene saber: si dentro de un organismo no marcas ninguna empresa, el mandatario firma para TODAS las empresas de ese organismo; al marcar una, queda restringido a esas."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Si la persona queda sin ninguna forma de firmar en alguno de los organismos marcados, el formulario te avisa: captúrale la firma del baúl, consíguele una validación de identidad vigente desde el módulo Identidad, o marca ese organismo como de firma física."
+            }
+          ]
+        },
+        {
+          "id": "convenio",
+          "title": "3. Convenio con el organismo",
+          "paragraphs": [
+            "Cuando existe un convenio comercial registrado entre tu compañía y el organismo, el contrato de mandato no lleva recuadro de firma del mandatario: firma solo el mandante. Los datos del mandatario siguen en el cuerpo del contrato."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "3-admin-company/3-red-de-clientes",
+      "title": "Red de clientes (Concesión y Marca Blanca)",
+      "href": "/manual/3-admin-company/3-red-de-clientes",
+      "audience": "Admin de Compañía",
+      "sectionId": "admin-company",
+      "summary": "Qué puede hacer la cabeza de una red con sus clientes: agregarlos, activarlos o desactivarlos, invitar usuarios y administrarlos, y consultar sus trámites y reportes.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué es una cabeza de red",
+          "paragraphs": [
+            "Una Concesión o una Marca Blanca es una compañía con clientes «hijos». Los hijos operan como cualquier compañía (crean sus usuarios y radican) y heredan los organismos de tránsito de la cabeza. La cabeza ve los trámites y las estadísticas de sus hijos en modo consulta; un hijo no ve nada de la cabeza ni de sus hermanos.",
+            "En la Concesión, los organismos y los clientes los asocia FLIT (Super Admin). En la Marca Blanca, la cabeza gestiona sus clientes y además su propia marca y dominio (ver «Marca y dominio de la red»)."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "panel",
+          "title": "2. Píldora «Red de clientes»",
+          "paragraphs": [
+            "Administración → Red de clientes (solo cabezas de red):"
+          ],
+          "bullets": [
+            "Agregar cliente a la red: razón social, NIT, código y tipo de compañía. Nace vinculado a tu red.",
+            "Activar / Desactivar cliente, con confirmación.",
+            "Invitar usuario a un cliente: eliges el cliente como destino y el rol (Administrador de compañía, Radicador, Gestor, Documentador, Validador u Operario full).",
+            "Administrar un cliente: abre su ficha para gestionar sus Representantes legales y Mandatarios (y sus Usuarios), con un aviso de que estás en un cliente de tu red."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Vincular una compañía ya existente a tu red o desvincularla no está en este panel: eso lo hace el equipo FLIT."
+            }
+          ]
+        },
+        {
+          "id": "alcance",
+          "title": "3. Alcance en Trámites y Reportes",
+          "paragraphs": [
+            "En Trámites y en Reportes verás el selector «Alcance»: Mi compañía, Toda la red o un cliente concreto. La elección se guarda por usuario. Con la red activa, las filas ajenas llevan el distintivo «Red» y la etiqueta «Solo consulta»: puedes abrir el detalle y ver el estado documental, pero no radicar, editar ni descargar documentos. DR. FLIT también busca en el alcance elegido."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "El alcance de red es exclusivo del Administrador de la cabeza. Un radicador u operador de la cabeza ve solo su compañía, sin selector."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "3-admin-company/4-marca-y-dominio",
+      "title": "Marca y dominio de la red (Marca Blanca)",
+      "href": "/manual/3-admin-company/4-marca-y-dominio",
+      "audience": "Admin de Compañía",
+      "sectionId": "admin-company",
+      "summary": "Cómo una cabeza Marca Blanca configura su identidad visual (logotipo, colores, nombre) y consulta el estado de su dominio propio, y qué heredan sus clientes.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "configurador",
+          "title": "1. Configurador de marca",
+          "paragraphs": [
+            "Solo si tu compañía es cabeza Marca Blanca: en Administración → Red de clientes encuentras el configurador de marca, debajo del listado de clientes. Ahí defines logotipo, color principal, color secundario, color de texto y el nombre visible en el acceso y en el correo. La previsualización muestra la pantalla de acceso, la cabecera de la aplicación y una muestra de correo con el tema aplicado."
+          ],
+          "bullets": [
+            "«Guardar borrador» conserva el trabajo sin afectar a nadie.",
+            "«Publicar identidad de marca» aplica la marca a tu red: el servidor valida logotipo, paleta, contraste y nombre; solo publica una marca completa.",
+            "Tus clientes heredan la marca publicada; el modo oscuro se deriva automáticamente. Si algo falla, la plataforma cae al respaldo FLIT, nunca a una pantalla rota."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "dominio",
+          "title": "2. Dominio de la red",
+          "paragraphs": [
+            "En la misma página, debajo del configurador de marca, ves el panel «Dominio de la red»: el estado del dominio propio desde el que tu red accede y recibe comunicaciones, y el botón «Comprobar ahora» para volver a validar el registro TXT en tu DNS. Aquí es de solo lectura: registrar el dominio por primera vez, cambiarlo o retirarlo lo hace el equipo FLIT."
+          ],
+          "bullets": [
+            "Estados: Pendiente de comprobación → Verificado → Activo. Un fallo muestra el motivo (TXT no encontrado o con valor distinto) y, mientras corre el plazo de gracia, el dominio sigue operando.",
+            "Con el dominio activo, la pantalla de acceso, la recuperación de contraseña y los enlaces de invitación de tu red usan tu dominio; el certificado se emite y renueva automáticamente.",
+            "El correo sale con el nombre de tu marca como remitente visible y el tema de la red en cabecera y pie."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "¿Necesitas registrar un dominio nuevo, cambiarlo o retirarlo? Pídeselo al equipo FLIT desde Ayuda → Soporte; tú puedes seguir el estado y comprobarlo, pero el alta y los cambios son suyos."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "3-admin-company/5-generacion-documental",
+      "title": "Generación documental sin trámite",
+      "href": "/manual/3-admin-company/5-generacion-documental",
+      "audience": "Admin de Compañía",
+      "sectionId": "admin-company",
+      "summary": "Emitir Certificados RUES y documentos privados de transferencia de dominio sin abrir un trámite, por unidad o por lote, y consultar lo generado.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué es",
+          "paragraphs": [
+            "Píldora «Generación documental» del dock, visible solo si tu rol tiene habilitado este módulo (no todo Admin de Compañía lo ve por defecto: si te falta, pídeselo al equipo FLIT). Emite documentos que normalmente nacen dentro de un trámite, pero aquí sin abrirlo, con los datos consultados en línea."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "pestanas",
+          "title": "2. Pestañas",
+          "paragraphs": [],
+          "bullets": [
+            "Certificado RUES: consulta el NIT y emite el certificado.",
+            "Transferencia: consulta la placa en el RUNT y emite el documento privado de transferencia de dominio. Eliges la causal (A traspaso ordinario, B transferencia unilateral de leasing, C entidad financiera a un tercero; dación en pago y contraprestación no monetaria), quién asume el impuesto sobre vehículos, la retención en la fuente y los derechos del trámite, y datos de firma (ciudad, representante legal).",
+            "Carga masiva: sube un lote y sigue el avance en vivo (se actualiza cada 4 segundos); descarga los documentos que sí salieron y revisa el detalle de cada fila.",
+            "Historial: todo lo generado por tu compañía con tipo, escenario, usuario, fecha y resultado."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/1-companias-y-organismos",
+      "title": "Compañías, organismos de tránsito y causales",
+      "href": "/manual/4-superadmin/1-companias-y-organismos",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "Alta y ciclo de vida de compañías y organismos, la ficha completa de cada compañía, entrada al hub OT y catálogo de causales de rechazo.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "companias",
+          "title": "1. Compañías",
+          "paragraphs": [
+            "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. «Crear compañía»: razón social, NIT, código único (máx. 32), tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
+            "Abrir una fila lleva a la ficha completa de la compañía, con 7 pestañas:"
+          ],
+          "bullets": [
+            "Trámites: familias habilitadas (Matrículas, Traspaso, Otros) con switch de bloqueo por familia y la lista blanca de trámites permitidos.",
+            "Configuración Empresa: parámetros de firma (con la firma precargada desde el baúl), validar SOAT ante RUNT, avisos al aprobar o rechazar y sus destinatarios, métodos de recaudo, fuente de comparendos, módulos activos del dashboard (Comparendos, Resoluciones), proveedores de consulta y de avalúo, y la tabla de organismos de tránsito con los bloqueos y restricciones que aplica cada uno. El buscador de esa tabla (por nombre o código, con o sin tildes) recorre todos los organismos, no solo la página que estás viendo.",
+            "Documentos: parámetros documentales de la gestora.",
+            "Representantes legales.",
+            "Mandatarios.",
+            "Usuarios.",
+            "Historial de Cambios: quién cambió qué y cuándo."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "«Guardar todo» no aplica los cambios de una vez: primero abre un resumen con el detalle de todo lo que vas a modificar, y solo al confirmarlo los guarda."
+            }
+          ]
+        },
+        {
+          "id": "companias-red",
+          "title": "2. Cabezas de red",
+          "paragraphs": [
+            "Si la compañía es cabeza de red (Concesión o Marca Blanca), su ficha suma el panel de hijas: agregar un cliente a la red, activar o inactivar una hija e invitar usuarios para que la administren.",
+            "Si además es Marca Blanca, configura la marca y el dominio propio de la red: registrar el dominio, cambiarlo, retirarlo y comprobarlo (validación de propiedad). Estas cuatro acciones son exclusivas del Super Admin; el Administrador de la cabeza de red solo las ve en modo lectura."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "organismos",
+          "title": "3. Tránsito → Organismos",
+          "paragraphs": [
+            "Catálogo de organismos de tránsito con código DIVIPOL, código integrador y departamento; filtra por estado, departamento o integrador. «Activar organismo de tránsito» crea su inquilino y lo deja operable; desde la fila entras a su hub, con 10 pestañas: Trámites (bandeja de decisión), Reglas, Documentos (prelación y etiquetas), Requisitos, Usuarios, Reportes, Mandatos, Validar impronta, Revocatorias (decidir las solicitudes que llegan del gestor) y Configuración (modo Quipux, ventana de revocatoria, feature flags)."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Un organismo sin código integrador cargado no puede radicar en la secretaría por Quipux; el aviso aparece en su fila."
+            },
+            {
+              "variant": "info",
+              "title": null,
+              "text": "La pestaña de webhooks del organismo es legado: solo se abre por URL directa (no tiene entrada en el hub)."
+            }
+          ]
+        },
+        {
+          "id": "causales",
+          "title": "4. Tránsito → Causales de rechazo",
+          "paragraphs": [
+            "Catálogo de causales que el organismo marca al rechazar («¿Qué falló?»). Cada causal tiene código, descripción y familia (matrícula inicial o traspaso: no son intercambiables). Se crean, editan y activan o desactivan; una causal inactiva deja de ofrecerse sin borrar el historial."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/2-documental-e-improntas",
+      "title": "Gestión documental e improntas",
+      "href": "/manual/4-superadmin/2-documental-e-improntas",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "El catálogo de documentos y su configuración por tipo de trámite, y la generación del Certificado de Improntas Digitales.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "documental",
+          "title": "1. Documental",
+          "paragraphs": [
+            "Administradores → Documental. Administra el catálogo de tipos de documento (nombre, formatos admitidos: PDF, JPG, PNG, WEBP). Puedes crear tipos nuevos y eliminar los que ya no uses; si un tipo está en uso en algún trámite, la eliminación se bloquea con un aviso, para no dejar huecos en trámites existentes.",
+            "Por tipo de trámite, la configuración documental tiene tres vistas: Documentos (lo que exige el catálogo), Overrides OT (lo que cada organismo añade o quita) y Matriz resuelta (lo que efectivamente verá el gestor, ya combinado, por organismo). Es la fuente de los requisitos que el asistente muestra en el paso de adjuntos."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "improntas",
+          "title": "2. Improntas",
+          "paragraphs": [
+            "Generación de improntas: emite el Certificado de Improntas Digitales del vehículo (Res. 17145/2023 Mintransporte) y descárgalo. Historial de improntas: consulta las generadas para tu inquilino, filtrables por placa y rango de fechas. La firma digital de cada impronta la verifica el organismo desde su pestaña «Validar impronta»."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/3-plataforma",
+      "title": "Plataforma: tipos de trámite, mandatos, FUR, notificaciones, Confirmación RUNT y banners",
+      "href": "/manual/4-superadmin/3-plataforma",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "Parametrización global que define qué trámites existen, cómo se recorren y cómo se comunica la plataforma.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "tipos",
+          "title": "1. Tipos de trámite",
+          "paragraphs": [
+            "Catálogo de trámites y su parametrización: qué recorrido sigue cada uno, qué exige y qué documentos pide. «Nuevo tipo de trámite» da de alta uno; cada tipo tiene 4 pestañas:"
+          ],
+          "bullets": [
+            "Identidad: familia (MATRÍCULAS, TRASPASO, OTROS), código, nombre, el copy que ve el gestor al elegirlo y el interruptor operable / no operable (no operable = no aparece en el selector).",
+            "Capacidades: captura de actores (y si la parte compradora admite varias personas), consulta del vehículo, datos comerciales, identidad («las partes validan identidad antes de radicar»), checklist de documentos, firma y FUR («el expediente se firma antes de radicarse»), decisión de prenda (puerta que bloquea o no) y generación de impronta.",
+            "Recorrido: el orden de pasos del asistente para ese tipo.",
+            "Documentos: qué exige el tipo; el detalle vive en Documental."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "«Retirar» un tipo de trámite lo saca del selector del gestor de inmediato, pero no borra el historial de los trámites que ya lo usaron; pídelo con confirmación explícita."
+            }
+          ]
+        },
+        {
+          "id": "mandatos",
+          "title": "2. Mandatos",
+          "paragraphs": [
+            "Plantillas de Contrato Privado de Mandato por organismo. «Configurar mandato» fija la redacción que aplica el OT (plantilla, mandatario institucional / unión temporal, NIT, ciudad de cámara, sigla). «Configurar mandatario» define por compañía el tipo de mandato (Persona o RL · Institucional · Abierto) y el mandatario por defecto. Incluye simulador del contrato."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "fur-notif",
+          "title": "3. FUR y Notificaciones",
+          "paragraphs": [
+            "FUR: simula cómo se construye el Formulario Único de Registro con datos sintéticos, para validar plantillas sin un trámite real.",
+            "Notificaciones: banco de plantillas de correo por canal y compañía (lectura), con vista previa que respeta el tema de la red (marca blanca en Marca Blanca). Antes de mandar una prueba, configura el buzón de pruebas (un correo propio para recibirlas); sin él, el botón de envío de prueba te pide configurarlo primero. Con el buzón listo, «Enviar prueba» manda el correo real a esa bandeja para revisar Seguridad, Trámites o Analítica antes de que lo reciba un cliente."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "runt-banners",
+          "title": "4. Confirmación RUNT y Banners",
+          "paragraphs": [
+            "Confirmación RUNT: consulta periódica al RUNT para confirmar que los trámites aprobados en FLIT quedaron registrados. Pestaña Configuración (global, permiso de administrar) y pestaña Historial (corridas e intentos por trámite: qué se consultó, qué respondió el RUNT y por qué se marcó SÍ o NO).",
+            "Banners: configura y programa el contenido del carrusel informativo que ven los usuarios, sin intervención técnica."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/4-integraciones-y-procesos",
+      "title": "Integraciones (Quipux, ICT, Log QX), procesos periódicos y migración",
+      "href": "/manual/4-superadmin/4-integraciones-y-procesos",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "Cómo se observan y se configuran las integraciones con secretarías y terceros, los procesos automáticos y la migración desde FLIT 1.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "quipux",
+          "title": "1. Quipux y Log QX",
+          "paragraphs": [
+            "Integración Quipux: un interruptor maestro prende o apaga toda la radicación automática; puedes guardar la configuración incompleta, pero mientras falten campos obligatorios los procesos no radicarán. Debajo del interruptor: la conexión (URLs de login, registro de documento y validación de estado, usuario y contraseña, código de consumidor), el almacenamiento S3 donde se publica el PDF consolidado que Quipux lee (bucket, prefijo, región y credenciales AWS), la entidad que radica (tipo y número de documento de FLIT ante la secretaría) y la cadencia y límites de los workers (intervalos de registro y consulta, tamaño de lote, máximo de intentos y de consultas, timeout).",
+            "Log QX (píldora Integraciones): bandeja de trámites con integración Quipux, filtrable por estado, fecha, placa o documento; abre cualquiera para ver la trazabilidad completa de sus envíos. Requiere el permiso de lectura de Log QX."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "ict",
+          "title": "2. ICT (Integración con Terceros)",
+          "paragraphs": [],
+          "bullets": [
+            "Log ICT: dos pestañas, Logs (peticiones ya enmascaradas por autenticación, transacción, webhook o fuente externa) y Alertas ICT (métricas y eventos de la integración).",
+            "Trazabilidad ICT: qué pasó con cada trámite que entró por la integración; busca por número, placa o VIN y abre su recorrido completo.",
+            "Reportes ICT: 5 pestañas — Novedades, Atascados, Jobs (rendimiento por proceso, solo Super Admin), Webhooks y Consultas (con envío programado)."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "jobs",
+          "title": "3. Procesos periódicos",
+          "paragraphs": [
+            "Catálogo unificado de los procesos automáticos de la plataforma, filtrable por Todos / ICT / Quipux: estado de cada uno y su cadencia, configurada una sola vez por módulo. Cadencia ICT: ventana horaria (Bogotá), intervalos, lotes y concurrencia; los cambios aplican en el siguiente ciclo, sin reinicio."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "migracion",
+          "title": "4. Migración V1 → V2",
+          "paragraphs": [
+            "Trae trámites del sistema anterior en dos pestañas: «Un trámite» (uno por uno) y «Carga masiva» (con reporte de resultado por fila). Reintentar es seguro: un trámite ya migrado no se duplica."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Esta consola se abre con el enlace directo /admin/migracion: es deliberadamente invisible, sin entrada en el dock ni en ningún menú, porque es una herramienta temporal de una migración concreta."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/5-rbac-y-auditoria",
+      "title": "RBAC, usuarios y auditoría",
+      "href": "/manual/4-superadmin/5-rbac-y-auditoria",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "Cómo se definen módulos, permisos y roles, quién los recibe y dónde queda el rastro.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "rbac",
+          "title": "1. RBAC Admin",
+          "paragraphs": [
+            "Gestiona módulos, permisos y roles del sistema, en 2 pestañas: Módulos y Permisos (las entradas navegables del sistema, con sus acciones) y Roles del sistema (que agrupan permisos y se separan en dos tablas: Roles de Compañía y Roles de Organismo de Tránsito). El dock de cada usuario se filtra por los módulos accesibles de su rol; la API vuelve a validar cada permiso."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Quitar un permiso a un rol afecta de inmediato a todos sus usuarios. El Super Admin no pasa por RBAC: tiene bypass total."
+            }
+          ]
+        },
+        {
+          "id": "usuarios",
+          "title": "2. Usuarios",
+          "paragraphs": [
+            "El módulo Usuarios para el Super Admin es global: eliges el destino de la invitación (compañía, organismo o perfil FLIT interno) y los roles que aplican a ese destino. Un perfil FLIT no pertenece a una compañía ni a un organismo y admite un solo rol.",
+            "«Eliminar usuario» es un borrado lógico: el usuario sale del listado activo y pierde el acceso, pero queda visible en la pestaña Eliminados, donde «Restaurar» lo devuelve a activo con sus roles previos. Cada usuario tiene además su propio historial de auditoría: quién lo invitó, qué roles cambiaron y cuándo."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "auditoria",
+          "title": "3. Auditoría",
+          "paragraphs": [
+            "Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación, además del módulo Trámites (creación, aceptación de términos, accesos de red). Filtra por módulo, actor, entidad y fecha. Es de solo lectura y no se puede alterar (append-only)."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/6-dr-flit-global",
+      "title": "DR. FLIT para el equipo FLIT",
+      "href": "/manual/4-superadmin/6-dr-flit-global",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "Qué cambia en el asistente cuando quien pregunta es Super Admin: alcance global, enlace directo a los casos y operación del chat con IA.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "alcance",
+          "title": "1. Búsqueda global",
+          "paragraphs": [
+            "Como Super Admin, DR. FLIT busca en todas las compañías: por placa, VIN, radicado o cliente. Cada tarjeta muestra la compañía dueña del trámite para que sepas dónde estás mirando. El historial por placa también es global."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "ayuda",
+          "title": "2. Ayuda con inteligencia artificial",
+          "paragraphs": [
+            "El chat responde en lenguaje natural con base en toda la documentación (Gestor, Organismo, Administración de compañía y Super Admin), citando los artículos usados. Sirve para responder por un cliente: escribe la duda tal como te la plantearon y abre el artículo que corresponde a su perfil.",
+            "Aplican las mismas reglas que a todos: autorización de tratamiento de datos la primera vez, tope diario de mensajes con aviso previo, y respuesta del buscador del manual cuando la inteligencia artificial no está disponible."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "casos",
+          "title": "3. Casos de soporte: qué ve el equipo FLIT",
+          "paragraphs": [
+            "Los casos radicados desde el chat llegan al tablero de soporte del equipo FLIT con la descripción, el resultado esperado, la frecuencia, la prioridad y los adjuntos del usuario, listos para triage. A los usuarios se les confirma solo el número de caso; como Super Admin, tú además ves el enlace directo al caso en el tablero."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "El tope diario de mensajes del chat y el modelo de inteligencia artificial se configuran por ambiente desde la operación de la plataforma; si el equipo necesita ajustarlos, es un cambio de configuración, no de código."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    }
+  ]
+}

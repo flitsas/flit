@@ -19,6 +19,8 @@ import { PledgeDocumentOverrideToggle } from "@/components/admin/documents/panel
 import { CreateButton } from "@/components/atom/CreateButton";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions } from "@/components/atom/RowActions";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 // HU #12883 AC1 — trampa de foco de diálogo ya compartida (nace en el wizard, es genérica).
 import { useWizardFocusTrap } from "@/components/operacion/use-wizard-focus-trap";
 import { DocumentPrecedenceList } from "./DocumentPrecedenceList";
@@ -54,6 +56,8 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
   const [precedence, setPrecedence] = useState<OtDocumentPrecedenceItem[]>([]);
   const [tagStatus, setTagStatus] = useState<UiStatus>("loading");
   const [tags, setTags] = useState<OtDocumentTag[]>([]);
+  // Bug #13055 — tabla de etiquetas homologada con el modelo de trámites: paginación en cliente.
+  const pgTags = usePaginacion();
   const [tagFormOpen, setTagFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<OtDocumentTag | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -298,6 +302,9 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
             />
           </div>
 
+          {tagStatus === "loading" ? (
+            <CarLoaderModal label="Cargando etiquetas…" />
+          ) : (
           <UiStateBoundary
             status={tagStatus}
             emptyMessage="No hay etiquetas configuradas."
@@ -314,12 +321,20 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
           >
             <DataTable
               columns={tagColumns}
-              rows={tags}
+              rows={pgTags.paginar(tags)}
               getRowKey={(tag) => tag.id}
               ariaLabel="Etiquetas documentales"
               allowHorizontalScroll={false}
+              pagination={{
+                page: pgTags.page,
+                pageSize: pgTags.pageSize,
+                totalCount: tags.length,
+                onPageChange: pgTags.setPage,
+                onPageSizeChange: pgTags.setPageSize,
+              }}
             />
           </UiStateBoundary>
+          )}
         </div>
       )}
 
