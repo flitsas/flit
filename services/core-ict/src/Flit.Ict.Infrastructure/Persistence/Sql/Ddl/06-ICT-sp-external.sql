@@ -85,9 +85,9 @@ BEGIN
         -- DRIVER (paz y salvo del conductor) para VENDEDOR (MAIN) y COMPRADOR (ASSI). Calcado de v1
         -- (BackApiExternalTransactValiQueryExt: DRIVER_MAIN / DRIVER_ASSI). Solo personas naturales (el
         -- paz y salvo aplica a la licencia; un NIT no conduce). El INSERT...SELECT produce 0 filas si el
-        -- actor no existe (p. ej. matrícula sin comprador). La novedad de paz y salvo es INFORMATIVA: NO
-        -- bloquea el paso a borrador (ver ExternalSourceValidators.Warnings), fiel a v1 (validateDriverRequest
-        -- registra la novedad y retorna OK, no un error).
+        -- actor no existe (p. ej. matrícula sin comprador). Desde el Bug #13109 (punto 9) un paz y salvo en
+        -- «no» explícito es novedad BLOQUEANTE (ExternalSourceValidators.Validate): no se crea el borrador.
+        -- Difiere de v1, donde validateDriverRequest solo registraba la novedad y retornaba OK.
         INSERT INTO ict.external_integration_source_query
             (eim_id, tenant_id, eia_id, actor_level, query_type, document_type, document_number)
         SELECT rec.id_master, rec.tenant_id, eia.id,
