@@ -1,6 +1,7 @@
 using System.Globalization;
 using Flit.Admin.Application.Integrations.Auth;
 using Flit.Api.Authorization;
+using Flit.Api.Middleware;
 using Flit.Api.RateLimiting;
 
 namespace Flit.Api.Endpoints;
@@ -32,6 +33,7 @@ public static class ExternalAuthEndpoints
         HttpContext context,
         CancellationToken cancellationToken)
     {
+        context.Features.Get<ExternalAccessDetails>()?.SetRequestedClientId(request?.ClientId); // HU #13086
         var result = await handler.HandleAsync(
             new IssueExternalClientTokenCommand(request?.ClientId, request?.ClientSecret), cancellationToken)
             .ConfigureAwait(false);

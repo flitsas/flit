@@ -247,6 +247,9 @@ app.UseCors(FrontendCorsPolicy);
 
 // HU #12418 (Feature #12366, ADR-0060 D2) — límite de tasa de /public/branding* (delta-hechos #1:
 // primera policy del repo). Tras CORS/routing, antes de auth/endpoints.
+// HU #13086 (Épica #12737) — bitácora de /api/v1/external/*. Antes de UseRateLimiter: registra también los 429.
+app.UseMiddleware<Flit.Api.Middleware.ExternalAccessLogMiddleware>();
+
 app.UseRateLimiter();
 
 // HU #12417 (Feature #12368, ADR-0060 D2) — puebla DomainContext leyendo EXCLUSIVAMENTE el sello

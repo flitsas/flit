@@ -144,6 +144,35 @@ public sealed class ExternalSyncEndToEndTests(PostgresDatabaseFixture fixture) :
         almacen.Pedidos.Should().Equal("fm-13077");
     }
 
+    /// <summary>HU #13086 — la llamada real deja su fila en <c>integrations.external_access_log</c>.</summary>
+    [PostgresFact]
+    public async Task HU13086_CadaPaginaQuedaEnLaBitacoraConLasCompaniasTocadas()
+    {
+        await SembrarAsync();
+        await RadicadoAsync(CompaniaA, 1);
+        await RadicadoAsync(CompaniaB, 2);
+
+        await using var factory = Host();
+        var cliente = Cliente(factory, [ExternalScopes.TramitesRead]);
+        cliente.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.86");
+        await GetAsync(cliente, Url);
+
+        await using var conn = await Fixture.OpenConnectionAsync();
+        await using var cmd = new NpgsqlCommand(
+            "SELECT client_id, endpoint, items_count, tenant_ids, pii_unmasked, http_status "
+            + "FROM integrations.external_access_log WHERE ip = '203.0.113.86'::inet",
+            conn);
+        await using var reader = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeTrue("la solicitud quedó registrada");
+        reader.GetString(0).Should().Be("flito-it");
+        reader.GetString(1).Should().Be("tramites.sync");
+        reader.GetInt32(2).Should().Be(2);
+        reader.GetFieldValue<Guid[]>(3).Should().BeEquivalentTo([CompaniaA, CompaniaB]);
+        reader.GetBoolean(4).Should().BeFalse("sin external.tramites.pii.read llegó enmascarado");
+        reader.GetInt32(5).Should().Be(200);
+        (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeFalse("una fila por solicitud");
+    }
+
     // ── Host, pase y siembra ────────────────────────────────────────────────
 
     private sealed class FirmaFija : IAttachmentStorage
