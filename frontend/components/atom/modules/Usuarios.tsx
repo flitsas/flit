@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History } from "lucide-react";
+import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History, PlugZap } from "lucide-react";
 import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, reactivateInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
@@ -20,6 +20,7 @@ import { ICON_BUTTON_HIT_AREA, type RowAction } from "@/components/atom/RowActio
 import { usePermissions } from "@/hooks/usePermissions";
 import { ICT_CLIENTS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
 import { IctClientsPanel } from "./users/IctClientsPanel";
+import { ExternalClientsPanel } from "./users/ExternalClientsPanel";
 import {
   SuspendOrDeactivateModal,
   type SuspendMode,
@@ -36,6 +37,8 @@ const ALL_TABS = [
   { id: "usuarios", label: "Usuarios", icon: Users },
   { id: "roles", label: "Roles y permisos", icon: Shield },
   { id: "clientes-ict", label: "Clientes ICT", icon: KeyRound },
+  // HU #13200 — clientes de integración EXTERNOS (Flito), solo SuperAdmin.
+  { id: "clientes-integracion", label: "Clientes de integración", icon: PlugZap },
   { id: "eliminados", label: "Eliminados", icon: Trash2 },
 ] as const;
 
@@ -86,10 +89,12 @@ export function Usuarios() {
   const [editRolesLoading, setEditRolesLoading] = useState(false);
 
   // AC4 (HU #10623): "Eliminados" es exclusivo de SuperAdmin. "Clientes ICT" requiere ict.clients.manage.
+  // HU #13200 AC6: "Clientes de integración" es exclusivo de SuperAdmin (la API de la HU #13088 también).
   const tabs = ALL_TABS.filter(
     (t) =>
       (t.id !== "eliminados" || isSuperAdmin) &&
-      (t.id !== "clientes-ict" || canManageIctClients),
+      (t.id !== "clientes-ict" || canManageIctClients) &&
+      (t.id !== "clientes-integracion" || isSuperAdmin),
   );
 
   async function loadUsers() {
@@ -415,6 +420,11 @@ export function Usuarios() {
         // Clientes de integración ICT (ronda 2, Feature #10888): CRUD de las credenciales que usan los
         // gestores para registrar pre-trámites. SuperAdmin administra cualquier compañía; el resto la suya.
         <IctClientsPanel isSuperAdmin={isSuperAdmin} tenantId={tenantId} />
+      )}
+
+      {tab === "clientes-integracion" && isSuperAdmin && (
+        // HU #13200 (Épica #12737): clientes de integración externos (Flito) que leen el feed de trámites.
+        <ExternalClientsPanel />
       )}
 
       {tab === "eliminados" && isSuperAdmin && (
