@@ -58,4 +58,11 @@ public interface IProcedureSyncReadRepository
 {
     Task<IReadOnlyList<ProcedureSyncChange>> ReadChangesAsync(
         ProcedureSyncPageRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #13079 — la misma página con el ítem completo del contrato (v3.1 §4), leído en la misma
+    /// instantánea que la página. Sin enmascarar datos personales.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureSyncEntry>> ReadItemsAsync(
+        ProcedureSyncPageRequest request, CancellationToken cancellationToken = default);
 }
