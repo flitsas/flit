@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, Pencil } from "lucide-react";
+import { AlertTriangle, Eye, Pencil } from "lucide-react";
 import { CompanyMandatarioForm } from "@/components/admin/companies/mandate-signers/CompanyMandatarioForm";
 import { MandatoOtConfigForm, type MandatoOtConfigPanelMode } from "@/components/admin/plataforma/MandatoOtConfigForm";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
@@ -20,6 +20,7 @@ import {
 import {
   createMandateSigner,
   fetchMandateSigners,
+  updateMandateSigner,
   type CompanyMandateSignerInput,
   type MandateSigner,
 } from "@/lib/api/admin-mandate-signers";
@@ -31,6 +32,9 @@ import {
   tipoDeFirmaMandatario,
 } from "@/lib/plataforma/mandatario-firma";
 import { etiquetaModelo, modeloDe } from "@/lib/plataforma/mandatario-vigencia";
+import { MandatarioCandado } from "@/components/admin/companies/mandate-signers/MandatarioCandado";
+import { StatusBadge } from "@/components/atom/StatusBadge";
+import { puedeEditarMandatario } from "@/lib/plataforma/mandatario-permisos";
 import { MandatarioVigenciaBadge } from "@/components/admin/companies/mandate-signers/MandatarioVigenciaBadge";
 
 
@@ -61,6 +65,8 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     return isSuperAdmin(payload) || isOtAdmin(payload);
   });
   const [signerCompanyId, setSignerCompanyId] = useState<string | null>(null);
+  // HU #13139 — edición del mandatario desde la lista (solo si el servidor lo permite por rol y origen).
+  const [editingSigner, setEditingSigner] = useState<MandateSigner | null>(null);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) {
@@ -114,6 +120,15 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
     setCompanyPage(1);
   }, [search, setCompanyPage]);
 
+  /**
+   * HU #13139 — «Sin mandatario»: la compañía no tiene default propio, ni mandatario activo
+   * vinculado, ni el organismo tiene uno general al que recurrir en la prelación.
+   */
+  const sinMandatario = (row: CompanyOtMandateRuleView): boolean =>
+    !row.defaultMandateSignerName?.trim() &&
+    !office?.defaultMandateSignerName?.trim() &&
+    !signers.some((sg) => sg.isActive && sg.companyTenantIds.includes(row.companyTenantId));
+
   const columns: DataTableColumn<CompanyOtMandateRuleView>[] = useMemo(
     () => [
       {
@@ -131,7 +146,21 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
       {
         key: "signer",
         header: "Mandatario",
-        render: (row) => signerCell(row.defaultMandateSignerName),
+        render: (row) =>
+          sinMandatario(row) ? (
+            <StatusBadge
+              tone="warning"
+              ariaLabel="Sin mandatario"
+              label={
+                <span className="inline-flex items-center gap-1" data-testid="ot-mandatos-sin-mandatario">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden={true} />
+                  Sin mandatario
+                </span>
+              }
+            />
+          ) : (
+            signerCell(row.defaultMandateSignerName)
+          ),
       },
       {
         key: "actions",
@@ -151,7 +180,8 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
         ),
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sinMandatario lee office/signers; se recalcula al cambiar
+    [office?.defaultMandateSignerName, signers],
   );
 
   if (status === "loading") {
@@ -222,7 +252,13 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
       key: "name",
       header: "Nombre",
       cellClassName: "font-semibold",
-      render: (row) => row.fullName,
+      render: (row) => (
+        <>
+          {row.fullName}
+          {/* El Admin OT ve sus acciones; el candado solo aplica a quien no puede tocarlo. */}
+          {row.origin === "organismo" && !puedeEditarMandatario(row) ? <MandatarioCandado /> : null}
+        </>
+      ),
     },
     {
       key: "docType",
@@ -256,19 +292,31 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
       key: "actions",
       header: "Acción",
       align: "right",
-      render: (row) =>
-        modeloDe(row) === "natural" ? (
-          <RowActions
-            actions={[
-              {
-                icon: Eye,
-                label: `Ver firma de ${row.fullName}`,
-                tone: "primary",
-                onClick: () => setPreviewSigner(row),
-              },
-            ]}
-          />
-        ) : null,
+      render: (row) => {
+        const actions = [
+          ...(canRegisterSigner && puedeEditarMandatario(row)
+            ? [
+                {
+                  icon: Pencil,
+                  label: `Editar mandatario ${row.fullName}`,
+                  tone: "primary" as const,
+                  onClick: () => setEditingSigner(row),
+                },
+              ]
+            : []),
+          ...(modeloDe(row) === "natural"
+            ? [
+                {
+                  icon: Eye,
+                  label: `Ver firma de ${row.fullName}`,
+                  tone: "primary" as const,
+                  onClick: () => setPreviewSigner(row),
+                },
+              ]
+            : []),
+        ];
+        return actions.length > 0 ? <RowActions actions={actions} /> : null;
+      },
     },
   ];
 
@@ -412,6 +460,36 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
                 : "Mandatario registrado. Ya puedes asociarlo como default de la empresa.",
               "success",
             );
+            void load();
+            return saved;
+          }}
+        />
+      ) : null}
+
+      {editingSigner ? (
+        <CompanyMandatarioForm
+          variant="hub"
+          offices={[{ transitOfficeId, code: office.code, name: office.name }]}
+          editing={editingSigner}
+          restrictToOfficeIds={[transitOfficeId]}
+          overlayClassName="z-[80]"
+          onCancel={() => setEditingSigner(null)}
+          onSubmit={async (input: CompanyMandateSignerInput) => {
+            const saved = await updateMandateSigner(transitOfficeId, editingSigner.id, {
+              fullName: input.fullName,
+              documentType: input.documentType,
+              documentNumber: input.documentNumber,
+              email: input.email,
+              companyTenantIds: editingSigner.companyTenantIds,
+              transitOfficeIds: [transitOfficeId],
+              signerModel: input.signerModel,
+              signatureMethod: input.signatureMethod,
+              validityKind: input.validityKind,
+              validFrom: input.validFrom,
+              validTo: input.validTo,
+            });
+            setEditingSigner(null);
+            show("Mandatario actualizado.", "success");
             void load();
             return saved;
           }}

@@ -78,7 +78,19 @@ export interface MandateSigner {
   /** HU #13130 — si el mandatario puede firmar hoy (vigencia y biometría vigentes). */
   signatureValid?: boolean;
   signatureInvalidReason?: SignatureInvalidReason | null;
+  /**
+   * HU #13134 — quién lo configuró: `organismo` (organismo de tránsito o Super Admin) o `compania`.
+   * Ausente en respuestas anteriores al cambio ⇒ se trata como `compania` (sin candado).
+   */
+  origin?: MandateSignerOrigin;
+  /** HU #13134 — el actor puede editar, inactivar y reactivar (el servidor lo calcula por rol y origen). */
+  puedeEditar?: boolean;
+  /** HU #13134 — el actor puede eliminar. */
+  puedeEliminar?: boolean;
 }
+
+/** HU #13134 — origen de la configuración del mandatario. */
+export type MandateSignerOrigin = "organismo" | "compania";
 
 /** Campos de modelo, forma de firma y vigencia que viajan en el alta y la edición (HU #13132). */
 export interface MandateSignerProfileFields {

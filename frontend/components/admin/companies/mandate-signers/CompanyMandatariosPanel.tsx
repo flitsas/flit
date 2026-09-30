@@ -33,8 +33,16 @@ import {
   organismosSinMedioDeFirma,
 } from "@/lib/plataforma/mandatario-firma";
 import { etiquetaModelo, modeloDe } from "@/lib/plataforma/mandatario-vigencia";
+import {
+  puedeCrearMandatarios,
+  puedeEditarMandatario,
+  tieneCandadoDelOrganismo,
+} from "@/lib/plataforma/mandatario-permisos";
+import { decodeJwtPayload } from "@/lib/auth/jwt";
+import { getToken } from "@/lib/api/client";
 import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "../legal-representatives/rl-flit-styles";
 import { CompanyMandatarioForm } from "./CompanyMandatarioForm";
+import { MandatarioCandado } from "./MandatarioCandado";
 import { MandatarioVigenciaBadge } from "./MandatarioVigenciaBadge";
 
 /**
@@ -61,6 +69,8 @@ export function CompanyMandatariosPanel({
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<MandateSigner | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // HU #13139 — el Gestor/Radicador no ve crear, editar ni eliminar.
+  const [canCreate] = useState(() => puedeCrearMandatarios(decodeJwtPayload(getToken())));
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -160,17 +170,19 @@ export function CompanyMandatariosPanel({
         </p>
       )}
 
-      <div className="flex justify-end">
-        <button
-          type="button"
-          className={rlPrimaryCtaClass}
-          style={rlPrimaryCtaStyle}
-          onClick={openCreate}
-          disabled={sinOrganismos}
-        >
-          Nuevo mandatario
-        </button>
-      </div>
+      {canCreate && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className={rlPrimaryCtaClass}
+            style={rlPrimaryCtaStyle}
+            onClick={openCreate}
+            disabled={sinOrganismos}
+          >
+            Nuevo mandatario
+          </button>
+        </div>
+      )}
 
       {/* Bug #13055 — tabla homologada con la de Trámites: loader del carrito, cabecera y filas de
           table-styles y acciones con RowActions (antes: gris genérico y botones de texto). */}
@@ -237,10 +249,19 @@ export function CompanyMandatariosPanel({
               </tr>
             </thead>
             <tbody>
-              {pg.paginar(signers).map((signer) => (
-                <tr key={signer.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+              {pg.paginar(signers).map((signer) => {
+                // HU #13139 — candado: lo configuró el organismo y este actor no lo puede tocar.
+                const candado = tieneCandadoDelOrganismo(signer);
+                const puedeEditar = canCreate && puedeEditarMandatario(signer);
+                return (
+                <tr
+                  key={signer.id}
+                  className={`${candado ? "bg-[#EEF1F5] dark:bg-white/5" : "bg-white dark:bg-[#0B0F14]"} ${TABLA_ROW_HOVER_CLS}`}
+                  data-candado={candado ? "true" : undefined}
+                >
                   <td className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     <span className="font-semibold">{signer.fullName}</span>
+                    {candado && <MandatarioCandado />}
                   </td>
                   <td className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     {formatDocumentWithType(signer.documentType, signer.documentNumber)}
@@ -275,7 +296,7 @@ export function CompanyMandatariosPanel({
                   </td>
                   <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
                     <RowActions
-                      actions={[
+                      actions={!puedeEditar ? [] : [
                         {
                           icon: Pencil,
                           label: `Editar mandatario ${signer.fullName}`,
@@ -303,7 +324,8 @@ export function CompanyMandatariosPanel({
                     />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
