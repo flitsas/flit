@@ -286,6 +286,7 @@ export function MandatosCatalogPanel() {
         <MandatoOtConfigForm
           office={editing.office}
           mode={editing.mode}
+          editableCompanyType
           onClose={() => setEditing(null)}
           onSaved={(view) => {
             setRows((prev) => prev.map((r) => (r.officeId === view.officeId ? view : r)));

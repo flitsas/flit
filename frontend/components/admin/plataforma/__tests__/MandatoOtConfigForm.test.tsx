@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@/lib/api/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MandatoOtConfigForm } from "@/components/admin/plataforma/MandatoOtConfigForm";
 import type { MandateOtConfigView } from "@/lib/api/admin-plataforma-mandatos";
@@ -7,6 +8,8 @@ import type { MandateOtConfigView } from "@/lib/api/admin-plataforma-mandatos";
 const listCompanyOtMandateRules = vi.fn();
 const fetchMandateSigners = vi.fn();
 const upsertMandateOtConfig = vi.fn();
+const upsertCompanyOtMandateRule = vi.fn();
+const deleteCompanyOtMandateRule = vi.fn();
 
 vi.mock("@/lib/api/admin-plataforma-mandatos", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/admin-plataforma-mandatos")>();
@@ -19,8 +22,8 @@ vi.mock("@/lib/api/admin-plataforma-mandatos", async (importOriginal) => {
     uploadMandateOtPdfTemplate: vi.fn(),
     saveMandateOtEditorBody: vi.fn(),
     deleteMandateOtCustomTemplate: vi.fn(),
-    upsertCompanyOtMandateRule: vi.fn(),
-    deleteCompanyOtMandateRule: vi.fn(),
+    upsertCompanyOtMandateRule: (...a: unknown[]) => upsertCompanyOtMandateRule(...a),
+    deleteCompanyOtMandateRule: (...a: unknown[]) => deleteCompanyOtMandateRule(...a),
     setOtDefaultSigner: vi.fn(),
     setCompanyDefaultSigner: vi.fn(),
   };
@@ -126,10 +129,10 @@ describe("MandatoOtConfigForm", () => {
       renderMandato(generico);
       expect(screen.queryByLabelText(/^mandatario institucional \/ UT$/i)).not.toBeInTheDocument();
       await user.selectOptions(screen.getByTestId("mandato-template-select"), "sabaneta");
-      await user.type(screen.getByLabelText(/^mandatario institucional \/ UT$/i), "UT-SETSA");
-      await user.type(screen.getByLabelText(/^nit$/i), "900273813-7");
-      await user.type(screen.getByLabelText(/ciudad cámara/i), "Medellín");
-      await user.type(screen.getByLabelText(/sigla/i), "SETSA");
+      fireEvent.change(screen.getByLabelText(/^mandatario institucional \/ UT$/i), { target: { value: "UT-SETSA" } });
+      fireEvent.change(screen.getByLabelText(/^nit$/i), { target: { value: "900273813-7" } });
+      fireEvent.change(screen.getByLabelText(/ciudad cámara/i), { target: { value: "Medellín" } });
+      fireEvent.change(screen.getByLabelText(/sigla/i), { target: { value: "SETSA" } });
       await user.click(screen.getByRole("button", { name: /guardar plantilla/i }));
       await waitFor(() => expect(upsertMandateOtConfig).toHaveBeenCalled());
       expect(upsertMandateOtConfig.mock.calls[0][1]).toMatchObject({
@@ -261,6 +264,213 @@ describe("MandatoOtConfigForm", () => {
       listCompanyOtMandateRules.mockRejectedValue(new Error("boom"));
       abrir();
       expect(await screen.findByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+    });
+  });
+  describe("HU #13151 editar el tipo de mandato de una compañía", () => {
+    const base = {
+      companyTenantId: "cia-1",
+      companyName: "Gestora Uno",
+      assignmentMode: "signer",
+      mandataryFamily: "individuo",
+      institutionalMandataryName: null,
+      institutionalMandataryNit: null,
+      chamberCity: null,
+      mandatarySigla: null,
+      hasExplicitRule: true,
+      defaultMandateSignerId: null,
+      rowVersion: 3,
+    };
+
+    const abrir = (editable = true) =>
+      render(
+        <MandatoOtConfigForm
+          office={funza}
+          mode="mandatario"
+          editableCompanyType={editable}
+          onClose={() => undefined}
+          onSaved={() => undefined}
+        />,
+      );
+
+    const abrirEditor = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(
+        await screen.findByRole("button", { name: /editar tipo de mandato de gestora uno/i }),
+      );
+      return screen.findByTestId("mandato-tipo-editor");
+    };
+
+    beforeEach(() => {
+      listCompanyOtMandateRules.mockResolvedValue([base]);
+    });
+
+    it("cambia a Persona jurídica: PUT institutional con la entidad y rowVersion", async () => {
+      const user = userEvent.setup();
+      upsertCompanyOtMandateRule.mockResolvedValue({
+        ...base,
+        assignmentMode: "institutional",
+        institutionalMandataryName: "UT-SETSA",
+        rowVersion: 4,
+      });
+      abrir();
+      await abrirEditor(user);
+      await user.selectOptions(screen.getByTestId("mandato-tipo-select"), "institucional");
+      await user.type(screen.getByLabelText(/nombre de la entidad/i), "UT-SETSA");
+      await user.type(screen.getByLabelText(/^nit$/i), "900-1");
+      await user.type(screen.getByLabelText(/ciudad de cámara/i), "Medellín");
+      await user.type(screen.getByLabelText(/^sigla$/i), "SETSA");
+      await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+      await waitFor(() => expect(upsertCompanyOtMandateRule).toHaveBeenCalled());
+      expect(upsertCompanyOtMandateRule).toHaveBeenCalledWith(
+        funza.officeId,
+        "cia-1",
+        expect.objectContaining({
+          assignmentMode: "institutional",
+          institutionalMandataryName: "UT-SETSA",
+          institutionalMandataryNit: "900-1",
+          chamberCity: "Medellín",
+          mandatarySigla: "SETSA",
+          rowVersion: 3,
+        }),
+      );
+      expect(await screen.findByTestId("mandato-company-tipo-cia-1")).toHaveTextContent("Persona jurídica");
+    });
+
+    it("con Persona natural o Mandato abierto no muestra ni envía datos de la entidad", async () => {
+      const user = userEvent.setup();
+      upsertCompanyOtMandateRule.mockResolvedValue({ ...base, rowVersion: 4 });
+      listCompanyOtMandateRules.mockResolvedValue([
+        {
+          ...base,
+          assignmentMode: "institutional",
+          institutionalMandataryName: "UT-SETSA",
+          chamberCity: "Medellín",
+          mandatarySigla: "SETSA",
+        },
+      ]);
+      abrir();
+      await abrirEditor(user);
+      expect(screen.getByTestId("mandato-tipo-entidad")).toBeInTheDocument();
+      await user.selectOptions(screen.getByTestId("mandato-tipo-select"), "persona_rl");
+      expect(screen.queryByTestId("mandato-tipo-entidad")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+      await waitFor(() => expect(upsertCompanyOtMandateRule).toHaveBeenCalled());
+      expect(upsertCompanyOtMandateRule.mock.calls[0][2]).toMatchObject({
+        assignmentMode: "signer",
+        institutionalMandataryName: null,
+        institutionalMandataryNit: null,
+        chamberCity: null,
+        mandatarySigla: null,
+      });
+      // El selector de mandatario default sigue disponible.
+      expect(screen.getByTestId("mandato-company-default-signer-cia-1")).toBeInTheDocument();
+    });
+
+    it("Mandato abierto pide confirmación y solo al confirmar envía", async () => {
+      const user = userEvent.setup();
+      upsertCompanyOtMandateRule.mockResolvedValue({ ...base, assignmentMode: "open", rowVersion: 4 });
+      abrir();
+      await abrirEditor(user);
+      await user.selectOptions(screen.getByTestId("mandato-tipo-select"), "abierto");
+      await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+      const confirm = await screen.findByTestId("mandato-abierto-confirm");
+      expect(confirm).toHaveTextContent(/dejará de exigir firma de mandatario/i);
+      expect(upsertCompanyOtMandateRule).not.toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: /confirmar cambio/i }));
+      await waitFor(() => expect(upsertCompanyOtMandateRule).toHaveBeenCalledTimes(1));
+      expect(upsertCompanyOtMandateRule.mock.calls[0][2]).toMatchObject({ assignmentMode: "open" });
+    });
+
+    it("cancelar la confirmación no envía y conserva el tipo anterior", async () => {
+      const user = userEvent.setup();
+      abrir();
+      await abrirEditor(user);
+      await user.selectOptions(screen.getByTestId("mandato-tipo-select"), "abierto");
+      await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+      await screen.findByTestId("mandato-abierto-confirm");
+      await user.click(screen.getByRole("button", { name: /cancelar/i }));
+      expect(upsertCompanyOtMandateRule).not.toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: /cancelar/i }));
+      expect(screen.getByTestId("mandato-company-tipo-cia-1")).toHaveTextContent("Persona natural");
+    });
+
+    it("nombre de entidad vacío no envía; el código del API muestra el mismo mensaje", async () => {
+      const user = userEvent.setup();
+      abrir();
+      await abrirEditor(user);
+      await user.selectOptions(screen.getByTestId("mandato-tipo-select"), "institucional");
+      await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+      expect(await screen.findByText(/nombre de la entidad es obligatorio/i)).toBeInTheDocument();
+      expect(upsertCompanyOtMandateRule).not.toHaveBeenCalled();
+
+      upsertCompanyOtMandateRule.mockRejectedValue(
+        new ApiError(400, "x", { error: "mandatario_institucional_requerido" }),
+      );
+      await user.type(screen.getByLabelText(/nombre de la entidad/i), "   a");
+      await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+      expect(await screen.findByText(/nombre de la entidad es obligatorio/i)).toBeInTheDocument();
+    });
+
+    it("409 row_version_conflict: mensaje claro, recarga la fila y conserva lo escrito", async () => {
+      const user = userEvent.setup();
+      upsertCompanyOtMandateRule.mockRejectedValue(
+        new ApiError(409, "conflict", { error: "row_version_conflict" }),
+      );
+      abrir();
+      await abrirEditor(user);
+      await user.selectOptions(screen.getByTestId("mandato-tipo-select"), "institucional");
+      await user.type(screen.getByLabelText(/nombre de la entidad/i), "Mi entidad");
+      listCompanyOtMandateRules.mockResolvedValue([
+        { ...base, assignmentMode: "open", rowVersion: 9 },
+      ]);
+      await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+      expect(await screen.findByTestId("mandato-tipo-error")).toHaveTextContent(/otra persona modificó la regla/i);
+      await waitFor(() => expect(listCompanyOtMandateRules).toHaveBeenCalledTimes(2));
+      expect(screen.getByLabelText(/nombre de la entidad/i)).toHaveValue("Mi entidad");
+      expect(await screen.findByTestId("mandato-company-tipo-cia-1")).toHaveTextContent("Mandato abierto");
+      expect(screen.getByRole("button", { name: /recargar el tipo actual/i })).toBeInTheDocument();
+    });
+
+    it("Volver al default: confirma y llama DELETE con rowVersion", async () => {
+      const user = userEvent.setup();
+      deleteCompanyOtMandateRule.mockResolvedValue(undefined);
+      abrir();
+      await user.click(
+        await screen.findByRole("button", { name: /volver al default de gestora uno/i }),
+      );
+      await screen.findByTestId("mandato-volver-default");
+      listCompanyOtMandateRules.mockResolvedValue([
+        { ...base, hasExplicitRule: false, rowVersion: null },
+      ]);
+      await user.click(screen.getByRole("button", { name: /^volver al default$/i }));
+      await waitFor(() =>
+        expect(deleteCompanyOtMandateRule).toHaveBeenCalledWith(funza.officeId, "cia-1", undefined, 3),
+      );
+      expect(await screen.findByText("Default")).toBeInTheDocument();
+    });
+
+    it("no ofrece Volver al default sin regla propia ni el control fuera de Plataforma", async () => {
+      listCompanyOtMandateRules.mockResolvedValue([{ ...base, hasExplicitRule: false, rowVersion: null }]);
+      const { unmount } = abrir();
+      await screen.findByRole("button", { name: /editar tipo de mandato de gestora uno/i });
+      expect(screen.queryByRole("button", { name: /volver al default de/i })).not.toBeInTheDocument();
+      unmount();
+      abrir(false);
+      await screen.findByTestId("mandato-company-tipo-cia-1");
+      expect(screen.queryByRole("button", { name: /editar tipo de mandato de/i })).not.toBeInTheDocument();
+    });
+
+    it("mientras guarda, deshabilita los controles y muestra el loader", async () => {
+      const user = userEvent.setup();
+      let resolve: (v: unknown) => void = () => undefined;
+      upsertCompanyOtMandateRule.mockReturnValue(new Promise((r) => (resolve = r)));
+      abrir();
+      await abrirEditor(user);
+      await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+      await waitFor(() => expect(screen.getByRole("button", { name: /^guardar$/i })).toBeDisabled());
+      expect(screen.getByTestId("mandato-tipo-select")).toBeDisabled();
+      expect(screen.getByRole("button", { name: /editar tipo de mandato de gestora uno/i })).toBeDisabled();
+      resolve({ ...base, rowVersion: 4 });
+      await waitFor(() => expect(screen.queryByTestId("mandato-tipo-editor")).not.toBeInTheDocument());
     });
   });
 });

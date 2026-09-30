@@ -1,13 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Eye, FileText, Search, Trash2, Upload } from "lucide-react";
+import { Copy, Eye, FileText, Pencil, RotateCcw, Search, Trash2, Upload } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { RowActions } from "@/components/atom/RowActions";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import {
+  CompanyTipoMandatoModal,
+  CompanyVolverDefaultModal,
+  type CompanyTipoMandatoValues,
+} from "@/components/admin/plataforma/CompanyTipoMandatoModal";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import {
+  deleteCompanyOtMandateRule,
   deleteMandateOtCustomTemplate,
   fetchMandateOtPreview,
   fetchMandatoTemplatePreview,
@@ -15,6 +22,7 @@ import {
   saveMandateOtEditorBody,
   setCompanyDefaultSigner,
   setOtDefaultSigner,
+  upsertCompanyOtMandateRule,
   uploadMandateOtPdfTemplate,
   upsertMandateOtConfig,
   type CompanyOtMandateRuleView,
@@ -27,7 +35,9 @@ import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 import {
   assignmentModeFromTemplateCode,
   mandatoTemplateOptions,
+  resolveAssignmentMode,
   resolveTipoNegocio,
+  suggestedFamilyForTipo,
   systemTemplateLabel,
   tipoNegocioLabel,
   terceroAjenoEnPlantilla,
@@ -67,6 +77,11 @@ export interface MandatoOtConfigFormProps {
   lockToCompanyId?: string | null;
   /** Abre el alta de mandatario de esa empresa (hub OT). */
   onRegisterSigner?: (companyTenantId: string) => void;
+  /**
+   * HU #13151 - permite al Super Admin editar el tipo de mandato de cada compania. Solo lo activa
+   * Plataforma; el hub del OT no lo pasa.
+   */
+  editableCompanyType?: boolean;
   /** Tras un alta, recarga el listado de mandatarios del OT sin cerrar el panel. */
   signersRevision?: number;
   /** Mandatario recién creado: se preselecciona como default del OT. */
@@ -81,6 +96,7 @@ export function MandatoOtConfigForm({
   highlightCompanyId,
   lockToCompanyId,
   onRegisterSigner,
+  editableCompanyType = false,
   signersRevision = 0,
   lastCreatedSignerId,
   onClose,
@@ -116,6 +132,11 @@ export function MandatoOtConfigForm({
   const [error, setError] = useState<string | null>(null);
   const [otDefaultSignerId, setOtDefaultSignerId] = useState(office.defaultMandateSignerId ?? "");
   const [hostCompanyId, setHostCompanyId] = useState("");
+  // HU #13151 - edicion del tipo de mandato por compania.
+  const [typeEditId, setTypeEditId] = useState<string | null>(null);
+  const [resetRuleId, setResetRuleId] = useState<string | null>(null);
+  const [ruleError, setRuleError] = useState<string | null>(null);
+  const [ruleConflict, setRuleConflict] = useState(false);
 
   const hasCustom = view.hasCustomTemplate;
   // Redacción que se emite hoy: con "auto" elegido, la del sistema para este organismo.
@@ -138,6 +159,13 @@ export function MandatoOtConfigForm({
       return row.companyName.toLowerCase().includes(q);
     });
   }, [companyRules, companySearch, lockToCompanyId]);
+
+  const typeEditRow = typeEditId
+    ? (companyRules.find((r) => r.companyTenantId === typeEditId) ?? null)
+    : null;
+  const resetRuleRow = resetRuleId
+    ? (companyRules.find((r) => r.companyTenantId === resetRuleId) ?? null)
+    : null;
 
   const companyPageRows = companyPg.paginar(filteredCompanyRules);
 
@@ -304,6 +332,91 @@ export function MandatoOtConfigForm({
     }
   };
 
+  const closeRuleDialogs = () => {
+    setTypeEditId(null);
+    setResetRuleId(null);
+    setRuleError(null);
+    setRuleConflict(false);
+  };
+
+  /** Mensaje de un fallo al escribir la regla; marca el conflicto para ofrecer recargar. */
+  const handleRuleFailure = async (err: unknown, fallback: string) => {
+    const code =
+      err instanceof ApiError && err.body && typeof err.body === "object" && "error" in err.body
+        ? String((err.body as { error?: unknown }).error ?? "")
+        : "";
+    if (err instanceof ApiError && (err.status === 409 || code === "row_version_conflict")) {
+      setRuleConflict(true);
+      setRuleError(
+        "Otra persona modificó la regla de esta compañía mientras la editabas. Se cargó el tipo actual; revisa y vuelve a guardar.",
+      );
+      await loadCompanyRules();
+      return;
+    }
+    setRuleConflict(false);
+    if (code === "mandatario_institucional_requerido") {
+      setRuleError("El nombre de la entidad es obligatorio.");
+    } else if (err instanceof ApiError && err.status === 403) {
+      setRuleError("No tienes permiso para cambiar el tipo de mandato.");
+    } else {
+      setRuleError(fallback);
+    }
+  };
+
+  const handleSaveCompanyType = async (
+    row: CompanyOtMandateRuleView,
+    values: CompanyTipoMandatoValues,
+  ) => {
+    setRuleError(null);
+    setRuleConflict(false);
+    setSavingCompanyId(row.companyTenantId);
+    try {
+      const institucional = values.tipo === "institucional";
+      const saved = await upsertCompanyOtMandateRule(office.officeId, row.companyTenantId, {
+        assignmentMode: resolveAssignmentMode(values.tipo),
+        mandataryFamily: suggestedFamilyForTipo(values.tipo, view.templateCode),
+        institutionalMandataryName: institucional ? values.institutionalName.trim() : null,
+        institutionalMandataryNit: institucional ? values.institutionalNit.trim() || null : null,
+        chamberCity: institucional ? values.chamberCity.trim() || null : null,
+        mandatarySigla: institucional ? values.sigla.trim() || null : null,
+        defaultMandateSignerId: values.tipo === "persona_rl" ? row.defaultMandateSignerId : null,
+        rowVersion: row.rowVersion,
+      });
+      setCompanyRules((prev) =>
+        prev.map((r) =>
+          r.companyTenantId === row.companyTenantId
+            ? {
+                ...r,
+                ...saved,
+                companyName: saved.companyName || r.companyName,
+                companyTaxId: saved.companyTaxId ?? r.companyTaxId,
+              }
+            : r,
+        ),
+      );
+      closeRuleDialogs();
+    } catch (err) {
+      await handleRuleFailure(err, "No se pudo guardar el tipo de mandato.");
+    } finally {
+      setSavingCompanyId(null);
+    }
+  };
+
+  const handleResetCompanyRule = async (row: CompanyOtMandateRuleView) => {
+    setRuleError(null);
+    setRuleConflict(false);
+    setSavingCompanyId(row.companyTenantId);
+    try {
+      await deleteCompanyOtMandateRule(office.officeId, row.companyTenantId, undefined, row.rowVersion);
+      closeRuleDialogs();
+      await loadCompanyRules();
+    } catch (err) {
+      await handleRuleFailure(err, "No se pudo volver al default.");
+    } finally {
+      setSavingCompanyId(null);
+    }
+  };
+
   const handleRemoveCustom = async () => {
     setError(null);
     setSaving(true);
@@ -459,13 +572,55 @@ export function MandatoOtConfigForm({
           );
         },
       },
+      ...(editableCompanyType
+        ? [
+            {
+              key: "acciones",
+              header: "Acciones",
+              align: "right" as const,
+              cellClassName: "!px-2.5",
+              headerClassName: "!px-2.5",
+              render: (row: CompanyOtMandateRuleView) => (
+                <RowActions
+                  actions={[
+                    {
+                      icon: Pencil,
+                      label: `Editar tipo de mandato de ${row.companyName}`,
+                      onClick: () => {
+                        setRuleError(null);
+                        setRuleConflict(false);
+                        setTypeEditId(row.companyTenantId);
+                      },
+                      disabled: busy,
+                    },
+                    ...(row.hasExplicitRule
+                      ? [
+                          {
+                            icon: RotateCcw,
+                            label: `Volver al default de ${row.companyName}`,
+                            onClick: () => {
+                              setRuleError(null);
+                              setRuleConflict(false);
+                              setResetRuleId(row.companyTenantId);
+                            },
+                            disabled: busy,
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              ),
+            } satisfies DataTableColumn<CompanyOtMandateRuleView>,
+          ]
+        : []),
     ],
     // Handlers son estables por cierre de render; deps cubren estado que cambia las celdas.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers del mismo render
-    [busy, savingCompanyId, otSigners, office.officeId, onRegisterSigner],
+    [busy, savingCompanyId, otSigners, office.officeId, onRegisterSigner, editableCompanyType],
   );
 
   return (
+    <>
     <OtSidePanel
       open
       title={mode === "mandatario" ? "Configurar mandatario" : "Configurar mandato"}
@@ -964,6 +1119,32 @@ export function MandatoOtConfigForm({
         )}
       </div>
     </OtSidePanel>
+    {typeEditRow ? (
+      <CompanyTipoMandatoModal
+        key={typeEditRow.companyTenantId}
+        row={typeEditRow}
+        busy={savingCompanyId !== null}
+        error={ruleError}
+        conflict={ruleConflict}
+        onSave={(values) => void handleSaveCompanyType(typeEditRow, values)}
+        onCancel={closeRuleDialogs}
+        onReload={() => {
+          setRuleError(null);
+          setRuleConflict(false);
+        }}
+      />
+    ) : null}
+    {resetRuleRow ? (
+      <CompanyVolverDefaultModal
+        companyName={resetRuleRow.companyName}
+        busy={savingCompanyId !== null}
+        error={ruleError}
+        onConfirm={() => void handleResetCompanyRule(resetRuleRow)}
+        onCancel={closeRuleDialogs}
+      />
+    ) : null}
+    {savingCompanyId !== null ? <CarLoaderModal label="Guardando…" /> : null}
+    </>
   );
 }
 
