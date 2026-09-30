@@ -65,7 +65,8 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
     private static CompanyMandateSignerRequest Alta(string documento, params Guid[] organismos) =>
         new("Ana Restrepo", documento, organismos, "CC", "ana@flit.test",
             // HU #13122: el correo ya no habilita a firmar; se usa la excepción transitoria de firma física (F2).
-            PhysicalSignatureOfficeIds: organismos);
+            PhysicalSignatureOfficeIds: organismos,
+            SignatureMethod: "baul");
 
     /// <summary>Concesión P con grant a Ot1 (C1/C2 heredan) y red Marca Blanca sin bloqueos.</summary>
     private async Task SeedRedAsync()
@@ -322,6 +323,7 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
         DocumentNumber = documento,
         CompanyTenantIds = [company],
         Email = "ana@flit.test",
+        SignatureMethod = "biometria",
         CompanyVisibility = VistaOt,
     };
 
@@ -344,6 +346,7 @@ public sealed class EffectiveNetworkMandatesIntegrationTests(PostgresDatabaseFix
                 DocumentNumber = documento,
                 CompanyTenantIds = companies,
                 Email = "mandatario@flit.test",
+                SignatureMethod = "biometria",
                 CompanyVisibility = OtCompanyVisibility.WholeNetwork,
             });
             result.Errors.Should().BeEmpty();

@@ -11,7 +11,7 @@ public sealed record MandateSignerResponse(
     Guid TransitOfficeId,
     string FullName,
     string DocumentType,
-    string DocumentNumber,
+    string? DocumentNumber,
     string IntegrityHash,
     string? Email,
     Guid? UserId,
@@ -35,4 +35,20 @@ public sealed record MandateSignerResponse(
     /// Empresas representadas por organismo. Lo necesita el formulario para precargar la selección al
     /// editar; vacío para un organismo significa "aplica a todas allí".
     /// </summary>
-    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null);
+    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null,
+    /// <summary>HU #13129 — modelo: <c>natural</c> | <c>juridica</c> | <c>formato_blanco</c>.</summary>
+    string SignerModel = MandateSignerModels.Natural,
+    /// <summary>HU #13129 — forma de firma (<c>baul</c> | <c>biometria</c>); nula fuera de natural y en legados.</summary>
+    string? SignatureMethod = null,
+    /// <summary>HU #13129 — vigencia propia: <c>fixed</c> | <c>range</c>.</summary>
+    string ValidityKind = MandateValidityKinds.Fixed,
+    /// <summary>HU #13129 — inicio del rango (date); nulo con vigencia fija.</summary>
+    DateOnly? ValidFrom = null,
+    /// <summary>HU #13129 — fin del rango (date); nulo con vigencia fija.</summary>
+    DateOnly? ValidTo = null,
+    /// <summary>
+    /// HU #13129 — estado de vigencia calculado en servidor (día de Colombia): <c>inactivo</c> →
+    /// <c>vencido</c> → <c>por_vencer</c> (≤ 7 días al fin) → <c>vigente</c>; <c>no_vigente</c> si el rango
+    /// aún no empieza. No se persiste.
+    /// </summary>
+    string ValidityStatus = MandateValidityStatus.Vigente);

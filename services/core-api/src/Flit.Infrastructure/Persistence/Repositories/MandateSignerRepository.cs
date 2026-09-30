@@ -91,6 +91,11 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             SignatureVaultId = data.SignatureVaultId,
             RegisteredAt = data.RegisteredAt,
             IsActive = true,
+            SignerModel = data.SignerModel,
+            SignatureMethod = data.SignatureMethod,
+            ValidityKind = data.ValidityKind,
+            ValidFrom = data.ValidFrom,
+            ValidTo = data.ValidTo,
             CreatedAt = now,
             CreatedBy = data.CreatedBy,
         });
@@ -139,7 +144,7 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             .FirstOrDefaultAsync(s => s.Id == data.MandateSignerId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (signer is null || !signer.IsActive)
+        if (signer is null || !signer.IsActive || signer.DeletedAt is not null)
         {
             return false;
         }
@@ -178,6 +183,12 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         signer.IntegrityHash = data.IntegrityHash;
         signer.Email = data.Email;
         signer.UserId = data.UserId;
+        // HU #13129 — modelo, forma de firma y vigencia propia (ya validados y normalizados).
+        signer.SignerModel = data.SignerModel;
+        signer.SignatureMethod = data.SignatureMethod;
+        signer.ValidityKind = data.ValidityKind;
+        signer.ValidFrom = data.ValidFrom;
+        signer.ValidTo = data.ValidTo;
         // La columna existía desde la HU #10910 pero NADIE la escribía: el trámite resolvía la firma
         // por documento y esta referencia quedaba siempre nula. Solo se toca si el llamante la
         // gestiona: escribirla siempre haría que un guardado desde el perfil del organismo —que no
@@ -246,7 +257,7 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             .ConfigureAwait(false);
 
         // Idempotente: 404 si no existe o ya estaba inactivo.
-        if (signer is null || !signer.IsActive)
+        if (signer is null || !signer.IsActive || signer.DeletedAt is not null)
         {
             return false;
         }
@@ -302,7 +313,7 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             .ConfigureAwait(false);
 
         // Idempotente: 404 si no existe o ya estaba activo.
-        if (signer is null || signer.IsActive)
+        if (signer is null || signer.IsActive || signer.DeletedAt is not null)
         {
             return false;
         }

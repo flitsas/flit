@@ -15,7 +15,8 @@ public sealed class MandateSignerItem
     /// <summary>Tipo de documento (ADR-0036). Insumo del descriptor de validación de identidad.</summary>
     public string DocumentType { get; init; } = "CC";
 
-    public string DocumentNumber { get; init; } = string.Empty;
+    /// <summary>Nulo solo para el Formato en blanco (HU #13129).</summary>
+    public string? DocumentNumber { get; init; } = string.Empty;
     public string IntegrityHash { get; init; } = string.Empty;
 
     /// <summary>Correo del mandatario para la validación de identidad (ADR-0036, HU #10911). PII.</summary>
@@ -47,6 +48,22 @@ public sealed class MandateSignerItem
 
     public DateTimeOffset RegisteredAt { get; init; }
     public bool IsActive { get; init; }
+
+    /// <summary>HU #13129 (ADR-0061) — modelo: natural, juridica o formato_blanco.</summary>
+    public string SignerModel { get; init; } = MandateSignerModels.Natural;
+
+    /// <summary>Forma de firma (baul o biometria); nula en juridica, formato_blanco y legados sin migrar.</summary>
+    public string? SignatureMethod { get; init; }
+
+    /// <summary>Vigencia propia: fixed o range.</summary>
+    public string ValidityKind { get; init; } = MandateValidityKinds.Fixed;
+
+    public DateOnly? ValidFrom { get; init; }
+    public DateOnly? ValidTo { get; init; }
+
+    /// <summary>Estado de vigencia calculado para <paramref name="today"/> (día calendario de Colombia).</summary>
+    public string ValidityStatusOn(DateOnly today) =>
+        MandateValidityStatus.Compute(IsActive, ValidityKind, ValidFrom, ValidTo, today);
 
     /// <summary>Compañías (tenants gestores) actualmente asignadas al mandatario.</summary>
     public IReadOnlyList<Guid> CompanyTenantIds { get; init; } = [];

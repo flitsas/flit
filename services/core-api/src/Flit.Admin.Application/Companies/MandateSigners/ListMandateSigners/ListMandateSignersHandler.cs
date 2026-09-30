@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 
@@ -21,6 +22,8 @@ public sealed class ListMandateSignersHandler
         var signers = await _reader
             .ListByOtAsync(query.TransitOfficeId, query.Visibility, cancellationToken).ConfigureAwait(false);
 
+        var today = ColombiaTime.Today(TimeProvider.System);
+
         return
         [
             .. signers.Select(s => new MandateSignerResponse(
@@ -38,7 +41,15 @@ public sealed class ListMandateSignersHandler
                 s.RegisteredAt,
                 s.IsActive,
                 s.CompanyTenantIds,
-                s.TransitOfficeIds)),
+                s.TransitOfficeIds,
+                null,
+                null,
+                s.SignerModel,
+                s.SignatureMethod,
+                s.ValidityKind,
+                s.ValidFrom,
+                s.ValidTo,
+                s.ValidityStatusOn(today))),
         ];
     }
 }

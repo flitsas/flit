@@ -7,6 +7,8 @@ public sealed class CreateMandateSignerCommand
 {
     public required Guid TransitOfficeId { get; init; }
     public required string FullName { get; init; }
+
+    /// <summary>Vacío solo para el Formato en blanco (HU #13129).</summary>
     public required string DocumentNumber { get; init; }
     public required IReadOnlyList<Guid> CompanyTenantIds { get; init; }
 
@@ -43,6 +45,21 @@ public sealed class CreateMandateSignerCommand
     /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
     /// </summary>
     public IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies { get; init; }
+
+    /// <summary>
+    /// HU #13129 (ADR-0061) — modelo: <c>natural</c> | <c>juridica</c> | <c>formato_blanco</c>. Ausente ⇒
+    /// <c>natural</c>. Persona jurídica y Formato en blanco no admiten forma de firma, fechas ni correo.
+    /// </summary>
+    public string? SignerModel { get; init; }
+
+    /// <summary>Forma de firma de la Persona natural: <c>baul</c> | <c>biometria</c>. Obligatoria para natural.</summary>
+    public string? SignatureMethod { get; init; }
+
+    /// <summary>Vigencia propia: <c>fixed</c> (por defecto) | <c>range</c> (exige <see cref="ValidFrom"/> y <see cref="ValidTo"/>).</summary>
+    public string? ValidityKind { get; init; }
+
+    public DateOnly? ValidFrom { get; init; }
+    public DateOnly? ValidTo { get; init; }
 
     public Guid? CreatedBy { get; init; }
     public Guid? CorrelationId { get; init; }

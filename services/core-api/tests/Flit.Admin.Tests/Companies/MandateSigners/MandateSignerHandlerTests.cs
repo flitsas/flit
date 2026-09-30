@@ -218,6 +218,7 @@ public sealed class MandateSignerHandlerTests
             FullName = fullName,
             DocumentNumber = documentNumber,
             CompanyTenantIds = companies,
+            SignatureMethod = "biometria",
             CreatedBy = Operator,
             CompanyVisibility = OtCompanyVisibility.WholeNetwork,
         };

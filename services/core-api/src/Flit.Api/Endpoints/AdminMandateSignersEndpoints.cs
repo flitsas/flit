@@ -159,6 +159,12 @@ public static class AdminMandateSignersEndpoints
             TransitOfficeIds = request.TransitOfficeIds,
             // HU #13123 — firma del baúl (solo el id) y validaciones compartidas con la compañía.
             SignatureVaultId = request.SignatureVaultId,
+            // HU #13129 — modelo, forma de firma y vigencia propia.
+            SignerModel = request.SignerModel,
+            SignatureMethod = request.SignatureMethod,
+            ValidityKind = request.ValidityKind,
+            ValidFrom = request.ValidFrom,
+            ValidTo = request.ValidTo,
             ValidateSigningMeans = true,
             CreatedBy = ResolveUserId(httpContext.User),
             CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),
@@ -207,6 +213,12 @@ public static class AdminMandateSignersEndpoints
             Email = request.Email,
             UserId = request.UserId,
             TransitOfficeIds = request.TransitOfficeIds,
+            // HU #13129 — modelo, forma de firma y vigencia propia (ausentes ⇒ se conserva lo guardado).
+            SignerModel = request.SignerModel,
+            SignatureMethod = request.SignatureMethod,
+            ValidityKind = request.ValidityKind,
+            ValidFrom = request.ValidFrom,
+            ValidTo = request.ValidTo,
             UpdatedBy = ResolveUserId(httpContext.User),
             CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),
         };

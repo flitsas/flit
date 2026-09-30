@@ -132,4 +132,51 @@ public sealed class MandateSignerSigningCapabilityTests
             .Validate([Funza], null, null, Signer(signatureVaultId: Firma))
             .Should().BeNull();
     }
+
+    // ── HU #13129 — con forma de firma explícita no hay caída de un medio al otro ──────────────────
+
+    [Fact]
+    public void FormaBaul_SinFirmaElegida_ErrorSobreLaFirmaDelBaul()
+    {
+        var error = MandateSignerSigningCapability.Validate(
+            [Funza], null, null, null, MandateSignatureMethods.Baul);
+
+        error.Should().NotBeNull();
+        error!.Field.Should().Be("signatureVaultId");
+        error.Message.Should().Be(MandateSignerSigningCapability.SinFirmaDelBaulMessage);
+    }
+
+    [Fact]
+    public void FormaBaul_ConFirmaElegida_SeHabilita()
+    {
+        MandateSignerSigningCapability
+            .Validate([Funza, Bogota], null, Firma, null, MandateSignatureMethods.Baul)
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void FormaBaul_LaIdentidadVigenteNoSustituyeALaFirmaDelBaul()
+    {
+        // ADR-0061: elección explícita; la identidad no rescata a un mandatario baúl sin firma.
+        MandateSignerSigningCapability
+            .Validate([Funza], null, null, Signer(identityStatus: "valid"), MandateSignatureMethods.Baul)
+            .Should().NotBeNull();
+    }
+
+    [Fact]
+    public void FormaBaul_LaFirmaFisicaTransitoriaSigueExentandoAlOrganismoMarcado()
+    {
+        MandateSignerSigningCapability
+            .Validate([Funza], [Funza], null, null, MandateSignatureMethods.Baul)
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void FormaBiometria_SeHabilita_SinExigirValidacionAprobadaAlGuardar()
+    {
+        // La validación la origina y vigila el módulo Identidad (30 días, HU #13130).
+        MandateSignerSigningCapability
+            .Validate([Funza], null, null, Signer(identityStatus: "none"), MandateSignatureMethods.Biometria)
+            .Should().BeNull();
+    }
 }

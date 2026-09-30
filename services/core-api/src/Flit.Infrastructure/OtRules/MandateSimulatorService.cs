@@ -86,7 +86,7 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         var vinculos = await (
             from s in _db.MandateSigners.AsNoTracking()
             join c in _db.MandateSignerCompanies.AsNoTracking() on s.Id equals c.MandateSignerId
-            where c.TransitOfficeId == officeId && c.IsActive && s.IsActive
+            where c.TransitOfficeId == officeId && c.IsActive && s.IsActive && s.DeletedAt == null
             select new { s.Id, s.FullName, s.DocumentNumber, c.CompanyTenantId, s.SignatureVaultId })
             .ToListAsync(ct)
             .ConfigureAwait(false);
@@ -384,6 +384,7 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
                 && c.MandateSignerId == mandateSignerId
                 && c.IsActive
                 && s.IsActive
+                && s.DeletedAt == null
             select (Guid?)c.CompanyTenantId)
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);

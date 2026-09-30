@@ -33,6 +33,11 @@ public static class MandateSignerSigningCapability
         + "el baúl ni una validación biométrica válida o en curso. Carga su firma en el baúl de firmas "
         + "o inicia la validación biométrica en el módulo Identidad.";
 
+    public const string SinFirmaDelBaulMessage =
+        "Elija la firma del baúl del mandatario: la forma de firma baúl exige una firma activa y vigente.";
+
+    public const string FieldVault = "signatureVaultId";
+
     /// <summary>
     /// Estado de identidad que cuenta como resuelta o en curso. <c>expired</c> NO cuenta: una
     /// validación vencida no estampa sello, y renovarla es una acción explícita del gestor.
@@ -54,11 +59,27 @@ public static class MandateSignerSigningCapability
         IReadOnlyList<Guid> offices,
         IReadOnlyList<Guid>? physicalSignatureOfficeIds,
         Guid? signatureVaultId,
-        MandateSignerItem? existente = null)
+        MandateSignerItem? existente = null,
+        string? signatureMethod = null)
     {
         ArgumentNullException.ThrowIfNull(offices);
 
-        if (PuedeFirmarElectronicamente(signatureVaultId, existente))
+        // HU #13129 — con forma de firma explícita no hay caída de un medio al otro (ADR-0061).
+        // Biometría: la validación la origina y la vigila el módulo Identidad (30 días, HU #13130), no
+        // se exige aprobada para guardar. Baúl: exige la firma elegida.
+        if (signatureMethod == MandateSignatureMethods.Biometria)
+        {
+            return [];
+        }
+
+        if (signatureMethod == MandateSignatureMethods.Baul)
+        {
+            if (signatureVaultId is { } v && v != Guid.Empty || existente?.SignatureVaultId is not null)
+            {
+                return [];
+            }
+        }
+        else if (PuedeFirmarElectronicamente(signatureVaultId, existente))
         {
             return [];
         }
@@ -78,13 +99,19 @@ public static class MandateSignerSigningCapability
         IReadOnlyList<Guid> offices,
         IReadOnlyList<Guid>? physicalSignatureOfficeIds,
         Guid? signatureVaultId,
-        MandateSignerItem? existente = null)
+        MandateSignerItem? existente = null,
+        string? signatureMethod = null)
     {
         var sinFirma = OrganismosSinMedioDeFirma(
-            offices, physicalSignatureOfficeIds, signatureVaultId, existente);
+            offices, physicalSignatureOfficeIds, signatureVaultId, existente, signatureMethod);
 
-        return sinFirma.Count == 0
-            ? null
+        if (sinFirma.Count == 0)
+        {
+            return null;
+        }
+
+        return signatureMethod == MandateSignatureMethods.Baul
+            ? new MandateSignerValidationError(FieldVault, SinFirmaDelBaulMessage, null)
             : new MandateSignerValidationError(Field, SinMedioDeFirmaMessage, null);
     }
 

@@ -66,7 +66,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                 && c.CompanyTenantId == companyTenantId
                 && c.IsActive
                 && s.IsActive
-            select new { s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType })
+                && s.DeletedAt == null
+            select new { s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType, s.SignerModel })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -77,7 +78,9 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
         var vigentes = await LoadVigentIdentitiesAsync(
             transitOfficeId,
-            signers.Select(s => (s.Id, s.DocumentType, s.DocumentNumber)).ToList(),
+            // HU #13129 — Persona jurídica y Formato en blanco no tienen identidad que resolver.
+            signers.Where(s => s.SignerModel == "natural" && !string.IsNullOrWhiteSpace(s.DocumentNumber))
+                .Select(s => (s.Id, s.DocumentType, s.DocumentNumber!)).ToList(),
             cancellationToken).ConfigureAwait(false);
 
         // Quién firma a mano ANTE ESTE organismo: es una propiedad del vínculo, no de la persona.
@@ -95,7 +98,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         return
         [
             .. signers.Where(s => admitidos.Contains(s.Id)).Select(s => new MandateSignerCandidate(
-                s.Id, s.FullName, s.DocumentNumber, s.UserId, vigentes.ContainsKey(s.Id),
+                s.Id, s.FullName, s.DocumentNumber ?? string.Empty, s.UserId, vigentes.ContainsKey(s.Id),
                 s.SignatureVaultId, s.DocumentType, vigentes.GetValueOrDefault(s.Id)?.Certificado,
                 vigentes.GetValueOrDefault(s.Id)?.ValidUntil,
                 firmanAMano.Contains(s.Id))),
@@ -115,7 +118,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             .Select(s => new
             {
                 s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType,
-                s.TransitOfficeId,
+                s.TransitOfficeId, s.SignerModel,
             })
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -129,7 +132,9 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         // candidato sin vigencia, igual que antes cuando no había fila admin.
         var vigentes = await LoadVigentIdentitiesAsync(
             signer.TransitOfficeId,
-            [(signer.Id, signer.DocumentType, signer.DocumentNumber ?? string.Empty)],
+            signer.SignerModel == "natural" && !string.IsNullOrWhiteSpace(signer.DocumentNumber)
+                ? [(signer.Id, signer.DocumentType, signer.DocumentNumber)]
+                : [],
             cancellationToken).ConfigureAwait(false);
 
         return new MandateSignerCandidate(

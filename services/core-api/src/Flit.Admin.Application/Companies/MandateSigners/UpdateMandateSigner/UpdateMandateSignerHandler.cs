@@ -78,8 +78,48 @@ public sealed class UpdateMandateSignerHandler
         var otStatus = await _otStatus
             .GetByIdAsync(command.TransitOfficeId, cancellationToken).ConfigureAwait(false);
 
+        // HU #13129 — modelo, forma de firma y vigencia; lo que no se manda se conserva (solo natural).
+        var (profile, profileErrors) = MandateSignerModelRules.Evaluate(
+            new MandateSignerProfileInput(
+                command.SignerModel,
+                command.SignatureMethod,
+                command.ValidityKind,
+                command.ValidFrom,
+                command.ValidTo,
+                command.FullName,
+                command.DocumentType,
+                command.DocumentNumber,
+                command.Email,
+                command.ActualizaFirma ? command.SignatureVaultId : null),
+            signer);
+
         var (otTenantId, errors) = MandateSignerValidation.ValidateBase(
-            otStatus, command.FullName, command.DocumentNumber, companyIds);
+            otStatus,
+            profile.FullName,
+            profile.DocumentNumber,
+            companyIds,
+            documentRequired: profile.Model != MandateSignerModels.FormatoBlanco);
+        errors.AddRange(profileErrors);
+
+        // Forma de firma baúl: la firma elegida (o la ya guardada, si el llamante no gestiona la firma).
+        var efectiveVaultId = command.ActualizaFirma ? command.SignatureVaultId : signer.SignatureVaultId;
+        if (errors.Count == 0
+            && profile.SignatureMethod == MandateSignatureMethods.Baul)
+        {
+            var offices = transitOfficeIds is { Count: > 0 }
+                ? transitOfficeIds
+                : (signer.TransitOfficeIds.Count > 0 ? signer.TransitOfficeIds : [command.TransitOfficeId]);
+            var baulError = MandateSignerSigningCapability.Validate(
+                offices,
+                physicalSignatureOfficeIds ?? signer.PhysicalSignatureOfficeIds,
+                efectiveVaultId,
+                existente: null,
+                MandateSignatureMethods.Baul);
+            if (baulError is not null)
+            {
+                errors.Add(baulError);
+            }
+        }
 
         if (otTenantId is not null && companiesToValidate.Count > 0)
         {
@@ -101,10 +141,16 @@ public sealed class UpdateMandateSignerHandler
             return UpdateMandateSignerResult.Invalid(errors);
         }
 
-        var fullName = command.FullName.Trim();
-        var documentNumber = command.DocumentNumber.Trim();
-        var documentType = string.IsNullOrWhiteSpace(command.DocumentType) ? "CC" : command.DocumentType.Trim();
+        var fullName = profile.FullName;
+        var documentNumber = profile.DocumentNumber;
+        var documentType = profile.DocumentType;
         var email = string.IsNullOrWhiteSpace(command.Email) ? null : command.Email.Trim();
+
+        // El vínculo al baúl solo existe con forma de firma baúl: al pasar a biometría o a un modelo sin
+        // firma personal se desvincula (elección explícita, sin caída de un medio al otro, ADR-0061).
+        var conservaBaul = profile.SignatureMethod == MandateSignatureMethods.Baul;
+        var actualizaFirma = command.ActualizaFirma || !conservaBaul;
+        var vaultId = conservaBaul ? command.SignatureVaultId : null;
         // Regenera la huella con la MISMA fecha de registro original (RF: huella determinista).
         var integrityHash = MandateSignerIntegrityHash.Compute(fullName, documentNumber, signer.RegisteredAt);
 
@@ -123,13 +169,18 @@ public sealed class UpdateMandateSignerHandler
                 command.UserId,
                 transitOfficeIds,
                 physicalSignatureOfficeIds,
-                command.SignatureVaultId,
+                vaultId,
                 command.OfficeCompanies,
-                command.ActualizaFirma,
+                actualizaFirma,
                 // Tras la edición, el organismo bajo el que se editó es el primario. Solo cambia algo
                 // cuando la lista retira al primario anterior; en la edición desde el perfil del
                 // organismo ambos coinciden y esto es un no-op.
-                NuevoOrganismoPrimario: command.TransitOfficeId),
+                NuevoOrganismoPrimario: command.TransitOfficeId,
+                SignerModel: profile.Model,
+                SignatureMethod: profile.SignatureMethod,
+                ValidityKind: profile.ValidityKind,
+                ValidFrom: profile.ValidFrom,
+                ValidTo: profile.ValidTo),
             cancellationToken).ConfigureAwait(false);
 
         return updated

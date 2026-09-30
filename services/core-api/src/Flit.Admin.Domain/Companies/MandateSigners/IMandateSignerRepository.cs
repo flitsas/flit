@@ -48,7 +48,7 @@ public sealed record CreateMandateSignerData(
     Guid TransitOfficeId,
     Guid OtTenantId,
     string FullName,
-    string DocumentNumber,
+    string? DocumentNumber,
     string IntegrityHash,
     DateTimeOffset RegisteredAt,
     IReadOnlyList<Guid> CompanyTenantIds,
@@ -80,14 +80,20 @@ public sealed record CreateMandateSignerData(
     /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
     /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
     /// </summary>
-    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null);
+    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null,
+    /// <summary>HU #13129 — modelo, forma de firma y vigencia propia, ya normalizados y validados.</summary>
+    string SignerModel = MandateSignerModels.Natural,
+    string? SignatureMethod = null,
+    string ValidityKind = MandateValidityKinds.Fixed,
+    DateOnly? ValidFrom = null,
+    DateOnly? ValidTo = null);
 
 /// <summary>Datos de edición. La huella ya viene recalculada con la fecha de registro original.</summary>
 public sealed record UpdateMandateSignerData(
     Guid MandateSignerId,
     Guid OtTenantId,
     string FullName,
-    string DocumentNumber,
+    string? DocumentNumber,
     string IntegrityHash,
     IReadOnlyList<Guid> CompanyTenantIds,
     Guid? UpdatedBy,
@@ -133,7 +139,13 @@ public sealed record UpdateMandateSignerData(
     /// apuntando a un organismo donde el mandatario ya no aplica, y la reactivación —que restaura el
     /// primario— lo resucitaría. <c>null</c> ⇒ se conserva el que ya tiene.
     /// </summary>
-    Guid? NuevoOrganismoPrimario = null);
+    Guid? NuevoOrganismoPrimario = null,
+    /// <summary>HU #13129 — modelo, forma de firma y vigencia propia, ya normalizados y validados.</summary>
+    string SignerModel = MandateSignerModels.Natural,
+    string? SignatureMethod = null,
+    string ValidityKind = MandateValidityKinds.Fixed,
+    DateOnly? ValidFrom = null,
+    DateOnly? ValidTo = null);
 
 /// <summary>
 /// Empresas representadas que un mandatario atiende en un organismo. La lista vacía significa "todas":

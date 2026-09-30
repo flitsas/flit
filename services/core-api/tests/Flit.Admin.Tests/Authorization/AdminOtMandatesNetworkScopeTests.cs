@@ -447,8 +447,111 @@ public sealed class AdminOtMandatesNetworkScopeTests
                 email = "ana@flit.test",
                 transitOfficeIds = new[] { office },
                 signatureVaultId = firma,
+                signatureMethod = "baul",
             },
             Ct);
+
+    private Task<HttpResponseMessage> PostModeloAsync(Guid office, Guid company, object cuerpo) =>
+        _client.PostAsJsonAsync($"/api/v1/admin/transit-offices/{office}/mandate-signers", cuerpo, Ct);
+
+    [Fact]
+    public async Task HU13129_AC2_natural_con_baul_y_rango_es_201_y_la_lista_trae_el_estado_calculado()
+    {
+        AuthenticateOtUser();
+        var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.AddHours(-5).Date);
+        var firma = await SeedFirmaAsync(_head);
+
+        var response = await PostModeloAsync(_officeA, _head, new
+        {
+            fullName = "Ana Restrepo",
+            documentNumber = Documento,
+            companyTenantIds = new[] { _head },
+            transitOfficeIds = new[] { _officeA },
+            signerModel = "natural",
+            signatureMethod = "baul",
+            signatureVaultId = firma,
+            validityKind = "range",
+            validFrom = hoy.AddDays(-2).ToString("yyyy-MM-dd"),
+            validTo = hoy.AddDays(5).ToString("yyyy-MM-dd"),
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(Ct));
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement
+            .GetProperty("signingMeans").GetString().Should().Be("baul");
+
+        var lista = await _client.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/admin/transit-offices/{_officeA}/mandate-signers", Ct);
+        var fila = lista.GetProperty("data").EnumerateArray().Single();
+        fila.GetProperty("signerModel").GetString().Should().Be("natural");
+        fila.GetProperty("signatureMethod").GetString().Should().Be("baul");
+        fila.GetProperty("validityKind").GetString().Should().Be("range");
+        fila.GetProperty("validFrom").GetString().Should().Be(hoy.AddDays(-2).ToString("yyyy-MM-dd"));
+        fila.GetProperty("validTo").GetString().Should().Be(hoy.AddDays(5).ToString("yyyy-MM-dd"));
+        fila.GetProperty("validityStatus").GetString().Should().Be("por_vencer");
+    }
+
+    [Fact]
+    public async Task HU13129_AC5_juridica_con_forma_de_firma_es_422_con_campo_y_mensaje()
+    {
+        AuthenticateOtUser();
+
+        var response = await PostModeloAsync(_officeA, _head, new
+        {
+            fullName = "Operadora UT",
+            documentNumber = "900123456",
+            companyTenantIds = new[] { _head },
+            transitOfficeIds = new[] { _officeA },
+            signerModel = "juridica",
+            signatureMethod = "baul",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var error = (await response.Content.ReadFromJsonAsync<JsonElement>(Ct))
+            .GetProperty("errors").EnumerateArray()
+            .Single(e => e.GetProperty("field").GetString() == "signatureMethod");
+        error.GetProperty("message").GetString().Should().Contain("Persona natural");
+    }
+
+    [Fact]
+    public async Task HU13129_AC3_formato_en_blanco_es_201_sin_documento_ni_forma_de_firma()
+    {
+        AuthenticateOtUser();
+
+        var response = await PostModeloAsync(_officeA, _head, new
+        {
+            companyTenantIds = new[] { _head },
+            transitOfficeIds = new[] { _officeA },
+            signerModel = "formato_blanco",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(Ct));
+        var lista = await _client.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/admin/transit-offices/{_officeA}/mandate-signers", Ct);
+        var fila = lista.GetProperty("data").EnumerateArray().Single();
+        fila.GetProperty("fullName").GetString().Should().Be("Formato en blanco");
+        fila.GetProperty("signerModel").GetString().Should().Be("formato_blanco");
+    }
+
+    [Fact]
+    public async Task HU13129_AC6_rango_invertido_es_422()
+    {
+        AuthenticateOtUser();
+
+        var response = await PostModeloAsync(_officeA, _head, new
+        {
+            fullName = "Ana Restrepo",
+            documentNumber = Documento,
+            companyTenantIds = new[] { _head },
+            transitOfficeIds = new[] { _officeA },
+            signatureMethod = "baul",
+            validityKind = "range",
+            validFrom = "2026-12-10",
+            validTo = "2026-12-01",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await response.Content.ReadAsStringAsync(Ct)).Should().Contain("validTo");
+    }
 
     [Fact]
     public async Task HU13123_AC1_ot_admin_registra_mandatario_con_firma_del_baul_de_la_compania_201()
@@ -516,14 +619,14 @@ public sealed class AdminOtMandatesNetworkScopeTests
     }
 
     [Fact]
-    public async Task HU13123_AC5_sin_baul_ni_validacion_es_422_con_mensaje_de_falta_de_medio_de_firma()
+    public async Task HU13123_AC5_con_baul_y_sin_firma_es_422_con_mensaje_de_falta_de_firma_del_baul()
     {
         AuthenticateOtUser();
 
         var response = await PostAltaAsync(_officeA, _head, null);
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
-        (await response.Content.ReadAsStringAsync(Ct)).Should().Contain("no está en condiciones de firmar");
+        (await response.Content.ReadAsStringAsync(Ct)).Should().Contain("no tiene una firma vigente en el baúl");
     }
 
     [Fact]

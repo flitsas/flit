@@ -6,6 +6,7 @@ using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Flit.Admin.Tests.Companies.MandateSigners;
@@ -79,7 +80,7 @@ public sealed class CreateMandateSignerOtSigningMeansTests
     }
 
     private static CreateMandateSignerCommand Alta(
-        string documento, Guid company, Guid? firma, bool validar = true) =>
+        string documento, Guid company, Guid? firma, bool validar = true, string? metodo = "baul") =>
         new()
         {
             TransitOfficeId = Office,
@@ -90,6 +91,7 @@ public sealed class CreateMandateSignerOtSigningMeansTests
             Email = "ana@flit.test",
             TransitOfficeIds = [Office],
             SignatureVaultId = firma,
+            SignatureMethod = metodo,
             ValidateSigningMeans = validar,
             CompanyVisibility = OtCompanyVisibility.WholeNetwork,
         };
@@ -131,7 +133,7 @@ public sealed class CreateMandateSignerOtSigningMeansTests
     }
 
     [Fact]
-    public async Task SinBaulNiValidacion_AunConCorreo_SeRechazaConMensajeDeFaltaDeMedioDeFirma()
+    public async Task ConBaul_SinFirmaEnElBaul_AunConCorreo_SeRechazaConMensajeDeFaltaDeFirmaDelBaul()
     {
         await using var ctx = MandateSignerHandlerTests.NewSeededContext();
 
@@ -139,7 +141,7 @@ public sealed class CreateMandateSignerOtSigningMeansTests
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().ContainSingle()
-            .Which.Message.Should().Be(CreateMandateSignerHandler.SinMedioParaOtMessage);
+            .Which.Message.Should().Be(CreateMandateSignerHandler.SinBaulParaOtMessage);
     }
 
     [Fact]
@@ -169,6 +171,7 @@ public sealed class CreateMandateSignerOtSigningMeansTests
             DocumentNumber = "1020304050",
             CompanyTenantIds = [CompanyA, CompanyB],
             SignatureVaultId = firma,
+            SignatureMethod = "baul",
             ValidateSigningMeans = true,
             CompanyVisibility = OtCompanyVisibility.WholeNetwork,
         };
@@ -201,7 +204,7 @@ public sealed class CreateMandateSignerOtSigningMeansTests
         await using var ctx = MandateSignerHandlerTests.NewSeededContext();
         await SeedBiometriaAsync(ctx, CompanyA, "1020304050", BiometricEstados.Aprobado);
 
-        var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null), Ct);
+        var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null, metodo: "biometria"), Ct);
 
         result.IsValid.Should().BeTrue();
         result.SigningMeans.Should().Be("biometria");
@@ -209,27 +212,56 @@ public sealed class CreateMandateSignerOtSigningMeansTests
         (await reader.GetByIdAsync(result.MandateSignerId!.Value, Ct))!.SignatureVaultId.Should().BeNull();
     }
 
-    [Fact]
-    public async Task SinVault_ConBiometriaEnCurso_SeRechaza()
+    [Theory]
+    [InlineData(BiometricEstados.EnProceso, 0)]
+    [InlineData(BiometricEstados.Aprobado, 45)]
+    public async Task ConBiometria_EnCursoOVencida_SeRechazaEnElAltaDelOt(string estado, int dias)
     {
+        // El alta del OT (HU #13123) exige validacion APROBADA y vigente; en curso o vencida no cuentan.
         await using var ctx = MandateSignerHandlerTests.NewSeededContext();
-        await SeedBiometriaAsync(ctx, CompanyA, "1020304050", BiometricEstados.EnProceso);
+        await SeedBiometriaAsync(ctx, CompanyA, "1020304050", estado, diasDesdeAprobacion: dias == 0 ? 1 : dias);
 
-        var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null), Ct);
+        var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null, metodo: "biometria"), Ct);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().ContainSingle().Which.Message.Should().Be(CreateMandateSignerHandler.SinMedioParaOtMessage);
     }
 
     [Fact]
-    public async Task SinVault_ConBiometriaVencidaMasDe30Dias_SeRechaza()
+    public async Task ConBiometria_AprobadaEnOtraCompania_SeRechazaEnElAltaDelOt()
     {
         await using var ctx = MandateSignerHandlerTests.NewSeededContext();
-        await SeedBiometriaAsync(ctx, CompanyA, "1020304050", BiometricEstados.Aprobado, diasDesdeAprobacion: 45);
+        await SeedBiometriaAsync(ctx, CompanyB, "1020304050", BiometricEstados.Aprobado);
 
-        var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null), Ct);
+        (await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null, metodo: "biometria"), Ct))
+            .IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SinFormaDeFirma_ConFirmaVigenteEnElBaul_ConservaLaResolucionYFijaBaul()
+    {
+        // Sin signatureMethod explicito el OT conserva la resolucion en servidor de HU #13123.
+        await using var ctx = MandateSignerHandlerTests.NewSeededContext();
+        var firma = await SeedFirmaAsync(ctx, CompanyA, "1020304050");
+
+        var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null, metodo: null), Ct);
+
+        result.IsValid.Should().BeTrue();
+        result.SigningMeans.Should().Be("baul");
+        var fila = await ctx.MandateSigners.AsNoTracking().SingleAsync(Ct);
+        fila.SignatureMethod.Should().Be("baul");
+        fila.SignatureVaultId.Should().Be(firma);
+    }
+
+    [Fact]
+    public async Task SinFormaDeFirma_SinBaulNiBiometriaAprobada_422ConMensajeDeFaltaDeMedio()
+    {
+        await using var ctx = MandateSignerHandlerTests.NewSeededContext();
+
+        var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null, metodo: null), Ct);
 
         result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Message.Should().Be(CreateMandateSignerHandler.SinMedioParaOtMessage);
     }
 
     [Fact]
@@ -241,18 +273,7 @@ public sealed class CreateMandateSignerOtSigningMeansTests
         var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null), Ct);
 
         result.IsValid.Should().BeFalse();
-        result.Errors.Should().ContainSingle().Which.Message.Should().Be(CreateMandateSignerHandler.SinMedioParaOtMessage);
-    }
-
-    [Fact]
-    public async Task SinVault_BiometriaAprobadaEnOtraCompania_NoCuenta()
-    {
-        await using var ctx = MandateSignerHandlerTests.NewSeededContext();
-        await SeedBiometriaAsync(ctx, CompanyB, "1020304050", BiometricEstados.Aprobado);
-
-        var result = await Handler(ctx).HandleAsync(Alta("1020304050", CompanyA, null), Ct);
-
-        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Message.Should().Be(CreateMandateSignerHandler.SinBaulParaOtMessage);
     }
 
     [Fact]
@@ -275,6 +296,7 @@ public sealed class CreateMandateSignerOtSigningMeansTests
             FullName = "Ana Restrepo",
             DocumentNumber = "1020304050",
             CompanyTenantIds = [CompanyA, CompanyB],
+            SignatureMethod = "baul",
             ValidateSigningMeans = true,
             CompanyVisibility = OtCompanyVisibility.WholeNetwork,
         };
@@ -297,6 +319,7 @@ public sealed class CreateMandateSignerOtSigningMeansTests
             CompanyTenantIds = [CompanyA],
             TransitOfficeIds = [Office],
             PhysicalSignatureOfficeIds = [Office],
+            SignatureMethod = "baul",
             ValidateSigningMeans = true,
             CompanyVisibility = OtCompanyVisibility.WholeNetwork,
         };

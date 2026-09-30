@@ -74,6 +74,18 @@ public sealed class UpdateMandateSignerCommand
     /// </summary>
     public bool ActualizaFirma { get; init; }
 
+    /// <summary>HU #13129 — modelo; ausente ⇒ se conserva el guardado.</summary>
+    public string? SignerModel { get; init; }
+
+    /// <summary>HU #13129 — forma de firma; ausente ⇒ se conserva la guardada (solo natural).</summary>
+    public string? SignatureMethod { get; init; }
+
+    /// <summary>HU #13129 — <c>fixed</c> | <c>range</c>; ausente ⇒ se conserva la guardada (solo natural).</summary>
+    public string? ValidityKind { get; init; }
+
+    public DateOnly? ValidFrom { get; init; }
+    public DateOnly? ValidTo { get; init; }
+
     public Guid? UpdatedBy { get; init; }
     public Guid? CorrelationId { get; init; }
 

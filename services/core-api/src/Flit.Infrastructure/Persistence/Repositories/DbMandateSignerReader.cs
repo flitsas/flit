@@ -59,7 +59,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
                 var candidatos = await _context.MandateSigners
                     .AsNoTracking()
-                    .Where(s => idsDelOrganismo.Keys.Contains(s.Id))
+                    .Where(s => idsDelOrganismo.Keys.Contains(s.Id) && s.DeletedAt == null)
                     .OrderByDescending(s => s.IsActive)
                     .ThenBy(s => s.FullName)
                     .ToListAsync(cancellationToken)
@@ -134,6 +134,11 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             UserId = s.UserId,
             RegisteredAt = s.RegisteredAt,
             IsActive = s.IsActive,
+            SignerModel = s.SignerModel,
+            SignatureMethod = s.SignatureMethod,
+            ValidityKind = s.ValidityKind,
+            ValidFrom = s.ValidFrom,
+            ValidTo = s.ValidTo,
             CompanyTenantIds = [.. s.CompanyTenantIds.Where(visibles.Contains)],
             TransitOfficeIds = [.. s.TransitOfficeIds.Where(id => id == transitOfficeId)],
             PhysicalSignatureOfficeIds = [.. s.PhysicalSignatureOfficeIds.Where(id => id == transitOfficeId)],
@@ -153,7 +158,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             {
                 var signer = await _context.MandateSigners
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(s => s.Id == mandateSignerId, cancellationToken)
+                    .FirstOrDefaultAsync(s => s.Id == mandateSignerId && s.DeletedAt == null, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (signer is null)
@@ -185,7 +190,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     PhysicalSignatureOfficeIds = physicalBySigner.GetValueOrDefault(signer.Id, []),
                     FullName = signer.FullName,
                     DocumentType = signer.DocumentType,
-                    DocumentNumber = signer.DocumentNumber ?? string.Empty,
+                    DocumentNumber = signer.DocumentNumber,
                     IntegrityHash = signer.IntegrityHash,
                     Email = signer.Email,
                     SignatureVaultId = signer.SignatureVaultId,
@@ -199,6 +204,11 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     UserId = signer.UserId,
                     RegisteredAt = signer.RegisteredAt,
                     IsActive = signer.IsActive,
+                    SignerModel = signer.SignerModel,
+                    SignatureMethod = signer.SignatureMethod,
+                    ValidityKind = signer.ValidityKind,
+                    ValidFrom = signer.ValidFrom,
+                    ValidTo = signer.ValidTo,
                     CompanyTenantIds = companyIds,
                 };
             },
@@ -228,7 +238,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
                 var signers = await _context.MandateSigners
                     .AsNoTracking()
-                    .Where(s => signerIds.Contains(s.Id))
+                    .Where(s => signerIds.Contains(s.Id) && s.DeletedAt == null)
                     .OrderByDescending(s => s.IsActive)
                     .ThenBy(s => s.FullName)
                     .ToListAsync(cancellationToken)
@@ -414,7 +424,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
                 var signers = await _context.MandateSigners
                     .AsNoTracking()
-                    .Where(s => activosEnElOrganismo.Contains(s.Id) && s.IsActive)
+                    .Where(s => activosEnElOrganismo.Contains(s.Id) && s.IsActive && s.DeletedAt == null)
                     .Select(s => new { s.Id, s.FullName, s.IntegrityHash })
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
@@ -590,7 +600,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             TransitOfficeId = signer.TransitOfficeId,
             FullName = signer.FullName,
             DocumentType = signer.DocumentType,
-            DocumentNumber = signer.DocumentNumber ?? string.Empty,
+            DocumentNumber = signer.DocumentNumber,
             IntegrityHash = signer.IntegrityHash,
             Email = signer.Email,
             SignatureVaultId = signer.SignatureVaultId,
@@ -600,6 +610,11 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             UserId = signer.UserId,
             RegisteredAt = signer.RegisteredAt,
             IsActive = signer.IsActive,
+            SignerModel = signer.SignerModel,
+            SignatureMethod = signer.SignatureMethod,
+            ValidityKind = signer.ValidityKind,
+            ValidFrom = signer.ValidFrom,
+            ValidTo = signer.ValidTo,
             CompanyTenantIds = companiesBySigner.GetValueOrDefault(signer.Id, []),
             TransitOfficeIds = officesBySigner.GetValueOrDefault(signer.Id, []),
             PhysicalSignatureOfficeIds = physicalBySigner?.GetValueOrDefault(signer.Id, []) ?? [],
@@ -642,6 +657,12 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         CancellationToken cancellationToken)
     {
         var result = new Dictionary<Guid, AdminIdentityVigencia.Resultado>();
+
+        // HU #13129 — solo la Persona natural tiene identidad que resolver: a Persona jurídica (NIT) y a
+        // Formato en blanco (sin documento) no se les consulta ni asocia validación de identidad.
+        signers = [.. signers.Where(s =>
+            s.SignerModel == Flit.Admin.Domain.Companies.MandateSigners.MandateSignerModels.Natural
+            && !string.IsNullOrWhiteSpace(s.DocumentNumber))];
         if (signers.Count == 0)
         {
             return result;
@@ -654,7 +675,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             _context,
             _otStatus,
             [.. signers.Select(s => new MandateSignerIdentityTenantResolver.SignerRef(
-                s.Id, s.TransitOfficeId, s.DocumentType, s.DocumentNumber ?? string.Empty))],
+                s.Id, s.TransitOfficeId, s.DocumentType, s.DocumentNumber!))],
             (tenantId, documentos, ct) => _identityResolver.ResolveManyBatchedAsync(tenantId, documentos, now, ct),
             cancellationToken).ConfigureAwait(false);
 

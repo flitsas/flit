@@ -759,7 +759,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         CancellationToken ct)
     {
         var signerOk = await _db.MandateSigners.AsNoTracking()
-            .AnyAsync(s => s.Id == mandateSignerId && s.IsActive, ct)
+            .AnyAsync(s => s.Id == mandateSignerId && s.IsActive && s.DeletedAt == null, ct)
             .ConfigureAwait(false);
         if (!signerOk)
             return false;
@@ -786,7 +786,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         CancellationToken ct)
     {
         var signerOk = await _db.MandateSigners.AsNoTracking()
-            .AnyAsync(s => s.Id == mandateSignerId && s.IsActive, ct)
+            .AnyAsync(s => s.Id == mandateSignerId && s.IsActive && s.DeletedAt == null, ct)
             .ConfigureAwait(false);
         if (!signerOk)
             return false;

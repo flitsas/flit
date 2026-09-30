@@ -16,6 +16,9 @@ namespace Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 /// disparador de ese correo). El disparo que existía aquí desde la HU #10911/#11000
 /// (<c>IAdminIdentityValidationService.EnsureAsync</c>, best-effort) se retira; el resultado del
 /// alta siempre reporta <see cref="MandateSignerIdentityOutcome.NotAttempted"/>.
+///
+/// HU #13129 (ADR-0061) — el alta valida el modelo del mandatario (natural, jurídica, formato en blanco),
+/// la forma de firma (baúl o biometría) y la vigencia propia (fija o por rango) con 422 por campo.
 /// </summary>
 public sealed class CreateMandateSignerHandler
 {
@@ -33,6 +36,10 @@ public sealed class CreateMandateSignerHandler
     public const string SinMedioParaOtMessage =
         "El mandatario no está en condiciones de firmar: la persona necesita una firma vigente en el baúl "
         + "de su compañía o una validación biométrica aprobada y vigente.";
+
+    public const string SinBaulParaOtMessage =
+        "El mandatario no tiene una firma vigente en el baúl de su compañía. Elija la forma de firma "
+        + "biometría o cargue su firma en el baúl.";
 
     public const string VariasCompaniasSinBaulMessage =
         "Sin indicar la firma del baúl, el mandatario solo puede registrarse para una compañía a la vez.";
@@ -62,8 +69,56 @@ public sealed class CreateMandateSignerHandler
         var otStatus = await _otStatus
             .GetByIdAsync(command.TransitOfficeId, cancellationToken).ConfigureAwait(false);
 
+        // Alta del OT sin forma de firma explícita (natural): se conserva la resolución en servidor de
+        // HU #13123 (baúl vigente o biometría aprobada y vigente) y se fija la forma con el medio hallado.
+        var method = command.SignatureMethod;
+        SigningResolution? inferred = null;
+        var modelRaw = command.SignerModel?.Trim().ToLowerInvariant();
+        if (command.ValidateSigningMeans
+            && string.IsNullOrWhiteSpace(method)
+            && (string.IsNullOrEmpty(modelRaw) || modelRaw == MandateSignerModels.Natural)
+            && !string.IsNullOrWhiteSpace(command.DocumentNumber)
+            && companyIds.Count > 0)
+        {
+            var dummy = new MandateSignerProfile(
+                MandateSignerModels.Natural, null, MandateValidityKinds.Fixed, null, null,
+                command.FullName, string.IsNullOrWhiteSpace(command.DocumentType) ? "CC" : command.DocumentType.Trim(),
+                command.DocumentNumber.Trim());
+            inferred = await ResolveSigningMeansAsync(command, dummy, companyIds, cancellationToken)
+                .ConfigureAwait(false);
+            if (inferred.Error is null)
+            {
+                method = inferred.Means;
+            }
+        }
+
+        // HU #13129 — modelo, forma de firma y vigencia (422 por campo).
+        var (profile, profileErrors) = MandateSignerModelRules.Evaluate(new MandateSignerProfileInput(
+            command.SignerModel,
+            method,
+            command.ValidityKind,
+            command.ValidFrom,
+            command.ValidTo,
+            command.FullName,
+            command.DocumentType,
+            command.DocumentNumber,
+            command.Email,
+            command.SignatureVaultId));
+
         var (otTenantId, errors) = MandateSignerValidation.ValidateBase(
-            otStatus, command.FullName, command.DocumentNumber, companyIds);
+            otStatus,
+            profile.FullName,
+            profile.DocumentNumber,
+            companyIds,
+            documentRequired: profile.Model != MandateSignerModels.FormatoBlanco);
+        if (inferred?.Error is not null)
+        {
+            errors.Add(inferred.Error);
+        }
+        else
+        {
+            errors.AddRange(profileErrors);
+        }
 
         if (otTenantId is not null && companyIds.Count > 0)
         {
@@ -80,12 +135,17 @@ public sealed class CreateMandateSignerHandler
                 .ConfigureAwait(false);
         }
 
-        Guid? signatureVaultId = command.SignatureVaultId;
-        string? signingMeans = null;
-        if (errors.Count == 0 && command.ValidateSigningMeans)
+        // Solo la Persona natural con baúl conserva el vínculo a la firma del baúl.
+        Guid? signatureVaultId = profile.SignatureMethod == MandateSignatureMethods.Baul
+            ? command.SignatureVaultId
+            : null;
+        string? signingMeans = profile.SignatureMethod;
+        if (errors.Count == 0 && command.ValidateSigningMeans && profile.IsNatural)
         {
-            var signing = await ResolveSigningMeansAsync(command, companyIds, cancellationToken)
-                .ConfigureAwait(false);
+            var signing = inferred is { Error: null }
+                ? inferred
+                : await ResolveSigningMeansAsync(command, profile, companyIds, cancellationToken)
+                    .ConfigureAwait(false);
             if (signing.Error is not null)
             {
                 errors.Add(signing.Error);
@@ -103,9 +163,9 @@ public sealed class CreateMandateSignerHandler
         }
 
         var registeredAt = DateTimeOffset.UtcNow;
-        var fullName = command.FullName.Trim();
-        var documentNumber = command.DocumentNumber.Trim();
-        var documentType = string.IsNullOrWhiteSpace(command.DocumentType) ? "CC" : command.DocumentType.Trim();
+        var fullName = profile.FullName;
+        var documentNumber = profile.DocumentNumber;
+        var documentType = profile.DocumentType;
         var email = string.IsNullOrWhiteSpace(command.Email) ? null : command.Email.Trim();
         var integrityHash = MandateSignerIntegrityHash.Compute(fullName, documentNumber, registeredAt);
 
@@ -126,7 +186,12 @@ public sealed class CreateMandateSignerHandler
                 command.TransitOfficeIds,
                 command.PhysicalSignatureOfficeIds,
                 signatureVaultId,
-                command.OfficeCompanies),
+                command.OfficeCompanies,
+                profile.Model,
+                profile.SignatureMethod,
+                profile.ValidityKind,
+                profile.ValidFrom,
+                profile.ValidTo),
             cancellationToken).ConfigureAwait(false);
 
         // HU #11757 (ADR-0050) — el alta de un mandatario NO genera fila de validación ni correo,
@@ -143,20 +208,20 @@ public sealed class CreateMandateSignerHandler
         MandateSignerValidationError? Error, Guid? SignatureVaultId, string? Means);
 
     /// <summary>
-    /// HU #13123 — mismas reglas que el alta de la compañía. Con <c>SignatureVaultId</c> en el request se
-    /// valida esa firma contra el tenant de la compañía (existe, es de esa persona, activa y vigente).
+    /// HU #13123 + HU #13129 — mismas reglas que el alta de la compañía, ahora con forma de firma explícita
+    /// (solo Persona natural).
     /// <para>
-    /// <b>Ajuste:</b> el OT no ve el baúl ni lo envía, así que SIN <c>SignatureVaultId</c> el backend
-    /// resuelve el medio de firma de la persona (tipo + número) dentro del tenant de la compañía destino:
-    /// 1) firma vigente en el baúl de esa compañía (se vincula al mandatario) o 2) validación biométrica
-    /// APROBADA y vigente en ese mismo tenant (criterio de HU #13121). En curso/vencida y el correo no
-    /// cuentan; la firma física transitoria no aplica al alta del OT. Sin ninguno ⇒ 422. Con varias
-    /// compañías y sin vault ⇒ 422 (la resolución es por una compañía). Solo se devuelve el nombre del
-    /// medio, nunca datos del baúl.
+    /// <b>Biometría:</b> se guarda sin exigir una validación aprobada; la origina y vigila el módulo
+    /// Identidad (30 días, HU #13130). <b>Baúl:</b> con <c>SignatureVaultId</c> se valida esa firma contra el
+    /// tenant de la compañía (existe, es de esa persona, activa y vigente); sin él, el backend resuelve la
+    /// firma vigente de la persona (tipo + número) en el baúl de la compañía destino (el OT no ve el baúl).
+    /// Sin firma ⇒ 422 <c>signatureVaultId</c>. Con varias compañías y sin vault ⇒ 422. La firma física
+    /// transitoria no aplica al alta del OT. Solo se devuelve el nombre del medio.
     /// </para>
     /// </summary>
     private async Task<SigningResolution> ResolveSigningMeansAsync(
         CreateMandateSignerCommand command,
+        MandateSignerProfile profile,
         IReadOnlyList<Guid> companyIds,
         CancellationToken cancellationToken)
     {
@@ -164,8 +229,10 @@ public sealed class CreateMandateSignerHandler
             ? command.TransitOfficeIds.Distinct().ToList()
             : [command.TransitOfficeId];
         var distinctCompanies = companyIds.Distinct().ToList();
+        var method = profile.SignatureMethod;
 
-        if (command.SignatureVaultId is { } vaultId && vaultId != Guid.Empty)
+        if (method != MandateSignatureMethods.Biometria
+            && command.SignatureVaultId is { } vaultId && vaultId != Guid.Empty)
         {
             if (distinctCompanies.Count != 1)
             {
@@ -189,14 +256,9 @@ public sealed class CreateMandateSignerHandler
                     command.Email,
                     SignatureVaultId: vaultId),
                 cancellationToken).ConfigureAwait(false);
-            if (firmaError is not null)
-            {
-                return new SigningResolution(firmaError, null, null);
-            }
-
-            var explicitError = MandateSignerSigningCapability.Validate(
-                offices, command.PhysicalSignatureOfficeIds, vaultId);
-            return new SigningResolution(explicitError, vaultId, explicitError is null ? MeansVault : null);
+            return firmaError is not null
+                ? new SigningResolution(firmaError, null, null)
+                : new SigningResolution(null, vaultId, MeansVault);
         }
 
         if (distinctCompanies.Count != 1)
@@ -208,13 +270,12 @@ public sealed class CreateMandateSignerHandler
         }
 
         var companyTenant = distinctCompanies[0];
-        var documentType = string.IsNullOrWhiteSpace(command.DocumentType) ? "CC" : command.DocumentType.Trim();
-        var documentNumber = command.DocumentNumber.Trim();
+        var documentNumber = profile.DocumentNumber ?? string.Empty;
 
-        if (_vaultReader is not null)
+        if (method != MandateSignatureMethods.Biometria && _vaultReader is not null)
         {
             var firma = await _vaultReader
-                .FindActiveByDocumentAsync(companyTenant, documentType, documentNumber, cancellationToken)
+                .FindActiveByDocumentAsync(companyTenant, profile.DocumentType, documentNumber, cancellationToken)
                 .ConfigureAwait(false);
             var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaTime.Offset).Date);
             if (firma is not null && firma.EstaVigente(hoy))
@@ -223,18 +284,22 @@ public sealed class CreateMandateSignerHandler
             }
         }
 
-        if (_biometricReader is not null
+        if (method != MandateSignatureMethods.Baul
+            && _biometricReader is not null
             && await _biometricReader
-                .HasApprovedValidAsync(companyTenant, documentType, documentNumber, cancellationToken)
+                .HasApprovedValidAsync(companyTenant, profile.DocumentType, documentNumber, cancellationToken)
                 .ConfigureAwait(false))
         {
             return new SigningResolution(null, null, MeansBiometric);
         }
 
-        return new SigningResolution(
-            new MandateSignerValidationError(MandateSignerSigningCapability.Field, SinMedioParaOtMessage, null),
-            null,
-            null);
+        return method == MandateSignatureMethods.Baul
+            ? new SigningResolution(
+                new MandateSignerValidationError(
+                    MandateSignerSigningCapability.FieldVault, SinBaulParaOtMessage, null), null, null)
+            : new SigningResolution(
+                new MandateSignerValidationError(
+                    MandateSignerSigningCapability.Field, SinMedioParaOtMessage, null), null, null);
     }
 
     internal static async Task AddExclusiveSlotErrorsAsync(

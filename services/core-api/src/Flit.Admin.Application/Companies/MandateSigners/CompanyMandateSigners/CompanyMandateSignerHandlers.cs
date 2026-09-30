@@ -30,7 +30,20 @@ public sealed record CompanyMandateSignerRequest(
     /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
     /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
     /// </summary>
-    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null);
+    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null,
+    /// <summary>
+    /// HU #13129 (ADR-0061) — modelo: <c>natural</c> (por defecto) | <c>juridica</c> | <c>formato_blanco</c>.
+    /// Persona jurídica y Formato en blanco no admiten forma de firma, fechas ni correo (422).
+    /// </summary>
+    string? SignerModel = null,
+    /// <summary>HU #13129 — forma de firma de la Persona natural: <c>baul</c> | <c>biometria</c>.</summary>
+    string? SignatureMethod = null,
+    /// <summary>HU #13129 — vigencia propia: <c>fixed</c> (por defecto) | <c>range</c>.</summary>
+    string? ValidityKind = null,
+    /// <summary>HU #13129 — inicio del rango (date <c>yyyy-MM-dd</c>); solo con <c>range</c>.</summary>
+    DateOnly? ValidFrom = null,
+    /// <summary>HU #13129 — fin del rango (date); solo con <c>range</c>.</summary>
+    DateOnly? ValidTo = null);
 
 /// <summary>
 /// HU #11202 — alta de un mandatario desde el configurador de la COMPAÑÍA. La empresa captura los datos
@@ -77,18 +90,34 @@ public sealed class CreateCompanyMandateSignerHandler
             return CreateMandateSignerResult.Invalid([error]);
         }
 
-        var firmaError = await ValidarFirmaAsync(
-            _vaultReader, companyTenantId, request, cancellationToken).ConfigureAwait(false);
-        if (firmaError is not null)
+        // HU #13129 — modelo, forma de firma y vigencia (422 por campo).
+        var (profile, profileErrors) = MandateSignerModelRules.Evaluate(ToProfileInput(request));
+        if (profileErrors.Count > 0)
         {
-            return CreateMandateSignerResult.Invalid([firmaError]);
+            return CreateMandateSignerResult.Invalid(profileErrors);
+        }
+
+        // Solo la Persona natural con baúl aporta y valida una firma del baúl; la biometría no la exige
+        // aprobada al guardar (la origina y vigila el módulo Identidad).
+        if (profile.SignatureMethod == MandateSignatureMethods.Baul)
+        {
+            var firmaError = await ValidarFirmaAsync(
+                _vaultReader, companyTenantId, request, cancellationToken).ConfigureAwait(false);
+            if (firmaError is not null)
+            {
+                return CreateMandateSignerResult.Invalid([firmaError]);
+            }
         }
 
         // HU #11715 — no se habilita en un organismo a quien no puede firmar ante él.
-        var sinFirmaError = MandateSignerSigningCapability.Validate(
-            offices,
-            request.PhysicalSignatureOfficeIds,
-            request.SignatureVaultId);
+        var sinFirmaError = profile.IsNatural
+            ? MandateSignerSigningCapability.Validate(
+                offices,
+                request.PhysicalSignatureOfficeIds,
+                request.SignatureVaultId,
+                existente: null,
+                profile.SignatureMethod)
+            : null;
         if (sinFirmaError is not null)
         {
             return CreateMandateSignerResult.Invalid([sinFirmaError]);
@@ -107,12 +136,30 @@ public sealed class CreateCompanyMandateSignerHandler
                 PhysicalSignatureOfficeIds = request.PhysicalSignatureOfficeIds,
                 SignatureVaultId = request.SignatureVaultId,
                 OfficeCompanies = request.OfficeCompanies,
+                SignerModel = request.SignerModel,
+                SignatureMethod = request.SignatureMethod,
+                ValidityKind = request.ValidityKind,
+                ValidFrom = request.ValidFrom,
+                ValidTo = request.ValidTo,
                 CreatedBy = createdBy,
                 // La compañía configura sus propios mandatarios: ve toda la red (Bug #12912).
                 CompanyVisibility = OtCompanyVisibility.WholeNetwork,
             },
             cancellationToken).ConfigureAwait(false);
     }
+
+    internal static MandateSignerProfileInput ToProfileInput(CompanyMandateSignerRequest request) =>
+        new(
+            request.SignerModel,
+            request.SignatureMethod,
+            request.ValidityKind,
+            request.ValidFrom,
+            request.ValidTo,
+            request.FullName,
+            request.DocumentType,
+            request.DocumentNumber,
+            request.Email,
+            request.SignatureVaultId);
 
     /// <summary>
     /// Valida la firma del baúl elegida para el mandatario, con el mismo criterio que el representante
@@ -245,23 +292,38 @@ public sealed class UpdateCompanyMandateSignerHandler
         // suyo mientras siga en la lista; solo si el gestor lo retira pasa a serlo el primero de los que
         // quedan. Tomar siempre `offices[0]` —el primero que mandó el formulario— era el origen del 404:
         // en cuanto no coincidía con el primario guardado, la búsqueda no encontraba al mandatario.
-        var firmaError = await CreateCompanyMandateSignerHandler.ValidarFirmaAsync(
-            _vaultReader, companyTenantId, request, cancellationToken).ConfigureAwait(false);
-        if (firmaError is not null)
+        // HU #13129 — modelo, forma de firma y vigencia; lo que no se manda se conserva (solo natural).
+        var (profile, profileErrors) = MandateSignerModelRules.Evaluate(
+            CreateCompanyMandateSignerHandler.ToProfileInput(request), signer);
+        if (profileErrors.Count > 0)
         {
-            return UpdateMandateSignerResult.Invalid([firmaError]);
+            return UpdateMandateSignerResult.Invalid(profileErrors);
         }
 
-        // HU #13122 AC4 — se valida TODA la lista de organismos, no solo los nuevos: un mandatario que
-        // solo tenía correo (medio que ya no cuenta) no puede seguir guardándose sin cargar su firma en
-        // el baúl o iniciar la validación biométrica. La excepción transitoria de firma física (hasta F2)
-        // se respeta: si el formulario no manda la lista (null), rigen los organismos que ya tenía a mano.
+        if (profile.SignatureMethod == MandateSignatureMethods.Baul)
+        {
+            var firmaError = await CreateCompanyMandateSignerHandler.ValidarFirmaAsync(
+                _vaultReader, companyTenantId, request, cancellationToken).ConfigureAwait(false);
+            if (firmaError is not null)
+            {
+                return UpdateMandateSignerResult.Invalid([firmaError]);
+            }
+        }
+
+        // HU #13122 AC4 + HU #13129 — se valida TODA la lista de organismos, no solo los nuevos. La forma
+        // de firma baúl exige la firma elegida (este configurador gestiona la firma: su null la quita);
+        // la biometría no exige validación aprobada al guardar. La excepción transitoria de firma física
+        // (hasta #13131) se respeta: si el formulario no manda la lista (null), rigen los organismos que
+        // ya tenía a mano.
         var fisicos = request.PhysicalSignatureOfficeIds ?? signer.PhysicalSignatureOfficeIds;
-        var sinFirmaError = MandateSignerSigningCapability.Validate(
-            offices,
-            fisicos,
-            request.SignatureVaultId,
-            signer);
+        var sinFirmaError = profile.IsNatural
+            ? MandateSignerSigningCapability.Validate(
+                offices,
+                fisicos,
+                request.SignatureVaultId,
+                existente: null,
+                profile.SignatureMethod)
+            : null;
         if (sinFirmaError is not null)
         {
             return UpdateMandateSignerResult.Invalid([sinFirmaError]);
@@ -285,6 +347,11 @@ public sealed class UpdateCompanyMandateSignerHandler
                 PhysicalSignatureOfficeIds = request.PhysicalSignatureOfficeIds,
                 SignatureVaultId = request.SignatureVaultId,
                 OfficeCompanies = request.OfficeCompanies,
+                SignerModel = request.SignerModel,
+                SignatureMethod = request.SignatureMethod,
+                ValidityKind = request.ValidityKind,
+                ValidFrom = request.ValidFrom,
+                ValidTo = request.ValidTo,
                 // El configurador de la compañía SÍ gestiona la firma: su null significa "quítala".
                 ActualizaFirma = true,
                 UpdatedBy = updatedBy,

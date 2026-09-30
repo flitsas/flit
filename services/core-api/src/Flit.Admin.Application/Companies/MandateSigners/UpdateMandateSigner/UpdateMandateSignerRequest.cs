@@ -12,4 +12,13 @@ public sealed record UpdateMandateSignerRequest(
     /// HU #11201 — conjunto deseado de organismos. Ausente ⇒ no se tocan (la consola del organismo solo
     /// edita datos personales y compañías). Presente ⇒ reemplaza: los que no vengan se retiran.
     /// </summary>
-    IReadOnlyList<Guid>? TransitOfficeIds = null);
+    IReadOnlyList<Guid>? TransitOfficeIds = null,
+    /// <summary>
+    /// HU #13129 — modelo, forma de firma y vigencia. Ausentes ⇒ se conserva lo guardado (solo dentro de
+    /// Persona natural). Persona jurídica y Formato en blanco no admiten forma de firma, fechas ni correo.
+    /// </summary>
+    string? SignerModel = null,
+    string? SignatureMethod = null,
+    string? ValidityKind = null,
+    DateOnly? ValidFrom = null,
+    DateOnly? ValidTo = null);

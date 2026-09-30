@@ -34,7 +34,8 @@ internal static class MandateSignerValidation
         TransitOfficeOperationalStatusItem? otStatus,
         string? fullName,
         string? documentNumber,
-        IReadOnlyList<Guid> companyTenantIds)
+        IReadOnlyList<Guid> companyTenantIds,
+        bool documentRequired = true)
     {
         var errors = new List<MandateSignerValidationError>();
 
@@ -43,7 +44,7 @@ internal static class MandateSignerValidation
             errors.Add(new MandateSignerValidationError("fullName", NombreRequeridoMessage, null));
         }
 
-        if (string.IsNullOrWhiteSpace(documentNumber))
+        if (documentRequired && string.IsNullOrWhiteSpace(documentNumber))
         {
             // No se adjunta el valor: es PII.
             errors.Add(new MandateSignerValidationError("documentNumber", DocumentoRequeridoMessage, null));

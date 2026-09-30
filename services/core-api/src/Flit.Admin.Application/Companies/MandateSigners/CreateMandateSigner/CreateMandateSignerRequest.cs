@@ -21,4 +21,14 @@ public sealed record CreateMandateSignerRequest(
     /// HU #13123 — firma del baúl de la compañía elegida para el mandatario. El OT solo envía el id: no
     /// recibe la lista del baúl. Se valida en backend contra el tenant de la compañía.
     /// </summary>
-    Guid? SignatureVaultId = null);
+    Guid? SignatureVaultId = null,
+    /// <summary>HU #13129 — <c>natural</c> (por defecto) | <c>juridica</c> | <c>formato_blanco</c>.</summary>
+    string? SignerModel = null,
+    /// <summary>HU #13129 — forma de firma de la Persona natural: <c>baul</c> | <c>biometria</c>.</summary>
+    string? SignatureMethod = null,
+    /// <summary>HU #13129 — <c>fixed</c> (por defecto) | <c>range</c>.</summary>
+    string? ValidityKind = null,
+    /// <summary>HU #13129 — inicio del rango (date, <c>yyyy-MM-dd</c>); solo con <c>range</c>.</summary>
+    DateOnly? ValidFrom = null,
+    /// <summary>HU #13129 — fin del rango (date); solo con <c>range</c>.</summary>
+    DateOnly? ValidTo = null);

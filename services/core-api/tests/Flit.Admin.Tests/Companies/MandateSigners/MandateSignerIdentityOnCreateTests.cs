@@ -70,6 +70,7 @@ public sealed class MandateSignerIdentityOnCreateTests
             DocumentNumber = documentNumber,
             DocumentType = "CC",
             Email = email,
+            SignatureMethod = "biometria",
             CompanyTenantIds = [MandateSignerHandlerTests.CompanyA],
             CreatedBy = MandateSignerHandlerTests.Operator,
         };
