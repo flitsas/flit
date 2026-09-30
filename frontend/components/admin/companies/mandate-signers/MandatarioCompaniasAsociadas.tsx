@@ -9,6 +9,7 @@ import {
   fetchOtAssociableCompanies,
   type AssociableCompaniesPage,
   type AssociableCompany,
+  type MandateSignerOfficeCompanies,
 } from "@/lib/api/admin-mandate-signers";
 
 /** El servidor rechaza búsquedas de menos de 2 caracteres (422): no se envían. */
@@ -30,6 +31,25 @@ export interface AsociadaSeleccionada {
   id: string;
   name?: string;
   nit?: string;
+}
+
+/**
+ * Selección inicial al editar: con nombre y NIT cuando el servidor los trae; solo con id (respaldo
+ * «Compañía asociada») si no.
+ */
+export function precargarAsociadas(
+  officeCompanies?: MandateSignerOfficeCompanies[],
+): Record<string, AsociadaSeleccionada> {
+  const out: Record<string, AsociadaSeleccionada> = {};
+  for (const o of officeCompanies ?? []) {
+    for (const c of o.associatedCompanies ?? []) {
+      if (c.id) out[c.id] = { id: c.id, name: c.name || undefined, nit: c.nit || undefined };
+    }
+    for (const id of o.associatedCompanyTenantIds ?? []) {
+      if (!out[id]) out[id] = { id };
+    }
+  }
+  return out;
 }
 
 export function etiquetaAsociada(c: AsociadaSeleccionada): string {

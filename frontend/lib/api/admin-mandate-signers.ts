@@ -327,6 +327,14 @@ export interface CompanyMandateSignerInput extends MandateSignerProfileFields {
 export interface MandateSignerOfficeCompanies {
   transitOfficeId: string;
   associatedCompanyTenantIds: string[];
+  /** Nombre y NIT de las asociadas (solo esos datos); ausente en respuestas antiguas. */
+  associatedCompanies?: MandateSignerAssociatedCompany[];
+}
+
+export interface MandateSignerAssociatedCompany {
+  id: string;
+  name: string;
+  nit: string;
 }
 
 /**

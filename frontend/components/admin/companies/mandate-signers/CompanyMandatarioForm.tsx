@@ -21,6 +21,7 @@ import {
   MandatarioCompaniasAsociadas,
   type AsociadaSeleccionada,
   type FuenteAsociadas,
+  precargarAsociadas,
 } from "./MandatarioCompaniasAsociadas";
 import type {
   CompanyMandateSignerInput,
@@ -103,11 +104,7 @@ export function CompanyMandatarioForm({
   const [signatureVaultId, setSignatureVaultId] = useState<string | null>(inicial.signatureVaultId);
   // HU #13181 — compañías asociadas (una sola selección que aplica a los organismos elegidos).
   const [asociadasSel, setAsociadasSel] = useState<Record<string, AsociadaSeleccionada>>(() =>
-    Object.fromEntries(
-      (editing?.officeCompanies ?? [])
-        .flatMap((o) => o.associatedCompanyTenantIds ?? [])
-        .map((id) => [id, { id }]),
-    ),
+    precargarAsociadas(editing?.officeCompanies),
   );
   const [erroresAsociadas, setErroresAsociadas] = useState<Record<string, string>>({});
   // Verdadero cuando el Admin de Compañía no tiene hijas: no hay lista y el mandatario es solo suyo.
