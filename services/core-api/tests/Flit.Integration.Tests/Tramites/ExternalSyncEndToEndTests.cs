@@ -5,14 +5,17 @@ using Flit.Admin.Domain.Integrations;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Integration.Tests.MarcaBlanca;
 using Flit.Integration.Tests.Postgres;
+using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using Xunit;
 
@@ -108,7 +111,62 @@ public sealed class ExternalSyncEndToEndTests(PostgresDatabaseFixture fixture) :
         (await GetAsync(cliente, $"{Url}?cursor={cursor}")).GetProperty("items").GetArrayLength().Should().Be(0);
     }
 
+    /// <summary>
+    /// HU #13077 — paso 7 de la guía de consumo: la factura que anuncia el feed se descarga con la URL
+    /// firmada de su <c>adjuntoId</c>. El file-manager es un doble que firma lo que le pidan.
+    /// </summary>
+    [PostgresFact]
+    public async Task HU13077_LaFacturaQueAnunciaElFeedSeDescargaPorSuAdjuntoId()
+    {
+        await SembrarAsync();
+        var tramite = await RadicadoAsync(CompaniaA, 1);
+        await EjecutarAsync(
+            "INSERT INTO tramites.procedure_instance_attachments (tenant_id, procedure_instance_id, tipo, filename, mimetype, size_bytes, sha256, storage_path, uploaded_at) "
+            + "SELECT tenant_id, id, 'factura', 'factura.pdf', 'application/pdf', 10, repeat('a', 64), 'fm-13077', now() "
+            + "FROM tramites.procedure_instances WHERE id = @id",
+            tramite);
+
+        var almacen = new FirmaFija();
+        await using var factory = Host().WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+        {
+            s.RemoveAll<IAttachmentStorage>();
+            s.AddSingleton<IAttachmentStorage>(almacen);
+        }));
+        var cliente = Cliente(factory, [ExternalScopes.TramitesRead]);
+
+        var factura = (await GetAsync(cliente, Url)).GetProperty("items")[0].GetProperty("factura");
+        var adjuntoId = factura.GetProperty("adjuntoId").GetGuid();
+        var url = await GetAsync(cliente, $"/api/v1/external/tramites/{tramite}/adjuntos/{adjuntoId}/url");
+
+        url.GetProperty("url").GetString().Should().Be("https://almacen.ejemplo.test/fm-13077?sig=x");
+        url.GetProperty("nombreArchivo").GetString().Should().Be("factura.pdf");
+        url.GetProperty("contentType").GetString().Should().Be("application/pdf");
+        almacen.Pedidos.Should().Equal("fm-13077");
+    }
+
     // ── Host, pase y siembra ────────────────────────────────────────────────
+
+    private sealed class FirmaFija : IAttachmentStorage
+    {
+        public List<string> Pedidos { get; } = [];
+
+        public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(string storagePath, CancellationToken ct = default)
+        {
+            Pedidos.Add(storagePath);
+            return Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(
+                ($"https://almacen.ejemplo.test/{storagePath}?sig=x", DateTimeOffset.UtcNow.AddMinutes(10)));
+        }
+
+        public Task<StoredFile> SaveAsync(Guid procedureInstanceId, string tipo, string originalFilename, Stream content, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<PresignedUpload> CreatePresignedUploadAsync(Guid procedureInstanceId, string tipo, string originalFilename, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public void Delete(string storagePath) => throw new NotSupportedException();
+
+        public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) => throw new NotSupportedException();
+    }
 
     private WebApplicationFactory<Program> Host() =>
         new MarcaBlancaApiFactory(Fixture).WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, config) =>

@@ -65,4 +65,16 @@ public interface IProcedureSyncReadRepository
     /// </summary>
     Task<IReadOnlyList<ProcedureSyncEntry>> ReadItemsAsync(
         ProcedureSyncPageRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #13077 — la factura <paramref name="attachmentId"/> del trámite <paramref name="procedureId"/>, con
+    /// el mismo alcance que el feed (radicado alguna vez, no migrado) y sin borrado lógico. <c>null</c> si el
+    /// trámite o el adjunto no existen, el adjunto es de otro trámite, no es de tipo factura o el trámite
+    /// está fuera de alcance: para el cliente todos son el mismo 404.
+    /// </summary>
+    Task<ProcedureSyncInvoiceFile?> FindInvoiceAsync(
+        Guid procedureId, Guid attachmentId, CancellationToken cancellationToken = default);
 }
+
+/// <summary>HU #13077 — lo necesario para firmar la descarga de una factura del feed.</summary>
+public sealed record ProcedureSyncInvoiceFile(string StoragePath, string FileName, string ContentType);

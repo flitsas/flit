@@ -193,5 +193,8 @@ public sealed class ExternalSyncEndpointTests : IClassFixture<ExternalSyncEndpoi
 
         public Task<IReadOnlyList<ProcedureSyncChange>> ReadChangesAsync(ProcedureSyncPageRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<ProcedureSyncInvoiceFile?> FindInvoiceAsync(Guid procedureId, Guid attachmentId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

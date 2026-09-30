@@ -2,6 +2,7 @@ using System.Globalization;
 using Flit.Admin.Domain.Integrations;
 using Flit.Api.Authorization;
 using Flit.Queries.Domain.Time;
+using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.ExternalSync;
 
 namespace Flit.Api.Endpoints;
@@ -12,6 +13,8 @@ namespace Flit.Api.Endpoints;
 /// <c>external.tramites.read</c>; sin <c>external.tramites.pii.read</c> los datos personales de los
 /// compradores llegan enmascarados. La ruta no pasa por el middleware de tenant (no está en su lista):
 /// la lectura entre compañías la acota el ámbito exclusivo del repositorio (HU #13076).
+/// <para>HU #13077 — <c>GET /api/v1/external/tramites/{id}/adjuntos/{adjuntoId}/url</c> (contrato v3.1 §3):
+/// URL firmada de corta vida de la factura, con el mecanismo de ADR-0029 (la firma el file-manager).</para>
 /// </summary>
 public static class ExternalSyncEndpoints
 {
@@ -33,6 +36,11 @@ public static class ExternalSyncEndpoints
             .RequireAuthorization(ExternalClientAuthorization.TramitesReadPolicy)
             .WithTags("External")
             .WithName("ExternalTramitesSync");
+
+        app.MapGet($"{ExternalClientAuthorization.RoutePrefix}/tramites/{{id}}/adjuntos/{{adjuntoId}}/url", InvoiceUrlAsync)
+            .RequireAuthorization(ExternalClientAuthorization.TramitesReadPolicy)
+            .WithTags("External")
+            .WithName("ExternalTramiteAdjuntoUrl");
 
         return app;
     }
@@ -102,10 +110,63 @@ public static class ExternalSyncEndpoints
             ColombiaTime.From(timeProvider.GetUtcNow())));
     }
 
-    private static async Task<IResult> Problem(HttpContext context, string code, string detail)
+    /// <summary>
+    /// Solo facturas (decisión del PO). Todo lo que no se puede entregar es el mismo 404, también un id mal
+    /// formado o un archivo que el file-manager ya no tiene: FLITO trata cualquier 404 como «no disponible».
+    /// La URL no se registra en ningún log: lleva la firma (ADR-0029).
+    /// </summary>
+    private static async Task<IResult> InvoiceUrlAsync(
+        HttpContext context,
+        IProcedureSyncReadRepository repository,
+        IAttachmentStorage storage,
+        ILoggerFactory loggerFactory,
+        string id,
+        string adjuntoId,
+        CancellationToken cancellationToken)
     {
-        await ExternalProblem.WriteAsync(context, StatusCodes.Status400BadRequest, code, detail, context.RequestAborted)
-            .ConfigureAwait(false);
+        if (!Guid.TryParse(id, out var procedureId) || !Guid.TryParse(adjuntoId, out var attachmentId))
+        {
+            return await NotFound(context).ConfigureAwait(false);
+        }
+
+        var invoice = await repository.FindInvoiceAsync(procedureId, attachmentId, cancellationToken).ConfigureAwait(false);
+        if (invoice is null)
+        {
+            return await NotFound(context).ConfigureAwait(false);
+        }
+
+        (string Url, DateTimeOffset ExpiresAt)? signed;
+        try
+        {
+            signed = await storage.GetPresignedViewUrlAsync(invoice.StoragePath, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            ExternalSyncLog.FirmaNoDisponible(loggerFactory.CreateLogger(typeof(ExternalSyncEndpoints)), ex, attachmentId, procedureId);
+            return await Problem(context, StatusCodes.Status503ServiceUnavailable, "storage_unavailable",
+                "El almacenamiento de archivos no está disponible; reintentar más tarde.").ConfigureAwait(false);
+        }
+
+        if (signed is not { } url)
+        {
+            return await NotFound(context).ConfigureAwait(false);
+        }
+
+        context.Response.Headers.CacheControl = "no-store";
+        return Results.Ok(new ExternalAttachmentUrl(
+            url.Url, ColombiaTime.From(url.ExpiresAt), invoice.FileName, invoice.ContentType));
+    }
+
+    private static Task<IResult> NotFound(HttpContext context) =>
+        Problem(context, StatusCodes.Status404NotFound, "attachment_not_found", "El adjunto no está disponible.");
+
+    private static Task<IResult> Problem(HttpContext context, string code, string detail) =>
+        Problem(context, StatusCodes.Status400BadRequest, code, detail);
+
+    private static async Task<IResult> Problem(HttpContext context, int status, string code, string detail)
+    {
+        await ExternalProblem.WriteAsync(context, status, code, detail, context.RequestAborted).ConfigureAwait(false);
         return Results.Empty;
     }
 }
@@ -117,3 +178,13 @@ public sealed record ExternalSyncPage(
     bool HasMore,
     int PageSize,
     DateTimeOffset ServerTime);
+
+internal static partial class ExternalSyncLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "El file-manager no firmó la factura {AttachmentId} del trámite {ProcedureId}.")]
+    public static partial void FirmaNoDisponible(ILogger logger, Exception ex, Guid attachmentId, Guid procedureId);
+}
+
+/// <summary>URL firmada de un adjunto (contrato v3.1 §3). <c>ExpiraEn</c> es informativo.</summary>
+public sealed record ExternalAttachmentUrl(string Url, DateTimeOffset ExpiraEn, string NombreArchivo, string ContentType);
