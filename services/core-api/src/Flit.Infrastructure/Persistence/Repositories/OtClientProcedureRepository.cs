@@ -1326,19 +1326,18 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     .FirstOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
 
-                var prenda = await _context.ProcedureInstancePrendas
+                // Bug #13164 — solo la decisión VIGENTE, la más reciente (CreatedAt de la fila, desempate
+                // por Id). Antes se tomaba cualquier fila, sin filtro ni orden, y podía salir una
+                // reemplazada con su acreedor. La máscara del acreedor se aplica al materializar con la
+                // misma regla de dominio que el PUT/GET de prenda (EF no traduce el método).
+                var prendaRow = await _context.ProcedureInstancePrendas
                     .AsNoTracking()
-                    .Where(x => x.ProcedureInstanceId == mapped.Id)
-                    .Select(x => new OtClientProcedurePrenda
-                    {
-                        Decision = x.Decision,
-                        Estado = x.Estado,
-                        AcreedorNombre = x.AcreedorNombre,
-                        AcreedorDocumento = x.AcreedorDocumento,
-                        LevantamientoEntidad = x.LevantamientoEntidad,
-                    })
+                    .Where(x => x.ProcedureInstanceId == mapped.Id && x.Estado == PrendaEstado.Vigente)
+                    .OrderByDescending(x => x.CreatedAt)
+                    .ThenByDescending(x => x.Id)
                     .FirstOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
+                var prenda = ToOtClientProcedurePrenda(prendaRow);
 
                 // Feature #12565 — intento de revocatoria MÁS RECIENTE (cualquier estado): a lo sumo uno
                 // puede estar activo (índice único parcial), así que el más reciente por intento es
@@ -2162,6 +2161,27 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 ProcedureTypeName = typeNames.GetValueOrDefault(item.ProcedureTypeId, "\u2014"),
             })
             .ToList();
+    }
+
+    /// <summary>
+    /// Bug #13164 — proyecta la fila vigente de prenda al detalle del OT. Con <c>omitir</c>
+    /// (<see cref="PrendaDecision.ConservaDatosDeAcreedor"/> = <c>false</c>) el acreedor y la entidad de
+    /// levantamiento no se exponen aunque la fila histórica los tenga (Habeas Data, Ley 1581).
+    /// </summary>
+    internal static OtClientProcedurePrenda? ToOtClientProcedurePrenda(ProcedureInstancePrenda? row)
+    {
+        if (row is null)
+            return null;
+
+        var conserva = PrendaDecision.ConservaDatosDeAcreedor(row.Decision);
+        return new OtClientProcedurePrenda
+        {
+            Decision = row.Decision,
+            Estado = row.Estado,
+            AcreedorNombre = conserva ? row.AcreedorNombre : null,
+            AcreedorDocumento = conserva ? row.AcreedorDocumento : null,
+            LevantamientoEntidad = conserva ? row.LevantamientoEntidad : null,
+        };
     }
 }
 
