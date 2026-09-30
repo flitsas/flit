@@ -482,5 +482,17 @@ public sealed class ExternalApiContractTests : IClassFixture<ExternalApiContract
 
         public Task<IReadOnlyList<ExternalClientView>> ListAsync(CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        // HU #13088 — miembros de administración que estas pruebas no usan.
+        public Task<ExternalClientView?> UpdateAsync(
+            Guid id, ExternalClientChanges changes, Guid? actor, DateTimeOffset now, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ExternalClientView?> ReplaceSecretAsync(
+            Guid id, string newSecretHash, bool revokePrevious, Guid? actor, DateTimeOffset now, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ExternalClientView?> UnlockAsync(Guid id, Guid? actor, DateTimeOffset now, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }
