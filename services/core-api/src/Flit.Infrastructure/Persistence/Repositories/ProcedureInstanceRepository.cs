@@ -575,12 +575,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && ((v.ValidUntil != null && v.ValidUntil > now)
                     || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
                 // HU #10867 — incluir prevalidaciones standalone (sin trámite) y las ligadas a instancias no eliminadas.
-                // Bug #13055 — ni las de un trámite anulado o revocado (misma cláusula que WhereInstanciaVigente).
                 && (v.ProcedureInstanceId == null
-                    || (v.ProcedureInstance != null
-                        && v.ProcedureInstance.DeletedAt == null
-                        && v.ProcedureInstance.Status != TramiteEstado.Anulado
-                        && v.ProcedureInstance.Status != TramiteEstado.Revocado)))
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
             .ToListAsync(ct);
 
         foreach (var v in candidates)
