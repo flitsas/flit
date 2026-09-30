@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -50,7 +51,10 @@ public sealed class TramiteLifecycleService(
     ILogger<TramiteLifecycleService>? logger = null,
     // HU #12775 AC3 — al final por la misma razón que el anterior. Null en tests que no lo ejercitan:
     // sin resolutor el gate de Cámara de Comercio se omite (comportamiento previo a la HU).
-    CamaraComercioRequirementResolver? camaraComercioResolver = null) : ITramiteLifecycleService
+    CamaraComercioRequirementResolver? camaraComercioResolver = null,
+    // HU #13144 (ADR-0066) — para excluir del gate el mandato personalizado de la compañía (ADR-0042). AL FINAL
+    // por la misma razón que los anteriores. Null ⇒ nunca hay mandato personalizado.
+    IPersonalizedDocumentResolver? personalizedDocumentResolver = null) : ITramiteLifecycleService
 {
     private readonly ILogger<TramiteLifecycleService> _logger =
         logger ?? NullLogger<TramiteLifecycleService>.Instance;
@@ -62,6 +66,14 @@ public sealed class TramiteLifecycleService(
     // ADR-0036 §D9 (HU #10916) — directorio de mandatarios del OT para resolver el firmante al aprobar.
     // Default seguro (NUNCA resuelve candidatos) en tests que no lo ejercitan.
     private readonly IMandateSignerDirectory _mandateDirectory = mandateDirectory ?? NullMandateSignerDirectory.Instance;
+
+    // HU #13144 (ADR-0066) — evaluador ÚNICO del mandatario para el gate de radicación. Solo existe si el
+    // directorio se cableó de verdad: con mandateDirectory nulo (tests que no lo ejercitan) el chequeo NO se
+    // evalúa, igual que matrixCompleteness. No basta con NullMandateSignerDirectory: devolvería cero
+    // candidatos y bloquearía todo.
+    private readonly MandateSignerEvaluator? _mandateEvaluator = mandateDirectory is null
+        ? null
+        : new MandateSignerEvaluator(mandateDirectory, mandatePolicy, vaultPolicy, personalizedDocumentResolver);
 
     // HU #10970 — modo por ambiente de CF-03 en el gate de radicación. Sin inyectar ⇒ bloqueo duro
     // (comportamiento previo a esta historia).
@@ -173,11 +185,21 @@ public sealed class TramiteLifecycleService(
 
         // Gates OT de entrega (heredados del submit HU #10217/#2). HU #10872 (AC1) — este es el GATE
         // FINAL de radicación: corre SIEMPRE, sin importar el diff de campos corregidos.
+        var metadataTransicion = command.Metadata;
         if (esRadicacion)
         {
             var entregaError = await EvaluarEntregaAsync(instance, ct).ConfigureAwait(false);
             if (entregaError is var (code, detail) && code is not null)
                 return TramiteTransitionOutcome.Fail(code, detail);
+
+            // HU #13144 (ADR-0066) — mandatario activo, vigente y con firma válida. DESPUÉS de grant,
+            // operabilidad y reglas OT (no tapa sus mensajes), cuando el organismo ya está promovido. Cubre la
+            // primera radicación y la re-radicación desde subsanación, y los dos destinos de /submit.
+            var mandatarioGate = await EvaluarMandatarioAlRadicarAsync(instance, ct).ConfigureAwait(false);
+            if (mandatarioGate.Code is not null)
+                return TramiteTransitionOutcome.Fail(mandatarioGate.Code, mandatarioGate.Detail);
+            if (mandatarioGate.Aviso is not null)
+                metadataTransicion = MergeMetadata(metadataTransicion, mandatarioGate.Aviso);
         }
 
         // ADR-0036 §D9 (HU #10916) — al APROBAR, resolver el mandatario que firma el mandato: automático
@@ -231,7 +253,7 @@ public sealed class TramiteLifecycleService(
             command.Reason,
             command.ChangedByUserId,
             now,
-            command.Metadata);
+            metadataTransicion);
 
         // Historial (RF05) + publicación (RNF01) se ENCOLAN en la misma unidad de trabajo;
         // el commit único de abajo los persiste o descarta en bloque.
@@ -278,6 +300,72 @@ public sealed class TramiteLifecycleService(
 
         if (!regeneracionQueue.Encolar(tenantId, instanceId, documento))
             TramiteLifecycleLog.RegeneracionAnticipadaDescartada(_logger, instanceId, tenantId, documento);
+    }
+
+    /// <summary>
+    /// HU #13144 (ADR-0066) — gate de radicación del mandatario. <c>off</c> o evaluador no cableado: no se
+    /// consulta el directorio ni se registra nada. <c>block</c>: rechaza con <c>mandatario_no_configurado</c> o
+    /// <c>mandatario_firma_invalida</c>. <c>warn</c>: radica y devuelve el aviso (motivo, organismo y compañía,
+    /// sin datos personales) para el log estructurado y la clave <c>mandatario_aviso</c> de los metadatos de la
+    /// transición, que es la fuente persistente para medir el volumen.
+    /// </summary>
+    private async Task<(string? Code, string? Detail, JsonObject? Aviso)> EvaluarMandatarioAlRadicarAsync(
+        ProcedureInstance instance, CancellationToken ct)
+    {
+        var modo = _validationPolicy.MandatarioRequerido;
+        if (_mandateEvaluator is null || modo == TramiteValidationMode.Off)
+            return (null, null, null);
+
+        MandateSignerEvaluacion evaluacion;
+        try
+        {
+            evaluacion = await _mandateEvaluator.EvaluateAsync(instance, null, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (modo == TramiteValidationMode.Warn && ex is not OperationCanceledException)
+        {
+            // En warn la medición nunca detiene una radicación.
+            TramiteLifecycleLog.MandatarioEvaluacionFallida(_logger, instance.Id, instance.TenantId, ex);
+            return (null, null, null);
+        }
+
+        if (evaluacion.CodigoDeError is not { } codigo)
+            return (null, null, null);
+
+        if (modo == TramiteValidationMode.Block)
+            return (codigo, evaluacion.MensajeDeError, null);
+
+        var motivo = evaluacion.Motivo ?? MandateSignerEstados.MotivoSinCandidatos;
+        TramiteLifecycleLog.MandatarioAviso(
+            _logger, instance.Id, codigo, motivo, evaluacion.TransitOfficeId, instance.TenantId);
+
+        return (null, null, new JsonObject
+        {
+            ["modo"] = "warn",
+            ["codigo"] = codigo,
+            ["estado"] = MandateSignerEstados.ToCode(evaluacion.Estado),
+            ["motivo"] = motivo,
+            ["transitOfficeId"] = evaluacion.TransitOfficeId?.ToString(),
+            ["companyTenantId"] = instance.TenantId.ToString(),
+        });
+    }
+
+    /// <summary>Agrega <c>mandatario_aviso</c> a los metadatos de la transición sin perder lo que ya traían.</summary>
+    private static string MergeMetadata(string? existing, JsonObject aviso)
+    {
+        JsonObject root;
+        try
+        {
+            root = string.IsNullOrWhiteSpace(existing)
+                ? []
+                : JsonNode.Parse(existing) as JsonObject ?? new JsonObject { ["original"] = existing };
+        }
+        catch (JsonException)
+        {
+            root = new JsonObject { ["original"] = existing };
+        }
+
+        root["mandatario_aviso"] = aviso;
+        return root.ToJsonString();
     }
 
     /// <summary>
@@ -900,4 +988,16 @@ internal static partial class TramiteLifecycleLog
         Message = "HU #12796 — la regeneración anticipada del consolidado {Documento} del trámite {InstanceId} (tenant {TenantId}) se descartó; lo cubre la regeneración perezosa.")]
     public static partial void RegeneracionAnticipadaDescartada(
         ILogger logger, Guid instanceId, Guid tenantId, TipoConsolidado documento);
+
+    // HU #13144 (ADR-0066) — aviso del gate de mandatario en modo warn. SIN datos personales: solo ids y el
+    // motivo del vocabulario estable (nunca documento, correo ni ruta de firma del mandatario).
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Flit.TramiteValidations MandatarioRequerido (warn): el trámite {InstanceId} se radica sin mandatario válido. Codigo={Codigo}, Motivo={Motivo}, TransitOfficeId={TransitOfficeId}, CompanyTenantId={CompanyTenantId}.")]
+    public static partial void MandatarioAviso(
+        ILogger logger, Guid instanceId, string codigo, string motivo, Guid? transitOfficeId, Guid companyTenantId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "HU #13144 — no se pudo evaluar el mandatario del trámite {InstanceId} (tenant {TenantId}); en modo warn la radicación continúa.")]
+    public static partial void MandatarioEvaluacionFallida(
+        ILogger logger, Guid instanceId, Guid tenantId, Exception exception);
 }

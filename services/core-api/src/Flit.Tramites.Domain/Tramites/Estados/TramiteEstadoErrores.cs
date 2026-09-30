@@ -135,6 +135,19 @@ public static class TramiteEstadoErrores
     public const string MandatarioRequerido = "mandatario_requerido";
 
     /// <summary>
+    /// HU #13144 (ADR-0066) — gate de radicación: el organismo y la compañía no resuelven ningún mandatario
+    /// activo y vigente (o todos se descartaron por vigencia o estado) y la validación está en modo
+    /// <c>block</c> (409). Subsanable: el organismo o la compañía registran un mandatario.
+    /// </summary>
+    public const string MandatarioNoConfigurado = "mandatario_no_configurado";
+
+    /// <summary>
+    /// HU #13144 (ADR-0066) — gate de radicación: hay mandatarios pero ninguno tiene firma válida (falta firma
+    /// en el baúl o validación biométrica vigente) y la validación está en modo <c>block</c> (409).
+    /// </summary>
+    public const string MandatarioFirmaInvalida = "mandatario_firma_invalida";
+
+    /// <summary>
     /// ICT (servicio v1 <c>pauseDraftProcess</c> / bandera <c>starts_procedure_in_paused</c>) — el
     /// trámite está PAUSADO (<c>procedure_instances.is_paused=true</c>): no avanza (radicación /
     /// preparación bloqueadas), replicando el <c>ForbiddenError</c> de v1. Es reversible (reanudar con

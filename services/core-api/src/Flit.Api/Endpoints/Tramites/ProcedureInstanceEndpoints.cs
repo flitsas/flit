@@ -696,6 +696,9 @@ internal static class ProcedureInstanceEndpoints
                 // HU #10518 — OT con grant pero desactivado/sin tenant a nivel plataforma.
                 "organismo_no_operable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El organismo de tránsito no está operativo en FLIT."),
                 "ot_rule_blocked" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El trámite está bloqueado por una regla OT activa."),
+                // HU #13144 (ADR-0066) — gate de mandatario al radicar en modo block. Sin este mapeo el default
+                // los devolvería como 422; son 409 igual que documentos_incompletos.
+                TramiteEstadoErrores.MandatarioNoConfigurado or TramiteEstadoErrores.MandatarioFirmaInvalida => MandatarioGateProblem.For(error, null),
                 "biometria_requerida_ot" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Se requiere validación biométrica según reglas OT."),
                 // R10 (HU #10597) — gate de prenda del traspaso.
                 TramiteEstadoErrores.PrendaDecisionRequerida => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDecisionRequerida, detail: "El vehículo tiene gravámenes: registra una decisión de prenda antes de radicar."),
@@ -921,6 +924,10 @@ internal static class ProcedureInstanceEndpoints
                 // (409, subsanable reintentando con mandateSignerId).
                 TramiteEstadoErrores.MandatarioRequerido =>
                     Results.Problem(statusCode: 409, title: errorCode, detail: errorDetail),
+                // HU #13144 (ADR-0066) — gate de mandatario al radicar (modo block): 409 subsanable, el
+                // organismo o la compañía registran un mandatario.
+                TramiteEstadoErrores.MandatarioNoConfigurado or TramiteEstadoErrores.MandatarioFirmaInvalida =>
+                    MandatarioGateProblem.For(errorCode, errorDetail),
                 _ => Results.Problem(
                     statusCode: 422, title: errorCode,
                     detail: errorDetail ?? "La transición solicitada no es válida."),
@@ -1436,4 +1443,20 @@ internal record TramitesSearchRequest
         // Default DESC, igual que el GET: solo "asc" invierte.
         SortDescending = !string.Equals(SortDir, "asc", StringComparison.OrdinalIgnoreCase),
     };
+}
+
+/// <summary>
+/// HU #13144 (ADR-0066) — respuesta 409 del gate de mandatario al radicar. Compartida por <c>/submit</c> y
+/// <c>/transition</c> (ambos pasan por <c>TramiteLifecycleService</c>): sin este mapeo el <c>default</c> de cada
+/// endpoint devolvería 422. El mensaje explica cómo resolverlo y nunca lleva datos del mandatario.
+/// </summary>
+internal static class MandatarioGateProblem
+{
+    public static IResult For(string errorCode, string? detail) =>
+        Results.Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: errorCode,
+            detail: detail ?? (errorCode == TramiteEstadoErrores.MandatarioFirmaInvalida
+                ? MandateSignerEstados.MensajeFirmaInvalida
+                : MandateSignerEstados.MensajeSinMandatario));
 }
