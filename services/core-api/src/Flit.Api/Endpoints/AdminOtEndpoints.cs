@@ -1560,9 +1560,11 @@ public static class AdminOtEndpoints
 
         if (decision.Outcome == MandatoApprovalOutcome.RequiereSeleccion)
         {
-            // Varios mandatarios y ninguno cotejó: el aprobador debe elegir uno y reintentar con mandateSignerId.
+            // El aprobador debe elegir uno y reintentar con mandateSignerId. HU #13145 (AC6, ADR-0066): la
+            // respuesta trae los candidatos VÁLIDOS calculados por el backend (id, nombre y forma de firma,
+            // sin documento ni ruta de firma): el cliente ya no filtra por isActive ni companyTenantIds.
             return Results.Json(
-                new { error = "mandatario_requerido" },
+                new { error = "mandatario_requerido", candidatos = decision.Candidatos ?? [] },
                 statusCode: StatusCodes.Status409Conflict);
         }
 

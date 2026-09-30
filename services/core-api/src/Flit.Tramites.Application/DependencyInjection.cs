@@ -146,6 +146,9 @@ public static class DependencyInjection
         // HU #11203 — elección del mandatario que firma, adelantada al registro del trámite.
         services.AddScoped<ListMandateSignerOptionsHandler>();
         services.AddScoped<SetMandateSignerHandler>();
+        // HU #13144/#13145 (ADR-0066) — evaluador único del mandatario y firmante previsto de solo lectura.
+        services.AddScoped<MandateSignerEvaluator>();
+        services.AddScoped<GetMandateSignerPrevistoHandler>();
 
         // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
         services.AddScoped<RunRnmcConsultHandler>();

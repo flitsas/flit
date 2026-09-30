@@ -10035,6 +10035,36 @@ paths:
         required: true
         schema: { type: string, format: uuid }
       - $ref: "#/components/parameters/TenantIdHeader"
+    get:
+      operationId: getProcedureInstanceMandateSigner
+      tags: ["Trámites · Traspaso"]
+      security:
+        - bearerAuth: []
+      summary: "Firmante previsto del mandato (solo lectura)"
+      description: >
+        HU #13145 (ADR-0066). Quién firmará el mandato del trámite según la prelación del mandatario
+        (Explícita, OT para la compañía, propio de la compañía, asociado, default del OT), calculado por el
+        MISMO evaluador que usa el gate de radicación: la pantalla y la radicación nunca discrepan.
+
+
+        `estado`: `valido` (con `nombre` y `formaFirma`), `sin_mandatario` o `firma_invalida` (con `motivo`),
+        `no_aplica` (mandato Persona jurídica, Mandato abierto o mandato personalizado de la compañía),
+        `pendiente_organismo` (sin organismo elegido) o `pendiente_eleccion_ot` (varios válidos: el OT
+        elige al aprobar). `modo` es el modo vigente de la validación (`block` | `warn` | `off`).
+
+
+        Solo `nombre` y `formaFirma`: nunca el documento de identidad ni la ruta de la firma (Ley 1581). El
+        trámite se busca en el tenant de la petición; uno de otro tenant responde 404.
+      responses:
+        "200":
+          description: "Firmante previsto."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MandateSignerPrevistoResponse"
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "404": { description: "Trámite no encontrado (o de otro tenant)." }
     put:
       operationId: setProcedureInstanceMandateSigner
       tags: ["Trámites · Traspaso"]
@@ -10049,6 +10079,10 @@ paths:
         El elegido debe estar entre los habilitados para el organismo del trámite y esa compañía.
         Aceptar cualquier id dejaría el trámite apuntando a un mandatario que no puede firmarlo, y eso
         solo se descubriría al aprobar.
+
+
+        HU #13145 (AC4, ADR-0066): el mandatario lo define el OT o el Super Admin. Un usuario de la compañía
+        gestora recibe 403 `mandatario_no_editable_por_gestor` y el trámite no cambia.
       requestBody:
         required: true
         content:
@@ -10062,6 +10096,7 @@ paths:
         "204": { description: "Mandatario fijado." }
         "400": { description: "Falta el header X-Tenant-Id." }
         "401": { description: "No autenticado." }
+        "403": { description: "mandatario_no_editable_por_gestor — solo el OT o el Super Admin fijan el mandatario." }
         "404": { description: "Trámite no encontrado." }
         "409":
           description: >
@@ -11765,11 +11800,42 @@ components:
           format: uuid
           nullable: true
           description: >
-            El elegido explícitamente; si no hay ninguno y solo existe un candidato, ese candidato (no
-            hay nada que decidir).
+            El elegido explícitamente o, si no hay ninguno, el que resuelve la prelación del mandatario
+            (ADR-0066: OT para la compañía, propio de la compañía, default del OT); nulo si el nivel es ambiguo.
         editable:
           type: boolean
           description: "Falso fuera de borrador/subsanación: el mandatario se muestra pero no se cambia."
+    MandateSignerPrevistoResponse:
+      type: object
+      description: >
+        HU #13145 (ADR-0066). Firmante previsto del mandato. Nunca incluye documento de identidad ni ruta de
+        firma del mandatario.
+      required: [estado, modo]
+      properties:
+        estado:
+          type: string
+          enum: [valido, sin_mandatario, firma_invalida, no_aplica, pendiente_organismo, pendiente_eleccion_ot]
+        nombre:
+          type: string
+          nullable: true
+          description: "Solo con `estado = valido`."
+        formaFirma:
+          type: string
+          nullable: true
+          enum: [baul, biometria]
+          description: "Solo con `estado = valido`; nula en Persona jurídica y Formato en blanco."
+        motivo:
+          type: string
+          nullable: true
+          description: >
+            Vocabulario estable de ADR-0066: sin_mandatario_configurado, mandatario_fuera_de_vigencia,
+            mandatario_inactivo, mandatario_eliminado, biometria_vencida, sin_validacion_aprobada,
+            baul_sin_firma_vigente, firma_fisica_sin_migrar (y, con `no_aplica`, mandato_sin_firmante_persona o
+            mandato_personalizado_de_compania).
+        modo:
+          type: string
+          enum: [block, warn, off]
+          description: "Modo vigente de `TramiteValidations:MandatarioRequerido`."
     # ── Preferencias de UI ─────────────────────────────────────────────────────
     UserUiPreferenceResponse:
       type: object

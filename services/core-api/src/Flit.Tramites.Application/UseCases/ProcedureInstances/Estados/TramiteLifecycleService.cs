@@ -419,8 +419,9 @@ public sealed class TramiteLifecycleService(
     private static string DetalleMandatario(string code) => code switch
     {
         TramiteEstadoErrores.MandatarioRequerido =>
-            "Hay varios mandatarios para la compañía en este organismo y ninguno corresponde a su usuario. " +
-            "Elija el mandatario que firma el mandato e intente aprobar de nuevo.",
+            "El mandatario que firma el mandato debe elegirse entre los mandatarios vigentes de la compañía " +
+            "en este organismo: ninguno quedó determinado (o el elegido ya no es válido). " +
+            "Elija uno e intente aprobar de nuevo.",
         _ => "No se pudo resolver el mandatario del mandato.",
     };
 

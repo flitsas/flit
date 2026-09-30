@@ -443,16 +443,44 @@ internal static class ProcedureInstanceEndpoints
                 : Results.Ok(result);
         }).WithName("ListProcedureInstanceMandateSigners");
 
+        // HU #13145 (ADR-0066) — el firmante PREVISTO, de solo lectura: estado (valido, sin_mandatario,
+        // firma_invalida, no_aplica, pendiente_organismo, pendiente_eleccion_ot), nombre y forma de firma
+        // (solo con valido) y el modo vigente de la validación. Reutiliza el evaluador del gate de radicación.
+        // El trámite se busca en el tenant de la petición (otro tenant = 404) y la respuesta nunca trae el
+        // documento ni la ruta de firma del mandatario (Ley 1581).
+        group.MapGet("/instances/{id:guid}/mandate-signer", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetMandateSignerPrevistoHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
+                : Results.Ok(result);
+        }).WithName("GetProcedureInstanceMandateSigner");
+
         // HU #11203 (AC4/AC5) — fija quién firma. Solo en borrador o subsanación.
+        // HU #13145 (AC4) — y solo el OT / Super Admin: el usuario de la compañía gestora recibe 403.
         group.MapPut("/instances/{id:guid}/mandate-signer", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             SetMandateSignerBody body,
+            HttpContext http,
             SetMandateSignerHandler handler,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            if (!MandateSignerEditPolicy.CanSet(http.User))
+                return Results.Problem(
+                    statusCode: 403,
+                    title: MandateSignerEditPolicy.ErrorCode,
+                    detail: MandateSignerEditPolicy.ForbiddenMessage);
 
             var error = await handler.HandleAsync(id, tenantId.Value, body.MandateSignerId, ct);
             return error switch

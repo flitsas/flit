@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
@@ -25,7 +26,15 @@ public enum MandatoApprovalOutcome
 }
 
 /// <summary>Decisión de la resolución del mandatario al aprobar; <c>MandateSignerId</c> solo con <see cref="MandatoApprovalOutcome.Resolved"/>.</summary>
-public sealed record MandatoApprovalDecision(MandatoApprovalOutcome Outcome, Guid? MandateSignerId);
+/// <param name="Candidatos">
+/// HU #13145 (ADR-0066) — con <see cref="MandatoApprovalOutcome.RequiereSeleccion"/>, los mandatarios VÁLIDOS
+/// entre los que el OT puede elegir (id, nombre y forma de firma), calculados en el backend: el cliente no
+/// filtra. Nunca llevan documento ni ruta de firma (Ley 1581). <c>null</c> en los demás desenlaces.
+/// </param>
+public sealed record MandatoApprovalDecision(
+    MandatoApprovalOutcome Outcome,
+    Guid? MandateSignerId,
+    IReadOnlyList<MandateSignerCandidatoDto>? Candidatos = null);
 
 /// <summary>
 /// Resuelve QUÉ mandatario firma el mandato al aprobar un trámite (ADR-0036 §D9, HU #10916). Es la
@@ -95,6 +104,7 @@ public sealed class MandatoApprovalHandler(
             .ConfigureAwait(false);
 
         var resolution = MandateSignerPrelacionLoader.Decidir(prelacion, approvingUserId);
+        var candidatos = prelacion.Validos.Select(MandateSignerCandidatoDto.From).ToList();
 
         // El OT puede emitir el mandato en blanco (sin identidad, baúl ni firma a mano).
         // Quién firma sigue resolviéndose; cómo firma no bloquea la aceptación.
@@ -103,7 +113,7 @@ public sealed class MandatoApprovalHandler(
             MandateSignerResolutionStatus.Resolved =>
                 new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer!.Id),
             MandateSignerResolutionStatus.RequiereSeleccion =>
-                new MandatoApprovalDecision(MandatoApprovalOutcome.RequiereSeleccion, null),
+                new MandatoApprovalDecision(MandatoApprovalOutcome.RequiereSeleccion, null, candidatos),
             _ => new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null),
         };
     }
