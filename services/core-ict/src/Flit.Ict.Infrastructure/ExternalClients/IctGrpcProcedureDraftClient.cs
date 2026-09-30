@@ -81,12 +81,16 @@ public sealed partial class IctGrpcProcedureDraftClient(
             ExternalRef = master.Id.ToString(),
         };
 
-        // Hay tipos cuyo organismo de tránsito lo fija el RUNT (paridad v1 de traspaso) y no el código
-        // del cliente: se envía el nombre que capturó el orquestador de la consulta VEHICLE y core-api
-        // lo resuelve al transit_office_id del catálogo (grants del tenant). En los demás va vacío y lo
-        // asigna el gestor. Quién es cuál lo declara el mapeo, no el texto del código (ADR-0050).
-        // TODO(ICT-OT-MATRICULA): en matrícula, resolver el OT por el traffic_secretary_code del cliente.
-        if (procedureType.ResolvesTransitOfficeFromRunt && !string.IsNullOrWhiteSpace(master.RuntTransitOfficeName))
+        // Organismo de tránsito (Bug #13109). Primero el código que viajó en la transacción: el SP de negocio
+        // ya lo resolvió a transit_office_id (activo + grant del tenant) y se envía tal cual. Si no hay id,
+        // hay tipos cuyo organismo lo fija el RUNT (paridad v1 de traspaso): se envía el nombre que capturó
+        // el orquestador de la consulta VEHICLE y core-api lo resuelve por nombre. En los demás va vacío y lo
+        // asigna el gestor. Quién resuelve por RUNT lo declara el mapeo, no el texto del código (ADR-0050).
+        if (master.TransitOfficeId is { } transitOfficeId && transitOfficeId != Guid.Empty)
+        {
+            request.TransitOfficeId = transitOfficeId.ToString();
+        }
+        else if (procedureType.ResolvesTransitOfficeFromRunt && !string.IsNullOrWhiteSpace(master.RuntTransitOfficeName))
         {
             request.TransitOfficeName = master.RuntTransitOfficeName;
         }
