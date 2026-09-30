@@ -52,6 +52,7 @@ import type {
   ListInstancesParams,
   FirmaPosteriorEstado,
   MandateSignerSelection,
+  MandateSignerPrevisto,
   TransitOfficeOption,
   TransitOfficesResponse,
   VehicleServiceTypeOption,
@@ -1108,6 +1109,13 @@ export const tramitesClient = {
   // organismo en la compañía), con la vigencia de su identidad y cuál está elegido.
   listMandateSigners: (id: string, tenantId?: string) =>
     request<MandateSignerSelection>(`/api/v1/tramites/instances/${id}/mandate-signers`, {
+      headers: tenantHeader(tenantId),
+    }),
+
+  // HU #13146 — quién firmará el mandato (solo lectura). No existe PUT para la compañía: el OT o el
+  // Super Admin fijan el mandatario (la compañía recibe 403 `mandatario_no_editable_por_gestor`).
+  getMandateSigner: (id: string, tenantId?: string) =>
+    request<MandateSignerPrevisto>(`/api/v1/tramites/instances/${id}/mandate-signer`, {
       headers: tenantHeader(tenantId),
     }),
 

@@ -2558,6 +2558,30 @@ export interface MandateSignerSelection {
 }
 
 /**
+ * HU #13145 / #13146 (ADR-0066) — firmante previsto del mandato, de solo lectura. Lo calcula el mismo
+ * evaluador que el gate de radicación. Nunca trae documento de identidad ni ruta de la firma.
+ */
+export type MandateSignerPrevistoEstado =
+  | 'valido'
+  | 'sin_mandatario'
+  | 'firma_invalida'
+  | 'no_aplica'
+  | 'pendiente_organismo'
+  | 'pendiente_eleccion_ot';
+
+export interface MandateSignerPrevisto {
+  estado: MandateSignerPrevistoEstado;
+  /** Solo con `estado = valido`. */
+  nombre?: string | null;
+  /** Solo con `estado = valido`. */
+  formaFirma?: 'baul' | 'biometria' | null;
+  /** Vocabulario estable de ADR-0066 (p. ej. `biometria_vencida`). */
+  motivo?: string | null;
+  /** Modo vigente de la validación al radicar. */
+  modo: 'block' | 'warn' | 'off';
+}
+
+/**
  * HU #11197 - estado de la firma a posteriori de una parte. `aplica` es true solo cuando el
  * representante legal tiene la identidad Y la firma del baul vencidas: con cualquiera de las dos
  * vigente el tramite puede firmarse ya y la opcion no se ofrece.
