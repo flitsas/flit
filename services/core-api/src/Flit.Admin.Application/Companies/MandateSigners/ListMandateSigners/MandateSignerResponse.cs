@@ -61,4 +61,13 @@ public sealed record MandateSignerResponse(
     /// HU #13130 — motivo cuando <c>SignatureValid</c> es falso: <c>mandatario_fuera_de_vigencia</c>,
     /// <c>mandatario_inactivo</c>, <c>biometria_vencida</c> o <c>sin_validacion_aprobada</c>.
     /// </summary>
-    string? SignatureInvalidReason = null);
+    string? SignatureInvalidReason = null,
+    /// <summary>
+    /// HU #13134 — origen de la configuración: <c>organismo</c> (organismo de tránsito o Super Admin) o
+    /// <c>compania</c>. La UI muestra «Configurado por el organismo de tránsito» con candado para el primero.
+    /// </summary>
+    string Origin = MandateSignerOriginRules.Organismo,
+    /// <summary>HU #13134 — el actor puede editar, inactivar y reactivar este mandatario (regla única por origen y rol).</summary>
+    bool PuedeEditar = true,
+    /// <summary>HU #13134 — el actor puede eliminar este mandatario (misma regla que <see cref="PuedeEditar"/>).</summary>
+    bool PuedeEliminar = true);

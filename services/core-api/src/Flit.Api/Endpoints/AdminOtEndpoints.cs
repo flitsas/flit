@@ -1563,8 +1563,18 @@ public static class AdminOtEndpoints
             // El aprobador debe elegir uno y reintentar con mandateSignerId. HU #13145 (AC6, ADR-0066): la
             // respuesta trae los candidatos VÁLIDOS calculados por el backend (id, nombre y forma de firma,
             // sin documento ni ruta de firma): el cliente ya no filtra por isActive ni companyTenantIds.
+            // HU #13137 — sin candidatos válidos el mensaje explica que NO hay mandatario activo (no «hay varios»).
+            var candidatos = decision.Candidatos ?? [];
             return Results.Json(
-                new { error = "mandatario_requerido", candidatos = decision.Candidatos ?? [] },
+                new
+                {
+                    error = "mandatario_requerido",
+                    candidatos,
+                    sinCandidatos = candidatos.Count == 0,
+                    message = candidatos.Count == 0
+                        ? Flit.Tramites.Application.UseCases.ProcedureInstances.MandateSignerEstados.MensajeSinMandatarioAlAprobar
+                        : Flit.Tramites.Application.UseCases.ProcedureInstances.MandateSignerEstados.MensajeEleccionRequerida,
+                },
                 statusCode: StatusCodes.Status409Conflict);
         }
 

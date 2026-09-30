@@ -49,6 +49,13 @@ public sealed class MandateSignerItem
     public DateTimeOffset RegisteredAt { get; init; }
     public bool IsActive { get; init; }
 
+    /// <summary>
+    /// HU #13134 — origen de la configuración: <c>organismo</c> (organismo de tránsito o Super Admin) o
+    /// <c>compania</c>. En el listado del organismo se calcula con sus vínculos en ese organismo; en el de la
+    /// compañía, con sus vínculos con ella.
+    /// </summary>
+    public string Origin { get; init; } = MandateSignerOriginRules.Organismo;
+
     /// <summary>HU #13129 (ADR-0061) — modelo: natural, juridica o formato_blanco.</summary>
     public string SignerModel { get; init; } = MandateSignerModels.Natural;
 

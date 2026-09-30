@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.DeleteMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerImpact;
 using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerSignatureImage;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
@@ -80,12 +82,34 @@ public static class AdminMandateSignersEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
-        // POST /{signerId}/reactivate — reactiva un mandatario inactivado (sin compañías).
+        // POST /{signerId}/reactivate — reactiva un mandatario inactivado y restaura sus vínculos (HU #13136).
         group.MapPost("/{mandateSignerId:guid}/reactivate", ReactivateAsync)
             .WithName("AdminMandateSignersReactivate")
             .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
-            .WithSummary("Reactiva un mandatario inactivado (se reasignan sus compañías)")
+            .WithSummary("Reactiva un mandatario inactivado y restaura sus vínculos sin desplazar el default vigente")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        // DELETE /{signerId} — eliminación (baja lógica deleted_at) con confirmación del impacto (HU #13135).
+        group.MapDelete("/{mandateSignerId:guid}", DeleteAsync)
+            .WithName("AdminMandateSignersDelete")
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
+            .WithSummary("Elimina (baja lógica) un mandatario; con impacto exige confirmarImpacto=true")
             .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        // GET /{signerId}/impact — qué perdería la baja del mandatario (solo lectura, HU #13135).
+        group.MapGet("/{mandateSignerId:guid}/impact", ImpactAsync)
+            .WithName("AdminMandateSignersImpact")
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
+            .WithSummary("Impacto de dar de baja al mandatario: únicos activos, defaults y trámites sin aprobar")
+            .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
@@ -175,6 +199,8 @@ public static class AdminMandateSignersEndpoints
         {
             TransitOfficeId = transitOfficeId,
             Visibility = OtCompanyVisibilityPolicy.For(httpContext.User),
+            // HU #13134 — origen y banderas puedeEditar/puedeEliminar según el rol de quien consulta.
+            ActorKind = MandateSignerActors.ForHub(httpContext.User),
         };
         var result = await handler.HandleAsync(query, cancellationToken).ConfigureAwait(false);
 
@@ -316,13 +342,12 @@ public static class AdminMandateSignersEndpoints
             TransitOfficeId = transitOfficeId,
             MandateSignerId = mandateSignerId,
             ChangedBy = ResolveUserId(httpContext.User),
+            ActorKind = MandateSignerActors.ForHub(httpContext.User),
         };
 
-        var outcome = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleDetailedAsync(command, cancellationToken).ConfigureAwait(false);
 
-        return outcome == InactivateMandateSignerOutcome.Inactivated
-            ? Results.NoContent()
-            : Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en este organismo." });
+        return MandateSignerLifecycleResponses.ForInactivate(httpContext, result, NotInOffice(mandateSignerId));
     }
 
     private static async Task<IResult> ReactivateAsync(
@@ -337,14 +362,52 @@ public static class AdminMandateSignersEndpoints
             TransitOfficeId = transitOfficeId,
             MandateSignerId = mandateSignerId,
             ChangedBy = ResolveUserId(httpContext.User),
+            ActorKind = MandateSignerActors.ForHub(httpContext.User),
         };
 
-        var outcome = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleDetailedAsync(command, cancellationToken).ConfigureAwait(false);
 
-        return outcome == ReactivateMandateSignerOutcome.Reactivated
-            ? Results.NoContent()
-            : Results.NotFound(new { error = $"No existe el mandatario {mandateSignerId} en este organismo." });
+        return MandateSignerLifecycleResponses.ForReactivate(result, NotInOffice(mandateSignerId));
     }
+
+    private static async Task<IResult> DeleteAsync(
+        Guid transitOfficeId,
+        Guid mandateSignerId,
+        HttpContext httpContext,
+        [FromQuery] bool? confirmarImpacto,
+        [FromServices] DeleteMandateSignerHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(
+            new DeleteMandateSignerCommand
+            {
+                TransitOfficeId = transitOfficeId,
+                MandateSignerId = mandateSignerId,
+                ConfirmImpact = confirmarImpacto ?? false,
+                ChangedBy = ResolveUserId(httpContext.User),
+                ActorKind = MandateSignerActors.ForHub(httpContext.User),
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return MandateSignerLifecycleResponses.ForDelete(httpContext, result, NotInOffice(mandateSignerId));
+    }
+
+    private static async Task<IResult> ImpactAsync(
+        Guid transitOfficeId,
+        Guid mandateSignerId,
+        [FromServices] GetMandateSignerImpactHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var impact = await handler.HandleAsync(transitOfficeId, mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return impact is null
+            ? Results.NotFound(new { error = NotInOffice(mandateSignerId) })
+            : Results.Ok(new { data = MandateSignerLifecycleResponses.ImpactBody(impact) });
+    }
+
+    private static string NotInOffice(Guid mandateSignerId) =>
+        $"No existe el mandatario {mandateSignerId} en este organismo.";
 
     private static async Task<IResult> GetSignatureImageAsync(
         Guid transitOfficeId,

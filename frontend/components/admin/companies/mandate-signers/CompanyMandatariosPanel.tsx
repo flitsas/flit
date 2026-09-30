@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, RotateCcw, UserX } from "lucide-react";
+import { Pencil, RotateCcw, Trash2, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -16,6 +16,8 @@ import {
 } from "@/components/atom/table-styles";
 import {
   createCompanyMandateSigner,
+  deleteCompanyMandateSigner,
+  fetchCompanyMandateSignerImpact,
   fetchCompanyMandateSigners,
   fetchCompanyTransitOffices,
   fetchRepresentedCompanies,
@@ -33,8 +35,24 @@ import {
   organismosSinMedioDeFirma,
 } from "@/lib/plataforma/mandatario-firma";
 import { etiquetaModelo, modeloDe } from "@/lib/plataforma/mandatario-vigencia";
+import {
+  puedeCrearMandatarios,
+  puedeEditarMandatario,
+  puedeEliminarMandatario,
+  tieneCandadoDelOrganismo,
+} from "@/lib/plataforma/mandatario-permisos";
+import {
+  mensajeErrorAccion,
+  mensajeResultadoBaja,
+  mensajeResultadoReactivar,
+  type AccionBaja,
+} from "@/lib/plataforma/mandatario-baja";
+import { decodeJwtPayload } from "@/lib/auth/jwt";
+import { getToken } from "@/lib/api/client";
 import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "../legal-representatives/rl-flit-styles";
 import { CompanyMandatarioForm } from "./CompanyMandatarioForm";
+import { MandatarioBajaDialog } from "./MandatarioBajaDialog";
+import { MandatarioCandado } from "./MandatarioCandado";
 import { MandatarioVigenciaBadge } from "./MandatarioVigenciaBadge";
 
 /**
@@ -61,6 +79,10 @@ export function CompanyMandatariosPanel({
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<MandateSigner | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // HU #13140 — diálogo de confirmación previa para desactivar o eliminar.
+  const [baja, setBaja] = useState<{ signer: MandateSigner; accion: AccionBaja } | null>(null);
+  // HU #13139 — el Gestor/Radicador no ve crear, editar ni eliminar.
+  const [canCreate] = useState(() => puedeCrearMandatarios(decodeJwtPayload(getToken())));
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -112,19 +134,24 @@ export function CompanyMandatariosPanel({
     return saved;
   };
 
-  const handleToggleActivo = async (signer: MandateSigner) => {
+  // HU #13140 — la baja (desactivar o eliminar) la confirma el diálogo, que ya consultó el impacto.
+  const ejecutarBaja = async (signer: MandateSigner, accion: AccionBaja, confirmarImpacto: boolean) => {
+    const outcome =
+      accion === "eliminar"
+        ? await deleteCompanyMandateSigner(tenantId, signer.id, confirmarImpacto, networkHeadId)
+        : await inactivateCompanyMandateSigner(tenantId, signer.id, networkHeadId);
+    show(mensajeResultadoBaja(signer.fullName, accion, outcome), "success");
+    await load();
+  };
+
+  const handleReactivar = async (signer: MandateSigner) => {
     setBusyId(signer.id);
     try {
-      if (signer.isActive) {
-        await inactivateCompanyMandateSigner(tenantId, signer.id, networkHeadId);
-        show(`${signer.fullName} quedó inactivo.`, "success");
-      } else {
-        await reactivateCompanyMandateSigner(tenantId, signer.id, networkHeadId);
-        show(`${signer.fullName} vuelve a estar activo.`, "success");
-      }
+      const result = await reactivateCompanyMandateSigner(tenantId, signer.id, networkHeadId);
+      show(mensajeResultadoReactivar(signer.fullName, result), "success");
       await load();
-    } catch {
-      show("No se pudo cambiar el estado del mandatario.", "error");
+    } catch (err) {
+      show(mensajeErrorAccion(err), "error");
     } finally {
       setBusyId(null);
     }
@@ -160,17 +187,19 @@ export function CompanyMandatariosPanel({
         </p>
       )}
 
-      <div className="flex justify-end">
-        <button
-          type="button"
-          className={rlPrimaryCtaClass}
-          style={rlPrimaryCtaStyle}
-          onClick={openCreate}
-          disabled={sinOrganismos}
-        >
-          Nuevo mandatario
-        </button>
-      </div>
+      {canCreate && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className={rlPrimaryCtaClass}
+            style={rlPrimaryCtaStyle}
+            onClick={openCreate}
+            disabled={sinOrganismos}
+          >
+            Nuevo mandatario
+          </button>
+        </div>
+      )}
 
       {/* Bug #13055 — tabla homologada con la de Trámites: loader del carrito, cabecera y filas de
           table-styles y acciones con RowActions (antes: gris genérico y botones de texto). */}
@@ -237,10 +266,19 @@ export function CompanyMandatariosPanel({
               </tr>
             </thead>
             <tbody>
-              {pg.paginar(signers).map((signer) => (
-                <tr key={signer.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+              {pg.paginar(signers).map((signer) => {
+                // HU #13139 — candado: lo configuró el organismo y este actor no lo puede tocar.
+                const candado = tieneCandadoDelOrganismo(signer);
+                const puedeEditar = canCreate && puedeEditarMandatario(signer);
+                return (
+                <tr
+                  key={signer.id}
+                  className={`${candado ? "bg-[#EEF1F5] dark:bg-white/5" : "bg-white dark:bg-[#0B0F14]"} ${TABLA_ROW_HOVER_CLS}`}
+                  data-candado={candado ? "true" : undefined}
+                >
                   <td className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     <span className="font-semibold">{signer.fullName}</span>
+                    {candado && <MandatarioCandado />}
                   </td>
                   <td className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     {formatDocumentWithType(signer.documentType, signer.documentNumber)}
@@ -275,7 +313,7 @@ export function CompanyMandatariosPanel({
                   </td>
                   <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
                     <RowActions
-                      actions={[
+                      actions={!puedeEditar ? [] : [
                         {
                           icon: Pencil,
                           label: `Editar mandatario ${signer.fullName}`,
@@ -288,22 +326,34 @@ export function CompanyMandatariosPanel({
                         signer.isActive
                           ? {
                               icon: UserX,
-                              label: `Inactivar mandatario ${signer.fullName}`,
-                              onClick: () => void handleToggleActivo(signer),
+                              label: `Desactivar mandatario ${signer.fullName}`,
+                              onClick: () => setBaja({ signer, accion: "desactivar" }),
                               tone: "danger",
                               disabled: busyId === signer.id,
                             }
                           : {
                               icon: RotateCcw,
                               label: `Reactivar mandatario ${signer.fullName}`,
-                              onClick: () => void handleToggleActivo(signer),
+                              onClick: () => void handleReactivar(signer),
                               disabled: busyId === signer.id,
                             },
+                        ...(puedeEliminarMandatario(signer)
+                          ? [
+                              {
+                                icon: Trash2,
+                                label: `Eliminar mandatario ${signer.fullName}`,
+                                onClick: () => setBaja({ signer, accion: "eliminar" }),
+                                tone: "danger" as const,
+                                disabled: busyId === signer.id,
+                              },
+                            ]
+                          : []),
                       ]}
                     />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -317,6 +367,20 @@ export function CompanyMandatariosPanel({
           noun="mandatarios"
         />
       </UiStateBoundary>
+      )}
+
+      {baja && (
+        <MandatarioBajaDialog
+          signer={baja.signer}
+          accion={baja.accion}
+          loadImpact={(signal) =>
+            fetchCompanyMandateSignerImpact(tenantId, baja.signer.id, signal, networkHeadId)
+          }
+          onConfirm={(confirmar) => ejecutarBaja(baja.signer, baja.accion, confirmar)}
+          onClose={() => setBaja(null)}
+          officeLabel={(id) => officeNameById.get(id) ?? "un organismo"}
+          companyLabel={(id) => (id === tenantId ? "Esta compañía" : "Otra compañía de la red")}
+        />
       )}
 
       {formOpen && (

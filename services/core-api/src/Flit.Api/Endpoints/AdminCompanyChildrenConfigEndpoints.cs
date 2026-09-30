@@ -58,6 +58,8 @@ public static class AdminCompanyChildrenConfigEndpoints
 
         // Mandatarios, representantes, baúl y documentos personalizados — misma consola, tenant = hijo.
         group.MapGroup("/mandate-signers")
+            // HU #13195/#13136 — el índice «un activo por origen» responde 409, no 500.
+            .AddEndpointFilter<MandateSignerLinkConflictFilter>()
             .MapAdminCompanyMandateSignersChildRoutes();
 
         group.MapGroup("/legal-representatives")

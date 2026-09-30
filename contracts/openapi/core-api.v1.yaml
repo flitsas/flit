@@ -429,6 +429,258 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{mandateSignerId}:
+    delete:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersDelete
+      summary: Elimina (baja lógica) un mandatario del organismo
+      description: >
+        HU #13135/#13137 (Feature #13115). Baja lógica (`deleted_at`, `deleted_by`): el mandatario desaparece de listas y
+        candidatos, se retiran los defaults que apuntaban a él, se reasignan con la prelación del OT (ADR-0066) los
+        trámites radicados sin aprobar y se conserva el historial de los ya firmados. Todo en una transacción.
+        Con impacto no vacío exige `confirmarImpacto=true` (409 `mandatario_baja_requiere_confirmacion`).
+        Los conteos de la reasignación viajan en las cabeceras `X-Mandatario-Reasignados` y
+        `X-Mandatario-Pendientes-Decision-OT`. Permisos: un mandatario configurado por el organismo solo lo eliminan
+        el Admin OT y el Super Admin (403 `mandatario_configurado_por_organismo` para la compañía).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+        - name: confirmarImpacto
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Confirmación explícita cuando la baja tiene impacto (único activo, defaults o trámites sin aprobar).
+      responses:
+        "204":
+          description: "Eliminado. Cabeceras con los conteos de la reasignación de trámites."
+          headers:
+            X-Mandatario-Reasignados: { schema: { type: integer } }
+            X-Mandatario-Pendientes-Decision-OT: { schema: { type: integer } }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o ya estaba eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La baja tiene impacto y falta `confirmarImpacto` (`mandatario_baja_requiere_confirmacion`, con el impacto en `impact`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{mandateSignerId}/impact:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersImpact
+      summary: Impacto de dar de baja al mandatario
+      description: >
+        HU #13135 (Feature #13115). Solo lectura: compañías y organismos donde el mandatario es el ÚNICO activo de
+        esa compañía, los defaults (de compañía y del organismo) que perdería y el número de trámites radicados
+        sin aprobar que hoy lo usan. Solo identificadores y conteos (sin datos personales).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Impacto de la baja.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/MandateSignerImpact" }
+        "403":
+          description: "Sin permiso: usuario sin rol de gestión o mandatario configurado por el organismo (`mandatario_configurado_por_organismo`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o no pertenece al alcance (no se revela más).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{mandateSignerId}/reactivate:
+    post:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersReactivate
+      summary: Reactiva un mandatario restaurando sus vínculos
+      description: >
+        HU #13136 (Feature #13115). Reactiva un mandatario inactivado y restaura los vínculos con compañías y
+        organismos que retiró la baja, sin desplazar al default vigente (solo recupera un default que quedó vacío).
+        Un vínculo que chocaría con otro mandatario activo del mismo origen para la compañía y el organismo
+        (índice único) se restaura inactivo y se informa en `conflictLinks`; si TODOS chocan no se reactiva nada
+        (409 `mandatario_activo_existente`). Un mandatario eliminado no se reactiva (404).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Reactivado; detalle de lo restaurado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MandateSignerReactivation" }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o ya estaba activo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Todos los vínculos chocan con otro mandatario activo (`mandatario_activo_existente`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/mandate-signers/{mandateSignerId}:
+    delete:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyMandateSignersDelete
+      summary: Elimina (baja lógica) un mandatario de la compañía
+      description: >
+        HU #13135/#13137 (Feature #13115). Baja lógica (`deleted_at`, `deleted_by`): el mandatario desaparece de listas y
+        candidatos, se retiran los defaults que apuntaban a él, se reasignan con la prelación del OT (ADR-0066) los
+        trámites radicados sin aprobar y se conserva el historial de los ya firmados. Todo en una transacción.
+        Con impacto no vacío exige `confirmarImpacto=true` (409 `mandatario_baja_requiere_confirmacion`).
+        Los conteos de la reasignación viajan en las cabeceras `X-Mandatario-Reasignados` y
+        `X-Mandatario-Pendientes-Decision-OT`. Permisos: un mandatario configurado por el organismo solo lo eliminan
+        el Admin OT y el Super Admin (403 `mandatario_configurado_por_organismo` para la compañía).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+        - name: confirmarImpacto
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Confirmación explícita cuando la baja tiene impacto (único activo, defaults o trámites sin aprobar).
+      responses:
+        "204":
+          description: "Eliminado. Cabeceras con los conteos de la reasignación de trámites."
+          headers:
+            X-Mandatario-Reasignados: { schema: { type: integer } }
+            X-Mandatario-Pendientes-Decision-OT: { schema: { type: integer } }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o ya estaba eliminado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La baja tiene impacto y falta `confirmarImpacto` (`mandatario_baja_requiere_confirmacion`, con el impacto en `impact`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/mandate-signers/{mandateSignerId}/impact:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyMandateSignersImpact
+      summary: Impacto de dar de baja al mandatario de la compañía
+      description: >
+        HU #13135 (Feature #13115). Solo lectura: compañías y organismos donde el mandatario es el ÚNICO activo de
+        esa compañía, los defaults (de compañía y del organismo) que perdería y el número de trámites radicados
+        sin aprobar que hoy lo usan. Solo identificadores y conteos (sin datos personales).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Impacto de la baja.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/MandateSignerImpact" }
+        "403":
+          description: "Sin permiso: usuario sin rol de gestión o mandatario configurado por el organismo (`mandatario_configurado_por_organismo`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o no pertenece al alcance (no se revela más).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/companies/{tenantId}/mandate-signers/{mandateSignerId}/reactivate:
+    post:
+      tags: [Admin · Mandatarios]
+      operationId: adminCompanyMandateSignersReactivate
+      summary: Reactiva un mandatario de la compañía restaurando sus vínculos
+      description: >
+        HU #13136 (Feature #13115). Reactiva un mandatario inactivado y restaura los vínculos con compañías y
+        organismos que retiró la baja, sin desplazar al default vigente (solo recupera un default que quedó vacío).
+        Un vínculo que chocaría con otro mandatario activo del mismo origen para la compañía y el organismo
+        (índice único) se restaura inactivo y se informa en `conflictLinks`; si TODOS chocan no se reactiva nada
+        (409 `mandatario_activo_existente`). Un mandatario eliminado no se reactiva (404).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: mandateSignerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Reactivado; detalle de lo restaurado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MandateSignerReactivation" }
+        "403":
+          description: Sin permiso (rol o candado por origen).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe, está eliminado o ya estaba activo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Todos los vínculos chocan con otro mandatario activo (`mandatario_activo_existente`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/admin/mandate-signers/physical-signature-migration-report:
     get:
       tags: [Admin · Mandatarios]
@@ -11762,6 +12014,56 @@ components:
           nullable: true
           enum: [mandatario_fuera_de_vigencia, mandatario_inactivo, biometria_vencida, sin_validacion_aprobada]
           description: "Motivo cuando `firmaValida` es false."
+    MandateSignerImpact:
+      type: object
+      description: >
+        HU #13135 — impacto de dar de baja a un mandatario. Solo identificadores y conteos; sin datos personales.
+      required: [hasImpact, onlyActiveFor, defaults, pendingProcedures]
+      properties:
+        hasImpact: { type: boolean }
+        onlyActiveFor:
+          type: array
+          description: Compañías y organismos donde el mandatario es el único activo.
+          items:
+            type: object
+            required: [transitOfficeId, companyTenantId]
+            properties:
+              transitOfficeId: { type: string, format: uuid }
+              companyTenantId: { type: string, format: uuid }
+        defaults:
+          type: array
+          description: Defaults que quedarían en nulo.
+          items:
+            type: object
+            required: [kind, transitOfficeId]
+            properties:
+              kind: { type: string, enum: [company_rule, office] }
+              transitOfficeId: { type: string, format: uuid }
+              companyTenantId: { type: string, format: uuid, nullable: true }
+        pendingProcedures:
+          type: integer
+          description: Trámites radicados sin aprobar (preasignación, asignado, entregado) que usan al mandatario.
+
+    MandateSignerReactivation:
+      type: object
+      description: HU #13136 — vínculos restaurados por la reactivación y los que quedaron inactivos por conflicto.
+      required: [restoredLinks, conflictLinks, restoredDefaults]
+      properties:
+        restoredLinks:
+          type: array
+          items: { $ref: "#/components/schemas/MandateSignerLink" }
+        conflictLinks:
+          type: array
+          items: { $ref: "#/components/schemas/MandateSignerLink" }
+        restoredDefaults: { type: integer }
+
+    MandateSignerLink:
+      type: object
+      required: [transitOfficeId, companyTenantId]
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        companyTenantId: { type: string, format: uuid }
+
     PhysicalSignatureMigrationRow:
       type: object
       description: >

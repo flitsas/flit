@@ -238,4 +238,30 @@ public sealed class MandatoApprovalHandlerTests
         await _directory.DidNotReceive().GetCandidatesAsync(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
+
+    // ── HU #13137 — mensaje corregido del 409 mandatario_requerido ───────────────────────────────
+
+    [Fact]
+    public async Task HU13137_EleccionExplicitaInvalida_SinNingunCandidato_RequiereSeleccionConListaVacia()
+    {
+        // Tras dar de baja al mandatario asignado no queda ninguno: el OT eligió uno que ya no es válido.
+        var instance = SeedInstance();
+        Candidates();
+
+        var decision = await Handler().CheckAsync(
+            instance.Id, Tenant, Guid.NewGuid(), Guid.NewGuid(), TestContext.Current.CancellationToken);
+
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.RequiereSeleccion);
+        decision.Candidatos.Should().BeEmpty("el endpoint lo traduce a «no hay mandatario activo», no a «hay varios»");
+    }
+
+    [Fact]
+    public void HU13137_LosMensajesDelConflictoDistinguenCeroCandidatosDeVarios()
+    {
+        Flit.Tramites.Application.UseCases.ProcedureInstances.MandateSignerEstados.MensajeSinMandatarioAlAprobar
+            .Should().Contain("No hay un mandatario activo")
+            .And.NotContainEquivalentOf("hay varios");
+        Flit.Tramites.Application.UseCases.ProcedureInstances.MandateSignerEstados.MensajeEleccionRequerida
+            .Should().Contain("elija uno");
+    }
 }

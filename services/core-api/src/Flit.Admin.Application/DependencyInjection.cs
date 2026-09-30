@@ -9,6 +9,8 @@ using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.DeleteMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerImpact;
 using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerSignatureImage;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
@@ -204,6 +206,10 @@ public static class DependencyInjection
         services.AddScoped<UpdateMandateSignerHandler>();
         services.AddScoped<InactivateMandateSignerHandler>();
         services.AddScoped<ReactivateMandateSignerHandler>();
+        // HU #13134/#13135 — permisos por origen y rol; eliminación (baja lógica) e impacto previo.
+        services.AddScoped<Companies.MandateSigners.MandateSignerAccessGuard>();
+        services.AddScoped<DeleteMandateSignerHandler>();
+        services.AddScoped<GetMandateSignerImpactHandler>();
         services.AddScoped<ListMandateSignersHandler>();
         services.AddScoped<Companies.MandateSigners.PhysicalSignatureMigration.GetPhysicalSignatureMigrationReportHandler>();
         services.AddScoped<Companies.MandateSigners.PhysicalSignatureMigration.GetMandateLinkCollapseReportHandler>();
