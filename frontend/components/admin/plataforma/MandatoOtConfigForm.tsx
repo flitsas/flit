@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Eye, FileText, Search, Trash2, Upload } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import {
   deleteMandateOtCustomTemplate,
@@ -25,7 +27,9 @@ import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 import {
   assignmentModeFromTemplateCode,
   mandatoTemplateOptions,
+  resolveTipoNegocio,
   systemTemplateLabel,
+  tipoNegocioLabel,
   terceroAjenoEnPlantilla,
 } from "@/lib/plataforma/mandato-templates";
 
@@ -375,21 +379,44 @@ export function MandatoOtConfigForm({
               <p className="truncate text-sm font-medium text-[#162244] dark:text-white">
                 {row.companyName}
               </p>
-              <p
-                className="truncate text-[11px] text-[#59677D] dark:text-white/50"
-                title={
-                  rowBusy
-                    ? "Guardando cambios…"
-                    : row.hasExplicitRule
-                      ? "Esta compañía tiene una regla propia de mandato para este OT (mandatario default distinto al implícito)."
-                      : "Sin regla propia: usa Persona/RL por defecto del sistema para este OT."
-                }
-              >
-                {rowBusy ? "Guardando…" : row.hasExplicitRule ? "Regla propia" : "Default"}
-              </p>
+              {row.companyTaxId ? (
+                <p className="truncate font-mono text-[11px] text-[#59677D] dark:text-white/50">
+                  {row.companyTaxId}
+                </p>
+              ) : null}
+              {rowBusy ? (
+                <p className="text-[11px] text-[#59677D] dark:text-white/50">Guardando…</p>
+              ) : null}
             </div>
           );
         },
+      },
+      {
+        // HU #13150 — tipo de mandato de la compañía en este organismo.
+        key: "tipoMandato",
+        header: "Tipo de mandato",
+        cellClassName: "!px-2.5",
+        headerClassName: "!px-2.5",
+        render: (row) => (
+          <div className="flex flex-col items-start gap-1">
+            <span
+              className="text-sm text-[#162244] dark:text-white"
+              data-testid={`mandato-company-tipo-${row.companyTenantId}`}
+            >
+              {tipoNegocioLabel(resolveTipoNegocio(row.assignmentMode))}
+            </span>
+            {row.hasExplicitRule ? null : (
+              <span title="Sin regla propia: la compañía usa el tipo por defecto del organismo, Persona natural.">
+                <StatusBadge label="Default" tone="neutral" />
+              </span>
+            )}
+            {row.hasExplicitRule ? null : (
+              <span className="text-[11px] text-[#59677D] dark:text-white/50">
+                Sin regla propia: usa el tipo por defecto.
+              </span>
+            )}
+          </div>
+        ),
       },
       {
         key: "defaultSigner",
@@ -844,7 +871,7 @@ export function MandatoOtConfigForm({
                   Tipo de mandatario por compañía
                 </h3>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                  Sin regla propia la empresa usa el modelo del organismo. En Persona/RL puedes
+                  Sin regla propia la empresa usa el modelo del organismo. En Persona natural puedes
                   fijar un mandatario preferido (preselección en el paso FUR).{" "}
                   {rulesStatus === "ready" ? (
                     <span className="font-medium text-[#162244] dark:text-white/80">
@@ -857,9 +884,12 @@ export function MandatoOtConfigForm({
             </div>
 
             {rulesStatus === "loading" ? (
-              <p className="text-[11px] text-[#59677D]" role="status">
-                Cargando compañías…
-              </p>
+              <>
+                <p className="text-[11px] text-[#59677D]" role="status">
+                  Cargando compañías…
+                </p>
+                <CarLoaderModal label="Cargando compañías…" />
+              </>
             ) : null}
             {rulesStatus === "error" ? (
               <p role="alert" className="text-[11px] text-[#FF4E00]">

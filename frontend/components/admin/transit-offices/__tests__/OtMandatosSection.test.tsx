@@ -102,6 +102,7 @@ function companyRow(overrides: Partial<CompanyOtMandateRuleView> = {}): CompanyO
     defaultMandateSignerDocumentType: null,
     defaultMandateSignerDocumentNumber: null,
     defaultMandateSignerIntegrityHash: null,
+    rowVersion: null,
     ...overrides,
   };
 }

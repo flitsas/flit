@@ -190,4 +190,77 @@ describe("MandatoOtConfigForm", () => {
       expect(screen.getByLabelText(/^mandatario institucional \/ UT$/i)).toBeInTheDocument();
     });
   });
+  describe("HU #13150 columna Tipo de mandato por compañía", () => {
+    const regla = (over: Record<string, unknown>) => ({
+      companyTenantId: "cia-x",
+      companyName: "Compañía X",
+      assignmentMode: "signer",
+      hasExplicitRule: true,
+      defaultMandateSignerId: null,
+      rowVersion: 1,
+      ...over,
+    });
+
+    const abrir = () =>
+      render(
+        <MandatoOtConfigForm
+          office={funza}
+          mode="mandatario"
+          onClose={() => undefined}
+          onSaved={() => undefined}
+        />,
+      );
+
+    it("muestra Persona natural, Persona jurídica y Mandato abierto por compañía", async () => {
+      listCompanyOtMandateRules.mockResolvedValue([
+        regla({ companyTenantId: "a", companyName: "Alfa", assignmentMode: "signer" }),
+        regla({ companyTenantId: "b", companyName: "Beta", assignmentMode: "institutional" }),
+        regla({ companyTenantId: "c", companyName: "Gamma", assignmentMode: "open" }),
+      ]);
+      abrir();
+      expect(await screen.findByRole("columnheader", { name: /tipo de mandato/i })).toBeInTheDocument();
+      expect(screen.getByTestId("mandato-company-tipo-a")).toHaveTextContent("Persona natural");
+      expect(screen.getByTestId("mandato-company-tipo-b")).toHaveTextContent("Persona jurídica");
+      expect(screen.getByTestId("mandato-company-tipo-c")).toHaveTextContent("Mandato abierto");
+    });
+
+    it("compañía sin regla propia: Persona natural con marca Default y ayuda", async () => {
+      listCompanyOtMandateRules.mockResolvedValue([
+        regla({ companyTenantId: "a", companyName: "Alfa", hasExplicitRule: false, rowVersion: null }),
+      ]);
+      abrir();
+      expect(await screen.findByTestId("mandato-company-tipo-a")).toHaveTextContent("Persona natural");
+      expect(screen.getByText("Default")).toBeInTheDocument();
+      expect(screen.getByText(/sin regla propia: usa el tipo por defecto/i)).toBeInTheDocument();
+    });
+
+    it("no muestra etiquetas antiguas y un modo desconocido cae en Persona natural", async () => {
+      listCompanyOtMandateRules.mockResolvedValue([
+        regla({ companyTenantId: "z", companyName: "Zeta", assignmentMode: "otra_cosa" }),
+      ]);
+      const { container } = abrir();
+      expect(await screen.findByTestId("mandato-company-tipo-z")).toHaveTextContent("Persona natural");
+      expect(container.ownerDocument.body.textContent).not.toMatch(
+        /Persona o RL|Persona\/RL|Institucional OT|Abierto \(sin asumir\)/,
+      );
+    });
+
+    it("pagina con Filas por página cuando hay más compañías que la página", async () => {
+      listCompanyOtMandateRules.mockResolvedValue(
+        Array.from({ length: 12 }, (_, n) =>
+          regla({ companyTenantId: `c${n}`, companyName: `Compañía ${n + 1}` }),
+        ),
+      );
+      abrir();
+      expect(await screen.findByText("Compañía 1")).toBeInTheDocument();
+      expect(screen.queryByText("Compañía 12")).not.toBeInTheDocument();
+      expect(screen.getByText(/filas por página/i)).toBeInTheDocument();
+    });
+
+    it("muestra Reintentar si la carga falla", async () => {
+      listCompanyOtMandateRules.mockRejectedValue(new Error("boom"));
+      abrir();
+      expect(await screen.findByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+    });
+  });
 });

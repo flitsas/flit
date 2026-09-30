@@ -16,6 +16,7 @@ vi.mock("../client", async (importOriginal) => {
 // Ante 4xx/5xx no-ok lanza ApiError cuyo mensaje sale del ProblemDetails del backend, nunca de
 // "Error {status} al subir plantilla" / "al extraer mandato" / "al previsualizar mandato" (Bug #11626).
 import {
+  mapCompanyRule,
   uploadMandateOtPdfTemplate,
   extractMandateConfigFromFile,
   fetchMandateOtPreview,
@@ -127,5 +128,17 @@ describe("fetchMandateOtPreview — errores no-ok (Bug #11626)", () => {
     expect(err.message).toBe("La configuración del OT está incompleta.");
     expect(err.message).not.toContain("/api/v1/admin/plataforma/mandatos");
     expect(err.message).not.toMatch(/al previsualizar mandato/);
+  });
+});
+
+describe("mapCompanyRule — rowVersion (HU #13150)", () => {
+  it("conserva rowVersion en camelCase y PascalCase", () => {
+    expect(mapCompanyRule({ companyTenantId: "a", rowVersion: 4 }).rowVersion).toBe(4);
+    expect(mapCompanyRule({ CompanyTenantId: "a", RowVersion: "7" }).rowVersion).toBe(7);
+  });
+
+  it("es null cuando la compañía hereda (sin regla)", () => {
+    expect(mapCompanyRule({ companyTenantId: "a", rowVersion: null }).rowVersion).toBeNull();
+    expect(mapCompanyRule({ companyTenantId: "a" }).rowVersion).toBeNull();
   });
 });

@@ -256,7 +256,7 @@ export interface CompanyOtMandateRuleView {
   chamberCity: string | null;
   mandatarySigla: string | null;
   hasExplicitRule: boolean;
-  /** Mandatario persona preferido (solo Persona/RL). */
+  /** Mandatario persona preferido (solo Persona natural). */
   defaultMandateSignerId: string | null;
   companyTaxId: string | null;
   companyCode: string | null;
@@ -264,6 +264,8 @@ export interface CompanyOtMandateRuleView {
   defaultMandateSignerDocumentType: string | null;
   defaultMandateSignerDocumentNumber: string | null;
   defaultMandateSignerIntegrityHash: string | null;
+  /** Token de concurrencia de la regla (HU #13148); null si la compañía hereda el default. */
+  rowVersion: number | null;
 }
 
 export interface UpsertCompanyOtMandateRuleBody {
@@ -274,9 +276,11 @@ export interface UpsertCompanyOtMandateRuleBody {
   chamberCity?: string | null;
   mandatarySigla?: string | null;
   defaultMandateSignerId?: string | null;
+  /** Obligatorio cuando la regla ya existe: el API responde 409 row_version_conflict si quedó vieja. */
+  rowVersion?: number | null;
 }
 
-function mapCompanyRule(raw: Record<string, unknown>): CompanyOtMandateRuleView {
+export function mapCompanyRule(raw: Record<string, unknown>): CompanyOtMandateRuleView {
   const defaultId =
     (raw.defaultMandateSignerId as string | null | undefined) ??
     (raw.DefaultMandateSignerId as string | null | undefined) ??
@@ -318,6 +322,7 @@ function mapCompanyRule(raw: Record<string, unknown>): CompanyOtMandateRuleView 
     defaultMandateSignerIntegrityHash: optionalString(
       raw.defaultMandateSignerIntegrityHash ?? raw.DefaultMandateSignerIntegrityHash,
     ),
+    rowVersion: parseRowVersion(raw.rowVersion ?? raw.RowVersion),
   };
 }
 
@@ -372,10 +377,11 @@ export async function setCompanyDefaultSigner(
   companyTenantId: string,
   defaultMandateSignerId: string | null,
   signal?: AbortSignal,
+  rowVersion?: number | null,
 ): Promise<CompanyOtMandateRuleView> {
   const data = await apiFetch<CompanyOtMandateRuleView>(
     `${mandateOfficeRoot(officeId)}/company-rules/${companyTenantId}/default-signer`,
-    { method: "PATCH", body: { defaultMandateSignerId }, signal },
+    { method: "PATCH", body: { defaultMandateSignerId, rowVersion }, signal },
   );
   return mapCompanyRule(data as unknown as Record<string, unknown>);
 }
@@ -384,8 +390,10 @@ export async function deleteCompanyOtMandateRule(
   officeId: string,
   companyTenantId: string,
   signal?: AbortSignal,
+  rowVersion?: number | null,
 ): Promise<void> {
-  await apiFetch<void>(`${mandateOfficeRoot(officeId)}/company-rules/${companyTenantId}`, {
+  const query = rowVersion != null ? `?rowVersion=${encodeURIComponent(String(rowVersion))}` : "";
+  await apiFetch<void>(`${mandateOfficeRoot(officeId)}/company-rules/${companyTenantId}${query}`, {
     method: "DELETE",
     signal,
   });
