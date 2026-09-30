@@ -512,9 +512,12 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         if (_catalog.GetById(officeId) is null)
             return (MandateConfigWriteStatus.OfficeNotFound, null);
 
-        var mode = MandatoAssignmentModeCodes.Resolve(request.AssignmentMode);
-        if (!AssignmentModes.Contains(mode))
+        // HU #13154 — se valida el valor ENVIADO: Resolve() convierte cualquier texto desconocido en «signer»,
+        // así que validar después de resolver aceptaba un tipo inventado y lo guardaba como Persona natural.
+        var rawMode = request.AssignmentMode?.Trim();
+        if (string.IsNullOrEmpty(rawMode) || !AssignmentModes.Contains(rawMode))
             return (MandateConfigWriteStatus.InvalidAssignmentMode, null);
+        var mode = MandatoAssignmentModeCodes.Resolve(rawMode);
 
         var family = string.IsNullOrWhiteSpace(request.MandataryFamily)
             ? MandatoFamiliaCodes.Individuo

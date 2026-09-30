@@ -114,11 +114,15 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
                     MandatoSystemOfficeTemplates.ResolveTemplateCode(code, null, null),
                     hasCustom: false),
                 builtin?.RequiresForNaturalPerson ?? false,
-                OpenOrValue(assignmentMode, builtin?.InstitutionalMandataryName),
-                OpenOrValue(assignmentMode, builtin?.InstitutionalMandataryNit),
-                builtin?.MandataryFamily ?? MandatoFamiliaCodes.Individuo,
-                builtin?.ChamberCity,
-                builtin?.MandatarySigla,
+                // HU #13154 — sin fila de OT (legado) la regla de la compañía igual manda: antes se ignoraba y el
+                // contrato de una compañía en «Persona jurídica» no citaba a su entidad.
+                OpenOrValue(assignmentMode, rule?.InstitutionalMandataryName ?? builtin?.InstitutionalMandataryName),
+                OpenOrValue(assignmentMode, rule?.InstitutionalMandataryNit ?? builtin?.InstitutionalMandataryNit),
+                !string.IsNullOrWhiteSpace(rule?.MandataryFamily)
+                    ? rule!.MandataryFamily
+                    : builtin?.MandataryFamily ?? MandatoFamiliaCodes.Individuo,
+                rule?.ChamberCity ?? builtin?.ChamberCity,
+                rule?.MandatarySigla ?? builtin?.MandatarySigla,
                 assignmentMode,
                 OtDefaultMandateSignerId: OtDefaultOrNull(assignmentMode, null),
                 DefaultMandateSignerId: SignerDefaultOrNull(rule));
