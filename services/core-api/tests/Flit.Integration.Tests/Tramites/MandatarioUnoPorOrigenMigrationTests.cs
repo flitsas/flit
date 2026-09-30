@@ -536,7 +536,7 @@ public sealed class MandatarioUnoPorOrigenMigrationTests(PostgresDatabaseFixture
         // Inactivar al primero libera el cupo y la edición pasa.
         await using var c5 = NewContext();
         (await new MandateSignerRepository(c5).InactivateAsync(
-            new InactivateMandateSignerData(primero, OtTenant, null, null), TestContext.Current.CancellationToken)).Should().BeTrue();
+            new InactivateMandateSignerData(primero, OtTenant, null, null), TestContext.Current.CancellationToken)).Applied.Should().BeTrue();
         await using var c6 = NewContext();
         (await new MandateSignerRepository(c6).UpdateAsync(
             new UpdateMandateSignerData(
