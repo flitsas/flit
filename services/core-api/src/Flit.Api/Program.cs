@@ -263,6 +263,10 @@ app.UseMiddleware<Flit.Api.Authorization.DomainBindingMiddleware>();
 
 app.UseAuthorization();
 
+// HU #13085 (Épica #12737) — cuota por cliente externo (120/min por client_id). Va DESPUÉS de la autorización:
+// el client_id solo es fiable con el pase ya validado, y los 401/403 no consumen cuota.
+app.UseMiddleware<Flit.Api.RateLimiting.ExternalClientQuotaMiddleware>();
+
 // Enforcement multi-tenant de los endpoints runtime de trámites (#1): resuelve el tenant desde el
 // JWT (no del header del cliente) y deja superadmin con acceso multi-tenant. Va DESPUÉS de la auth
 // (necesita HttpContext.User) y ANTES de los endpoints. No toca parametrización ni portal público.
