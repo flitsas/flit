@@ -55,7 +55,9 @@ pueden compartir valor.
    entrega filas cuya transacción es anterior a `pg_snapshot_xmin(pg_current_snapshot())`: por debajo
    de ese límite ya no puede confirmar nada nuevo. Las filas de la asignación inicial, sin `sync_xact`,
    cuentan como la transacción 0. La ventana de 5 s del contrato se mantiene. El cursor es opaco para
-   el consumidor, así que el contrato no cambia.
+   el consumidor; lo único que cambia en el contrato (§3, HU #13081) es que los ítems llegan en el
+   orden del cursor, que normalmente coincide con `syncVersion` pero no está garantizado entre
+   trámites distintos. La regla de upsert por `id` (descartar `syncVersion` ≤ al guardado) no cambia.
 
 ## Alternativas consideradas
 

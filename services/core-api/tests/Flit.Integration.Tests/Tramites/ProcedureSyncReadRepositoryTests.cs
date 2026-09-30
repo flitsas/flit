@@ -158,7 +158,7 @@ public sealed class ProcedureSyncReadRepositoryTests(PostgresDatabaseFixture fix
 
         await FluentActions.Awaiting(() => repo.ReadChangesAsync(new(new(1, 1), DateTimeOffset.UtcNow, 10, SinVentana)))
             .Should().ThrowAsync<ArgumentException>();
-        await FluentActions.Awaiting(() => repo.ReadChangesAsync(new(null, null, 1001, SinVentana)))
+        await FluentActions.Awaiting(() => repo.ReadChangesAsync(new(null, null, 1002, SinVentana)))
             .Should().ThrowAsync<ArgumentOutOfRangeException>();
         await FluentActions.Awaiting(() => repo.ReadChangesAsync(new(null, null, 0, SinVentana)))
             .Should().ThrowAsync<ArgumentOutOfRangeException>();

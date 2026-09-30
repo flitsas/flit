@@ -131,6 +131,20 @@ public static class ApiSecurityExtensions
                     ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
                     ClockSkew = TimeSpan.FromSeconds(30),
                 };
+
+                // HU #13081 — sin pase, pase caducado o de otro emisor: 401 en problem+json con code
+                // invalid_token, como el resto de errores externos (contrato v3.1 §2).
+                options.Events = new JwtBearerEvents
+                {
+                    OnChallenge = async context =>
+                    {
+                        context.HandleResponse();
+                        context.Response.Headers.WWWAuthenticate = "Bearer";
+                        await ExternalProblem.WriteAsync(context.HttpContext, StatusCodes.Status401Unauthorized,
+                            "invalid_token", "Falta el pase o no es válido para este recurso.",
+                            context.HttpContext.RequestAborted).ConfigureAwait(false);
+                    },
+                };
             });
 
         services.AddAuthorizationBuilder()
