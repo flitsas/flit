@@ -88,6 +88,7 @@ public sealed class ProcedureSyncConcurrencyTests(PostgresDatabaseFixture fixtur
         await lector;
 
         // Tras la ventana, lo que quede por entregar llega; luego el feed queda quieto.
+        await ProcedureSyncTestWait.EsperarFeedEstableAsync(Fixture);
         await Task.Delay(Ventana * 2, TestContext.Current.CancellationToken);
         cursor = await RecorrerAsync(cursor, entregado);
         (await LeerAsync(ProcedureSyncPageRequest.FromCursor(cursor!.Value, 1000, Ventana))).Should().BeEmpty("el feed quedó al día");
