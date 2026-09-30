@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OtMandatosSection } from "@/components/admin/transit-offices/OtMandatosSection";
@@ -341,7 +341,9 @@ describe("OtMandatosSection", () => {
         registeredAt: "2026-01-01T00:00:00Z",
         isActive: true,
         companyTenantIds: [],
-        physicalSignatureOfficeIds: [],
+        signerModel: "natural",
+        validityKind: "fixed",
+        validityStatus: "vigente",
       },
     ]);
     const user = userEvent.setup();
@@ -355,10 +357,61 @@ describe("OtMandatosSection", () => {
     expect(screen.getByText("CC")).toBeInTheDocument();
     expect(screen.getByText("52123456")).toBeInTheDocument();
     expect(screen.getByText("Firma del baúl")).toBeInTheDocument();
+    // HU #13133 — modelo y estado de vigencia en la fila; ninguna opción de firma física.
+    expect(screen.getByText("Persona natural")).toBeInTheDocument();
+    expect(screen.getByTestId("mandatario-vigencia")).toHaveTextContent("Vigente");
+    expect(screen.queryByText(/firma a mano|f[ií]sica/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /ver firma de hugo mandatario/i }));
     expect(await screen.findByRole("dialog", { name: /firma de hugo mandatario/i })).toBeInTheDocument();
     expect(await screen.findByRole("img", { name: /firma de hugo mandatario/i })).toBeInTheDocument();
     expect(fetchMandateSignerSignatureImage).toHaveBeenCalledWith("ot-1", "ms-1");
+  });
+
+  it("HU #13133 AC1-AC4: modelo y vigencia por fila; jurídica y formato en blanco sin vigencia ni «Ver firma»; sin firma física", async () => {
+    fetchMandateOtConfig.mockResolvedValue(office);
+    const base = {
+      transitOfficeId: "ot-1",
+      documentType: "CC",
+      integrityHash: "h".repeat(64),
+      email: null,
+      userId: null,
+      identityValidationRef: null,
+      identityStatus: "none",
+      signatureVaultId: null,
+      registeredAt: "2026-01-01T00:00:00Z",
+      isActive: true,
+      companyTenantIds: [],
+    };
+    fetchMandateSigners.mockResolvedValue([
+      { ...base, id: "a", fullName: "Ana Vigente", documentNumber: "1", signerModel: "natural", validityStatus: "vigente" },
+      { ...base, id: "b", fullName: "Beto Porvencer", documentNumber: "2", signerModel: "natural", validityStatus: "por_vencer", validityKind: "range", validTo: "2026-10-05" },
+      { ...base, id: "c", fullName: "Carla Vencida", documentNumber: "3", signerModel: "natural", validityStatus: "vencido" },
+      { ...base, id: "d", fullName: "Dario Inactivo", documentNumber: "4", signerModel: "natural", validityStatus: "inactivo", isActive: false },
+      { ...base, id: "e", fullName: "Entidad SAS", documentNumber: "9001", signerModel: "juridica" },
+      { ...base, id: "f", fullName: "Sin nombre propio", documentNumber: null, signerModel: "formato_blanco" },
+    ]);
+    render(
+      <ToastProvider>
+        <OtMandatosSection transitOfficeId="ot-1" />
+      </ToastProvider>,
+    );
+    const tabla = await screen.findByRole("table", { name: "Mandatarios del organismo" });
+    const fila = (nombre: string) => within(tabla).getByText(nombre).closest("tr") as HTMLElement;
+    expect(within(fila("Ana Vigente")).getByTestId("mandatario-vigencia")).toHaveTextContent("Vigente");
+    const porVencer = within(fila("Beto Porvencer")).getByTestId("mandatario-vigencia");
+    expect(porVencer).toHaveTextContent("Por vencer");
+    expect(porVencer).toHaveTextContent("Hasta 05/10/2026");
+    expect(within(fila("Carla Vencida")).getByTestId("mandatario-vigencia")).toHaveTextContent("Vencido");
+    expect(within(fila("Dario Inactivo")).getByTestId("mandatario-vigencia")).toHaveTextContent("Inactivo");
+    const juridica = fila("Entidad SAS");
+    expect(within(juridica).getByText("Persona jurídica")).toBeInTheDocument();
+    expect(within(juridica).getByTestId("mandatario-vigencia")).toHaveAttribute("data-estado", "sin_vigencia");
+    expect(within(juridica).queryByRole("button", { name: /ver firma/i })).not.toBeInTheDocument();
+    expect(within(fila("Sin nombre propio")).getByTestId("mandatario-vigencia")).toHaveAttribute(
+      "data-estado",
+      "sin_vigencia",
+    );
+    expect(within(tabla).queryByText(/firma a mano|f[ií]sica/i)).not.toBeInTheDocument();
   });
 
   it("muestra error con reintentar", async () => {

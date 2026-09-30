@@ -103,7 +103,8 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
       "baul de firmas",
       "escritura",
       "empresas representadas",
-      "firma fisica",
+      "vigencia del mandatario",
+      "por vencer",
       "validacion de identidad del mandatario",
       "acordeon por compania",
       "nit",
@@ -137,6 +138,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
           "Registrar / Editar mandatario: primero eliges el modelo. Persona natural: nombre, documento, correo (solo dato de contacto; no dispara ningún envío), forma de firma (Baúl de firmas o Validación de identidad) y vigencia (Fija o Rango de fechas con inicio y fin). Con Baúl de firmas aparece el selector de la firma del baúl. Persona jurídica: nombre y NIT de la entidad, sin firma personal. Formato en blanco: no se piden datos; el sistema solo entrega el PDF sin firma.",
           "Al editar ves el mismo bloque de identidad de solo consulta que en representantes legales (solo en Persona natural): si necesita una validación de identidad, se gestiona desde el módulo Identidad, no desde este formulario. Los mandatarios anteriores aparecen como Persona natural y conservan su firma del baúl.",
           "Organismos donde aplica: solo se ofrecen los habilitados para tu compañía. Dentro de cada organismo puedes acotar las empresas para las que firma. La firma de forma física ya no se ofrece.",
+          "Lista de mandatarios: cada fila muestra el modelo y una etiqueta de vigencia con texto e ícono: verde «Vigente», naranja «Por vencer» (faltan 7 días o menos para el fin), rojo «Vencido», gris «Inactivo» y azul «Aún no vigente» si el rango todavía no empieza. En rango de fechas se indica hasta cuándo. Persona jurídica y Formato en blanco no tienen vigencia y muestran un guion. Un mandatario eliminado no aparece.",
           "Regla que conviene saber: si dentro de un organismo no marcas ninguna empresa, el mandatario firma para TODAS las empresas de ese organismo; al marcar una, queda restringido a esas.",
         ],
         callouts: [

@@ -48,7 +48,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           "Configuración Empresa: parámetros de firma (con la firma precargada desde el baúl), validar SOAT ante RUNT, avisos al aprobar o rechazar y sus destinatarios, métodos de recaudo, fuente de comparendos, módulos activos del dashboard (Comparendos, Resoluciones), proveedores de consulta y de avalúo, y la tabla de organismos de tránsito con los bloqueos y restricciones que aplica cada uno. El buscador de esa tabla (por nombre o código, con o sin tildes) recorre todos los organismos, no solo la página que estás viendo.",
           "Documentos: parámetros documentales de la gestora.",
           "Representantes legales.",
-          "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
+          "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
           "Usuarios.",
           "Historial de Cambios: quién cambió qué y cuándo.",
         ],

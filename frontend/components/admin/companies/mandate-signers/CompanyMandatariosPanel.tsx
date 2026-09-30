@@ -32,8 +32,10 @@ import {
   motivoSinFirma,
   organismosSinMedioDeFirma,
 } from "@/lib/plataforma/mandatario-firma";
+import { etiquetaModelo, modeloDe } from "@/lib/plataforma/mandatario-vigencia";
 import { rlPrimaryCtaClass, rlPrimaryCtaStyle } from "../legal-representatives/rl-flit-styles";
 import { CompanyMandatarioForm } from "./CompanyMandatarioForm";
+import { MandatarioVigenciaBadge } from "./MandatarioVigenciaBadge";
 
 /**
  * HU #11202 — mandatarios gestionados desde el configurador de la COMPAÑÍA.
@@ -136,14 +138,12 @@ export function CompanyMandatariosPanel({
   /**
    * HU #11717 — organismos donde el mandatario está habilitado pero no podría firmar. Se calcula con
    * la misma regla que impone el backend al parametrizar, para que la consola no diga una cosa y el
-   * guardado otra.
+   * guardado otra. Solo aplica a la Persona natural: la jurídica y el formato en blanco no firman.
    */
   const sinFirmaPorSigner = (signer: MandateSigner) =>
-    organismosSinMedioDeFirma(
-      signer.transitOfficeIds ?? [],
-      signer.physicalSignatureOfficeIds ?? [],
-      signer,
-    );
+    modeloDe(signer) === "natural" && signer.isActive
+      ? organismosSinMedioDeFirma(signer.transitOfficeIds ?? [], signer)
+      : [];
 
   const sinOrganismos = offices.length === 0;
 
@@ -211,6 +211,20 @@ export function CompanyMandatariosPanel({
                   className={`${TABLA_HEADER_CELL_CLS}`}
                   style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                 >
+                  Modelo
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Vigencia
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
                   Organismos
                 </th>
                 <th
@@ -227,14 +241,15 @@ export function CompanyMandatariosPanel({
                 <tr key={signer.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
                   <td className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     <span className="font-semibold">{signer.fullName}</span>
-                    {!signer.isActive && (
-                      <span className="ml-2 inline-block rounded-full border bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                        Inactivo
-                      </span>
-                    )}
                   </td>
                   <td className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     {formatDocumentWithType(signer.documentType, signer.documentNumber)}
+                  </td>
+                  <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
+                    {etiquetaModelo(signer)}
+                  </td>
+                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                    <MandatarioVigenciaBadge signer={signer} />
                   </td>
                   <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     {(signer.transitOfficeIds ?? []).length === 0
@@ -243,8 +258,7 @@ export function CompanyMandatariosPanel({
                           .map((id) => officeNameById.get(id) ?? id)
                           .join(", ")}
                     {/* HU #11717 — se SEÑALA, no se inhabilita: los trámites en curso siguen
-                        emitiendo su mandato como hoy. Los organismos de firma física quedan fuera,
-                        porque ahí la línea en blanco es el resultado correcto. */}
+                        emitiendo su mandato como hoy. */}
                     {sinFirmaPorSigner(signer).length > 0 && (
                       <div
                         className="mt-1 text-[11px] leading-tight"

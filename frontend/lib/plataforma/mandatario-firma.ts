@@ -40,17 +40,13 @@ export function puedeFirmarElectronicamente(medio: MedioDeFirma): boolean {
  * Organismos de `seleccionados` en los que el mandatario quedaría sin poder firmar. Vacío ⇒ se puede
  * habilitar en todos.
  *
- * <p>Los marcados como de firma física quedan exentos: ahí la línea en blanco es el resultado
- * correcto, porque el gestor eligió que ese organismo se firme a mano.</p>
+ * <p>HU #13133: la firma física ya no es medio de firma, así que no hay organismos exentos.</p>
  */
 export function organismosSinMedioDeFirma(
   seleccionados: readonly string[],
-  fisicos: readonly string[],
   medio: MedioDeFirma,
 ): string[] {
-  if (puedeFirmarElectronicamente(medio)) return [];
-  const aMano = new Set(fisicos);
-  return seleccionados.filter((id) => !aMano.has(id));
+  return puedeFirmarElectronicamente(medio) ? [] : [...seleccionados];
 }
 
 /** Qué le falta al mandatario, para decírselo al gestor en vez de un «no se pudo guardar». */
@@ -65,17 +61,12 @@ export type TipoFirmaMandatario =
   | "baul"
   | "identidad"
   | "identidad_pendiente"
-  | "a_mano"
   | "sin_medio";
 
-export function tipoDeFirmaMandatario(
-  medio: MedioDeFirma & { physicalSignatureOfficeIds?: string[] | null },
-  officeId: string,
-): TipoFirmaMandatario {
+export function tipoDeFirmaMandatario(medio: MedioDeFirma): TipoFirmaMandatario {
   if (medio.signatureVaultId) return "baul";
   if (medio.identityStatus === "valid") return "identidad";
-  if (medio.identityStatus === "pending" || (medio.email?.trim() ?? "") !== "") return "identidad_pendiente";
-  if (medio.physicalSignatureOfficeIds?.includes(officeId)) return "a_mano";
+  if (medio.identityStatus === "pending") return "identidad_pendiente";
   return "sin_medio";
 }
 
@@ -87,8 +78,6 @@ export function etiquetaTipoFirma(tipo: TipoFirmaMandatario): string {
       return "Validación de identidad";
     case "identidad_pendiente":
       return "Identidad en curso";
-    case "a_mano":
-      return "Firma a mano";
     default:
       return "Sin medio de firma";
   }

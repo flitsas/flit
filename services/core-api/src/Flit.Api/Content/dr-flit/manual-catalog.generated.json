@@ -1847,8 +1847,8 @@
             "Administración → Mandatos muestra tres bloques:"
           ],
           "bullets": [
-            "Mandatario general del organismo: el firmante por defecto cuando la compañía no tiene uno propio. Puedes registrarlo y editarlo aquí (nombre, tipo y número de documento, tipo de firma); registrar personas nuevas es solo del Admin OT.",
-            "Mandatarios del organismo: todas las personas habilitadas para firmar mandatos ante tu OT, con su tipo de firma (estampada desde el baúl o física). El botón «Ver firma» de cada fila abre una vista previa de la firma registrada en el baúl, para comprobar cuál quedará estampada antes de usarla en un mandato.",
+            "Mandatario general del organismo: el firmante por defecto cuando la compañía no tiene uno propio. Puedes registrarlo y editarlo aquí (nombre, tipo y número de documento, forma de firma); registrar personas nuevas es solo del Admin OT.",
+            "Mandatarios del organismo: todas las personas habilitadas para firmar mandatos ante tu OT, con su modelo (Persona natural, Persona jurídica o Formato en blanco), su tipo de firma (baúl de firmas o validación de identidad) y una etiqueta de vigencia: verde «Vigente», naranja «Por vencer» (faltan 7 días o menos), rojo «Vencido», gris «Inactivo» y azul «Aún no vigente» cuando el rango todavía no empieza. La etiqueta siempre lleva el estado escrito, no depende del color. Persona jurídica y Formato en blanco no tienen vigencia: muestran un guion. El botón «Ver firma» (solo en Persona natural) abre una vista previa de la firma registrada, para comprobar cuál quedará estampada antes de usarla en un mandato. La firma física ya no existe. Un mandatario eliminado no aparece en la lista.",
             "Empresas que radican en este organismo: busca por razón social o NIT y revisa qué mandatario aplica por defecto a cada una."
           ],
           "callouts": [
@@ -2073,6 +2073,7 @@
             "Registrar / Editar mandatario: primero eliges el modelo. Persona natural: nombre, documento, correo (solo dato de contacto; no dispara ningún envío), forma de firma (Baúl de firmas o Validación de identidad) y vigencia (Fija o Rango de fechas con inicio y fin). Con Baúl de firmas aparece el selector de la firma del baúl. Persona jurídica: nombre y NIT de la entidad, sin firma personal. Formato en blanco: no se piden datos; el sistema solo entrega el PDF sin firma.",
             "Al editar ves el mismo bloque de identidad de solo consulta que en representantes legales (solo en Persona natural): si necesita una validación de identidad, se gestiona desde el módulo Identidad, no desde este formulario. Los mandatarios anteriores aparecen como Persona natural y conservan su firma del baúl.",
             "Organismos donde aplica: solo se ofrecen los habilitados para tu compañía. Dentro de cada organismo puedes acotar las empresas para las que firma. La firma de forma física ya no se ofrece.",
+            "Lista de mandatarios: cada fila muestra el modelo y una etiqueta de vigencia con texto e ícono: verde «Vigente», naranja «Por vencer» (faltan 7 días o menos para el fin), rojo «Vencido», gris «Inactivo» y azul «Aún no vigente» si el rango todavía no empieza. En rango de fechas se indica hasta cuándo. Persona jurídica y Formato en blanco no tienen vigencia y muestran un guion. Un mandatario eliminado no aparece.",
             "Regla que conviene saber: si dentro de un organismo no marcas ninguna empresa, el mandatario firma para TODAS las empresas de ese organismo; al marcar una, queda restringido a esas."
           ],
           "callouts": [
@@ -2250,7 +2251,7 @@
             "Configuración Empresa: parámetros de firma (con la firma precargada desde el baúl), validar SOAT ante RUNT, avisos al aprobar o rechazar y sus destinatarios, métodos de recaudo, fuente de comparendos, módulos activos del dashboard (Comparendos, Resoluciones), proveedores de consulta y de avalúo, y la tabla de organismos de tránsito con los bloqueos y restricciones que aplica cada uno. El buscador de esa tabla (por nombre o código, con o sin tildes) recorre todos los organismos, no solo la página que estás viendo.",
             "Documentos: parámetros documentales de la gestora.",
             "Representantes legales.",
-            "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
+            "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
             "Usuarios.",
             "Historial de Cambios: quién cambió qué y cuándo."
           ],

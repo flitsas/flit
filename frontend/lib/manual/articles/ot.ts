@@ -538,7 +538,8 @@ export const OT_ARTICLES: ManualArticle[] = [
       "contrato de mandato",
       "mandatario general",
       "tipo de firma",
-      "firma fisica",
+      "vigencia del mandatario",
+      "por vencer",
       "empresas que radican",
       "ver firma",
       "vista previa de la firma",
@@ -558,8 +559,8 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "2. Pestaña Mandatos del hub",
         paragraphs: ["Administración → Mandatos muestra tres bloques:"],
         bullets: [
-          "Mandatario general del organismo: el firmante por defecto cuando la compañía no tiene uno propio. Puedes registrarlo y editarlo aquí (nombre, tipo y número de documento, tipo de firma); registrar personas nuevas es solo del Admin OT.",
-          "Mandatarios del organismo: todas las personas habilitadas para firmar mandatos ante tu OT, con su tipo de firma (estampada desde el baúl o física). El botón «Ver firma» de cada fila abre una vista previa de la firma registrada en el baúl, para comprobar cuál quedará estampada antes de usarla en un mandato.",
+          "Mandatario general del organismo: el firmante por defecto cuando la compañía no tiene uno propio. Puedes registrarlo y editarlo aquí (nombre, tipo y número de documento, forma de firma); registrar personas nuevas es solo del Admin OT.",
+          "Mandatarios del organismo: todas las personas habilitadas para firmar mandatos ante tu OT, con su modelo (Persona natural, Persona jurídica o Formato en blanco), su tipo de firma (baúl de firmas o validación de identidad) y una etiqueta de vigencia: verde «Vigente», naranja «Por vencer» (faltan 7 días o menos), rojo «Vencido», gris «Inactivo» y azul «Aún no vigente» cuando el rango todavía no empieza. La etiqueta siempre lleva el estado escrito, no depende del color. Persona jurídica y Formato en blanco no tienen vigencia: muestran un guion. El botón «Ver firma» (solo en Persona natural) abre una vista previa de la firma registrada, para comprobar cuál quedará estampada antes de usarla en un mandato. La firma física ya no existe. Un mandatario eliminado no aparece en la lista.",
           "Empresas que radican en este organismo: busca por razón social o NIT y revisa qué mandatario aplica por defecto a cada una.",
         ],
         callouts: [

@@ -14,6 +14,13 @@ export type ValidityKind = "fixed" | "range";
 /** Estado de vigencia calculado en el servidor. */
 export type ValidityStatus = "inactivo" | "vencido" | "no_vigente" | "por_vencer" | "vigente";
 
+/** HU #13130 — por qué un mandatario no puede firmar hoy. */
+export type SignatureInvalidReason =
+  | "mandatario_fuera_de_vigencia"
+  | "mandatario_inactivo"
+  | "biometria_vencida"
+  | "sin_validacion_aprobada";
+
 /** Un mandatario asignado a una compañía (ADR-0036: multiplicidad ⇒ una compañía puede tener varios). */
 export interface AssignedSigner {
   mandateSignerId: string;
@@ -57,8 +64,6 @@ export interface MandateSigner {
    * (deprecado): esta lista es la que dice dónde puede firmar.
    */
   transitOfficeIds?: string[];
-  /** Subconjunto de los anteriores donde el mandatario firma a mano. */
-  physicalSignatureOfficeIds?: string[];
   /** Empresas representadas por organismo; vacío para un organismo ⇒ aplica a todas allí. */
   officeCompanies?: MandateSignerOfficeCompanies[];
   /** HU #13129 — ausente en respuestas anteriores al cambio ⇒ Persona natural. */
@@ -70,6 +75,9 @@ export interface MandateSigner {
   validFrom?: string | null;
   validTo?: string | null;
   validityStatus?: ValidityStatus;
+  /** HU #13130 — si el mandatario puede firmar hoy (vigencia y biometría vigentes). */
+  signatureValid?: boolean;
+  signatureInvalidReason?: SignatureInvalidReason | null;
 }
 
 /** Campos de modelo, forma de firma y vigencia que viajan en el alta y la edición (HU #13132). */
@@ -247,12 +255,6 @@ export interface CompanyMandateSignerInput extends MandateSignerProfileFields {
   email: string | null;
   /** Organismos donde aplica. Al editar, REEMPLAZA a los anteriores: quitar uno lo retira. */
   transitOfficeIds: string[];
-  /**
-   * Subconjunto de los anteriores donde el mandatario firma A MANO: el contrato deja la línea con sus
-   * datos debajo y no estampa firma del baúl ni sello de identidad.
-   * @deprecated HU #13132: el formulario ya no lo ofrece (la firma física se retira, HU #13131).
-   */
-  physicalSignatureOfficeIds?: string[];
   /**
    * Firma del baúl elegida para el mandatario. `null` ⇒ el trámite la resuelve por documento, que es
    * el comportamiento previo.

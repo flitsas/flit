@@ -30,6 +30,8 @@ import {
   etiquetaTipoFirma,
   tipoDeFirmaMandatario,
 } from "@/lib/plataforma/mandatario-firma";
+import { etiquetaModelo, modeloDe } from "@/lib/plataforma/mandatario-vigencia";
+import { MandatarioVigenciaBadge } from "@/components/admin/companies/mandate-signers/MandatarioVigenciaBadge";
 
 
 export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string }) {
@@ -234,26 +236,39 @@ export function OtMandatosSection({ transitOfficeId }: { transitOfficeId: string
       render: (row) => dash(row.documentNumber),
     },
     {
+      key: "modelo",
+      header: "Modelo",
+      render: (row) => etiquetaModelo(row),
+    },
+    {
       key: "firma",
       header: "Tipo de firma",
-      render: (row) => etiquetaTipoFirma(tipoDeFirmaMandatario(row, transitOfficeId)),
+      // Persona jurídica y Formato en blanco no firman con medio propio.
+      render: (row) =>
+        modeloDe(row) === "natural" ? etiquetaTipoFirma(tipoDeFirmaMandatario(row)) : "—",
+    },
+    {
+      key: "vigencia",
+      header: "Vigencia",
+      render: (row) => <MandatarioVigenciaBadge signer={row} />,
     },
     {
       key: "actions",
       header: "Acción",
       align: "right",
-      render: (row) => (
-        <RowActions
-          actions={[
-            {
-              icon: Eye,
-              label: `Ver firma de ${row.fullName}`,
-              tone: "primary",
-              onClick: () => setPreviewSigner(row),
-            },
-          ]}
-        />
-      ),
+      render: (row) =>
+        modeloDe(row) === "natural" ? (
+          <RowActions
+            actions={[
+              {
+                icon: Eye,
+                label: `Ver firma de ${row.fullName}`,
+                tone: "primary",
+                onClick: () => setPreviewSigner(row),
+              },
+            ]}
+          />
+        ) : null,
     },
   ];
 
