@@ -16,4 +16,9 @@ public sealed record CreateMandateSignerRequest(
     /// HU #11201 — organismos donde aplica el mandatario. Ausente ⇒ solo el organismo de la ruta, que
     /// es como da de alta la consola del propio organismo.
     /// </summary>
-    IReadOnlyList<Guid>? TransitOfficeIds = null);
+    IReadOnlyList<Guid>? TransitOfficeIds = null,
+    /// <summary>
+    /// HU #13123 — firma del baúl de la compañía elegida para el mandatario. El OT solo envía el id: no
+    /// recibe la lista del baúl. Se valida en backend contra el tenant de la compañía.
+    /// </summary>
+    Guid? SignatureVaultId = null);

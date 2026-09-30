@@ -1,4 +1,6 @@
+using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.Companies.TransitOffices;
 
 namespace Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
@@ -19,12 +21,15 @@ public sealed class CreateMandateSignerHandler
     private readonly ITransitOfficeOperationalStatusReader _otStatus;
     private readonly IMandateSignerReader _reader;
     private readonly IMandateSignerRepository _repository;
+    private readonly ISignatureVaultReader? _vaultReader;
 
     public CreateMandateSignerHandler(
         ITransitOfficeOperationalStatusReader otStatus,
         IMandateSignerReader reader,
-        IMandateSignerRepository repository)
+        IMandateSignerRepository repository,
+        ISignatureVaultReader? vaultReader = null)
     {
+        _vaultReader = vaultReader;
         _otStatus = otStatus ?? throw new ArgumentNullException(nameof(otStatus));
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
@@ -57,6 +62,16 @@ public sealed class CreateMandateSignerHandler
                     command.CompanyVisibility,
                     cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        if (errors.Count == 0 && command.ValidateSigningMeans)
+        {
+            var signingError = await ValidateSigningMeansAsync(command, companyIds, cancellationToken)
+                .ConfigureAwait(false);
+            if (signingError is not null)
+            {
+                errors.Add(signingError);
+            }
         }
 
         if (errors.Count > 0)
@@ -97,6 +112,55 @@ public sealed class CreateMandateSignerHandler
         // el disparo. El desenlace siempre es `NotAttempted` — se conserva el campo en la respuesta por
         // compatibilidad con el cliente, que ya lo tipa como uno de los cuatro valores del enum.
         return CreateMandateSignerResult.Success(signerId, integrityHash);
+    }
+
+    /// <summary>
+    /// HU #13123 — mismas reglas que el alta de la compañía: la firma del baúl se valida contra el tenant
+    /// de la compañía (existe, es de esa persona, activa y vigente) y el mandatario debe tener un medio de
+    /// firma (baúl; el correo NO cuenta, HU #13122). El OT nunca recibe el baúl completo: solo el id de la
+    /// firma que envía se valida aquí, en backend.
+    /// </summary>
+    private async Task<MandateSignerValidationError?> ValidateSigningMeansAsync(
+        CreateMandateSignerCommand command,
+        IReadOnlyList<Guid> companyIds,
+        CancellationToken cancellationToken)
+    {
+        var offices = command.TransitOfficeIds is { Count: > 0 }
+            ? command.TransitOfficeIds.Distinct().ToList()
+            : [command.TransitOfficeId];
+
+        if (command.SignatureVaultId is { } vaultId && vaultId != Guid.Empty)
+        {
+            var distinctCompanies = companyIds.Distinct().ToList();
+            if (distinctCompanies.Count != 1)
+            {
+                return new MandateSignerValidationError(
+                    "signatureVaultId",
+                    "La firma del baúl solo puede indicarse cuando el mandatario se registra para una compañía.",
+                    null);
+            }
+
+            var firmaError = await CreateCompanyMandateSignerHandler.ValidarFirmaAsync(
+                _vaultReader,
+                distinctCompanies[0],
+                new CompanyMandateSignerRequest(
+                    command.FullName,
+                    command.DocumentNumber,
+                    offices,
+                    command.DocumentType,
+                    command.Email,
+                    SignatureVaultId: vaultId),
+                cancellationToken).ConfigureAwait(false);
+            if (firmaError is not null)
+            {
+                return firmaError;
+            }
+        }
+
+        return MandateSignerSigningCapability.Validate(
+            offices,
+            command.PhysicalSignatureOfficeIds,
+            command.SignatureVaultId);
     }
 
     internal static async Task AddExclusiveSlotErrorsAsync(

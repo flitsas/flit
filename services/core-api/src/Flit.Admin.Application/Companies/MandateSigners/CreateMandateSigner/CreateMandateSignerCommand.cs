@@ -48,6 +48,15 @@ public sealed class CreateMandateSignerCommand
     public Guid? CorrelationId { get; init; }
 
     /// <summary>
+    /// HU #13123 (Epic #13090, F1) — alta desde el OT: aplica las MISMAS validaciones que la compañía
+    /// (firma del baúl contra el tenant de la compañía, medio de firma). Solo se evalúan cuando la
+    /// compañía ya pasó su validación de visibilidad/exclusividad, para no confirmar la existencia de una
+    /// compañía que el organismo no ve. El flujo de la compañía valida antes de delegar y deja esto en
+    /// <c>false</c>.
+    /// </summary>
+    public bool ValidateSigningMeans { get; init; }
+
+    /// <summary>
     /// Bug #12912 (Ley 1581) — compañías que quien opera puede asignar en el OT (ver
     /// <see cref="OtCompanyVisibility"/>). Con la vista del organismo la operación queda acotada a su
     /// propia fila: no toca organismos ajenos ni compañías que no puede ver.

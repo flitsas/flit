@@ -48,6 +48,8 @@ public static class AdminMandateSignersEndpoints
         // POST — alta de mandatario (RF22).
         group.MapPost("", CreateAsync)
             .WithName("AdminMandateSignersCreate")
+            // HU #13123 — escritura solo para ot_admin o SuperAdmin (gestor_tramites_ot recibe 403).
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithSummary("Registra un mandatario en el organismo de tránsito")
             .Produces(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -57,6 +59,7 @@ public static class AdminMandateSignersEndpoints
         // PUT /{signerId} — edición (RF23, regenera huella).
         group.MapPut("/{mandateSignerId:guid}", UpdateAsync)
             .WithName("AdminMandateSignersUpdate")
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithSummary("Edita un mandatario (regenera la huella de integridad)")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -67,6 +70,7 @@ public static class AdminMandateSignersEndpoints
         // POST /{signerId}/inactivate — baja lógica que libera compañías (RF24).
         group.MapPost("/{mandateSignerId:guid}/inactivate", InactivateAsync)
             .WithName("AdminMandateSignersInactivate")
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithSummary("Inactiva un mandatario y libera sus compañías")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -76,6 +80,7 @@ public static class AdminMandateSignersEndpoints
         // POST /{signerId}/reactivate — reactiva un mandatario inactivado (sin compañías).
         group.MapPost("/{mandateSignerId:guid}/reactivate", ReactivateAsync)
             .WithName("AdminMandateSignersReactivate")
+            .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithSummary("Reactiva un mandatario inactivado (se reasignan sus compañías)")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -152,6 +157,9 @@ public static class AdminMandateSignersEndpoints
             UserId = request.UserId,
             // HU #11201 — la misma persona puede firmar en varios organismos.
             TransitOfficeIds = request.TransitOfficeIds,
+            // HU #13123 — firma del baúl (solo el id) y validaciones compartidas con la compañía.
+            SignatureVaultId = request.SignatureVaultId,
+            ValidateSigningMeans = true,
             CreatedBy = ResolveUserId(httpContext.User),
             CompanyVisibility = OtCompanyVisibilityPolicy.For(httpContext.User),
         };
