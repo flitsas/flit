@@ -131,6 +131,14 @@ Ajustes de alcance (opcionales):
 | `V1Snapshot:Include` | `generated` | Solo lo que V1 no persiste. `all` suma los adjuntos ya cargados, para auditoría. |
 | `V1Snapshot:Consolidated` | `auto` | Arma el consolidado solo si V1 no tiene uno guardado (pesa 9-12 MB). `always` / `never`. |
 
+**El consolidado que V1 tiene guardado llega aunque la copia no lo refleje** (HU #13163). La
+instancia 2 lo copia leyendo `id_attachment_pdf_prepared` de la COPIA de la base, pero el snapshot
+se le pide al V1 EN VIVO. Si la copia se tomó antes de que V1 guardara el consolidado, la instancia 2
+lo ve vacío y V1 (`consolidated=auto`) tampoco lo arma porque ya tiene uno. Por eso esta instancia
+toma `persistedConsolidated.preparedFileId` del snapshot y, si la 2 no lo trajo, copia ese archivo
+ORIGINAL desde el file-manager de V1, en la misma columna y con el mismo id que usaría la 2 (no se
+duplica). Necesita el file-manager de origen configurado. No aplica a borradores.
+
 Lo que V1 no logre construir se reporta en el resultado con su motivo: **ninguna pieza se descarta
 en silencio**. Las improntas no se firman, porque firmarlas exigiría escribir en V1: se entrega el
 PDF ya firmado si existe y, si no, el original marcado como degradado.
