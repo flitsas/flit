@@ -171,9 +171,25 @@ public sealed class MigrationRunner(
         var attachmentMap = new AttachmentMapStore(db);
         await attachmentMap.EnsureCreatedAsync(cancellationToken);
 
+        // HU #13163 — para traer el consolidado que V1 tiene guardado cuando la copia de la base no lo
+        // refleja hace falta el file-manager de ORIGEN, igual que en la instancia 2. Si no está
+        // configurado, la instancia sigue y el reporte avisa qué consolidado no se pudo traer.
+        AttachmentCopier? consolidadoCopier = null;
+        var (copyMode, attachmentsFailure) = settings.ValidateForAttachments();
+        if (attachmentsFailure is null)
+        {
+            var sourceClient = new FileManagerClient(
+                httpClients.CreateClient(MigrationHttpClients.SourceFileManager),
+                settings.SourceFileManager.FilesPath,
+                settings.SourceFileManager.AuthToken);
+            consolidadoCopier = new AttachmentCopier(
+                db, attachmentMap, sourceClient, targetClient, copyMode,
+                context!.Target.SystemUserId, request.BatchId);
+        }
+
         var loader = new SnapshotLoader(
             request.Kind, db, context!.MigrationMap, attachmentMap, snapshotClient, targetClient,
-            context.Target.SystemUserId, request.BatchId);
+            context.Target.SystemUserId, request.BatchId, consolidadoCopier);
 
         var results = new List<SnapshotLoadResult>();
         foreach (var missing in context.MissingIds)
