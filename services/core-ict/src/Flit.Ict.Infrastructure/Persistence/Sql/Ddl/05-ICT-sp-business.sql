@@ -315,7 +315,10 @@ BEGIN
         WHERE eim.id = rec.id_master;
 
         -- Placa activa (traspasos 3/4, HU #12518): solo familia TRASPASO del mismo tenant.
-        -- Anulado, rechazado y aprobado no bloquean (alineado a CF-01 / wizard: no están "en proceso").
+        -- Bug #13109 punto 2: bloquea solo si el trámite está EN PROCESO con la misma regla que core-api
+        -- (TramiteEstado.EstaEnProceso, CF-01): borrador, preparado, preasignacion, asignado, entregado, el
+        -- legado subsanacion, o rechazado con subsanacion_activa. Aprobado, anulado, revocado y rechazado sin
+        -- subsanación no bloquean. Lista positiva: un estado nuevo no bloquea hasta que core-api lo declare.
         IF rec.transaction_type IN (3, 4) THEN
             IF EXISTS (
                 SELECT 1 FROM tramites.procedure_instances pi
@@ -327,7 +330,8 @@ BEGIN
                   AND pt.family = 'TRASPASO'
                   AND upper(btrim(fv.value_text)) = upper(btrim(
                         (SELECT plate FROM ict.external_integration_master WHERE id = rec.id_master)))
-                  AND pi.status NOT IN ('anulado', 'rechazado', 'aprobado')
+                  AND (lower(pi.status) IN ('borrador', 'preparado', 'preasignacion', 'asignado', 'entregado', 'subsanacion')
+                       OR (lower(pi.status) = 'rechazado' AND pi.subsanacion_activa = true))
                   AND pi.deleted_at IS NULL
             ) THEN
                 UPDATE ict.external_integration_master
