@@ -88,8 +88,7 @@ public sealed class CreateCompanyMandateSignerHandler
         var sinFirmaError = MandateSignerSigningCapability.Validate(
             offices,
             request.PhysicalSignatureOfficeIds,
-            request.SignatureVaultId,
-            request.Email);
+            request.SignatureVaultId);
         if (sinFirmaError is not null)
         {
             return CreateMandateSignerResult.Invalid([sinFirmaError]);
@@ -253,16 +252,15 @@ public sealed class UpdateCompanyMandateSignerHandler
             return UpdateMandateSignerResult.Invalid([firmaError]);
         }
 
-        // HU #11715 AC6 — solo se valida lo que se está AGREGANDO. Un mandatario con organismos
-        // previos que hoy no cumplirían se puede seguir editando: esos vínculos quedan señalados
-        // (HU #11717), no inhabilitados, para no romper los trámites en curso.
-        var yaHabilitados = new HashSet<Guid>(signer.TransitOfficeIds);
-        var nuevos = offices.Where(o => !yaHabilitados.Contains(o)).ToList();
+        // HU #13122 AC4 — se valida TODA la lista de organismos, no solo los nuevos: un mandatario que
+        // solo tenía correo (medio que ya no cuenta) no puede seguir guardándose sin cargar su firma en
+        // el baúl o iniciar la validación biométrica. La excepción transitoria de firma física (hasta F2)
+        // se respeta: si el formulario no manda la lista (null), rigen los organismos que ya tenía a mano.
+        var fisicos = request.PhysicalSignatureOfficeIds ?? signer.PhysicalSignatureOfficeIds;
         var sinFirmaError = MandateSignerSigningCapability.Validate(
-            nuevos,
-            request.PhysicalSignatureOfficeIds,
+            offices,
+            fisicos,
             request.SignatureVaultId,
-            request.Email,
             signer);
         if (sinFirmaError is not null)
         {

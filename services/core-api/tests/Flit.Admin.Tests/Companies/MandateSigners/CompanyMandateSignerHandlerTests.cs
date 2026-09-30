@@ -152,11 +152,12 @@ public sealed class CompanyMandateSignerHandlerTests
         (await list.HandleAsync(Compania, ct)).Single().Id;
 
     /// <summary>
-    /// El correo va siempre: desde la HU #11715 no se habilita en un organismo a quien no puede firmar
-    /// ante él, y con correo la validación de identidad sale al registrarlo.
+    /// Desde la HU #13122 el correo ya NO habilita a firmar: para no exigir baúl en cada prueba, el alta base
+    /// usa la excepción TRANSITORIA de firma física (se retira en la Feature F2) en todos sus organismos.
     /// </summary>
     private static CompanyMandateSignerRequest Alta(params Guid[] organismos) =>
-        new("Ana Restrepo", "1020304050", organismos, "CC", "ana@x.com");
+        new("Ana Restrepo", "1020304050", organismos, "CC", "ana@x.com",
+            PhysicalSignatureOfficeIds: organismos);
 
     // ── AC1 — alta desde la compañía ──────────────────────────────────────────
 
@@ -239,7 +240,9 @@ public sealed class CompanyMandateSignerHandlerTests
         await create.HandleAsync(Compania, Alta(OtMedellin), null, ct);
         await create.HandleAsync(
             Compania,
-            new CompanyMandateSignerRequest("Carlos Pérez", "9080706050", [OtEnvigado], "CC", "carlos@x.com"),
+            new CompanyMandateSignerRequest(
+                "Carlos Pérez", "9080706050", [OtEnvigado], "CC", "carlos@x.com",
+                PhysicalSignatureOfficeIds: [OtEnvigado]),
             null,
             ct);
 
@@ -369,7 +372,8 @@ public sealed class CompanyMandateSignerHandlerTests
         // Envigado primero: distinto del primario (Medellín), que es como lo manda el multiselect.
         var result = await Editor(ctx).HandleAsync(
             Compania, id, new CompanyMandateSignerRequest(
-                "Ana Restrepo", "1020304050", [OtEnvigado, OtMedellin], "CC", "ana@x.com"),
+                "Ana Restrepo", "1020304050", [OtEnvigado, OtMedellin], "CC", "ana@x.com",
+                PhysicalSignatureOfficeIds: [OtEnvigado, OtMedellin]),
             null, ct);
 
         result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
@@ -535,6 +539,141 @@ public sealed class CompanyMandateSignerHandlerTests
         var result = await Editor(ctx).HandleAsync(
             Compania, id,
             new CompanyMandateSignerRequest("Ana Restrepo Gómez", "1020304050", [OtMedellin], "CC", null),
+            null, ct);
+
+        result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
+    }
+
+    // ── HU #13122 — el correo ya no cuenta como medio de firma ────────────────
+
+    [Fact]
+    public async Task Alta_SoloConCorreo_SeRechazaConMensajeSinCorreo()
+    {
+        // AC1 — correo, sin baúl ni validación, organismo sin firma física ⇒ 422.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+
+        var result = await create.HandleAsync(
+            Compania,
+            new CompanyMandateSignerRequest("Ana Restrepo", "1020304050", [OtMedellin], "CC", "ana@x.com"),
+            null, ct);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Message.Should().Be(MandateSignerSigningCapability.SinMedioDeFirmaMessage);
+        (await list.HandleAsync(Compania, ct)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Alta_ConFirmaDelBaul_SeAcepta_AunqueNoTengaCorreo()
+    {
+        // AC2
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var firmaId = await SeedFirmaAsync(ctx, "1020304050", ct);
+        var (create, list) = Handlers(ctx, firmaId);
+
+        var result = await create.HandleAsync(
+            Compania,
+            new CompanyMandateSignerRequest(
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null, SignatureVaultId: firmaId),
+            null, ct);
+
+        result.IsValid.Should().BeTrue();
+        (await list.HandleAsync(Compania, ct)).Should().ContainSingle();
+    }
+
+    /// <summary>Mandatario legado: registrado solo con correo, sin baúl, sin identidad y sin firma física.</summary>
+    private static async Task<Guid> SeedSoloCorreoAsync(FlitDbContext ctx, CancellationToken ct)
+    {
+        var reader = new DbMandateSignerReader(ctx);
+        var inner = new CreateMandateSignerHandler(OtOperable(), reader, new MandateSignerRepository(ctx));
+        var result = await inner.HandleAsync(
+            new CreateMandateSignerCommand
+            {
+                TransitOfficeId = OtMedellin,
+                FullName = "Ana Restrepo",
+                DocumentNumber = "1020304050",
+                CompanyTenantIds = [Compania],
+                DocumentType = "CC",
+                Email = "ana@x.com",
+                TransitOfficeIds = [OtMedellin],
+                CompanyVisibility = OtCompanyVisibility.WholeNetwork,
+            },
+            ct);
+        result.IsValid.Should().BeTrue();
+        return result.MandateSignerId!.Value;
+    }
+
+    [Fact]
+    public async Task Editar_MandatarioQueSoloTeniaCorreo_SinAgregarBaulNiValidacion_SeRechaza()
+    {
+        // AC4 — editar cualquier dato de un mandatario que solo tiene correo responde 422.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var id = await SeedSoloCorreoAsync(ctx, ct);
+
+        var result = await Editor(ctx).HandleAsync(
+            Compania, id,
+            new CompanyMandateSignerRequest("Ana Restrepo Gómez", "1020304050", [OtMedellin], "CC", "ana@x.com"),
+            null, ct);
+
+        result.Outcome.Should().Be(UpdateMandateSignerOutcome.ValidationFailed);
+        result.Errors.Should().ContainSingle()
+            .Which.Message.Should().Be(MandateSignerSigningCapability.SinMedioDeFirmaMessage);
+    }
+
+    [Fact]
+    public async Task Editar_MandatarioQueSoloTeniaCorreo_AgregandoFirmaDelBaul_SeAcepta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var firmaId = await SeedFirmaAsync(ctx, "1020304050", ct);
+        var id = await SeedSoloCorreoAsync(ctx, ct);
+        var reader = new DbMandateSignerReader(ctx);
+        var editor = new UpdateCompanyMandateSignerHandler(
+            reader, new UpdateMandateSignerHandler(OtOperable(), reader, new MandateSignerRepository(ctx)),
+            new DbSignatureVaultReader(ctx));
+
+        var result = await editor.HandleAsync(
+            Compania, id,
+            new CompanyMandateSignerRequest(
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", "ana@x.com", SignatureVaultId: firmaId),
+            null, ct);
+
+        result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
+    }
+
+    [Fact]
+    public async Task Editar_ConValidacionBiometricaPendiente_SeAcepta()
+    {
+        // AC3 — validación biométrica válida o pendiente en el módulo Identidad del tenant de la compañía.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var id = await SeedSoloCorreoAsync(ctx, ct);
+        ctx.ProcedureInstanceBiometricValidations.Add(new Flit.Tramites.Domain.Entities.ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Compania,
+            DocumentType = "CC",
+            DocumentNumber = "1020304050",
+            Status = Flit.Tramites.Domain.Entities.BiometricEstados.EnProceso,
+            Provider = Flit.Tramites.Domain.Entities.BiometricProviders.Kyverum,
+            TokenHash = "hash",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync(ct);
+
+        var result = await Editor(ctx).HandleAsync(
+            Compania, id,
+            new CompanyMandateSignerRequest("Ana Restrepo Gómez", "1020304050", [OtMedellin], "CC", "ana@x.com"),
             null, ct);
 
         result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);

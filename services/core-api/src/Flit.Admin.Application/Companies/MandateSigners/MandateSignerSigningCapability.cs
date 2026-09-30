@@ -11,15 +11,18 @@ namespace Flit.Admin.Application.Companies.MandateSigners;
 /// → sello de la validación de identidad vigente → línea en blanco—. Sin ninguna de las dos, el
 /// contrato salía con la línea de guiones bajos sin que nadie lo advirtiera.</para>
 ///
-/// <para><b>Excepción: la firma física.</b> Un organismo marcado en
+/// <para><b>El correo NO cuenta (HU #13122, Epic #13090).</b> Tener correo no habilita a firmar: sin firma
+/// activa del baúl ni validación biométrica válida o en curso, el mandatario no puede firmar. El
+/// correo es solo un dato de contacto.</para>
+///
+/// <para><b>Excepción transitoria: la firma física.</b> Un organismo marcado en
 /// <c>PhysicalSignatureOfficeIds</c> no exige baúl ni identidad al parametrizar (se puede dejar
 /// línea en blanco). Si el mandatario ya tiene imagen o sello, el contrato las estampa igual:
 /// el modelo a mano no las oculta.</para>
 ///
-/// <para><b>La identidad recién enviada cuenta.</b> Un mandatario nuevo no tiene identidad vigente
-/// —se le envía al registrarlo, con su correo—, así que exigir <c>valid</c> haría imposible dar de
-/// alta a nadie que no tuviera ya firma en el baúl. Basta con que la validación esté en camino:
-/// <c>pending</c>, o un correo al que mandarla.</para>
+/// <para><b>La identidad en curso cuenta.</b> Basta con que la validación biométrica esté en camino
+/// (<c>pending</c>) para no bloquear al mandatario mientras Kyverum resuelve. La firma física la retira
+/// la Feature F2; hasta entonces se conserva la excepción.</para>
 /// </summary>
 public static class MandateSignerSigningCapability
 {
@@ -27,8 +30,8 @@ public static class MandateSignerSigningCapability
 
     public const string SinMedioDeFirmaMessage =
         "El mandatario no está en condiciones de firmar en los organismos indicados: no tiene firma en "
-        + "el baúl ni validación de identidad. Captúrale la firma, registra un correo para enviarle la "
-        + "validación de identidad, o marca esos organismos como de firma física.";
+        + "el baúl ni una validación biométrica válida o en curso. Carga su firma en el baúl de firmas "
+        + "o inicia la validación biométrica en el módulo Identidad.";
 
     /// <summary>
     /// Estado de identidad que cuenta como resuelta o en curso. <c>expired</c> NO cuenta: una
@@ -43,7 +46,6 @@ public static class MandateSignerSigningCapability
     /// <param name="offices">Organismos que el formulario quiere dejar habilitados.</param>
     /// <param name="physicalSignatureOfficeIds">Los que se firman a mano (exentos).</param>
     /// <param name="signatureVaultId">Firma del baúl elegida en la petición.</param>
-    /// <param name="email">Correo al que se enviaría la validación de identidad.</param>
     /// <param name="existente">
     /// Mandatario ya registrado, en la edición. <c>null</c> en el alta. Aporta la firma y la identidad
     /// que ya tiene, para no exigir que se vuelvan a mandar en cada guardado.
@@ -52,12 +54,11 @@ public static class MandateSignerSigningCapability
         IReadOnlyList<Guid> offices,
         IReadOnlyList<Guid>? physicalSignatureOfficeIds,
         Guid? signatureVaultId,
-        string? email,
         MandateSignerItem? existente = null)
     {
         ArgumentNullException.ThrowIfNull(offices);
 
-        if (PuedeFirmarElectronicamente(signatureVaultId, email, existente))
+        if (PuedeFirmarElectronicamente(signatureVaultId, existente))
         {
             return [];
         }
@@ -77,11 +78,10 @@ public static class MandateSignerSigningCapability
         IReadOnlyList<Guid> offices,
         IReadOnlyList<Guid>? physicalSignatureOfficeIds,
         Guid? signatureVaultId,
-        string? email,
         MandateSignerItem? existente = null)
     {
         var sinFirma = OrganismosSinMedioDeFirma(
-            offices, physicalSignatureOfficeIds, signatureVaultId, email, existente);
+            offices, physicalSignatureOfficeIds, signatureVaultId, existente);
 
         return sinFirma.Count == 0
             ? null
@@ -90,7 +90,6 @@ public static class MandateSignerSigningCapability
 
     private static bool PuedeFirmarElectronicamente(
         Guid? signatureVaultId,
-        string? email,
         MandateSignerItem? existente)
     {
         if (signatureVaultId is not null || existente?.SignatureVaultId is not null)
@@ -98,13 +97,7 @@ public static class MandateSignerSigningCapability
             return true;
         }
 
-        if (!string.IsNullOrWhiteSpace(email))
-        {
-            return true;
-        }
-
         return existente is not null
-            && (!string.IsNullOrWhiteSpace(existente.Email)
-                || IdentidadResueltaOEnCurso.Contains(existente.IdentityStatus, StringComparer.OrdinalIgnoreCase));
+            && IdentidadResueltaOEnCurso.Contains(existente.IdentityStatus, StringComparer.OrdinalIgnoreCase);
     }
 }

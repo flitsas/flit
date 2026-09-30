@@ -36,7 +36,7 @@ public sealed class MandateSignerSigningCapabilityTests
     public void SinFirmaNiIdentidadNiCorreo_NoSePuedeHabilitar()
     {
         // AC1 — es el caso que dejaba el contrato con la línea en blanco sin avisar.
-        var error = MandateSignerSigningCapability.Validate([Funza], null, null, null);
+        var error = MandateSignerSigningCapability.Validate([Funza], null, null);
 
         error.Should().NotBeNull();
         error!.Field.Should().Be("transitOfficeIds");
@@ -47,7 +47,7 @@ public sealed class MandateSignerSigningCapabilityTests
     public void ConFirmaDelBaul_SeHabilita()
     {
         // AC2.
-        MandateSignerSigningCapability.Validate([Funza, Bogota], null, Firma, null).Should().BeNull();
+        MandateSignerSigningCapability.Validate([Funza, Bogota], null, Firma).Should().BeNull();
     }
 
     [Fact]
@@ -55,16 +55,40 @@ public sealed class MandateSignerSigningCapabilityTests
     {
         // AC3.
         MandateSignerSigningCapability
-            .Validate([Funza], null, null, null, Signer(identityStatus: "valid"))
+            .Validate([Funza], null, null, Signer(identityStatus: "valid"))
             .Should().BeNull();
     }
 
     [Fact]
-    public void ConCorreo_SeHabilita_PorqueLaValidacionSaleAlRegistrarlo()
+    public void SoloConCorreo_NoAlcanza()
     {
-        // Un mandatario nuevo nunca tiene identidad vigente todavía: se le envía con su correo. Sin
-        // esto no se podría dar de alta a nadie que no tuviera ya firma en el baúl.
-        MandateSignerSigningCapability.Validate([Funza], null, null, "mandatario@ejemplo.com")
+        // HU #13122 AC1/AC4 — el correo ya no cuenta: un mandatario que solo tiene correo (sin baúl ni
+        // validación biométrica) no puede firmar y se rechaza, tanto en el alta como al editarlo.
+        var soloCorreo = Signer(email: "mandatario@ejemplo.com");
+
+        var enEdicion = MandateSignerSigningCapability.Validate([Funza], null, null, soloCorreo);
+        var enAlta = MandateSignerSigningCapability.Validate([Funza], null, null);
+
+        enEdicion.Should().NotBeNull();
+        enEdicion!.Message.Should().Be(MandateSignerSigningCapability.SinMedioDeFirmaMessage);
+        enAlta.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void ElMensaje_NoSugiereElCorreo_YIndicaBaulOBiometria()
+    {
+        var mensaje = MandateSignerSigningCapability.SinMedioDeFirmaMessage;
+
+        mensaje.Should().NotContainEquivalentOf("correo");
+        mensaje.Should().Contain("baúl").And.Contain("biométrica");
+    }
+
+    [Fact]
+    public void IdentidadEnCurso_SeHabilita()
+    {
+        // HU #13122 AC3 — una validación biométrica pendiente cuenta como medio en camino.
+        MandateSignerSigningCapability
+            .Validate([Funza], null, null, Signer(identityStatus: "pending"))
             .Should().BeNull();
     }
 
@@ -73,7 +97,7 @@ public sealed class MandateSignerSigningCapabilityTests
     {
         // Una validación vencida no estampa sello; renovarla es una acción explícita del gestor.
         MandateSignerSigningCapability
-            .Validate([Funza], null, null, null, Signer(identityStatus: "expired"))
+            .Validate([Funza], null, null, Signer(identityStatus: "expired"))
             .Should().NotBeNull();
     }
 
@@ -82,14 +106,14 @@ public sealed class MandateSignerSigningCapabilityTests
     {
         // Firma a mano no exige baúl al parametrizar. Si más adelante hay imagen o sello, el contrato
         // sí la estampa: el modelo a mano ya no oculta una firma que el mandatario tiene.
-        MandateSignerSigningCapability.Validate([Funza], [Funza], null, null).Should().BeNull();
+        MandateSignerSigningCapability.Validate([Funza], [Funza], null).Should().BeNull();
     }
 
     [Fact]
     public void FirmaFisica_SoloExentaElOrganismoMarcado()
     {
         var sinFirma = MandateSignerSigningCapability.OrganismosSinMedioDeFirma(
-            [Funza, Bogota], [Funza], null, null);
+            [Funza, Bogota], [Funza], null);
 
         sinFirma.Should().ContainSingle().Which.Should().Be(Bogota);
     }
@@ -98,14 +122,14 @@ public sealed class MandateSignerSigningCapabilityTests
     public void SinOrganismosNuevos_NoSeValidaNada()
     {
         // AC6 — editar un mandatario que ya incumple no obliga a arreglarlo.
-        MandateSignerSigningCapability.Validate([], null, null, null, Signer()).Should().BeNull();
+        MandateSignerSigningCapability.Validate([], null, null, Signer()).Should().BeNull();
     }
 
     [Fact]
     public void LaFirmaYaGuardadaCuenta_SinReenviarlaEnCadaGuardado()
     {
         MandateSignerSigningCapability
-            .Validate([Funza], null, null, null, Signer(signatureVaultId: Firma))
+            .Validate([Funza], null, null, Signer(signatureVaultId: Firma))
             .Should().BeNull();
     }
 }
