@@ -249,4 +249,30 @@ public sealed class CalculadoraDeRecorridoTests
 
         tiempos.SegundosSinAvanzar.Should().Be(0);
     }
+
+    [Fact]
+    public void Bug13109_EsperandoDocumentos_LaNotaSeCuelgaDeLaValidacionDeNegocio()
+    {
+        // Negocio validado, sin cierre de adjuntos ni waiver: las fuentes externas no han corrido.
+        var marcas = new MarcasRecorrido(
+            Recibido, Negocio, null, null, null,
+            IctEstado.EnValidacionExterna, null, Negocio.AddMinutes(10), EsperandoDocumentos: true);
+
+        var (hitos, _) = CalculadoraDeRecorrido.Construir(marcas);
+
+        var negocio = hitos.Single(h => h.Etapa == IctEstado.EnValidacionNegocio);
+        negocio.Mensaje.Should().Be(NotasRecorrido.DocumentosPendientes);
+        negocio.Resultado.Should().Be(ResultadoHito.Ok, "la espera de documentos no es una novedad");
+        hitos.Where(h => h.Etapa != IctEstado.EnValidacionNegocio).Should().OnlyContain(h => h.Mensaje == null);
+    }
+
+    [Fact]
+    public void Bug13109_TrasLaConsultaDeFuentes_LaNotaNoAparece()
+    {
+        var marcas = Completo() with { EsperandoDocumentos = true };
+
+        var (hitos, _) = CalculadoraDeRecorrido.Construir(marcas);
+
+        hitos.Should().OnlyContain(h => h.Mensaje == null);
+    }
 }

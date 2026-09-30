@@ -49,6 +49,11 @@ public sealed record TiemposRecorrido(
 /// El endpoint pasa la hora del servidor: leer el reloj en el render del navegador ataría la cifra a
 /// la zona horaria del usuario.
 /// </param>
+/// <param name="EsperandoDocumentos">
+/// Bug #13109: el negocio quedó validado, pero el cliente no ha cerrado los adjuntos ni pidió procesar
+/// sin ellos, así que las fuentes externas y el RUNT esperan. Lo decide el repositorio con el evento
+/// del SP de negocio y las banderas vigentes del master.
+/// </param>
 public sealed record MarcasRecorrido(
     DateTime Recibido,
     DateTime? ValidacionNegocio,
@@ -57,7 +62,22 @@ public sealed record MarcasRecorrido(
     DateTime? Anulado,
     string Estado,
     string? MensajeNovedad,
-    DateTime Ahora);
+    DateTime Ahora,
+    bool EsperandoDocumentos = false);
+
+/// <summary>Notas del recorrido que no son novedades (no bloquean ni marcan error).</summary>
+public static class NotasRecorrido
+{
+    /// <summary>
+    /// Bug #13109. Literal que el SP de negocio deja en el timeline (<c>ict.pretramite_events</c>) y que
+    /// el recorrido cuelga de la etapa de negocio mientras las fuentes externas no hayan corrido.
+    /// </summary>
+    public const string DocumentosPendientes =
+        "No se ha procesado porque no se han terminado de cargar los documentos adjuntos.";
+
+    /// <summary>Resultado del evento de timeline que registra la espera de documentos.</summary>
+    public const string OutcomeDocumentosPendientes = "documentos_pendientes";
+}
 
 /// <summary>Recorrido completo de un pre-trámite (HU #11816).</summary>
 public sealed record RecorridoTramite(
@@ -166,6 +186,13 @@ public static class CalculadoraDeRecorrido
             }
 
             var mensaje = resultado == ResultadoHito.Error ? m.MensajeNovedad : null;
+
+            // Bug #13109: la espera de documentos se cuelga de la validación de negocio, pero solo mientras
+            // las fuentes externas no hayan corrido; después ya no describe dónde está el trámite.
+            if (mensaje is null && i == 1 && m.EsperandoDocumentos && m.ConsultaFuentes is null && ocurrido is not null)
+            {
+                mensaje = NotasRecorrido.DocumentosPendientes;
+            }
             hitos.Add(new HitoTrazabilidad(etapa, titulo, ocurrido, delta, resultado, false, mensaje));
 
             if (ocurrido is not null)
