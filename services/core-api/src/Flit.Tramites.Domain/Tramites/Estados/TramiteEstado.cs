@@ -177,9 +177,10 @@ public static class TramiteEstado
 
     /// <summary>
     /// Bug #13055 — estados que CONGELAN las validaciones de identidad del trámite: un resultado tardío
-    /// del proveedor (webhook, consulta o expiración) ya no las cambia, y una aprobada deja de servir
-    /// como identidad vigente para otros trámites de la persona. <see cref="Aprobado"/> queda fuera a
-    /// propósito: el sistema sigue trabajando su expediente (firmas, regeneración documental).
+    /// del proveedor (webhook, consulta o expiración) ya no las cambia. No afecta la reutilización: una
+    /// aprobada sigue sirviendo como identidad vigente para otros trámites de la persona.
+    /// <see cref="Aprobado"/> queda fuera a propósito: el sistema sigue trabajando su expediente (firmas,
+    /// regeneración documental).
     /// </summary>
     public static readonly IReadOnlyList<string> EstadosQueCongelanIdentidad = [Anulado, Revocado];
 
