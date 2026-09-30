@@ -48,6 +48,11 @@ pueden compartir valor.
    explícita al criterio A11** del checklist de esquema: la lectura del feed no filtra por compañía;
    un índice con `tenant_id` delante no le sirve. La lectura entre compañías se acota por el ámbito
    exclusivo del servicio externo (HU #13076), no por el índice.
+   **Corrección (DDL 128, HU #13083):** `uq_procedure_instances_sync_version` pasa a ser único
+   **parcial** (`WHERE sync_version IS NOT NULL`). Como índice único corriente convertía cada sello de
+   sincronización en un cambio de clave (bloqueo `FOR UPDATE`), que choca con el `FOR KEY SHARE` de las
+   FK de las tablas hijas: dos escrituras simultáneas en hijas del mismo trámite terminaban en deadlock.
+   PostgreSQL no cuenta los índices parciales como claves de FK; la unicidad se conserva.
 7. **Recorrido por (transacción, versión) y solo transacciones cerradas** (HU #13076, DDL 126). La
    versión se toma al escribir, no al confirmar: un cursor solo por versión perdería para siempre el
    cambio de una transacción larga que confirma después de otra con versión mayor. La lectura ordena
