@@ -1,6 +1,7 @@
 using System.Globalization;
 using Flit.Admin.Domain.Integrations;
 using Flit.Api.Authorization;
+using Flit.Api.Middleware;
 using Flit.Queries.Domain.Time;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.ExternalSync;
@@ -100,6 +101,12 @@ public static class ExternalSyncEndpoints
             : !string.IsNullOrEmpty(cursor) ? cursor
             : desde is { } d ? ExternalSyncCursor.EncodeSince(d)
             : ExternalSyncCursor.Encode(ExternalSyncCursor.Start);
+
+        // HU #13086 — qué se entregó, para la bitácora (sin los datos mismos).
+        context.Features.Get<ExternalAccessDetails>()?.SetPage(
+            page.Select(e => e.Item.SyncVersion).ToList(),
+            page.Select(e => e.Item.CompaniaGestora.TenantId),
+            conPii && page.Any(e => e.Item.Compradores.Count > 0));
 
         context.Response.Headers.CacheControl = "no-store";
         return Results.Ok(new ExternalSyncPage(

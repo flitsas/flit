@@ -358,6 +358,9 @@ public static class AdminInfrastructureExtensions
         // Entidad de plataforma sin tenant: la administra el SuperAdmin y el login la busca por client_id.
         services.AddScoped<Flit.Admin.Domain.Integrations.IExternalClientRepository,
             ExternalClientRepository>();
+        // HU #13086 — bitácora de accesos externos (integrations.external_access_log).
+        services.AddScoped<Flit.Admin.Domain.Integrations.IExternalAccessLogRepository,
+            ExternalAccessLogRepository>();
 
         // Causales de rechazo — catálogo global (CRUD SuperAdmin) y validación de las causales
         // que llegan en el rechazo del organismo.

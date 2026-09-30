@@ -62,6 +62,11 @@ clave filtrada vale hasta que alguien la rote a mano.
 ## Consecuencias
 
 - Nuevo schema `integrations`; aquí vivirá también la bitácora de accesos externos (HU #13086).
+- La bitácora `integrations.external_access_log` (HU #13086, DDL 127) es **solo de inserción**: no lleva
+  `created_by`, `updated_*`, `deleted_*` ni `row_version`, ni triggers de `row_version` o `audit_log`. Una
+  bitácora no se edita ni se audita a sí misma. Tampoco lleva `tenant_id` (una página del feed toca varias
+  compañías) ni clave foránea a `external_clients`, porque también registra peticiones con un cliente
+  desconocido o sin pase. La IP va marcada `@pii:medium`. La depuración a 12 meses queda para la fase 2.
 - Los identificadores de cliente (`flito-dev`, `flito-qa`, `flito-pdn`) son únicos y no se reutilizan,
   ni tras dar de baja al cliente.
 - La entrega del secreto a Flito es manual y fuera de banda; nunca por las herramientas de trabajo.
