@@ -52,7 +52,7 @@ describe("mandatario-firma (HU #11716/#11717)", () => {
     expect(tipoDeFirmaMandatario({ identityStatus: "pending" })).toBe("identidad_pendiente");
     expect(tipoDeFirmaMandatario({ email: "x@y.com" })).toBe("sin_medio");
     expect(tipoDeFirmaMandatario({})).toBe("sin_medio");
-    expect(etiquetaTipoFirma("baul")).toBe("Firma del baúl");
+    expect(etiquetaTipoFirma("baul")).toBe("Baúl de firmas");
   });
 
   it("HU #13133: no existe el tipo «firma a mano»", () => {

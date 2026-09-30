@@ -73,7 +73,7 @@ export function tipoDeFirmaMandatario(medio: MedioDeFirma): TipoFirmaMandatario 
 export function etiquetaTipoFirma(tipo: TipoFirmaMandatario): string {
   switch (tipo) {
     case "baul":
-      return "Firma del baúl";
+      return "Baúl de firmas";
     case "identidad":
       return "Validación de identidad";
     case "identidad_pendiente":

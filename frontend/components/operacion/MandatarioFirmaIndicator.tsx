@@ -15,8 +15,8 @@ import type { MandateSignerPrevisto } from '@/lib/api/types/procedure-runtime';
  */
 
 const FORMA_FIRMA: Record<string, string> = {
-  baul: 'Firma del baúl',
-  biometria: 'Biometría',
+  baul: 'Baúl de firmas',
+  biometria: 'Validación de identidad',
 };
 
 const MOTIVO: Record<string, string> = {
@@ -24,7 +24,7 @@ const MOTIVO: Record<string, string> = {
   mandatario_eliminado: 'El mandatario que correspondía ya no está registrado.',
   mandatario_fuera_de_vigencia: 'El mandatario está fuera de su vigencia.',
   mandatario_inactivo: 'El mandatario está inactivo.',
-  biometria_vencida: 'La biometría del mandatario está vencida.',
+  biometria_vencida: 'La validación de identidad del mandatario está vencida.',
   sin_validacion_aprobada: 'El mandatario no tiene una validación de identidad aprobada.',
   baul_sin_firma_vigente: 'El mandatario no tiene una firma vigente en el baúl.',
   firma_fisica_sin_migrar: 'La firma física del mandatario no se ha migrado.',

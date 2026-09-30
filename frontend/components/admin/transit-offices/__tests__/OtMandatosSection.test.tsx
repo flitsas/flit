@@ -357,7 +357,7 @@ describe("OtMandatosSection", () => {
     expect(screen.getByText("Hugo Mandatario")).toBeInTheDocument();
     expect(screen.getByText("CC")).toBeInTheDocument();
     expect(screen.getByText("52123456")).toBeInTheDocument();
-    expect(screen.getByText("Firma del baúl")).toBeInTheDocument();
+    expect(screen.getByText("Baúl de firmas")).toBeInTheDocument();
     // HU #13133 — modelo y estado de vigencia en la fila; ninguna opción de firma física.
     expect(screen.getByText("Persona natural")).toBeInTheDocument();
     expect(screen.getByTestId("mandatario-vigencia")).toHaveTextContent("Vigente");

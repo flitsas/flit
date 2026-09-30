@@ -30,7 +30,7 @@ test.describe('HU13146 — Quién firmará el mandato en el Resumen', () => {
     );
     await abrirResumen(page);
     const indicador = page.getByTestId('mandatario-firma-valido');
-    await expect(indicador).toContainText('Firmará: Ana Restrepo / Firma del baúl');
+    await expect(indicador).toContainText('Firmará: Ana Restrepo / Baúl de firmas');
     await expect(indicador.getByRole('button')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Finalizar y enviar trámite' })).toBeEnabled();
   });

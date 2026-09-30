@@ -71,8 +71,6 @@ const mocks = vi.hoisted(() => ({
   generarImpronta: vi.fn(),
   generarConsolidado: vi.fn(),
   getPrenda: vi.fn(),
-  listMandateSigners: vi.fn(),
-  setMandateSigner: vi.fn(),
   // HU #13146 — firmante previsto del mandato (solo lectura).
   getMandateSigner: vi.fn(),
   // Declaraciones del paso de requisitos (tipo de servicio, casilla 18 del FUR).
@@ -319,8 +317,6 @@ beforeEach(() => {
     hash: 'h',
   });
   mocks.getPrenda.mockResolvedValue([]);
-  mocks.listMandateSigners.mockResolvedValue({ opciones: [], elegidoId: null, editable: true });
-  mocks.setMandateSigner.mockResolvedValue(undefined);
   mocks.getMandateSigner.mockResolvedValue({ estado: 'no_aplica', modo: 'block' });
   mocks.generarConsolidado.mockResolvedValue({
     document: { attachmentId: 'c-1', tipo: 'consolidado', filename: 'c.pdf', sha256: 'abc' },
@@ -1884,7 +1880,7 @@ describe('TramiteWizard — HU #13146 quién firmará el mandato', () => {
     });
     await abrirResumen();
     const ind = await screen.findByTestId('mandatario-firma-valido');
-    expect(ind).toHaveTextContent('Firmará: Ana Restrepo / Firma del baúl');
+    expect(ind).toHaveTextContent('Firmará: Ana Restrepo / Baúl de firmas');
     expect(within(ind).queryByRole('button')).not.toBeInTheDocument();
     expect(within(ind).queryByRole('combobox')).not.toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeEnabled();
@@ -1917,7 +1913,7 @@ describe('TramiteWizard — HU #13146 quién firmará el mandato', () => {
     });
     await abrirResumen();
     expect(await screen.findByText('Mandatario sin firma válida')).toBeInTheDocument();
-    expect(screen.getByTestId('mandatario-firma-aviso')).toHaveTextContent(/biometría del mandatario está vencida.*Puedes radicar/);
+    expect(screen.getByTestId('mandatario-firma-aviso')).toHaveTextContent(/validación de identidad del mandatario está vencida.*Puedes radicar/);
     expect(screen.getByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeEnabled();
   });
 

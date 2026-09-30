@@ -2529,35 +2529,6 @@ export interface NotificationDispatchesResponse {
 }
 
 /**
- * HU #11203 — un mandatario que puede firmar el mandato del trámite.
- *
- * Puede firmar por cualquiera de dos vías ALTERNATIVAS: `firmaBaulVigente` o `identidadVigente`. Antes
- * solo se informaba la identidad, así que un mandatario con su firma del baúl vigente —perfectamente
- * capaz de firmar— se anunciaba como si le faltara algo.
- */
-export interface MandateSignerOption {
-  id: string;
-  nombre: string;
-  tipoDocumento: string;
-  documento: string;
-  identidadVigente: boolean;
-  identidadHasta: string | null;
-  firmaBaulVigente?: boolean;
-  /**
-   * Firma A MANO ante el organismo del trámite. Quien firma a mano no necesita ninguna de las dos vías
-   * anteriores: el documento le deja la línea y él la suscribe.
-   */
-  firmaFisica?: boolean;
-}
-
-/** Mandatarios disponibles y cuál está elegido. `editable` es falso fuera de borrador. */
-export interface MandateSignerSelection {
-  opciones: MandateSignerOption[];
-  elegidoId: string | null;
-  editable: boolean;
-}
-
-/**
  * HU #13145 / #13146 (ADR-0066) — firmante previsto del mandato, de solo lectura. Lo calcula el mismo
  * evaluador que el gate de radicación. Nunca trae documento de identidad ni ruta de la firma.
  */
