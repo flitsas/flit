@@ -205,6 +205,51 @@ public sealed class PrendaAdjuntosDecisionAnteriorBug13240Tests
         _instances.Received(1).RemoveAttachment(registro);
     }
 
+    /// <summary>
+    /// Review PR #508 (B1) — primera activación de la complementaria: el front guarda primero la base
+    /// (<c>registrar</c>) y luego <c>levantar</c>. El PUT de la base no puede retirar el
+    /// <c>prenda_levantamiento</c> recién subido: no pertenece a ninguna decisión reemplazada.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Complementaria_PrimeraActivacion_PutDeLaBaseNoRetiraElDocDeLaComplementaria(bool baseYaVigente)
+    {
+        var instance = Instancia(ProcedureTypeFixture.PrendaInscripcion);
+        Adjunto(instance, PrendaDocTipos.Registro);
+        Adjunto(instance, PrendaDocTipos.Levantamiento);
+        if (baseYaVigente)
+            Vigente(PrendaDecision.Registrar);
+
+        var (_, error) = await Handler().HandleAsync(_id, _tenant, new RegistrarPrendaInput(
+            PrendaDecision.Registrar, "Banco Ficticio S.A.", "900000001"), ct: Ct);
+
+        error.Should().BeNull();
+        Tipos(instance).Should().Equal(PrendaDocTipos.Levantamiento, PrendaDocTipos.Registro);
+        _storage.DidNotReceiveWithAnyArgs().Delete(default!);
+        _instances.DidNotReceiveWithAnyArgs().RemoveAttachment(default!);
+    }
+
+    /// <summary>
+    /// Review PR #508 (B1) — en un tipo complementario solo se retira el soporte de la decisión
+    /// REEMPLAZADA en este guardado; el de la otra familia (aún sin decisión vigente) se conserva.
+    /// </summary>
+    [Fact]
+    public async Task Complementaria_ConstitucionReemplazada_RetiraSuDocYConservaElDeLaOtraFamilia()
+    {
+        var instance = Instancia(ProcedureTypeFixture.PrendaInscripcion);
+        var registro = Adjunto(instance, PrendaDocTipos.Registro);
+        Adjunto(instance, PrendaDocTipos.Levantamiento);
+        Vigente(PrendaDecision.Registrar);
+
+        var (_, error) = await Handler().HandleAsync(_id, _tenant, new RegistrarPrendaInput(
+            PrendaDecision.Solicitar, "Banco Ficticio S.A.", "900000001"), ct: Ct);
+
+        error.Should().BeNull();
+        Tipos(instance).Should().Equal(PrendaDocTipos.Levantamiento);
+        _instances.Received(1).RemoveAttachment(registro);
+    }
+
     [Fact]
     public async Task EstadoNoEditable_NoRetiraAdjuntos_PeroGuardaLaDecision()
     {

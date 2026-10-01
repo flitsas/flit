@@ -198,7 +198,8 @@ public sealed class RegistrarPrendaHandler(
 
         // Bug #13240 — el soporte de la decisión anterior no sobrevive al cambio de decisión.
         var vigentesResultantes = vigentes.Except(aReemplazar).Append(nueva).ToList();
-        await RetirarSoportesHuerfanosAsync(instanceId, tenantId, vigentesResultantes, ct).ConfigureAwait(false);
+        await RetirarSoportesHuerfanosAsync(
+            instanceId, tenantId, vigentesResultantes, aReemplazar, permiteComplementaria, ct).ConfigureAwait(false);
 
         return (ToDto(nueva), null);
     }
@@ -207,8 +208,16 @@ public sealed class RegistrarPrendaHandler(
     /// Bug #13240 — retira los adjuntos de prenda (<see cref="PrendaDocTipos.All"/>) que ya no exige
     /// NINGUNA decisión vigente: el PDF de «registrar» tras cambiar a <c>omitir</c>/<c>sin_prenda</c> o a
     /// <c>levantar</c> seguía en los documentos del trámite y dentro del consolidado, mientras el FUR —que
-    /// lee las vigentes— ya no lo declaraba. Con la acción complementaria (dos vigentes, una por familia)
-    /// se conserva el soporte de la otra familia porque sigue exigido.
+    /// lee las vigentes— ya no lo declaraba.
+    ///
+    /// <para><b>Candidatos según el tipo (review PR #508, B1).</b> Sin acción complementaria
+    /// (Matrícula/Traspaso: a lo sumo UNA vigente) es candidato todo <c>prenda_*</c> que la vigente
+    /// resultante no exige — cubre también el PDF subido sin haber guardado nunca la decisión. CON
+    /// complementaria (<see cref="ProcedureTypeLayers.PermiteAccionComplementaria"/>) solo lo son los
+    /// DocTipos de las decisiones REEMPLAZADAS en este guardado que ninguna vigente resultante exige: el
+    /// front guarda primero la base y luego la complementaria, así que en la primera activación el
+    /// documento de la complementaria ya está subido y todavía no pertenece a ninguna decisión; tratarlo
+    /// como huérfano lo borraba en el PUT de la base.</para>
     ///
     /// <para><b>Mismas reglas que el borrado del gestor</b> (<see cref="DeleteAttachmentHandler"/>, vía
     /// <see cref="AttachmentRetiro"/>): solo en estado editable
@@ -229,6 +238,8 @@ public sealed class RegistrarPrendaHandler(
         Guid instanceId,
         Guid tenantId,
         IReadOnlyList<ProcedureInstancePrenda> vigentes,
+        IReadOnlyList<ProcedureInstancePrenda> reemplazadas,
+        bool permiteComplementaria,
         CancellationToken ct)
     {
         if (_storage is null)
@@ -243,8 +254,15 @@ public sealed class RegistrarPrendaHandler(
             .OfType<string>()
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        IReadOnlySet<string> candidatos = permiteComplementaria
+            ? reemplazadas
+                .Select(r => PrendaDecision.DocTipoFor(r.Decision))
+                .OfType<string>()
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : PrendaDocTipos.All;
+
         var huerfanos = instance.Attachments
-            .Where(a => PrendaDocTipos.All.Contains(a.Tipo) && !exigidos.Contains(a.Tipo))
+            .Where(a => candidatos.Contains(a.Tipo) && !exigidos.Contains(a.Tipo))
             .ToList();
         if (huerfanos.Count == 0)
             return;
@@ -255,6 +273,12 @@ public sealed class RegistrarPrendaHandler(
         if (retirables.Count == 0)
             return;
 
+        // Riesgo latente (review PR #508, O3): este SaveChanges solo hace DELETE de adjuntos porque
+        // AutoUnmark es no-op para prenda_* (ningún ítem de TramiteTipologiaCatalog usa esos DocTipos).
+        // Si alguno llegara a usarlos, AutoUnmark modificaría la instancia y el UPDATE saldría con el
+        // row_version que EF leyó antes del save de la prenda (el ConsolidadoVigenciaTracker puede
+        // haberlo subido) ⇒ DbUpdateConcurrencyException. En ese caso, recargar la entrada antes de Retirar.
+        // Solo se guarda cuando hubo retiro.
         AttachmentRetiro.Retirar(instance, retirables, instances, _storage, _imprintAudit);
         await instances.SaveChangesAsync(ct).ConfigureAwait(false);
     }
