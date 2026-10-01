@@ -2,6 +2,7 @@ using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserManagement;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -234,6 +235,23 @@ public sealed class UserManagementRepository(FlitDbContext db) : IUserManagement
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         entity.UpdatedBy = restoredBy;
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsLiveEmailUniqueViolation(ex))
+        {
+            // Bug #13194 — red de la carrera: el handler ya pre-valida con FindLiveByEmailAsync, pero
+            // entre esa lectura y este UPDATE otra cuenta pudo quedar viva con el mismo correo.
+            db.Entry(entity).State = EntityState.Unchanged;
+            throw new UserEmailInUseByLiveAccountException();
+        }
     }
+
+    private const string LiveEmailUniqueIndex = "uq_users_email";
+
+    private static bool IsLiveEmailUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException pg
+        && pg.SqlState == PostgresErrorCodes.UniqueViolation
+        && pg.ConstraintName == LiveEmailUniqueIndex;
 }

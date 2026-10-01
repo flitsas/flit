@@ -54,6 +54,20 @@ public sealed class SelfDeletionException : Exception
 }
 
 /// <summary>
+/// Bug #13194 — no se puede restaurar una cuenta eliminada si su correo ya lo usa otra cuenta VIVA
+/// (p. ej. se volvió a invitar y activar). <c>uq_users_email</c> es parcial (<c>deleted_at IS NULL</c>):
+/// restaurar dejaría dos cuentas vivas con el mismo correo y la BD lo rechaza. El handler lo detecta
+/// antes y el repositorio traduce el 23505 de la carrera a esta misma excepción.
+/// </summary>
+public sealed class UserEmailInUseByLiveAccountException : Exception
+{
+    public UserEmailInUseByLiveAccountException()
+        : base("Ya existe una cuenta activa con ese correo.")
+    {
+    }
+}
+
+/// <summary>
 /// El usuario objetivo de una restauración NO está eliminado (HU #10623 AC5): se rechaza
 /// explícitamente en vez de tratar la restauración como un no-op silencioso.
 /// </summary>
