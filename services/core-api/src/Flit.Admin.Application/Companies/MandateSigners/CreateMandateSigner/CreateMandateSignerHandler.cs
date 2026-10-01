@@ -361,7 +361,7 @@ public sealed class CreateMandateSignerHandler
             // HU #13179 — solo las compañías PROPIETARIAS entran en la exclusividad y RF33; las asociadas se
             // validan aparte (MandateSignerAssociationRules) y no ocupan el cupo de nadie.
             MandateSignerValidation.ValidateCompanies(
-                errors, companyIds, otCompanies, resolutions, currentSignerId, validas);
+                errors, companyIds, otCompanies, resolutions, currentSignerId, configuredByScope, validas);
         }
     }
 }

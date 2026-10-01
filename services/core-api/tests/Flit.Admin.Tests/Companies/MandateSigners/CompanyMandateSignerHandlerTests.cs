@@ -249,6 +249,64 @@ public sealed class CompanyMandateSignerHandlerTests
         porOrganismo[OtEnvigado].Should().Be("compania", "el vínculo nuevo toma el origen de quien edita");
     }
 
+    // HU #13195c — D-A1: el Super Admin que crea desde la compañía deja origen super_admin, no compania.
+    [Theory]
+    [InlineData("super_admin", "super_admin")]
+    [InlineData("compania", "compania")]
+    public async Task HU13195c_LaAltaPorCompaniaGuardaElOrigenDelActor(string actor, string esperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, _) = Handlers(ctx);
+
+        (await create.HandleAsync(Compania, Alta(OtMedellin), null, actor, ct)).IsValid.Should().BeTrue();
+
+        (await ScopesAsync(ctx, ct)).Should().Equal(esperado);
+    }
+
+    [Fact]
+    public async Task HU13195c_SuperAdminYCompaniaCoexisten_ElMismoGrupoDeOrigenSigueSiendoUnico()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, _) = Handlers(ctx);
+        var otro = new CompanyMandateSignerRequest(
+            "Beto Gómez", "99887766", [OtMedellin], "CC", "beto@x.com", SignatureMethod: "biometria");
+
+        (await create.HandleAsync(Compania, Alta(OtMedellin), null, "super_admin", ct)).IsValid.Should().BeTrue();
+        // Otro origen (compañía): coexiste.
+        (await create.HandleAsync(Compania, otro, null, "compania", ct)).IsValid.Should().BeTrue();
+        // super_admin comparte grupo con organismo: un segundo de ese grupo se rechaza.
+        var tercero = new CompanyMandateSignerRequest(
+            "Carlos Ruiz", "55443322", [OtMedellin], "CC", "c@x.com", SignatureMethod: "biometria");
+        var repetido = await create.HandleAsync(Compania, tercero, null, "super_admin", ct);
+        repetido.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HU13195c_EditarComoSuperAdminUnMandatarioDeLaCompania_ConservaSuGrupo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+        // Uno de la compañía y uno del organismo ya coexisten en Medellín.
+        (await create.HandleAsync(Compania, Alta(OtMedellin), null, "compania", ct)).IsValid.Should().BeTrue();
+        var otro = new CompanyMandateSignerRequest(
+            "Beto Gómez", "99887766", [OtMedellin], "CC", "beto@x.com", SignatureMethod: "biometria");
+        (await create.HandleAsync(Compania, otro, null, "super_admin", ct)).IsValid.Should().BeTrue();
+        var delaCompania = (await list.HandleAsync(Compania, ct)).Single(m => m.FullName == "Ana Restrepo").Id;
+
+        // El Super Admin edita al de la compañía: no choca con el suyo (grupo distinto).
+        var result = await Editor(ctx).HandleAsync(
+            Compania, delaCompania, Alta(OtMedellin), null, "super_admin", ct);
+
+        result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
+        (await ScopesAsync(ctx, ct)).Should().BeEquivalentTo("compania", "super_admin");
+    }
+
     // ── AC2 — solo organismos de esa compañía ─────────────────────────────────
 
     [Fact]

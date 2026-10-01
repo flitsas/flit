@@ -145,7 +145,8 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         }
 
         var result = await handler
-            .HandleAsync(childTenantId, request, AdminCompanyChildrenConfigEndpoints.ResolveUserId(user), ct)
+            .HandleAsync(
+                childTenantId, request, AdminCompanyChildrenConfigEndpoints.ResolveUserId(user), AdminCompanyMandateSignersEndpoints.OrigenDeLaCompania(user), ct)
             .ConfigureAwait(false);
 
         return result.IsValid
@@ -174,7 +175,8 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         }
 
         var result = await handler
-            .HandleAsync(childTenantId, mandateSignerId, request, AdminCompanyChildrenConfigEndpoints.ResolveUserId(user), ct)
+            .HandleAsync(
+                childTenantId, mandateSignerId, request, AdminCompanyChildrenConfigEndpoints.ResolveUserId(user), AdminCompanyMandateSignersEndpoints.OrigenDeLaCompania(user), ct)
             .ConfigureAwait(false);
 
         return result.Outcome switch
