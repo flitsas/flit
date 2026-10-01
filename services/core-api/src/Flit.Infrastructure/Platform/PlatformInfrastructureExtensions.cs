@@ -18,11 +18,8 @@ internal static class PlatformInfrastructureExtensions
 {
     public static IServiceCollection AddPlatformInfrastructure(this IServiceCollection services)
     {
-        services.AddPlatformModule();
-        services.AddScoped<IProductCatalog, ProductCatalogRepository>();
-        services.AddScoped<ITenantProductRepository, TenantProductRepository>();
-        services.AddScoped<IProductAccessStore, ProductAccessStore>();
-        services.AddScoped<IProductManifestStore, ProductManifestStore>();
+        // Epic #13217 (HU #13232): catálogo, productos por empresa, acceso y manifiestos, compartidos con core-identity.
+        services.AddPlatformStores();
         services.AddScoped<ITenantProductFlags, TenantProductFlagsReader>();
         return services;
     }

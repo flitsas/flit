@@ -37,6 +37,12 @@
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="OpenIddict.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
+    <!-- Contraseñas (Argon2), JWT de siempre y correo (SMTP): lo que usa el login. -->
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
+    <PackageReference Include="MailKit" />
   </ItemGroup>
 
   <ItemGroup>
