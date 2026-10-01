@@ -437,6 +437,32 @@ describe('TramiteWizard — anular trámite', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('El trámite ya fue entregado.');
     expect(onExit).not.toHaveBeenCalled();
   });
+
+  // Bug #13194 punto 1 — el `onClose` inline del WizardModal cambiaba en cada render y la trampa de
+  // foco re-enfocaba la X tras CADA tecla: el motivo solo aceptaba una letra.
+  it('escribir varias letras en el motivo conserva el foco y el valor completo (Bug #13194)', async () => {
+    const user = await abrirDialogo();
+    const motivo = screen.getByLabelText('Motivo de la anulación');
+
+    await user.click(motivo);
+    await user.type(motivo, 'Error de digitación');
+
+    expect(motivo).toHaveValue('Error de digitación');
+    expect(document.activeElement).toBe(motivo);
+  });
+
+  it('Escape sigue cerrando el diálogo de anular tras escribir (Bug #13194)', async () => {
+    const user = await abrirDialogo();
+    const motivo = screen.getByLabelText('Motivo de la anulación');
+    await user.type(motivo, 'Abc');
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Motivo de la anulación')).not.toBeInTheDocument(),
+    );
+    expect(mocks.transitionInstance).not.toHaveBeenCalled();
+  });
 });
 
 describe('TramiteWizard — instancia existente (Track B)', () => {
