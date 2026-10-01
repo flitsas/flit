@@ -77,6 +77,25 @@ public static class AdminPlataformaMandatosEndpoints
             .WithName("AdminPlataformaMandatosFormats")
             .Produces(StatusCodes.Status200OK);
 
+        // HU #13171 — el Super Admin edita nombre, tipo y plantilla de un formato EXISTENTE (sin POST ni DELETE: 405;
+        // un código nuevo: 404). RowVersion obligatorio; bitácora en admin.tenant_config_audit_logs.
+        group.MapGet("/formatos/{code}", GetFormatAsync)
+            .WithName("AdminPlataformaMandatosFormatGet")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/formatos/{code}/versions/{versionNumber:int}", GetFormatVersionAsync)
+            .WithName("AdminPlataformaMandatosFormatVersion")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPut("/formatos/{code}", UpdateFormatAsync)
+            .WithName("AdminPlataformaMandatosFormatUpdate")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         // HU #13173 — vista previa de la plantilla EN BORRADOR de un formato: valida y genera el PDF de muestra sin guardar nada.
         group.MapPost("/formatos/{code}/preview", PreviewDraftAsync)
             .WithName("AdminPlataformaMandatosFormatDraftPreview")
@@ -154,8 +173,86 @@ public static class AdminPlataformaMandatosEndpoints
         return Results.Ok(new { items });
     }
 
-    private static IResult ListFormatsAsync() =>
-        Results.Ok(new { items = MandatoFormatCatalog.All.Select(MandatoFormatResponses.Describe).ToList() });
+    private static async Task<IResult> ListFormatsAsync(
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var items = await formats.ListAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new { items = items.Select(MandatoFormatResponses.Describe).ToList() });
+    }
+
+    private static async Task<IResult> GetFormatAsync(
+        [FromRoute] string code,
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var detail = await formats.GetAsync(code, ct).ConfigureAwait(false);
+        if (detail is null)
+            return Results.NotFound();
+
+        return Results.Ok(new
+        {
+            format = MandatoFormatResponses.Describe(detail.Format),
+            body = detail.CurrentBody,
+            versions = detail.Versions.Select(v => new
+            {
+                versionNumber = v.VersionNumber,
+                sha256 = v.BodySha256,
+                createdAt = v.CreatedAt,
+                createdBy = v.CreatedBy,
+            }),
+        });
+    }
+
+    private static async Task<IResult> GetFormatVersionAsync(
+        [FromRoute] string code,
+        [FromRoute] int versionNumber,
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var found = await formats.GetVersionAsync(code, versionNumber, ct).ConfigureAwait(false);
+        if (found is not { } v)
+            return Results.NotFound();
+
+        return Results.Ok(new
+        {
+            versionNumber = v.Info.VersionNumber,
+            sha256 = v.Info.BodySha256,
+            createdAt = v.Info.CreatedAt,
+            createdBy = v.Info.CreatedBy,
+            body = v.Body,
+        });
+    }
+
+    private static async Task<IResult> UpdateFormatAsync(
+        [FromRoute] string code,
+        [FromBody] UpdateMandateFormatRequest request,
+        HttpContext http,
+        ClaimsPrincipal user,
+        [FromServices] IMandateFormatAdminService formats,
+        CancellationToken ct)
+    {
+        var result = await formats.UpdateAsync(code, request, ResolveUserId(user), ct).ConfigureAwait(false);
+
+        // HU #13171 — bitácora de éxito, sin cambio real y fallo (con su código); sin cuerpo de plantilla.
+        await MandateFormatAudit.WriteAsync(http, code?.Trim().ToLowerInvariant() ?? string.Empty, request, result)
+            .ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            MandateFormatUpdateStatus.Ok => Results.Ok(new
+            {
+                format = MandatoFormatResponses.Describe(result.Current!),
+                changed = result.Changed,
+                publishedVersion = result.PublishedVersion,
+            }),
+            MandateFormatUpdateStatus.NotFound => Results.NotFound(),
+            MandateFormatUpdateStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
+            _ => Results.Json(
+                new { error = result.ErrorCode, unknownVariables = result.UnknownVariables },
+                statusCode: StatusCodes.Status400BadRequest),
+        };
+    }
 
     private static async Task<IResult> GetAsync(
         Guid officeId,

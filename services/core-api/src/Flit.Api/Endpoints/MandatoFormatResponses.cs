@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Plataforma.Mandatos;
 using Flit.Infrastructure.Documents;
 using Flit.Tramites.Domain.Documents;
 
@@ -39,14 +40,18 @@ internal static class MandatoFormatResponses
             new { error = "template_code_invalido", allowed = MandatoFormatCatalog.RedactionCodes },
             statusCode: StatusCodes.Status400BadRequest);
 
-    /// <summary>Proyección del catálogo para el frontend (GET /mandatos/formatos).</summary>
-    public static object Describe(MandatoFormatDefinition f) => new
+    /// <summary>Proyección de un formato para el frontend (GET /mandatos/formatos y respuesta del PUT).</summary>
+    public static object Describe(MandateFormatView f) => new
     {
         code = f.Code,
-        name = f.DefaultName,
-        assignmentMode = f.DefaultAssignmentMode,
+        name = f.Name,
+        assignmentMode = f.AssignmentMode,
         baseRedaction = f.BaseRedaction,
-        selectableAsRedaction = f.IsRedaction,
-        delegatesToOfficeTemplate = !f.IsRedaction,
+        selectableAsRedaction = f.SelectableAsRedaction,
+        delegatesToOfficeTemplate = f.DelegatesToOfficeTemplate,
+        currentVersion = f.CurrentVersion,
+        hasCustomTemplate = f.HasCustomTemplate,
+        rowVersion = f.RowVersion,
+        updatedAt = f.UpdatedAt,
     };
 }

@@ -273,6 +273,8 @@ public static class AdminInfrastructureExtensions
         // HU #13169 — personalización y versiones inmutables de cada formato de contrato de mandato.
         services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateFormatRepository,
             Flit.Infrastructure.OtRules.MandateFormatRepository>();
+        services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateFormatAdminService,
+            Flit.Infrastructure.OtRules.MandateFormatAdminService>();
         services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateTemplateStorage,
             Flit.Infrastructure.Storage.MandateTemplateStorage>();
         // Simulador de mandatos (HU #11706): reusa la política del trámite, no una propia.
