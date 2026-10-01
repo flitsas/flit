@@ -1,3 +1,4 @@
+using Flit.Api.Grpc;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Integration.Tests.Postgres;
@@ -15,6 +16,9 @@ namespace Flit.Integration.Tests.Tenancy;
 /// <list type="bullet">
 /// <item>ACTIVAR una invitación sobre un correo cuyo único usuario está eliminado crea una fila NUEVA sin
 /// violar el índice (la eliminada se conserva con su historial).</item>
+/// <item>El usuario de servicio ICT (<c>IctOrchestrationService.ResolveIctCreatorAsync</c>) se obtiene-o-crea
+/// con <c>ON CONFLICT (email) WHERE deleted_at IS NULL</c>: sin el predicado PostgreSQL no infiere el
+/// árbitro sobre un índice parcial (42P10) y la materialización ICT se rompía en cada ejecución.</item>
 /// <item>RESTAURAR la eliminada cuando el correo ya lo usa la cuenta viva: el repositorio traduce el
 /// 23505 de <c>uq_users_email</c> a <see cref="UserEmailInUseByLiveAccountException"/> (409), no un 500.</item>
 /// </list>
@@ -100,5 +104,54 @@ public sealed class Bug13194UsersEmailUnicoSoloVivosTests(PostgresDatabaseFixtur
         await using var check = NewContext();
         (await check.Users.AsNoTracking().SingleAsync(u => u.Id == UsuarioEliminado, Ct))
             .DeletedAt.Should().NotBeNull("la restauración se rechazó y la cuenta sigue eliminada");
+    }
+
+    // ── Usuario de servicio ICT (code review 3ª vuelta) ─────────────────────────────────────────────
+
+    private static string CorreoServicioIct => $"ict-integration+{Tenant}@flit.local";
+
+    [PostgresFact]
+    public async Task ICT_Usuario_de_servicio_se_crea_y_luego_se_obtiene_el_mismo()
+    {
+        Guid primero;
+        await using (var ctx = NewContext())
+            primero = await IctOrchestrationService.ResolveIctCreatorAsync(ctx, string.Empty, Tenant, Ct);
+        Guid segundo;
+        await using (var ctx = NewContext())
+            segundo = await IctOrchestrationService.ResolveIctCreatorAsync(ctx, string.Empty, Tenant, Ct);
+
+        segundo.Should().Be(primero, "la segunda ejecución obtiene el usuario que creó la primera");
+        await using var check = NewContext();
+        (await check.Users.AsNoTracking().CountAsync(u => u.Email == CorreoServicioIct, Ct)).Should().Be(1);
+    }
+
+    [PostgresFact]
+    public async Task ICT_Con_usuario_de_servicio_eliminado_crea_uno_nuevo_vivo()
+    {
+        var eliminado = Guid.Parse("0199a000-0000-7000-8000-0000000131c7");
+        await using (var seed = NewContext())
+        {
+            seed.Users.Add(new User
+            {
+                Id = eliminado,
+                Email = CorreoServicioIct,
+                DisplayName = "Integración ICT",
+                Status = "active",
+                HomeTenantId = Tenant,
+                CreatedAt = DateTimeOffset.UtcNow.AddDays(-10),
+                DeletedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            });
+            await seed.SaveChangesAsync(Ct);
+        }
+
+        Guid creado;
+        await using (var ctx = NewContext())
+            creado = await IctOrchestrationService.ResolveIctCreatorAsync(ctx, string.Empty, Tenant, Ct);
+
+        creado.Should().NotBe(eliminado, "nunca se devuelve el usuario de servicio eliminado");
+        await using var check = NewContext();
+        var vivo = await check.Users.AsNoTracking().SingleAsync(u => u.Id == creado, Ct);
+        vivo.DeletedAt.Should().BeNull();
+        vivo.Email.Should().Be(CorreoServicioIct);
     }
 }
