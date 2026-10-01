@@ -2733,7 +2733,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: El usuario no está eliminado (`USER_NOT_DELETED`) — no hay nada que restaurar.
+          description: >
+            El usuario no está eliminado (`USER_NOT_DELETED`) — no hay nada que restaurar —,
+            o su correo ya lo usa otra cuenta activa (`USER_EMAIL_IN_USE`, Bug #13194:
+            "Ya existe una cuenta activa con ese correo").
           content:
             application/json:
               schema:

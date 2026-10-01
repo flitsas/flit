@@ -59,6 +59,26 @@ public sealed class RestoreUserHandlerTests
             Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
     }
 
+    // Bug #13194 (review 2, B1) — el correo de la cuenta eliminada ya lo usa otra cuenta VIVA (se volvió a
+    // invitar y activar): restaurar violaría uq_users_email ⇒ excepción de dominio (409), no un 500, y no
+    // se intenta el UPDATE.
+    [Fact]
+    public async Task HandleAsync_WhenEmailInUseByLiveAccount_ThrowsEmailInUse()
+    {
+        _repo.FindTargetAsync(UserId, true, Arg.Any<CancellationToken>())
+            .Returns(new UserManagementTarget(UserId, TenantId, "user@flit.local", "Usuario", DateTimeOffset.UtcNow, 1));
+        _repo.FindLiveByEmailAsync("user@flit.local", Arg.Any<CancellationToken>())
+            .Returns(new ExistingUserByEmail(Guid.NewGuid()));
+
+        await _handler
+            .Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
+            .Should().ThrowAsync<UserEmailInUseByLiveAccountException>()
+            .WithMessage("Ya existe una cuenta activa con ese correo.");
+
+        await _repo.DidNotReceiveWithAnyArgs().RestoreUserAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+    }
+
     // Usuario objetivo inexistente → TargetUserNotFoundException.
     [Fact]
     public async Task HandleAsync_WhenTargetNotFound_ThrowsTargetUserNotFound()

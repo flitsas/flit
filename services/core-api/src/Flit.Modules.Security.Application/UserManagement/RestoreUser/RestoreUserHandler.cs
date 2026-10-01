@@ -11,6 +11,9 @@ namespace Flit.Modules.Security.Application.UserManagement.RestoreUser;
 ///      estado de suspensión que el usuario tenía al momento de eliminarse.
 /// AC5: restaurar un usuario que NO está eliminado se rechaza explícitamente con
 ///      <see cref="UserNotDeletedException"/> — no es un no-op silencioso.
+/// Bug #13194: si el correo ya lo usa otra cuenta VIVA, restaurar violaría <c>uq_users_email</c>
+///      (parcial por <c>deleted_at IS NULL</c>) — se rechaza con
+///      <see cref="UserEmailInUseByLiveAccountException"/> (409) en vez de un 500.
 /// </summary>
 public sealed class RestoreUserHandler(IUserManagementRepository repo)
 {
@@ -24,6 +27,9 @@ public sealed class RestoreUserHandler(IUserManagementRepository repo)
 
         if (target.DeletedAt is null)
             throw new UserNotDeletedException();
+
+        if (await repo.FindLiveByEmailAsync(target.Email, ct) is not null)
+            throw new UserEmailInUseByLiveAccountException();
 
         await repo.RestoreUserAsync(target.UserId, cmd.CallerId, ct);
     }
