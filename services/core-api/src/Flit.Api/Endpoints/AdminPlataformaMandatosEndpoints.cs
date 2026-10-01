@@ -7,6 +7,7 @@ using Flit.Api.Endpoints.Auditing;
 using Flit.Infrastructure.Documents;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
+using Flit.Tramites.Domain.Integration;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints;
@@ -357,6 +358,7 @@ public static class AdminPlataformaMandatosEndpoints
         [FromQuery] Guid? officeId,
         [FromServices] IMandatoGenerator generator,
         [FromServices] IMandateConfigAdminService service,
+        [FromServices] IMandateFormatTemplateProvider formatTemplates,
         CancellationToken ct)
     {
         var code = templateCode?.Trim() ?? string.Empty;
@@ -376,7 +378,7 @@ public static class AdminPlataformaMandatosEndpoints
                     statusCode: StatusCodes.Status400BadRequest);
             }
 
-            return await PreviewOtAsync(officeId.Value, service, generator, ct).ConfigureAwait(false);
+            return await PreviewOtAsync(officeId.Value, service, generator, formatTemplates, ct).ConfigureAwait(false);
         }
 
         if (!MandatoFormatCatalog.IsRedaction(code))
@@ -424,6 +426,7 @@ public static class AdminPlataformaMandatosEndpoints
         Guid officeId,
         [FromServices] IMandateConfigAdminService service,
         [FromServices] IMandatoGenerator generator,
+        [FromServices] IMandateFormatTemplateProvider formatTemplates,
         CancellationToken ct)
     {
         var view = await service.GetAsync(officeId, ct).ConfigureAwait(false);
@@ -433,7 +436,11 @@ public static class AdminPlataformaMandatosEndpoints
         if (view.CustomTemplateKind == MandatoCustomTemplateKindCodes.Pdf)
             customPdf = await service.OpenCustomPdfAsync(officeId, ct).ConfigureAwait(false);
 
-        var doc = generator.GenerateMandato(BuildOtPreviewData(view, customPdf));
+        // HU #13172 — la vista previa del organismo muestra lo que recibirá un trámite nuevo: la plantilla vigente del formato.
+        var applied = await MandatoFormatTemplateApplier
+            .ApplyAsync(BuildOtPreviewData(view, customPdf), formatTemplates, null, ct)
+            .ConfigureAwait(false);
+        var doc = generator.GenerateMandato(applied.Data);
         return Results.File(doc.Content, contentType: "application/pdf");
     }
 

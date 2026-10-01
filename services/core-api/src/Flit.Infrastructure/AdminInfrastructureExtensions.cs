@@ -275,6 +275,9 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.OtRules.MandateFormatRepository>();
         services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateFormatAdminService,
             Flit.Infrastructure.OtRules.MandateFormatAdminService>();
+        // HU #13172 — plantilla publicada de cada formato para generar el contrato (y el simulador).
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandateFormatTemplateProvider,
+            Flit.Infrastructure.OtRules.MandateFormatTemplateProvider>();
         services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateTemplateStorage,
             Flit.Infrastructure.Storage.MandateTemplateStorage>();
         // Simulador de mandatos (HU #11706): reusa la política del trámite, no una propia.
