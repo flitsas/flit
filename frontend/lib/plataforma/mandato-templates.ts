@@ -1,40 +1,35 @@
 /**
- * Catálogo de plantillas de Contrato de Mandato aplicadas en FLIT.
- * Espejo de dominio (`MandatoTemplateResolver` + seed HU #10912 / familias HU #11204 /
- * assignment_mode Plataforma tres tipos).
+ * Utilidades de los formatos de Contrato de Mandato.
+ *
+ * HU #13174: la lista de formatos (códigos, nombres, tipo por defecto) ya NO vive aquí; la publica el
+ * backend en GET /mandatos/formatos (`MandatoFormatView`). Este módulo conserva solo lo que el catálogo
+ * no trae: tipos de negocio, familias y qué organismo es el dueño de cada redacción de sistema.
  */
-
-export type MandatoTemplateCode = "generico" | "sabaneta" | "bello" | "municipio";
+import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 
 /**
- * Redacción ELEGIDA para un OT. `auto` no es una redacción: delega en la plantilla de sistema del
- * organismo (o en la genérica si no tiene). Es lo que se guarda; la redacción EFECTIVA la resuelve
- * el backend.
+ * Código de la opción «automática»: delega en la redacción del organismo. Es el único código que el
+ * frontend conoce por nombre, porque no es un formato del catálogo editable sino una elección.
  */
-export type MandatoConfiguredTemplateCode = MandatoTemplateCode | "auto";
+export const MANDATO_TEMPLATE_AUTO_CODE = "auto";
 
-/** Opción "automática" del selector: encabeza la lista porque es el default sensato. */
-export const MANDATO_TEMPLATE_AUTO = {
-  code: "auto" as const,
-  label: "Automática (según el organismo)",
-  summary:
-    "El organismo usa la plantilla que el sistema tiene asignada a su código. Si no tiene ninguna, usa la genérica.",
-};
+/** Nombre vigente del formato; si el código guardado ya no está en el catálogo, muestra el código. */
+export function mandatoFormatName(
+  formatos: readonly MandatoFormatView[],
+  code: string | null | undefined,
+): string {
+  const normalized = (code ?? "").trim();
+  if (normalized === "") return "";
+  return formatos.find((f) => f.code.toLowerCase() === normalized.toLowerCase())?.name ?? normalized;
+}
 
-/** Opciones del selector de plantilla por OT: la automática más las redacciones del sistema. */
-export function mandatoTemplateOptions(): readonly {
-  code: MandatoConfiguredTemplateCode;
-  label: string;
-  summary: string;
-}[] {
-  return [
-    MANDATO_TEMPLATE_AUTO,
-    ...MANDATO_TEMPLATES.map((t) => ({
-      code: t.code as MandatoConfiguredTemplateCode,
-      label: t.label,
-      summary: t.summary,
-    })),
-  ];
+/** Formato del catálogo por código, o undefined si no existe (código desconocido guardado). */
+export function findMandatoFormat(
+  formatos: readonly MandatoFormatView[],
+  code: string | null | undefined,
+): MandatoFormatView | undefined {
+  const normalized = (code ?? "").trim().toLowerCase();
+  return formatos.find((f) => f.code.toLowerCase() === normalized);
 }
 
 export type MandatoFamiliaCode = "individuo" | "organismo_transito";
@@ -105,14 +100,17 @@ export function tipoNegocioLabel(tipo: MandatoTipoNegocio): string {
   return MANDATO_TIPOS.find((t) => t.value === tipo)?.label ?? tipo;
 }
 
-/** Modo persistido según la redacción: Sabaneta → institucional; el resto → Persona natural. */
-export function assignmentModeFromTemplateCode(
+/**
+ * Modo persistido según el formato: el tipo por defecto que trae el catálogo. Con «automática» o un
+ * código desconocido, Persona natural.
+ */
+export function assignmentModeFromFormat(
+  formatos: readonly MandatoFormatView[],
   templateCode: string | null | undefined,
 ): MandateAssignmentMode {
-  const code = (templateCode ?? "generico").trim().toLowerCase();
-  if (code === "auto") return "signer";
-  const def = MANDATO_TEMPLATES.find((t) => t.code === code);
-  return resolveAssignmentMode(def?.tipoTipico ?? "persona_rl");
+  const code = (templateCode ?? "").trim().toLowerCase();
+  if (code === MANDATO_TEMPLATE_AUTO_CODE) return "signer";
+  return resolveAssignmentMode(resolveTipoNegocio(findMandatoFormat(formatos, code)?.assignmentMode));
 }
 
 export interface MandatoTemplateOtBinding {
@@ -127,130 +125,50 @@ export interface MandatoTemplateOtBinding {
   chamberCity?: string;
 }
 
-export interface MandatoTemplateDefinition {
-  code: MandatoTemplateCode;
-  label: string;
-  summary: string;
-  familia: MandatoFamiliaCode;
-  familiaLabel: string;
-  /** Tipo de negocio típico de esta redacción. */
-  tipoTipico: MandatoTipoNegocio;
-  requiresForNaturalPerson: boolean;
-  /** Quién firma el bloque del mandatario en el PDF. */
-  mandatarioFirma: string;
-  /** OT con esta plantilla sembrada o comportamiento default. */
-  bindings: MandatoTemplateOtBinding[];
-}
+/**
+ * Organismos que son dueños de una redacción de sistema (los datos de su municipio o mandatario
+ * institucional van en el texto). No viene del catálogo del backend; solo sirve para advertir cuando
+ * se asigna la redacción de un organismo a otro. Una redacción sin entrada (p. ej. la genérica) no
+ * nombra a nadie y nunca advierte.
+ */
+export const MANDATO_FORMATO_VINCULOS: Readonly<Record<string, readonly MandatoTemplateOtBinding[]>> = {
+  sabaneta: [
+    {
+      officeCode: "5631000",
+      officeName: "Sabaneta",
+      hasExplicitConfig: true,
+      institutionalMandataryName:
+        "UNION TEMPORAL SERVICIOS ESPECIALIZADOS DE TRANSITO Y TRANSPORTE DE SABANETA SETSA",
+      institutionalMandataryNit: "900273813-7",
+      mandatarySigla: "UT-SETSA",
+      chamberCity: "Medellín",
+    },
+  ],
+  bello: [
+    {
+      officeCode: "5088000",
+      officeName: "Bello",
+      hasExplicitConfig: true,
+      institutionalMandataryName: "UNION TEMPORAL MOVILIDAD AVANZADA DE BELLO MAB",
+      institutionalMandataryNit: "901783814-6",
+      chamberCity: "Medellín",
+    },
+  ],
+  municipio: [
+    { officeCode: "5266000", officeName: "Envigado", hasExplicitConfig: true, chamberCity: "Envigado" },
+    { officeCode: "25286000", officeName: "Funza", hasExplicitConfig: true, chamberCity: "Funza" },
+    { officeCode: "5001000", officeName: "Medellín", hasExplicitConfig: true, chamberCity: "Medellín" },
+  ],
+};
 
-/** Plantillas que el generador conoce hoy (código cerrado en el PDF generator). */
-export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
-  {
-    code: "generico",
-    label: "Genérico",
-    summary:
-      "Plantilla por defecto del sistema. Aplica a cualquier organismo que no tenga una plantilla propia. Firman mandante y mandatario (Persona natural).",
-    familia: "individuo",
-    familiaLabel: "Individuo",
-    tipoTipico: "persona_rl",
-    requiresForNaturalPerson: true,
-    mandatarioFirma: "Mandante y mandatario (o abierto)",
-    bindings: [
-      {
-        officeCode: "*",
-        officeName: "Cualquier OT sin plantilla propia del sistema",
-        hasExplicitConfig: false,
-      },
-    ],
-  },
-  {
-    code: "sabaneta",
-    label: "Sabaneta",
-    summary:
-      "Plantilla del sistema para Sabaneta (UT-SETSA). Mandatario institucional; solo firma el mandante. Los datos de la UT salen de la config del OT.",
-    familia: "organismo_transito",
-    familiaLabel: "Organismo de tránsito",
-    tipoTipico: "institucional",
-    requiresForNaturalPerson: true,
-    mandatarioFirma: "Solo mandante (sin bloque de firma del mandatario)",
-    bindings: [
-      {
-        officeCode: "5631000",
-        officeName: "Sabaneta",
-        hasExplicitConfig: true,
-        institutionalMandataryName:
-          "UNION TEMPORAL SERVICIOS ESPECIALIZADOS DE TRANSITO Y TRANSPORTE DE SABANETA SETSA",
-        institutionalMandataryNit: "900273813-7",
-        mandatarySigla: "UT-SETSA",
-        chamberCity: "Medellín",
-      },
-    ],
-  },
-  {
-    code: "bello",
-    label: "Bello",
-    summary:
-      "Plantilla del sistema para el organismo de Bello. El mandatario es el representante legal de la UT-MAB; firman ambas partes.",
-    familia: "organismo_transito",
-    familiaLabel: "Organismo de tránsito",
-    tipoTipico: "persona_rl",
-    requiresForNaturalPerson: true,
-    mandatarioFirma: "Mandante y mandatario (RL de la UT)",
-    bindings: [
-      {
-        officeCode: "5088000",
-        officeName: "Bello",
-        hasExplicitConfig: true,
-        institutionalMandataryName: "UNION TEMPORAL MOVILIDAD AVANZADA DE BELLO MAB",
-        institutionalMandataryNit: "901783814-6",
-        chamberCity: "Medellín",
-      },
-    ],
-  },
-  {
-    code: "municipio",
-    label: "Envigado, Funza y Medellín",
-    summary:
-      "Plantilla corta municipal para Envigado, Funza y Medellín. Firman mandante y mandatario. La ciudad del cierre cambia según el OT del trámite.",
-    familia: "individuo",
-    familiaLabel: "Individuo",
-    tipoTipico: "persona_rl",
-    requiresForNaturalPerson: true,
-    mandatarioFirma: "Mandante y mandatario",
-    bindings: [
-      {
-        officeCode: "5266000",
-        officeName: "Envigado",
-        hasExplicitConfig: true,
-        chamberCity: "Envigado",
-      },
-      {
-        officeCode: "25286000",
-        officeName: "Funza",
-        hasExplicitConfig: true,
-        chamberCity: "Funza",
-      },
-      {
-        officeCode: "5001000",
-        officeName: "Medellín",
-        hasExplicitConfig: true,
-        chamberCity: "Medellín",
-      },
-    ],
-  },
-] as const;
-
-/** Etiqueta legible de la redacción del sistema (fallback sin plantilla propia). */
-export function systemTemplateLabel(code: string | null | undefined): string {
-  const normalized = (code ?? "generico").trim().toLowerCase();
-  return MANDATO_TEMPLATES.find((t) => t.code === normalized)?.label ?? "Genérico";
-}
-
-/** Filas planas OT → plantilla para la tabla de aplicación. */
-export interface MandatoOtApplicationRow {
-  officeCode: string;
-  officeName: string;
-  templateCode: MandatoTemplateCode;
-  hasExplicitConfig: boolean;
+/**
+ * true si la redacción del sistema nombra a un mandatario institucional (UT) cuyos datos salen de la
+ * config del OT. Se deduce de los vínculos, no de comparar el código; cuando el catálogo del backend
+ * exponga la familia del formato, esta función se reemplaza por ese dato.
+ */
+export function formatoNombraMandatarioInstitucional(code: string | null | undefined): boolean {
+  const bindings = MANDATO_FORMATO_VINCULOS[(code ?? "").trim().toLowerCase()] ?? [];
+  return bindings.some((b) => Boolean(b.institutionalMandataryName));
 }
 
 /**
@@ -271,19 +189,17 @@ export function terceroAjenoEnPlantilla(
   const code = (templateCode ?? "").trim().toLowerCase();
 
   // La automática nunca advierte: por definición aplica la redacción propia del organismo.
-  if (code === "" || code === MANDATO_TEMPLATE_AUTO.code) return null;
+  if (code === "" || code === MANDATO_TEMPLATE_AUTO_CODE) return null;
 
-  const template = MANDATO_TEMPLATES.find((t) => t.code === code);
-  if (!template) return null;
-
-  // La genérica no nombra a ningún organismo concreto: es el respaldo de todos.
-  if (template.bindings.some((b) => b.officeCode === "*")) return null;
+  // Sin dueños conocidos (genérica o código desconocido) no nombra a ningún organismo concreto.
+  const bindings = MANDATO_FORMATO_VINCULOS[code];
+  if (!bindings || bindings.length === 0) return null;
 
   const ot = (officeCode ?? "").trim();
-  if (ot !== "" && template.bindings.some((b) => b.officeCode === ot)) return null;
+  if (ot !== "" && bindings.some((b) => b.officeCode === ot)) return null;
 
   // Es de otro. Se nombra a quién, que es lo que el gestor necesita para juzgar.
-  const nombres = template.bindings.map(
+  const nombres = bindings.map(
     (b) => b.institutionalMandataryName ?? b.chamberCity ?? b.officeName,
   );
   return [...new Set(nombres)].join(", ");

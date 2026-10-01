@@ -2,8 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@/lib/api/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MandatoFormatosState } from "@/hooks/useMandatoFormatos";
 import { MandatoOtConfigForm } from "@/components/admin/plataforma/MandatoOtConfigForm";
-import type { MandateOtConfigView } from "@/lib/api/admin-plataforma-mandatos";
+import type { MandateOtConfigView, MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 
 const listCompanyOtMandateRules = vi.fn();
 const fetchMandateSigners = vi.fn();
@@ -32,6 +33,26 @@ vi.mock("@/lib/api/admin-plataforma-mandatos", async (importOriginal) => {
 vi.mock("@/lib/api/admin-mandate-signers", () => ({
   fetchMandateSigners: (...a: unknown[]) => fetchMandateSigners(...a),
 }));
+
+const fmt = (code: string, name: string, assignmentMode = "signer"): MandatoFormatView => ({
+  code,
+  name,
+  assignmentMode,
+  baseRedaction: code === "auto" ? null : code,
+  selectableAsRedaction: code !== "auto",
+  delegatesToOfficeTemplate: code === "auto",
+});
+const formatosOk: MandatoFormatosState = {
+  status: "ready",
+  reload: () => undefined,
+  formatos: [
+    fmt("auto", "Automática (según el organismo)"),
+    fmt("generico", "Genérico"),
+    fmt("sabaneta", "Sabaneta", "institutional"),
+    fmt("bello", "Bello"),
+    fmt("municipio", "Envigado, Funza y Medellín"),
+  ],
+};
 
 const funza = {
   officeId: "eeacc872-a522-56bb-9150-70776b094009",
@@ -65,6 +86,7 @@ describe("MandatoOtConfigForm", () => {
       <MandatoOtConfigForm
         office={funza}
         mode="mandato"
+        formatos={formatosOk}
         onClose={() => undefined}
         onSaved={() => undefined}
       />,
@@ -105,6 +127,68 @@ describe("MandatoOtConfigForm", () => {
     cta.click();
     expect(onRegisterSigner).toHaveBeenCalledWith("cia-1");
   });
+  describe("HU #13174 formatos desde el catálogo del backend", () => {
+    const renderCon = (formatos: MandatoFormatosState, office = funza) =>
+      render(
+        <MandatoOtConfigForm
+          office={office}
+          mode="mandato"
+          formatos={formatos}
+          onClose={() => undefined}
+          onSaved={() => undefined}
+        />,
+      );
+
+    it("las opciones y nombres salen de la respuesta, con el nombre editado", async () => {
+      renderCon({
+        ...formatosOk,
+        formatos: [fmt("auto", "Automática"), fmt("municipio", "Envigado renombrado")],
+      });
+      const select = await screen.findByTestId("mandato-template-select");
+      const labels = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
+      expect(labels).toEqual(["Automática", "Envigado renombrado"]);
+    });
+
+    it("con el catálogo en error muestra el mensaje con Reintentar y no ofrece opciones", async () => {
+      const user = userEvent.setup();
+      const reload = vi.fn();
+      renderCon({ formatos: [], status: "error", reload });
+      expect(await screen.findByTestId("mandato-formatos-error")).toHaveTextContent(/no se pudo cargar/i);
+      expect(screen.queryByTestId("mandato-template-select")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /reintentar/i }));
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it("mientras carga muestra un estado de carga y no el selector", () => {
+      renderCon({ formatos: [], status: "loading", reload: () => undefined });
+      expect(screen.getByTestId("mandato-formatos-loading")).toBeInTheDocument();
+      expect(screen.queryByTestId("mandato-template-select")).not.toBeInTheDocument();
+    });
+
+    it("un código guardado que ya no está en el catálogo se muestra sin romper la pantalla", async () => {
+      renderCon(formatosOk, {
+        ...funza,
+        templateCode: "retirado",
+        configuredTemplateCode: "retirado",
+      } as MandateOtConfigView);
+      const select = (await screen.findByTestId("mandato-template-select")) as HTMLSelectElement;
+      expect(select.value).toBe("retirado");
+      expect(screen.getByRole("option", { name: /retirado/i })).toBeInTheDocument();
+    });
+
+    it("los campos institucionales siguen el tipo del formato del catálogo, no el texto del código", async () => {
+      const user = userEvent.setup();
+      renderCon({
+        ...formatosOk,
+        formatos: [fmt("auto", "Automática"), fmt("municipio", "Municipal", "institutional"), fmt("generico", "Genérico")],
+      });
+      await user.selectOptions(await screen.findByTestId("mandato-template-select"), "municipio");
+      expect(screen.getByLabelText(/^mandatario institucional \/ UT$/i)).toBeInTheDocument();
+      await user.selectOptions(screen.getByTestId("mandato-template-select"), "generico");
+      expect(screen.queryByLabelText(/^mandatario institucional \/ UT$/i)).not.toBeInTheDocument();
+    });
+  });
+
   describe("HU #13152 campos institucionales según la redacción seleccionada", () => {
     const generico = {
       ...funza,
@@ -118,6 +202,7 @@ describe("MandatoOtConfigForm", () => {
         <MandatoOtConfigForm
           office={office}
           mode="mandato"
+        formatos={formatosOk}
           onClose={() => undefined}
           onSaved={() => undefined}
         />,

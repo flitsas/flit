@@ -20,6 +20,7 @@ import {
   uploadMandateOtPdfTemplate,
   extractMandateConfigFromFile,
   fetchMandateOtPreview,
+  listMandatoFormats,
 } from "../admin-plataforma-mandatos";
 
 const originalFetch = global.fetch;
@@ -140,5 +141,36 @@ describe("mapCompanyRule — rowVersion (HU #13150)", () => {
   it("es null cuando la compañía hereda (sin regla)", () => {
     expect(mapCompanyRule({ companyTenantId: "a", rowVersion: null }).rowVersion).toBeNull();
     expect(mapCompanyRule({ companyTenantId: "a" }).rowVersion).toBeNull();
+  });
+});
+
+describe("listMandatoFormats (HU #13174)", () => {
+  it("pide /mandatos/formatos y mapea el catálogo", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [
+            { code: "auto", name: "Automática", assignmentMode: "signer", baseRedaction: null, selectableAsRedaction: false, delegatesToOfficeTemplate: true },
+            { code: "bello", name: "Bello", assignmentMode: "signer", baseRedaction: "bello", selectableAsRedaction: true, delegatesToOfficeTemplate: false },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    global.fetch = fetchMock as never;
+
+    const result = await listMandatoFormats();
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/v1/admin/plataforma/mandatos/formatos");
+    expect(result.map((f) => f.code)).toEqual(["auto", "bello"]);
+    expect(result[0]).toMatchObject({ baseRedaction: null, delegatesToOfficeTemplate: true });
+    expect(result[1].selectableAsRedaction).toBe(true);
+  });
+
+  it("sin items devuelve una lista vacía", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }),
+    ) as never;
+    expect(await listMandatoFormats()).toEqual([]);
   });
 });

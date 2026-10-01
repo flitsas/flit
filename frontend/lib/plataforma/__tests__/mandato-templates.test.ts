@@ -1,14 +1,31 @@
 import { describe, expect, it } from "vitest";
+import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 import {
   MANDATO_TIPOS,
-  assignmentModeFromTemplateCode,
+  assignmentModeFromFormat,
+  mandatoFormatName,
   resolveAssignmentMode,
   resolveTipoNegocio,
   suggestedFamilyForTipo,
-  systemTemplateLabel,
   tipoNegocioLabel,
   terceroAjenoEnPlantilla,
 } from "@/lib/plataforma/mandato-templates";
+
+const fmt = (code: string, name: string, assignmentMode = "signer"): MandatoFormatView => ({
+  code,
+  name,
+  assignmentMode,
+  baseRedaction: code === "auto" ? null : code,
+  selectableAsRedaction: code !== "auto",
+  delegatesToOfficeTemplate: code === "auto",
+});
+const FORMATOS: MandatoFormatView[] = [
+  fmt("auto", "Automática"),
+  fmt("generico", "Genérico"),
+  fmt("sabaneta", "Sabaneta", "institutional"),
+  fmt("bello", "Bello"),
+  fmt("municipio", "Envigado, Funza y Medellín"),
+];
 
 describe("mandato-templates tipos de negocio", () => {
   it("mapea assignment_mode → tipo UI", () => {
@@ -31,12 +48,17 @@ describe("mandato-templates tipos de negocio", () => {
     expect(suggestedFamilyForTipo("abierto", "sabaneta")).toBe("individuo");
   });
 
-  it("el modo persistido sale de la plantilla: Sabaneta institucional, el resto Persona natural", () => {
-    expect(assignmentModeFromTemplateCode("sabaneta")).toBe("institutional");
-    expect(assignmentModeFromTemplateCode("generico")).toBe("signer");
-    expect(assignmentModeFromTemplateCode("bello")).toBe("signer");
-    expect(assignmentModeFromTemplateCode("municipio")).toBe("signer");
-    expect(assignmentModeFromTemplateCode("auto")).toBe("signer");
+  it("el modo persistido sale del tipo por defecto del formato del catálogo", () => {
+    expect(assignmentModeFromFormat(FORMATOS, "sabaneta")).toBe("institutional");
+    expect(assignmentModeFromFormat(FORMATOS, "generico")).toBe("signer");
+    expect(assignmentModeFromFormat(FORMATOS, "bello")).toBe("signer");
+    expect(assignmentModeFromFormat(FORMATOS, "auto")).toBe("signer");
+    // Un código que ya no está en el catálogo cae en Persona natural.
+    expect(assignmentModeFromFormat(FORMATOS, "retirado")).toBe("signer");
+    // Si el backend cambia el tipo de un formato, se sigue el catálogo y no una constante.
+    expect(assignmentModeFromFormat([fmt("bello", "Bello", "institutional")], "bello")).toBe(
+      "institutional",
+    );
   });
 
   it("expone labels de producto", () => {
@@ -47,12 +69,12 @@ describe("mandato-templates tipos de negocio", () => {
     expect(tipoNegocioLabel("abierto")).toBe("Mandato abierto");
   });
 
-  it("etiqueta la redacción del sistema para el badge", () => {
-    expect(systemTemplateLabel("generico")).toBe("Genérico");
-    expect(systemTemplateLabel("sabaneta")).toBe("Sabaneta");
-    expect(systemTemplateLabel("bello")).toBe("Bello");
-    expect(systemTemplateLabel("municipio")).toMatch(/Envigado.*Funza.*Medellín/i);
-    expect(systemTemplateLabel(null)).toBe("Genérico");
+  it("muestra el nombre vigente del catálogo y, si el código ya no existe, el código guardado", () => {
+    expect(mandatoFormatName(FORMATOS, "generico")).toBe("Genérico");
+    expect(mandatoFormatName(FORMATOS, "municipio")).toMatch(/Envigado.*Funza.*Medellín/i);
+    expect(mandatoFormatName([fmt("bello", "Bello Renombrado")], "bello")).toBe("Bello Renombrado");
+    expect(mandatoFormatName(FORMATOS, "retirado")).toBe("retirado");
+    expect(mandatoFormatName(FORMATOS, null)).toBe("");
   });
 });
 

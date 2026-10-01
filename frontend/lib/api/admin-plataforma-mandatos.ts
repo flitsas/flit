@@ -1,11 +1,7 @@
 // Cliente SuperAdmin — Plataforma → Mandatos (config por OT + plantilla propia + preview + extract).
 import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
 import { ApiError } from "./types";
-import type {
-  MandateAssignmentMode,
-  MandatoConfiguredTemplateCode,
-  MandatoTemplateCode,
-} from "@/lib/plataforma/mandato-templates";
+import type { MandateAssignmentMode } from "@/lib/plataforma/mandato-templates";
 
 const base = "/api/v1/admin/plataforma/mandatos";
 
@@ -17,13 +13,13 @@ export interface MandateOtConfigView {
   code: string;
   name: string;
   /** Redacción EFECTIVA que se emite hoy para este OT (con `auto` ya resuelto). */
-  templateCode: MandatoTemplateCode | string;
+  templateCode: string;
   /**
    * Redacción ELEGIDA, tal cual está guardada (`auto` si el OT no fija ninguna). Es la que
    * preselecciona el selector: preseleccionar con la efectiva convertiría un "automática" en una
    * redacción fija al guardar sin tocar nada.
    */
-  configuredTemplateCode: MandatoConfiguredTemplateCode | string;
+  configuredTemplateCode: string;
   requiresForNaturalPerson: boolean;
   mandataryFamily: MandataryFamilyCode | string;
   assignmentMode: MandateAssignmentMode | string;
@@ -228,8 +224,42 @@ export async function deleteMandateOtCustomTemplate(
   return mapView(data as unknown as Record<string, unknown>);
 }
 
+/**
+ * HU #13174 — formato de contrato del catálogo del backend (GET /mandatos/formatos). Es la única fuente
+ * de códigos y nombres: el frontend no mantiene una lista propia.
+ */
+export interface MandatoFormatView {
+  code: string;
+  /** Nombre vigente (el que edita el Super Admin). */
+  name: string;
+  /** Tipo de mandato por defecto de la redacción. */
+  assignmentMode: MandateAssignmentMode | string;
+  /** Redacción base que emite el generador; null en la automática, que solo delega. */
+  baseRedaction: string | null;
+  selectableAsRedaction: boolean;
+  delegatesToOfficeTemplate: boolean;
+}
+
+function mapFormat(raw: Record<string, unknown>): MandatoFormatView {
+  const baseRedaction = typeof raw.baseRedaction === "string" ? raw.baseRedaction : null;
+  return {
+    code: String(raw.code ?? ""),
+    name: String(raw.name ?? raw.code ?? ""),
+    assignmentMode: String(raw.assignmentMode ?? "signer"),
+    baseRedaction,
+    selectableAsRedaction: raw.selectableAsRedaction === true || baseRedaction !== null,
+    delegatesToOfficeTemplate: raw.delegatesToOfficeTemplate === true,
+  };
+}
+
+export async function listMandatoFormats(signal?: AbortSignal): Promise<MandatoFormatView[]> {
+  const data = await apiFetch<{ items?: Record<string, unknown>[] }>(`${base}/formatos`, { signal });
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.map(mapFormat);
+}
+
 export async function fetchMandatoTemplatePreview(
-  templateCode: MandatoTemplateCode | string,
+  templateCode: string,
   signal?: AbortSignal,
   officeId?: string,
 ): Promise<Blob> {

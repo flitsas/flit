@@ -8,9 +8,26 @@ const listMandateOtConfigs = vi.fn();
 const deleteMandateOtConfig = vi.fn();
 const openPdfBlobInNewTab = vi.fn();
 const fetchMandatoTemplatePreview = vi.fn();
+const listMandatoFormats = vi.fn();
+const formato = (code: string, name: string, assignmentMode = "signer") => ({
+  code,
+  name,
+  assignmentMode,
+  baseRedaction: code === "auto" ? null : code,
+  selectableAsRedaction: code !== "auto",
+  delegatesToOfficeTemplate: code === "auto",
+});
+const CATALOGO = [
+  formato("auto", "Automática (según el organismo)"),
+  formato("generico", "Genérico"),
+  formato("sabaneta", "Sabaneta", "institutional"),
+  formato("bello", "Bello"),
+  formato("municipio", "Envigado, Funza y Medellín"),
+];
 
 vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
   listMandateOtConfigs: (...a: unknown[]) => listMandateOtConfigs(...a),
+  listMandatoFormats: (...a: unknown[]) => listMandatoFormats(...a),
   deleteMandateOtConfig: (...a: unknown[]) => deleteMandateOtConfig(...a),
   fetchMandatoTemplatePreview: (...a: unknown[]) => fetchMandatoTemplatePreview(...a),
   fetchMandateOtPreview: vi.fn(),
@@ -38,6 +55,9 @@ vi.mock("@/lib/api/tramites-client", () => ({
 vi.mock("@/lib/documents/open-document-tab", () => ({
   openPdfBlobInNewTab: (...a: unknown[]) => openPdfBlobInNewTab(...a),
 }));
+
+// Las filas y el catálogo llegan por separado: se espera a una acción de fila, no a un texto repetido.
+const esperarFilas = () => screen.findByRole("button", { name: /acciones de mandato para sabaneta/i });
 
 function renderPanel() {
   return render(
@@ -104,6 +124,8 @@ describe("MandatosCatalogPanel configurador", () => {
     deleteMandateOtConfig.mockReset();
     openPdfBlobInNewTab.mockReset();
     fetchMandatoTemplatePreview.mockReset();
+    listMandatoFormats.mockReset();
+    listMandatoFormats.mockResolvedValue(CATALOGO);
     listMandateOtConfigs.mockResolvedValue(sampleRows);
     openPdfBlobInNewTab.mockResolvedValue(undefined);
     fetchMandatoTemplatePreview.mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
@@ -111,7 +133,8 @@ describe("MandatosCatalogPanel configurador", () => {
 
   it("carga OTs desde la API y muestra Acciones", async () => {
     renderPanel();
-    expect(await screen.findByText("Sabaneta")).toBeInTheDocument();
+    await esperarFilas();
+    expect(screen.getAllByText("Sabaneta").length).toBeGreaterThan(0);
     expect(screen.getByText("Medellín")).toBeInTheDocument();
     expect(screen.getAllByText("Por compañía").length).toBeGreaterThan(0);
     expect(
@@ -122,7 +145,7 @@ describe("MandatosCatalogPanel configurador", () => {
   it("abre configuración del mandato desde el menú Acciones", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByText("Sabaneta");
+    await esperarFilas();
     await user.click(screen.getByRole("button", { name: /acciones de mandato para sabaneta/i }));
     await user.click(screen.getByRole("menuitem", { name: /configuración del mandato/i }));
     expect(screen.getByTestId("mandato-ot-config-form")).toHaveAttribute("data-mode", "mandato");
@@ -132,7 +155,7 @@ describe("MandatosCatalogPanel configurador", () => {
   it("abre configuración del mandatario desde el menú Acciones", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByText("Sabaneta");
+    await esperarFilas();
     await user.click(screen.getByRole("button", { name: /acciones de mandato para sabaneta/i }));
     await user.click(screen.getByRole("menuitem", { name: /configuración del mandatario/i }));
     expect(screen.getByTestId("mandato-ot-config-form")).toHaveAttribute("data-mode", "mandatario");
@@ -140,7 +163,7 @@ describe("MandatosCatalogPanel configurador", () => {
   });
 
   async function abrirRestablecer(user: ReturnType<typeof userEvent.setup>) {
-    await screen.findByText("Sabaneta");
+    await esperarFilas();
     await user.click(screen.getByRole("button", { name: /acciones de mandato para sabaneta/i }));
     await user.click(screen.getByRole("menuitem", { name: /restablecer default/i }));
     return screen.findByTestId("mandatos-reset-dialog");
@@ -212,14 +235,14 @@ describe("MandatosCatalogPanel configurador", () => {
   it("HU #13153: organismo en default no ofrece Restablecer", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByText("Sabaneta");
+    await esperarFilas();
     await user.click(screen.getByRole("button", { name: /acciones de mandato para medellín/i }));
     expect(screen.queryByRole("menuitem", { name: /restablecer default/i })).not.toBeInTheDocument();
   });
 
   it("HU #13152: la ayuda dice que el tipo por defecto es Persona natural y nadie afirma que Mandato abierto lo es", async () => {
     renderPanel();
-    await screen.findByText("Sabaneta");
+    await esperarFilas();
     expect(
       screen.getByText(/tipo por defecto de un organismo nuevo es persona natural/i),
     ).toBeInTheDocument();
@@ -229,9 +252,9 @@ describe("MandatosCatalogPanel configurador", () => {
   it("abre preview de plantilla genérica", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByText("Sabaneta");
-    const card = screen.getByTestId("mandato-template-generico");
-    await user.click(within(card).getByRole("button", { name: /ver documento de mandato generico/i }));
+    await esperarFilas();
+    const card = await screen.findByTestId("mandato-template-generico");
+    await user.click(within(card).getByRole("button", { name: /ver documento de mandato genérico/i }));
     await waitFor(() => expect(openPdfBlobInNewTab).toHaveBeenCalled());
   });
 
@@ -257,5 +280,51 @@ describe("MandatosCatalogPanel configurador", () => {
     expect(await screen.findByText("Organismo 11")).toBeInTheDocument();
     expect(screen.getByText("Organismo 12")).toBeInTheDocument();
     expect(screen.queryByText("Organismo 1")).not.toBeInTheDocument();
+  });
+
+  describe("HU #13174 formatos desde el backend", () => {
+    it("las tarjetas salen del catálogo y no se inventan opciones", async () => {
+      listMandatoFormats.mockResolvedValue([
+        formato("generico", "Genérico"),
+        formato("bello", "Bello renombrado"),
+      ]);
+      renderPanel();
+      expect(await screen.findByTestId("mandato-template-bello")).toHaveTextContent("Bello renombrado");
+      expect(screen.getByTestId("mandato-template-generico")).toBeInTheDocument();
+      expect(screen.queryByTestId("mandato-template-municipio")).not.toBeInTheDocument();
+    });
+
+    it("la tabla muestra el nombre editado del formato de cada organismo", async () => {
+      listMandatoFormats.mockResolvedValue([
+        formato("sabaneta", "Sabaneta (editado)", "institutional"),
+        formato("generico", "Genérico"),
+      ]);
+      renderPanel();
+      await screen.findByText("Medellín");
+      await waitFor(() => expect(screen.getAllByText("Sabaneta (editado)").length).toBeGreaterThan(1));
+    });
+
+    it("si el catálogo falla muestra el error con Reintentar y al reintentar carga", async () => {
+      const user = userEvent.setup();
+      listMandatoFormats.mockRejectedValueOnce(new Error("boom"));
+      renderPanel();
+      expect(await screen.findByTestId("mandatos-formatos-error")).toBeInTheDocument();
+      expect(screen.queryByTestId("mandato-template-generico")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /reintentar/i }));
+      expect(await screen.findByTestId("mandato-template-generico")).toBeInTheDocument();
+      expect(listMandatoFormats).toHaveBeenCalledTimes(2);
+    });
+
+    it("mientras carga muestra un estado de carga", async () => {
+      listMandatoFormats.mockReturnValue(new Promise(() => undefined));
+      renderPanel();
+      expect(await screen.findByTestId("mandatos-formatos-loading")).toBeInTheDocument();
+    });
+
+    it("la automática no ofrece Ver documento: delega en el organismo", async () => {
+      renderPanel();
+      const card = await screen.findByTestId("mandato-template-auto");
+      expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+    });
   });
 });
