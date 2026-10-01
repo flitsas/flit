@@ -376,6 +376,13 @@ public static class InfrastructureExtensions
         services.AddSingleton(Options.Create(emailAssets));
         services.Configure<NotificationEmailAssetsOptions>(
             configuration.GetSection(NotificationEmailAssetsOptions.SectionName));
+        // Bug #13194 — los correos del módulo Security (Application, sin acceso a Infrastructure)
+        // leen la MISMA clave Notifications:EmailAssets:BaseUrl; sin ella, respaldo local del layout.
+        services.AddSingleton(new SecurityEmailAssetsOptions
+        {
+            BaseUrl = configuration.GetSection(SecurityEmailAssetsOptions.SectionName)[nameof(SecurityEmailAssetsOptions.BaseUrl)]
+                ?? string.Empty,
+        });
 
         // SMTP real, o consola en Development cuando no hay host configurado.
         // HU #11358 AC5 — Scoped (no Singleton): todos los AddHttpClient<T> del repo son

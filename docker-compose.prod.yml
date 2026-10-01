@@ -31,7 +31,9 @@
 #
 # Variables requeridas en .env (junto al compose):
 #   CONNECTION_STRING_CORE  cadena Npgsql .NET (Host=...;Port=5432;Database=...;Username=...;Password=...)
-#   CORS_ORIGIN             origen permitido del frontend (https://<env>.flitsas.online)
+#   CORS_ORIGIN             origen permitido del frontend (https://<env>.flitsas.online) y URL
+#                           base de los enlaces de los correos de core-api (Bug #13194).
+#                           OBLIGATORIA: sin ella `docker compose` aborta (ver servicio core-api)
 #   CORS_ORIGIN_MARCA_BLANCA  segundo origen del gateway: dominio de marca blanca
 #                             (https://marcablanca<env>.flitsas.online, mismo front)
 #   VERIFIK_API_TOKEN       token Verifik (RUNT)
@@ -131,6 +133,19 @@ services:
       ASPNETCORE_URLS: http://+:${CORE_API_PORT:-4003}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       Cors__AllowedOrigins: ${CORS_ORIGIN:-https://dev.flitsas.online}
+      # URLs publicas que viajan en los CORREOS (Bug #13194). Este servicio corre con
+      # ASPNETCORE_ENVIRONMENT=Development en los tres ambientes, asi que appsettings.QA.json
+      # nunca se carga y sin estas lineas gana appsettings.json, que apunta a DEV: en QA y PDN
+      # los enlaces de activacion y de recuperacion llevaban a dev.flitsas.online.
+      # Salen de CORS_ORIGIN porque ya es "el front de ESTE ambiente" (sin barra final: el
+      # navegador no la admite en un Origin) y QA/PDN ya la tienen bien, o su CORS fallaria.
+      # SIN valor por defecto a proposito: un respaldo a DEV repetiria el bug en silencio.
+      # Si falta, `docker compose` aborta antes de crear contenedores con el mensaje de abajo.
+      # Los sufijos son los de appsettings.json; si cambian alla, cambian aqui.
+      Invitations__ActivateUrlBase: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/invite/activate
+      PasswordRecovery__ResetUrlBase: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/reset-password
+      Notifications__EmailAssets__BaseUrl: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/email-assets
+      PublicBranding__PublicBaseUrl: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}
       # Marca Blanca (#12417/#12421): MISMA clave que Internal__ApiKey del servicio gateway
       # de abajo. Si difieren, el Gateway no puede autenticar GET /internal/domains/active
       # (responde 401 SIEMPRE) y su CORS dinamico cae a la lista fija de Cors__AllowedOrigins__0
