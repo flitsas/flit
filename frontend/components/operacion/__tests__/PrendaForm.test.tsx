@@ -1868,3 +1868,148 @@ describe('Bug #13203 — garantía mobiliaria con shape crudo del RUNT (entidad/
     expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toHaveValue('');
   });
 });
+
+// Bug #13240 — cambiar a una decisión que ya no exige documento dejaba el PDF de prenda en el
+// trámite. El servidor lo retira al guardar (PUT prenda); el formulario debe (1) releer los adjuntos
+// tras guardar para que el retirado desaparezca sin recargar y (2) avisar ANTES de guardar.
+// Uso de ejemplo: <PrendaForm ref={ref} instanceId="abc" decisions={traspasoDecisions(false)} />
+describe('Bug #13240 — adjuntos de prenda de la decisión anterior', () => {
+  const AVISO = 'Al guardar, se retirará el documento de prenda adjuntado para la decisión anterior.';
+  const adjunto = (tipo: string) => ({
+    id: `att-${tipo}`,
+    tipo,
+    filename: `${tipo}.pdf`,
+    mimetype: 'application/pdf',
+    sizeBytes: 1024,
+    sha256: 'abc123',
+    source: 'user',
+    uploadedAt: '2026-10-01T00:00:00Z',
+  });
+  const vigente = (decision: string) => ({
+    id: 'p1',
+    decision,
+    estado: 'vigente',
+    acreedorNombre: 'BANCO FICTICIO S.A.',
+    acreedorDocumento: '900000001',
+    levantamientoEntidad: null,
+    createdAt: '2026-10-01T00:00:00Z',
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
+    client.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true } as never);
+    client.putPrenda.mockResolvedValue(vigente('omitir') as never);
+  });
+
+  const renderTraspaso = () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm ref={ref} instanceId="abc" decisions={traspasoDecisions(false)} embeddedInWizard />,
+    );
+    return ref;
+  };
+
+  const elegir = async (value: string) => {
+    const select = await screen.findByLabelText('¿Al vehículo se le asociará una prenda?');
+    fireEvent.change(select, { target: { value } });
+    return select;
+  };
+
+  it('a) tras guardar una decisión distinta se vuelven a pedir los adjuntos y el PDF retirado desaparece', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('prenda_registro')] as never);
+    const ref = renderTraspaso();
+    await waitFor(() =>
+      expect(screen.getByLabelText('¿Al vehículo se le asociará una prenda?')).toHaveValue('registrar'),
+    );
+    await elegir('omitir');
+    expect(await screen.findByText(AVISO)).toBeInTheDocument();
+
+    const antes = client.getAttachments.mock.calls.length;
+    // El servidor ya retiró el adjunto: la siguiente lectura llega vacía.
+    client.getAttachments.mockResolvedValue([] as never);
+    const ok = await ref.current!.save();
+
+    expect(ok).toBe(true);
+    await waitFor(() => expect(client.getAttachments.mock.calls.length).toBeGreaterThan(antes));
+    await waitFor(() => expect(screen.queryByText(AVISO)).not.toBeInTheDocument());
+    // El frontend NO borra por su cuenta: la fuente de verdad es el PUT.
+    expect(client.deleteAttachment).not.toHaveBeenCalled();
+  });
+
+  it('a) con una decisión que sigue exigiendo documento, guardar refresca también la carga del certificado', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('prenda_registro')] as never);
+    client.putPrenda.mockResolvedValue(vigente('registrar') as never);
+    const ref = renderTraspaso();
+    await screen.findByLabelText('Documento de soporte de prenda');
+    await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
+    const antes = client.getAttachments.mock.calls.length;
+
+    const ok = await ref.current!.save();
+
+    expect(ok).toBe(true);
+    // PrendaForm + PrendaDocumentUpload releen: al menos dos lecturas nuevas.
+    await waitFor(() => expect(client.getAttachments.mock.calls.length).toBeGreaterThanOrEqual(antes + 2));
+  });
+
+  it('b) aviso visible, como estado accesible y asociado al selector, cuando la nueva decisión no exige el adjunto', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('prenda_registro')] as never);
+    renderTraspaso();
+    await waitFor(() =>
+      expect(screen.getByLabelText('¿Al vehículo se le asociará una prenda?')).toHaveValue('registrar'),
+    );
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
+
+    const select = await elegir('levantar');
+    const aviso = await screen.findByText(AVISO);
+    const status = aviso.closest('[role="status"]');
+    expect(status).not.toBeNull();
+    expect(status!.id).toBeTruthy();
+    expect(select.getAttribute('aria-describedby') ?? '').toContain(status!.id);
+  });
+
+  it('b) matrícula: de «Registrar prenda» a «Sin prenda» con certificado adjunto muestra el aviso', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('prenda_registro')] as never);
+    render(<PrendaForm instanceId="abc" />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Registrar prenda' })).toHaveAttribute('aria-pressed', 'true'),
+    );
+    await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sin prenda' }));
+
+    expect(await screen.findByText(AVISO)).toBeInTheDocument();
+  });
+
+  it('c) sin adjunto de prenda no hay aviso al cambiar de decisión', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('soat')] as never);
+    renderTraspaso();
+    await waitFor(() =>
+      expect(screen.getByLabelText('¿Al vehículo se le asociará una prenda?')).toHaveValue('registrar'),
+    );
+    await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
+
+    await elegir('omitir');
+
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
+  });
+
+  it('c) sin aviso si la nueva decisión exige el mismo tipo ya adjunto', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('prenda_solicitud')] as never);
+    renderTraspaso();
+    await waitFor(() =>
+      expect(screen.getByLabelText('¿Al vehículo se le asociará una prenda?')).toHaveValue('registrar'),
+    );
+    await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
+
+    await elegir('solicitar');
+    // Volver al tipo exigido retira el aviso.
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
+  });
+});
