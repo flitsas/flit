@@ -1,6 +1,6 @@
 namespace Flit.Infrastructure.Persistence.Schemas;
 
-internal static class SchemaNames
+public static class SchemaNames
 {
     public const string Identity = "identity";
     public const string Security = "security";

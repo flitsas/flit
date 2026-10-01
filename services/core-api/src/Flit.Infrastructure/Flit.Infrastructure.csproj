@@ -42,6 +42,8 @@
     <ProjectReference Include="..\Flit.Modules.Quipux.Application\Flit.Modules.Quipux.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Quipux.Domain\Flit.Modules.Quipux.Domain.csproj" />
     <ProjectReference Include="..\Flit.Modules.Platform\Flit.Modules.Platform.csproj" />
+    <!-- Epic #13217 (HU #13231): entidades y configuraciones de identidad, compartidas con core-identity. -->
+    <ProjectReference Include="..\Flit.Identity.Infrastructure\Flit.Identity.Infrastructure.csproj" />
     <!-- Contratos gRPC compartidos con core-ict (ICT). Plano C: core-api es CLIENTE de IctStateCallback
          (reflejo de estado del trámite → core-ict). El .csproj vive en services/core-ict/. -->
     <ProjectReference Include="..\..\..\core-ict\src\Flit.Ict.Grpc.Contracts\Flit.Ict.Grpc.Contracts.csproj" />

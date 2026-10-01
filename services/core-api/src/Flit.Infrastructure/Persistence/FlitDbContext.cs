@@ -402,6 +402,8 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlitDbContext).Assembly);
+        // Epic #13217 (HU #13231): las tablas de identidad viven en su propia librería, compartida con core-identity.
+        modelBuilder.ApplyConfigurationsFromAssembly(IdentityPersistence.Assembly);
 
         // HU #12990 (FLIT Suite A-05): almacenes del servidor OIDC del hub (OpenIddict) en identity.oidc_*.
         Configurations.Identity.OidcModel.Map(modelBuilder);
