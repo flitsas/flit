@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Linq.Expressions;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
@@ -265,24 +266,49 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.ProcedureType)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
 
-    public async Task<IReadOnlyList<ProcedureInstance>> ListDraftFinalizedByActorAsync(
-        Guid tenantId, string parte, string tipoDoc, string documento, CancellationToken ct)
+    public async Task<IReadOnlyList<ProcedureInstance>> ListPendientesDeFirmaPorSujetoAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct)
     {
+        // Persona jurídica: el sujeto es el representante legal en actor.metadata (jsonb, camelCase como
+        // lo serializa ActorMetadataReader). `@>` con un documento serializado aquí: parametrizado, sin
+        // concatenar SQL.
+        var representanteJson = JsonSerializer.Serialize(new
+        {
+            representanteLegal = new { tipoDocumento = tipoDoc, numeroDocumento = documento },
+        });
+        var radicadosPendientes = TramiteFirmaPendiente.EstadosRadicadosPendientes.ToList();
+
         return await db.ProcedureInstances
             // ADR-0050 — el consumidor lee `instance.Family` para decidir el reparto por partes.
             .Include(i => i.ProcedureType)
             .Include(i => i.Actors)
             .Where(i => i.TenantId == tenantId
-                && i.Status == TramiteEstado.Borrador
-                && i.DraftFinalizedAt != null
                 && i.DeletedAt == null
+                && ((i.Status == TramiteEstado.Borrador && i.DraftFinalizedAt != null)
+                    || (i.Status == TramiteEstado.Rechazado && i.SubsanacionActiva)
+                    || radicadosPendientes.Contains(i.Status))
                 && i.Actors.Any(a =>
-                    a.ActorType == parte
-                    && a.DocumentType == tipoDoc
-                    && a.DocumentNumber == documento))
+                    (a.ActorType == BiometricRules.ParteComprador || a.ActorType == BiometricRules.ParteVendedor)
+                    && ((a.DocumentType == tipoDoc && a.DocumentNumber == documento)
+                        || EF.Functions.JsonContains(a.Metadata, representanteJson))))
             .OrderBy(i => i.DraftFinalizedAt)
             .ThenBy(i => i.Consecutivo)
             .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlySet<Guid>> ListInstanceIdsConEventoDeValidacionAsync(
+        Guid tenantId, string tipo, Guid validationId, CancellationToken ct)
+    {
+        var correlacion = JsonSerializer.Serialize(new { validation_id = validationId });
+        var ids = await db.ProcedureInstanceEvents
+            .AsNoTracking()
+            .Where(e => e.TenantId == tenantId
+                && e.Tipo == tipo
+                && EF.Functions.JsonContains(e.Payload, correlacion))
+            .Select(e => e.ProcedureInstanceId)
+            .Distinct()
+            .ToListAsync(ct);
+        return ids.ToHashSet();
     }
 
     public Task<ProcedureInstance?> GetByIdWithCommercialAsync(Guid id, Guid tenantId, CancellationToken ct) =>
