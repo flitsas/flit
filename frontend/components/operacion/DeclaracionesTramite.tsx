@@ -20,12 +20,12 @@ const RUES_NO_ENCONTRADO =
   'No se encontró una empresa con ese NIT en el RUES. Verifica el número e inténtalo de nuevo.';
 
 /** 503 del proveedor RUES: fallo transitorio, no es un error del operador — se ofrece reintentar. */
+const RUES_NO_DISPONIBLE =
+  'El RUES no respondió en este momento. No es un error tuyo: puedes reintentar en unos segundos.';
+
 /** Bug #13194 — aviso normativo de la empresa vinculadora (opcional con servicio PÚBLICO). */
 const AVISO_EMPRESA_VINCULADORA =
   'Si el vehículo es de servicio público de pasajeros o mixto (colectivo, taxi, especial, mixto o por carretera), el organismo de tránsito exige la empresa vinculadora (Res. 20233040017145, art. 5.3.1.2). Para servicio público de carga es opcional.';
-
-const RUES_NO_DISPONIBLE =
-  'El RUES no respondió en este momento. No es un error tuyo: puedes reintentar en unos segundos.';
 
 // B4 (guardián de diseño) — antes duplicaba a mano la clase de campo del wizard (sin `focus:ring`,
 // solo cambio de borde). Se usa `WIZARD_INPUT` (`wizard-field-styles.ts`), la única fuente para el

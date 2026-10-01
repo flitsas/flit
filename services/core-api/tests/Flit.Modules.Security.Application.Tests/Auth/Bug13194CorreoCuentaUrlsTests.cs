@@ -137,6 +137,34 @@ public sealed class Bug13194CorreoCuentaUrlsTests
         typeof(WelcomeRegistrationEmailTemplate).GetField("DefaultLoginUrl").Should().BeNull();
     }
 
+    /// <summary>
+    /// O8 (review 2) — la base de login sale de una URL ABSOLUTA del frontend: se conserva esquema + host
+    /// (+ puerto) y el path pasa a <c>/login</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("https://qa.flitsas.online/invite/activate", "https://qa.flitsas.online/login")]
+    [InlineData("  http://localhost:3000/invite/activate  ", "http://localhost:3000/login")]
+    public void BuildLoginUrl_con_base_absoluta_conserva_el_host(string baseUrl, string esperado)
+    {
+        WelcomeRegistrationEmailTemplate.BuildLoginUrl(baseUrl).Should().Be(esperado);
+    }
+
+    /// <summary>
+    /// O8 (review 2) — una base relativa o inválida es un error de configuración: falla rápido con un
+    /// mensaje que nombra la clave, en vez de devolver un <c>/login</c> relativo (enlace muerto en el correo).
+    /// </summary>
+    [Theory]
+    [InlineData("/invite/activate")]
+    [InlineData("")]
+    [InlineData("qa.flitsas.online/invite/activate")]
+    [InlineData("ftp://qa.flitsas.online/invite/activate")]
+    public void BuildLoginUrl_con_base_relativa_o_invalida_falla_rapido(string baseUrl)
+    {
+        var act = () => WelcomeRegistrationEmailTemplate.BuildLoginUrl(baseUrl);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Invitations:ActivateUrlBase*");
+    }
+
     private sealed class DictionaryServiceProvider(Dictionary<Type, object> services) : IServiceProvider
     {
         public object? GetService(Type serviceType) => services.GetValueOrDefault(serviceType);

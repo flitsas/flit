@@ -136,7 +136,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:${CORE_API_PORT:-5003}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
-      Cors__AllowedOrigins: ${CORS_ORIGIN:-https://qa.flitsas.online}
+      Cors__AllowedOrigins: ${CORS_ORIGIN}
       # URLs publicas que viajan en los CORREOS (Bug #13194). Este servicio corre con
       # ASPNETCORE_ENVIRONMENT=Development en los tres ambientes, asi que appsettings.QA.json
       # nunca se carga y sin estas lineas gana appsettings.json, que apunta a DEV: en QA y PDN
@@ -485,7 +485,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:${GATEWAY_PORT:-5002}
-      Cors__AllowedOrigins__0: ${CORS_ORIGIN:-https://qa.flitsas.online}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN}
       # Segundo origen: el dominio de marca blanca sirve el MISMO front (mismo
       # contenedor, otro vhost de nginx) y por tanto llama al mismo gateway.
       Cors__AllowedOrigins__1: ${CORS_ORIGIN_MARCA_BLANCA:-https://marcablancaqa.flitsas.online}

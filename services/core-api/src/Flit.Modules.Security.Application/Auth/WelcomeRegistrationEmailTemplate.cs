@@ -15,14 +15,23 @@ public static class WelcomeRegistrationEmailTemplate
     /// <summary>
     /// Bug #13194 — URL de login del ambiente a partir de una URL configurada del MISMO frontend
     /// (<c>Invitations:ActivateUrlBase</c>): se conserva esquema + host (+ puerto) y se reemplaza el
-    /// path por <see cref="LoginPath"/>. Una base relativa o inválida devuelve solo el path.
+    /// path por <see cref="LoginPath"/>.
+    /// <para>Una base relativa o inválida es un error de CONFIGURACIÓN y falla rápido con
+    /// <see cref="InvalidOperationException"/>: devolver solo <c>/login</c> dejaba un enlace muerto en
+    /// el correo sin que nadie se enterara.</para>
     /// </summary>
     public static string BuildLoginUrl(string configuredFrontendUrl)
     {
         ArgumentNullException.ThrowIfNull(configuredFrontendUrl);
-        return Uri.TryCreate(configuredFrontendUrl.Trim(), UriKind.Absolute, out var uri)
-            ? uri.GetLeftPart(UriPartial.Authority) + LoginPath
-            : LoginPath;
+        if (!Uri.TryCreate(configuredFrontendUrl.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        {
+            throw new InvalidOperationException(
+                "Invitations:ActivateUrlBase debe ser una URL absoluta http(s) del frontend del ambiente; "
+                + "con una base relativa o inválida el correo no puede llevar el enlace de inicio de sesión.");
+        }
+
+        return uri.GetLeftPart(UriPartial.Authority) + LoginPath;
     }
 
     /// <summary>
