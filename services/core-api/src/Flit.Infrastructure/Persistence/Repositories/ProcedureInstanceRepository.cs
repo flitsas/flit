@@ -469,9 +469,18 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             return new Dictionary<string, bool>();
 
         var distinct = tenantIds.Distinct().ToList();
+
+        // Bug #13194 (P4, D1) — el interruptor «Baúl de firmas activo» de la compañía MANDA: solo
+        // cuentan las firmas de tenants con signature_vault_enabled activo, igual que en el paso de
+        // identidad y el gate (SignatureVaultPolicy.ResolveAsync). Sin fila de configuración = apagado.
+        // Es un filtro (subconsulta) en la MISMA consulta: sin N+1 ni lectura extra por tenant.
+        var tenantsConBaul = db.TenantOperationalPolicies
+            .Where(p => p.SignatureVaultEnabled)
+            .Select(p => p.TenantId);
+
         var rows = await db.SignatureVault
             .AsNoTracking()
-            .Where(v => distinct.Contains(v.TenantId))
+            .Where(v => distinct.Contains(v.TenantId) && tenantsConBaul.Contains(v.TenantId))
             .Select(v => new { v.TenantId, v.DocumentType, v.DocumentNumber, v.Estado, v.VigenciaDesde, v.VigenciaHasta })
             .ToListAsync(ct);
 

@@ -168,6 +168,9 @@ public interface IProcedureInstanceRepository
     /// deliberadamente no consulta el baúl para no caer en N+1. Aquí se resuelve en UNA consulta por los
     /// tenants del listado, que es lo que permite usarlo fila a fila.
     /// </para>
+    /// <para>Bug #13194 (P4, D1): solo incluye tenants con el interruptor «Baúl de firmas activo»
+    /// (<c>signature_vault_enabled</c>); con el baúl apagado la persona queda AUSENTE, como en el paso de
+    /// identidad y el gate.</para>
     /// </summary>
     Task<IReadOnlyDictionary<string, bool>> ListFirmaBaulVigenciaKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateOnly hoy, CancellationToken ct = default);
