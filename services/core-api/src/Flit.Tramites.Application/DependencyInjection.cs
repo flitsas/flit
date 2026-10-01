@@ -168,6 +168,10 @@ public static class DependencyInjection
         services.AddScoped<SimularBiometriaHandler>();
         // HU #10350 — asegurar identidad vigente (reuso de validación ≤30 días) al guardar la parte.
         services.AddScoped<EnsureIdentityHandler>();
+        // Bug #13194 (punto 4) — asegurar identidad + disparar el correo de validación (reutilizable por
+        // ICT y por el gate de envío al organismo) y completar el RL de una PJ desde el directorio.
+        services.AddScoped<EnsureIdentityAndNotifyHandler>();
+        services.AddScoped<RepresentanteLegalDesdeDirectorio>();
 
         // HU #10866 (CF-01, Feature #10864) — Prevalidación standalone (sin trámite): upsert de
         // la entidad Person + inicio de validación biométrica con ProcedureInstanceId=null.
