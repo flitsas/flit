@@ -200,7 +200,6 @@ public sealed class MandatarioGateRadicacionTests
     // AC3 — persona natural sin firma válida en modo block.
     [Theory]
     [InlineData("sin_validacion_aprobada")]
-    [InlineData("biometria_vencida")]
     public async Task Ac3_NaturalSinFirmaValida_Block_Rechaza_ConFirmaInvalida(string motivo)
     {
         var i = Wire(TramiteEstado.Preparado);
@@ -241,7 +240,7 @@ public sealed class MandatarioGateRadicacionTests
         var i = Wire(TramiteEstado.Preparado);
         Candidates(
             Signer(MandateSignerOrigins.Organismo, firmaValida: false, motivo: "mandatario_fuera_de_vigencia"),
-            Signer(MandateSignerOrigins.Compania, firmaValida: false, motivo: "biometria_vencida"));
+            Signer(MandateSignerOrigins.Compania, firmaValida: false, motivo: "sin_validacion_aprobada"));
 
         (await Radicar(Sut(TramiteValidationMode.Block), i)).ErrorCode
             .Should().Be(TramiteEstadoErrores.MandatarioFirmaInvalida);
@@ -417,7 +416,7 @@ public sealed class MandatarioGateRadicacionTests
     public async Task Ac7_DefaultDelOtNoVinculado_SinFirmaValida_Bloquea()
     {
         var i = Wire(TramiteEstado.Preparado);
-        var defaultOt = Signer(firmaValida: false, motivo: "biometria_vencida");
+        var defaultOt = Signer(firmaValida: false, motivo: "sin_validacion_aprobada");
         Config("signer", otDefault: defaultOt.Id);
         Candidates();
         _directory.GetByIdAsync(defaultOt.Id, Arg.Any<CancellationToken>()).Returns(defaultOt);

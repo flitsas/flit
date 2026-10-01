@@ -2575,7 +2575,7 @@ export interface MandateSignerPrevisto {
   nombre?: string | null;
   /** Solo con `estado = valido`. */
   formaFirma?: 'baul' | 'biometria' | null;
-  /** Vocabulario estable de ADR-0066 (p. ej. `biometria_vencida`). */
+  /** Vocabulario estable de ADR-0066 (p. ej. `sin_validacion_aprobada`). */
   motivo?: string | null;
   /** Modo vigente de la validación al radicar. */
   modo: 'block' | 'warn' | 'off';
