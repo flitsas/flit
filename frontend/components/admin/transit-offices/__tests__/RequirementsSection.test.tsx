@@ -83,6 +83,22 @@ describe("RequirementsSection — HU #10547", () => {
     );
   });
 
+  // Bug #13194 (P4) — la firma se exige siempre: el interruptor se conserva (retirarlo es decisión de
+  // producto), pero tiene que decir que ya no desactiva la validación de identidad.
+  it("Bug #13194 — avisa que la validación de identidad es obligatoria aunque el interruptor siga", async () => {
+    vi.mocked(fetchOtRequirements).mockResolvedValue({ ...baseRequirements, identityValidationEnabled: false });
+    renderSection();
+
+    const identity = await screen.findByRole("switch", { name: /Validación de identidad/i });
+    expect(identity).toBeInTheDocument();
+    const nota = screen.getByText(
+      /La validación de identidad es obligatoria para radicar; este ajuste ya no la desactiva\./,
+    );
+    expect(nota).toBeVisible();
+    // El switch queda descrito por la nota para el lector de pantalla.
+    expect(identity.getAttribute("aria-describedby")).toContain("ot-req-identity-nota");
+  });
+
   it("muestra el estado de error si la carga falla", async () => {
     vi.mocked(fetchOtRequirements).mockRejectedValueOnce(new Error("boom"));
     renderSection();
