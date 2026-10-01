@@ -166,6 +166,18 @@ public static class AdminMandateSignersEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // HU #13247 (Feature #13245) — mandatarios afectados por la validación exclusiva (Persona natural con biometría sin
+        // validación propia aprobada), con compañía, organismo y correo para avisarles. SOLO Super Admin (403 al resto).
+        app.MapGroup("/api/v1/admin/mandate-signers")
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Mandatarios")
+            .MapGet("/identity-validation-report", IdentityValidationReportAsync)
+            .WithName("AdminMandateSignersIdentityValidationReport")
+            .WithSummary("Mandatarios con biometría sin validación propia aprobada (filtrable por organismo, exportable a CSV)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         // HU #13195 (ADR-0066 D1) — reporte PREVIO de solo lectura del colapso de vínculos (un activo por origen).
         // SOLO Super Admin (403 al resto); sin datos personales: ids, organismo, compañía y qué se conserva.
         app.MapGroup("/api/v1/admin/mandate-signers")
@@ -222,6 +234,30 @@ public static class AdminMandateSignersEndpoints
                 System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(csv)).ToArray(),
                 "text/csv; charset=utf-8",
                 PhysicalSignatureMigrationCsv.FileName);
+        }
+
+        return Results.Ok(new { data = rows, total = rows.Count });
+    }
+
+    /// <summary>
+    /// HU #13247 — <c>?transitOfficeId=</c> filtra por organismo; <c>?format=csv</c> exporta. Incluye el correo del
+    /// mandatario (PII, Ley 1581) para poder avisarle: solo Super Admin y nunca se escribe en logs.
+    /// </summary>
+    private static async Task<IResult> IdentityValidationReportAsync(
+        [FromQuery] Guid? transitOfficeId,
+        [FromQuery] string? format,
+        [FromServices] GetMandateIdentityAffectedReportHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var rows = await handler.HandleAsync(transitOfficeId, cancellationToken).ConfigureAwait(false);
+
+        if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
+        {
+            var csv = MandateIdentityAffectedCsv.Build(rows);
+            return Results.File(
+                System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(csv)).ToArray(),
+                "text/csv; charset=utf-8",
+                MandateIdentityAffectedCsv.FileName);
         }
 
         return Results.Ok(new { data = rows, total = rows.Count });

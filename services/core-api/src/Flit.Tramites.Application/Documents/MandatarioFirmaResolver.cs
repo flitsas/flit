@@ -19,6 +19,9 @@ namespace Flit.Tramites.Application.Documents;
 /// </summary>
 public static class MandatarioFirmaResolver
 {
+    /// <summary>Texto del sello cuando la aprobación no trae serie de certificado (igual que el sello de las partes).</summary>
+    public const string SinCertificado = "no disponible";
+
     /// <summary>Firma resuelta: imagen del baúl, o sello de texto, o ninguna de las dos.</summary>
     public readonly record struct Resultado(
         byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos, string? MotivoSinFirma = null);
@@ -84,9 +87,18 @@ public static class MandatarioFirmaResolver
             onVaultError?.Invoke(ex);
         }
 
-        // Sin firma del baúl: sello con el certificado de su identidad vigente, si lo hay.
-        return signer.IdentityVigente && !string.IsNullOrWhiteSpace(signer.CertificadoIdentidad)
-            ? new Resultado(null, $"Validación de identidad\nFirma {signer.CertificadoIdentidad}", null)
-            : new Resultado(null, null, null);
+        // Sin firma del baúl: sello con el certificado de su identidad vigente. Defecto C2 de la validación E2E (HU #13247):
+        // una aprobación sin serie de certificado (p. ej. las simuladas o anteriores a HU #10488) SÍ estampa el sello, con la
+        // misma tolerancia que el sello de las partes del trámite (IdentidadSelloText: «Firma no disponible»); antes el recuadro
+        // quedaba «Sin firmar» aunque el mandatario tuviera su validación propia aprobada.
+        if (!signer.IdentityVigente)
+        {
+            return new Resultado(null, null, null);
+        }
+
+        var firmaIdentidad = string.IsNullOrWhiteSpace(signer.CertificadoIdentidad)
+            ? SinCertificado
+            : signer.CertificadoIdentidad.Trim();
+        return new Resultado(null, $"Validación de identidad\nFirma {firmaIdentidad}", null);
     }
 }

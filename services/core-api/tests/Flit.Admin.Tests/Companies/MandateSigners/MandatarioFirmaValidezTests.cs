@@ -148,14 +148,17 @@ public sealed class MandatarioFirmaValidezTests
 
     private static MandateSignerDirectory Directorio(FlitDbContext ctx, ProcedureInstanceBiometricValidation? latest)
     {
+        // HU #13247 — solo cuenta la validación lanzada PARA el mandatario (party_role mandatario + su ficha).
+        if (latest is not null)
+        {
+            latest.PartyRole = BiometricRules.ParteMandatario;
+            latest.MandateSignerId = Signer;
+        }
+
         IReadOnlyList<ProcedureInstanceBiometricValidation> rows = latest is null ? [] : [latest];
         var repo = Substitute.For<IProcedureInstanceRepository>();
-        repo.ListBiometricValidationsByPersonAsync(
-                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
-                Arg.Any<CancellationToken>())
-            .Returns((Array.Empty<ProcedureInstanceBiometricValidation>(), 0, false));
-        repo.ListBiometricValidationsByPersonAsync(Gestora, "CC", Documento, 0, 1, Arg.Any<CancellationToken>())
-            .Returns((rows, rows.Count, false));
+        repo.ListMandatarioValidationsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(rows);
         var reader = Substitute.For<ITransitOfficeOperationalStatusReader>();
         reader.GetByIdAsync(Ot, Arg.Any<CancellationToken>()).Returns((TransitOfficeOperationalStatusItem?)null);
         return new MandateSignerDirectory(ctx, reader, new IdentityVigenciaPorDocumentoResolver(repo));

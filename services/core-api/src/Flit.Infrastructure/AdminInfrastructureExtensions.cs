@@ -245,6 +245,8 @@ public static class AdminInfrastructureExtensions
         // HU #13131 - reporte de migracion de la firma fisica (solo Super Admin).
         services.AddScoped<IPhysicalSignatureMigrationReader, DbPhysicalSignatureMigrationReader>();
         services.AddScoped<IMandateSignerLinkCollapseReader, DbMandateSignerLinkCollapseReader>();
+        // HU #13247 — reporte de mandatarios con biometría sin validación propia aprobada (solo Super Admin).
+        services.AddScoped<IMandateIdentityAffectedReader, DbMandateIdentityAffectedReader>();
         services.AddScoped<IRepresentedAssociationRetirementStore, RepresentedAssociationRetirementStore>();
         services.AddScoped<IManagingCompanyDirectory, ManagingCompanyDirectory>();
 

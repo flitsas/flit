@@ -85,20 +85,17 @@ internal sealed class DbPhysicalSignatureMigrationReader : IPhysicalSignatureMig
             .ConfigureAwait(false);
 
         var tenantIds = links.Select(l => l.CompanyTenantId).Distinct().ToList();
-        var tenantNames = await LoadTenantNamesAsync(tenantIds, cancellationToken).ConfigureAwait(false);
+        var tenantNames = await LoadTenantNamesAsync(_context, tenantIds, cancellationToken).ConfigureAwait(false);
 
-        // Identidad: mejor estado entre las compañías del mandatario (regla única de HU #13121).
-        var identidades = await MandateSignerIdentityTenantResolver.ResolveAsync(
-            _context,
-            _otStatus,
+        // Identidad: solo la validación propia del mandatario (HU #13247).
+        var identidades = await _identityResolver.ResolveMandatariosAsync(
             [.. candidatos
                 .Where(c => !string.IsNullOrWhiteSpace(c.DocumentNumber))
                 .GroupBy(c => c.Id)
                 .Select(g => g.First())
-                .Select(c => new MandateSignerIdentityTenantResolver.SignerRef(
-                    c.Id, c.TransitOfficeId, c.DocumentType, c.DocumentNumber!))],
-            (tenantId, documentos, ct) => _identityResolver.ResolveManyBatchedMandatarioAsync(
-                tenantId, documentos, DateTimeOffset.UtcNow, ct),
+                .Select(c => new IdentityVigenciaPorDocumentoResolver.MandatarioIdentityRef(
+                    c.Id, c.DocumentType, c.DocumentNumber))],
+            DateTimeOffset.UtcNow,
             cancellationToken).ConfigureAwait(false);
 
         var rows = new List<PhysicalSignatureMigrationRow>();
@@ -191,7 +188,8 @@ internal sealed class DbPhysicalSignatureMigrationReader : IPhysicalSignatureMig
     }
 
     /// <summary><c>identity.tenants</c> tiene RLS por tenant: se lee cross-tenant (solo el Super Admin llega aquí).</summary>
-    private async Task<Dictionary<Guid, string>> LoadTenantNamesAsync(
+    internal static async Task<Dictionary<Guid, string>> LoadTenantNamesAsync(
+        FlitDbContext context,
         List<Guid> tenantIds,
         CancellationToken cancellationToken)
     {
@@ -200,30 +198,30 @@ internal sealed class DbPhysicalSignatureMigrationReader : IPhysicalSignatureMig
             return [];
         }
 
-        Task<Dictionary<Guid, string>> Read() => _context.Tenants.AsNoTracking()
+        Task<Dictionary<Guid, string>> Read() => context.Tenants.AsNoTracking()
             .Where(t => tenantIds.Contains(t.Id))
             .Select(t => new { t.Id, t.LegalName })
             .ToDictionaryAsync(t => t.Id, t => t.LegalName, cancellationToken);
 
-        if (!_context.Database.IsRelational())
+        if (!context.Database.IsRelational())
         {
             return await Read().ConfigureAwait(false);
         }
 
-        if (_context.Database.CurrentTransaction is not null)
+        if (context.Database.CurrentTransaction is not null)
         {
-            await _context.Database.ExecuteSqlRawAsync("SET LOCAL row_security = off", cancellationToken)
+            await context.Database.ExecuteSqlRawAsync("SET LOCAL row_security = off", cancellationToken)
                 .ConfigureAwait(false);
             return await Read().ConfigureAwait(false);
         }
 
-        var strategy = _context.Database.CreateExecutionStrategy();
+        var strategy = context.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
-            var transaction = await _context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             await using (transaction.ConfigureAwait(false))
             {
-                await _context.Database.ExecuteSqlRawAsync("SET LOCAL row_security = off", cancellationToken)
+                await context.Database.ExecuteSqlRawAsync("SET LOCAL row_security = off", cancellationToken)
                     .ConfigureAwait(false);
                 var result = await Read().ConfigureAwait(false);
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

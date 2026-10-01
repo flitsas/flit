@@ -62,29 +62,63 @@ public sealed class MandateSignerIdentityVigenciaTests
         return reader;
     }
 
+    private static readonly Guid Compania = Guid.NewGuid();
+
+    /// <summary>Validación lanzada PARA el mandatario (party_role mandatario + su ficha), en el tenant de la compañía.</summary>
+    private static ProcedureInstanceBiometricValidation Propia(
+        string status = BiometricEstados.Aprobado,
+        DateTimeOffset? creada = null,
+        string numero = Documento,
+        Guid? signer = null,
+        Guid? tenant = null)
+    {
+        var creadaEn = creada ?? Now.AddDays(-1);
+        return new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant ?? Compania,
+            PartyRole = BiometricRules.ParteMandatario,
+            MandateSignerId = signer ?? Signer,
+            DocumentType = "CC",
+            DocumentNumber = numero,
+            Status = status,
+            Provider = BiometricProviders.Kyverum,
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = Now.AddHours(1),
+            ValidatedAt = status == BiometricEstados.Aprobado ? creadaEn.AddMinutes(5) : null,
+            CreatedAt = creadaEn,
+        };
+    }
+
+    /// <summary>Validación de OTRO rol con el mismo documento (comprador, vendedor o prevalidación standalone).</summary>
+    private static ProcedureInstanceBiometricValidation DeOtroRol(string? rol, Guid tenantId) => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = tenantId,
+        PartyRole = rol,
+        DocumentType = "CC",
+        DocumentNumber = Documento,
+        Status = BiometricEstados.Aprobado,
+        Provider = BiometricProviders.Kyverum,
+        TokenHash = Guid.NewGuid().ToString("N"),
+        ExpiresAt = Now.AddHours(1),
+        ValidatedAt = Now.AddDays(-1),
+        ValidUntil = Now.AddDays(29),
+        CreatedAt = Now.AddDays(-1),
+    };
+
+    private static DbMandateSignerReader NewReader(FlitDbContext ctx) =>
+        new(ctx, ReaderConTenant(Ot, OtTenant));
+
     [Fact]
-    public async Task GetByIdAsync_ConAprobadaVigenteEnElModuloIdentidad_MarcaValidYExponeVigencia()
+    public async Task GetByIdAsync_ConValidacionPropiaAprobada_MarcaValid_SinFechaDeFin()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
-        ctx.ProcedureInstanceBiometricValidations.Add(new ProcedureInstanceBiometricValidation
-        {
-            Id = Guid.NewGuid(),
-            TenantId = OtTenant,
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            Status = BiometricEstados.Aprobado,
-            Provider = BiometricProviders.Kyverum,
-            TokenHash = "hash",
-            ExpiresAt = Now.AddHours(1),
-            ValidatedAt = Now.AddDays(-1),
-            ValidUntil = Now.AddDays(29),
-            CreatedAt = Now.AddDays(-1),
-        });
+        ctx.ProcedureInstanceBiometricValidations.Add(Propia());
         await ctx.SaveChangesAsync(ct);
 
-        var reader = new DbMandateSignerReader(ctx, ReaderConTenant(Ot, OtTenant));
-        var item = await reader.GetByIdAsync(Signer, ct);
+        var item = await NewReader(ctx).GetByIdAsync(Signer, ct);
 
         item.Should().NotBeNull();
         item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
@@ -92,101 +126,108 @@ public sealed class MandateSignerIdentityVigenciaTests
     }
 
     [Fact]
-    public async Task GetByIdAsync_AprobadaHace40Dias_SigueValid_SinRenovacion()
+    public async Task GetByIdAsync_PropiaAprobadaHace40Dias_SigueValid_SinRenovacion()
     {
-        // HU #13130b (decisión del PO, 01-oct): el mandatario no renueva; la ventana de 30 días es del trámite.
+        // HU #13130b: la ventana de 30 días es del trámite; el mandatario no renueva.
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
-        var vieja = Aprobada(OtTenant);
-        vieja.ValidatedAt = Now.AddDays(-40);
-        vieja.ValidUntil = Now.AddDays(-10);
-        vieja.CreatedAt = Now.AddDays(-40);
-        ctx.ProcedureInstanceBiometricValidations.Add(vieja);
+        ctx.ProcedureInstanceBiometricValidations.Add(Propia(creada: Now.AddDays(-40)));
         await ctx.SaveChangesAsync(ct);
 
-        var item = await new DbMandateSignerReader(ctx, ReaderConTenant(Ot, OtTenant)).GetByIdAsync(Signer, ct);
+        (await NewReader(ctx).GetByIdAsync(Signer, ct))!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
+    }
 
-        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
+    [Theory]
+    [InlineData("comprador")]
+    [InlineData("vendedor")]
+    [InlineData(null)] // prevalidación standalone
+    public async Task GetByIdAsync_AprobacionDeOtroRolConElMismoDocumento_NoCuenta_QuedaSinValidar(string? rol)
+    {
+        // HU #13247 AC2/AC5: la biometría de un comprador, un vendedor o una prevalidación con la misma cédula no habilita la
+        // firma del mandatario, sea cual sea el tenant; sin validación propia queda pendiente de validación, sin backfill.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
+        await VincularCompaniaAsync(ctx, Compania);
+        ctx.ProcedureInstanceBiometricValidations.Add(DeOtroRol(rol, Compania));
+        ctx.ProcedureInstanceBiometricValidations.Add(DeOtroRol(rol, OtTenant));
+        await ctx.SaveChangesAsync(ct);
+
+        (await NewReader(ctx).GetByIdAsync(Signer, ct))!.IdentityStatus.Should().Be(AdminIdentityVigencia.None);
     }
 
     [Fact]
-    public async Task GetByIdAsync_AprobadaAntiguaYNuevaValidacionEnCurso_SigueValid()
+    public async Task GetByIdAsync_ValidacionPropiaDeOtraFicha_NoCuenta()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
-        var vieja = Aprobada(OtTenant);
-        vieja.ValidatedAt = Now.AddDays(-60);
-        vieja.ValidUntil = Now.AddDays(-30);
-        vieja.CreatedAt = Now.AddDays(-60);
-        ctx.ProcedureInstanceBiometricValidations.Add(vieja);
-        ctx.ProcedureInstanceBiometricValidations.Add(new ProcedureInstanceBiometricValidation
-        {
-            Id = Guid.NewGuid(),
-            TenantId = OtTenant,
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            Status = BiometricEstados.EnProceso,
-            Provider = BiometricProviders.Kyverum,
-            TokenHash = "hash-2",
-            ExpiresAt = Now.AddHours(1),
-            CreatedAt = Now.AddDays(-1),
-        });
+        ctx.ProcedureInstanceBiometricValidations.Add(Propia(signer: Guid.NewGuid()));
         await ctx.SaveChangesAsync(ct);
 
-        var item = await new DbMandateSignerReader(ctx, ReaderConTenant(Ot, OtTenant)).GetByIdAsync(Signer, ct);
-
-        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
+        (await NewReader(ctx).GetByIdAsync(Signer, ct))!.IdentityStatus.Should().Be(AdminIdentityVigencia.None);
     }
 
     [Fact]
-    public async Task GetByIdAsync_ConValidacionEnCurso_MarcaPending()
+    public async Task GetByIdAsync_PropiaAprobadaDeUnDocumentoAnterior_NoCuenta()
     {
-        // Es el AC central de la ola: prevalidar en Identidad (queda "en_curso" hasta que Kyverum
-        // resuelva) debe reflejarse aquí como "en curso", no seguir mostrando "sin validar".
+        // HU #13247 AC3: tras editar el documento, la validación del documento anterior no cuenta.
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
-        ctx.ProcedureInstanceBiometricValidations.Add(new ProcedureInstanceBiometricValidation
-        {
-            Id = Guid.NewGuid(),
-            TenantId = OtTenant,
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            Status = BiometricEstados.EnProceso,
-            Provider = BiometricProviders.Kyverum,
-            TokenHash = "hash",
-            ExpiresAt = Now.AddHours(1),
-            CreatedAt = Now.AddDays(-1),
-        });
+        ctx.ProcedureInstanceBiometricValidations.Add(Propia(numero: "999000111"));
         await ctx.SaveChangesAsync(ct);
 
-        var reader = new DbMandateSignerReader(ctx, ReaderConTenant(Ot, OtTenant));
-        var item = await reader.GetByIdAsync(Signer, ct);
+        (await NewReader(ctx).GetByIdAsync(Signer, ct))!.IdentityStatus.Should().Be(AdminIdentityVigencia.None);
+    }
 
-        item.Should().NotBeNull();
+    [Fact]
+    public async Task GetByIdAsync_PropiaAprobadaAntiguaYNuevaEnCurso_LaAnteriorDejaDeContar_MarcaPending()
+    {
+        // HU #13246 AC3: reenviar lanza una nueva y la anterior deja de contar hasta que la nueva se apruebe.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
+        ctx.ProcedureInstanceBiometricValidations.Add(Propia(creada: Now.AddDays(-60)));
+        ctx.ProcedureInstanceBiometricValidations.Add(Propia(BiometricEstados.EnProceso, Now.AddDays(-1)));
+        await ctx.SaveChangesAsync(ct);
+
+        (await NewReader(ctx).GetByIdAsync(Signer, ct))!.IdentityStatus.Should().Be(AdminIdentityVigencia.Pending);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ConValidacionPropiaEnCurso_MarcaPending()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
+        ctx.ProcedureInstanceBiometricValidations.Add(Propia(BiometricEstados.EnProceso));
+        await ctx.SaveChangesAsync(ct);
+
+        var item = await NewReader(ctx).GetByIdAsync(Signer, ct);
+
         item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Pending);
         item.IdentityValidUntil.Should().BeNull();
     }
 
     [Fact]
-    public async Task GetByIdAsync_OtSinTenant_QuedaSinValidarYNoConsultaIdentidad()
+    public async Task GetByIdAsync_MandatarioExistenteSinValidacionPropia_QuedaPendienteDeValidacion_SinBackfill()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var ctx = await SeedAsync();
-        var identityRepo = Substitute.For<IProcedureInstanceRepository>();
-        var reader = new DbMandateSignerReader(
-            ctx, ReaderConTenant(Ot, null), new IdentityVigenciaPorDocumentoResolver(identityRepo));
 
-        var item = await reader.GetByIdAsync(Signer, ct);
-
-        item.Should().NotBeNull();
-        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.None);
-        await identityRepo.DidNotReceive().ListLatestBiometricValidationsByPersonsAsync(
-            Arg.Any<Guid>(),
-            Arg.Any<IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)>>(),
-            Arg.Any<CancellationToken>());
+        (await NewReader(ctx).GetByIdAsync(Signer, ct))!.IdentityStatus.Should().Be(AdminIdentityVigencia.None);
+        (await ctx.ProcedureInstanceBiometricValidations.CountAsync(ct)).Should().Be(0);
     }
 
-    private static readonly Guid Compania = Guid.NewGuid();
+    [Fact]
+    public async Task GetByIdAsync_LaValidacionPropiaNoDependeDelTenantDelOrganismoNiDeLaCompaniaVinculada()
+    {
+        // La validación es de la ficha, no del documento: con o sin compañías vinculadas, en el tenant que sea.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = await SeedAsync();
+        await VincularCompaniaAsync(ctx, Compania);
+        ctx.ProcedureInstanceBiometricValidations.Add(Propia(tenant: Compania));
+        await ctx.SaveChangesAsync(ct);
+
+        (await new DbMandateSignerReader(ctx, ReaderConTenant(Ot, null)).GetByIdAsync(Signer, ct))!
+            .IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
+    }
 
     private static async Task VincularCompaniaAsync(FlitDbContext ctx, Guid companyTenantId)
     {
@@ -202,82 +243,13 @@ public sealed class MandateSignerIdentityVigenciaTests
         await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private static ProcedureInstanceBiometricValidation Aprobada(Guid tenantId) => new()
-    {
-        Id = Guid.NewGuid(),
-        TenantId = tenantId,
-        DocumentType = "CC",
-        DocumentNumber = Documento,
-        Status = BiometricEstados.Aprobado,
-        Provider = BiometricProviders.Kyverum,
-        TokenHash = "hash",
-        ExpiresAt = Now.AddHours(1),
-        ValidatedAt = Now.AddDays(-1),
-        ValidUntil = Now.AddDays(29),
-        CreatedAt = Now.AddDays(-1),
-    };
-
-    [Fact]
-    public async Task GetByIdAsync_ValidacionRegistradaEnElTenantDeLaCompania_MarcaValidAunqueElOtTengaOtroTenant()
-    {
-        // HU #13121 AC2: la validación vive en el tenant de la compañía (el OT no puede registrar en Identidad).
-        var ct = TestContext.Current.CancellationToken;
-        await using var ctx = await SeedAsync();
-        await VincularCompaniaAsync(ctx, Compania);
-        ctx.ProcedureInstanceBiometricValidations.Add(Aprobada(Compania));
-        await ctx.SaveChangesAsync(ct);
-
-        var reader = new DbMandateSignerReader(ctx, ReaderConTenant(Ot, OtTenant));
-        var item = await reader.GetByIdAsync(Signer, ct);
-
-        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
-        item.IdentityValidUntil.Should().BeNull("el mandatario no renueva su identidad (HU #13130b)");
-    }
-
-    [Fact]
-    public async Task GetByIdAsync_ValidacionSoloEnUnTenantNoRelacionado_QuedaSinValidar()
-    {
-        // HU #13121 AC3: existe una aprobada, pero en un tenant que ni es de su compañía ni del OT vinculado.
-        var ct = TestContext.Current.CancellationToken;
-        await using var ctx = await SeedAsync();
-        await VincularCompaniaAsync(ctx, Compania);
-        ctx.ProcedureInstanceBiometricValidations.Add(Aprobada(Guid.NewGuid()));
-        // Incluso una en el tenant del OT se ignora: con compañías vinculadas manda el tenant de la compañía.
-        ctx.ProcedureInstanceBiometricValidations.Add(Aprobada(OtTenant));
-        await ctx.SaveChangesAsync(ct);
-
-        var reader = new DbMandateSignerReader(ctx, ReaderConTenant(Ot, OtTenant));
-        var item = await reader.GetByIdAsync(Signer, ct);
-
-        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.None);
-    }
-
-    [Fact]
-    public async Task GetByIdAsync_DosCompaniasConValidacionSoloEnUna_MarcaValid()
-    {
-        // HU #13121 AC4: regla única — vigente en alguna de sus compañías vinculadas; no depende del OT.
-        var ct = TestContext.Current.CancellationToken;
-        var otraCompania = Guid.NewGuid();
-        await using var ctx = await SeedAsync();
-        await VincularCompaniaAsync(ctx, Compania);
-        await VincularCompaniaAsync(ctx, otraCompania);
-        ctx.ProcedureInstanceBiometricValidations.Add(Aprobada(otraCompania));
-        await ctx.SaveChangesAsync(ct);
-
-        var reader = new DbMandateSignerReader(ctx, ReaderConTenant(Ot, null));
-        var item = await reader.GetByIdAsync(Signer, ct);
-
-        item!.IdentityStatus.Should().Be(AdminIdentityVigencia.Valid);
-    }
-
     [Fact]
     public async Task ListByOtAsync_DosMandatariosDelMismoOrganismo_ResuelveEnUnaSolaConsultaBatch()
     {
-        // AC de lote (HU #11765): dos mandatarios del MISMO organismo con documentos distintos se
-        // resuelven con UNA sola llamada batch al resolver de Identidad, no una por fila.
+        // AC de lote (HU #11765): dos mandatarios del MISMO organismo se resuelven con UNA sola lectura de sus validaciones
+        // propias, no una por fila.
         var ct = TestContext.Current.CancellationToken;
         var otroSigner = Guid.NewGuid();
-        const string otroDocumento = "9998887776";
         await using var ctx = await SeedAsync();
         ctx.MandateSigners.Add(new MandateSigner
         {
@@ -285,35 +257,29 @@ public sealed class MandateSignerIdentityVigenciaTests
             TransitOfficeId = Ot,
             FullName = "Carlos Pérez",
             DocumentType = "CC",
-            DocumentNumber = otroDocumento,
+            DocumentNumber = "9998887776",
             IntegrityHash = new string('b', 64),
             RegisteredAt = Now,
             IsActive = true,
             CreatedAt = Now,
         });
-        ctx.MandateSignerTransitOffices.Add(new MandateSignerTransitOffice
+        foreach (var id in new[] { Signer, otroSigner })
         {
-            Id = Guid.NewGuid(),
-            MandateSignerId = Signer,
-            TransitOfficeId = Ot,
-            IsActive = true,
-            CreatedAt = Now,
-        });
-        ctx.MandateSignerTransitOffices.Add(new MandateSignerTransitOffice
-        {
-            Id = Guid.NewGuid(),
-            MandateSignerId = otroSigner,
-            TransitOfficeId = Ot,
-            IsActive = true,
-            CreatedAt = Now,
-        });
+            ctx.MandateSignerTransitOffices.Add(new MandateSignerTransitOffice
+            {
+                Id = Guid.NewGuid(),
+                MandateSignerId = id,
+                TransitOfficeId = Ot,
+                IsActive = true,
+                CreatedAt = Now,
+            });
+        }
+
         await ctx.SaveChangesAsync(ct);
 
         var identityRepo = Substitute.For<IProcedureInstanceRepository>();
-        identityRepo.ListLatestBiometricValidationsByPersonsAsync(
-                OtTenant,
-                Arg.Any<IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)>>(),
-                Arg.Any<CancellationToken>())
+        identityRepo.ListMandatarioValidationsAsync(
+                Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
             .Returns([]);
 
         var reader = new DbMandateSignerReader(
@@ -322,8 +288,10 @@ public sealed class MandateSignerIdentityVigenciaTests
         var items = await reader.ListByOtAsync(Ot, OtCompanyVisibility.WholeNetwork, ct);
 
         items.Should().HaveCount(2);
-        await identityRepo.Received(1).ListLatestBiometricValidationsByPersonsAsync(
-            OtTenant,
+        await identityRepo.Received(1).ListMandatarioValidationsAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 2), Arg.Any<CancellationToken>());
+        await identityRepo.DidNotReceive().ListLatestBiometricValidationsByPersonsAsync(
+            Arg.Any<Guid>(),
             Arg.Any<IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)>>(),
             Arg.Any<CancellationToken>());
     }

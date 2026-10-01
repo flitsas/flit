@@ -819,6 +819,50 @@ paths:
         "502":
           description: El proveedor rechazó el envío de forma definitiva (`code = proveedor_error`).
 
+  /api/v1/admin/mandate-signers/identity-validation-report:
+    get:
+      tags: [Admin · Mandatarios]
+      operationId: adminMandateSignersIdentityValidationReport
+      summary: Mandatarios con biometría sin validación propia aprobada (HU #13247)
+      description: >
+        HU #13247 (Feature #13245). Mandatarios Persona natural activos con forma de firma `biometria` que NO tienen una
+        validación propia aprobada: pierden la firma hasta validarse por el flujo nuevo (sin backfill desde validaciones de
+        trámites). Una fila por vínculo con compañía; trae compañía, organismo y CORREO para avisarles antes de desplegar
+        (dato personal, Ley 1581: solo SuperAdmin, nunca en logs). `identityStatus`: `none` (pendiente de validación),
+        `pending` (en curso) o `expired`. Con `format=csv` se exporta como `text/csv`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [json, csv], default: json }
+      responses:
+        "200":
+          description: Filas del reporte.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  total: { type: integer }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MandateIdentityAffectedRow"
+            text/csv:
+              schema:
+                type: string
+        "401":
+          description: No autenticado.
+        "403":
+          description: Autenticado pero sin rol SuperAdmin.
+
   /api/v1/admin/mandate-signers/represented-associations/impact-report:
     get:
       tags: [Admin · Mandatarios]
@@ -12399,6 +12443,20 @@ components:
           type: string
           format: uuid
           nullable: true
+    MandateIdentityAffectedRow:
+      type: object
+      description: HU #13247. Mandatario con biometría sin validación propia aprobada (incluye correo, PII).
+      required: [mandateSignerId, fullName, transitOfficeId, transitOfficeCode, transitOfficeName, identityStatus]
+      properties:
+        mandateSignerId: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, nullable: true }
+        companyTenantId: { type: string, format: uuid, nullable: true }
+        companyName: { type: string, nullable: true }
+        transitOfficeId: { type: string, format: uuid }
+        transitOfficeCode: { type: string }
+        transitOfficeName: { type: string }
+        identityStatus: { type: string, enum: [none, pending, expired] }
     # ── Preferencias de UI ─────────────────────────────────────────────────────
     UserUiPreferenceResponse:
       type: object

@@ -11,10 +11,11 @@ using Xunit;
 namespace Flit.Integration.Tests.TransitOffices;
 
 /// <summary>
-/// HU #13121 (Epic #13090, F1) — la identidad de un mandatario se busca en el tenant de la COMPAÑÍA que
-/// lo registró, no en el del organismo (el módulo Identidad devuelve 403 a los usuarios del OT). PostgreSQL
-/// real. <para>Uso de ejemplo: con una validación aprobada en el tenant C2 y un mandatario de C2 en Ot1,
-/// <c>new DbMandateSignerReader(ctx).GetByIdAsync(id)</c> devuelve <c>IdentityStatus == "valid"</c>.</para>
+/// HU #13121 (Epic #13090, F1) + HU #13247 (Feature #13245) — la identidad de un mandatario es SOLO la de su validación
+/// propia (party_role <c>mandatario</c> + referencia a su ficha), registrada en el tenant de la COMPAÑÍA que lo registró (el
+/// módulo Identidad devuelve 403 a los usuarios del OT). La aprobación de una prevalidación, un comprador o un vendedor con la
+/// misma cédula NO cuenta. PostgreSQL real. <para>Uso de ejemplo: con una validación propia aprobada en el tenant C2 y un
+/// mandatario de C2 en Ot1, <c>new DbMandateSignerReader(ctx).GetByIdAsync(id)</c> devuelve <c>IdentityStatus == "valid"</c>.</para>
 /// </summary>
 public sealed class MandateSignerIdentityTenantIntegrationTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
@@ -52,12 +53,35 @@ public sealed class MandateSignerIdentityTenantIntegrationTests(PostgresDatabase
         return signerId;
     }
 
-    private async Task AddAprobadaAsync(Guid tenantId)
+    /// <summary>Validación PROPIA del mandatario: rol mandatario + su ficha, sin persona ni trámite (DDL 129).</summary>
+    private async Task AddPropiaAprobadaAsync(Guid tenantId, Guid signerId)
+    {
+        await using var ctx = NewContext();
+        var now = DateTimeOffset.UtcNow;
+        ctx.ProcedureInstanceBiometricValidations.Add(new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            PartyRole = BiometricRules.ParteMandatario,
+            MandateSignerId = signerId,
+            DocumentType = "CC",
+            DocumentNumber = Documento,
+            Status = BiometricEstados.Aprobado,
+            Provider = BiometricProviders.Kyverum,
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = now.AddHours(1),
+            ValidatedAt = now.AddDays(-1),
+            CreatedAt = now.AddDays(-1),
+        });
+        await ctx.SaveChangesAsync();
+    }
+
+    /// <summary>Prevalidación standalone del mismo documento (cuelga de su persona, ck_biometric_validation_anchor).</summary>
+    private async Task AddPrevalidacionAprobadaAsync(Guid tenantId)
     {
         await using var ctx = NewContext();
         var now = DateTimeOffset.UtcNow;
         var personId = Guid.NewGuid();
-        // La prevalidación standalone cuelga de su persona (ck_biometric_validation_anchor).
         ctx.Persons.Add(new Person
         {
             Id = personId,
@@ -88,10 +112,10 @@ public sealed class MandateSignerIdentityTenantIntegrationTests(PostgresDatabase
     }
 
     [PostgresFact]
-    public async Task Validacion_registrada_en_el_tenant_de_la_compania_llega_a_la_ficha_aunque_el_OT_tenga_otro_tenant()
+    public async Task Validacion_propia_registrada_en_el_tenant_de_la_compania_llega_a_la_ficha_aunque_el_OT_tenga_otro_tenant()
     {
         var signerId = await SeedSignerAsync(HierarchyScenario.C2);
-        await AddAprobadaAsync(HierarchyScenario.C2);
+        await AddPropiaAprobadaAsync(HierarchyScenario.C2, signerId);
 
         await using var ctx = NewContext();
         var item = await new DbMandateSignerReader(ctx).GetByIdAsync(signerId);
@@ -100,10 +124,12 @@ public sealed class MandateSignerIdentityTenantIntegrationTests(PostgresDatabase
     }
 
     [PostgresFact]
-    public async Task Validacion_en_un_tenant_no_relacionado_no_da_sello()
+    public async Task La_aprobacion_de_una_prevalidacion_con_el_mismo_documento_no_cuenta_para_el_mandatario()
     {
+        // HU #13247 AC2: sin validación propia no hay firma válida, aunque el documento ya esté aprobado como prevalidación
+        // en el mismo tenant de la compañía.
         var signerId = await SeedSignerAsync(HierarchyScenario.C2);
-        await AddAprobadaAsync(HierarchyScenario.C1);
+        await AddPrevalidacionAprobadaAsync(HierarchyScenario.C2);
 
         await using var ctx = NewContext();
         var item = await new DbMandateSignerReader(ctx).GetByIdAsync(signerId);

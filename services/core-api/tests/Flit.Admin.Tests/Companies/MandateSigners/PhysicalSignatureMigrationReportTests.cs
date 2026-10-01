@@ -135,18 +135,26 @@ public sealed class PhysicalSignatureMigrationReportTests
         params string[] documentosConBaul)
     {
         var repo = Substitute.For<IProcedureInstanceRepository>();
-        repo.ListLatestBiometricValidationsByPersonsAsync(
-                Arg.Any<Guid>(),
-                Arg.Any<IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)>>(),
-                Arg.Any<CancellationToken>())
+        // HU #13247 — la identidad del mandatario es SOLO la de su validación propia (party_role mandatario + su ficha):
+        // el doble devuelve, para cada ficha pedida cuyo documento figura en el diccionario, su fila propia.
+        repo.ListMandatarioValidationsAsync(
+                Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                var docs = call.ArgAt<IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)>>(1);
+                var ids = call.ArgAt<IReadOnlyCollection<Guid>>(0);
                 return (IReadOnlyList<ProcedureInstanceBiometricValidation>)
                 [
-                    .. docs
-                        .Where(d => validaciones?.ContainsKey(d.DocumentNumberNorm) == true)
-                        .Select(d => validaciones![d.DocumentNumberNorm]),
+                    .. ctx.MandateSigners
+                        .Where(x => ids.Contains(x.Id) && x.DocumentNumber != null)
+                        .ToList()
+                        .Where(x => validaciones?.ContainsKey(x.DocumentNumber!) == true)
+                        .Select(x =>
+                        {
+                            var v = validaciones![x.DocumentNumber!];
+                            v.PartyRole = BiometricRules.ParteMandatario;
+                            v.MandateSignerId = x.Id;
+                            return v;
+                        }),
                 ];
             });
 

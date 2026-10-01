@@ -20,11 +20,11 @@ namespace Flit.Infrastructure.OtRules;
 /// EXCLUSIVAMENTE contra el módulo Identidad (HU #11752, ADR-0050): fuente única de verdad, ya no
 /// <c>admin.admin_identity_validations</c> (ADR-0034, superada).
 ///
-/// <para><b>Qué tenant se consulta (HU #13121).</b> La validación biométrica del mandatario se registra en
-/// el tenant de la COMPAÑÍA que lo registró (el módulo Identidad devuelve 403 a los usuarios de un OT, así
-/// que nunca nace en el tenant del organismo). Se resuelve en cada compañía vinculada (regla única: vigente
-/// en alguna) con <see cref="MandateSignerIdentityTenantResolver"/>; el tenant del OT solo es respaldo para
-/// mandatarios sin compañías vinculadas.</para>
+/// <para><b>Qué validación cuenta (HU #13247, Feature #13245).</b> SOLO la validación lanzada PARA el mandatario
+/// (party_role <c>mandatario</c> + referencia a su ficha), la más reciente con su documento actual
+/// (<see cref="IdentityVigenciaPorDocumentoResolver.ResolveMandatariosAsync"/>). Ya no se busca por documento y
+/// tenant: la aprobación de un comprador, un vendedor o una prevalidación con la misma cédula no cuenta. Se
+/// registra en el tenant de la compañía (HU #13121, #13246), pero la lectura no depende del tenant.</para>
 
 /// <para><b>Reutiliza, no duplica.</b> La consulta y clasificación de vigencia vive en
 /// <see cref="IdentityVigenciaPorDocumentoResolver"/> (HU #11751, capa Application): este directorio NO
@@ -249,8 +249,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
     }
 
     /// <summary>
-    /// HU #13180b — tenants de las compañías con vínculo ACTIVO de cada mandatario (en cualquier organismo): mismo
-    /// criterio de compañías que usa <see cref="MandateSignerIdentityTenantResolver"/> para su identidad.
+    /// HU #13180b — tenants de las compañías con vínculo ACTIVO de cada mandatario (en cualquier organismo): ahí
+    /// puede vivir su firma del baúl.
     /// </summary>
     private async Task<Dictionary<Guid, IReadOnlyList<Guid>>> LoadLinkedTenantsAsync(
         List<Guid> signerIds, CancellationToken cancellationToken)
@@ -320,12 +320,11 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         }
 
         var now = DateTimeOffset.UtcNow;
-        var resueltos = await MandateSignerIdentityTenantResolver.ResolveAsync(
-            _context,
-            _otStatus,
-            [.. signers.Select(s => new MandateSignerIdentityTenantResolver.SignerRef(
-                s.Id, transitOfficeId, s.DocumentType, s.DocumentNumber))],
-            (tenantId, documentos, ct) => _identityResolver.ResolveManyMandatarioAsync(tenantId, documentos, now, ct),
+        // HU #13247 — solo la validación propia del mandatario (party_role mandatario + su ficha) cuenta.
+        var resueltos = await _identityResolver.ResolveMandatariosAsync(
+            [.. signers.Select(s => new IdentityVigenciaPorDocumentoResolver.MandatarioIdentityRef(
+                s.Id, s.DocumentType, s.DocumentNumber))],
+            now,
             cancellationToken).ConfigureAwait(false);
 
         foreach (var (signerId, result) in resueltos)

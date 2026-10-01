@@ -715,16 +715,13 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     /// había migrado, pero la ficha admin (esta clase) seguía leyendo la tabla vieja y su rótulo no se
     /// movía al prevalidar desde Identidad.
     /// <para>
-    /// <b>Tenant (HU #13121).</b> La validación biométrica se registra en el tenant de la COMPAÑÍA que
-    /// registró al mandatario (el módulo Identidad devuelve 403 a los usuarios de un OT), no en el del
-    /// organismo. Ver <see cref="MandateSignerIdentityTenantResolver"/> (vigente en alguna de sus
-    /// compañías vinculadas; respaldo al tenant del OT solo si no tiene compañías).
+    /// <b>Validación propia (HU #13247).</b> Solo cuenta la validación lanzada PARA el mandatario (party_role
+    /// <c>mandatario</c> + su ficha; se registra en el tenant de la compañía, HU #13121/#13246), la más reciente con su
+    /// documento actual: <see cref="IdentityVigenciaPorDocumentoResolver.ResolveMandatariosAsync"/>. La lectura no
+    /// depende del tenant ni de las aprobaciones de otros roles con el mismo documento.
     /// </para>
     /// <para>
-    /// <b>Lote.</b> Dentro de cada grupo por organismo, UNA sola consulta SQL para todos sus documentos
-    /// vía <see cref="IdentityVigenciaPorDocumentoResolver.ResolveManyBatchedAsync"/> (sin N+1). Un OT sin
-    /// tenant operativo (<c>HasTenant=false</c>) no tiene contra qué resolver identidad: sus mandatarios
-    /// quedan en <see cref="AdminIdentityVigencia.None"/>, igual que antes cuando no había fila admin.
+    /// <b>Lote.</b> UNA sola lectura de las validaciones propias de todos los mandatarios pedidos (sin N+1).
     /// </para>
     /// <para>
     /// El estado ADR-0050 se traduce al vocabulario histórico del contrato con
@@ -754,13 +751,12 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
         var now = DateTimeOffset.UtcNow;
 
-        // HU #13121 — el tenant es el de la(s) compañía(s) que registró al mandatario, no el del OT.
-        var resueltos = await MandateSignerIdentityTenantResolver.ResolveAsync(
-            _context,
-            _otStatus,
-            [.. signers.Select(s => new MandateSignerIdentityTenantResolver.SignerRef(
-                s.Id, s.TransitOfficeId, s.DocumentType, s.DocumentNumber!))],
-            (tenantId, documentos, ct) => _identityResolver.ResolveManyBatchedMandatarioAsync(tenantId, documentos, now, ct),
+        // HU #13247 — la identidad del mandatario es SOLO la de su validación propia (party_role mandatario + su ficha),
+        // la más reciente con su documento actual; el tenant y el documento de otros roles no cuentan.
+        var resueltos = await _identityResolver.ResolveMandatariosAsync(
+            [.. signers.Select(s => new IdentityVigenciaPorDocumentoResolver.MandatarioIdentityRef(
+                s.Id, s.DocumentType, s.DocumentNumber))],
+            now,
             cancellationToken).ConfigureAwait(false);
 
         foreach (var (signerId, resultado) in resueltos)

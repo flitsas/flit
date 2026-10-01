@@ -136,132 +136,81 @@ public sealed class IdentityVigenciaPorDocumentoResolver(IProcedureInstanceRepos
         return result;
     }
 
-    // ---- Variante del MANDATARIO (ajuste HU #13130b, decisión del PO 01-oct) ----------------------------
-    // Para el mandatario persona natural que firma con biometría, «identidad vigente» = tener una validación
-    // biométrica APROBADA, sin renovación mientras su vigencia propia esté activa: NO se aplica la ventana de
-    // BiometricRules.VigenciaDias (30 días), que sigue rigiendo el trámite (gate, prevalidación) y NO se toca.
+    // ---- Variante del MANDATARIO (HU #13130b, HU #13247, decisiones del Líder Técnico 01-oct-2026) ---------------
+    // Para el mandatario persona natural que firma con biometría, «identidad vigente» = tener una validación biométrica
+    // APROBADA lanzada PARA ÉL (party_role mandatario + referencia a su ficha), sin renovación mientras su vigencia propia
+    // esté activa: NO se aplica la ventana de BiometricRules.VigenciaDias (30 días), que sigue rigiendo el trámite (gate,
+    // prevalidación) y NO se toca. EXCLUSIVA: la aprobación de un comprador, un vendedor o una prevalidación con el mismo
+    // documento no cuenta, y tampoco importa el tenant (la validación es de la ficha, no del documento).
 
-    /// <summary>Tope de filas a revisar para encontrar la aprobación más reciente de un mandatario.</summary>
-    private const int MandatarioScanTake = 100;
+    /// <summary>Datos de un mandatario para resolver su identidad: su ficha y su documento ACTUAL.</summary>
+    public readonly record struct MandatarioIdentityRef(Guid MandateSignerId, string? DocumentType, string? DocumentNumber);
 
-    /// <summary>
-    /// Variante del mandatario de <see cref="ResolveAsync"/>: cualquier validación APROBADA (la más reciente)
-    /// cuenta como <see cref="IdentityVigenciaEstados.AprobadaVigente"/> sin importar su antigüedad. Sin
-    /// aprobación se clasifica la fila más reciente como siempre (en curso / vencida / sin validación).
-    /// <c>ValidUntil</c> va en <c>null</c>: el mandatario no renueva su identidad.
-    /// </summary>
+    /// <summary>Identidad de UN mandatario (variante de lote con un solo elemento).</summary>
     public async Task<IdentityVigenciaResult> ResolveMandatarioAsync(
-        Guid tenantId,
+        Guid mandateSignerId,
         string? documentType,
         string? documentNumber,
         DateTimeOffset now,
         CancellationToken ct = default)
     {
-        var (tipo, numero) = DocumentCanonicalNormalization.Normalize(documentType, documentNumber);
-        if (tipo.Length == 0 || numero.Length == 0)
-            return IdentityVigenciaResult.SinValidacion;
-
-        // Caso común: la fila más reciente decide (misma lectura que el trámite, take=1).
-        var (rows, _, _) = await repo
-            .ListBiometricValidationsByPersonAsync(tenantId, tipo, numero, 0, 1, ct)
-            .ConfigureAwait(false);
-
-        // Hay una validación más reciente que NO es aprobación (en curso, rechazada): buscar la aprobación
-        // anterior, que sigue valiendo para el mandatario.
-        if (rows.Count > 0 && rows[0].Status != BiometricEstados.Aprobado)
-        {
-            (rows, _, _) = await repo
-                .ListBiometricValidationsByPersonAsync(tenantId, tipo, numero, 0, MandatarioScanTake, ct)
-                .ConfigureAwait(false);
-        }
-
-        return ClassifyMandatario(rows, now);
-    }
-
-    /// <summary>Variante del mandatario de <see cref="ResolveManyAsync"/> (una lectura por documento).</summary>
-    public async Task<IReadOnlyDictionary<string, IdentityVigenciaResult>> ResolveManyMandatarioAsync(
-        Guid tenantId,
-        IReadOnlyCollection<(string DocumentType, string DocumentNumber)> documents,
-        DateTimeOffset now,
-        CancellationToken ct = default)
-    {
-        var result = new Dictionary<string, IdentityVigenciaResult>(StringComparer.Ordinal);
-        foreach (var (documentType, documentNumber) in documents)
-        {
-            var key = DocumentCanonicalNormalization.IdentidadKey(tenantId, documentType, documentNumber);
-            if (result.ContainsKey(key))
-                continue;
-
-            result[key] = await ResolveMandatarioAsync(tenantId, documentType, documentNumber, now, ct)
-                .ConfigureAwait(false);
-        }
-
-        return result;
+        var resolved = await ResolveMandatariosAsync(
+            [new MandatarioIdentityRef(mandateSignerId, documentType, documentNumber)], now, ct).ConfigureAwait(false);
+        return resolved.GetValueOrDefault(mandateSignerId, IdentityVigenciaResult.SinValidacion);
     }
 
     /// <summary>
-    /// Variante del mandatario de <see cref="ResolveManyBatchedAsync"/>: una consulta en lote por la fila más
-    /// reciente; solo los documentos cuya última fila NO es una aprobación (hay una validación en curso o
-    /// rechazada encima de una aprobación anterior) se revisan por separado para hallar su aprobación.
+    /// Identidad de varios mandatarios con UNA lectura (HU #13247). Para cada ficha cuenta solo su validación MÁS RECIENTE
+    /// cuyo documento coincide con el documento actual de la ficha: al lanzar una nueva (reenvío, cambio de documento,
+    /// paso de baúl a biometría) la anterior deja de contar, y una validación de un documento anterior tampoco. Aprobada ⇒
+    /// <see cref="IdentityVigenciaEstados.AprobadaVigente"/> sin fecha de fin (el mandatario no renueva); en curso, vencida
+    /// o sin validación se clasifica como siempre. Toda ficha pedida aparece en el resultado.
     /// </summary>
-    public async Task<IReadOnlyDictionary<string, IdentityVigenciaResult>> ResolveManyBatchedMandatarioAsync(
-        Guid tenantId,
-        IReadOnlyCollection<(string DocumentType, string DocumentNumber)> documents,
+    public async Task<IReadOnlyDictionary<Guid, IdentityVigenciaResult>> ResolveMandatariosAsync(
+        IReadOnlyCollection<MandatarioIdentityRef> signers,
         DateTimeOffset now,
         CancellationToken ct = default)
     {
-        var normalizados = documents
-            .Select(d => DocumentCanonicalNormalization.Normalize(d.DocumentType, d.DocumentNumber))
-            .Where(p => p.DocumentType.Length > 0 && p.DocumentNumber.Length > 0)
-            .Distinct()
-            .ToList();
-
-        var result = new Dictionary<string, IdentityVigenciaResult>(StringComparer.Ordinal);
-        if (normalizados.Count == 0)
+        var result = new Dictionary<Guid, IdentityVigenciaResult>();
+        if (signers.Count == 0)
             return result;
 
         var rows = await repo
-            .ListLatestBiometricValidationsByPersonsAsync(
-                tenantId,
-                [.. normalizados.Select(p => (DocumentTypeNorm: p.DocumentType, DocumentNumberNorm: p.DocumentNumber))],
-                ct)
+            .ListMandatarioValidationsAsync([.. signers.Select(x => x.MandateSignerId)], ct)
             .ConfigureAwait(false);
+        var bySigner = rows
+            .Where(r => r.MandateSignerId.HasValue)
+            .GroupBy(r => r.MandateSignerId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
-        var latestByKey = rows.ToDictionary(
-            r => DocumentCanonicalNormalization.IdentidadKey(tenantId, r.DocumentType, r.DocumentNumber),
-            r => r);
-
-        foreach (var (tipo, numero) in normalizados)
+        foreach (var signer in signers)
         {
-            var key = DocumentCanonicalNormalization.IdentidadKey(tenantId, tipo, numero);
-            var latest = latestByKey.GetValueOrDefault(key);
-            if (latest is null || latest.Status == BiometricEstados.Aprobado)
+            var (tipo, numero) = DocumentCanonicalNormalization.Normalize(signer.DocumentType, signer.DocumentNumber);
+            if (tipo.Length == 0 || numero.Length == 0 || !bySigner.TryGetValue(signer.MandateSignerId, out var own))
             {
-                result[key] = ClassifyMandatario(latest is null ? [] : [latest], now);
+                result[signer.MandateSignerId] = IdentityVigenciaResult.SinValidacion;
                 continue;
             }
 
-            result[key] = await ResolveMandatarioAsync(tenantId, tipo, numero, now, ct).ConfigureAwait(false);
+            // Más reciente primero (el repositorio ya ordena así); la primera con el documento actual decide.
+            var latest = own.FirstOrDefault(r =>
+                DocumentCanonicalNormalization.Normalize(r.DocumentType, r.DocumentNumber) == (tipo, numero));
+            result[signer.MandateSignerId] = ClassifyMandatario(latest, now);
         }
 
         return result;
     }
 
-    /// <summary>
-    /// Aprobación más reciente (cualquier antigüedad) → aprobada vigente; si no hay, la clasificación normal de
-    /// la fila más reciente. <paramref name="rowsNewestFirst"/> viene ordenada de la más reciente a la más antigua.
-    /// </summary>
     private static IdentityVigenciaResult ClassifyMandatario(
-        IReadOnlyList<ProcedureInstanceBiometricValidation> rowsNewestFirst, DateTimeOffset now)
+        ProcedureInstanceBiometricValidation? latest, DateTimeOffset now)
     {
-        if (rowsNewestFirst.Count == 0)
+        if (latest is null)
             return IdentityVigenciaResult.SinValidacion;
 
-        var aprobada = rowsNewestFirst.FirstOrDefault(r => r.Status == BiometricEstados.Aprobado);
-        return aprobada is not null
+        return latest.Status == BiometricEstados.Aprobado
             ? new IdentityVigenciaResult(
-                IdentityVigenciaEstados.AprobadaVigente, aprobada.ValidatedAt, null, aprobada.CertificateHash)
-            : Classify(rowsNewestFirst[0], now);
+                IdentityVigenciaEstados.AprobadaVigente, latest.ValidatedAt, null, latest.CertificateHash)
+            : Classify(latest, now);
     }
 
     /// <summary>Clasifica la fila más reciente (o su ausencia) con <see cref="IdentityVigenciaClassifier"/>.</summary>
