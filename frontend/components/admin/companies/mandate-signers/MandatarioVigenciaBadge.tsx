@@ -20,7 +20,7 @@ type Props = Pick<MandateSigner, "signerModel" | "validityStatus" | "isActive" |
 
 /**
  * HU #13133 — etiqueta de vigencia: texto + ícono + color (verde vigente, naranja por vencer, rojo
- * vencido, gris inactivo). Sin vigencia (Persona jurídica / Formato en blanco) muestra un guion.
+ * vencido e inactivo). Sin vigencia (Persona jurídica / Formato en blanco) muestra un guion.
  */
 export function MandatarioVigenciaBadge({ signer }: { signer: Props }) {
   const vista = presentarVigencia(signer);

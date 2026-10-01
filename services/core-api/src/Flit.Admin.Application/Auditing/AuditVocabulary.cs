@@ -50,6 +50,12 @@ public static class AuditVocabulary
 
         // Epic #12543 — aceptación de Términos y Condiciones antes de crear un trámite.
         public const string AcceptTerms = "accept_terms";
+
+        // HU #13138 (Feature #13115) — ciclo de vida de los mandatarios. La baja reutiliza
+        // <see cref="Deactivate"/> y la eliminación <see cref="Delete"/>.
+        public const string Reactivate = "reactivate";
+        public const string RemoveDefault = "remove_default";
+        public const string ReassignProcedure = "reassign_procedure";
     }
 
     /// <summary>Categoría transversal de la operación auditada (HU #10678).</summary>
@@ -70,5 +76,8 @@ public static class AuditVocabulary
 
         // Epic #12543 — aceptación de T&C al crear trámite (reflejo del registro de evidencia).
         public const string Tramites = "tramites";
+
+        // HU #13138 — baja, reactivación, eliminación, retiro de default y reasignación de mandatarios.
+        public const string Mandatarios = "mandatarios";
     }
 }

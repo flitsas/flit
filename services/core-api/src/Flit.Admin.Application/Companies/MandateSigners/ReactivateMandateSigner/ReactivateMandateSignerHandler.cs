@@ -7,12 +7,23 @@ public enum ReactivateMandateSignerOutcome
 {
     Reactivated,
     NotFound,
+
+    /// <summary>
+    /// Todos los vínculos que recuperaría chocan con otro mandatario activo del mismo origen: no se reactiva nada
+    /// (409 <c>mandatario_activo_existente</c>, HU #13136).
+    /// </summary>
+    Conflict,
 }
 
+/// <summary>Desenlace detallado de la reactivación: vínculos restaurados y los que quedaron inactivos por conflicto.</summary>
+public sealed record ReactivateMandateSignerResult(
+    ReactivateMandateSignerOutcome Outcome,
+    MandateSignerLifecycleResult? Lifecycle);
+
 /// <summary>
-/// Reactiva un mandatario inactivado: vuelve activo con auditoría atómica (RF28), sin
-/// restaurar compañías (se liberaron al inactivar y se reasignan con "Editar"). Idempotente:
-/// 404 si no existe, pertenece a otro OT o ya estaba activo.
+/// Reactiva un mandatario inactivado: vuelve activo con auditoría atómica (RF28) y recupera los vínculos
+/// con compañías y organismos que retiró la baja, sin desplazar al default vigente (HU #13136). Idempotente:
+/// 404 si no existe, está eliminado, pertenece a otro OT o ya estaba activo.
 /// </summary>
 public sealed class ReactivateMandateSignerHandler
 {
@@ -32,6 +43,12 @@ public sealed class ReactivateMandateSignerHandler
 
     public async Task<ReactivateMandateSignerOutcome> HandleAsync(
         ReactivateMandateSignerCommand command,
+        CancellationToken cancellationToken = default) =>
+        (await HandleDetailedAsync(command, cancellationToken).ConfigureAwait(false)).Outcome;
+
+    /// <summary>Igual que <see cref="HandleAsync"/> pero informa los vínculos restaurados y los conflictos.</summary>
+    public async Task<ReactivateMandateSignerResult> HandleDetailedAsync(
+        ReactivateMandateSignerCommand command,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -42,7 +59,7 @@ public sealed class ReactivateMandateSignerHandler
         // 404 si no existe, pertenece a otro OT o ya estaba activo.
         if (signer is null || signer.TransitOfficeId != command.TransitOfficeId || signer.IsActive)
         {
-            return ReactivateMandateSignerOutcome.NotFound;
+            return new ReactivateMandateSignerResult(ReactivateMandateSignerOutcome.NotFound, null);
         }
 
         var otStatus = await _otStatus
@@ -50,19 +67,25 @@ public sealed class ReactivateMandateSignerHandler
 
         if (otStatus?.TenantId is null)
         {
-            return ReactivateMandateSignerOutcome.NotFound;
+            return new ReactivateMandateSignerResult(ReactivateMandateSignerOutcome.NotFound, null);
         }
 
-        var reactivated = await _repository.ReactivateAsync(
+        var result = await _repository.ReactivateAsync(
             new ReactivateMandateSignerData(
                 command.MandateSignerId,
                 otStatus.TenantId.Value,
                 command.ChangedBy,
-                command.CorrelationId),
+                command.CorrelationId,
+                command.ActorKind),
             cancellationToken).ConfigureAwait(false);
 
-        return reactivated
-            ? ReactivateMandateSignerOutcome.Reactivated
-            : ReactivateMandateSignerOutcome.NotFound;
+        if (result.AllLinksConflict)
+        {
+            return new ReactivateMandateSignerResult(ReactivateMandateSignerOutcome.Conflict, result);
+        }
+
+        return result.Applied
+            ? new ReactivateMandateSignerResult(ReactivateMandateSignerOutcome.Reactivated, result)
+            : new ReactivateMandateSignerResult(ReactivateMandateSignerOutcome.NotFound, null);
     }
 }

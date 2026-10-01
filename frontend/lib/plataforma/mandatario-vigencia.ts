@@ -20,7 +20,8 @@ const POR_ESTADO: Record<ValidityStatus, { texto: string; tone: StatusTone }> = 
   vigente: { texto: "Vigente", tone: "success" },
   por_vencer: { texto: "Por vencer", tone: "warning" },
   vencido: { texto: "Vencido", tone: "danger" },
-  inactivo: { texto: "Inactivo", tone: "neutral" },
+  // HU #13139 — el inactivo se ve en rojo, como el vencido; el gris queda para el candado del organismo.
+  inactivo: { texto: "Inactivo", tone: "danger" },
   no_vigente: { texto: "Aún no vigente", tone: "info" },
 };
 

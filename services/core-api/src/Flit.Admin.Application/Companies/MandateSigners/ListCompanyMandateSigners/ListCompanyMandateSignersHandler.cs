@@ -24,8 +24,18 @@ public sealed class ListCompanyMandateSignersHandler
         _companies = companies;
     }
 
+    public Task<IReadOnlyList<MandateSignerResponse>> HandleAsync(
+        Guid companyTenantId,
+        CancellationToken cancellationToken = default) =>
+        HandleAsync(companyTenantId, MandateSignerActorKind.None, cancellationToken);
+
+    /// <summary>
+    /// HU #13134 — con el rol del actor, cada fila trae <c>origin</c> y las banderas <c>puedeEditar</c> /
+    /// <c>puedeEliminar</c> calculadas con la regla única por origen y rol.
+    /// </summary>
     public async Task<IReadOnlyList<MandateSignerResponse>> HandleAsync(
         Guid companyTenantId,
+        MandateSignerActorKind actor,
         CancellationToken cancellationToken = default)
     {
         var signers = await _reader
@@ -64,7 +74,10 @@ public sealed class ListCompanyMandateSignersHandler
                 s.ValidTo,
                 s.ValidityStatusOn(today),
                 s.FirmaValidezOn(today)?.Valida,
-                s.FirmaValidezOn(today)?.Motivo)),
+                s.FirmaValidezOn(today)?.Motivo,
+                s.Origin,
+                MandateSignerOriginRules.CanModify(actor, s.Origin),
+                MandateSignerOriginRules.CanModify(actor, s.Origin))),
         ];
     }
 }

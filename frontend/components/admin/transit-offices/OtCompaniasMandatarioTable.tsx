@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pencil } from "lucide-react";
+import { AlertTriangle, Pencil } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions } from "@/components/atom/RowActions";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   fetchOtAssociableCompanies,
@@ -24,11 +25,14 @@ const DEBOUNCE_MS = 300;
 export function OtCompaniasMandatarioTable({
   transitOfficeId,
   signerNameOf,
+  sinMandatarioOf,
   onEdit,
 }: {
   transitOfficeId: string;
   /** Mandatario por defecto ya configurado para la compañía (vacío si no tiene regla). */
   signerNameOf: (companyTenantId: string) => string | null | undefined;
+  /** HU #13139 — la compañía no tiene mandatario propio, vinculado ni general al que recurrir. */
+  sinMandatarioOf?: (companyTenantId: string) => boolean;
   onEdit: (company: AssociableCompany) => void;
 }) {
   const pg = usePaginacion();
@@ -98,6 +102,20 @@ export function OtCompaniasMandatarioTable({
         header: "Mandatario",
         render: (row) => {
           const name = signerNameOf(row.id)?.trim();
+          if (!name && sinMandatarioOf?.(row.id)) {
+            return (
+              <StatusBadge
+                tone="warning"
+                ariaLabel="Sin mandatario"
+                label={
+                  <span className="inline-flex items-center gap-1" data-testid="ot-mandatos-sin-mandatario">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden={true} />
+                    Sin mandatario
+                  </span>
+                }
+              />
+            );
+          }
           return name ? (
             name
           ) : (
@@ -123,7 +141,7 @@ export function OtCompaniasMandatarioTable({
         ),
       },
     ],
-    [signerNameOf, onEdit],
+    [signerNameOf, sinMandatarioOf, onEdit],
   );
 
   const items = data?.items ?? [];

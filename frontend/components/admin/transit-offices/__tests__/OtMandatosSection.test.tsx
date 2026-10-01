@@ -350,7 +350,8 @@ describe("OtMandatosSection", () => {
     const tabla = await screen.findByRole("table", { name: "Compañías activas" });
     expect(within(tabla).getByText("Nunca Radicó Ltda.")).toBeInTheDocument();
     expect(within(tabla).getByText("800555111")).toBeInTheDocument();
-    expect(within(tabla).getAllByText("Sin definir")).toHaveLength(2);
+    // Sin reglas, sin general ni mandatarios activos: HU #13139 la marca «Sin mandatario».
+    expect(within(tabla).getAllByTestId("ot-mandatos-sin-mandatario")).toHaveLength(2);
     expect(fetchOtAssociableCompanies).toHaveBeenCalledWith(
       "ot-1",
       expect.objectContaining({ page: 1, pageSize: 10 }),

@@ -77,7 +77,19 @@ export interface MandateSigner {
   /** HU #13130 — si el mandatario puede firmar hoy (vigencia y biometría vigentes). */
   signatureValid?: boolean;
   signatureInvalidReason?: SignatureInvalidReason | null;
+  /**
+   * HU #13134 — quién lo configuró: `organismo` (organismo de tránsito o Super Admin) o `compania`.
+   * Ausente en respuestas anteriores al cambio ⇒ se trata como `compania` (sin candado).
+   */
+  origin?: MandateSignerOrigin;
+  /** HU #13134 — el actor puede editar, inactivar y reactivar (el servidor lo calcula por rol y origen). */
+  puedeEditar?: boolean;
+  /** HU #13134 — el actor puede eliminar. */
+  puedeEliminar?: boolean;
 }
+
+/** HU #13134 — origen de la configuración del mandatario. */
+export type MandateSignerOrigin = "organismo" | "compania";
 
 /** Campos de modelo, forma de firma y vigencia que viajan en el alta y la edición (HU #13132). */
 export interface MandateSignerProfileFields {
@@ -131,6 +143,85 @@ export interface MandateSignerSaved {
    * Solo viaja en el POST de alta.
    */
   identity?: "sent" | "reused" | "failed" | "notattempted";
+}
+
+/** HU #13135 — dónde es el único activo, qué defaults perdería y cuántos trámites sin aprobar lo usan. */
+export interface MandateSignerImpact {
+  hasImpact: boolean;
+  /** Pares compañía × organismo donde es el único mandatario activo. */
+  onlyActiveFor: { transitOfficeId: string; companyTenantId: string }[];
+  /** `company_rule` (default de la compañía en un organismo) u `office` (general del organismo). */
+  defaults: { kind: string; transitOfficeId: string; companyTenantId: string | null }[];
+  /** Trámites radicados sin aprobar que lo usan. */
+  pendingProcedures: number;
+}
+
+/** HU #13135 — conteos de la reasignación de trámites tras la baja (cabeceras del 204). */
+export interface MandateSignerLifecycleOutcome {
+  /** Trámites reasignados con la prelación; 0 si el servidor no los informó. */
+  reassigned: number;
+  /** Trámites que quedan para que el OT decida al aprobar. */
+  pendingOtDecision: number;
+}
+
+/** HU #13136 — resultado de reactivar. */
+export interface MandateSignerReactivation {
+  restoredLinks: { transitOfficeId: string; companyTenantId: string }[];
+  /** Vínculos que se restauraron inactivos porque ya hay otro mandatario activo. */
+  conflictLinks: { transitOfficeId: string; companyTenantId: string }[];
+  restoredDefaults: number;
+}
+
+/** Códigos de error que el servidor manda en `code` (403 y 409 de las acciones de ciclo de vida). */
+export const MANDATE_SIGNER_ERROR = {
+  confirmationRequired: "mandatario_baja_requiere_confirmacion",
+  activeExists: "mandatario_activo_existente",
+  lockedByOffice: "mandatario_configurado_por_organismo",
+  noPermission: "mandatario_sin_permiso",
+} as const;
+
+function normalizeImpact(raw: Partial<MandateSignerImpact> | null | undefined): MandateSignerImpact {
+  return {
+    hasImpact: raw?.hasImpact ?? false,
+    onlyActiveFor: raw?.onlyActiveFor ?? [],
+    defaults: raw?.defaults ?? [],
+    pendingProcedures: raw?.pendingProcedures ?? 0,
+  };
+}
+
+/** El impacto que adjunta el 409 de confirmación requerida, o `null` si el error es otro. */
+export function impactFromConfirmationError(error: unknown): MandateSignerImpact | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null;
+  const body = error.body as { code?: string; impact?: Partial<MandateSignerImpact> } | null | undefined;
+  return body?.code === MANDATE_SIGNER_ERROR.confirmationRequired ? normalizeImpact(body.impact) : null;
+}
+
+/** Código de error del servidor (`code`) de un ApiError, si lo trae. */
+export function mandateSignerErrorCode(error: unknown): string | null {
+  if (!(error instanceof ApiError)) return null;
+  const code = (error.body as { code?: unknown } | null | undefined)?.code;
+  return typeof code === "string" ? code : null;
+}
+
+/** Lee los conteos de reasignación de las cabeceras de la respuesta. */
+function captureOutcome(): {
+  outcome: () => MandateSignerLifecycleOutcome;
+  onResponse: (r: Response) => void;
+} {
+  let current: MandateSignerLifecycleOutcome = { reassigned: 0, pendingOtDecision: 0 };
+  const num = (v: string | null | undefined) => {
+    const n = Number.parseInt(v ?? "", 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  return {
+    outcome: () => current,
+    onResponse: (r) => {
+      current = {
+        reassigned: num(r.headers?.get("X-Mandatario-Reasignados")),
+        pendingOtDecision: num(r.headers?.get("X-Mandatario-Pendientes-Decision-OT")),
+      };
+    },
+  };
 }
 
 function base(transitOfficeId: string): string {
@@ -229,24 +320,64 @@ export function updateMandateSigner(
   });
 }
 
-/** POST /{signerId}/inactivate — baja lógica que libera compañías (RF24). */
-export function inactivateMandateSigner(
+/**
+ * POST /{signerId}/inactivate — baja lógica que libera compañías (RF24). Devuelve cuántos trámites
+ * se reasignaron y cuántos quedan para decisión del OT (cabeceras del 204, HU #13135).
+ */
+export async function inactivateMandateSigner(
   transitOfficeId: string,
   mandateSignerId: string,
-): Promise<void> {
-  return apiFetch<void>(`${base(transitOfficeId)}/${mandateSignerId}/inactivate`, {
+): Promise<MandateSignerLifecycleOutcome> {
+  const { outcome, onResponse } = captureOutcome();
+  await apiFetch<void>(`${base(transitOfficeId)}/${mandateSignerId}/inactivate`, {
+    method: "POST",
+    onResponse,
+  });
+  return outcome();
+}
+
+/**
+ * POST /{signerId}/reactivate — reactiva un mandatario inactivado. El 200 informa los vínculos que
+ * se restauraron y los que no (porque ya hay otro activo), sin desplazar al vigente (HU #13136).
+ */
+export function reactivateMandateSigner(
+  transitOfficeId: string,
+  mandateSignerId: string,
+): Promise<MandateSignerReactivation> {
+  return apiFetch<MandateSignerReactivation>(`${base(transitOfficeId)}/${mandateSignerId}/reactivate`, {
     method: "POST",
   });
 }
 
-/** POST /{signerId}/reactivate — reactiva un mandatario inactivado (sin compañías). */
-export function reactivateMandateSigner(
+/** GET /{signerId}/impact — qué perdería la baja del mandatario (solo lectura, HU #13135). */
+export async function fetchMandateSignerImpact(
   transitOfficeId: string,
   mandateSignerId: string,
-): Promise<void> {
-  return apiFetch<void>(`${base(transitOfficeId)}/${mandateSignerId}/reactivate`, {
-    method: "POST",
+  signal?: AbortSignal,
+): Promise<MandateSignerImpact> {
+  const r = await apiFetch<{ data: MandateSignerImpact }>(
+    `${base(transitOfficeId)}/${mandateSignerId}/impact`,
+    { signal },
+  );
+  return normalizeImpact(r.data);
+}
+
+/**
+ * DELETE /{signerId} — eliminación (baja lógica, se conserva el historial). Con impacto exige
+ * `confirmarImpacto`: sin ella responde 409 `mandatario_baja_requiere_confirmacion`.
+ */
+export async function deleteMandateSigner(
+  transitOfficeId: string,
+  mandateSignerId: string,
+  confirmarImpacto: boolean,
+): Promise<MandateSignerLifecycleOutcome> {
+  const { outcome, onResponse } = captureOutcome();
+  await apiFetch<void>(`${base(transitOfficeId)}/${mandateSignerId}`, {
+    method: "DELETE",
+    query: { confirmarImpacto },
+    onResponse,
   });
+  return outcome();
 }
 
 /** GET PNG de la firma del baúl del mandatario (preview del ojo). 404 si no hay imagen. */
@@ -409,24 +540,58 @@ export function updateCompanyMandateSigner(
   });
 }
 
-/** POST /{signerId}/inactivate — baja lógica del mandatario. */
-export function inactivateCompanyMandateSigner(
+/** POST /{signerId}/inactivate — baja lógica del mandatario; informa los trámites reasignados. */
+export async function inactivateCompanyMandateSigner(
   tenantId: string,
   mandateSignerId: string,
   networkHeadId?: string | null,
-): Promise<void> {
-  return apiFetch<void>(`${companyBase(tenantId, networkHeadId)}/${mandateSignerId}/inactivate`, {
+): Promise<MandateSignerLifecycleOutcome> {
+  const { outcome, onResponse } = captureOutcome();
+  await apiFetch<void>(`${companyBase(tenantId, networkHeadId)}/${mandateSignerId}/inactivate`, {
     method: "POST",
+    onResponse,
   });
+  return outcome();
 }
 
-/** POST /{signerId}/reactivate — reactiva un mandatario inactivado. */
+/** POST /{signerId}/reactivate — reactiva un mandatario inactivado sin desplazar al vigente. */
 export function reactivateCompanyMandateSigner(
   tenantId: string,
   mandateSignerId: string,
   networkHeadId?: string | null,
-): Promise<void> {
-  return apiFetch<void>(`${companyBase(tenantId, networkHeadId)}/${mandateSignerId}/reactivate`, {
-    method: "POST",
+): Promise<MandateSignerReactivation> {
+  return apiFetch<MandateSignerReactivation>(
+    `${companyBase(tenantId, networkHeadId)}/${mandateSignerId}/reactivate`,
+    { method: "POST" },
+  );
+}
+
+/** GET /{signerId}/impact — qué perdería la baja del mandatario (solo lectura). */
+export async function fetchCompanyMandateSignerImpact(
+  tenantId: string,
+  mandateSignerId: string,
+  signal?: AbortSignal,
+  networkHeadId?: string | null,
+): Promise<MandateSignerImpact> {
+  const r = await apiFetch<{ data: MandateSignerImpact }>(
+    `${companyBase(tenantId, networkHeadId)}/${mandateSignerId}/impact`,
+    { signal },
+  );
+  return normalizeImpact(r.data);
+}
+
+/** DELETE /{signerId} — eliminación (baja lógica, conserva el historial); con impacto exige confirmarlo. */
+export async function deleteCompanyMandateSigner(
+  tenantId: string,
+  mandateSignerId: string,
+  confirmarImpacto: boolean,
+  networkHeadId?: string | null,
+): Promise<MandateSignerLifecycleOutcome> {
+  const { outcome, onResponse } = captureOutcome();
+  await apiFetch<void>(`${companyBase(tenantId, networkHeadId)}/${mandateSignerId}`, {
+    method: "DELETE",
+    query: { confirmarImpacto },
+    onResponse,
   });
+  return outcome();
 }

@@ -17,16 +17,24 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// La exclusividad (OT, compañía) → un mandatario activo la valida el handler antes; el índice
 /// único parcial <c>uq_mandate_signer_companies_active</c> es el guardián último en BD.
 /// </summary>
-internal sealed class MandateSignerRepository : IMandateSignerRepository
+internal sealed partial class MandateSignerRepository : IMandateSignerRepository
 {
     private const string EntityName = "mandate_signer";
     private const string OnePerOriginIndex = "uq_mandate_signer_companies_one_per_origin";
 
     private readonly FlitDbContext _context;
+    private readonly IMandateSignerProcedureReassigner? _reassigner;
 
-    public MandateSignerRepository(FlitDbContext context)
+    /// <param name="reassigner">
+    /// HU #13137 — reasigna los trámites radicados sin aprobar al dar de baja. Opcional para los sitios que
+    /// construyen el repositorio a mano (tests): sin él la baja no toca trámites.
+    /// </param>
+    public MandateSignerRepository(
+        FlitDbContext context,
+        IMandateSignerProcedureReassigner? reassigner = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _reassigner = reassigner;
     }
 
     public Task<Guid> CreateAsync(
@@ -51,18 +59,33 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             cancellationToken);
     }
 
-    public Task<bool> InactivateAsync(
+    public Task<MandateSignerLifecycleResult> InactivateAsync(
         InactivateMandateSignerData data,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(data);
         return ExecuteInTenantScopeAsync(
             data.OtTenantId,
-            () => PersistInactivateAsync(data, cancellationToken),
+            () => PersistRetireAsync(
+                data.MandateSignerId, data.OtTenantId, data.ChangedBy, data.CorrelationId, data.ActorKind,
+                delete: false, cancellationToken),
             cancellationToken);
     }
 
-    public Task<bool> ReactivateAsync(
+    public Task<MandateSignerLifecycleResult> DeleteAsync(
+        DeleteMandateSignerData data,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        return ExecuteInTenantScopeAsync(
+            data.OtTenantId,
+            () => PersistRetireAsync(
+                data.MandateSignerId, data.OtTenantId, data.ChangedBy, data.CorrelationId, data.ActorKind,
+                delete: true, cancellationToken),
+            cancellationToken);
+    }
+
+    public Task<MandateSignerLifecycleResult> ReactivateAsync(
         ReactivateMandateSignerData data,
         CancellationToken cancellationToken = default)
     {
@@ -256,32 +279,56 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         return true;
     }
 
-    private async Task<bool> PersistInactivateAsync(
-        InactivateMandateSignerData data,
+    /// <summary>
+    /// Baja del mandatario, inactivación (<paramref name="delete"/> = false) o eliminación lógica (true), con sus
+    /// efectos en UNA transacción (HU #13135, #13137, #13138): libera vínculos y organismos, retira los defaults
+    /// que apuntan a él (no se limpian solos: la baja lógica no dispara el <c>ON DELETE SET NULL</c>), reasigna
+    /// los trámites radicados sin aprobar con la prelación del OT y deja la bitácora. La traza de vínculos y
+    /// defaults retirados queda en el evento de baja y permite restaurarlos al reactivar (HU #13136).
+    /// </summary>
+    private async Task<MandateSignerLifecycleResult> PersistRetireAsync(
+        Guid mandateSignerId,
+        Guid otTenantId,
+        Guid? changedBy,
+        Guid? correlationId,
+        MandateSignerActorKind actor,
+        bool delete,
         CancellationToken cancellationToken)
     {
         var signer = await _context.MandateSigners
-            .FirstOrDefaultAsync(s => s.Id == data.MandateSignerId, cancellationToken)
+            .FirstOrDefaultAsync(s => s.Id == mandateSignerId, cancellationToken)
             .ConfigureAwait(false);
 
-        // Idempotente: 404 si no existe o ya estaba inactivo.
-        if (signer is null || !signer.IsActive || signer.DeletedAt is not null)
+        // Idempotente: no existe, ya eliminado o (inactivar) ya inactivo => nada que hacer (404).
+        if (signer is null || signer.DeletedAt is not null || (!delete && !signer.IsActive))
         {
-            return false;
+            return MandateSignerLifecycleResult.NotApplied;
         }
+
+        // Los defaults de compañía y los trámites viven en tenants ajenos al del OT: lectura y escritura
+        // cross-tenant dentro de esta transacción (mismo patrón que los readers de administración OT).
+        await BypassRowSecurityAsync(cancellationToken).ConfigureAwait(false);
 
         var now = DateTimeOffset.UtcNow;
 
         signer.IsActive = false;
         signer.UpdatedAt = now;
-        signer.UpdatedBy = data.ChangedBy;
+        signer.UpdatedBy = changedBy;
+        if (delete)
+        {
+            signer.DeletedAt = now;
+            signer.DeletedBy = changedBy;
+        }
 
-        // Libera las compañías: sus filas dejan de contar para el índice de exclusividad.
+        // Libera las compañías: sus filas dejan de contar para el índice de exclusividad. Se anotan para poder
+        // restaurarlas al reactivar (las que ya estaban inactivas por una edición NO se restauran).
         var assignments = await _context.MandateSignerCompanies
             .Where(c => c.MandateSignerId == signer.Id && c.IsActive)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-
+        var retiredLinks = assignments
+            .Select(a => new MandateSignerLinkRef(a.TransitOfficeId, a.CompanyTenantId))
+            .ToList();
         foreach (var assignment in assignments)
         {
             assignment.IsActive = false;
@@ -305,63 +352,96 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             .Where(o => o.MandateSignerId == signer.Id && o.IsActive)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-
+        var retiredOffices = offices.Select(o => o.TransitOfficeId).ToList();
         foreach (var office in offices)
         {
             office.IsActive = false;
         }
 
-        AddAudit(
-            data.OtTenantId,
-            fieldName: "is_active",
-            oldValue: JsonSerializer.Serialize(true),
-            newValue: JsonSerializer.Serialize(false),
-            changedAt: now,
-            changedBy: data.ChangedBy,
-            correlationId: data.CorrelationId);
-
-        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return true;
-    }
-
-    private async Task<bool> PersistReactivateAsync(
-        ReactivateMandateSignerData data,
-        CancellationToken cancellationToken)
-    {
-        var signer = await _context.MandateSigners
-            .FirstOrDefaultAsync(s => s.Id == data.MandateSignerId, cancellationToken)
+        // HU #13135 — retira TODOS los defaults que apuntan al mandatario (compañía x organismo y general del
+        // organismo). Sin esto quedarían apuntando a alguien que ya no firma.
+        var retiredDefaults = await RetireDefaultsAsync(signer.Id, changedBy, now, cancellationToken)
             .ConfigureAwait(false);
 
-        // Idempotente: 404 si no existe o ya estaba activo.
-        if (signer is null || signer.IsActive || signer.DeletedAt is not null)
+        // Se guarda ANTES de reasignar: el evaluador lee el directorio de la misma conexión y debe ver al
+        // mandatario ya fuera de juego.
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // HU #13137 — tramites radicados sin aprobar que apuntaban al mandatario: prelación del OT o, si no
+        // queda nadie, nulo para que el OT decida al aprobar. Si falla, se revierte toda la transacción.
+        var reassignment = await ReassignProceduresAsync(signer.Id, cancellationToken).ConfigureAwait(false);
+
+        if (!delete)
         {
-            return false;
+            // Fila histórica de la baja (se conserva: la consumen la auditoría existente y sus pruebas).
+            AddAudit(
+                otTenantId,
+                fieldName: "is_active",
+                oldValue: JsonSerializer.Serialize(true),
+                newValue: JsonSerializer.Serialize(false),
+                changedAt: now,
+                changedBy: changedBy,
+                correlationId: correlationId);
         }
 
-        var now = DateTimeOffset.UtcNow;
-
-        // Vuelve activo SIN restaurar compañías: las liberadas al inactivar se reasignan a mano.
-        signer.IsActive = true;
-        signer.UpdatedAt = now;
-        signer.UpdatedBy = data.ChangedBy;
-
-        // HU #11201 — los organismos SÍ se recuperan, pero solo el primario. Dejarlo sin ninguno lo
-        // volvería invisible en todas las consolas (que listan por organismo) y no habría forma de
-        // editarlo para devolvérselos: quedaría activo e inalcanzable. Con el primario reaparece donde
-        // se dio de alta y desde ahí se le vuelven a asignar los demás.
-        await RestaurarOrganismoPrimarioAsync(signer, now, cancellationToken).ConfigureAwait(false);
-
-        AddAudit(
-            data.OtTenantId,
-            fieldName: "is_active",
-            oldValue: JsonSerializer.Serialize(false),
-            newValue: JsonSerializer.Serialize(true),
-            changedAt: now,
-            changedBy: data.ChangedBy,
-            correlationId: data.CorrelationId);
+        WriteRetirementAudit(
+            otTenantId, signer.Id, delete, now, changedBy, correlationId, actor,
+            retiredOffices, retiredLinks, retiredDefaults, reassignment);
 
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return true;
+
+        return new MandateSignerLifecycleResult(
+            Applied: true,
+            reassignment,
+            RestoredLinks: [],
+            ConflictLinks: [],
+            RetiredDefaults: retiredDefaults.Count,
+            RestoredDefaults: 0);
+    }
+
+    private async Task<List<MandateSignerDefaultRef>> RetireDefaultsAsync(
+        Guid signerId,
+        Guid? changedBy,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var retired = new List<MandateSignerDefaultRef>();
+
+        var rules = await _context.CompanyOtMandateRules
+            .Where(r => r.DefaultMandateSignerId == signerId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var rule in rules)
+        {
+            rule.DefaultMandateSignerId = null;
+            rule.UpdatedAt = now;
+            rule.UpdatedBy = changedBy;
+            retired.Add(new MandateSignerDefaultRef(
+                MandateSignerDefaultRef.CompanyRule, rule.TransitOfficeId, rule.CompanyTenantId));
+        }
+
+        var configs = await _context.TransitOfficeMandateConfigs
+            .Where(c => c.DefaultMandateSignerId == signerId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var config in configs)
+        {
+            config.DefaultMandateSignerId = null;
+            config.UpdatedAt = now;
+            config.UpdatedBy = changedBy;
+            retired.Add(new MandateSignerDefaultRef(MandateSignerDefaultRef.Office, config.TransitOfficeId, null));
+        }
+
+        return retired;
+    }
+
+    private async Task BypassRowSecurityAsync(CancellationToken cancellationToken)
+    {
+        if (_context.Database.IsRelational())
+        {
+            await _context.Database.ExecuteSqlRawAsync("SET LOCAL row_security = off", cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>

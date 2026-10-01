@@ -58,7 +58,10 @@ public sealed class ListMandateSignersHandler
                 s.ValidTo,
                 s.ValidityStatusOn(today),
                 s.FirmaValidezOn(today)?.Valida,
-                s.FirmaValidezOn(today)?.Motivo)),
+                s.FirmaValidezOn(today)?.Motivo,
+                s.Origin,
+                MandateSignerOriginRules.CanModify(query.ActorKind, s.Origin),
+                MandateSignerOriginRules.CanModify(query.ActorKind, s.Origin))),
         ];
     }
 }

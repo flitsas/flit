@@ -101,7 +101,7 @@ describe("HU #13133 — lista de mandatarios de la compañía", () => {
     expect(within(fila("Dario Inactivo")).getByTestId("mandatario-vigencia")).toHaveTextContent("Inactivo");
   });
 
-  it("AC2: los tonos son verde, naranja, rojo y gris (tokens de la paleta de estados)", async () => {
+  it("AC2: los tonos son verde, naranja, rojo y rojo (inactivo, HU #13139) (tokens de la paleta de estados)", async () => {
     fetchCompanyMandateSigners.mockResolvedValue([
       signer({ id: "1", fullName: "Ana Vigente" }),
       signer({ id: "2", fullName: "Beto Porvencer", validityStatus: "por_vencer" }),
@@ -114,7 +114,7 @@ describe("HU #13133 — lista de mandatarios de la compañía", () => {
     expect(tono("Ana Vigente")).toBe("var(--badge-success-fg)");
     expect(tono("Beto Porvencer")).toBe("var(--badge-warning-fg)");
     expect(tono("Carla Vencida")).toBe("var(--badge-danger-fg)");
-    expect(tono("Dario Inactivo")).toBe("var(--badge-neutral-fg)");
+    expect(tono("Dario Inactivo")).toBe("var(--badge-danger-fg)");
   });
 
   it("AC3: el estado se lee en el texto y en el nombre accesible, no solo en el color", async () => {

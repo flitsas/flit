@@ -159,7 +159,7 @@ public sealed class MandateSignerHandlerTests
     }
 
     [Fact]
-    public async Task Reactivate_BringsSignerBackActive_WithoutCompanies()
+    public async Task Reactivate_BringsSignerBackActive_RestoringItsCompanies()
     {
         await using var ctx = NewSeededContext();
         var (create, _, inactivate, reactivate, list) = CrudHandlers(ctx);
@@ -180,11 +180,11 @@ public sealed class MandateSignerHandlerTests
         }, Ct);
         outcome.Should().Be(ReactivateMandateSignerOutcome.Reactivated);
 
-        // Vuelve activo pero sin compañías (se liberaron y no se restauran).
+        // HU #13136 — vuelve activo y recupera las compañías que retiró la baja.
         var row = (await list.HandleAsync(new ListMandateSignersQuery { TransitOfficeId = Office, Visibility = OtCompanyVisibility.WholeNetwork }, Ct))
             .Single(s => s.Id == samuel.MandateSignerId);
         row.IsActive.Should().BeTrue();
-        row.CompanyTenantIds.Should().BeEmpty();
+        row.CompanyTenantIds.Should().BeEquivalentTo([CompanyA]);
 
         // Reactivar de nuevo es idempotente (ya activo) → NotFound.
         var again = await reactivate.HandleAsync(new ReactivateMandateSignerCommand

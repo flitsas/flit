@@ -208,9 +208,10 @@ public sealed class TramiteLifecycleService(
         // la regeneración del PDF del mandato con el firmante la dispara el handler tras el commit.
         if (command.ToStatus == TramiteEstado.Aprobado)
         {
-            var mandatoError = await ResolverMandatarioAlAprobarAsync(instance, command, ct).ConfigureAwait(false);
+            var (mandatoError, sinCandidatos) =
+                await ResolverMandatarioAlAprobarAsync(instance, command, ct).ConfigureAwait(false);
             if (mandatoError is not null)
-                return TramiteTransitionOutcome.Fail(mandatoError, DetalleMandatario(mandatoError));
+                return TramiteTransitionOutcome.Fail(mandatoError, DetalleMandatario(mandatoError, sinCandidatos));
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -374,7 +375,7 @@ public sealed class TramiteLifecycleService(
     /// hay nada que resolver (el mandato no aplica, o el mandatario es institucional sin firmante persona)
     /// o si el firmante quedó fijado en <c>instance.MandateSignerId</c>.
     /// </summary>
-    private async Task<string?> ResolverMandatarioAlAprobarAsync(
+    private async Task<(string? Code, bool SinCandidatos)> ResolverMandatarioAlAprobarAsync(
         ProcedureInstance instance, TramiteTransitionCommand command, CancellationToken ct)
     {
         // Producto: el mandato aplica siempre (PN y PJ); aquí solo resolvemos firmante / plantilla.
@@ -386,11 +387,11 @@ public sealed class TramiteLifecycleService(
 
         // Institucional u abierto (regla compañía×OT): no hay firmante persona que resolver.
         if (MandatoAssignmentModeCodes.SkipsPersonSigner(config?.AssignmentMode))
-            return null;
+            return (null, false);
 
         // El OT debe estar promovido (se hizo en la entrega). Sin él no podemos consultar el directorio.
         if (instance.TransitOfficeId is not { } transitOfficeId)
-            return null;
+            return (null, false);
 
         var (prelacion, _) = await MandateSignerPrelacionLoader
             .ResolveAsync(
@@ -405,19 +406,22 @@ public sealed class TramiteLifecycleService(
         {
             case MandateSignerResolutionStatus.Resolved:
                 instance.MandateSignerId = resolution.Signer!.Id;
-                return null;
+                return (null, false);
             case MandateSignerResolutionStatus.RequiereSeleccion:
-                return TramiteEstadoErrores.MandatarioRequerido;
+                // HU #13137 — con cero candidatos válidos el mensaje NO dice «hay varios»: no queda mandatario.
+                return (TramiteEstadoErrores.MandatarioRequerido, prelacion.Validos.Count == 0);
             default:
                 // NoConfigurado: el OT no tiene mandatarios; se aprueba sin firmante (el mandato queda con
                 // placeholder hasta que el OT registre uno y se regenere). No bloquea la aprobación.
-                return null;
+                return (null, false);
         }
     }
 
     /// <summary>Detalle del error de mandatario para el mensaje al usuario (ADR-0036 §D9).</summary>
-    private static string DetalleMandatario(string code) => code switch
+    private static string DetalleMandatario(string code, bool sinCandidatos = false) => code switch
     {
+        TramiteEstadoErrores.MandatarioRequerido when sinCandidatos =>
+            MandateSignerEstados.MensajeSinMandatarioAlAprobar,
         TramiteEstadoErrores.MandatarioRequerido =>
             "El mandatario que firma el mandato debe elegirse entre los mandatarios vigentes de la compañía " +
             "en este organismo: ninguno quedó determinado (o el elegido ya no es válido). " +
